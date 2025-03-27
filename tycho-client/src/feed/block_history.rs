@@ -29,7 +29,9 @@ pub enum BlockPosition {
 /// Provides lightweight validation and relative positioning of received block headers
 /// emitted by StateSynchronizer structs.
 impl BlockHistory {
-    pub fn new(history: Vec<Header>, size: usize) -> Self {
+    pub fn new(mut history: Vec<Header>, size: usize) -> Self {
+        // sort history by block number
+        history.sort_by_key(|h| h.number);
         Self {
             history: VecDeque::from(history),
             size,

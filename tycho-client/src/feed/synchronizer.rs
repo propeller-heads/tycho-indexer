@@ -46,6 +46,7 @@ pub struct ProtocolStateSynchronizer<R: RPCClient, D: DeltasClient> {
     component_tracker: Arc<Mutex<ComponentTracker<R>>>,
     shared: Arc<Mutex<SharedState>>,
     end_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    timeout: u64,
 }
 
 #[derive(Debug, Default)]
@@ -141,11 +142,12 @@ pub trait StateSynchronizer: Send + Sync + 'static {
 impl<R, D> ProtocolStateSynchronizer<R, D>
 where
     // TODO: Consider moving these constraints directly to the
-    //  client...
+    // client...
     R: RPCClient + Clone + Send + Sync + 'static,
     D: DeltasClient + Clone + Send + Sync + 'static,
 {
     /// Creates a new state synchronizer.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         extractor_id: ExtractorIdentity,
         retrieve_balances: bool,
@@ -154,6 +156,7 @@ where
         include_snapshots: bool,
         rpc_client: R,
         deltas_client: D,
+        timeout: u64,
     ) -> Self {
         Self {
             extractor_id: extractor_id.clone(),
@@ -170,6 +173,7 @@ where
             max_retries,
             shared: Arc::new(Mutex::new(SharedState::default())),
             end_tx: Arc::new(Mutex::new(None)),
+            timeout,
         }
     }
 
@@ -341,15 +345,11 @@ where
             .await?;
 
         info!("Waiting for deltas...");
-        // we need to wait 2 messages because of cache gateways insertion delay.
-        let first_msg = timeout(Duration::from_secs(360), msg_rx.recv())
+        // wait for first deltas message
+        let mut first_msg = timeout(Duration::from_secs(self.timeout), msg_rx.recv())
             .await?
             .ok_or_else(|| anyhow::format_err!("Subscription ended too soon"))?;
-        let mut second_msg = timeout(Duration::from_secs(360), msg_rx.recv())
-            .await?
-            .ok_or_else(|| anyhow::format_err!("Subscription ended too soon"))?;
-
-        self.filter_deltas(&mut second_msg, &tracker);
+        self.filter_deltas(&mut first_msg, &tracker);
 
         // initial snapshot
         let block = first_msg.get_block().clone();
@@ -360,9 +360,9 @@ where
             .await
             .map_err(|rpc_err| anyhow::format_err!("failed to get initial snapshot: {}", rpc_err))?
             .merge(StateSyncMessage {
-                header: Header::from_block(second_msg.get_block(), second_msg.is_revert()),
+                header: Header::from_block(first_msg.get_block(), first_msg.is_revert()),
                 snapshots: Default::default(),
-                deltas: Some(second_msg),
+                deltas: Some(first_msg),
                 removed_components: Default::default(),
             });
 
@@ -653,6 +653,7 @@ mod test {
             true,
             rpc_client,
             deltas_client,
+            10_u64,
         )
     }
 
@@ -904,19 +905,6 @@ mod test {
                     ts: Default::default(),
                 },
                 revert: false,
-                ..Default::default()
-            },
-            BlockChanges {
-                extractor: "uniswap-v2".to_string(),
-                chain: Chain::Ethereum,
-                block: Block {
-                    number: 3,
-                    hash: Bytes::from("0x03"),
-                    parent_hash: Bytes::from("0x02"),
-                    chain: Chain::Ethereum,
-                    ts: Default::default(),
-                },
-                revert: false,
                 component_tvl: [
                     ("Component1".to_string(), 100.0),
                     ("Component2".to_string(), 0.0),
@@ -941,16 +929,13 @@ mod test {
         tx.send(deltas[0].clone())
             .await
             .expect("deltas channel msg 0 closed!");
-        tx.send(deltas[1].clone())
-            .await
-            .expect("deltas channel msg 1 closed!");
         let first_msg = timeout(Duration::from_millis(100), rx.recv())
             .await
             .expect("waiting for first state msg timed out!")
             .expect("state sync block sender closed!");
-        tx.send(deltas[2].clone())
+        tx.send(deltas[1].clone())
             .await
-            .expect("deltas channel msg 2 closed!");
+            .expect("deltas channel msg 1 closed!");
         let second_msg = timeout(Duration::from_millis(100), rx.recv())
             .await
             .expect("waiting for second state msg timed out!")
@@ -961,11 +946,11 @@ mod test {
             .expect("state sync task panicked!");
 
         // assertions
-        let exp = StateSyncMessage {
+        let exp1 = StateSyncMessage {
             header: Header {
-                number: 2,
-                hash: Bytes::from("0x02"),
-                parent_hash: Bytes::from("0x01"),
+                number: 1,
+                hash: Bytes::from("0x01"),
+                parent_hash: Bytes::from("0x00"),
                 revert: false,
             },
             snapshots: Snapshot {
@@ -1001,15 +986,15 @@ mod test {
                 .collect(),
                 vm_storage: HashMap::new(),
             },
-            deltas: Some(deltas[1].clone()),
+            deltas: Some(deltas[0].clone()),
             removed_components: Default::default(),
         };
 
         let exp2 = StateSyncMessage {
             header: Header {
-                number: 3,
-                hash: Bytes::from("0x03"),
-                parent_hash: Bytes::from("0x02"),
+                number: 2,
+                hash: Bytes::from("0x02"),
+                parent_hash: Bytes::from("0x01"),
                 revert: false,
             },
             snapshots: Snapshot {
@@ -1039,9 +1024,9 @@ mod test {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
-                    number: 3,
-                    hash: Bytes::from("0x03"),
-                    parent_hash: Bytes::from("0x02"),
+                    number: 2,
+                    hash: Bytes::from("0x02"),
+                    parent_hash: Bytes::from("0x01"),
                     chain: Chain::Ethereum,
                     ts: Default::default(),
                 },
@@ -1063,7 +1048,7 @@ mod test {
             .into_iter()
             .collect(),
         };
-        assert_eq!(first_msg, exp);
+        assert_eq!(first_msg, exp1);
         assert_eq!(second_msg, exp2);
         assert!(exit.is_ok());
     }
@@ -1162,6 +1147,7 @@ mod test {
             true,
             ArcRPCClient(Arc::new(rpc_client)),
             ArcDeltasClient(Arc::new(deltas_client)),
+            10_u64,
         );
         state_sync
             .initialize()
@@ -1194,19 +1180,6 @@ mod test {
                     ts: Default::default(),
                 },
                 revert: false,
-                ..Default::default()
-            },
-            BlockChanges {
-                extractor: "uniswap-v2".to_string(),
-                chain: Chain::Ethereum,
-                block: Block {
-                    number: 3,
-                    hash: Bytes::from("0x03"),
-                    parent_hash: Bytes::from("0x02"),
-                    chain: Chain::Ethereum,
-                    ts: Default::default(),
-                },
-                revert: false,
                 component_tvl: [
                     ("Component1".to_string(), 6.0), // Within range, should not trigger changes
                     ("Component2".to_string(), 2.0), // Below lower threshold, should be removed
@@ -1227,9 +1200,6 @@ mod test {
         tx.send(deltas[0].clone())
             .await
             .expect("deltas channel msg 0 closed!");
-        tx.send(deltas[1].clone())
-            .await
-            .expect("deltas channel msg 1 closed!");
 
         // Expecting to receive the initial state message
         let _ = timeout(Duration::from_millis(100), rx.recv())
@@ -1238,9 +1208,9 @@ mod test {
             .expect("state sync block sender closed!");
 
         // Send the third message, which should trigger TVL-based changes
-        tx.send(deltas[2].clone())
+        tx.send(deltas[1].clone())
             .await
-            .expect("deltas channel msg 2 closed!");
+            .expect("deltas channel msg 1 closed!");
         let second_msg = timeout(Duration::from_millis(100), rx.recv())
             .await
             .expect("waiting for second state msg timed out!")
@@ -1253,9 +1223,9 @@ mod test {
 
         let expected_second_msg = StateSyncMessage {
             header: Header {
-                number: 3,
-                hash: Bytes::from("0x03"),
-                parent_hash: Bytes::from("0x02"),
+                number: 2,
+                hash: Bytes::from("0x02"),
+                parent_hash: Bytes::from("0x01"),
                 revert: false,
             },
             snapshots: Snapshot {
@@ -1280,9 +1250,9 @@ mod test {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
-                    number: 3,
-                    hash: Bytes::from("0x03"),
-                    parent_hash: Bytes::from("0x02"),
+                    number: 2,
+                    hash: Bytes::from("0x02"),
+                    parent_hash: Bytes::from("0x01"),
                     chain: Chain::Ethereum,
                     ts: Default::default(),
                 },

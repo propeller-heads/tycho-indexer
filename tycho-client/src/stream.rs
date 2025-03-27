@@ -37,6 +37,7 @@ pub struct TychoStreamBuilder {
     exchanges: HashMap<String, ComponentFilter>,
     block_time: u64,
     timeout: u64,
+    max_missed_blocks: u64,
     no_state: bool,
     auth_key: Option<String>,
     no_tls: bool,
@@ -46,28 +47,30 @@ impl TychoStreamBuilder {
     /// Creates a new `TychoStreamBuilder` with the given Tycho URL and blockchain network.
     /// Initializes the builder with default values for block time and timeout based on the chain.
     pub fn new(tycho_url: &str, chain: Chain) -> Self {
-        let (block_time, timeout) = Self::default_timing(&chain);
+        let (block_time, timeout, max_missed_blocks) = Self::default_timing(&chain);
         Self {
             tycho_url: tycho_url.to_string(),
             chain,
             exchanges: HashMap::new(),
             block_time,
             timeout,
+            max_missed_blocks,
             no_state: false,
             auth_key: None,
             no_tls: true,
         }
     }
 
-    /// Returns the default block time and timeout values for the given blockchain network.
-    fn default_timing(chain: &Chain) -> (u64, u64) {
+    /// Returns the default block_time, timeout and max_missed_blocks values for the given
+    /// blockchain network.
+    fn default_timing(chain: &Chain) -> (u64, u64, u64) {
         match chain {
-            Chain::Ethereum => (600, 1),
-            Chain::Starknet => (30, 5),
-            Chain::ZkSync => (1, 2),
-            Chain::Arbitrum => (1, 0), // Typically closer to 0.25s
-            Chain::Base => (10, 2),
-            Chain::Unichain => (10, 2),
+            Chain::Ethereum => (12, 4, 10),
+            Chain::Starknet => (2, 2, 50),
+            Chain::ZkSync => (3, 2, 50),
+            Chain::Arbitrum => (1, 0, 100), // Typically closer to 0.25s
+            Chain::Base => (2, 2, 50),
+            Chain::Unichain => (1, 1, 100),
         }
     }
 
@@ -87,6 +90,11 @@ impl TychoStreamBuilder {
     /// Sets the timeout duration for network operations.
     pub fn timeout(mut self, timeout: u64) -> Self {
         self.timeout = timeout;
+        self
+    }
+
+    pub fn max_missed_blocks(mut self, max_missed_blocks: u64) -> Self {
+        self.max_missed_blocks = max_missed_blocks;
         self
     }
 
@@ -151,6 +159,7 @@ impl TychoStreamBuilder {
         let mut block_sync = BlockSynchronizer::new(
             Duration::from_secs(self.block_time),
             Duration::from_secs(self.timeout),
+            self.max_missed_blocks,
         );
 
         let available_protocols_set = rpc_client
@@ -191,6 +200,7 @@ impl TychoStreamBuilder {
                 !self.no_state,
                 rpc_client.clone(),
                 ws_client.clone(),
+                self.block_time + self.timeout,
             );
             block_sync = block_sync.register_synchronizer(id, sync);
         }
