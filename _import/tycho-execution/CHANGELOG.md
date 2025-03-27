@@ -1,3 +1,14 @@
+## [0.67.1](https://github.com/propeller-heads/tycho-execution/compare/0.67.0...0.67.1) (2025-03-27)
+
+
+### Bug Fixes
+
+* added empty line ([b3c4dbc](https://github.com/propeller-heads/tycho-execution/commit/b3c4dbc293df758ff4cff949298a819436d83c38))
+* fixed git checkout for codelint ([58e2ddd](https://github.com/propeller-heads/tycho-execution/commit/58e2ddd50e131c484ad53a6dca0b09e1d221d0e5))
+* prepared lint workflow for external contributors ([9f7d605](https://github.com/propeller-heads/tycho-execution/commit/9f7d605ea5e76d230b5946c618ece76365fb4f02))
+* removed empty line ([ae5d7de](https://github.com/propeller-heads/tycho-execution/commit/ae5d7deaccfc1ac527f88371bb3f055b01689801))
+* test run outside a PR ([af01972](https://github.com/propeller-heads/tycho-execution/commit/af0197205adb3220673022b690f1d8aa6f6734aa))
+
 ## [0.67.0](https://github.com/propeller-heads/tycho-execution/compare/0.66.1...0.67.0) (2025-03-20)
 
 
