@@ -1,3 +1,10 @@
+## [0.68.1](https://github.com/propeller-heads/tycho-execution/compare/0.68.0...0.68.1) (2025-03-27)
+
+
+### Bug Fixes
+
+* Add crate metadata ([7e7fabf](https://github.com/propeller-heads/tycho-execution/commit/7e7fabf51bff842ab20c2f512e4f3a609a266e79))
+
 ## [0.68.0](https://github.com/propeller-heads/tycho-execution/compare/0.67.2...0.68.0) (2025-03-27)
 
 
