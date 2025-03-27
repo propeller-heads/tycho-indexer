@@ -9,7 +9,6 @@ use evm_ekubo_sdk::{
         util::find_nearest_initialized_tick_index,
     },
 };
-use thiserror::Error;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_core::Bytes;
 
@@ -28,33 +27,24 @@ enum EkuboExtension {
     Oracle,
 }
 
-#[derive(Error, Debug)]
-pub enum StateDecodingError {
-    #[error(transparent)]
-    InvalidSnapshot(#[from] InvalidSnapshotError),
-    #[error("unsupported extension")]
-    UnsupportedExtension,
-}
-
 impl TryFrom<Bytes> for EkuboExtension {
-    type Error = StateDecodingError;
+    type Error = InvalidSnapshotError;
 
     fn try_from(value: Bytes) -> Result<Self, Self::Error> {
         // See extension ID encoding in tycho-protocol-sdk
         match i32::from(value) {
-            0 => Err(StateDecodingError::UnsupportedExtension),
+            0 => Err(InvalidSnapshotError::ValueError("unknown extension".to_string())),
             1 => Ok(Self::Base),
             2 => Ok(Self::Oracle),
             discriminant => Err(InvalidSnapshotError::ValueError(format!(
                 "unknown discriminant {discriminant}"
-            ))
-            .into()),
+            ))),
         }
     }
 }
 
 impl TryFromWithBlock<ComponentWithState> for EkuboState {
-    type Error = StateDecodingError;
+    type Error = InvalidSnapshotError;
 
     async fn try_from_with_block(
         snapshot: ComponentWithState,
@@ -243,7 +233,7 @@ mod tests {
 
         assert!(matches!(
             err,
-            StateDecodingError::InvalidSnapshot(InvalidSnapshotError::MissingAttribute(attr)) if attr == missing_attribute
+            InvalidSnapshotError::MissingAttribute(attr) if attr == missing_attribute
         ));
     }
 }
