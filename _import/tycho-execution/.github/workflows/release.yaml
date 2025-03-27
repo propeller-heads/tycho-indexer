@@ -1,0 +1,30 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs: { }
+  release:
+    types: [ created, prereleased ]
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  publish-crate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Push to crates.io
+        run: |
+          cargo publish --locked --verbose --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
+# we can't use the action because it errors on github dependencies in any workspace crate
+#      - uses: katyo/publish-crates@v2
+#        with:
+#          path: "./tycho-common"
+#          registry-token: ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
+

@@ -2,7 +2,7 @@ use std::{collections::HashSet, str::FromStr};
 
 use alloy_primitives::{aliases::U24, U256, U8};
 use alloy_sol_types::SolValue;
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
@@ -80,7 +80,7 @@ pub struct SplitSwapStrategyEncoder {
 
 impl SplitSwapStrategyEncoder {
     pub fn new(
-        blockchain: tycho_core::models::Chain,
+        blockchain: tycho_common::models::Chain,
         swap_encoder_registry: SwapEncoderRegistry,
         swapper_pk: Option<String>,
     ) -> Result<Self, EncodingError> {
@@ -341,7 +341,7 @@ mod tests {
     use alloy_primitives::hex;
     use num_bigint::{BigInt, BigUint};
     use rstest::rstest;
-    use tycho_core::{
+    use tycho_common::{
         models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
         Bytes,
     };

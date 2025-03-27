@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use num_bigint::BigUint;
-use tycho_core::{
+use tycho_common::{
     models::{protocol::ProtocolComponent, Chain},
     Bytes,
 };

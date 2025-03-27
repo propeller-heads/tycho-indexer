@@ -1,7 +1,7 @@
 use hex;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
-use tycho_core::{
+use tycho_common::{
     models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
     Bytes,
 };
@@ -130,6 +130,7 @@ impl From<TychoCoreChain> for Chain {
             TychoCoreChain::Arbitrum => Chain { id: 42161, name: chain.to_string() },
             TychoCoreChain::Starknet => Chain { id: 0, name: chain.to_string() },
             TychoCoreChain::Base => Chain { id: 8453, name: chain.to_string() },
+            TychoCoreChain::Unichain => Chain { id: 130, name: chain.to_string() },
         }
     }
 }

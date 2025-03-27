@@ -19,7 +19,7 @@ impl SwapEncoderRegistry {
     /// executors' addresses in the file at the given path.
     pub fn new(
         executors_file_path: Option<String>,
-        blockchain: tycho_core::models::Chain,
+        blockchain: tycho_common::models::Chain,
     ) -> Result<Self, EncodingError> {
         let chain = Chain::from(blockchain);
         let config_str = if let Some(ref path) = executors_file_path {
