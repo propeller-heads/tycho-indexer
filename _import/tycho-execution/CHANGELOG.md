@@ -1,3 +1,15 @@
+## [0.68.0](https://github.com/propeller-heads/tycho-execution/compare/0.67.2...0.68.0) (2025-03-27)
+
+
+### Features
+
+* switch to tycho_commons ([0836bf7](https://github.com/propeller-heads/tycho-execution/commit/0836bf7d530f18a6c0f112542bcad16050e88afa))
+
+
+### Bug Fixes
+
+* Handle unichain chain id ([379858b](https://github.com/propeller-heads/tycho-execution/commit/379858bfca27eb5e8180a32351337779e625e0b5))
+
 ## [0.67.2](https://github.com/propeller-heads/tycho-execution/compare/0.67.1...0.67.2) (2025-03-27)
 
 
