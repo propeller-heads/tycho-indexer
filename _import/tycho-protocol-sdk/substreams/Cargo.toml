@@ -14,7 +14,7 @@ members = [
     "ethereum-template-factory",
     "ethereum-template-singleton",
     "ethereum-uniswap-v4",
-    "ethereum-ekubo",
+    "ethereum-ekubo-v2",
 ]
 resolver = "2"
 

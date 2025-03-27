@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use substreams::scalar::BigInt;
+use substreams::{hex, scalar::BigInt};
 use substreams_helper::hex::Hexable;
 use tycho_substreams::models::{
     Attribute, BalanceChange, BlockChanges, ChangeType, EntityChanges, FinancialType,
@@ -57,7 +57,7 @@ fn maybe_create_component(
                 contracts: vec![],
                 change: ChangeType::Creation.into(),
                 protocol_type: Some(ProtocolType {
-                    name: "ekubo".to_string(),
+                    name: "ekubo_v2_pool".to_string(),
                     financial_type: FinancialType::Swap.into(),
                     implementation_type: ImplementationType::Custom.into(),
                     attribute_schema: vec![],
@@ -113,6 +113,12 @@ fn maybe_create_component(
                         change: ChangeType::Creation.into(),
                         name: "sqrt_ratio".to_string(),
                         value: pi.sqrt_ratio,
+                    },
+                    Attribute {
+                        change: ChangeType::Creation.into(),
+                        name: "balance_owner".to_string(), /* TODO: We should use AccountBalances
+                                                            * instead */
+                        value: hex!("e0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444").to_vec(),
                     },
                 ],
             },

@@ -261,7 +261,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ethereum-ekubo"
+name = "ethereum-ekubo-v2"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -274,7 +274,7 @@ dependencies = [
  "serde_qs",
  "substreams",
  "substreams-ethereum",
- "substreams-helper 0.0.2",
+ "substreams-helper 0.0.2 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=e4609be)",
  "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=3c08359)",
 ]
 
@@ -1451,6 +1451,29 @@ dependencies = [
 name = "substreams-helper"
 version = "0.0.2"
 source = "git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3#b8aeaa3dc6e7242a5dd23681921258ef2cb3c6dd"
+dependencies = [
+ "anyhow",
+ "base64",
+ "bigdecimal",
+ "downcast-rs",
+ "ethabi 18.0.0",
+ "hex",
+ "hex-literal 0.4.1",
+ "num-bigint",
+ "pad",
+ "prost 0.11.9",
+ "prost-types 0.12.6",
+ "substreams",
+ "substreams-entity-change",
+ "substreams-ethereum",
+ "thiserror 1.0.69",
+ "tiny-keccak",
+]
+
+[[package]]
+name = "substreams-helper"
+version = "0.0.2"
+source = "git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=e4609be#e4609bed0bb3c73a13864a951b8cb64c523bc148"
 dependencies = [
  "anyhow",
  "base64",

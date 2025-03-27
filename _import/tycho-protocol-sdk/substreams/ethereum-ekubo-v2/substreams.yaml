@@ -1,7 +1,8 @@
 specVersion: v0.1.0
 package:
-  name: "ethereum_ekubo"
+  name: "ethereum_ekubo_v2"
   version: v0.1.0
+  url: "https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/substreams/ethereum-ekubo-v2"
 
 protobuf:
   files:
@@ -12,14 +13,13 @@ protobuf:
     - ../../proto
     - ./proto
   excludePaths:
-    - sf/substreams
     - google
     - tycho
 
 binaries:
   default:
     type: wasm/rust-v1
-    file: ../target/wasm32-unknown-unknown/release/ethereum_ekubo.wasm
+    file: ../target/wasm32-unknown-unknown/release/ethereum_ekubo_v2.wasm
 
 network: ethereum
 networks:
