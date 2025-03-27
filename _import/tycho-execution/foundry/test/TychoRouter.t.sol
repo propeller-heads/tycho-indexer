@@ -1028,6 +1028,27 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertEq(balancerAfter - balancerBefore, 1120007305574805922);
     }
 
+    function testEkuboIntegration() public {
+        deal(ALICE, 1 ether);
+        uint256 balancerBefore = IERC20(USDC_ADDR).balanceOf(ALICE);
+
+        // Approve permit2
+        vm.startPrank(ALICE);
+        // Encoded solution generated using `test_split_encoding_strategy_ekubo`
+        (bool success,) = tychoRouterAddr.call{value: 1 ether}(
+            hex"0a83cb080000000000000000000000000000000000000000000000000de0b6b3a76400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc200000000000000000000000000000000000000000000000000000000000001200000000000000000000000000000000000000000000000000000000000000077007500010000005991a2df15a8f6a256d3ec51e99254cd3fb576a93ede3eca2a72b3aecc820e955b36f38437d013950000000000000000000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4851d02a5948496a67827242eabc5725531342527c000000000000000000000000000000000000000000"
+        );
+
+        uint256 balancerAfter = IERC20(USDC_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertGe(balancerAfter - balancerBefore, 26173932);
+
+        // All input tokens are transferred to the router at first. Make sure we used
+        // all of it (and thus our splits are correct).
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+    }
+
     function testSplitSwapIntegration() public {
         // Test created with calldata from our router encoder, replacing the executor
         // address with the USV2 executor address.

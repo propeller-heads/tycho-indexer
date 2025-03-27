@@ -143,7 +143,11 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         address receiver,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
+        if (address(tokenIn) != address(0)) {
+            IERC20(tokenIn).safeTransferFrom(
+                msg.sender, address(this), amountIn
+            );
+        }
         return _swapChecked(
             amountIn,
             tokenIn,
@@ -547,5 +551,25 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         if (data.length < 24) revert TychoRouter__InvalidDataLength();
         _handleCallback(data);
         return "";
+    }
+
+    function locked(uint256) external {
+        // TODO replace with real executor address once deployed
+        address executor = address(0x5991A2dF15A8F6A256D3Ec51E99254Cd3fb576A9);
+
+        // slither-disable-next-line controlled-delegatecall,low-level-calls
+        (bool success, bytes memory result) = executor.delegatecall(
+            abi.encodeWithSelector(ICallback.handleCallback.selector, msg.data)
+        );
+
+        if (!success) {
+            revert(
+                string(
+                    result.length > 0
+                        ? result
+                        : abi.encodePacked("Callback failed")
+                )
+            );
+        }
     }
 }

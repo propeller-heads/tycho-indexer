@@ -338,7 +338,7 @@ mod tests {
     use std::{collections::HashMap, str::FromStr};
 
     use alloy::hex::encode;
-    use alloy_primitives::hex;
+    use alloy_primitives::{hex, Address};
     use num_bigint::{BigInt, BigUint};
     use rstest::rstest;
     use tycho_common::{
@@ -1012,6 +1012,62 @@ mod tests {
 
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
+    }
+
+    #[test]
+    fn test_split_encoding_strategy_ekubo() {
+        //   ETH ──(EKUBO)──> USDC
+
+        let token_in = Bytes::from(Address::ZERO.as_slice());
+        let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+
+        let static_attributes = HashMap::from([
+            ("fee".to_string(), Bytes::from(0_u64)),
+            ("tick_spacing".to_string(), Bytes::from(0_u32)),
+            ("extension".to_string(), Bytes::from("0x51d02a5948496a67827242eabc5725531342527c")), /* Oracle */
+        ]);
+
+        let component = ProtocolComponent {
+            // All Ekubo swaps go through the core contract - not necessary to specify pool id
+            // for test
+            protocol_system: "ekubo".to_string(),
+            static_attributes,
+            ..Default::default()
+        };
+
+        let swap = Swap {
+            component,
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
+            split: 0f64,
+        };
+
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder =
+            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, None).unwrap();
+
+        let solution = Solution {
+            exact_out: false,
+            given_token: token_in,
+            given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+            checked_token: token_out,
+            expected_amount: None,
+            checked_amount: Some(BigUint::from_str("1").unwrap()),
+            slippage: None,
+            // Alice
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+            swaps: vec![swap],
+            ..Default::default()
+        };
+
+        let (calldata, _) = encoder
+            .encode_strategy(solution)
+            .unwrap();
+
+        let hex_calldata = encode(&calldata);
+        println!("{}", hex_calldata);
     }
 
     #[test]
