@@ -42,6 +42,10 @@ tracing-subscriber = { version = "0.3.17", default-features = false, features = 
 ] }
 hyper = "0.14.27"
 
+# link openssl statically - needed for building the linux binary
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
+
 
 [dev-dependencies]
 pretty_assertions.workspace = true
