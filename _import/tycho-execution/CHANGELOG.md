@@ -1,3 +1,11 @@
+## [0.67.2](https://github.com/propeller-heads/tycho-execution/compare/0.67.1...0.67.2) (2025-03-27)
+
+
+### Bug Fixes
+
+* prepared lint workflow for external contributors ([9896f48](https://github.com/propeller-heads/tycho-execution/commit/9896f4882940517d61852300420c7c580138406f))
+* prepared lint workflow for external contributors ([5162b9e](https://github.com/propeller-heads/tycho-execution/commit/5162b9e19efcaa5a2137f71a94f6f9e7f7d14da0))
+
 ## [0.67.1](https://github.com/propeller-heads/tycho-execution/compare/0.67.0...0.67.1) (2025-03-27)
 
 
