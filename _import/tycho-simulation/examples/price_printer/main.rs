@@ -72,7 +72,7 @@ fn register_exchanges(
                     Some(uniswap_v4_pool_with_hook_filter),
                 )
         }
-        Chain::ZkSync | Chain::Starknet | Chain::Arbitrum => {}
+        _ => {}
     }
     builder
 }

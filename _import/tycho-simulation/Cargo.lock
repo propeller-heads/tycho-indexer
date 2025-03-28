@@ -8151,32 +8151,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "tycho-core"
-version = "0.61.1"
-source = "git+https://github.com/propeller-heads/tycho-indexer.git?tag=0.61.1#aae2c11bffe9ae5e436adc019b769438fa038272"
-dependencies = [
- "anyhow",
- "async-trait",
- "bytes",
- "chrono",
- "hex",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "strum 0.25.0",
- "strum_macros 0.25.3",
- "thiserror 1.0.69",
- "tiny-keccak",
- "tracing",
- "typetag",
- "utoipa",
- "uuid 1.16.0",
-]
-
-[[package]]
 name = "tycho-execution"
-version = "0.66.1"
-source = "git+https://github.com/propeller-heads/tycho-execution.git?tag=0.66.1#5a6433caf1e968ed972bd510c0b87698b65bce14"
+version = "0.68.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a012c584964f81c918e48125a219affce2fa3890e6f2aae52e106f061a6790cb"
 dependencies = [
  "alloy 0.9.2",
  "alloy-primitives",
@@ -8193,7 +8171,7 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
- "tycho-core",
+ "tycho-common",
 ]
 
 [[package]]
