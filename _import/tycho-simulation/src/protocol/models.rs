@@ -41,7 +41,7 @@ use crate::models::Token;
 ///
 /// * `address`: String, the address of the trading pair
 /// * `tokens`: `Vec<ERC20Token>`, the tokens of the trading pair
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ProtocolComponent {
     #[deprecated(since = "0.73.0", note = "Use `id` instead")]
     pub address: Bytes,
