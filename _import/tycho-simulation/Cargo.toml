@@ -2,6 +2,7 @@
 name = "tycho-simulation"
 version = "0.86.0"
 edition = "2021"
+# TODO add metadata
 
 [workspace]
 members = ["tycho_simulation_py"]
@@ -83,7 +84,7 @@ ratatui = "0.29.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
-tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", package = "tycho-execution", features = ["evm"], tag = "0.66.1" }
+tycho-execution = "0.68.1"
 
 [features]
 default = ["evm"]
