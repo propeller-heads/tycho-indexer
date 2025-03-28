@@ -28,6 +28,7 @@ use std::{collections::HashMap, default::Default, future::Future};
 
 use chrono::NaiveDateTime;
 use num_bigint::BigUint;
+use serde::Serialize;
 use tycho_client::feed::Header;
 use tycho_common::{models::Chain, Bytes};
 
@@ -165,7 +166,7 @@ impl GetAmountOutResult {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BlockUpdate {
     pub block_number: u64,
     /// The new and updated states of this block
