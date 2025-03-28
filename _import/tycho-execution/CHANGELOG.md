@@ -1,3 +1,10 @@
+## [0.68.2](https://github.com/propeller-heads/tycho-execution/compare/0.68.1...0.68.2) (2025-03-28)
+
+
+### Bug Fixes
+
+* fix for foundry tests external contributors ([a9ddb0e](https://github.com/propeller-heads/tycho-execution/commit/a9ddb0e6e9ef546f6e851c3056df5a55ee4dfa76))
+
 ## [0.68.1](https://github.com/propeller-heads/tycho-execution/compare/0.68.0...0.68.1) (2025-03-27)
 
 
