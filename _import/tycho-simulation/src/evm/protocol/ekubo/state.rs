@@ -1,5 +1,6 @@
 use std::{any::Any, collections::HashMap, fmt::Debug};
 
+use alloy_primitives::Address;
 use evm_ekubo_sdk::{
     math::{
         tick::{MAX_TICK, MIN_TICK},
@@ -181,14 +182,28 @@ impl ProtocolSim for EkuboState {
             .downcast_ref::<EkuboState>()
             .is_some_and(|other_state| self == other_state)
     }
+
+    fn get_limits(
+        &self,
+        sell_token: Address,
+        _buy_token: Address,
+    ) -> Result<(BigUint, BigUint), SimulationError> {
+        // TODO Update once exact out is supported
+        Ok((
+            self.get_limit(U256::from_big_endian(sell_token.as_slice()))?
+                .into(),
+            BigUint::ZERO,
+        ))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use evm_ekubo_sdk::{math::tick::MIN_SQRT_RATIO, quoting::base_pool::BasePoolState};
+    use num_traits::Zero;
 
     use super::*;
-    use crate::evm::protocol::ekubo::test_pool::{attributes, state, POOL_KEY};
+    use crate::evm::protocol::ekubo::test_pool::*;
 
     #[test]
     fn test_delta_transition() {
@@ -207,29 +222,15 @@ mod tests {
         assert_eq!(state(), pool);
     }
 
-    #[tokio::test]
+    #[test]
     // Compare against the reference implementation
-    async fn test_get_amount_out() {
-        let token0 = Token {
-            address: POOL_KEY.token0.to_big_endian().into(),
-            decimals: 0,
-            symbol: "TOKEN0".to_string(),
-            gas: BigUint::default(),
-        };
-
-        let token1 = Token {
-            address: POOL_KEY.token1.to_big_endian().into(),
-            decimals: 0,
-            symbol: "TOKEN1".to_string(),
-            gas: BigUint::default(),
-        };
-
+    fn test_get_amount_out() {
         let state = state();
 
         let amount = 100_u8;
 
         let tycho_quote = state
-            .get_amount_out(BigUint::from(amount), &token0, &token1)
+            .get_amount_out(BigUint::from(amount), &token0(), &token1())
             .unwrap();
 
         let EkuboState::Base(pool) = state else {
@@ -247,5 +248,24 @@ mod tests {
             .unwrap();
 
         assert_eq!(tycho_out, reference_out);
+    }
+
+    #[test]
+    fn test_get_limits() {
+        let state = state();
+
+        let max_amount_in = state
+            .get_limits(
+                Address::from_word(POOL_KEY.token0.to_big_endian().into()),
+                Address::from_word(POOL_KEY.token1.to_big_endian().into()),
+            )
+            .unwrap()
+            .0;
+
+        assert!(!max_amount_in.is_zero());
+
+        state
+            .get_amount_out(max_amount_in, &token0(), &token1())
+            .unwrap();
     }
 }

@@ -7,17 +7,37 @@ use evm_ekubo_sdk::{
         types::{Config, NodeKey, Tick},
     },
 };
+use num_bigint::BigUint;
 use tycho_core::{dto::ProtocolComponent, Bytes};
 
 use super::{pool::base::BasePool, state::EkuboState};
+use crate::models::Token;
 
 pub const POOL_KEY: NodeKey = NodeKey {
     token0: U256([1, 0, 0, 0]),
     token1: U256([2, 0, 0, 0]),
-    config: Config { fee: 0, tick_spacing: 1, extension: U256::zero() },
+    config: Config { fee: 0, tick_spacing: 10, extension: U256::zero() },
 };
 
-pub const LOWER_TICK: Tick = Tick { index: -10, liquidity_delta: 1_000 };
+pub fn token0() -> Token {
+    Token {
+        address: POOL_KEY.token0.to_big_endian().into(),
+        decimals: 0,
+        symbol: "TOKEN0".to_string(),
+        gas: BigUint::default(),
+    }
+}
+
+pub fn token1() -> Token {
+    Token {
+        address: POOL_KEY.token1.to_big_endian().into(),
+        decimals: 0,
+        symbol: "TOKEN1".to_string(),
+        gas: BigUint::default(),
+    }
+}
+
+pub const LOWER_TICK: Tick = Tick { index: -10, liquidity_delta: 100_000_000 };
 
 pub const UPPER_TICK: Tick =
     Tick { index: -LOWER_TICK.index, liquidity_delta: -LOWER_TICK.liquidity_delta };

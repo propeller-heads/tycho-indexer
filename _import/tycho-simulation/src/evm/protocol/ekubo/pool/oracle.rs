@@ -103,4 +103,22 @@ impl EkuboPool for OraclePool {
             self.state.last_snapshot_time,
         );
     }
+
+    fn get_limit(&self, token_in: U256) -> Result<u128, SimulationError> {
+        let max_in_token_amount = TokenAmount { amount: i128::MAX, token: token_in };
+
+        let quote = self
+            .imp
+            .quote(QuoteParams {
+                token_amount: max_in_token_amount,
+                sqrt_ratio_limit: None,
+                override_state: None,
+                meta: 0,
+            })
+            .map_err(|err| SimulationError::RecoverableError(format!("quoting error: {err:?}")))?;
+
+        u128::try_from(quote.consumed_amount).map_err(|_| {
+            SimulationError::FatalError("consumed amount should be non-negative".to_string())
+        })
+    }
 }

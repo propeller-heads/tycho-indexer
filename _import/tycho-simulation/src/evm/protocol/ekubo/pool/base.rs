@@ -1,5 +1,5 @@
 use evm_ekubo_sdk::{
-    math::uint::U256,
+    math::{tick::to_sqrt_ratio, uint::U256},
     quoting::{
         self,
         base_pool::{BasePoolResources, BasePoolState},
@@ -40,6 +40,8 @@ impl BasePool {
     const BASE_GAS_COST_OF_ONE_SWAP: u64 = 25_000;
     const GAS_COST_OF_ONE_TICK_SPACING_CROSSED: u64 = 4_000;
     const GAS_COST_OF_ONE_INITIALIZED_TICK_CROSSED: u64 = 20_000;
+
+    const WEI_UNDERESTIMATION_FACTOR: u128 = 2;
 
     pub fn new(key: NodeKey, state: BasePoolState, ticks: Ticks, active_tick: i32) -> Self {
         Self {
@@ -120,5 +122,61 @@ impl EkuboPool for BasePool {
         }
 
         self.imp = impl_from_state(*self.key(), self.state, self.ticks.inner().clone());
+    }
+
+    fn get_limit(&self, token_in: U256) -> Result<u128, SimulationError> {
+        let max_in_token_amount = TokenAmount { amount: i128::MAX, token: token_in };
+
+        let sqrt_ratio = self.sqrt_ratio();
+        let ticks = self.ticks.inner();
+
+        let sqrt_ratio_limit = if token_in == self.key().token0 {
+            ticks
+                .first()
+                .map_or(Ok(sqrt_ratio), |tick| {
+                    to_sqrt_ratio(tick.index)
+                        .ok_or_else(|| {
+                            SimulationError::FatalError(
+                                "sqrt_ratio should be computable from tick index".to_string(),
+                            )
+                        })
+                        .map(|r| Ord::min(r, sqrt_ratio))
+                })
+        } else {
+            ticks
+                .last()
+                .map_or(Ok(sqrt_ratio), |tick| {
+                    to_sqrt_ratio(tick.index)
+                        .ok_or_else(|| {
+                            SimulationError::FatalError(
+                                "sqrt_ratio should be computable from tick index".to_string(),
+                            )
+                        })
+                        .map(|r| Ord::max(r, sqrt_ratio))
+                })
+        }?;
+
+        let quote = self
+            .imp
+            .quote(QuoteParams {
+                token_amount: max_in_token_amount,
+                sqrt_ratio_limit: Some(sqrt_ratio_limit),
+                override_state: None,
+                meta: (),
+            })
+            .map_err(|err| SimulationError::RecoverableError(format!("quoting error: {err:?}")))?;
+
+        let resources = quote.execution_resources;
+
+        Ok(u128::try_from(quote.consumed_amount)
+            .map_err(|_| {
+                SimulationError::FatalError("consumed amount should be non-negative".to_string())
+            })?
+            .saturating_sub(
+                Self::WEI_UNDERESTIMATION_FACTOR *
+                    (resources.initialized_ticks_crossed as u128 +
+                        resources.tick_spacings_crossed as u128 / 256 +
+                        1),
+            ))
     }
 }
