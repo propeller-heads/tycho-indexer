@@ -82,10 +82,9 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
         _locked(msg.data[36:]);
     }
 
-    function payCallback(uint256, address token) external coreOnly {
-        uint128 amount = uint128(bytes16(LibBytes.loadCalldata(msg.data, 68)));
-
-        SafeTransferLib.safeTransfer(token, address(core), amount);
+    function payCallback(uint256, address /*token*/) external coreOnly {
+        // Without selector and locker id
+        _payCallback(msg.data[36:]);
     }
 
     function _balanceOf(address token)
@@ -193,10 +192,10 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
     }
 
     function _payCallback(bytes calldata payData) internal {
-        address token = address(bytes20(payData[0:20]));
-        uint128 amount = uint128(bytes16(payData[20:36]));
+        address token = address(bytes20(payData[12:32])); // This arg is abi-encoded
+        uint128 amount = uint128(bytes16(payData[32:48]));
 
-        SafeTransferLib.safeTransfer(address(core), token, amount);
+        SafeTransferLib.safeTransfer(token, address(core), amount);
     }
 
     // To receive withdrawals from Core
