@@ -82,7 +82,7 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
         _locked(msg.data[36:]);
     }
 
-    function payCallback(uint256, address /*token*/) external coreOnly {
+    function payCallback(uint256, address /*token*/ ) external coreOnly {
         // Without selector and locker id
         _payCallback(msg.data[36:]);
     }
