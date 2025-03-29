@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
@@ -203,7 +203,7 @@ mod tests {
 
     use num_bigint::BigUint;
     use rstest::rstest;
-    use tycho_core::{models::protocol::ProtocolComponent, Bytes};
+    use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
     use crate::encoding::models::Swap;

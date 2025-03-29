@@ -1,4 +1,4 @@
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 
 use crate::encoding::{evm::constants::GROUPABLE_PROTOCOLS, models::Swap};
 
@@ -74,7 +74,7 @@ mod tests {
     use std::str::FromStr;
 
     use alloy_primitives::hex;
-    use tycho_core::{models::protocol::ProtocolComponent, Bytes};
+    use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
     use crate::encoding::models::Swap;

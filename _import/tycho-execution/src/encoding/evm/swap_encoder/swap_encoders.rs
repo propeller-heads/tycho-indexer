@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use alloy_primitives::{Address, Bytes as AlloyBytes};
 use alloy_sol_types::SolValue;
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
@@ -328,7 +328,7 @@ mod tests {
 
     use alloy::hex::encode;
     use num_bigint::BigInt;
-    use tycho_core::{models::protocol::ProtocolComponent, Bytes};
+    use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
 

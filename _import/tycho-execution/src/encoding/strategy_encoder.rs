@@ -1,4 +1,4 @@
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 
 use crate::encoding::{errors::EncodingError, models::Solution, swap_encoder::SwapEncoder};
 
