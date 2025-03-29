@@ -7,6 +7,7 @@ use evm_ekubo_sdk::{
         util::find_nearest_initialized_tick_index,
     },
 };
+use num_traits::Zero;
 
 use super::{EkuboPool, EkuboPoolQuote};
 use crate::{evm::protocol::ekubo::tick::Ticks, protocol::errors::SimulationError};
@@ -37,7 +38,8 @@ fn impl_from_state(
 }
 
 impl BasePool {
-    const BASE_GAS_COST_OF_ONE_SWAP: u64 = 25_000;
+    const BASE_GAS_COST_OF_ONE_FULL_RANGE_SWAP: u64 = 20_000;
+    const BASE_GAS_COST_OF_ONE_CL_SWAP: u64 = 24_000;
     const GAS_COST_OF_ONE_TICK_SPACING_CROSSED: u64 = 4_000;
     const GAS_COST_OF_ONE_INITIALIZED_TICK_CROSSED: u64 = 20_000;
 
@@ -83,13 +85,22 @@ impl BasePool {
 
         Ok(EkuboPoolQuote {
             calculated_amount: quote.calculated_amount,
-            gas: Self::gas_costs(&quote.execution_resources),
+            gas: Self::gas_costs(
+                &quote.execution_resources,
+                self.key().config.tick_spacing.is_zero(),
+            ),
             new_state,
         })
     }
 
-    pub fn gas_costs(resources: &BasePoolResources) -> u64 {
-        Self::BASE_GAS_COST_OF_ONE_SWAP +
+    pub fn gas_costs(resources: &BasePoolResources, is_full_range: bool) -> u64 {
+        let base_gas_cost = if is_full_range {
+            Self::BASE_GAS_COST_OF_ONE_FULL_RANGE_SWAP
+        } else {
+            Self::BASE_GAS_COST_OF_ONE_CL_SWAP
+        };
+
+        base_gas_cost +
             resources.tick_spacings_crossed as u64 * Self::GAS_COST_OF_ONE_TICK_SPACING_CROSSED +
             resources.initialized_ticks_crossed as u64 *
                 Self::GAS_COST_OF_ONE_INITIALIZED_TICK_CROSSED

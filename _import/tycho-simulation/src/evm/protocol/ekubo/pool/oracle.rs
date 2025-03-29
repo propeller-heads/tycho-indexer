@@ -67,7 +67,7 @@ impl OraclePool {
 
         Ok(EkuboPoolQuote {
             calculated_amount: quote.calculated_amount,
-            gas: BasePool::gas_costs(&resources.base_pool_resources) +
+            gas: BasePool::gas_costs(&resources.base_pool_resources, true) +
                 Self::GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT, /* TODO Depend on snapshots_written
                                                              * when timestamps are supported */
             new_state,

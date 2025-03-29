@@ -33,9 +33,6 @@ pub enum EkuboState {
 }
 
 impl EkuboState {
-    // Minimum overhead of initiating any swap with the Core contract
-    const BASE_GAS_COST: u64 = 50_000;
-
     pub fn set_tick(&mut self, tick: Tick) -> Result<(), String> {
         match self {
             Self::Base(p) => {
@@ -106,9 +103,7 @@ impl ProtocolSim for EkuboState {
             amount: BigUint::try_from(quote.calculated_amount).map_err(|_| {
                 SimulationError::FatalError("output amount must be non-negative".to_string())
             })?,
-            gas: (quote.gas + Self::BASE_GAS_COST).into(), /* TODO If we can detect multihop
-                                                            * swaps, only add BASE_GAS_COST for
-                                                            * the first swap */
+            gas: quote.gas.into(),
             new_state: Box::new(quote.new_state),
         })
     }
