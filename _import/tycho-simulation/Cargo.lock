@@ -2947,7 +2947,7 @@ dependencies = [
 [[package]]
 name = "evm_ekubo_sdk"
 version = "0.3.1"
-source = "git+https://github.com/EkuboProtocol/evm-rust-sdk?rev=431beec#431beecbc91bd84681fd207e1cb0c92cd297b625"
+source = "git+https://github.com/EkuboProtocol/evm-rust-sdk?rev=d720391#d720391b787b382d3d0e8b2f76c9885c9f93b635"
 dependencies = [
  "insta",
  "num-traits",

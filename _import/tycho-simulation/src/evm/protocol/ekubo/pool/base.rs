@@ -109,7 +109,7 @@ impl BasePool {
 
 impl EkuboPool for BasePool {
     fn key(&self) -> &NodeKey {
-        self.imp.key()
+        self.imp.get_key()
     }
 
     fn sqrt_ratio(&self) -> U256 {

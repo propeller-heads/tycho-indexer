@@ -77,7 +77,7 @@ impl OraclePool {
 
 impl EkuboPool for OraclePool {
     fn key(&self) -> &NodeKey {
-        self.imp.key()
+        self.imp.get_key()
     }
 
     fn sqrt_ratio(&self) -> U256 {
@@ -93,7 +93,7 @@ impl EkuboPool for OraclePool {
     }
 
     fn reinstantiate(&mut self) {
-        let key = self.imp.key();
+        let key = self.key();
 
         self.imp = quoting::oracle_pool::OraclePool::new(
             key.token1,
