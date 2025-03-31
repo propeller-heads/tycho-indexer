@@ -1,3 +1,11 @@
+## [0.69.0](https://github.com/propeller-heads/tycho-execution/compare/0.68.2...0.69.0) (2025-03-31)
+
+
+### Features
+
+* Add PancakeSwapV3 support to encoding ([fa024a4](https://github.com/propeller-heads/tycho-execution/commit/fa024a4a6702c7809af31a6ba392338d9368c6d2))
+* Pancakeswap V3 support ([d582543](https://github.com/propeller-heads/tycho-execution/commit/d582543057665b737cc0aab5243ccc22db1f0a13))
+
 ## [0.68.2](https://github.com/propeller-heads/tycho-execution/compare/0.68.1...0.68.2) (2025-03-28)
 
 
