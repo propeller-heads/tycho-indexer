@@ -7,7 +7,7 @@
     "pancakeswap_v3": "0x4929B619A8F0D9c06ed0FfD497636580D823F65d",
     "uniswap_v4": "0x042C0ebBEAb9d9987c2f64Ee05f2B3aeB86eAf70",
     "vm:balancer_v2": "0x00BE8EfAE40219Ff76287b0F9b9e497942f5BC91",
-    "ekubo": "0x5E40985A4d4E8DbAd1dc35fFCfacfCde3e3d1806"
+    "ekubo_v2": "0x5E40985A4d4E8DbAd1dc35fFCfacfCde3e3d1806"
   },
   "tenderly_ethereum": {
     "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",
