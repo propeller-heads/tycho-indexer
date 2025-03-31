@@ -3,7 +3,7 @@ use std::{any::Any, collections::HashMap};
 use alloy_primitives::{Address, U256};
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::Zero;
-use tycho_core::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
 use super::reserve_price::spot_price_from_reserves;
 use crate::{
@@ -197,7 +197,7 @@ mod tests {
     use approx::assert_ulps_eq;
     use num_traits::One;
     use rstest::rstest;
-    use tycho_core::hex_bytes::Bytes;
+    use tycho_common::hex_bytes::Bytes;
 
     use super::*;
 

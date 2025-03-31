@@ -4,7 +4,7 @@ use alloy_primitives::{Address, Sign, I256, U256};
 use num_bigint::BigUint;
 use num_traits::Zero;
 use tracing::trace;
-use tycho_core::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
 use super::enums::FeeAmount;
 use crate::{
@@ -481,7 +481,7 @@ mod tests {
     use num_traits::FromPrimitive;
     use serde_json::Value;
     use tycho_client::feed::synchronizer::ComponentWithState;
-    use tycho_core::hex_bytes::Bytes;
+    use tycho_common::hex_bytes::Bytes;
 
     use super::*;
     use crate::{evm::protocol::utils::bytes_to_address, protocol::models::TryFromWithBlock};

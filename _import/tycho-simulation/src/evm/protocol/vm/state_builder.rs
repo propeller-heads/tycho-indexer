@@ -13,7 +13,7 @@ use revm::{
     DatabaseRef,
 };
 use tracing::warn;
-use tycho_core::Bytes as TychoBytes;
+use tycho_common::Bytes as TychoBytes;
 
 use super::{
     constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
@@ -47,7 +47,7 @@ use crate::{
 /// ```rust
 /// use alloy_primitives::Address;
 /// use std::path::PathBuf;
-/// use tycho_core::Bytes;
+/// use tycho_common::Bytes;
 /// use tycho_simulation::evm::engine_db::simulation_db::BlockHeader;
 /// use tycho_simulation::evm::engine_db::SHARED_TYCHO_DB;
 /// use tycho_simulation::protocol::errors::SimulationError;

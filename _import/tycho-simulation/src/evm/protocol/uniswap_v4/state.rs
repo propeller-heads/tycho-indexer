@@ -4,7 +4,7 @@ use alloy_primitives::{Address, Sign, I256, U256};
 use num_bigint::BigUint;
 use num_traits::Zero;
 use tracing::trace;
-use tycho_core::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
     evm::protocol::{

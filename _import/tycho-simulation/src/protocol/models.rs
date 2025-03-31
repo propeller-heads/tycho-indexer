@@ -29,7 +29,7 @@ use std::{collections::HashMap, default::Default, future::Future};
 use chrono::NaiveDateTime;
 use num_bigint::BigUint;
 use tycho_client::feed::Header;
-use tycho_core::{models::Chain, Bytes};
+use tycho_common::{models::Chain, Bytes};
 
 use super::state::ProtocolSim;
 use crate::models::Token;
@@ -84,7 +84,7 @@ impl ProtocolComponent {
     }
 
     pub fn from_with_tokens(
-        core_model: tycho_core::dto::ProtocolComponent,
+        core_model: tycho_common::dto::ProtocolComponent,
         mut tokens: Vec<Token>,
     ) -> Self {
         tokens.sort_unstable_by_key(|t| t.address.clone());
@@ -103,9 +103,9 @@ impl ProtocolComponent {
     }
 }
 
-impl From<ProtocolComponent> for tycho_core::models::protocol::ProtocolComponent {
+impl From<ProtocolComponent> for tycho_common::models::protocol::ProtocolComponent {
     fn from(component: ProtocolComponent) -> Self {
-        tycho_core::models::protocol::ProtocolComponent {
+        tycho_common::models::protocol::ProtocolComponent {
             id: hex::encode(component.id),
             protocol_system: component.protocol_system,
             protocol_type_name: component.protocol_type_name,

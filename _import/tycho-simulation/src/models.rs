@@ -12,7 +12,7 @@ use std::{
 
 use alloy_primitives::U256;
 use num_bigint::BigUint;
-use tycho_core::{dto::ResponseToken, Bytes};
+use tycho_common::{dto::ResponseToken, Bytes};
 
 use crate::utils::hexstring_to_vec;
 

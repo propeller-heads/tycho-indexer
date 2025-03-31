@@ -8,7 +8,7 @@ use clap::Parser;
 use futures::{future::select_all, StreamExt};
 use tokio::{sync::mpsc, task::JoinHandle};
 use tycho_client::feed::component_tracker::ComponentFilter;
-use tycho_core::models::Chain;
+use tycho_common::models::Chain;
 use tycho_simulation::{
     evm::{
         engine_db::tycho_db::PreCachedDB,
@@ -72,7 +72,7 @@ fn register_exchanges(
                     Some(uniswap_v4_pool_with_hook_filter),
                 )
         }
-        Chain::ZkSync | Chain::Starknet | Chain::Arbitrum => {}
+        _ => {}
     }
     builder
 }

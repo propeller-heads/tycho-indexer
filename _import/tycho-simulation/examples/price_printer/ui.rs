@@ -17,7 +17,7 @@ use ratatui::{
 };
 use tokio::{select, sync::mpsc::Receiver};
 use tracing::warn;
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 use tycho_simulation::protocol::{
     models::{BlockUpdate, ProtocolComponent},
     state::ProtocolSim,

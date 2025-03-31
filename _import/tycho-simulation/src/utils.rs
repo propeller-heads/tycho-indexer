@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use tracing::info;
 use tycho_client::{rpc::RPCClient, HttpRPCClient};
-use tycho_core::{models::Chain, Bytes};
+use tycho_common::{models::Chain, Bytes};
 
 use crate::{models::Token, protocol::errors::SimulationError};
 
