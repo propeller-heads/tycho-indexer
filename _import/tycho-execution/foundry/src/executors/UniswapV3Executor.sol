@@ -80,6 +80,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
         returns (bytes memory result)
     {
         // The data has the following layout:
+        // - selector (4 bytes)
         // - amount0Delta (32 bytes)
         // - amount1Delta (32 bytes)
         // - dataOffset (32 bytes)
@@ -87,11 +88,11 @@ contract UniswapV3Executor is IExecutor, ICallback {
         // - protocolData (variable length)
 
         (int256 amount0Delta, int256 amount1Delta) =
-            abi.decode(msgData[:64], (int256, int256));
+            abi.decode(msgData[4:68], (int256, int256));
 
-        address tokenIn = address(bytes20(msgData[128:148]));
+        address tokenIn = address(bytes20(msgData[132:152]));
 
-        verifyCallback(msgData[128:]);
+        verifyCallback(msgData[132:]);
 
         uint256 amountOwed =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
@@ -147,10 +148,10 @@ contract UniswapV3Executor is IExecutor, ICallback {
 
     function _makeV3CallbackData(address tokenIn, address tokenOut, uint24 fee)
         internal
-        view
+        pure
         returns (bytes memory)
     {
-        return abi.encodePacked(tokenIn, tokenOut, fee, self);
+        return abi.encodePacked(tokenIn, tokenOut, fee);
     }
 
     function _verifyPairAddress(

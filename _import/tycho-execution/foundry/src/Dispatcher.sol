@@ -52,7 +52,7 @@ contract Dispatcher {
      * @dev Calls an executor, assumes swap.protocolData contains
      *  protocol-specific data required by the executor.
      */
-    // slither-disable-next-line delegatecall-loop
+    // slither-disable-next-line delegatecall-loop,assembly
     function _callExecutor(
         address executor,
         uint256 amount,
@@ -60,6 +60,10 @@ contract Dispatcher {
     ) internal returns (uint256 calculatedAmount) {
         if (!executors[executor]) {
             revert Dispatcher__UnapprovedExecutor();
+        }
+
+        assembly {
+            tstore(0, executor)
         }
 
         // slither-disable-next-line controlled-delegatecall,low-level-calls
@@ -80,8 +84,12 @@ contract Dispatcher {
         calculatedAmount = abi.decode(result, (uint256));
     }
 
+    // slither-disable-next-line assembly
     function _handleCallback(bytes calldata data) internal {
-        address executor = address(uint160(bytes20(data[data.length - 20:])));
+        address executor;
+        assembly {
+            executor := tload(0)
+        }
 
         if (!executors[executor]) {
             revert Dispatcher__UnapprovedExecutor();
