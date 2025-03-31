@@ -11,5 +11,6 @@ pub static GROUPABLE_PROTOCOLS: LazyLock<HashSet<&'static str>> = LazyLock::new(
     let mut set = HashSet::new();
     set.insert("uniswap_v4");
     set.insert("balancer_v3");
+    set.insert("ekubo");
     set
 });
