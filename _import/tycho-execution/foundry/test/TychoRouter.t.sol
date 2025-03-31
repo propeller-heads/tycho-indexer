@@ -753,6 +753,39 @@ contract TychoRouterTest is TychoRouterTestSetup {
         assertGe(finalBalance, expAmountOut);
     }
 
+    function testSwapSinglePancakeV3() public {
+        // Trade 1 WETH for USDT with 1 swap on Pancakeswap V3
+        // 1 WETH    ->    USDT
+        //       (PancakeV3)
+        uint256 amountIn = 10 ** 18;
+        deal(WETH_ADDR, tychoRouterAddr, amountIn);
+
+        uint256 expAmountOut = 2659_567519; //Swap 1 WETH for 1205.12 DAI
+        bool zeroForOne = true;
+        bytes memory protocolData = encodeUniswapV3Swap(
+            WETH_ADDR,
+            USDT_ADDR,
+            tychoRouterAddr,
+            PANCAKESWAPV3_WETH_USDT_POOL,
+            zeroForOne
+        );
+        bytes memory swap = encodeSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(pancakev3Executor),
+            protocolData
+        );
+
+        bytes[] memory swaps = new bytes[](1);
+        swaps[0] = swap;
+
+        tychoRouter.exposedSwap(amountIn, 2, pleEncode(swaps));
+
+        uint256 finalBalance = IERC20(USDT_ADDR).balanceOf(tychoRouterAddr);
+        assertGe(finalBalance, expAmountOut);
+    }
+
     function testSwapSingleUSV3Permit2() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V3 using Permit2
         // 1 WETH   ->   DAI

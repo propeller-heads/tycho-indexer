@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import "@uniswap/v3-updated/CallbackValidationV2.sol";
 import "@interfaces/ICallback.sol";
 
 error UniswapV3Executor__InvalidDataLength();
@@ -106,8 +105,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
         address tokenOut = address(bytes20(data[20:40]));
         uint24 poolFee = uint24(bytes3(data[40:43]));
 
-        // slither-disable-next-line unused-return
-        CallbackValidationV2.verifyCallback(factory, tokenIn, tokenOut, poolFee);
+        _verifyPairAddress(tokenIn, tokenOut, poolFee, msg.sender);
     }
 
     function uniswapV3SwapCallback(

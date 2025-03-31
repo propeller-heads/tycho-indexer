@@ -36,6 +36,7 @@ contract TychoRouterTestSetup is Test, Constants {
     address tychoRouterAddr;
     UniswapV2Executor public usv2Executor;
     UniswapV3Executor public usv3Executor;
+    UniswapV3Executor public pancakev3Executor;
     UniswapV4Executor public usv4Executor;
     MockERC20[] tokens;
 
@@ -46,8 +47,10 @@ contract TychoRouterTestSetup is Test, Constants {
         vm.startPrank(ADMIN);
         address factoryV2 = USV2_FACTORY_ETHEREUM;
         address factoryV3 = USV3_FACTORY_ETHEREUM;
+        address factoryPancakeV3 = PANCAKESWAPV3_DEPLOYER_ETHEREUM;
         bytes32 initCodeV2 = USV2_POOL_CODE_INIT_HASH;
         bytes32 initCodeV3 = USV3_POOL_CODE_INIT_HASH;
+        bytes32 initCodePancakeV3 = PANCAKEV3_POOL_CODE_INIT_HASH;
         address poolManagerAddress = 0x000000000004444c5dc75cB358380D2e3dE08A90;
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
         tychoRouter = new TychoRouterExposed(PERMIT2_ADDRESS, WETH_ADDR);
@@ -65,11 +68,14 @@ contract TychoRouterTestSetup is Test, Constants {
         usv2Executor = new UniswapV2Executor(factoryV2, initCodeV2);
         usv3Executor = new UniswapV3Executor(factoryV3, initCodeV3);
         usv4Executor = new UniswapV4Executor(poolManager);
+        pancakev3Executor =
+            new UniswapV3Executor(factoryPancakeV3, initCodePancakeV3);
         vm.startPrank(EXECUTOR_SETTER);
-        address[] memory executors = new address[](3);
+        address[] memory executors = new address[](4);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
-        executors[2] = address(usv4Executor);
+        executors[2] = address(pancakev3Executor);
+        executors[3] = address(usv4Executor);
         tychoRouter.setExecutors(executors);
         vm.stopPrank();
 

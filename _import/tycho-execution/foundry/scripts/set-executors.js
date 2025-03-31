@@ -51,7 +51,7 @@ async function main() {
     // Set executors
     const executorAddresses = executorsToSet.map(executor => executor.executor);
     const tx = await router.setExecutors(executorAddresses, {
-        gasLimit: 200000 // should be around 50k per executor
+        gasLimit: 300000 // should be around 50k per executor
     });
     await tx.wait(); // Wait for the transaction to be mined
     console.log(`Executors set at transaction: ${tx.hash}`);
