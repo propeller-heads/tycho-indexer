@@ -1,3 +1,10 @@
+## [0.87.0](https://github.com/propeller-heads/tycho-simulation/compare/0.86.1...0.87.0) (2025-03-31)
+
+
+### Features
+
+* update tycho deps ([6a11287](https://github.com/propeller-heads/tycho-simulation/commit/6a11287f3d2e4c2a291afc57b819c49000171313))
+
 ## [0.86.1](https://github.com/propeller-heads/tycho-simulation/compare/0.86.0...0.86.1) (2025-03-31)
 
 
