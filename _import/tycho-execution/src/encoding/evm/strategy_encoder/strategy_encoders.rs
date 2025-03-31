@@ -1030,7 +1030,7 @@ mod tests {
         let component = ProtocolComponent {
             // All Ekubo swaps go through the core contract - not necessary to specify pool id
             // for test
-            protocol_system: "ekubo".to_string(),
+            protocol_system: "ekubo_v2".to_string(),
             static_attributes,
             ..Default::default()
         };
