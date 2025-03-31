@@ -1029,6 +1029,9 @@ contract TychoRouterTest is TychoRouterTestSetup {
     }
 
     function testEkuboIntegration() public {
+        vm.skip(true);
+        // Test needs to be run on block 22082754 or later
+
         deal(ALICE, 1 ether);
         uint256 balancerBefore = IERC20(USDC_ADDR).balanceOf(ALICE);
 

@@ -54,7 +54,7 @@ contract TychoRouterTestSetup is Test, Constants {
         bytes32 initCodeV3 = USV3_POOL_CODE_INIT_HASH;
         bytes32 initCodePancakeV3 = PANCAKEV3_POOL_CODE_INIT_HASH;
         address poolManagerAddress = 0x000000000004444c5dc75cB358380D2e3dE08A90;
-        ICore ekuboCore = ICore(0xe0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444);
+        address ekuboCore = 0xe0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444;
 
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
         tychoRouter = new TychoRouterExposed(PERMIT2_ADDRESS, WETH_ADDR);

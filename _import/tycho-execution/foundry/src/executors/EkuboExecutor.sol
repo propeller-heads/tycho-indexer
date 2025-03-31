@@ -25,8 +25,8 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
     uint256 constant POOL_DATA_OFFSET = 56;
     uint256 constant HOP_BYTE_LEN = 52;
 
-    constructor(ICore _core) {
-        core = _core;
+    constructor(address _core) {
+        core = ICore(_core);
     }
 
     function swap(uint256 amountIn, bytes calldata data)
