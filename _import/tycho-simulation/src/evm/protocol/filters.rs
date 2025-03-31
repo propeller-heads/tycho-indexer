@@ -169,7 +169,7 @@ pub fn uniswap_v4_pool_with_hook_filter(component: &ComponentWithState) -> bool 
     true
 }
 
-/// Filters out pool that have rely on ERC4626 in Balancer V3
+/// Filters out pools that rely on ERC4626 in Balancer V3
 pub fn balancer_v3_pool_filter(component: &ComponentWithState) -> bool {
     if let Some(erc4626) = component
         .component

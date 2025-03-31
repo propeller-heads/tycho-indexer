@@ -243,8 +243,11 @@ where
                     let overwrites =
                         Some(self.get_overwrites(vec![t0, t1], *MAX_BALANCE / U256::from(100))?);
 
-                    let x1 = self.get_sell_amount_limit(vec![t0, t1], overwrites.clone())? /
+                    let x1 = self
+                        .get_amount_limits(vec![t0, t1], overwrites.clone())?
+                        .0 /
                         U256::from(100);
+
                     let x2 = x1 + (x1 / U256::from(100));
 
                     let y1 = self
