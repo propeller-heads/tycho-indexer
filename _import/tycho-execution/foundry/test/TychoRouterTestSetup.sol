@@ -75,13 +75,14 @@ contract TychoRouterTestSetup is Test, Constants {
         pancakev3Executor =
             new UniswapV3Executor(factoryPancakeV3, initCodePancakeV3);
         ekuboExecutor = new EkuboExecutor(ekuboCore);
+
         vm.startPrank(EXECUTOR_SETTER);
         address[] memory executors = new address[](5);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
         executors[2] = address(pancakev3Executor);
         executors[3] = address(usv4Executor);
-        executors[3] = address(ekuboExecutor);
+        executors[4] = address(ekuboExecutor);
         tychoRouter.setExecutors(executors);
         vm.stopPrank();
 
