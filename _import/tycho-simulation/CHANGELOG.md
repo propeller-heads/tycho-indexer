@@ -1,3 +1,11 @@
+## [0.86.1](https://github.com/propeller-heads/tycho-simulation/compare/0.86.0...0.86.1) (2025-03-31)
+
+
+### Bug Fixes
+
+* Add default for new Chain enum variants ([ff49676](https://github.com/propeller-heads/tycho-simulation/commit/ff49676b456e67a81dc8ad1f2b7789113d0de31d))
+* get tycho client & common deps from crates.io ([20d6ecb](https://github.com/propeller-heads/tycho-simulation/commit/20d6ecbaf644c0f40ddfd2f034540feb52f031b8))
+
 ## [0.86.0](https://github.com/propeller-heads/tycho-simulation/compare/0.85.1...0.86.0) (2025-03-25)
 
 
