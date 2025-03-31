@@ -89,17 +89,10 @@ jobs:
       - name: Install git
         run: sudo apt update && sudo apt install -y git
 
-      - name: Checkout PR (from fork or branch)
-        if: github.event_name == 'pull_request'
+      - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: refs/pull/${{ github.event.pull_request.number }}/head
-
-      - name: Checkout push branch (main or other)
-        if: github.event_name != 'pull_request'
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup git to use https
         run: |
