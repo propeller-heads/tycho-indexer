@@ -5,7 +5,7 @@ pragma solidity ^0.8.26;
 type Config is bytes32;
 
 // Each pool has its own state associated with this key
-struct PoolKey {
+struct EkuboPoolKey {
     address token0;
     address token1;
     Config config;

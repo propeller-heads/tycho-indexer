@@ -33,6 +33,9 @@ const executors_to_deploy = {
     // Args: Pool manager
     {exchange: "UniswapV4Executor", args: ["0x000000000004444c5dc75cB358380D2e3dE08A90"]},
     {exchange: "BalancerV2Executor", args: []},
+    // Args: Ekubo core contract
+    {exchange: "EkuboExecutor", args: [
+      "0xe0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444"
   ],
   "base":[
     // Args: Factory, Pool Init Code Hash

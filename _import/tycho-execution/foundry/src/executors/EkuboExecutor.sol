@@ -9,7 +9,7 @@ import {ILocker, IPayer} from "@ekubo/interfaces/IFlashAccountant.sol";
 import {NATIVE_TOKEN_ADDRESS} from "@ekubo/math/constants.sol";
 import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
 import {LibBytes} from "@solady/utils/LibBytes.sol";
-import {Config, PoolKey} from "@ekubo/types/poolKey.sol";
+import {Config, EkuboPoolKey} from "@ekubo/types/poolKey.sol";
 import {MAX_SQRT_RATIO, MIN_SQRT_RATIO} from "@ekubo/types/sqrtRatio.sol";
 
 contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
@@ -25,8 +25,8 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
     uint256 constant POOL_DATA_OFFSET = 56;
     uint256 constant HOP_BYTE_LEN = 52;
 
-    constructor(ICore _core) {
-        core = _core;
+    constructor(address _core) {
+        core = ICore(_core);
     }
 
     function swap(uint256 amountIn, bytes calldata data)
@@ -146,7 +146,7 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
                 : (nextTokenIn, nextTokenOut, false);
 
             (int128 delta0, int128 delta1) = core.swap_611415377(
-                PoolKey(token0, token1, poolConfig),
+                EkuboPoolKey(token0, token1, poolConfig),
                 nextAmountIn,
                 isToken1,
                 isToken1 ? MAX_SQRT_RATIO : MIN_SQRT_RATIO,
