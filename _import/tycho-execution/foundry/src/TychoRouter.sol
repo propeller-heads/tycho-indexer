@@ -554,8 +554,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     }
 
     function locked(uint256) external {
-        // TODO replace with real executor address once deployed
-        address executor = address(0x5991A2dF15A8F6A256D3Ec51E99254Cd3fb576A9);
+        address executor = address(0x5E40985A4d4E8DbAd1dc35fFCfacfCde3e3d1806);
 
         // slither-disable-next-line controlled-delegatecall,low-level-calls
         (bool success, bytes memory result) = executor.delegatecall(
