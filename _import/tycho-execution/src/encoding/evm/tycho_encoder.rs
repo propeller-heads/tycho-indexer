@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use num_bigint::BigUint;
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
@@ -34,7 +34,7 @@ impl Clone for EVMTychoEncoder {
 
 impl EVMTychoEncoder {
     pub fn new(
-        chain: tycho_core::models::Chain,
+        chain: tycho_common::models::Chain,
         strategy_encoder: Box<dyn StrategyEncoder>,
     ) -> Result<Self, EncodingError> {
         let chain: Chain = Chain::from(chain);
@@ -54,6 +54,8 @@ impl EVMTychoEncoder {
     ///   swap's input is the chain's wrapped token.
     /// * If the solution is unwrapping, the checked token is the chain's native token and the last
     ///   swap's output is the chain's wrapped token.
+    /// * The token cannot appear more than once in the solution unless it is the first and last
+    ///   token (i.e. a true cyclical swap).
     fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError> {
         if solution.exact_out {
             return Err(EncodingError::FatalError(
@@ -175,7 +177,7 @@ impl TychoEncoder for EVMTychoEncoder {
 mod tests {
     use std::str::FromStr;
 
-    use tycho_core::models::{protocol::ProtocolComponent, Chain as TychoCoreChain};
+    use tycho_common::models::{protocol::ProtocolComponent, Chain as TychoCoreChain};
 
     use super::*;
     use crate::encoding::{

@@ -1,3 +1,48 @@
+## [0.68.2](https://github.com/propeller-heads/tycho-execution/compare/0.68.1...0.68.2) (2025-03-28)
+
+
+### Bug Fixes
+
+* fix for foundry tests external contributors ([a9ddb0e](https://github.com/propeller-heads/tycho-execution/commit/a9ddb0e6e9ef546f6e851c3056df5a55ee4dfa76))
+
+## [0.68.1](https://github.com/propeller-heads/tycho-execution/compare/0.68.0...0.68.1) (2025-03-27)
+
+
+### Bug Fixes
+
+* Add crate metadata ([7e7fabf](https://github.com/propeller-heads/tycho-execution/commit/7e7fabf51bff842ab20c2f512e4f3a609a266e79))
+
+## [0.68.0](https://github.com/propeller-heads/tycho-execution/compare/0.67.2...0.68.0) (2025-03-27)
+
+
+### Features
+
+* switch to tycho_commons ([0836bf7](https://github.com/propeller-heads/tycho-execution/commit/0836bf7d530f18a6c0f112542bcad16050e88afa))
+
+
+### Bug Fixes
+
+* Handle unichain chain id ([379858b](https://github.com/propeller-heads/tycho-execution/commit/379858bfca27eb5e8180a32351337779e625e0b5))
+
+## [0.67.2](https://github.com/propeller-heads/tycho-execution/compare/0.67.1...0.67.2) (2025-03-27)
+
+
+### Bug Fixes
+
+* prepared lint workflow for external contributors ([9896f48](https://github.com/propeller-heads/tycho-execution/commit/9896f4882940517d61852300420c7c580138406f))
+* prepared lint workflow for external contributors ([5162b9e](https://github.com/propeller-heads/tycho-execution/commit/5162b9e19efcaa5a2137f71a94f6f9e7f7d14da0))
+
+## [0.67.1](https://github.com/propeller-heads/tycho-execution/compare/0.67.0...0.67.1) (2025-03-27)
+
+
+### Bug Fixes
+
+* added empty line ([b3c4dbc](https://github.com/propeller-heads/tycho-execution/commit/b3c4dbc293df758ff4cff949298a819436d83c38))
+* fixed git checkout for codelint ([58e2ddd](https://github.com/propeller-heads/tycho-execution/commit/58e2ddd50e131c484ad53a6dca0b09e1d221d0e5))
+* prepared lint workflow for external contributors ([9f7d605](https://github.com/propeller-heads/tycho-execution/commit/9f7d605ea5e76d230b5946c618ece76365fb4f02))
+* removed empty line ([ae5d7de](https://github.com/propeller-heads/tycho-execution/commit/ae5d7deaccfc1ac527f88371bb3f055b01689801))
+* test run outside a PR ([af01972](https://github.com/propeller-heads/tycho-execution/commit/af0197205adb3220673022b690f1d8aa6f6734aa))
+
 ## [0.67.0](https://github.com/propeller-heads/tycho-execution/compare/0.66.1...0.67.0) (2025-03-20)
 
 

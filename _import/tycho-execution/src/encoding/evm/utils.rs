@@ -3,7 +3,7 @@ use std::{cmp::max, sync::Arc};
 use alloy_primitives::{aliases::U24, keccak256, Address, FixedBytes, Keccak256, U256, U8};
 use num_bigint::BigUint;
 use tokio::runtime::{Handle, Runtime};
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
