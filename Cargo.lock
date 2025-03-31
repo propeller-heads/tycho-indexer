@@ -1903,6 +1903,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "console_error_panic_hook"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
+dependencies = [
+ "cfg-if",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "const-hex"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3291,8 +3301,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "190092ea657667030ac6a35e305e62fc4dd69fd98ac98631e5d3a2b1575a12b5"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "wasi",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -6118,6 +6130,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-wasm-bindgen"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3b143e2833c57ab9ad3ea280d21fd34e285a42837aeb0ee301f4f41890fa00e"
+dependencies = [
+ "js-sys",
+ "serde",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "serde_derive"
 version = "1.0.218"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7286,9 +7309,12 @@ dependencies = [
  "async-trait",
  "chrono",
  "clap",
+ "console_error_panic_hook",
  "futures 0.3.30",
+ "getrandom",
  "hex",
  "hyper 0.14.28",
+ "js-sys",
  "lru",
  "mockall",
  "mockito",
@@ -7297,6 +7323,7 @@ dependencies = [
  "reqwest 0.12.7",
  "rstest",
  "serde",
+ "serde-wasm-bindgen",
  "serde_json",
  "test-log",
  "thiserror 1.0.56",
@@ -7307,6 +7334,9 @@ dependencies = [
  "tracing-subscriber",
  "tycho-common",
  "uuid 1.7.0",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
@@ -7682,6 +7712,7 @@ dependencies = [
  "rand",
  "serde",
  "uuid-macro-internal",
+ "wasm-bindgen",
 ]
 
 [[package]]

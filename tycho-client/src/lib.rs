@@ -25,15 +25,32 @@
 //! - `updates` module handles receiving and processing updates messages from the server.
 const TYCHO_SERVER_VERSION: &str = "v1";
 
+// Only include these modules for non-WASM builds
+#[cfg(not(target_arch = "wasm32"))]
 pub mod cli;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod deltas;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod feed;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod rpc;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod stream;
 
 #[cfg(test)]
 #[macro_use]
 extern crate pretty_assertions;
 
+// Only export these for non-WASM builds
+#[cfg(not(target_arch = "wasm32"))]
 pub use deltas::{DeltasError, WsDeltasClient};
+#[cfg(not(target_arch = "wasm32"))]
 pub use rpc::{HttpRPCClient, RPCError};
+
+// WASM-specific module that contains the WebAssembly interface
+#[cfg(target_arch = "wasm32")]
+mod wasm;
+
+// Export the WASM module's contents
+#[cfg(target_arch = "wasm32")]
+pub use wasm::TychoClient;

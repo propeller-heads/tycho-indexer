@@ -11,43 +11,68 @@ license.workspace = true
 categories.workspace = true
 readme = "README.md"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
+# Configure the binary and library
 [[bin]]
 name = "tycho-client"
 path = "src/main.rs"
+required-features = ["native"]
 
+[lib]
+name = "tycho_client"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+# Shared dependencies (used by both WASM and native)
 [dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["std"] }
 tycho-common.workspace = true
+
+# WASM-specific dependencies (always included when targeting WASM)
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2.87"
+wasm-bindgen-futures = "0.4.37"
+js-sys = "0.3.64"
+web-sys = { version = "0.3.64", features = [
+    "console", "Window", "Document", "Element", 
+    "Headers", "Request", "RequestInit", "Response", 
+    "WebSocket", "MessageEvent", "Event"
+]}
+serde-wasm-bindgen = "0.5.0"
+console_error_panic_hook = "0.1.7"
+# Add these for WASM compatibility
+getrandom = { version = "0.2", features = ["js"] }
+uuid = { workspace = true, features = ["v4", "js"] }
+
+# Native-only dependencies (only included when NOT targeting WASM)
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+clap = { workspace = true, features = ["derive", "env"] }
 futures03.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 async-trait.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["rt", "macros", "fs", "io-util", "net", "time", "sync"] }
 tokio-tungstenite.workspace = true
-uuid.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-chrono.workspace = true
+tracing-appender.workspace = true
+reqwest = { version = "0.12.7", features = ["json"] }
+tracing-subscriber = { version = "0.3.17", default-features = false, features = ["env-filter", "fmt", "json"] }
+hyper = "0.14.27"
+uuid = { workspace = true, features = ["v4"] }
 hex.workspace = true
 anyhow.workspace = true
-tracing-appender.workspace = true
 lru.workspace = true
-clap = { workspace = true, features = ["derive", "env"] }
-reqwest = { version = "0.12.7", features = ["json"] }
-tracing-subscriber = { version = "0.3.17", default-features = false, features = [
-    "env-filter",
-    "fmt",
-    "json",
-] }
-hyper = "0.14.27"
+chrono.workspace = true
 
-
+# Dev dependencies
 [dev-dependencies]
 pretty_assertions.workspace = true
 rstest.workspace = true
 rand.workspace = true
 mockall.workspace = true
 mockito = "1.1.1"
-tracing-subscriber = "0.3.17"
 test-log = { version = "0.2.14", features = ["trace"] }
+
+# Feature flags for conditional compilation
+[features]
+default = ["native"]
+native = []  # This feature enables native (non-WASM) functionality
