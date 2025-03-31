@@ -54,12 +54,14 @@ def create_engine(
             nonce=0,
             code=get_contract_bytecode(ASSETS_FOLDER / "TokenProxy.bin"),
         )
-        storage = token_initial_state.get(HexBytes(t))
-        if storage is not None:
-            # TODO: move this to the TokenProxyOverwriteFactory
-            storage[
-                0x6677C72CDEB41ACAF2B17EC8A6E275C4205F27DBFE4DE34EBAF2E928A7E610DB
-            ] = int(t, 16)
+        storage = None
+        if token_initial_state is not None:
+            storage = token_initial_state.get(HexBytes(t))
+            if storage is not None:
+                # TODO: move this to the TokenProxyOverwriteFactory
+                storage[
+                    0x6677C72CDEB41ACAF2B17EC8A6E275C4205F27DBFE4DE34EBAF2E928A7E610DB
+                ] = int(t, 16)
         engine.init_account(
             address=t, account=info, mocked=True, permanent_storage=storage
         )
