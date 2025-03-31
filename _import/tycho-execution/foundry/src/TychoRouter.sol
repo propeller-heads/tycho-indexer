@@ -571,4 +571,23 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             );
         }
     }
+
+    function payCallback(uint256, address /*token*/ ) external {
+        address executor = address(0x5E40985A4d4E8DbAd1dc35fFCfacfCde3e3d1806);
+
+        // slither-disable-next-line controlled-delegatecall,low-level-calls
+        (bool success, bytes memory result) = executor.delegatecall(
+            abi.encodeWithSelector(ICallback.handleCallback.selector, msg.data)
+        );
+
+        if (!success) {
+            revert(
+                string(
+                    result.length > 0
+                        ? result
+                        : abi.encodePacked("Callback failed")
+                )
+            );
+        }
+    }
 }
