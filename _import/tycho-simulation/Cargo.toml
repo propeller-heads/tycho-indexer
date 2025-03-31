@@ -28,6 +28,7 @@ tracing = "0.1.37"
 num-traits = "0.2.17"
 dotenv = "0.15.0"
 itertools = "0.10.5"
+enum_delegate = "0.2.0"
 
 # Enum utilities
 strum = "0.25.0"
@@ -59,6 +60,9 @@ tokio-stream = "0.1.16"
 # Dialoguer
 dialoguer = "0.10.4"
 
+# Ekubo
+evm_ekubo_sdk = { git = "https://github.com/EkuboProtocol/evm-rust-sdk", rev = "d720391" }
+
 [dev-dependencies]
 tokio-test = "0.4.4"
 approx = "0.5.1"
@@ -80,7 +84,6 @@ crossterm = { version = "0.28.1", features = ["event-stream"] }
 unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
 tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", package = "tycho-execution", features = ["evm"], tag = "0.66.1" }
-
 
 [features]
 default = ["evm"]

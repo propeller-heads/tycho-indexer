@@ -1,3 +1,4 @@
+pub mod ekubo;
 pub mod filters;
 pub mod safe_math;
 pub mod u256_num;
