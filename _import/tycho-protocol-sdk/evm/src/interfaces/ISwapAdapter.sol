@@ -16,11 +16,17 @@ import {ISwapAdapterTypes} from "src/interfaces/ISwapAdapterTypes.sol";
 /// be assumed to have the required sell or buy token balance as well as
 /// unlimited approvals to this contract.
 interface ISwapAdapter is ISwapAdapterTypes {
-    /// @notice Calculates pool prices for specified amounts (optional).
+    /// @notice Calculates marginal prices for specified amounts (optional).
     /// @dev The returned prices should include all dex fees. In case the fee is
-    /// dynamic, the returned price is expected to include the minimum fee.
+    /// dynamic on the amount traded, the returned price is expected to include
+    /// the minimum fee.
+    /// Note that the returned price should be the marginal price which is
+    /// distinct from the executed price `swap(amount_in) / amount_in`! The
+    /// marginal price is defined as the price to trade an arbitrarily small
+    /// (almost zero) amount after the trade of (amount). E.g. the marginal
+    /// price of a uniswap v2 pool at amount=0 is `reserve0/reserve1`.
     /// Ideally this method should be implemented, although it is optional as
-    /// the price function can be numerically estimated from the swap function.
+    /// the price function can be numerically derived from the swap function.
     /// In case it is not available, it should be flagged via capabilities and
     /// calling it should revert using the `NotImplemented` error. The method
     /// needs to be implemented as view as this is usually more efficient and
@@ -28,8 +34,7 @@ interface ISwapAdapter is ISwapAdapterTypes {
     /// @param poolId The ID of the trading pool.
     /// @param sellToken The token being sold.
     /// @param buyToken The token being bought.
-    /// @param specifiedAmounts The specified amounts used for price
-    /// calculation.
+    /// @param specifiedAmounts Amounts to calculate marginal prices at.
     /// @return prices array of prices as fractions corresponding to the
     /// provided amounts.
     function price(
