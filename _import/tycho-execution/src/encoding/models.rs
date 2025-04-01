@@ -110,7 +110,7 @@ pub struct Transaction {
 pub struct EncodingContext {
     pub receiver: Bytes,
     pub exact_out: bool,
-    pub router_address: Bytes,
+    pub router_address: Option<Bytes>,
     pub group_token_in: Bytes,
     pub group_token_out: Bytes,
 }

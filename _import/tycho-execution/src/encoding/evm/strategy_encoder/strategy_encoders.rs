@@ -207,7 +207,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 let encoding_context = EncodingContext {
                     receiver: self.router_address.clone(),
                     exact_out: solution.exact_out,
-                    router_address: self.router_address.clone(),
+                    router_address: Some(self.router_address.clone()),
                     group_token_in: grouped_swap.input_token.clone(),
                     group_token_out: grouped_swap.output_token.clone(),
                 };
@@ -331,7 +331,7 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
             let encoding_context = EncodingContext {
                 receiver: receiver.clone(),
                 exact_out: solution.exact_out,
-                router_address: Bytes::from("0x0000000000000000000000000000000000000000"),
+                router_address: None,
                 group_token_in: grouped_swap.input_token.clone(),
                 group_token_out: grouped_swap.output_token.clone(),
             };
