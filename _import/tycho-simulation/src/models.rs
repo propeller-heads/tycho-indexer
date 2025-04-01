@@ -12,9 +12,18 @@ use std::{
 
 use alloy_primitives::U256;
 use num_bigint::BigUint;
+use thiserror::Error;
 use tycho_common::{dto::ResponseToken, Bytes};
 
 use crate::utils::hexstring_to_vec;
+
+#[derive(Debug, Error)]
+pub enum ModelError {
+    #[error("Conversion error: {0}")]
+    ConversionError(String),
+    #[error("Missing required data: {0}")]
+    MissingData(String),
+}
 
 #[derive(Clone, Debug, Eq)]
 pub struct Token {
@@ -82,13 +91,15 @@ impl Hash for Token {
 }
 
 impl TryFrom<ResponseToken> for Token {
-    type Error = std::num::TryFromIntError;
+    type Error = ModelError;
 
     fn try_from(value: ResponseToken) -> Result<Self, Self::Error> {
         Ok(Self {
             address: value.address,
-            decimals: value.decimals.try_into()?,
-            symbol: value.symbol,
+            decimals: value.decimals.try_into().map_err(|e| {
+                ModelError::ConversionError(format!("Failed to convert decimals: {}", e))
+            })?,
+            symbol: value.symbol.to_string(),
             gas: BigUint::from(
                 value
                     .gas
@@ -98,7 +109,9 @@ impl TryFrom<ResponseToken> for Token {
                     .iter()
                     .min()
                     .copied()
-                    .expect("Expected a value in gas"),
+                    .ok_or_else(|| {
+                        ModelError::MissingData("Gas attribute is missing".to_string())
+                    })?,
             ),
         })
     }
