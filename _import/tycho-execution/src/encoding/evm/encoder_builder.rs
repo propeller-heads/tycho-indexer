@@ -1,4 +1,4 @@
-use tycho_common::models::Chain;
+use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -17,6 +17,7 @@ pub struct EVMEncoderBuilder {
     strategy: Option<Box<dyn StrategyEncoder>>,
     chain: Option<Chain>,
     executors_file_path: Option<String>,
+    router_address: Option<Bytes>,
 }
 
 impl Default for EVMEncoderBuilder {
@@ -27,7 +28,12 @@ impl Default for EVMEncoderBuilder {
 
 impl EVMEncoderBuilder {
     pub fn new() -> Self {
-        EVMEncoderBuilder { chain: None, strategy: None, executors_file_path: None }
+        EVMEncoderBuilder {
+            chain: None,
+            strategy: None,
+            executors_file_path: None,
+            router_address: None,
+        }
     }
     pub fn chain(mut self, chain: Chain) -> Self {
         self.chain = Some(chain);
@@ -38,6 +44,13 @@ impl EVMEncoderBuilder {
     /// If it's not set, the default path will be used (config/executor_addresses.json)
     pub fn executors_file_path(mut self, executors_file_path: String) -> Self {
         self.executors_file_path = Some(executors_file_path);
+        self
+    }
+
+    /// Sets the `router_address` manually.
+    /// If it's not set, the default router address will be used (config/router_addresses.json)
+    pub fn router_address(mut self, router_address: Bytes) -> Self {
+        self.router_address = Some(router_address);
         self
     }
 
@@ -56,12 +69,17 @@ impl EVMEncoderBuilder {
         if let Some(chain) = self.chain {
             let swap_encoder_registry =
                 SwapEncoderRegistry::new(self.executors_file_path.clone(), chain)?;
-            let strategy =
-                Box::new(SplitSwapStrategyEncoder::new(chain, swap_encoder_registry, None, None)?);
+            let strategy = Box::new(SplitSwapStrategyEncoder::new(
+                chain,
+                swap_encoder_registry,
+                None,
+                self.router_address.clone(),
+            )?);
             Ok(EVMEncoderBuilder {
                 chain: Some(chain),
                 strategy: Some(strategy),
                 executors_file_path: self.executors_file_path,
+                router_address: self.router_address,
             })
         } else {
             Err(EncodingError::FatalError(
@@ -83,12 +101,13 @@ impl EVMEncoderBuilder {
                 chain,
                 swap_encoder_registry,
                 Some(swapper_pk),
-                None,
+                self.router_address.clone(),
             )?);
             Ok(EVMEncoderBuilder {
                 chain: Some(chain),
                 strategy: Some(strategy),
                 executors_file_path: self.executors_file_path,
+                router_address: self.router_address,
             })
         } else {
             Err(EncodingError::FatalError(
@@ -108,6 +127,7 @@ impl EVMEncoderBuilder {
                 chain: Some(chain),
                 strategy: Some(strategy),
                 executors_file_path: self.executors_file_path,
+                router_address: self.router_address,
             })
         } else {
             Err(EncodingError::FatalError(
