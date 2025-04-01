@@ -502,6 +502,25 @@ mock! {
             'life1: 'async_trait,
             'life2: 'async_trait,
             Self: 'async_trait;
+
+        #[allow(clippy::type_complexity)]
+        fn get_component_tvl<'life0, 'life1, 'life2, 'async_trait>(
+            &'life0 self,
+            chain: &'life1 Chain,
+            system: Option<&'life1 String>,
+            id: 'life2 &str,
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<
+                    Output = Result<f64, StorageError>,
+                > + ::core::marker::Send + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            'life2: 'async_trait,
+            Self: 'async_trait;
     }
 
     impl Gateway for Gateway {}

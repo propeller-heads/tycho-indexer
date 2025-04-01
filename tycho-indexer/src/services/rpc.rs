@@ -490,6 +490,28 @@ where
     }
 
     #[instrument(skip(self, request))]
+    async fn get_component_tvl(
+        &self,
+        request: &dto::ProtocolComponentTvlRequestBody,
+    ) -> Result<dto::ProtocolComponentTvlRequestResponse, RpcError> {
+        info!(?request, "Getting protocol component tvl.");
+        let chain = request.chain.into();
+        let system = request.protocol_system.clone();
+        let component_id = (&request.component_id).into();
+        match self
+            .db_gateway
+            .get_component_tvl(&chain, Some(system), component_id)
+            .await
+        {
+            Ok(tvl) => Ok(dto::ProtocolComponentTvlRequestResponse::new(tvl)),
+            Err(err) => {
+                error!(error = %err, "Error while getting protocol systems.");
+                Err(err.into())
+            }
+        }
+    }
+
+    #[instrument(skip(self, request))]
     async fn get_tokens(
         &self,
         request: &dto::TokensRequestBody,
@@ -966,6 +988,47 @@ pub async fn protocol_systems<G: Gateway>(
         }
     }
 }
+
+/// Retrieve protocol systems
+///
+/// This endpoint retrieves the protocol systems available in the indexer.
+#[utoipa::path(
+    post,
+    path = "/v1/component_tvl",
+    responses(
+        (status = 200, description = "OK", body = ProtocolComponentTvlRequestResponse),
+    ),
+    request_body = ProtocolComponentTvlRequestBody,
+    security(
+         ("apiKey" = [])
+    ),
+)]
+pub async fn component_tvl<G: Gateway>(
+    body: web::Json<dto::ProtocolComponentTvlRequestBody>,
+    handler: web::Data<RpcHandler<G>>,
+) -> HttpResponse {
+    // Tracing and metrics
+    counter!("rpc_requests", "endpoint" => "component_tvl").increment(1);
+    tracing::Span::current().record("protocol.system", &body.protocol_system);
+
+    // Call the handler to get component tvl
+    let response = handler
+        .into_inner()
+        .get_component_tvl(&body)
+        .await;
+
+    match response {
+        Ok(systems) => HttpResponse::Ok().json(systems),
+        Err(err) => {
+            error!(error = %err, ?body, "Error while getting component tvl.");
+            let status = err.status_code().as_u16().to_string();
+            counter!("rpc_requests_failed", "endpoint" => "component_tvl", "status" => status)
+                .increment(1);
+            HttpResponse::from_error(err)
+        }
+    }
+}
+
 
 /// Health check endpoint
 ///

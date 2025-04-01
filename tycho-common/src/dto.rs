@@ -1322,6 +1322,29 @@ impl ProtocolSystemsRequestResponse {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct ProtocolComponentTvlRequestBody {
+    #[serde(default)]
+    pub chain: Chain,
+    #[serde(default)]
+    pub protocol_system: String,
+    #[serde(default)]
+    pub component_id: String,
+}
+
+// #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+pub struct ProtocolComponentTvlRequestResponse {
+    pub tvl: f64
+}
+
+impl ProtocolComponentTvlRequestResponse {
+    pub fn new(tvl: f64) -> Self {
+        Self { tvl }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::str::FromStr;

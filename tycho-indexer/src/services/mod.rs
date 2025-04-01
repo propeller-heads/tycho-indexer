@@ -251,6 +251,10 @@ where
                     web::resource(format!("/{}/protocol_systems", self.prefix))
                         .route(web::post().to(rpc::protocol_systems::<G>)),
                 )
+                .service(
+                    web::resource(format!("/{}/component_tvl", self.prefix))
+                        .route(web::post().to(rpc::component_tvl::<G>)),
+                )
                 .wrap(RequestTracing::new())
                 .service(
                     SwaggerUi::new("/docs/{_:.*}").url("/api-docs/openapi.json", openapi.clone()),

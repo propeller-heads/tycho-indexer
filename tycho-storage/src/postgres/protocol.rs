@@ -21,7 +21,11 @@ use tycho_common::{
     storage::{BlockOrTimestamp, StorageError, Version, WithTotal},
     Bytes,
 };
-
+use crate::postgres::schema::component_balance_default::protocol_component_id;
+use crate::postgres::schema::component_tvl::dsl::component_tvl;
+use crate::postgres::schema::protocol_component;
+use crate::postgres::schema::protocol_system::dsl::protocol_system;
+use crate::postgres::schema::protocol_system::name;
 use super::{
     maybe_lookup_block_ts, maybe_lookup_version_ts, orm, schema, storage_error_from_diesel,
     truncate_to_byte_limit,
@@ -1740,6 +1744,38 @@ impl PostgresGateway {
         };
 
         Ok(WithTotal { total: Some(total), entity: paginated_protocol_systems })
+    }
+
+    pub async fn get_component_tvl(
+        &self,
+        chain: &Chain,
+        system: Option<String>,
+        component_id: &str,
+        conn: &mut AsyncPgConnection,
+    ) -> Result<f64, StorageError> {
+        use schema::component_tvl::dsl::*;
+        if !self.chain_id_cache.value_exists(chain) {
+            return Err(StorageError::NotFound("Chain".to_string(), chain.to_string()));
+        }
+        let chain_id = self.get_chain_id(chain);
+        let mut query = component_tvl
+            .inner_join(protocol_component::table)
+            .filter(protocol_component::chain_id.eq(chain_id))
+            .filter(protocol_component::external_id.eq(component_id))
+            .into_boxed();
+
+        if let Some(system_name) = system {
+            let system_id = self.get_protocol_system_id(&system_name);
+            query = query.filter(protocol_component::protocol_system_id.eq(system_id));
+        }
+
+        let result = query
+            .select(tvl)
+            .first::<f64>(conn)
+            .await
+            .map_err(|err| storage_error_from_diesel(err, "ComponentTVL", component_id, None))?;
+
+        Ok(result)
     }
 }
 
