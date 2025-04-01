@@ -1,3 +1,10 @@
+## [0.88.0](https://github.com/propeller-heads/tycho-simulation/compare/0.87.0...0.88.0) (2025-04-01)
+
+
+### Features
+
+* Introduce ModelError for improved error handling in Token conversion ([8b1dbee](https://github.com/propeller-heads/tycho-simulation/commit/8b1dbee6a4069eeca59a8bcb689d72b8a515d04f))
+
 ## [0.87.0](https://github.com/propeller-heads/tycho-simulation/compare/0.86.1...0.87.0) (2025-03-31)
 
 
