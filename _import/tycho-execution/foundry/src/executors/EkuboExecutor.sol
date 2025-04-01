@@ -120,10 +120,8 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
     }
 
     function _locked(bytes calldata swapData) internal {
-        // For partial swaps this is not equivalent to the given input amount
-        uint128 tokenInDebtAmount = 0;
-
         int128 nextAmountIn = int128(uint128(bytes16(swapData[0:16])));
+        uint128 tokenInDebtAmount = uint128(nextAmountIn);
 
         address receiver = address(bytes20(swapData[16:36]));
         address tokenIn = address(bytes20(swapData[36:POOL_DATA_OFFSET]));
@@ -152,10 +150,6 @@ contract EkuboExecutor is IExecutor, ICallback, ILocker, IPayer {
                 isToken1 ? MAX_SQRT_RATIO : MIN_SQRT_RATIO,
                 0
             );
-
-            if (tokenInDebtAmount == 0) {
-                tokenInDebtAmount = uint128(isToken1 ? delta1 : delta0);
-            }
 
             nextTokenIn = nextTokenOut;
             nextAmountIn = -(isToken1 ? delta0 : delta1);
