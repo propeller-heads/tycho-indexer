@@ -133,9 +133,7 @@ where
                 vm.transact()
             };
 
-            if let Ok(result) = res.as_ref() {
-                Self::print_traces(tracer, result)
-            }
+            Self::print_traces(tracer, res.as_ref().ok());
 
             res
         } else {
@@ -153,19 +151,35 @@ where
         self.state.clear_temp_storage();
     }
 
-    fn print_traces(tracer: TracingInspector, res: &ResultAndState) {
-        let ResultAndState { result, state: _ } = res;
-        let (exit_reason, _gas_refunded, gas_used, _out, _exec_logs) = match result.clone() {
-            ExecutionResult::Success { reason, gas_used, gas_refunded, output, logs, .. } => {
-                (reason.into(), gas_refunded, gas_used, Some(output), logs)
+    fn print_traces(tracer: TracingInspector, res: Option<&ResultAndState>) {
+        let (exit_reason, _gas_refunded, gas_used, _out, _exec_logs) = match res {
+            Some(ResultAndState { result, state: _ }) => {
+                // let ResultAndState { result, state: _ } = res;
+                match result.clone() {
+                    ExecutionResult::Success {
+                        reason,
+                        gas_used,
+                        gas_refunded,
+                        output,
+                        logs,
+                        ..
+                    } => (reason.into(), gas_refunded, gas_used, Some(output), logs),
+                    ExecutionResult::Revert { gas_used, output } => {
+                        // Need to fetch the unused gas
+                        (
+                            InstructionResult::Revert,
+                            0_u64,
+                            gas_used,
+                            Some(Output::Call(output)),
+                            vec![],
+                        )
+                    }
+                    ExecutionResult::Halt { reason, gas_used } => {
+                        (reason.into(), 0_u64, gas_used, None, vec![])
+                    }
+                }
             }
-            ExecutionResult::Revert { gas_used, output } => {
-                // Need to fetch the unused gas
-                (InstructionResult::Revert, 0_u64, gas_used, Some(Output::Call(output)), vec![])
-            }
-            ExecutionResult::Halt { reason, gas_used } => {
-                (reason.into(), 0_u64, gas_used, None, vec![])
-            }
+            _ => (InstructionResult::Stop, 0_u64, 0, None, vec![]),
         };
 
         let trace_res = TraceResult {
