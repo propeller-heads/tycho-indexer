@@ -109,5 +109,10 @@ contract Dispatcher {
                 )
             );
         }
+
+        // to prevent multiple callbacks
+        assembly {
+            tstore(0, 0)
+        }
     }
 }
