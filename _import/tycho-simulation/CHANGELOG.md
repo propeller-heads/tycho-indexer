@@ -1,3 +1,10 @@
+## [0.89.0](https://github.com/propeller-heads/tycho-simulation/compare/0.88.0...0.89.0) (2025-04-01)
+
+
+### Features
+
+* print traces on reverts ([d32e7a5](https://github.com/propeller-heads/tycho-simulation/commit/d32e7a56471773bd6b288e0039a39652672118ec))
+
 ## [0.88.0](https://github.com/propeller-heads/tycho-simulation/compare/0.87.0...0.88.0) (2025-04-01)
 
 
