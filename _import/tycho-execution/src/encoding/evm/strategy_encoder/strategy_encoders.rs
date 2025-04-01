@@ -1077,8 +1077,13 @@ mod tests {
         };
 
         let swap_encoder_registry = get_swap_encoder_registry();
-        let encoder =
-            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, None).unwrap();
+        let encoder = SplitSwapStrategyEncoder::new(
+            eth_chain(),
+            swap_encoder_registry,
+            None,
+            Some(Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap()),
+        )
+        .unwrap();
 
         let solution = Solution {
             exact_out: false,
@@ -1091,7 +1096,6 @@ mod tests {
             // Alice
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap],
             ..Default::default()
         };

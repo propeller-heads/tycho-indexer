@@ -232,9 +232,7 @@ impl SwapEncoder for BalancerV2SwapEncoder {
         let approval_needed: bool;
 
         if let Some(router_address) = encoding_context.router_address {
-            let tycho_router_address = bytes_to_address(
-                &router_address,
-            )?;
+            let tycho_router_address = bytes_to_address(&router_address)?;
             approval_needed = token_approvals_manager.approval_needed(
                 token,
                 tycho_router_address,
@@ -742,7 +740,7 @@ mod tests {
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
                 exact_out: false,
-                router_address: Bytes::default(),
+                router_address: Some(Bytes::default()),
             };
 
             let encoder = EkuboSwapEncoder::new(String::default());
@@ -780,7 +778,7 @@ mod tests {
                 group_token_in: group_token_in.clone(),
                 group_token_out: group_token_out.clone(),
                 exact_out: false,
-                router_address: Bytes::default(),
+                router_address: Some(Bytes::default()),
             };
 
             let first_swap = Swap {
