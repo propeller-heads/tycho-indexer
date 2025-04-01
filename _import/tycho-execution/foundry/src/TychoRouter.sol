@@ -503,25 +503,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     }
 
     /**
-     * @dev Called by PancakeV3 pool when swapping on it.
-     */
-    function pancakeV3SwapCallback(
-        int256, /* amount0Delta */
-        int256, /* amount1Delta */
-        bytes calldata data
-    ) external {
-        if (data.length < 24) revert TychoRouter__InvalidDataLength();
-        // We are taking advantage of the fact that the data we need is already encoded in the correct format inside msg.data
-        // This way we preserve the bytes calldata (and don't need to convert it to bytes memory)
-        uint256 dataOffset = 4 + 32 + 32 + 32; // Skip selector + 2 ints + data_offset
-        uint256 dataLength =
-            uint256(bytes32(msg.data[dataOffset:dataOffset + 32]));
-
-        bytes calldata fullData = msg.data[4:dataOffset + 32 + dataLength];
-        _handleCallback(fullData);
-    }
-
-    /**
      * @dev Called by UniswapV4 pool manager after achieving unlock state.
      */
     function unlockCallback(bytes calldata data)
@@ -531,45 +512,5 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         if (data.length < 24) revert TychoRouter__InvalidDataLength();
         _handleCallback(data);
         return "";
-    }
-
-    function locked(uint256) external {
-        address executor = address(0x4f88f6630a33dB05BEa1FeF7Dc7ff7508D1c531D);
-
-        // slither-disable-next-line controlled-delegatecall,low-level-calls
-        (bool success, bytes memory result) = executor.delegatecall(msg.data);
-
-        if (!success) {
-            revert(
-                string(
-                    result.length > 0
-                        ? result
-                        : abi.encodePacked("Callback failed")
-                )
-            );
-        }
-
-        // slither-disable-next-line assembly
-        assembly ("memory-safe") {
-            // Propagate the swappedAmount
-            return(add(result, 32), 16)
-        }
-    }
-
-    function payCallback(uint256, address /*token*/ ) external {
-        address executor = address(0x4f88f6630a33dB05BEa1FeF7Dc7ff7508D1c531D);
-
-        // slither-disable-next-line controlled-delegatecall,low-level-calls
-        (bool success, bytes memory result) = executor.delegatecall(msg.data);
-
-        if (!success) {
-            revert(
-                string(
-                    result.length > 0
-                        ? result
-                        : abi.encodePacked("Callback failed")
-                )
-            );
-        }
     }
 }
