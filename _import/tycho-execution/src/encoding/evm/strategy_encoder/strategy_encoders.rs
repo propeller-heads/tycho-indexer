@@ -385,7 +385,8 @@ mod tests {
 
     fn get_swap_encoder_registry() -> SwapEncoderRegistry {
         let eth_chain = eth_chain();
-        SwapEncoderRegistry::new(None, eth_chain).unwrap()
+        SwapEncoderRegistry::new(Some("config/test_executor_addresses.json".to_string()), eth_chain)
+            .unwrap()
     }
 
     #[test]
@@ -428,7 +429,7 @@ mod tests {
         let hex_protocol_data = encode(&protocol_data);
         assert_eq!(
             executor_address,
-            Bytes::from_str("0xf6c5be66FFf9DC69962d73da0A617a827c382329").unwrap()
+            Bytes::from_str("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f").unwrap()
         );
         assert_eq!(
             hex_protocol_data,
@@ -551,7 +552,7 @@ mod tests {
         let hex_protocol_data = encode(&protocol_data);
         assert_eq!(
             executor_address,
-            Bytes::from_str("0x042C0ebBEAb9d9987c2f64Ee05f2B3aeB86eAf70").unwrap()
+            Bytes::from_str("0xf62849f9a0b5bf2913b396098f7c7019b51a820a").unwrap()
         );
         assert_eq!(
             hex_protocol_data,
@@ -692,7 +693,7 @@ mod tests {
             "01",     // token out index
             "000000", // split
             // Swap data
-            "f6c5be66fff9dc69962d73da0a617a827c382329", // executor address
+            "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
@@ -1025,7 +1026,7 @@ mod tests {
             "01",     // token out index
             "000000", // split
             // Swap data header
-            "042c0ebbeab9d9987c2f64ee05f2b3aeb86eaf70", // executor address
+            "f62849f9a0b5bf2913b396098f7c7019b51a820a", // executor address
             // Protocol data
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // group token in
             "6982508145454ce325ddbe47a25d4ec3d2311933", // group token in
@@ -1081,7 +1082,7 @@ mod tests {
             eth_chain(),
             swap_encoder_registry,
             None,
-            Some(Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap()),
+            Some(Bytes::from_str("0x1d1499e622D69689cdf9004d05Ec547d650Ff211").unwrap()),
         )
         .unwrap();
 
@@ -1175,7 +1176,7 @@ mod tests {
             "01", // token out index
             "000000", // split
             // Swap data
-            "f6c5be66fff9dc69962d73da0a617a827c382329", // executor address
+            "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
@@ -1425,7 +1426,7 @@ mod tests {
             "00",     // token in index
             "01",     // token out index
             "000000", // split
-            "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+            "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
             "0001f4",                                   // pool fee
@@ -1435,7 +1436,7 @@ mod tests {
             "006d",                                     // ple encoded swaps
             "01",                                       // token in index
             "00000000",                                 // split
-            "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+            "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
             "000bb8",                                   // pool fee
@@ -1447,6 +1448,7 @@ mod tests {
 
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
+        println!("{}", hex_calldata);
     }
 
     #[test]
@@ -1576,7 +1578,7 @@ mod tests {
         "00", // token in index
         "01", // token out index
         "999999", // split
-        "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+        "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
         "0001f4", // pool fee
@@ -1587,7 +1589,7 @@ mod tests {
         "00", // token in index
         "01", // token out index
         "000000", // split
-        "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+        "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
         "000bb8", // pool fee
@@ -1598,7 +1600,7 @@ mod tests {
         "01", // token in index
         "00", // token out index
         "000000", // split
-        "f6c5be66fff9dc69962d73da0a617a827c382329", // executor address,
+        "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address,
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id,
         "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
@@ -1608,6 +1610,7 @@ mod tests {
         .join("");
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
+        println!("{}", hex_calldata);
     }
 
     #[test]
@@ -1734,7 +1737,7 @@ mod tests {
         "00", // token in index
         "01", // token out index
         "000000", // split
-        "f6c5be66fff9dc69962d73da0a617a827c382329", // executor address
+        "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id
         "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
@@ -1743,7 +1746,7 @@ mod tests {
         "01", // token in index
         "00", // token out index
         "999999", // split
-        "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+        "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "0001f4", // pool fee
@@ -1754,7 +1757,7 @@ mod tests {
         "01", // token in index
         "00", // token out index
         "000000", // split
-        "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+        "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "000bb8", // pool fee
@@ -1767,5 +1770,6 @@ mod tests {
 
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
+        println!("{}", hex_calldata);
     }
 }
