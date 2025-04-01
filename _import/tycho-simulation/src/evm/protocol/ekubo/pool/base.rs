@@ -2,15 +2,17 @@ use evm_ekubo_sdk::{
     math::{tick::to_sqrt_ratio, uint::U256},
     quoting::{
         self,
-        base_pool::{BasePoolResources, BasePoolState},
+        base_pool::{BasePoolError, BasePoolResources, BasePoolState},
         types::{NodeKey, Pool, QuoteParams, Tick, TokenAmount},
         util::find_nearest_initialized_tick_index,
     },
 };
-use num_traits::Zero;
 
 use super::{EkuboPool, EkuboPoolQuote};
-use crate::{evm::protocol::ekubo::tick::Ticks, protocol::errors::SimulationError};
+use crate::{
+    evm::protocol::ekubo::tick::Ticks,
+    protocol::errors::{InvalidSnapshotError, SimulationError, TransitionError},
+};
 
 #[derive(Debug, Clone, Eq)]
 pub struct BasePool {
@@ -33,33 +35,35 @@ fn impl_from_state(
     key: NodeKey,
     state: BasePoolState,
     ticks: Vec<Tick>,
-) -> quoting::base_pool::BasePool {
+) -> Result<quoting::base_pool::BasePool, BasePoolError> {
     quoting::base_pool::BasePool::new(key, state, ticks)
 }
 
 impl BasePool {
-    const BASE_GAS_COST_OF_ONE_FULL_RANGE_SWAP: u64 = 20_000;
-    const BASE_GAS_COST_OF_ONE_CL_SWAP: u64 = 24_000;
+    const BASE_GAS_COST: u64 = 24_000;
     const GAS_COST_OF_ONE_TICK_SPACING_CROSSED: u64 = 4_000;
     const GAS_COST_OF_ONE_INITIALIZED_TICK_CROSSED: u64 = 20_000;
 
     const WEI_UNDERESTIMATION_FACTOR: u128 = 2;
 
-    pub fn new(key: NodeKey, state: BasePoolState, ticks: Ticks, active_tick: i32) -> Self {
-        Self {
-            imp: impl_from_state(key, state, ticks.inner().clone()),
+    pub fn new(
+        key: NodeKey,
+        state: BasePoolState,
+        ticks: Ticks,
+        active_tick: i32,
+    ) -> Result<Self, InvalidSnapshotError> {
+        Ok(Self {
+            imp: impl_from_state(key, state, ticks.inner().clone()).map_err(|err| {
+                InvalidSnapshotError::ValueError(format!("creating base pool: {err:?}"))
+            })?,
             state,
             active_tick: Some(active_tick),
             ticks,
-        }
+        })
     }
 
     pub fn set_active_tick(&mut self, tick: i32) {
         self.active_tick = Some(tick);
-    }
-
-    pub fn set_tick(&mut self, tick: Tick) {
-        self.ticks.set(tick);
     }
 
     pub fn quote(&self, token_amount: TokenAmount) -> Result<EkuboPoolQuote, SimulationError> {
@@ -76,7 +80,9 @@ impl BasePool {
         let state_after = quote.state_after;
 
         let new_state = Self {
-            imp: impl_from_state(*self.key(), state_after, self.ticks.inner().clone()),
+            imp: impl_from_state(*self.key(), state_after, self.ticks.inner().clone()).map_err(
+                |err| SimulationError::RecoverableError(format!("recreating base pool: {err:?}")),
+            )?,
             state: state_after,
             active_tick: None,
             ticks: self.ticks.clone(),
@@ -84,23 +90,15 @@ impl BasePool {
         .into();
 
         Ok(EkuboPoolQuote {
+            consumed_amount: quote.consumed_amount,
             calculated_amount: quote.calculated_amount,
-            gas: Self::gas_costs(
-                &quote.execution_resources,
-                self.key().config.tick_spacing.is_zero(),
-            ),
+            gas: Self::gas_costs(&quote.execution_resources),
             new_state,
         })
     }
 
-    pub fn gas_costs(resources: &BasePoolResources, is_full_range: bool) -> u64 {
-        let base_gas_cost = if is_full_range {
-            Self::BASE_GAS_COST_OF_ONE_FULL_RANGE_SWAP
-        } else {
-            Self::BASE_GAS_COST_OF_ONE_CL_SWAP
-        };
-
-        base_gas_cost +
+    pub const fn gas_costs(resources: &BasePoolResources) -> u64 {
+        Self::BASE_GAS_COST +
             resources.tick_spacings_crossed as u64 * Self::GAS_COST_OF_ONE_TICK_SPACING_CROSSED +
             resources.initialized_ticks_crossed as u64 *
                 Self::GAS_COST_OF_ONE_INITIALIZED_TICK_CROSSED
@@ -124,7 +122,13 @@ impl EkuboPool for BasePool {
         self.state.liquidity = liquidity;
     }
 
-    fn reinstantiate(&mut self) {
+    fn set_tick(&mut self, tick: Tick) -> Result<(), String> {
+        self.ticks.set(tick);
+
+        Ok(())
+    }
+
+    fn reinstantiate(&mut self) -> Result<(), TransitionError<String>> {
         // Only after a swap we set the active_tick to None. In this case, the active_tick_index is
         // already correctly computed though
         if let Some(active_tick) = self.active_tick {
@@ -132,7 +136,15 @@ impl EkuboPool for BasePool {
                 find_nearest_initialized_tick_index(self.ticks.inner(), active_tick);
         }
 
-        self.imp = impl_from_state(*self.key(), self.state, self.ticks.inner().clone());
+        self.imp = impl_from_state(*self.key(), self.state, self.ticks.inner().clone()).map_err(
+            |err| {
+                TransitionError::SimulationError(SimulationError::RecoverableError(format!(
+                    "reinstantiate base pool: {err:?}"
+                )))
+            },
+        )?;
+
+        Ok(())
     }
 
     fn get_limit(&self, token_in: U256) -> Result<u128, SimulationError> {

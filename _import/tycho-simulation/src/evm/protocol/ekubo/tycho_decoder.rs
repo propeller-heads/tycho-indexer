@@ -4,16 +4,18 @@ use evm_ekubo_sdk::{
     math::uint::U256,
     quoting::{
         base_pool::BasePoolState,
+        full_range_pool::FullRangePoolState,
         oracle_pool::OraclePoolState,
         types::{Config, NodeKey},
         util::find_nearest_initialized_tick_index,
     },
 };
+use num_traits::Zero;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_common::Bytes;
 
 use super::{
-    pool::{base::BasePool, oracle::OraclePool},
+    pool::{base::BasePool, full_range::FullRangePool, oracle::OraclePool},
     state::EkuboState,
     tick::{ticks_from_attributes, Ticks},
 };
@@ -145,22 +147,34 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
 
         let key = NodeKey { token0, token1, config };
 
-        let state = BasePoolState {
-            sqrt_ratio,
-            liquidity,
-            active_tick_index: find_nearest_initialized_tick_index(&ticks, tick),
-        };
-
         Ok(match extension_id {
-            EkuboExtension::Base => Self::Base(BasePool::new(key, state, Ticks::new(ticks), tick)),
+            EkuboExtension::Base => {
+                if tick_spacing.is_zero() {
+                    Self::FullRange(FullRangePool::new(
+                        key,
+                        FullRangePoolState { sqrt_ratio, liquidity },
+                    )?)
+                } else {
+                    Self::Base(BasePool::new(
+                        key,
+                        BasePoolState {
+                            sqrt_ratio,
+                            liquidity,
+                            active_tick_index: find_nearest_initialized_tick_index(&ticks, tick),
+                        },
+                        Ticks::new(ticks),
+                        tick,
+                    )?)
+                }
+            }
             EkuboExtension::Oracle => Self::Oracle(OraclePool::new(
                 &key,
                 OraclePoolState {
-                    base_pool_state: state,
+                    full_range_pool_state: FullRangePoolState { liquidity, sqrt_ratio },
                     last_snapshot_time: 0, /* TODO Fill with real value when timestamps are
                                             * supported */
                 },
-            )),
+            )?),
         })
     }
 }

@@ -95,14 +95,17 @@ pub fn attributes() -> HashMap<String, Bytes> {
 }
 
 pub fn state() -> EkuboState {
-    EkuboState::Base(BasePool::new(
-        POOL_KEY,
-        BasePoolState {
-            sqrt_ratio: SQRT_RATIO_BETWEEN,
-            liquidity: LIQUIDITY_BETWEEN,
-            active_tick_index: Some(0),
-        },
-        vec![LOWER_TICK, UPPER_TICK].into(),
-        TICK_INDEX_BETWEEN,
-    ))
+    EkuboState::Base(
+        BasePool::new(
+            POOL_KEY,
+            BasePoolState {
+                sqrt_ratio: SQRT_RATIO_BETWEEN,
+                liquidity: LIQUIDITY_BETWEEN,
+                active_tick_index: Some(0),
+            },
+            vec![LOWER_TICK, UPPER_TICK].into(),
+            TICK_INDEX_BETWEEN,
+        )
+        .unwrap(),
+    )
 }
