@@ -26,6 +26,7 @@ pub trait EkuboPool {
 }
 
 pub struct EkuboPoolQuote {
+    pub consumed_amount: i128,
     pub calculated_amount: i128,
     pub gas: u64,
     pub new_state: EkuboState,

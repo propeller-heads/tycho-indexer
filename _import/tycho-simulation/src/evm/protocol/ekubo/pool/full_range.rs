@@ -70,6 +70,7 @@ impl FullRangePool {
         .into();
 
         Ok(EkuboPoolQuote {
+            consumed_amount: quote.consumed_amount,
             calculated_amount: quote.calculated_amount,
             gas: FullRangePool::gas_costs(),
             new_state,

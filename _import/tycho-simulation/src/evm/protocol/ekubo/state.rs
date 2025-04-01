@@ -73,13 +73,22 @@ impl ProtocolSim for EkuboState {
             Self::Oracle(p) => p.quote(token_amount),
         }?;
 
-        Ok(GetAmountOutResult {
+        let res = GetAmountOutResult {
             amount: BigUint::try_from(quote.calculated_amount).map_err(|_| {
                 SimulationError::FatalError("output amount must be non-negative".to_string())
             })?,
             gas: quote.gas.into(),
             new_state: Box::new(quote.new_state),
-        })
+        };
+
+        if quote.consumed_amount != token_amount.amount {
+            return Err(SimulationError::InvalidInput(
+                format!("pool does not have enough liquidity to support complete swap. input amount: {}, consumed amount: {}", token_amount.amount, quote.consumed_amount),
+                Some(res),
+            ));
+        }
+
+        Ok(res)
     }
 
     fn delta_transition(

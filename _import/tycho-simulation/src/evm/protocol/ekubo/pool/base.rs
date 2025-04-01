@@ -90,6 +90,7 @@ impl BasePool {
         .into();
 
         Ok(EkuboPoolQuote {
+            consumed_amount: quote.consumed_amount,
             calculated_amount: quote.calculated_amount,
             gas: Self::gas_costs(&quote.execution_resources),
             new_state,
