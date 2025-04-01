@@ -3,7 +3,6 @@ use std::{
     default::Default,
     env,
     str::FromStr,
-    sync::LazyLock,
 };
 
 use alloy::{
@@ -54,23 +53,6 @@ use tycho_simulation::{
 };
 
 const FAKE_PK: &str = "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234";
-
-static ROUTER_ADDRESSES: LazyLock<HashMap<Chain, Bytes>> = LazyLock::new(|| {
-    HashMap::from([
-        (
-            Chain::Ethereum,
-            "0x6512E8f80Ab24e6dD6eB042897898516c3175375"
-                .parse::<Bytes>()
-                .expect("Failed to create router address"),
-        ),
-        (
-            Chain::Base,
-            "0xC2C23b0199525DE070D126860133dc3badaD2EEb"
-                .parse::<Bytes>()
-                .expect("Failed to create router address"),
-        ),
-    ])
-});
 
 #[derive(Parser)]
 struct Cli {
@@ -205,7 +187,6 @@ async fn main() {
                 amount_in.clone(),
                 Bytes::from(wallet.address().to_vec()),
                 expected_amount,
-                chain,
             );
 
             if cli.swapper_pk == FAKE_PK {
@@ -422,7 +403,6 @@ fn encode(
     sell_amount: BigUint,
     user_address: Bytes,
     expected_amount: BigUint,
-    chain: Chain,
 ) -> Transaction {
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = Swap::new(
@@ -433,10 +413,6 @@ fn encode(
         // the amount or the total remaining balance.
         0f64,
     );
-    let router_address = ROUTER_ADDRESSES
-        .get(&chain)
-        .expect("Router address not found")
-        .clone();
 
     // Then we create a solution object with the previous swap
     let solution = Solution {
@@ -450,7 +426,6 @@ fn encode(
         exact_out: false,     // it's an exact in solution
         checked_amount: None, // the amount out will not be checked in execution
         swaps: vec![simple_swap],
-        router_address,
         ..Default::default()
     };
 
