@@ -179,7 +179,7 @@ impl TychoStreamDecoder {
                             return None;
                         }
 
-                        let token: Result<Token, std::num::TryFromIntError> = t.clone().try_into();
+                        let token = t.clone().try_into();
                         let result = match token {
                             Ok(t) => Ok((addr.clone(), t)),
                             Err(e) => Err(StreamDecodeError::Fatal(format!(
