@@ -1,14 +1,17 @@
 use evm_ekubo_sdk::{
-    math::uint::U256,
+    math::{
+        tick::{MAX_TICK, MIN_TICK},
+        uint::U256,
+    },
     quoting::{
         self,
-        oracle_pool::OraclePoolState,
-        types::{NodeKey, Pool, QuoteParams, TokenAmount},
+        oracle_pool::{OraclePoolError, OraclePoolState},
+        types::{NodeKey, Pool, QuoteParams, Tick, TokenAmount},
     },
 };
 
-use super::{base::BasePool, EkuboPool, EkuboPoolQuote};
-use crate::protocol::errors::SimulationError;
+use super::{full_range::FullRangePool, EkuboPool, EkuboPoolQuote};
+use crate::protocol::errors::{InvalidSnapshotError, SimulationError, TransitionError};
 
 #[derive(Debug, Eq, Clone)]
 pub struct OraclePool {
@@ -17,17 +20,22 @@ pub struct OraclePool {
 }
 
 impl PartialEq for OraclePool {
+    // The other properties are just helpers for keeping the underlying pool implementation
+    // up-to-date
     fn eq(&self, other: &Self) -> bool {
         self.imp == other.imp
     }
 }
 
-fn impl_from_state(key: &NodeKey, state: &OraclePoolState) -> quoting::oracle_pool::OraclePool {
+fn impl_from_state(
+    key: &NodeKey,
+    state: &OraclePoolState,
+) -> Result<quoting::oracle_pool::OraclePool, OraclePoolError> {
     quoting::oracle_pool::OraclePool::new(
         key.token1,
         key.config.extension,
-        state.base_pool_state.sqrt_ratio,
-        state.base_pool_state.liquidity,
+        state.full_range_pool_state.sqrt_ratio,
+        state.full_range_pool_state.liquidity,
         state.last_snapshot_time,
     )
 }
@@ -35,8 +43,13 @@ fn impl_from_state(key: &NodeKey, state: &OraclePoolState) -> quoting::oracle_po
 impl OraclePool {
     const GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT: u64 = 15_000;
 
-    pub fn new(key: &NodeKey, state: OraclePoolState) -> Self {
-        Self { imp: impl_from_state(key, &state), state }
+    pub fn new(key: &NodeKey, state: OraclePoolState) -> Result<Self, InvalidSnapshotError> {
+        Ok(Self {
+            imp: impl_from_state(key, &state).map_err(|err| {
+                InvalidSnapshotError::ValueError(format!("creating oracle pool: {err:?}"))
+            })?,
+            state,
+        })
     }
 
     pub fn set_last_snapshot_time(&mut self, last_snapshot_time: u64) {
@@ -60,16 +73,18 @@ impl OraclePool {
 
         let state_after = quote.state_after;
 
-        let new_state =
-            Self { imp: impl_from_state(self.key(), &state_after), state: state_after }.into();
-
-        let resources = quote.execution_resources;
+        let new_state = Self {
+            imp: impl_from_state(self.key(), &state_after).map_err(|err| {
+                SimulationError::RecoverableError(format!("recreating oracle pool: {err:?}"))
+            })?,
+            state: state_after,
+        }
+        .into();
 
         Ok(EkuboPoolQuote {
             calculated_amount: quote.calculated_amount,
-            gas: BasePool::gas_costs(&resources.base_pool_resources, true) +
-                Self::GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT, /* TODO Depend on snapshots_written
-                                                             * when timestamps are supported */
+            gas: FullRangePool::gas_costs() + Self::GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT, /* TODO Depend on snapshots_written
+                                                                                           * when timestamps are supported */
             new_state,
         })
     }
@@ -81,27 +96,56 @@ impl EkuboPool for OraclePool {
     }
 
     fn sqrt_ratio(&self) -> U256 {
-        self.state.base_pool_state.sqrt_ratio
+        self.state
+            .full_range_pool_state
+            .sqrt_ratio
     }
 
     fn set_sqrt_ratio(&mut self, sqrt_ratio: U256) {
-        self.state.base_pool_state.sqrt_ratio = sqrt_ratio;
+        self.state
+            .full_range_pool_state
+            .sqrt_ratio = sqrt_ratio;
     }
 
     fn set_liquidity(&mut self, liquidity: u128) {
-        self.state.base_pool_state.liquidity = liquidity;
+        self.state
+            .full_range_pool_state
+            .liquidity = liquidity;
     }
 
-    fn reinstantiate(&mut self) {
+    fn set_tick(&mut self, tick: Tick) -> Result<(), String> {
+        let idx = tick.index;
+
+        if ![MIN_TICK, MAX_TICK].contains(&idx) {
+            return Err(format!("oracle is full-range but passed tick has index {idx}"));
+        }
+
+        self.set_liquidity(tick.liquidity_delta.unsigned_abs());
+
+        Ok(())
+    }
+
+    fn reinstantiate(&mut self) -> Result<(), TransitionError<String>> {
         let key = self.key();
 
         self.imp = quoting::oracle_pool::OraclePool::new(
             key.token1,
             key.config.extension,
-            self.state.base_pool_state.sqrt_ratio,
-            self.state.base_pool_state.liquidity,
+            self.state
+                .full_range_pool_state
+                .sqrt_ratio,
+            self.state
+                .full_range_pool_state
+                .liquidity,
             self.state.last_snapshot_time,
-        );
+        )
+        .map_err(|err| {
+            TransitionError::SimulationError(SimulationError::RecoverableError(format!(
+                "reinstantiate base pool: {err:?}"
+            )))
+        })?;
+
+        Ok(())
     }
 
     fn get_limit(&self, token_in: U256) -> Result<u128, SimulationError> {

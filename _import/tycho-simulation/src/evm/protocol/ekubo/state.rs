@@ -2,17 +2,14 @@ use std::{any::Any, collections::HashMap, fmt::Debug};
 
 use alloy_primitives::Address;
 use evm_ekubo_sdk::{
-    math::{
-        tick::{MAX_TICK, MIN_TICK},
-        uint::U256,
-    },
+    math::uint::U256,
     quoting::types::{NodeKey, Tick, TokenAmount},
 };
 use num_bigint::BigUint;
 use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
 use super::{
-    pool::{base::BasePool, oracle::OraclePool, EkuboPool},
+    pool::{base::BasePool, full_range::FullRangePool, oracle::OraclePool, EkuboPool},
     tick::ticks_from_attributes,
 };
 use crate::{
@@ -29,32 +26,8 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EkuboState {
     Base(BasePool),
+    FullRange(FullRangePool),
     Oracle(OraclePool),
-}
-
-impl EkuboState {
-    pub fn set_tick(&mut self, tick: Tick) -> Result<(), String> {
-        match self {
-            Self::Base(p) => {
-                p.set_tick(tick);
-
-                Ok(())
-            }
-            Self::Oracle(p) => {
-                let idx = tick.index;
-
-                if ![MIN_TICK, MAX_TICK].contains(&idx) {
-                    return Err(format!(
-                        "oracle must be full-range but passed tick has index {idx}"
-                    ));
-                }
-
-                p.set_liquidity(tick.liquidity_delta.unsigned_abs());
-
-                Ok(())
-            }
-        }
-    }
 }
 
 fn sqrt_price_q128_to_f64(x: U256, (token0_decimals, token1_decimals): (usize, usize)) -> f64 {
@@ -96,6 +69,7 @@ impl ProtocolSim for EkuboState {
 
         let quote = match self {
             Self::Base(p) => p.quote(token_amount),
+            Self::FullRange(p) => p.quote(token_amount),
             Self::Oracle(p) => p.quote(token_amount),
         }?;
 
@@ -133,7 +107,8 @@ impl ProtocolSim for EkuboState {
                     p.set_active_tick(tick.clone().into());
                 }
             }
-            Self::Oracle(_) => {} // The exact tick is not required for oracle pools
+            Self::Oracle(_) | Self::FullRange(_) => {} /* The exact tick is not required for full
+                                                        * range pools */
         }
 
         let changed_ticks = ticks_from_attributes(
@@ -154,9 +129,7 @@ impl ProtocolSim for EkuboState {
                 .map_err(TransitionError::DecodeError)?;
         }
 
-        self.reinstantiate();
-
-        Ok(())
+        self.reinstantiate()
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
@@ -194,7 +167,10 @@ impl ProtocolSim for EkuboState {
 
 #[cfg(test)]
 mod tests {
-    use evm_ekubo_sdk::{math::tick::MIN_SQRT_RATIO, quoting::base_pool::BasePoolState};
+    use evm_ekubo_sdk::{
+        math::tick::{MIN_SQRT_RATIO, MIN_TICK},
+        quoting::base_pool::BasePoolState,
+    };
     use num_traits::Zero;
 
     use super::*;
@@ -202,12 +178,15 @@ mod tests {
 
     #[test]
     fn test_delta_transition() {
-        let mut pool = EkuboState::Base(BasePool::new(
-            POOL_KEY,
-            BasePoolState { sqrt_ratio: MIN_SQRT_RATIO, liquidity: 0, active_tick_index: None },
-            vec![].into(),
-            MIN_TICK,
-        ));
+        let mut pool = EkuboState::Base(
+            BasePool::new(
+                POOL_KEY,
+                BasePoolState { sqrt_ratio: MIN_SQRT_RATIO, liquidity: 0, active_tick_index: None },
+                vec![].into(),
+                MIN_TICK,
+            )
+            .unwrap(),
+        );
 
         let delta = ProtocolStateDelta { updated_attributes: attributes(), ..Default::default() };
 
