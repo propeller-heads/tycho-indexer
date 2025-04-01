@@ -1,3 +1,15 @@
+## [0.71.0](https://github.com/propeller-heads/tycho-execution/compare/0.70.0...0.71.0) (2025-04-01)
+
+
+### Features
+
+* Update ekubo router address ([e3d25fc](https://github.com/propeller-heads/tycho-execution/commit/e3d25fcd5ed4e160fff10d5c346b12f0cb3328c6))
+
+
+### Bug Fixes
+
+* update ekubo_v2 executor ([57aa1c3](https://github.com/propeller-heads/tycho-execution/commit/57aa1c3402da976cfed38db2b46c584162cdbb69))
+
 ## [0.70.0](https://github.com/propeller-heads/tycho-execution/compare/0.69.0...0.70.0) (2025-03-31)
 
 
