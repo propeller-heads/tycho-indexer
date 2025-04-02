@@ -1,3 +1,10 @@
+## [0.91.1](https://github.com/propeller-heads/tycho-simulation/compare/0.91.0...0.91.1) (2025-04-02)
+
+
+### Bug Fixes
+
+* filter out empty accounts balances ([cb8a074](https://github.com/propeller-heads/tycho-simulation/commit/cb8a074b33fd030a70001c3de6dfa38f5eb4a18a))
+
 ## [0.91.0](https://github.com/propeller-heads/tycho-simulation/compare/0.90.0...0.91.0) (2025-04-02)
 
 
