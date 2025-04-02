@@ -36,6 +36,7 @@ const executors_to_deploy = {
     // Args: Ekubo core contract
     {exchange: "EkuboExecutor", args: [
       "0xe0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444"
+    ]}
   ],
   "base":[
     // Args: Factory, Pool Init Code Hash
@@ -66,6 +67,20 @@ const executors_to_deploy = {
     // Args: Pool manager
     {exchange: "UniswapV4Executor", args: ["0x498581ff718922c3f8e6a244956af099b2652b2b"]},
     {exchange: "BalancerV2Executor", args: []},
+  ],
+  "unichain":[
+    // Args: Factory, Pool Init Code Hash
+    {exchange: "UniswapV2Executor", args: [
+      "0x1f98400000000000000000000000000000000002",
+      "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f"
+      ]},
+    // USV3 - Args: Factory, Pool Init Code Hash
+    {exchange: "UniswapV3Executor", args: [
+      "0x1f98400000000000000000000000000000000003",
+      "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54"
+    ]},
+    // Args: Pool manager
+    {exchange: "UniswapV4Executor", args: ["0x1f98400000000000000000000000000000000004"]},
   ],
 }
 
