@@ -229,13 +229,19 @@ impl SwapEncoder for BalancerV2SwapEncoder {
     ) -> Result<Vec<u8>, EncodingError> {
         let token_approvals_manager = ProtocolApprovalsManager::new()?;
         let token = bytes_to_address(&swap.token_in)?;
-        let router_address = bytes_to_address(&encoding_context.router_address)?;
-        let approval_needed = token_approvals_manager.approval_needed(
-            token,
-            router_address,
-            Address::from_str(&self.vault_address)
-                .map_err(|_| EncodingError::FatalError("Invalid vault address".to_string()))?,
-        )?;
+        let approval_needed: bool;
+
+        if let Some(router_address) = encoding_context.router_address {
+            let tycho_router_address = bytes_to_address(&router_address)?;
+            approval_needed = token_approvals_manager.approval_needed(
+                token,
+                tycho_router_address,
+                Address::from_str(&self.vault_address)
+                    .map_err(|_| EncodingError::FatalError("Invalid vault address".to_string()))?,
+            )?;
+        } else {
+            approval_needed = true;
+        }
 
         let component_id = AlloyBytes::from_str(&swap.component.id)
             .map_err(|_| EncodingError::FatalError("Invalid component ID".to_string()))?;
@@ -350,7 +356,7 @@ mod tests {
         let encoding_context = EncodingContext {
             receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
-            router_address: Bytes::zero(20),
+            router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
         };
@@ -397,7 +403,7 @@ mod tests {
         let encoding_context = EncodingContext {
             receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
-            router_address: Bytes::zero(20),
+            router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
         };
@@ -445,7 +451,7 @@ mod tests {
             // The receiver was generated with `makeAddr("bob") using forge`
             receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
             exact_out: false,
-            router_address: Bytes::zero(20),
+            router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
         };
@@ -503,7 +509,7 @@ mod tests {
             receiver: Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f"),
             exact_out: false,
             // Same as the executor address
-            router_address: Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f"),
+            router_address: Some(Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f")),
 
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
@@ -567,7 +573,7 @@ mod tests {
         let encoding_context = EncodingContext {
             receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
-            router_address: Bytes::zero(20),
+            router_address: Some(Bytes::zero(20)),
             group_token_in: group_token_in.clone(),
             // Token out is the same as the group token out
             group_token_out: token_out.clone(),
@@ -606,7 +612,7 @@ mod tests {
         let context = EncodingContext {
             receiver: receiver_address.clone(),
             exact_out: false,
-            router_address: router_address.clone(),
+            router_address: Some(router_address.clone()),
             group_token_in: usde_address.clone(),
             group_token_out: wbtc_address.clone(),
         };
@@ -734,7 +740,7 @@ mod tests {
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
                 exact_out: false,
-                router_address: Bytes::default(),
+                router_address: Some(Bytes::default()),
             };
 
             let encoder = EkuboSwapEncoder::new(String::default());
@@ -772,7 +778,7 @@ mod tests {
                 group_token_in: group_token_in.clone(),
                 group_token_out: group_token_out.clone(),
                 exact_out: false,
-                router_address: Bytes::default(),
+                router_address: Some(Bytes::default()),
             };
 
             let first_swap = Swap {

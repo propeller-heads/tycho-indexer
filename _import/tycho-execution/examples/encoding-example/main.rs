@@ -13,8 +13,6 @@ use tycho_execution::encoding::{
 
 fn main() {
     // Setup variables
-    let router_address = Bytes::from_str("0x1234567890abcdef1234567890abcdef12345678")
-        .expect("Failed to create router address");
     let swapper_pk =
         "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
     let user_address = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
@@ -61,7 +59,6 @@ fn main() {
         exact_out: false,     // it's an exact in solution
         checked_amount: None, // the amount out will not be checked in execution
         swaps: vec![simple_swap],
-        router_address,
         ..Default::default()
     };
 
