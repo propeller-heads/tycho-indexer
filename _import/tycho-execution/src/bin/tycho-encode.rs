@@ -1,7 +1,7 @@
 use std::io::{self, Read};
 
 use clap::{Parser, Subcommand};
-use tycho_common::models::Chain;
+use tycho_common::{hex_bytes::Bytes, models::Chain};
 use tycho_execution::encoding::{
     evm::encoder_builder::EVMEncoderBuilder, models::Solution, tycho_encoder::TychoEncoder,
 };
@@ -44,6 +44,8 @@ pub struct Cli {
     pub command: Commands,
     #[arg(short, long)]
     executors_file_path: Option<String>,
+    #[arg(short, long)]
+    router_address: Option<Bytes>,
 }
 
 #[derive(Subcommand)]
@@ -78,6 +80,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(config_path) = cli.executors_file_path {
         builder = builder.executors_file_path(config_path);
+    }
+    if let Some(router_address) = cli.router_address {
+        builder = builder.router_address(router_address);
     }
 
     builder = match cli.command {
