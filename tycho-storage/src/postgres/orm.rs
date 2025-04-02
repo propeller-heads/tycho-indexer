@@ -426,6 +426,10 @@ impl PartitionedVersionedRow for NewComponentBalance {
         self.valid_to
     }
 
+    fn get_valid_from(&self) -> NaiveDateTime {
+        self.valid_from
+    }
+
     fn archive(&mut self, next_version: &mut Self) {
         next_version.previous_value = self.new_balance.clone();
         self.valid_to = next_version.valid_from;
@@ -1056,6 +1060,10 @@ impl PartitionedVersionedRow for NewProtocolState {
         self.valid_to
     }
 
+    fn get_valid_from(&self) -> NaiveDateTime {
+        self.valid_from
+    }
+
     fn archive(&mut self, next_version: &mut Self) {
         next_version.previous_value = Some(self.attribute_value.clone());
         self.valid_to = next_version.valid_from;
@@ -1325,6 +1333,10 @@ impl StoredVersionedRow for AccountBalance {
         (self.account_id, self.token_id)
     }
 
+    fn get_valid_from(&self) -> NaiveDateTime {
+        self.valid_from
+    }
+
     async fn latest_versions_by_ids<I: IntoIterator<Item = Self::EntityId> + Send + Sync>(
         ids: I,
         conn: &mut AsyncPgConnection,
@@ -1430,6 +1442,10 @@ impl StoredVersionedRow for ContractCode {
 
     fn get_entity_id(&self) -> Self::EntityId {
         self.account_id
+    }
+
+    fn get_valid_from(&self) -> NaiveDateTime {
+        self.valid_from
     }
 
     async fn latest_versions_by_ids<I: IntoIterator<Item = Self::EntityId> + Send + Sync>(
@@ -1591,6 +1607,10 @@ impl PartitionedVersionedRow for NewSlot {
 
     fn get_valid_to(&self) -> NaiveDateTime {
         self.valid_to
+    }
+
+    fn get_valid_from(&self) -> NaiveDateTime {
+        self.valid_from
     }
 
     fn archive(&mut self, next_version: &mut Self) {
