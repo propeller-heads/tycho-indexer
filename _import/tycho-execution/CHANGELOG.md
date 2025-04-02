@@ -1,3 +1,17 @@
+## [0.72.0](https://github.com/propeller-heads/tycho-execution/compare/0.71.0...0.72.0) (2025-04-02)
+
+
+### Features
+
+* Make EncodingContext.router_address optional ([8865e22](https://github.com/propeller-heads/tycho-execution/commit/8865e22116dcb8c291caa745de78b4e6241315c8))
+* Remove router_address from Solution, set default ([d5c589d](https://github.com/propeller-heads/tycho-execution/commit/d5c589d2c09da8e7f22b40be6e5b236e0eb16645))
+* Support manual router address setting in builder ([c336a28](https://github.com/propeller-heads/tycho-execution/commit/c336a28905a1829da78997ea2126849fdabbcfc6))
+
+
+### Bug Fixes
+
+* fix Solution.router_address for Ekubo ([b397ddd](https://github.com/propeller-heads/tycho-execution/commit/b397ddd2beb007d0bed378949d35a9ce5c5b76c9))
+
 ## [0.71.0](https://github.com/propeller-heads/tycho-execution/compare/0.70.0...0.71.0) (2025-04-01)
 
 
