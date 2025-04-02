@@ -148,6 +148,7 @@ impl Chain {
                 self.decode_hex("0000000000000000000000000000000000000000", decode_err_msg)
             }
             324 => self.decode_hex("000000000000000000000000000000000000800A", decode_err_msg),
+            130 => self.decode_hex("0000000000000000000000000000000000000000", decode_err_msg),
             _ => Err(EncodingError::InvalidInput(format!(
                 "Native token not set for chain {:?}. Double check the chain is supported.",
                 self.name
@@ -162,6 +163,7 @@ impl Chain {
             8453 => self.decode_hex("4200000000000000000000000000000000000006", decode_err_msg),
             324 => self.decode_hex("5AEa5775959fBC2557Cc8789bC1bf90A239D9a91", decode_err_msg),
             42161 => self.decode_hex("82aF49447D8a07e3bd95BD0d56f35241523fBab1", decode_err_msg),
+            130 => self.decode_hex("4200000000000000000000000000000000000006", decode_err_msg),
             _ => Err(EncodingError::InvalidInput(format!(
                 "Wrapped token not set for chain {:?}. Double check the chain is supported.",
                 self.name
