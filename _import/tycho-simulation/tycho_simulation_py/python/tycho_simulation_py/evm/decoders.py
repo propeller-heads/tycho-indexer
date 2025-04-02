@@ -97,7 +97,11 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         decoded_pools = {}
         failed_pools = set()
         handle_vm_updates(block, snapshot.vm_storage)
-        account_balances = {account.address: account.token_balances for account in snapshot.vm_storage.values()}
+        account_balances = {
+            account.address: account.token_balances
+            for account in snapshot.vm_storage.values()
+            if len(account.token_balances) != 0
+        }
         for snap in snapshot.states.values():
             try:
                 pool = self.decode_pool_state(snap, block, account_balances)
