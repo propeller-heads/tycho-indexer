@@ -33,7 +33,8 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer {
         if (data.length < 92) revert EkuboExecutor__InvalidDataLength();
 
         // amountIn must be at most type(int128).MAX
-        calculatedAmount = uint256(_lock(bytes.concat(bytes16(uint128(amountIn)), data)));
+        calculatedAmount =
+            uint256(_lock(bytes.concat(bytes16(uint128(amountIn)), data)));
     }
 
     function locked(uint256) external coreOnly {
@@ -92,7 +93,10 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer {
         SafeTransferLib.safeTransfer(token, address(core), amount);
     }
 
-    function _lock(bytes memory data) internal returns (uint128 swappedAmount) {
+    function _lock(bytes memory data)
+        internal
+        returns (uint128 swappedAmount)
+    {
         address target = address(core);
 
         // slither-disable-next-line assembly
