@@ -1,3 +1,17 @@
+## [0.91.0](https://github.com/propeller-heads/tycho-simulation/compare/0.90.0...0.91.0) (2025-04-02)
+
+
+### Features
+
+* add Unichain support in price printer ([bb318ab](https://github.com/propeller-heads/tycho-simulation/commit/bb318ab6e9e75624fbca06701851f26a92a95f74))
+
+## [0.90.0](https://github.com/propeller-heads/tycho-simulation/compare/0.89.0...0.90.0) (2025-04-02)
+
+
+### Features
+
+* update tycho-execution version ([7bed198](https://github.com/propeller-heads/tycho-simulation/commit/7bed19866ca38436da5cae3a3cf36fe07d55fda3))
+
 ## [0.89.0](https://github.com/propeller-heads/tycho-simulation/compare/0.88.0...0.89.0) (2025-04-01)
 
 
