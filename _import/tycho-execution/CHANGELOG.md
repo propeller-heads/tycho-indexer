@@ -1,3 +1,10 @@
+## [0.73.0](https://github.com/propeller-heads/tycho-execution/compare/0.72.0...0.73.0) (2025-04-02)
+
+
+### Features
+
+* Add router_address to cli ([1f6f1a4](https://github.com/propeller-heads/tycho-execution/commit/1f6f1a4236d577e57f50d063a81e9a1ed801a6dd))
+
 ## [0.72.0](https://github.com/propeller-heads/tycho-execution/compare/0.71.0...0.72.0) (2025-04-02)
 
 
