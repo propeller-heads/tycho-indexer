@@ -227,7 +227,7 @@ pub struct SequentialSwapStrategyEncoder {
 
 impl SequentialSwapStrategyEncoder {
     pub fn new(
-        blockchain: tycho_core::models::Chain,
+        blockchain: tycho_common::models::Chain,
         swap_encoder_registry: SwapEncoderRegistry,
         swapper_pk: Option<String>,
         router_address: Bytes,
@@ -304,9 +304,9 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
                 let encoding_context = EncodingContext {
-                    receiver: solution.router_address.clone(),
+                    receiver: self.router_address.clone(),
                     exact_out: solution.exact_out,
-                    router_address: self.router_address.clone(),
+                    router_address: Some(self.router_address.clone()),
                     group_token_in: grouped_swap.input_token.clone(),
                     group_token_out: grouped_swap.output_token.clone(),
                 };
@@ -360,7 +360,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
         };
 
         let contract_interaction = encode_input(&self.selector, method_calldata);
-        Ok((contract_interaction, solution.router_address))
+        Ok((contract_interaction, self.router_address.clone()))
     }
 
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
@@ -1091,7 +1091,7 @@ mod tests {
             Some(private_key),
             Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
         )
-            .unwrap();
+        .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: weth,
@@ -1102,7 +1102,6 @@ mod tests {
             checked_amount,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap],
             ..Default::default()
         };
@@ -1127,104 +1126,23 @@ mod tests {
         // it's hard to assert
 
         let expected_swaps = String::from(concat!(
-        // length of ple encoded swaps without padding
-        "0000000000000000000000000000000000000000000000000000000000000053",
-        // ple encoded swaps
-        "0051",
-        // Swap data
-        "f6c5be66fff9dc69962d73da0a617a827c382329", // executor address
-        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
-        "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
-        "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
-        "00",                                       // zero2one
-        "00",                                       // exact out
-        "000000000000000000000000",                 // padding
+            // length of ple encoded swaps without padding
+            "0000000000000000000000000000000000000000000000000000000000000053",
+            // ple encoded swaps
+            "0051",
+            // Swap data
+            "f6c5be66fff9dc69962d73da0a617a827c382329", // executor address
+            "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
+            "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
+            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
+            "00",                                       // zero2one
+            "00",                                       // exact out
+            "000000000000000000000000",                 // padding
         ));
         let hex_calldata = encode(&calldata);
 
         assert_eq!(hex_calldata[..456], expected_input);
         assert_eq!(hex_calldata[1224..], expected_swaps);
-    }
-
-    #[test]
-    fn test_single_swap_strategy_encoder_wrap() {
-        // Performs a single swap from WETH to DAI on a USV2 pool, wrapping ETH
-        // Note: This test does not assert anything. It is only used to obtain integration test
-        // data for our router solidity test.
-
-        // Set up a mock private key for signing
-        let private_key =
-            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
-
-        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
-
-        let swap = Swap {
-            component: ProtocolComponent {
-                id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                protocol_system: "uniswap_v2".to_string(),
-                ..Default::default()
-            },
-            token_in: weth.clone(),
-            token_out: dai.clone(),
-            split: 0f64,
-        };
-        let swap_encoder_registry = get_swap_encoder_registry();
-        let encoder = SingleSwapStrategyEncoder::new(
-            eth_chain(),
-            swap_encoder_registry,
-            Some(private_key),
-            Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
-        )
-            .unwrap();
-        let solution = Solution {
-            exact_out: false,
-            given_token: weth,
-            given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-            checked_token: dai,
-            expected_amount,
-            slippage,
-            checked_amount,
-            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            swaps: vec![swap],
-            ..Default::default()
-        };
-
-        let (calldata, _) = encoder
-            .encode_strategy(solution)
-            .unwrap();
-        let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
-        let expected_input = [
-            "c378044e",                                                             // Function selector
-            "0000000000000000000000000000000000000000000000000de0b6b3a7640000",      // amount out
-            "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",      // token in
-            "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",      // token out
-            &expected_min_amount_encoded,                                            // min amount out
-            "0000000000000000000000000000000000000000000000000000000000000000",      // wrap
-            "0000000000000000000000000000000000000000000000000000000000000000",      // unwrap
-            "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",      // receiver
-        ]
-            .join("");
-
-        // after this there is the permit and because of the deadlines (that depend on block time)
-        // it's hard to assert
-
-        let expected_swap = String::from(concat!(
-        // length of swap bytes
-        "0000000000000000000000000000000000000000000000000000000000000051",
-        "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
-        "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
-        "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
-        "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
-        "00",                                       // zero2one
-        "00",                                       // exact out
-        "0000000000000000000000000000",             // padding
-        ));
-        let hex_calldata = encode(&calldata);
-
-        assert_eq!(hex_calldata[..456], expected_input);
-        assert_eq!(hex_calldata[1224..], expected_swap);
     }
 
     #[test]
@@ -1476,6 +1394,74 @@ mod tests {
     }
 
     #[test]
+    fn test_sequential_swap_strategy_encoder_complex_route() {
+        // Note: This test does not assert anything. It is only used to obtain integration test
+        // data for our router solidity test.
+        //
+        // Performs a split swap from WETH to USDC though WBTC and DAI using USV2 pools
+        //
+        //   WETH ───(USV2)──> WBTC ───(USV2)──> USDC
+
+        // Set up a mock private key for signing
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let weth = weth();
+        let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+
+        let swap_weth_wbtc = Swap {
+            component: ProtocolComponent {
+                id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
+                protocol_system: "uniswap_v2".to_string(),
+                ..Default::default()
+            },
+            token_in: weth.clone(),
+            token_out: wbtc.clone(),
+            // This represents the remaining 50%, but to avoid any rounding errors we set this to
+            // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
+            split: 0f64,
+        };
+        let swap_wbtc_usdc = Swap {
+            component: ProtocolComponent {
+                id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
+                protocol_system: "uniswap_v2".to_string(),
+                ..Default::default()
+            },
+            token_in: wbtc.clone(),
+            token_out: usdc.clone(),
+            split: 0f64,
+        };
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder = SequentialSwapStrategyEncoder::new(
+            eth_chain(),
+            swap_encoder_registry,
+            Some(private_key),
+            Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+        )
+        .unwrap();
+        let solution = Solution {
+            exact_out: false,
+            given_token: weth,
+            given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+            checked_token: usdc,
+            expected_amount: None,
+            checked_amount: Some(BigUint::from_str("26173932").unwrap()),
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
+            ..Default::default()
+        };
+
+        let (calldata, _) = encoder
+            .encode_strategy(solution)
+            .unwrap();
+
+        let _hex_calldata = encode(&calldata);
+        println!("{}", _hex_calldata);
+    }
+
+    #[test]
     fn test_split_encoding_strategy_usv4() {
         // Performs a sequential swap from USDC to PEPE though ETH using two consecutive USV4 pools
         //
@@ -1650,9 +1636,10 @@ mod tests {
             eth_chain(),
             swap_encoder_registry,
             None,
+            // TODO this should be OPTION
             Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
         )
-            .unwrap();
+        .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: weth,
@@ -1663,7 +1650,6 @@ mod tests {
             checked_amount,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap],
             ..Default::default()
         };
@@ -1736,7 +1722,7 @@ mod tests {
             None,
             Some(Bytes::from_str("0x1d1499e622D69689cdf9004d05Ec547d650Ff211").unwrap()),
         )
-            .unwrap();
+        .unwrap();
 
         let solution = Solution {
             exact_out: false,
