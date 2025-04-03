@@ -486,7 +486,7 @@ pub trait ProtocolGateway {
     /// # Parameters
     /// - `chain` The chain for which to retrieve the total value locked
     /// - `system` The protocol system for which to retrieve the total value locked
-    /// - `id` The id of the component for which to retrieve the total value locked
+    /// - `ids` The ids of the components to retrieve the total value locked for
     ///
     /// # Return
     /// The total value locked for the component

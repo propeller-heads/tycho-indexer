@@ -994,9 +994,9 @@ pub async fn protocol_systems<G: Gateway>(
     }
 }
 
-/// Retrieve protocol systems
+/// Retrieve protocol component tvl
 ///
-/// This endpoint retrieves the protocol systems available in the indexer.
+/// This endpoint retrieves component tvl
 #[utoipa::path(
     post,
     path = "/v1/component_tvl",
