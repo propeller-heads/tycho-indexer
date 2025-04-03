@@ -1369,7 +1369,7 @@ impl StoredVersionedRow for AccountBalance {
     }
 }
 
-#[derive(Insertable, Debug)]
+#[derive(Insertable, Debug, PartialEq, Clone)]
 #[diesel(table_name = account_balance)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewAccountBalance {
