@@ -50,11 +50,7 @@ module.exports = {
     },
 
     etherscan: {
-        apiKey: {
-          unichain: process.env.BLOCKCHAIN_EXPLORER_API_KEY,
-          base: process.env.BLOCKCHAIN_EXPLORER_API_KEY,
-          ethereum: process.env.BLOCKCHAIN_EXPLORER_API_KEY,
-        },
+        apiKey: process.env.BLOCKCHAIN_EXPLORER_API_KEY,
         customChains: [
           {
             network: "unichain",
