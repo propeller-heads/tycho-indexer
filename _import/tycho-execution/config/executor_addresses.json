@@ -24,5 +24,10 @@
   },
   "tenderly_base": {
     "uniswap_v3": "0x7c7E06d7317e620a185078e236879D2a87fC8d22"
+  },
+  "unichain": {
+    "uniswap_v2": "0x2E80FBD880379744b46C2aB7249D2949E6696353",
+    "uniswap_v3": "0x7ba9149EaCC5801279FF8B4d7ECa020bbef18F90",
+    "uniswap_v4": "0x475EB503D630C2919DC8B24cB6603E17e69Bfe35"
   }
 }
