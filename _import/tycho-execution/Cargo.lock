@@ -4341,7 +4341,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.75.1"
+version = "0.76.0"
 dependencies = [
  "alloy",
  "alloy-primitives",

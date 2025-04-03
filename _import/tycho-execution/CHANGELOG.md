@@ -1,3 +1,10 @@
+## [0.76.0](https://github.com/propeller-heads/tycho-execution/compare/0.75.1...0.76.0) (2025-04-03)
+
+
+### Features
+
+* deploy Ekubo gas optimizations ([9012d7b](https://github.com/propeller-heads/tycho-execution/commit/9012d7b4d1745a3c5315d12c7c412d6e3267e4ba))
+
 ## [0.75.1](https://github.com/propeller-heads/tycho-execution/compare/0.75.0...0.75.1) (2025-04-03)
 
 
