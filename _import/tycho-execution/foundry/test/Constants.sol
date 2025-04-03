@@ -130,9 +130,6 @@ contract Constants is Test, BaseConstants {
     bytes32 PANCAKEV3_POOL_CODE_INIT_HASH =
         0x6ce8eb472fa82df5469c6ab6d485f17c3ad13c8cd7af59b3d4a8026c5ce0f7e2;
 
-    // Curve router
-    address CURVE_ROUTER = 0x16C6521Dff6baB339122a0FE25a9116693265353;
-
     // Curve meta registry
     address CURVE_META_REGISTRY = 0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC;
 
