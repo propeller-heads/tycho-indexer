@@ -571,9 +571,7 @@ pub struct MaverickV2SwapEncoder {
 
 impl SwapEncoder for MaverickV2SwapEncoder {
     fn new(executor_address: String) -> Self {
-        Self {
-            executor_address,
-        }
+        Self { executor_address }
     }
     fn encode_swap(
         &self,
@@ -1473,7 +1471,8 @@ mod tests {
                 "14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67",
                 // receiver
                 "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
-            )).to_lowercase()
+            ))
+            .to_lowercase()
         );
     }
 }
