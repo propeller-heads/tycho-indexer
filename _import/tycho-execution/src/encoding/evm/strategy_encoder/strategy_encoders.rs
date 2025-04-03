@@ -953,7 +953,7 @@ mod tests {
         let expected_swap = String::from(concat!(
             // length of swap bytes
             "0000000000000000000000000000000000000000000000000000000000000051",
-            "f6c5be66fff9dc69962d73da0a617a827c382329", // executor address
+            "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
@@ -1484,7 +1484,7 @@ mod tests {
             "0000000000000000000000000000000000000000000000000000000000000051",   // length of swap bytes without padding
 
             // Swap data
-            "f6c5be66fff9dc69962d73da0a617a827c382329", // executor address
+            "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
