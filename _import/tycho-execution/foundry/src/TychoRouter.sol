@@ -557,9 +557,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         address executor = address(0xA612f60d3C49E5f13f0e067b14E0eD6656F3F279);
 
         // slither-disable-next-line controlled-delegatecall,low-level-calls
-        (bool success, bytes memory result) = executor.delegatecall(
-            abi.encodeWithSelector(ICallback.handleCallback.selector, msg.data)
-        );
+        (bool success, bytes memory result) = executor.delegatecall(msg.data);
 
         if (!success) {
             revert(
@@ -570,15 +568,19 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
                 )
             );
         }
+
+        // slither-disable-next-line assembly
+        assembly ("memory-safe") {
+            // Propagate the swappedAmount
+            return(add(result, 32), 16)
+        }
     }
 
     function payCallback(uint256, address /*token*/ ) external {
         address executor = address(0xA612f60d3C49E5f13f0e067b14E0eD6656F3F279);
 
         // slither-disable-next-line controlled-delegatecall,low-level-calls
-        (bool success, bytes memory result) = executor.delegatecall(
-            abi.encodeWithSelector(ICallback.handleCallback.selector, msg.data)
-        );
+        (bool success, bytes memory result) = executor.delegatecall(msg.data);
 
         if (!success) {
             revert(
