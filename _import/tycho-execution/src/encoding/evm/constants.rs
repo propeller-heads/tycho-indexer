@@ -1,6 +1,7 @@
 use std::{collections::HashSet, sync::LazyLock};
 
 pub const DEFAULT_EXECUTORS_JSON: &str = include_str!("../../../config/executor_addresses.json");
+pub const DEFAULT_ROUTERS_JSON: &str = include_str!("../../../config/router_addresses.json");
 
 /// These protocols support the optimization of grouping swaps.
 ///
@@ -11,5 +12,6 @@ pub static GROUPABLE_PROTOCOLS: LazyLock<HashSet<&'static str>> = LazyLock::new(
     let mut set = HashSet::new();
     set.insert("uniswap_v4");
     set.insert("balancer_v3");
+    set.insert("ekubo_v2");
     set
 });

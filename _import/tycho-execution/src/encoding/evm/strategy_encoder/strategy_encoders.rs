@@ -1,13 +1,17 @@
-use std::{collections::HashSet, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
 
 use alloy_primitives::{aliases::U24, U256, U8};
 use alloy_sol_types::SolValue;
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::Permit2,
+        constants::DEFAULT_ROUTERS_JSON,
         strategy_encoder::{group_swaps::group_swaps, strategy_validators::SplitSwapValidator},
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::{
@@ -68,6 +72,7 @@ pub trait EVMStrategyEncoder: StrategyEncoder {
 /// * `wrapped_address`: Address of the chain's wrapped token
 /// * `split_swap_validator`: SplitSwapValidator, responsible for checking validity of split swap
 ///   solutions
+/// * `router_address`: Address of the router to be used to execute swaps
 #[derive(Clone)]
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -76,13 +81,15 @@ pub struct SplitSwapStrategyEncoder {
     native_address: Bytes,
     wrapped_address: Bytes,
     split_swap_validator: SplitSwapValidator,
+    router_address: Bytes,
 }
 
 impl SplitSwapStrategyEncoder {
     pub fn new(
-        blockchain: tycho_core::models::Chain,
+        blockchain: tycho_common::models::Chain,
         swap_encoder_registry: SwapEncoderRegistry,
         swapper_pk: Option<String>,
+        router_address: Option<Bytes>,
     ) -> Result<Self, EncodingError> {
         let chain = Chain::from(blockchain);
         let (permit2, selector) = if let Some(swapper_pk) = swapper_pk {
@@ -94,6 +101,21 @@ impl SplitSwapStrategyEncoder {
                     .to_string(),
             )
         };
+
+        let tycho_router_address;
+        if let Some(address) = router_address {
+            tycho_router_address = address;
+        } else {
+            let default_routers: HashMap<String, Bytes> =
+                serde_json::from_str(DEFAULT_ROUTERS_JSON)?;
+            tycho_router_address = default_routers
+                .get(&chain.name)
+                .ok_or(EncodingError::FatalError(
+                    "No default router address found for chain".to_string(),
+                ))?
+                .to_owned();
+        }
+
         Ok(Self {
             permit2,
             selector,
@@ -101,6 +123,7 @@ impl SplitSwapStrategyEncoder {
             native_address: chain.native_token()?,
             wrapped_address: chain.wrapped_token()?,
             split_swap_validator: SplitSwapValidator,
+            router_address: tycho_router_address,
         })
     }
 }
@@ -183,9 +206,9 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
                 let encoding_context = EncodingContext {
-                    receiver: solution.router_address.clone(),
+                    receiver: self.router_address.clone(),
                     exact_out: solution.exact_out,
-                    router_address: solution.router_address.clone(),
+                    router_address: Some(self.router_address.clone()),
                     group_token_in: grouped_swap.input_token.clone(),
                     group_token_out: grouped_swap.output_token.clone(),
                 };
@@ -214,7 +237,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         };
         let method_calldata = if let Some(permit2) = self.permit2.clone() {
             let (permit, signature) = permit2.get_permit(
-                &solution.router_address,
+                &self.router_address,
                 &solution.sender,
                 &solution.given_token,
                 &solution.given_amount,
@@ -249,7 +272,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         };
 
         let contract_interaction = encode_input(&self.selector, method_calldata);
-        Ok((contract_interaction, solution.router_address))
+        Ok((contract_interaction, self.router_address.clone()))
     }
 
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
@@ -294,7 +317,6 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
             .ok_or_else(|| EncodingError::FatalError("Swap grouping failed".to_string()))?;
 
         let receiver = solution.receiver;
-        let router_address = solution.router_address;
 
         let swap_encoder = self
             .get_swap_encoder(&grouped_swap.protocol_system)
@@ -310,7 +332,7 @@ impl StrategyEncoder for ExecutorStrategyEncoder {
             let encoding_context = EncodingContext {
                 receiver: receiver.clone(),
                 exact_out: solution.exact_out,
-                router_address: router_address.clone(),
+                router_address: None,
                 group_token_in: grouped_swap.input_token.clone(),
                 group_token_out: grouped_swap.output_token.clone(),
             };
@@ -339,10 +361,10 @@ mod tests {
     use std::{collections::HashMap, str::FromStr};
 
     use alloy::hex::encode;
-    use alloy_primitives::hex;
+    use alloy_primitives::{hex, Address};
     use num_bigint::{BigInt, BigUint};
     use rstest::rstest;
-    use tycho_core::{
+    use tycho_common::{
         models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
         Bytes,
     };
@@ -364,7 +386,8 @@ mod tests {
 
     fn get_swap_encoder_registry() -> SwapEncoderRegistry {
         let eth_chain = eth_chain();
-        SwapEncoderRegistry::new(None, eth_chain).unwrap()
+        SwapEncoderRegistry::new(Some("config/test_executor_addresses.json".to_string()), eth_chain)
+            .unwrap()
     }
 
     #[test]
@@ -397,7 +420,6 @@ mod tests {
             // The receiver was generated with `makeAddr("bob") using forge`
             receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
             swaps: vec![swap],
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             slippage: None,
             native_action: None,
         };
@@ -408,7 +430,7 @@ mod tests {
         let hex_protocol_data = encode(&protocol_data);
         assert_eq!(
             executor_address,
-            Bytes::from_str("0xf6c5be66FFf9DC69962d73da0A617a827c382329").unwrap()
+            Bytes::from_str("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f").unwrap()
         );
         assert_eq!(
             hex_protocol_data,
@@ -453,7 +475,6 @@ mod tests {
             sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
             receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
             swaps: vec![swap.clone(), swap],
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             slippage: None,
             native_action: None,
         };
@@ -522,7 +543,6 @@ mod tests {
             slippage: None,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap_usdc_eth, swap_eth_pepe],
             ..Default::default()
         };
@@ -533,7 +553,7 @@ mod tests {
         let hex_protocol_data = encode(&protocol_data);
         assert_eq!(
             executor_address,
-            Bytes::from_str("0x042C0ebBEAb9d9987c2f64Ee05f2B3aeB86eAf70").unwrap()
+            Bytes::from_str("0xf62849f9a0b5bf2913b396098f7c7019b51a820a").unwrap()
         );
         assert_eq!(
             hex_protocol_data,
@@ -545,7 +565,7 @@ mod tests {
                 // zero for one
                 "00",
                 // executor address
-                "042c0ebbeab9d9987c2f64ee05f2b3aeb86eaf70",
+                "f62849f9a0b5bf2913b396098f7c7019b51a820a",
                 // first pool intermediary token (ETH)
                 "0000000000000000000000000000000000000000",
                 // fee
@@ -607,9 +627,13 @@ mod tests {
             split: 0f64,
         };
         let swap_encoder_registry = get_swap_encoder_registry();
-        let encoder =
-            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
-                .unwrap();
+        let encoder = SplitSwapStrategyEncoder::new(
+            eth_chain(),
+            swap_encoder_registry,
+            Some(private_key),
+            Some(Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395")),
+        )
+        .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: weth,
@@ -620,7 +644,6 @@ mod tests {
             checked_amount,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap],
             ..Default::default()
         };
@@ -671,7 +694,7 @@ mod tests {
             "01",     // token out index
             "000000", // split
             // Swap data
-            "f6c5be66fff9dc69962d73da0a617a827c382329", // executor address
+            "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
@@ -708,9 +731,13 @@ mod tests {
             split: 0f64,
         };
         let swap_encoder_registry = get_swap_encoder_registry();
-        let encoder =
-            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
-                .unwrap();
+        let encoder = SplitSwapStrategyEncoder::new(
+            eth_chain(),
+            swap_encoder_registry,
+            Some(private_key),
+            Some(Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395")),
+        )
+        .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: eth(),
@@ -720,7 +747,6 @@ mod tests {
             checked_amount: Some(BigUint::from_str("2659881924818443699787").unwrap()),
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap],
             native_action: Some(NativeAction::Wrap),
             ..Default::default()
@@ -757,9 +783,13 @@ mod tests {
             split: 0f64,
         };
         let swap_encoder_registry = get_swap_encoder_registry();
-        let encoder =
-            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
-                .unwrap();
+        let encoder = SplitSwapStrategyEncoder::new(
+            eth_chain(),
+            swap_encoder_registry,
+            Some(private_key),
+            Some(Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395")),
+        )
+        .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: dai,
@@ -769,7 +799,6 @@ mod tests {
             checked_amount: Some(BigUint::from_str("1_000000000000000000").unwrap()),
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap],
             native_action: Some(NativeAction::Unwrap),
             ..Default::default()
@@ -847,9 +876,13 @@ mod tests {
             split: 0f64,
         };
         let swap_encoder_registry = get_swap_encoder_registry();
-        let encoder =
-            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
-                .unwrap();
+        let encoder = SplitSwapStrategyEncoder::new(
+            eth_chain(),
+            swap_encoder_registry,
+            Some(private_key),
+            Some(Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395")),
+        )
+        .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: weth,
@@ -859,7 +892,6 @@ mod tests {
             checked_amount: Some(BigUint::from_str("26173932").unwrap()),
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap_weth_dai, swap_weth_wbtc, swap_dai_usdc, swap_wbtc_usdc],
             ..Default::default()
         };
@@ -928,9 +960,13 @@ mod tests {
             split: 0f64,
         };
         let swap_encoder_registry = get_swap_encoder_registry();
-        let encoder =
-            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
-                .unwrap();
+        let encoder = SplitSwapStrategyEncoder::new(
+            eth_chain(),
+            swap_encoder_registry,
+            Some(private_key),
+            Some(Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395")),
+        )
+        .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: usdc,
@@ -941,7 +977,6 @@ mod tests {
             slippage: None,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap_usdc_eth, swap_eth_pepe],
             ..Default::default()
         };
@@ -992,12 +1027,12 @@ mod tests {
             "01",     // token out index
             "000000", // split
             // Swap data header
-            "042c0ebbeab9d9987c2f64ee05f2b3aeb86eaf70", // executor address
+            "f62849f9a0b5bf2913b396098f7c7019b51a820a", // executor address
             // Protocol data
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // group token in
             "6982508145454ce325ddbe47a25d4ec3d2311933", // group token in
             "00",                                       // zero2one
-            "042c0ebbeab9d9987c2f64ee05f2b3aeb86eaf70", // executor address
+            "f62849f9a0b5bf2913b396098f7c7019b51a820a", // executor address
             // First pool params
             "0000000000000000000000000000000000000000", // intermediary token (ETH)
             "000bb8",                                   // fee
@@ -1013,6 +1048,67 @@ mod tests {
 
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
+        println!("{}", hex_calldata);
+    }
+
+    #[test]
+    fn test_split_encoding_strategy_ekubo() {
+        //   ETH ──(EKUBO)──> USDC
+
+        let token_in = Bytes::from(Address::ZERO.as_slice());
+        let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+
+        let static_attributes = HashMap::from([
+            ("fee".to_string(), Bytes::from(0_u64)),
+            ("tick_spacing".to_string(), Bytes::from(0_u32)),
+            ("extension".to_string(), Bytes::from("0x51d02a5948496a67827242eabc5725531342527c")), /* Oracle */
+        ]);
+
+        let component = ProtocolComponent {
+            // All Ekubo swaps go through the core contract - not necessary to specify pool id
+            // for test
+            protocol_system: "ekubo_v2".to_string(),
+            static_attributes,
+            ..Default::default()
+        };
+
+        let swap = Swap {
+            component,
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
+            split: 0f64,
+        };
+
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder = SplitSwapStrategyEncoder::new(
+            eth_chain(),
+            swap_encoder_registry,
+            None,
+            Some(Bytes::from_str("0x1d1499e622D69689cdf9004d05Ec547d650Ff211").unwrap()),
+        )
+        .unwrap();
+
+        let solution = Solution {
+            exact_out: false,
+            given_token: token_in,
+            given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+            checked_token: token_out,
+            expected_amount: None,
+            checked_amount: Some(BigUint::from_str("1").unwrap()),
+            slippage: None,
+            // Alice
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            swaps: vec![swap],
+            ..Default::default()
+        };
+
+        let (calldata, _) = encoder
+            .encode_strategy(solution)
+            .unwrap();
+
+        let hex_calldata = encode(&calldata);
+        println!("{}", hex_calldata);
     }
 
     #[test]
@@ -1039,8 +1135,13 @@ mod tests {
             split: 0f64,
         };
         let swap_encoder_registry = get_swap_encoder_registry();
-        let encoder =
-            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, None).unwrap();
+        let encoder = SplitSwapStrategyEncoder::new(
+            eth_chain(),
+            swap_encoder_registry,
+            None,
+            Some(Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395")),
+        )
+        .unwrap();
         let solution = Solution {
             exact_out: false,
             given_token: weth,
@@ -1051,7 +1152,6 @@ mod tests {
             checked_amount,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap],
             ..Default::default()
         };
@@ -1078,7 +1178,7 @@ mod tests {
             "01", // token out index
             "000000", // split
             // Swap data
-            "f6c5be66fff9dc69962d73da0a617a827c382329", // executor address
+            "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
@@ -1128,9 +1228,13 @@ mod tests {
             split: 0f64,
         };
         let swap_encoder_registry = get_swap_encoder_registry();
-        let encoder =
-            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
-                .unwrap();
+        let encoder = SplitSwapStrategyEncoder::new(
+            eth_chain(),
+            swap_encoder_registry,
+            Some(private_key),
+            Some(Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395")),
+        )
+        .unwrap();
 
         let solution = Solution {
             exact_out: false,
@@ -1142,7 +1246,6 @@ mod tests {
             slippage: None,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap_eth_pepe],
             ..Default::default()
         };
@@ -1192,9 +1295,13 @@ mod tests {
         };
 
         let swap_encoder_registry = get_swap_encoder_registry();
-        let encoder =
-            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
-                .unwrap();
+        let encoder = SplitSwapStrategyEncoder::new(
+            eth_chain(),
+            swap_encoder_registry,
+            Some(private_key),
+            Some(Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395")),
+        )
+        .unwrap();
 
         let solution = Solution {
             exact_out: false,
@@ -1206,7 +1313,6 @@ mod tests {
             slippage: None,
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             swaps: vec![swap_usdc_eth],
             ..Default::default()
         };
@@ -1276,9 +1382,13 @@ mod tests {
         };
 
         let swap_encoder_registry = get_swap_encoder_registry();
-        let encoder =
-            SplitSwapStrategyEncoder::new(eth_chain(), swap_encoder_registry, Some(private_key))
-                .unwrap();
+        let encoder = SplitSwapStrategyEncoder::new(
+            eth_chain(),
+            swap_encoder_registry,
+            Some(private_key),
+            Some(Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395")),
+        )
+        .unwrap();
 
         let solution = Solution {
             exact_out: false,
@@ -1290,7 +1400,6 @@ mod tests {
                                                                            * test */
             slippage: None,
             swaps: vec![swap_usdc_weth, swap_weth_usdc],
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             ..Default::default()
@@ -1319,7 +1428,7 @@ mod tests {
             "00",     // token in index
             "01",     // token out index
             "000000", // split
-            "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+            "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
             "0001f4",                                   // pool fee
@@ -1329,7 +1438,7 @@ mod tests {
             "006d",                                     // ple encoded swaps
             "01",                                       // token in index
             "00000000",                                 // split
-            "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+            "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
             "000bb8",                                   // pool fee
@@ -1341,6 +1450,7 @@ mod tests {
 
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
+        println!("{}", hex_calldata);
     }
 
     #[test]
@@ -1428,6 +1538,7 @@ mod tests {
             eth_chain(),
             swap_encoder_registry,
             Some(private_key.clone()),
+            Some(Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395")),
         )
         .unwrap();
 
@@ -1439,7 +1550,6 @@ mod tests {
             expected_amount: None,
             checked_amount: Some(BigUint::from_str("99574171").unwrap()), /* Expected output from
                                                                            * test */
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             slippage: None,
@@ -1470,7 +1580,7 @@ mod tests {
         "00", // token in index
         "01", // token out index
         "999999", // split
-        "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+        "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
         "0001f4", // pool fee
@@ -1481,7 +1591,7 @@ mod tests {
         "00", // token in index
         "01", // token out index
         "000000", // split
-        "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+        "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
         "000bb8", // pool fee
@@ -1492,7 +1602,7 @@ mod tests {
         "01", // token in index
         "00", // token out index
         "000000", // split
-        "f6c5be66fff9dc69962d73da0a617a827c382329", // executor address,
+        "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address,
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id,
         "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
@@ -1502,6 +1612,7 @@ mod tests {
         .join("");
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
+        println!("{}", hex_calldata);
     }
 
     #[test]
@@ -1585,6 +1696,7 @@ mod tests {
             eth_chain(),
             swap_encoder_registry,
             Some(private_key.clone()),
+            Some(Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395")),
         )
         .unwrap();
 
@@ -1596,7 +1708,6 @@ mod tests {
             expected_amount: None,
             checked_amount: Some(BigUint::from_str("99525908").unwrap()), /* Expected output from
                                                                            * test */
-            router_address: Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
             sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
             slippage: None,
@@ -1628,7 +1739,7 @@ mod tests {
         "00", // token in index
         "01", // token out index
         "000000", // split
-        "f6c5be66fff9dc69962d73da0a617a827c382329", // executor address
+        "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id
         "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
@@ -1637,7 +1748,7 @@ mod tests {
         "01", // token in index
         "00", // token out index
         "999999", // split
-        "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+        "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "0001f4", // pool fee
@@ -1648,7 +1759,7 @@ mod tests {
         "01", // token in index
         "00", // token out index
         "000000", // split
-        "dd8559c917393fc8dd2b4dd289c52ff445fde1b0", // executor address
+        "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "000bb8", // pool fee
@@ -1661,5 +1772,6 @@ mod tests {
 
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
+        println!("{}", hex_calldata);
     }
 }

@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use alloy_primitives::{Address, Bytes as AlloyBytes};
 use alloy_sol_types::SolValue;
-use tycho_core::Bytes;
+use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
@@ -229,13 +229,19 @@ impl SwapEncoder for BalancerV2SwapEncoder {
     ) -> Result<Vec<u8>, EncodingError> {
         let token_approvals_manager = ProtocolApprovalsManager::new()?;
         let token = bytes_to_address(&swap.token_in)?;
-        let router_address = bytes_to_address(&encoding_context.router_address)?;
-        let approval_needed = token_approvals_manager.approval_needed(
-            token,
-            router_address,
-            Address::from_str(&self.vault_address)
-                .map_err(|_| EncodingError::FatalError("Invalid vault address".to_string()))?,
-        )?;
+        let approval_needed: bool;
+
+        if let Some(router_address) = encoding_context.router_address {
+            let tycho_router_address = bytes_to_address(&router_address)?;
+            approval_needed = token_approvals_manager.approval_needed(
+                token,
+                tycho_router_address,
+                Address::from_str(&self.vault_address)
+                    .map_err(|_| EncodingError::FatalError("Invalid vault address".to_string()))?,
+            )?;
+        } else {
+            approval_needed = true;
+        }
 
         let component_id = AlloyBytes::from_str(&swap.component.id)
             .map_err(|_| EncodingError::FatalError("Invalid component ID".to_string()))?;
@@ -258,13 +264,77 @@ impl SwapEncoder for BalancerV2SwapEncoder {
     }
 }
 
+/// Encodes a swap on an Ekubo pool through the given executor address.
+///
+/// # Fields
+/// * `executor_address` - The address of the executor contract that will perform the swap.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EkuboSwapEncoder {
+    executor_address: String,
+}
+
+impl SwapEncoder for EkuboSwapEncoder {
+    fn new(executor_address: String) -> Self {
+        Self { executor_address }
+    }
+
+    fn encode_swap(
+        &self,
+        swap: Swap,
+        encoding_context: EncodingContext,
+    ) -> Result<Vec<u8>, EncodingError> {
+        if encoding_context.exact_out {
+            return Err(EncodingError::InvalidInput("exact out swaps not implemented".to_string()));
+        }
+
+        let fee = u64::from_be_bytes(
+            get_static_attribute(&swap, "fee")?
+                .try_into()
+                .map_err(|_| EncodingError::FatalError("fee should be an u64".to_string()))?,
+        );
+
+        let tick_spacing = u32::from_be_bytes(
+            get_static_attribute(&swap, "tick_spacing")?
+                .try_into()
+                .map_err(|_| {
+                    EncodingError::FatalError("tick_spacing should be an u32".to_string())
+                })?,
+        );
+
+        let extension: Address = get_static_attribute(&swap, "extension")?
+            .as_slice()
+            .try_into()
+            .map_err(|_| EncodingError::FatalError("extension should be an address".to_string()))?;
+
+        let mut encoded = vec![];
+
+        if encoding_context.group_token_in == swap.token_in {
+            encoded.extend(bytes_to_address(&encoding_context.receiver)?);
+            encoded.extend(bytes_to_address(&swap.token_in)?);
+        }
+
+        encoded.extend(bytes_to_address(&swap.token_out)?);
+        encoded.extend((extension, fee, tick_spacing).abi_encode_packed());
+
+        Ok(encoded)
+    }
+
+    fn executor_address(&self) -> &str {
+        &self.executor_address
+    }
+
+    fn clone_box(&self) -> Box<dyn SwapEncoder> {
+        Box::new(self.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
     use alloy::hex::encode;
     use num_bigint::BigInt;
-    use tycho_core::{models::protocol::ProtocolComponent, Bytes};
+    use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
 
@@ -286,7 +356,7 @@ mod tests {
         let encoding_context = EncodingContext {
             receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
-            router_address: Bytes::zero(20),
+            router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
         };
@@ -333,7 +403,7 @@ mod tests {
         let encoding_context = EncodingContext {
             receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
-            router_address: Bytes::zero(20),
+            router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
         };
@@ -381,7 +451,7 @@ mod tests {
             // The receiver was generated with `makeAddr("bob") using forge`
             receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
             exact_out: false,
-            router_address: Bytes::zero(20),
+            router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
         };
@@ -439,7 +509,7 @@ mod tests {
             receiver: Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f"),
             exact_out: false,
             // Same as the executor address
-            router_address: Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f"),
+            router_address: Some(Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f")),
 
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
@@ -503,7 +573,7 @@ mod tests {
         let encoding_context = EncodingContext {
             receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
             exact_out: false,
-            router_address: Bytes::zero(20),
+            router_address: Some(Bytes::zero(20)),
             group_token_in: group_token_in.clone(),
             // Token out is the same as the group token out
             group_token_out: token_out.clone(),
@@ -542,7 +612,7 @@ mod tests {
         let context = EncodingContext {
             receiver: receiver_address.clone(),
             exact_out: false,
-            router_address: router_address.clone(),
+            router_address: Some(router_address.clone()),
             group_token_in: usde_address.clone(),
             group_token_out: wbtc_address.clone(),
         };
@@ -635,5 +705,143 @@ mod tests {
                 "00003c"
             ))
         );
+    }
+
+    mod ekubo {
+        use super::*;
+
+        const RECEIVER: &str = "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6"; // Random address
+
+        #[test]
+        fn test_encode_swap_simple() {
+            let token_in = Bytes::from(Address::ZERO.as_slice());
+            let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+
+            let static_attributes = HashMap::from([
+                ("fee".to_string(), Bytes::from(0_u64)),
+                ("tick_spacing".to_string(), Bytes::from(0_u32)),
+                (
+                    "extension".to_string(),
+                    Bytes::from("0x51d02a5948496a67827242eabc5725531342527c"),
+                ), // Oracle
+            ]);
+
+            let component = ProtocolComponent { static_attributes, ..Default::default() };
+
+            let swap = Swap {
+                component,
+                token_in: token_in.clone(),
+                token_out: token_out.clone(),
+                split: 0f64,
+            };
+
+            let encoding_context = EncodingContext {
+                receiver: RECEIVER.into(),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                exact_out: false,
+                router_address: Some(Bytes::default()),
+            };
+
+            let encoder = EkuboSwapEncoder::new(String::default());
+
+            let encoded_swap = encoder
+                .encode_swap(swap, encoding_context)
+                .unwrap();
+
+            let hex_swap = encode(&encoded_swap);
+
+            assert_eq!(
+                hex_swap,
+                RECEIVER.to_string() +
+                    concat!(
+                        // group token in
+                        "0000000000000000000000000000000000000000",
+                        // token out 1st swap
+                        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                        // pool config 1st swap
+                        "51d02a5948496a67827242eabc5725531342527c000000000000000000000000",
+                    ),
+            );
+        }
+
+        #[test]
+        fn test_encode_swap_multi() {
+            let group_token_in = Bytes::from(Address::ZERO.as_slice());
+            let group_token_out = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
+            let intermediary_token = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+
+            let encoder = EkuboSwapEncoder::new(String::default());
+
+            let encoding_context = EncodingContext {
+                receiver: RECEIVER.into(),
+                group_token_in: group_token_in.clone(),
+                group_token_out: group_token_out.clone(),
+                exact_out: false,
+                router_address: Some(Bytes::default()),
+            };
+
+            let first_swap = Swap {
+                component: ProtocolComponent {
+                    static_attributes: HashMap::from([
+                        ("fee".to_string(), Bytes::from(0_u64)),
+                        ("tick_spacing".to_string(), Bytes::from(0_u32)),
+                        (
+                            "extension".to_string(),
+                            Bytes::from("0x51d02a5948496a67827242eabc5725531342527c"),
+                        ), // Oracle
+                    ]),
+                    ..Default::default()
+                },
+                token_in: group_token_in.clone(),
+                token_out: intermediary_token.clone(),
+                split: 0f64,
+            };
+
+            let second_swap = Swap {
+                component: ProtocolComponent {
+                    // 0.0025% fee & 0.005% base pool
+                    static_attributes: HashMap::from([
+                        ("fee".to_string(), Bytes::from(461168601842738_u64)),
+                        ("tick_spacing".to_string(), Bytes::from(50_u32)),
+                        ("extension".to_string(), Bytes::zero(20)),
+                    ]),
+                    ..Default::default()
+                },
+                token_in: intermediary_token.clone(),
+                token_out: group_token_out.clone(),
+                split: 0f64,
+            };
+
+            let first_encoded_swap = encoder
+                .encode_swap(first_swap, encoding_context.clone())
+                .unwrap();
+
+            let second_encoded_swap = encoder
+                .encode_swap(second_swap, encoding_context)
+                .unwrap();
+
+            let combined_hex =
+                format!("{}{}", encode(first_encoded_swap), encode(second_encoded_swap));
+
+            println!("{}", combined_hex);
+
+            assert_eq!(
+                combined_hex,
+                RECEIVER.to_string() +
+                    concat!(
+                        // group token in
+                        "0000000000000000000000000000000000000000",
+                        // token out 1st swap
+                        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                        // pool config 1st swap
+                        "51d02a5948496a67827242eabc5725531342527c000000000000000000000000",
+                        // token out 2nd swap
+                        "dac17f958d2ee523a2206206994597c13d831ec7",
+                        // pool config 2nd swap
+                        "00000000000000000000000000000000000000000001a36e2eb1c43200000032",
+                    ),
+            );
+        }
     }
 }

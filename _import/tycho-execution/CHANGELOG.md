@@ -1,3 +1,167 @@
+## [0.76.0](https://github.com/propeller-heads/tycho-execution/compare/0.75.1...0.76.0) (2025-04-03)
+
+
+### Features
+
+* deploy Ekubo gas optimizations ([9012d7b](https://github.com/propeller-heads/tycho-execution/commit/9012d7b4d1745a3c5315d12c7c412d6e3267e4ba))
+
+## [0.75.1](https://github.com/propeller-heads/tycho-execution/compare/0.75.0...0.75.1) (2025-04-03)
+
+
+### Bug Fixes
+
+* Proper ekubo protocol name in GROUPABLE_PROTOCOLS ([b4c687b](https://github.com/propeller-heads/tycho-execution/commit/b4c687bc3f51167fc942b8b7b00b17df4a2bec30))
+
+## [0.75.0](https://github.com/propeller-heads/tycho-execution/compare/0.74.0...0.75.0) (2025-04-03)
+
+
+### Features
+
+* Unichain deployment ([d05e118](https://github.com/propeller-heads/tycho-execution/commit/d05e1183d4e85eb57c139b1fd5411833efea92fc))
+
+
+### Bug Fixes
+
+* Run foundry tests on PR branch (not main) ([43f1a07](https://github.com/propeller-heads/tycho-execution/commit/43f1a0701707d2dbf5bfa4f6ccde50aea48e46a1))
+* Set native and wrapped tokens for Unichain ([4878229](https://github.com/propeller-heads/tycho-execution/commit/4878229e1d60a317b0f2d97ea57886e64cc70cb5))
+
+## [0.74.0](https://github.com/propeller-heads/tycho-execution/compare/0.73.0...0.74.0) (2025-04-02)
+
+
+### Features
+
+* Fix rollFork usage for Ekubo test ([6cdca83](https://github.com/propeller-heads/tycho-execution/commit/6cdca8381e711bc01b7573dd25cafc9aa057aac3))
+
+
+### Bug Fixes
+
+* Fix tests after cherry picking ([5336969](https://github.com/propeller-heads/tycho-execution/commit/5336969df8b06238b65a9c9f1a3458f43b89cb54))
+
+## [0.73.0](https://github.com/propeller-heads/tycho-execution/compare/0.72.0...0.73.0) (2025-04-02)
+
+
+### Features
+
+* Add router_address to cli ([1f6f1a4](https://github.com/propeller-heads/tycho-execution/commit/1f6f1a4236d577e57f50d063a81e9a1ed801a6dd))
+
+## [0.72.0](https://github.com/propeller-heads/tycho-execution/compare/0.71.0...0.72.0) (2025-04-02)
+
+
+### Features
+
+* Make EncodingContext.router_address optional ([8865e22](https://github.com/propeller-heads/tycho-execution/commit/8865e22116dcb8c291caa745de78b4e6241315c8))
+* Remove router_address from Solution, set default ([d5c589d](https://github.com/propeller-heads/tycho-execution/commit/d5c589d2c09da8e7f22b40be6e5b236e0eb16645))
+* Support manual router address setting in builder ([c336a28](https://github.com/propeller-heads/tycho-execution/commit/c336a28905a1829da78997ea2126849fdabbcfc6))
+
+
+### Bug Fixes
+
+* fix Solution.router_address for Ekubo ([b397ddd](https://github.com/propeller-heads/tycho-execution/commit/b397ddd2beb007d0bed378949d35a9ce5c5b76c9))
+
+## [0.71.0](https://github.com/propeller-heads/tycho-execution/compare/0.70.0...0.71.0) (2025-04-01)
+
+
+### Features
+
+* Update ekubo router address ([e3d25fc](https://github.com/propeller-heads/tycho-execution/commit/e3d25fcd5ed4e160fff10d5c346b12f0cb3328c6))
+
+
+### Bug Fixes
+
+* update ekubo_v2 executor ([57aa1c3](https://github.com/propeller-heads/tycho-execution/commit/57aa1c3402da976cfed38db2b46c584162cdbb69))
+
+## [0.70.0](https://github.com/propeller-heads/tycho-execution/compare/0.69.0...0.70.0) (2025-03-31)
+
+
+### Features
+
+* Support Ekubo callback in TychoRouter ([b3078f9](https://github.com/propeller-heads/tycho-execution/commit/b3078f9c7b99b3c0c9f0008b97855b48483f06dc))
+
+
+### Bug Fixes
+
+* ekubo -> ekubo_v2 ([18fa0cc](https://github.com/propeller-heads/tycho-execution/commit/18fa0cc7adfaa46879aa3637c03563c770582b0d))
+* ekubo -> ekubo_v2 ([6c35f11](https://github.com/propeller-heads/tycho-execution/commit/6c35f114e383b7ba93cb44d314a05f69ab15fadd))
+* Finalize ekubo executor address ([c0068d4](https://github.com/propeller-heads/tycho-execution/commit/c0068d456bbd271d1c74797577e0fe514be0fcc7))
+* support payCallback method for Ekubo ([7551612](https://github.com/propeller-heads/tycho-execution/commit/75516122e1a084f86c34e6eaaf43fe5f53a30d96))
+* Take address for EkuboExecutor init ([c678f40](https://github.com/propeller-heads/tycho-execution/commit/c678f400571d1b001c98595f68d9a99e0cf4900d))
+* test setup fix after rebase ([28f9f24](https://github.com/propeller-heads/tycho-execution/commit/28f9f244e6343393a96020a85f5e202012d7ca26))
+
+## [0.69.0](https://github.com/propeller-heads/tycho-execution/compare/0.68.2...0.69.0) (2025-03-31)
+
+
+### Features
+
+* Add PancakeSwapV3 support to encoding ([fa024a4](https://github.com/propeller-heads/tycho-execution/commit/fa024a4a6702c7809af31a6ba392338d9368c6d2))
+* Pancakeswap V3 support ([d582543](https://github.com/propeller-heads/tycho-execution/commit/d582543057665b737cc0aab5243ccc22db1f0a13))
+
+## [0.68.2](https://github.com/propeller-heads/tycho-execution/compare/0.68.1...0.68.2) (2025-03-28)
+
+
+### Bug Fixes
+
+* fix for foundry tests external contributors ([a9ddb0e](https://github.com/propeller-heads/tycho-execution/commit/a9ddb0e6e9ef546f6e851c3056df5a55ee4dfa76))
+
+## [0.68.1](https://github.com/propeller-heads/tycho-execution/compare/0.68.0...0.68.1) (2025-03-27)
+
+
+### Bug Fixes
+
+* Add crate metadata ([7e7fabf](https://github.com/propeller-heads/tycho-execution/commit/7e7fabf51bff842ab20c2f512e4f3a609a266e79))
+
+## [0.68.0](https://github.com/propeller-heads/tycho-execution/compare/0.67.2...0.68.0) (2025-03-27)
+
+
+### Features
+
+* switch to tycho_commons ([0836bf7](https://github.com/propeller-heads/tycho-execution/commit/0836bf7d530f18a6c0f112542bcad16050e88afa))
+
+
+### Bug Fixes
+
+* Handle unichain chain id ([379858b](https://github.com/propeller-heads/tycho-execution/commit/379858bfca27eb5e8180a32351337779e625e0b5))
+
+## [0.67.2](https://github.com/propeller-heads/tycho-execution/compare/0.67.1...0.67.2) (2025-03-27)
+
+
+### Bug Fixes
+
+* prepared lint workflow for external contributors ([9896f48](https://github.com/propeller-heads/tycho-execution/commit/9896f4882940517d61852300420c7c580138406f))
+* prepared lint workflow for external contributors ([5162b9e](https://github.com/propeller-heads/tycho-execution/commit/5162b9e19efcaa5a2137f71a94f6f9e7f7d14da0))
+
+## [0.67.1](https://github.com/propeller-heads/tycho-execution/compare/0.67.0...0.67.1) (2025-03-27)
+
+
+### Bug Fixes
+
+* added empty line ([b3c4dbc](https://github.com/propeller-heads/tycho-execution/commit/b3c4dbc293df758ff4cff949298a819436d83c38))
+* fixed git checkout for codelint ([58e2ddd](https://github.com/propeller-heads/tycho-execution/commit/58e2ddd50e131c484ad53a6dca0b09e1d221d0e5))
+* prepared lint workflow for external contributors ([9f7d605](https://github.com/propeller-heads/tycho-execution/commit/9f7d605ea5e76d230b5946c618ece76365fb4f02))
+* removed empty line ([ae5d7de](https://github.com/propeller-heads/tycho-execution/commit/ae5d7deaccfc1ac527f88371bb3f055b01689801))
+* test run outside a PR ([af01972](https://github.com/propeller-heads/tycho-execution/commit/af0197205adb3220673022b690f1d8aa6f6734aa))
+
+## [0.67.0](https://github.com/propeller-heads/tycho-execution/compare/0.66.1...0.67.0) (2025-03-20)
+
+
+### Features
+
+* Set v2/v3 executor addresses on ethereum ([783712b](https://github.com/propeller-heads/tycho-execution/commit/783712be5d8dae626c735193416ba03701d3a616))
+* Support Pancakeswap v3 on ethereum ([2a4ee88](https://github.com/propeller-heads/tycho-execution/commit/2a4ee88cad46dfeb068809bdd885e63094020bcd))
+* Support sushiswap v2 and pancakeswap v2 on ethereum ([0a8a34b](https://github.com/propeller-heads/tycho-execution/commit/0a8a34be035588d45e6b72a42f4dd691e3c98d2f))
+
+
+### Bug Fixes
+
+* proper exchange name when deploying executors ([39bd9df](https://github.com/propeller-heads/tycho-execution/commit/39bd9df4b6ca8db78bb4d6757c93b30cce29f360))
+* Remove pancakeswap V3 from approved executor addresses ([1ed149a](https://github.com/propeller-heads/tycho-execution/commit/1ed149a9b8ffd41b9cc702c77e146fa234176af0))
+
+## [0.66.1](https://github.com/propeller-heads/tycho-execution/compare/0.66.0...0.66.1) (2025-03-19)
+
+
+### Bug Fixes
+
+* Slippage precision calculation ([d644b63](https://github.com/propeller-heads/tycho-execution/commit/d644b63851a63babadfb909af97c5bf80dd03376))
+
 ## [0.66.0](https://github.com/propeller-heads/tycho-execution/compare/0.65.1...0.66.0) (2025-03-14)
 
 

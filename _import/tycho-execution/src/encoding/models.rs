@@ -1,7 +1,7 @@
 use hex;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
-use tycho_core::{
+use tycho_common::{
     models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
     Bytes,
 };
@@ -41,8 +41,6 @@ pub struct Solution {
     pub checked_amount: Option<BigUint>,
     /// List of swaps to fulfill the solution.
     pub swaps: Vec<Swap>,
-    /// Address of the router contract to be used for the swaps.
-    pub router_address: Bytes,
     /// If set, the corresponding native action will be executed.
     pub native_action: Option<NativeAction>,
 }
@@ -104,14 +102,15 @@ pub struct Transaction {
 ///
 /// * `receiver`: Address of the receiver of the out token after the swaps are completed.
 /// * `exact_out`: true if the solution is a buy order, false if it is a sell order.
-/// * `router_address`: Address of the router contract to be used for the swaps.
+/// * `router_address`: Address of the router contract to be used for the swaps. Zero address if
+///   solution does not require router address.
 /// * `group_token_in`: Token to be used as the input for the group swap.
 /// * `group_token_out`: Token to be used as the output for the group swap.
 #[derive(Clone, Debug)]
 pub struct EncodingContext {
     pub receiver: Bytes,
     pub exact_out: bool,
-    pub router_address: Bytes,
+    pub router_address: Option<Bytes>,
     pub group_token_in: Bytes,
     pub group_token_out: Bytes,
 }
@@ -130,6 +129,7 @@ impl From<TychoCoreChain> for Chain {
             TychoCoreChain::Arbitrum => Chain { id: 42161, name: chain.to_string() },
             TychoCoreChain::Starknet => Chain { id: 0, name: chain.to_string() },
             TychoCoreChain::Base => Chain { id: 8453, name: chain.to_string() },
+            TychoCoreChain::Unichain => Chain { id: 130, name: chain.to_string() },
         }
     }
 }
@@ -148,6 +148,7 @@ impl Chain {
                 self.decode_hex("0000000000000000000000000000000000000000", decode_err_msg)
             }
             324 => self.decode_hex("000000000000000000000000000000000000800A", decode_err_msg),
+            130 => self.decode_hex("0000000000000000000000000000000000000000", decode_err_msg),
             _ => Err(EncodingError::InvalidInput(format!(
                 "Native token not set for chain {:?}. Double check the chain is supported.",
                 self.name
@@ -162,6 +163,7 @@ impl Chain {
             8453 => self.decode_hex("4200000000000000000000000000000000000006", decode_err_msg),
             324 => self.decode_hex("5AEa5775959fBC2557Cc8789bC1bf90A239D9a91", decode_err_msg),
             42161 => self.decode_hex("82aF49447D8a07e3bd95BD0d56f35241523fBab1", decode_err_msg),
+            130 => self.decode_hex("4200000000000000000000000000000000000006", decode_err_msg),
             _ => Err(EncodingError::InvalidInput(format!(
                 "Wrapped token not set for chain {:?}. Double check the chain is supported.",
                 self.name

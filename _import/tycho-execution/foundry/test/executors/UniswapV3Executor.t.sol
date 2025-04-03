@@ -6,7 +6,9 @@ import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
 
 contract UniswapV3ExecutorExposed is UniswapV3Executor {
-    constructor(address _factory) UniswapV3Executor(_factory) {}
+    constructor(address _factory, bytes32 _initCode)
+        UniswapV3Executor(_factory, _initCode)
+    {}
 
     function decodeData(bytes calldata data)
         external
@@ -37,6 +39,7 @@ contract UniswapV3ExecutorTest is Test, Constants {
     using SafeERC20 for IERC20;
 
     UniswapV3ExecutorExposed uniswapV3Exposed;
+    UniswapV3ExecutorExposed pancakeV3Exposed;
     IERC20 WETH = IERC20(WETH_ADDR);
     IERC20 DAI = IERC20(DAI_ADDR);
 
@@ -44,7 +47,12 @@ contract UniswapV3ExecutorTest is Test, Constants {
         uint256 forkBlock = 17323404;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
 
-        uniswapV3Exposed = new UniswapV3ExecutorExposed(USV3_FACTORY_ETHEREUM);
+        uniswapV3Exposed = new UniswapV3ExecutorExposed(
+            USV3_FACTORY_ETHEREUM, USV3_POOL_CODE_INIT_HASH
+        );
+        pancakeV3Exposed = new UniswapV3ExecutorExposed(
+            PANCAKESWAPV3_DEPLOYER_ETHEREUM, PANCAKEV3_POOL_CODE_INIT_HASH
+        );
     }
 
     function testDecodeParams() public view {
@@ -81,6 +89,12 @@ contract UniswapV3ExecutorTest is Test, Constants {
     function testVerifyPairAddress() public view {
         uniswapV3Exposed.verifyPairAddress(
             WETH_ADDR, DAI_ADDR, 3000, DAI_WETH_USV3
+        );
+    }
+
+    function testVerifyPairAddressPancake() public view {
+        pancakeV3Exposed.verifyPairAddress(
+            WETH_ADDR, USDT_ADDR, 500, PANCAKESWAPV3_WETH_USDT_POOL
         );
     }
 
