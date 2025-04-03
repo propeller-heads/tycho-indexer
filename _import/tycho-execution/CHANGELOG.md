@@ -1,3 +1,15 @@
+## [0.74.0](https://github.com/propeller-heads/tycho-execution/compare/0.73.0...0.74.0) (2025-04-02)
+
+
+### Features
+
+* Fix rollFork usage for Ekubo test ([6cdca83](https://github.com/propeller-heads/tycho-execution/commit/6cdca8381e711bc01b7573dd25cafc9aa057aac3))
+
+
+### Bug Fixes
+
+* Fix tests after cherry picking ([5336969](https://github.com/propeller-heads/tycho-execution/commit/5336969df8b06238b65a9c9f1a3458f43b89cb54))
+
 ## [0.73.0](https://github.com/propeller-heads/tycho-execution/compare/0.72.0...0.73.0) (2025-04-02)
 
 
