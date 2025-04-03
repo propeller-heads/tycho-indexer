@@ -1021,7 +1021,7 @@ contract TychoRouterTest is TychoRouterTestSetup {
         // TEMPORARY while the Ekubo executor address is hardcoded in TychoRouter
         // This allows us to change the code at that address to be the testing executor code
         vm.etch(
-            0xA612f60d3C49E5f13f0e067b14E0eD6656F3F279,
+            0x4f88f6630a33dB05BEa1FeF7Dc7ff7508D1c531D,
             0x2a07706473244BC757E10F2a9E86fB532828afe3.code
         );
 
