@@ -1,3 +1,10 @@
+## [0.75.1](https://github.com/propeller-heads/tycho-execution/compare/0.75.0...0.75.1) (2025-04-03)
+
+
+### Bug Fixes
+
+* Proper ekubo protocol name in GROUPABLE_PROTOCOLS ([b4c687b](https://github.com/propeller-heads/tycho-execution/commit/b4c687bc3f51167fc942b8b7b00b17df4a2bec30))
+
 ## [0.75.0](https://github.com/propeller-heads/tycho-execution/compare/0.74.0...0.75.0) (2025-04-03)
 
 
