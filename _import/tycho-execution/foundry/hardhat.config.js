@@ -35,6 +35,11 @@ module.exports = {
             url: process.env.RPC_URL,
             accounts: [process.env.PRIVATE_KEY],
             chainId: 8453
+        },
+        unichain: {
+            url: process.env.RPC_URL,
+            accounts: [process.env.PRIVATE_KEY],
+            chainId: 130
         }
     },
 
@@ -45,6 +50,20 @@ module.exports = {
     },
 
     etherscan: {
-        apiKey: process.env.BLOCKCHAIN_EXPLORER_API_KEY,
+        apiKey: {
+          unichain: process.env.BLOCKCHAIN_EXPLORER_API_KEY,
+          base: process.env.BLOCKCHAIN_EXPLORER_API_KEY,
+          ethereum: process.env.BLOCKCHAIN_EXPLORER_API_KEY,
+        },
+        customChains: [
+          {
+            network: "unichain",
+            chainId: 130,
+            urls: {
+              apiURL: "https://api.uniscan.xyz/api",
+              browserURL: "https://www.uniscan.xyz/"
+            }
+          }
+        ]
     }
 };

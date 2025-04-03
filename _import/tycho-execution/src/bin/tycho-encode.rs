@@ -35,7 +35,6 @@ use tycho_execution::encoding::{
 ///         "token_out": "0x...",
 ///         "split": 0.0
 ///     }],
-///     "router_address": "0x..."
 /// }
 /// ```
 #[command(author, version, about, long_about = None)]
