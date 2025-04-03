@@ -478,6 +478,23 @@ pub trait ProtocolGateway {
         chain: &Chain,
         pagination_params: Option<&PaginationParams>,
     ) -> Result<WithTotal<Vec<String>>, StorageError>;
+
+    /// Retrieve the total value locked for a component
+    ///
+    /// Fetches the total value locked for a component
+    ///
+    /// # Parameters
+    /// - `chain` The chain for which to retrieve the total value locked
+    /// - `system` The protocol system for which to retrieve the total value locked
+    /// - `ids` The ids of the components to retrieve the total value locked for
+    ///
+    /// # Return
+    /// The total value locked for the component
+    async fn get_component_tvls(
+        &self,
+        chain: &Chain,
+        ids: Option<&[&str]>,
+    ) -> Result<HashMap<String, f64>, StorageError>;
 }
 
 /// Manage contracts and their state in storage.
