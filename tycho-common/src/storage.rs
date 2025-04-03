@@ -490,12 +490,11 @@ pub trait ProtocolGateway {
     ///
     /// # Return
     /// The total value locked for the component
-    async fn get_component_tvl(
+    async fn get_component_tvls(
         &self,
         chain: &Chain,
-        system: Option<String>,
-        id: &str,
-    ) -> Result<f64, StorageError>;
+        ids: Option<&[&str]>,
+    ) -> Result<HashMap<String, f64>, StorageError>;
 }
 
 /// Manage contracts and their state in storage.

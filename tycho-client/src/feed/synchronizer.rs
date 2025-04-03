@@ -18,8 +18,8 @@ use tokio::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        BlockChanges, BlockParam, ExtractorIdentity, ProtocolComponent, ResponseAccount,
-        ResponseProtocolState, VersionParam,
+        BlockChanges, BlockParam, ExtractorIdentity, ProtocolComponent,
+        ProtocolComponentTvlRequestBody, ResponseAccount, ResponseProtocolState, VersionParam,
     },
     Bytes,
 };
@@ -47,6 +47,7 @@ pub struct ProtocolStateSynchronizer<R: RPCClient, D: DeltasClient> {
     shared: Arc<Mutex<SharedState>>,
     end_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     timeout: u64,
+    include_tvl: bool,
 }
 
 #[derive(Debug, Default)]
@@ -58,6 +59,7 @@ struct SharedState {
 pub struct ComponentWithState {
     pub state: ResponseProtocolState,
     pub component: ProtocolComponent,
+    pub component_tvl: Option<f64>,
 }
 
 #[derive(Clone, PartialEq, Debug, Default, Serialize, Deserialize)]
@@ -157,6 +159,7 @@ where
         rpc_client: R,
         deltas_client: D,
         timeout: u64,
+        include_tvl: bool,
     ) -> Self {
         Self {
             extractor_id: extractor_id.clone(),
@@ -174,6 +177,7 @@ where
             shared: Arc::new(Mutex::new(SharedState::default())),
             end_tx: Arc::new(Mutex::new(None)),
             timeout,
+            include_tvl,
         }
     }
 
@@ -220,6 +224,18 @@ where
             return Ok(StateSyncMessage { header, ..Default::default() });
         }
 
+        let component_tvl = if self.include_tvl {
+            self.rpc_client
+                .get_component_tvl(&ProtocolComponentTvlRequestBody {
+                    chain: self.extractor_id.chain,
+                    component_ids: Some(request_ids.clone()),
+                })
+                .await?
+                .tvl
+        } else {
+            HashMap::new()
+        };
+
         let mut protocol_states = self
             .rpc_client
             .get_protocol_states_paginated(
@@ -245,7 +261,13 @@ where
                 if let Some(state) = protocol_states.remove(&component.id) {
                     Some((
                         component.id.clone(),
-                        ComponentWithState { state, component: component.clone() },
+                        ComponentWithState {
+                            state,
+                            component: component.clone(),
+                            component_tvl: component_tvl
+                                .get(&component.id)
+                                .cloned(),
+                        },
                     ))
                 } else if component_ids.contains(&&component.id) {
                     // only emit error event if we requested this component
@@ -530,6 +552,7 @@ mod test {
     use test_log::test;
     use tycho_common::dto::{
         Block, Chain, PaginationResponse, ProtocolComponentRequestResponse,
+        ProtocolComponentTvlRequestBody, ProtocolComponentTvlRequestResponse,
         ProtocolComponentsRequestBody, ProtocolStateRequestBody, ProtocolStateRequestResponse,
         ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, StateRequestBody,
         StateRequestResponse, TokensRequestBody, TokensRequestResponse,
@@ -594,6 +617,13 @@ mod test {
                 .get_protocol_systems(request)
                 .await
         }
+
+        async fn get_component_tvl(
+            &self,
+            request: &ProtocolComponentTvlRequestBody,
+        ) -> Result<ProtocolComponentTvlRequestResponse, RPCError> {
+            self.0.get_component_tvl(request).await
+        }
     }
 
     // Required for mock client to implement clone
@@ -654,6 +684,7 @@ mod test {
             rpc_client,
             deltas_client,
             10_u64,
+            false,
         )
     }
 
@@ -694,7 +725,11 @@ mod test {
                     .map(|state| {
                         (
                             state.component_id.clone(),
-                            ComponentWithState { state, component: component.clone() },
+                            ComponentWithState {
+                                state,
+                                component: component.clone(),
+                                component_tvl: None,
+                            },
                         )
                     })
                     .collect(),
@@ -757,6 +792,7 @@ mod test {
                             ..Default::default()
                         },
                         component: component.clone(),
+                        component_tvl: None,
                     },
                 )]
                 .into_iter()
@@ -966,6 +1002,7 @@ mod test {
                                 id: "Component1".to_string(),
                                 ..Default::default()
                             },
+                            component_tvl: None,
                         },
                     ),
                     (
@@ -979,6 +1016,7 @@ mod test {
                                 id: "Component2".to_string(),
                                 ..Default::default()
                             },
+                            component_tvl: None,
                         },
                     ),
                 ]
@@ -1011,6 +1049,7 @@ mod test {
                                 id: "Component3".to_string(),
                                 ..Default::default()
                             },
+                            component_tvl: None,
                         },
                     ),
                 ]
@@ -1148,6 +1187,7 @@ mod test {
             ArcRPCClient(Arc::new(rpc_client)),
             ArcDeltasClient(Arc::new(deltas_client)),
             10_u64,
+            false,
         );
         state_sync
             .initialize()
@@ -1240,6 +1280,7 @@ mod test {
                             id: "Component3".to_string(),
                             ..Default::default()
                         },
+                        component_tvl: None,
                     },
                 )]
                 .into_iter()

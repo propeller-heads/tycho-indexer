@@ -16,6 +16,7 @@ use tracing::{debug, error, instrument, trace, warn};
 use tycho_common::{
     dto::{
         Chain, PaginationParams, PaginationResponse, ProtocolComponentRequestResponse,
+        ProtocolComponentTvlRequestBody, ProtocolComponentTvlRequestResponse,
         ProtocolComponentsRequestBody, ProtocolStateRequestBody, ProtocolStateRequestResponse,
         ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, ResponseToken,
         StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse,
@@ -375,6 +376,11 @@ pub trait RPCClient: Send + Sync {
         &self,
         request: &ProtocolSystemsRequestBody,
     ) -> Result<ProtocolSystemsRequestResponse, RPCError>;
+
+    async fn get_component_tvl(
+        &self,
+        request: &ProtocolComponentTvlRequestBody,
+    ) -> Result<ProtocolComponentTvlRequestResponse, RPCError>;
 }
 
 #[derive(Debug, Clone)]
@@ -641,6 +647,40 @@ impl RPCClient for HttpRPCClient {
             })?;
         trace!(?protocol_systems, "Received protocol_systems response from Tycho server");
         Ok(protocol_systems)
+    }
+
+    async fn get_component_tvl(
+        &self,
+        request: &ProtocolComponentTvlRequestBody,
+    ) -> Result<ProtocolComponentTvlRequestResponse, RPCError> {
+        let uri = format!(
+            "{}/{}/component_tvl",
+            self.url
+                .to_string()
+                .trim_end_matches('/'),
+            TYCHO_SERVER_VERSION
+        );
+        debug!(%uri, "Sending get_component_tvl request to Tycho server");
+        trace!(?request, "Sending request to Tycho server");
+        let response = self
+            .http_client
+            .post(&uri)
+            .json(request)
+            .send()
+            .await
+            .map_err(|e| RPCError::HttpClient(e.to_string()))?;
+        trace!(?response, "Received response from Tycho server");
+        let body = response
+            .text()
+            .await
+            .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
+        let component_tvl = serde_json::from_str::<ProtocolComponentTvlRequestResponse>(&body)
+            .map_err(|err| {
+                error!("Failed to parse component_tvl response: {:?}", &body);
+                RPCError::ParseResponse(format!("Error: {}, Body: {}", err, body))
+            })?;
+        trace!(?component_tvl, "Received component_tvl response from Tycho server");
+        Ok(component_tvl)
     }
 }
 
@@ -1028,5 +1068,37 @@ mod tests {
 
         mocked_server.assert();
         assert_eq!(protocol_systems, vec!["system1", "system2"]);
+    }
+
+    #[tokio::test]
+    async fn test_get_component_tvl() {
+        let mut server = Server::new_async().await;
+        let server_resp = r#"
+        {
+            "tvl": {
+                "component1": 100.0
+            }
+        }
+        "#;
+        // test that the response is deserialized correctly
+        serde_json::from_str::<ProtocolComponentTvlRequestResponse>(server_resp)
+            .expect("deserialize");
+
+        let mocked_server = server
+            .mock("POST", "/v1/component_tvl")
+            .expect(1)
+            .with_body(server_resp)
+            .create_async()
+            .await;
+        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+
+        let response = client
+            .get_component_tvl(&Default::default())
+            .await
+            .expect("get protocol systems");
+        let component_tvl = response.tvl;
+
+        mocked_server.assert();
+        assert_eq!(component_tvl.get("component1"), Some(&100.0));
     }
 }

@@ -490,17 +490,22 @@ where
     }
 
     #[instrument(skip(self, request))]
-    async fn get_component_tvl(
+    async fn get_component_tvls(
         &self,
         request: &dto::ProtocolComponentTvlRequestBody,
     ) -> Result<dto::ProtocolComponentTvlRequestResponse, RpcError> {
         info!(?request, "Getting protocol component tvl.");
         let chain = request.chain.into();
-        let system = request.protocol_system.clone();
-        let component_id = (&request.component_id).into();
+        let ids_strs: Option<Vec<&str>> = request
+            .component_ids
+            .as_ref()
+            .map(|vec| vec.iter().map(String::as_str).collect());
+
+        let ids_slice = ids_strs.as_deref();
+
         match self
             .db_gateway
-            .get_component_tvl(&chain, Some(system), component_id)
+            .get_component_tvls(&chain, ids_slice)
             .await
         {
             Ok(tvl) => Ok(dto::ProtocolComponentTvlRequestResponse::new(tvl)),
@@ -1009,12 +1014,11 @@ pub async fn component_tvl<G: Gateway>(
 ) -> HttpResponse {
     // Tracing and metrics
     counter!("rpc_requests", "endpoint" => "component_tvl").increment(1);
-    tracing::Span::current().record("protocol.system", &body.protocol_system);
 
     // Call the handler to get component tvl
     let response = handler
         .into_inner()
-        .get_component_tvl(&body)
+        .get_component_tvls(&body)
         .await;
 
     match response {
@@ -1028,7 +1032,6 @@ pub async fn component_tvl<G: Gateway>(
         }
     }
 }
-
 
 /// Health check endpoint
 ///

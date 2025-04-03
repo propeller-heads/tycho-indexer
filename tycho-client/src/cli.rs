@@ -91,6 +91,10 @@ struct CliArgs {
     /// in conjunction with block_time to calculate a timeout: block_time * max_missed_blocks.
     #[clap(long, default_value = "10")]
     max_missed_blocks: u64,
+
+    /// If set, the synchronizer will include TVL in the messages.
+    #[clap(long)]
+    include_tvl: bool,
 }
 
 impl CliArgs {
@@ -252,6 +256,7 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) {
             rpc_client.clone(),
             ws_client.clone(),
             args.block_time + args.timeout,
+            args.include_tvl,
         );
         block_sync = block_sync.register_synchronizer(id, sync);
     }

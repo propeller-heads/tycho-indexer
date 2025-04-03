@@ -201,6 +201,7 @@ impl TychoStreamBuilder {
                 rpc_client.clone(),
                 ws_client.clone(),
                 self.block_time + self.timeout,
+                false,
             );
             block_sync = block_sync.register_synchronizer(id, sync);
         }

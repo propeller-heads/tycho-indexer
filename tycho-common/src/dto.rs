@@ -1328,19 +1328,17 @@ pub struct ProtocolComponentTvlRequestBody {
     #[serde(default)]
     pub chain: Chain,
     #[serde(default)]
-    pub protocol_system: String,
-    #[serde(default)]
-    pub component_id: String,
+    pub component_ids: Option<Vec<String>>,
 }
 
 // #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ProtocolComponentTvlRequestResponse {
-    pub tvl: f64
+    pub tvl: HashMap<String, f64>,
 }
 
 impl ProtocolComponentTvlRequestResponse {
-    pub fn new(tvl: f64) -> Self {
+    pub fn new(tvl: HashMap<String, f64>) -> Self {
         Self { tvl }
     }
 }
