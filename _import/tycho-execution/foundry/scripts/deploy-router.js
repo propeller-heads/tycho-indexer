@@ -13,6 +13,10 @@ async function main() {
         // permit2 address is the same as on ethereum
         permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
         weth = "0x4200000000000000000000000000000000000006";
+    } else if (network === "unichain") {
+        // permit2 address is the same as on ethereum
+        permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
+        weth = "0x4200000000000000000000000000000000000006";
     } else {
         throw new Error(`Unsupported network: ${network}`);
     }
