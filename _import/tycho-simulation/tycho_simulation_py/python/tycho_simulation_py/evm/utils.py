@@ -29,9 +29,9 @@ def decode_tycho_exchange(exchange: str) -> str:
 
 
 def create_engine(
-        mocked_tokens: list[Address],
-        trace: bool = False,
-        token_initial_state: Optional[dict[HexBytes, dict[int, int]]] = None,
+    mocked_tokens: list[Address],
+    trace: bool = False,
+    token_initial_state: Optional[dict[HexBytes, dict[int, int]]] = None,
 ) -> SimulationEngine:
     """Create a simulation engine with a mocked ERC20 contract at given addresses.
 
@@ -97,10 +97,10 @@ class ERC20Slots(NamedTuple):
 
 class ERC20OverwriteFactory:
     def __init__(
-            self,
-            token: EthereumToken,
-            token_slots: ERC20Slots = ERC20Slots(0, 1),
-            compiler: ContractCompiler = ContractCompiler.Solidity,
+        self,
+        token: EthereumToken,
+        token_slots: ERC20Slots = ERC20Slots(0, 1),
+        compiler: ContractCompiler = ContractCompiler.Solidity,
     ):
         """
         Initialize the ERC20OverwriteFactory.
@@ -417,7 +417,7 @@ class TokenProxyOverwriteFactory:
 
 
 def get_storage_slot_at_key(
-        key: Address, mapping_slot: int, compiler=ContractCompiler.Solidity
+    key: Address, mapping_slot: int, compiler=ContractCompiler.Solidity
 ) -> int:
     """Get storage slot index of a value stored at a certain key in a mapping
 
@@ -552,7 +552,7 @@ def parse_solidity_error_message(data) -> str:
 
 
 def maybe_coerce_error(
-        err: RuntimeError, pool_state: Any, gas_limit: int = None
+    err: RuntimeError, pool_state: Any, gas_limit: int = None
 ) -> Exception:
     details = err.args[0]
     # we got bytes as data, so this was a revert

@@ -38,24 +38,24 @@ TPoolState = TypeVar("TPoolState", bound="ThirdPartyPool")
 
 class ThirdPartyPool:
     def __init__(
-            self,
-            id_: str,
-            tokens: tuple[EthereumToken, ...],
-            balances: dict[Address, Decimal],
-            contract_balances: dict[Address, dict[Address, Decimal]],
-            block: EVMBlock,
-            adapter_contract_path: str,
-            marginal_prices: dict[tuple[EthereumToken, EthereumToken], Decimal] = None,
-            stateless_contracts: dict[str, bytes] = None,
-            capabilities: set[Capability] = None,
-            balance_owner: Optional[str] = None,
-            block_lasting_overwrites: defaultdict[Address, dict[int, int]] = None,
-            manual_updates: bool = False,
-            trace: bool = False,
-            involved_contracts=None,
-            token_storage_slots=None,
-            token_initial_state: Optional[dict[HexBytes, dict[int, int]]] = None,
-            token_proxy_tokens: dict[HexBytes, HexBytes] = None
+        self,
+        id_: str,
+        tokens: tuple[EthereumToken, ...],
+        balances: dict[Address, Decimal],
+        contract_balances: dict[Address, dict[Address, Decimal]],
+        block: EVMBlock,
+        adapter_contract_path: str,
+        marginal_prices: dict[tuple[EthereumToken, EthereumToken], Decimal] = None,
+        stateless_contracts: dict[str, bytes] = None,
+        capabilities: set[Capability] = None,
+        balance_owner: Optional[str] = None,
+        block_lasting_overwrites: defaultdict[Address, dict[int, int]] = None,
+        manual_updates: bool = False,
+        trace: bool = False,
+        involved_contracts=None,
+        token_storage_slots=None,
+        token_initial_state: Optional[dict[HexBytes, dict[int, int]]] = None,
+        token_proxy_tokens: dict[HexBytes, HexBytes] = None,
     ):
         self.id_ = id_
         """The pools identifier."""
@@ -91,7 +91,7 @@ class ThirdPartyPool:
         contract during simulations."""
 
         self.block_lasting_overwrites: defaultdict[Address, dict[int, int]] = (
-                block_lasting_overwrites or defaultdict(dict)
+            block_lasting_overwrites or defaultdict(dict)
         )
         """Storage overwrites that will be applied to all simulations. They will be cleared
         when ``clear_all_cache`` is called, i.e. usually at each block. Hence the name."""
@@ -108,7 +108,7 @@ class ThirdPartyPool:
         """A set of all contract addresses involved in the simulation of this pool."""
 
         self.token_storage_slots: dict[Address, tuple[ERC20Slots, ContractCompiler]] = (
-                token_storage_slots or {}
+            token_storage_slots or {}
         )
         self.token_initial_state = token_initial_state
         self.token_proxy_tokens = token_proxy_tokens
@@ -139,8 +139,11 @@ class ThirdPartyPool:
         if self._engine is not None:
             return
         else:
-            engine = create_engine([t.address for t in self.tokens], trace=self.trace,
-                                   token_initial_state=self.token_initial_state)
+            engine = create_engine(
+                [t.address for t in self.tokens],
+                trace=self.trace,
+                token_initial_state=self.token_initial_state,
+            )
             engine.init_account(
                 address="0x0000000000000000000000000000000000000000",
                 account=AccountInfo(balance=0, nonce=0),
@@ -195,14 +198,14 @@ class ThirdPartyPool:
                 if Capability.ScaledPrices in self.capabilities:
                     self.marginal_prices[(t0, t1)] = frac_to_decimal(frac)
                 else:
-                    scaled = frac * Fraction(10 ** t0.decimals, 10 ** t1.decimals)
+                    scaled = frac * Fraction(10**t0.decimals, 10**t1.decimals)
                     self.marginal_prices[(t0, t1)] = frac_to_decimal(scaled)
         else:
 
             def swap(
-                    sell_token: EthereumToken,
-                    sell_amount: Decimal,
-                    buy_token: EthereumToken,
+                sell_token: EthereumToken,
+                sell_amount: Decimal,
+                buy_token: EthereumToken,
             ) -> Decimal:
                 overwrites = self._get_overwrites(sell_token, buy_token)
                 trade, _ = self._adapter_contract.swap(
@@ -248,8 +251,8 @@ class ThirdPartyPool:
     def _init_token_storage_slots(self):
         for t in self.tokens:
             if (
-                    t.address in self.involved_contracts
-                    and t.address not in self.token_storage_slots
+                t.address in self.involved_contracts
+                and t.address not in self.token_storage_slots
             ):
                 self.token_storage_slots[t.address] = slots = token.brute_force_slots(
                     t, self.block, self._engine
@@ -257,10 +260,10 @@ class ThirdPartyPool:
                 log.debug(f"Using custom storage slots for {t.address}: {slots}")
 
     def get_amount_out(
-            self: TPoolState,
-            sell_token: EthereumToken,
-            sell_amount: Decimal,
-            buy_token: EthereumToken,
+        self: TPoolState,
+        sell_token: EthereumToken,
+        sell_amount: Decimal,
+        buy_token: EthereumToken,
     ) -> tuple[Decimal, int, TPoolState]:
         # if the pool has a hard limit and the sell amount exceeds that, simulate and
         # raise a partial trade
@@ -277,10 +280,10 @@ class ThirdPartyPool:
         return self._get_amount_out(sell_token, sell_amount, buy_token)
 
     def _get_amount_out(
-            self: TPoolState,
-            sell_token: EthereumToken,
-            sell_amount: Decimal,
-            buy_token: EthereumToken,
+        self: TPoolState,
+        sell_token: EthereumToken,
+        sell_amount: Decimal,
+        buy_token: EthereumToken,
     ) -> tuple[Decimal, int, TPoolState]:
         overwrites = self._get_overwrites(sell_token, buy_token)
         trade, state_changes = self._adapter_contract.swap(
@@ -309,7 +312,7 @@ class ThirdPartyPool:
         return buy_amount, trade.gas_used, new_state
 
     def _get_overwrites(
-            self, sell_token: EthereumToken, buy_token: EthereumToken, **kwargs
+        self, sell_token: EthereumToken, buy_token: EthereumToken, **kwargs
     ) -> dict[Address, dict[int, int]]:
         """Get an overwrites dictionary to use in a simulation.
 
@@ -320,7 +323,7 @@ class ThirdPartyPool:
         return _merge(self.block_lasting_overwrites.copy(), token_overwrites)
 
     def _get_token_overwrites(
-            self, sell_token: EthereumToken, buy_token: EthereumToken, max_amount=None
+        self, sell_token: EthereumToken, buy_token: EthereumToken, max_amount=None
     ) -> dict[Address, dict[int, int]]:
         """Creates overwrites for a token.
 
@@ -418,7 +421,7 @@ class ThirdPartyPool:
         )
 
     def get_sell_amount_limit(
-            self, sell_token: EthereumToken, buy_token: EthereumToken
+        self, sell_token: EthereumToken, buy_token: EthereumToken
     ) -> Decimal:
         """
         Retrieves the sell amount of the given token.
