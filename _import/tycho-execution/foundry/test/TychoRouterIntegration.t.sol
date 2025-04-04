@@ -5,9 +5,6 @@ import "./TychoRouterTestSetup.sol";
 
 contract TychoRouterTestIntegration is TychoRouterTestSetup {
     function testSplitSwapSingleIntegration() public {
-        // Test created with calldata from our router encoder, replacing the executor
-        // address with the USV2 executor address.
-
         // Tests swapping WETH -> DAI on a USV2 pool
         deal(WETH_ADDR, ALICE, 1 ether);
         uint256 balancerBefore = IERC20(DAI_ADDR).balanceOf(ALICE);
@@ -29,9 +26,6 @@ contract TychoRouterTestIntegration is TychoRouterTestSetup {
     }
 
     function testSplitSwapSingleWithoutPermit2Integration() public {
-        // Test created with calldata from our router encoder, replacing the executor
-        // address with the USV2 executor address.
-
         // Tests swapping WETH -> DAI on a USV2 pool without permit2
         deal(WETH_ADDR, ALICE, 1 ether);
         vm.startPrank(ALICE);
@@ -127,9 +121,6 @@ contract TychoRouterTestIntegration is TychoRouterTestSetup {
     }
 
     function testSplitSwapSingleWithWrapIntegration() public {
-        // Test created with calldata from our router encoder, replacing the executor
-        // address with the USV2 executor address.
-
         // Tests swapping WETH -> DAI on a USV2 pool, but ETH is received from the user
         // and wrapped before the swap
         deal(ALICE, 1 ether);
@@ -151,9 +142,6 @@ contract TychoRouterTestIntegration is TychoRouterTestSetup {
     }
 
     function testSplitSwapSingleWithUnwrapIntegration() public {
-        // Test created with calldata from our router encoder, replacing the executor
-        // address with the USV2 executor address.
-
         // Tests swapping DAI -> WETH on a USV2 pool, and WETH is unwrapped to ETH
         // before sending back to the user
         deal(DAI_ADDR, ALICE, 3000 ether);
@@ -206,16 +194,10 @@ contract TychoRouterTestIntegration is TychoRouterTestSetup {
 
         assertTrue(success, "Call Failed");
         assertGe(balancerAfter - balancerBefore, 26173932);
-
-        // All input tokens are transferred to the router at first. Make sure we used
-        // all of it (and thus our splits are correct).
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
     function testSplitSwapIntegration() public {
-        // Test created with calldata from our router encoder, replacing the executor
-        // address with the USV2 executor address.
-
         // Performs a split swap from WETH to USDC though WBTC and DAI using USV2 pools
         //
         //         ┌──(USV2)──> WBTC ───(USV2)──> USDC
@@ -244,10 +226,7 @@ contract TychoRouterTestIntegration is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
-    function testSequentialSwapIntegration() public {
-        // Test created with calldata from our router encoder, replacing the executor
-        // address with the USV2 executor address.
-
+    function testSequentialSwapIntegrationPermit2() public {
         // Performs a split swap from WETH to USDC though WBTC and DAI using USV2 pools
         //
         //   WETH ──(USV2)──> WBTC ───(USV2)──> USDC
@@ -268,9 +247,30 @@ contract TychoRouterTestIntegration is TychoRouterTestSetup {
 
         assertTrue(success, "Call Failed");
         assertEq(balancerAfter - balancerBefore, 2552915143);
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+    }
 
-        // All input tokens are transferred to the router at first. Make sure we used
-        // all of it (and thus our splits are correct).
+    function testSequentialSwapIntegration() public {
+        // Performs a split swap from WETH to USDC though WBTC and DAI using USV2 pools
+        //
+        //   WETH ──(USV2)──> WBTC ───(USV2)──> USDC
+        deal(WETH_ADDR, ALICE, 1 ether);
+        uint256 balancerBefore = IERC20(USDC_ADDR).balanceOf(ALICE);
+
+        // Approve permit2
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
+        // Encoded solution generated using `test_sequential_swap_strategy_encoder_no_permit2`
+        (bool success,) = tychoRouterAddr.call(
+            hex"e8a980d70000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4800000000000000000000000000000000000000000000000000000000018f61ec00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000a600515615deb798bb3e4dfa0139dfa1b3d433cc23b72fc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2bb2b8038a1640196fbe3e38816f3e67cba72d9403ede3eca2a72b3aecc820e955b36f38437d013950000515615deb798bb3e4dfa0139dfa1b3d433cc23b72f2260fac5e5542a773aa44fbcfedf7c193bc2c599004375dff511095cc5a197a54140a24efef3a4163ede3eca2a72b3aecc820e955b36f38437d01395010000000000000000000000000000000000000000000000000000"
+        );
+
+        vm.stopPrank();
+
+        uint256 balancerAfter = IERC20(USDC_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertEq(balancerAfter - balancerBefore, 2552915143);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
