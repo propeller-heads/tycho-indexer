@@ -1,13 +1,12 @@
-use std::{env, sync::Arc};
+use std::sync::Arc;
 
 use alloy::{
-    providers::{Provider, ProviderBuilder, RootProvider},
+    providers::{Provider, RootProvider},
     rpc::types::{TransactionInput, TransactionRequest},
     transports::BoxTransport,
 };
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use alloy_sol_types::SolValue;
-use dotenv::dotenv;
 use tokio::{
     runtime::{Handle, Runtime},
     task::block_in_place,
@@ -15,7 +14,7 @@ use tokio::{
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::{encode_input, get_runtime},
+    evm::utils::{encode_input, get_client, get_runtime},
 };
 
 /// A manager for checking if an approval is needed for interacting with a certain spender.
@@ -70,18 +69,6 @@ impl ProtocolApprovalsManager {
             ))),
         }
     }
-}
-
-/// Gets the client used for interacting with the EVM-compatible network.
-pub async fn get_client() -> Result<Arc<RootProvider<BoxTransport>>, EncodingError> {
-    dotenv().ok();
-    let eth_rpc_url = env::var("RPC_URL")
-        .map_err(|_| EncodingError::FatalError("Missing RPC_URL in environment".to_string()))?;
-    let client = ProviderBuilder::new()
-        .on_builtin(&eth_rpc_url)
-        .await
-        .map_err(|_| EncodingError::FatalError("Failed to build provider".to_string()))?;
-    Ok(Arc::new(client))
 }
 
 #[cfg(test)]

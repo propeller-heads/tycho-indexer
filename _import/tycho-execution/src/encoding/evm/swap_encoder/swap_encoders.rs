@@ -1,14 +1,22 @@
 use std::str::FromStr;
 
-use alloy_primitives::{Address, Bytes as AlloyBytes};
+use alloy::{
+    providers::Provider,
+    rpc::types::{TransactionInput, TransactionRequest},
+};
+use alloy_primitives::{Address, Bytes as AlloyBytes, TxKind, U256, U8};
 use alloy_sol_types::SolValue;
+use tokio::task::block_in_place;
 use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
-        utils::{bytes_to_address, get_static_attribute, pad_to_fixed_size},
+        utils,
+        utils::{
+            bytes_to_address, encode_input, get_runtime, get_static_attribute, pad_to_fixed_size,
+        },
     },
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
@@ -323,6 +331,166 @@ impl SwapEncoder for EkuboSwapEncoder {
         &self.executor_address
     }
 
+    fn clone_box(&self) -> Box<dyn SwapEncoder> {
+        Box::new(self.clone())
+    }
+}
+
+/// Encodes a swap on a Curve pool through the given executor address.
+///
+/// # Fields
+/// * `executor_address` - The address of the executor contract that will perform the swap.
+/// * `vault_address` - The address of the vault contract that will perform the swap.
+#[derive(Clone)]
+pub struct CurveSwapEncoder {
+    executor_address: String,
+    meta_registry_address: String,
+}
+
+impl CurveSwapEncoder {
+    fn get_pool_type(
+        &self,
+        pool_id: &str,
+        factory_address: Option<&str>,
+    ) -> Result<U8, EncodingError> {
+        match pool_id {
+            // TriPool
+            "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7" => Ok(U8::from(1)),
+            // STETHPool
+            "0xDC24316b9AE028F1497c275EB9192a3Ea0f67022" => Ok(U8::from(1)),
+            // TriCryptoPool
+            "0xD51a44d3FaE010294C616388b506AcdA1bfAAE46" => Ok(U8::from(3)),
+            // SUSDPool
+            "0xA5407eAE9Ba41422680e2e00537571bcC53efBfD" => Ok(U8::from(1)),
+            // FRAXUSDCPool
+            "0xDcEF968d416a41Cdac0ED8702fAC8128A64241A2" => Ok(U8::from(1)),
+            _ => match factory_address {
+                Some(address) => match address {
+                    // CryptoSwapNG factory
+                    "0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf" => Ok(U8::from(1)),
+                    // Metapool factory
+                    "0xB9fC157394Af804a3578134A6585C0dc9cc990d4" => Ok(U8::from(1)),
+                    // CryptoPool factory
+                    "0xF18056Bbd320E96A48e3Fbf8bC061322531aac99" => Ok(U8::from(2)),
+                    // Tricrypto factory
+                    "0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963" => Ok(U8::from(3)),
+                    // Twocrypto factory
+                    "0x98ee851a00abee0d95d08cf4ca2bdce32aeaaf7f" => Ok(U8::from(2)),
+                    // StableSwap factory
+                    "0x4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d" => Ok(U8::from(1)),
+                    _ => Err(EncodingError::FatalError(format!(
+                        "Unsupported curve factory address: {}",
+                        address
+                    ))),
+                },
+                None => Err(EncodingError::FatalError("Unsupported curve pool type".to_string())),
+            },
+        }
+    }
+
+    fn get_coin_indexes(
+        &self,
+        pool_id: Address,
+        token_in: Address,
+        token_out: Address,
+    ) -> Result<(U8, U8), EncodingError> {
+        let (handle, _runtime) = get_runtime()?;
+        let client = block_in_place(|| handle.block_on(utils::get_client()))?;
+        let args = (pool_id, token_in, token_out);
+        let data = encode_input("get_coin_indices(address,address,address)", args.abi_encode());
+        let tx = TransactionRequest {
+            to: Some(TxKind::from(Address::from_str(&self.meta_registry_address).map_err(
+                |_| EncodingError::FatalError("Invalid Curve meta registry address".to_string()),
+            )?)),
+            input: TransactionInput {
+                input: Some(alloy_primitives::Bytes::from(data)),
+                data: None,
+            },
+            ..Default::default()
+        };
+        let output = block_in_place(|| handle.block_on(async { client.call(&tx).await }));
+        type ResponseType = (U256, U256, bool);
+
+        match output {
+            Ok(response) => {
+                let (i_256, j_256, _): ResponseType = ResponseType::abi_decode(&response, true)
+                    .map_err(|_| {
+                        EncodingError::FatalError(
+                            "Failed to decode response for allowance".to_string(),
+                        )
+                    })?;
+                let i = U8::from(i_256);
+                let j = U8::from(j_256);
+                Ok((i, j))
+            }
+            Err(err) => Err(EncodingError::RecoverableError(format!(
+                "Curve meta registry call failed with error: {:?}",
+                err
+            ))),
+        }
+    }
+}
+
+impl SwapEncoder for CurveSwapEncoder {
+    fn new(executor_address: String) -> Self {
+        Self {
+            executor_address,
+            meta_registry_address: "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC".to_string(),
+        }
+    }
+    fn encode_swap(
+        &self,
+        swap: Swap,
+        encoding_context: EncodingContext,
+    ) -> Result<Vec<u8>, EncodingError> {
+        let token_approvals_manager = ProtocolApprovalsManager::new()?;
+        let token = bytes_to_address(&swap.token_in)?;
+        let approval_needed: bool;
+
+        let component_address = Address::from_str(&swap.component.id)
+            .map_err(|_| EncodingError::FatalError("Invalid curve pool address".to_string()))?;
+        if let Some(router_address) = encoding_context.router_address {
+            let tycho_router_address = bytes_to_address(&router_address)?;
+            approval_needed = token_approvals_manager.approval_needed(
+                token,
+                tycho_router_address,
+                component_address,
+            )?;
+        } else {
+            approval_needed = true;
+        }
+
+        let factory_bytes = get_static_attribute(&swap, "factory")?;
+        let factory = if factory_bytes.is_empty() {
+            None
+        } else {
+            Some(Address::from_slice(&factory_bytes).to_string())
+        };
+
+        let pool_type = self.get_pool_type(&swap.component.id, factory.as_deref())?;
+
+        let (i, j) = self.get_coin_indexes(
+            component_address,
+            bytes_to_address(&swap.token_in)?,
+            bytes_to_address(&swap.token_out)?,
+        )?;
+
+        let args = (
+            bytes_to_address(&swap.token_in)?,
+            bytes_to_address(&swap.token_out)?,
+            component_address,
+            pool_type.to_be_bytes::<1>(),
+            i.to_be_bytes::<1>(),
+            j.to_be_bytes::<1>(),
+            approval_needed,
+        );
+
+        Ok(args.abi_encode_packed())
+    }
+
+    fn executor_address(&self) -> &str {
+        &self.executor_address
+    }
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
         Box::new(self.clone())
     }
@@ -843,5 +1011,177 @@ mod tests {
                     ),
             );
         }
+    }
+
+    mod curve {
+        use rstest::rstest;
+
+        use super::*;
+
+        #[rstest]
+        #[case(
+            "0x5500307Bcf134E5851FB4D7D8D1Dc556dCdB84B4",
+            "0xdA16Cf041E2780618c49Dbae5d734B89a6Bac9b3",
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            1,
+            0
+        )]
+        #[case(
+            "0xef484de8C07B6e2d732A92B5F78e81B38f99f95E",
+            "0x865377367054516e17014CcdED1e7d814EDC9ce4",
+            "0xA5588F7cdf560811710A2D82D3C9c99769DB1Dcb",
+            0,
+            1
+        )]
+        #[case(
+            "0xA5407eAE9Ba41422680e2e00537571bcC53efBfD",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "0x57Ab1ec28D129707052df4dF418D58a2D46d5f51",
+            1,
+            3
+        )]
+        #[case(
+            "0xD51a44d3FaE010294C616388b506AcdA1bfAAE46",
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+            2,
+            1
+        )]
+        #[case(
+            "0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B",
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            2,
+            0
+        )]
+        fn test_curve_get_coin_indexes(
+            #[case] pool: &str,
+            #[case] token_in: &str,
+            #[case] token_out: &str,
+            #[case] expected_i: u64,
+            #[case] expected_j: u64,
+        ) {
+            let encoder = CurveSwapEncoder::new(String::default());
+            let (i, j) = encoder
+                .get_coin_indexes(
+                    Address::from_str(pool).unwrap(),
+                    Address::from_str(token_in).unwrap(),
+                    Address::from_str(token_out).unwrap(),
+                )
+                .unwrap();
+            assert_eq!(i, U8::from(expected_i));
+            assert_eq!(j, U8::from(expected_j));
+        }
+    }
+
+    #[test]
+    fn test_curve_encode_tripool() {
+        let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+        static_attributes.insert("factory".into(), Bytes::from(vec![]));
+        let curve_tri_pool = ProtocolComponent {
+            id: String::from("0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7"),
+            protocol_system: String::from("vm:curve"),
+            static_attributes,
+            ..Default::default()
+        };
+        let token_in = Bytes::from("0x6B175474E89094C44Da98b954EedeAC495271d0F");
+        let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+        let swap = Swap {
+            component: curve_tri_pool,
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
+            split: 0f64,
+        };
+        let encoding_context = EncodingContext {
+            // The receiver was generated with `makeAddr("bob") using forge`
+            receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+            exact_out: false,
+            router_address: None,
+            group_token_in: token_in.clone(),
+            group_token_out: token_out.clone(),
+        };
+        let encoder =
+            CurveSwapEncoder::new(String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"));
+        let encoded_swap = encoder
+            .encode_swap(swap, encoding_context)
+            .unwrap();
+        let hex_swap = encode(&encoded_swap);
+
+        assert_eq!(
+            hex_swap,
+            String::from(concat!(
+                // token in
+                "6b175474e89094c44da98b954eedeac495271d0f",
+                // token out
+                "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                // pool address
+                "bebc44782c7db0a1a60cb6fe97d0b483032ff1c7",
+                // pool type 1
+                "01",
+                // i index
+                "00",
+                // j index
+                "01",
+                // approval needed
+                "01",
+            ))
+        );
+    }
+
+    #[test]
+    fn test_curve_encode_factory() {
+        let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+        static_attributes.insert(
+            "factory".into(),
+            Bytes::from_str("0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf").unwrap(),
+        );
+        let curve_pool = ProtocolComponent {
+            id: String::from("0x02950460E2b9529D0E00284A5fA2d7bDF3fA4d72"),
+            protocol_system: String::from("vm:curve"),
+            static_attributes,
+            ..Default::default()
+        };
+        let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+        let token_out = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3");
+        let swap = Swap {
+            component: curve_pool,
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
+            split: 0f64,
+        };
+        let encoding_context = EncodingContext {
+            // The receiver was generated with `makeAddr("bob") using forge`
+            receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+            exact_out: false,
+            router_address: None,
+            group_token_in: token_in.clone(),
+            group_token_out: token_out.clone(),
+        };
+        let encoder =
+            CurveSwapEncoder::new(String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"));
+        let encoded_swap = encoder
+            .encode_swap(swap, encoding_context)
+            .unwrap();
+        let hex_swap = encode(&encoded_swap);
+
+        assert_eq!(
+            hex_swap,
+            String::from(concat!(
+                // token in
+                "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                // token out
+                "4c9edd5852cd905f086c759e8383e09bff1e68b3",
+                // pool address
+                "02950460e2b9529d0e00284a5fa2d7bdf3fa4d72",
+                // pool type 1
+                "01",
+                // i index
+                "01",
+                // j index
+                "00",
+                // approval needed
+                "01",
+            ))
+        );
     }
 }

@@ -1,5 +1,9 @@
-use std::{cmp::max, sync::Arc};
+use std::{cmp::max, env, sync::Arc};
 
+use alloy::{
+    providers::{ProviderBuilder, RootProvider},
+    transports::BoxTransport,
+};
 use alloy_primitives::{aliases::U24, keccak256, Address, FixedBytes, Keccak256, U256, U8};
 use num_bigint::BigUint;
 use tokio::runtime::{Handle, Runtime};
@@ -133,6 +137,19 @@ pub fn get_runtime() -> Result<(Handle, Option<Arc<Runtime>>), EncodingError> {
         }
     }
 }
+
+/// Gets the client used for interacting with the EVM-compatible network.
+pub async fn get_client() -> Result<Arc<RootProvider<BoxTransport>>, EncodingError> {
+    dotenv::dotenv().ok();
+    let eth_rpc_url = env::var("RPC_URL")
+        .map_err(|_| EncodingError::FatalError("Missing RPC_URL in environment".to_string()))?;
+    let client = ProviderBuilder::new()
+        .on_builtin(&eth_rpc_url)
+        .await
+        .map_err(|_| EncodingError::FatalError("Failed to build provider".to_string()))?;
+    Ok(Arc::new(client))
+}
+
 #[cfg(test)]
 mod tests {
     use num_bigint::BigUint;

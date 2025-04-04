@@ -1,8 +1,8 @@
 use crate::encoding::{
     errors::EncodingError,
     evm::swap_encoder::swap_encoders::{
-        BalancerV2SwapEncoder, EkuboSwapEncoder, UniswapV2SwapEncoder, UniswapV3SwapEncoder,
-        UniswapV4SwapEncoder,
+        BalancerV2SwapEncoder, CurveSwapEncoder, EkuboSwapEncoder, UniswapV2SwapEncoder,
+        UniswapV3SwapEncoder, UniswapV4SwapEncoder,
     },
     swap_encoder::SwapEncoder,
 };
@@ -31,6 +31,7 @@ impl SwapEncoderBuilder {
             "pancakeswap_v3" => Ok(Box::new(UniswapV3SwapEncoder::new(self.executor_address))),
             "uniswap_v4" => Ok(Box::new(UniswapV4SwapEncoder::new(self.executor_address))),
             "ekubo_v2" => Ok(Box::new(EkuboSwapEncoder::new(self.executor_address))),
+            "vm:curve" => Ok(Box::new(CurveSwapEncoder::new(self.executor_address))),
             _ => Err(EncodingError::FatalError(format!(
                 "Unknown protocol system: {}",
                 self.protocol_system
