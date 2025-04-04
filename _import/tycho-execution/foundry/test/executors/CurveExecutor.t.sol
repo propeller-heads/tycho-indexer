@@ -335,17 +335,4 @@ contract CurveExecutorTest is Test, Constants {
             metaRegistry.get_coin_indices(pool, tokenIn, tokenOut);
         return (coinInIndex, coinOutIndex);
     }
-
-    function dealAaveDai() internal {
-        deal(DAI_ADDR, address(curveExecutorExposed), 100_000 * 10 ** 18);
-        IAaveLendingPool aave =
-            IAaveLendingPool(0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9);
-
-        vm.startPrank(address(curveExecutorExposed));
-        IERC20(DAI_ADDR).approve(address(aave), type(uint256).max);
-        aave.deposit(
-            DAI_ADDR, 100_000 * 10 ** 18, address(curveExecutorExposed), 0
-        );
-        vm.stopPrank();
-    }
 }
