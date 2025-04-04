@@ -16,31 +16,13 @@ use crate::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::{
             biguint_to_u256, bytes_to_address, encode_input, get_min_amount_for_solution,
-            get_token_position, percentage_to_uint24,
+            get_token_position, percentage_to_uint24, ple_encode,
         },
     },
     models::{Chain, EncodingContext, NativeAction, Solution},
     strategy_encoder::StrategyEncoder,
     swap_encoder::SwapEncoder,
 };
-
-/// Encodes a solution using a specific strategy for execution on the EVM-compatible network.
-pub trait EVMStrategyEncoder: StrategyEncoder {
-    /// Uses prefix-length encoding to efficient encode action data.
-    ///
-    /// Prefix-length encoding is a data encoding method where the beginning of a data segment
-    /// (the "prefix") contains information about the length of the following data.
-    fn ple_encode(&self, action_data_array: Vec<Vec<u8>>) -> Vec<u8> {
-        let mut encoded_action_data: Vec<u8> = Vec::new();
-
-        for action_data in action_data_array {
-            let args = (encoded_action_data, action_data.len() as u16, action_data);
-            encoded_action_data = args.abi_encode_packed();
-        }
-
-        encoded_action_data
-    }
-}
 
 /// Represents the encoder for a swap strategy which supports single swaps.
 ///
@@ -89,8 +71,6 @@ impl SingleSwapStrategyEncoder {
         encoded
     }
 }
-
-impl EVMStrategyEncoder for SingleSwapStrategyEncoder {}
 
 impl StrategyEncoder for SingleSwapStrategyEncoder {
     fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
@@ -285,8 +265,6 @@ impl SplitSwapStrategyEncoder {
     }
 }
 
-impl EVMStrategyEncoder for SplitSwapStrategyEncoder {}
-
 impl StrategyEncoder for SplitSwapStrategyEncoder {
     fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
         self.split_swap_validator
@@ -387,7 +365,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             swaps.push(swap_data);
         }
 
-        let encoded_swaps = self.ple_encode(swaps);
+        let encoded_swaps = ple_encode(swaps);
         let tokens_len = if solution.given_token == solution.checked_token {
             tokens.len() - 1
         } else {
@@ -458,7 +436,7 @@ impl ExecutorStrategyEncoder {
         Self { swap_encoder_registry }
     }
 }
-impl EVMStrategyEncoder for ExecutorStrategyEncoder {}
+
 impl StrategyEncoder for ExecutorStrategyEncoder {
     fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
         let grouped_swaps = group_swaps(solution.clone().swaps);
