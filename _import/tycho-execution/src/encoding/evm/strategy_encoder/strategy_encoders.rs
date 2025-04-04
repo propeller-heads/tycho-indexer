@@ -1083,7 +1083,7 @@ mod tests {
             eth_chain(),
             swap_encoder_registry,
             None,
-            Some(Bytes::from_str("0x1d1499e622D69689cdf9004d05Ec547d650Ff211").unwrap()),
+            Some(Bytes::from_str("0xA4AD4f68d0b91CFD19687c881e50f3A00242828c").unwrap()),
         )
         .unwrap();
 
