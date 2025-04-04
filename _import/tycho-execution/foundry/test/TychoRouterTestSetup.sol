@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import "../src/executors/BalancerV2Executor.sol";
+import "../src/executors/CurveExecutor.sol";
 import "../src/executors/EkuboExecutor.sol";
 import "../src/executors/UniswapV2Executor.sol";
 import "../src/executors/UniswapV3Executor.sol";
@@ -42,6 +43,7 @@ contract TychoRouterTestSetup is Test, Constants {
     UniswapV4Executor public usv4Executor;
     BalancerV2Executor public balancerv2Executor;
     EkuboExecutor public ekuboExecutor;
+    CurveExecutor public curveExecutor;
     MockERC20[] tokens;
 
     function setUp() public {
@@ -96,14 +98,16 @@ contract TychoRouterTestSetup is Test, Constants {
             new UniswapV3Executor(factoryPancakeV3, initCodePancakeV3);
         balancerv2Executor = new BalancerV2Executor();
         ekuboExecutor = new EkuboExecutor(ekuboCore);
+        curveExecutor = new CurveExecutor(ETH_ADDR);
 
-        address[] memory executors = new address[](6);
+        address[] memory executors = new address[](7);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
         executors[2] = address(pancakev3Executor);
         executors[3] = address(usv4Executor);
         executors[4] = address(balancerv2Executor);
         executors[5] = address(ekuboExecutor);
+        executors[6] = address(curveExecutor);
         return executors;
     }
 

@@ -375,7 +375,7 @@ impl CurveSwapEncoder {
                     // Tricrypto factory
                     "0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963" => Ok(U8::from(3)),
                     // Twocrypto factory
-                    "0x98ee851a00abee0d95d08cf4ca2bdce32aeaaf7f" => Ok(U8::from(2)),
+                    "0x98EE851a00abeE0d95D08cF4CA2BdCE32aeaAF7F" => Ok(U8::from(2)),
                     // StableSwap factory
                     "0x4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d" => Ok(U8::from(1)),
                     _ => Err(EncodingError::FatalError(format!(
@@ -1131,10 +1131,8 @@ mod tests {
     #[test]
     fn test_curve_encode_factory() {
         let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert(
-            "factory".into(),
-            Bytes::from_str("0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf").unwrap(),
-        );
+        static_attributes
+            .insert("factory".into(), Bytes::from("0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf"));
         let curve_pool = ProtocolComponent {
             id: String::from("0x02950460E2b9529D0E00284A5fA2d7bDF3fA4d72"),
             protocol_system: String::from("vm:curve"),

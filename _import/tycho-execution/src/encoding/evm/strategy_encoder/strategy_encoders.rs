@@ -1773,4 +1773,62 @@ mod tests {
         assert_eq!(hex_calldata[1288..], expected_swaps);
         println!("{}", hex_calldata);
     }
+
+    #[test]
+    fn test_split_encoding_strategy_curve() {
+        //   UWU ──(curve 2 crypto pool)──> WETH
+
+        let token_in = Bytes::from("0x55C08ca52497e2f1534B59E2917BF524D4765257"); // UWU
+        let token_out = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"); // USDC
+
+        let static_attributes = HashMap::from([(
+            "factory".to_string(),
+            Bytes::from("0x98ee851a00abee0d95d08cf4ca2bdce32aeaaf7f"),
+        )]);
+
+        let component = ProtocolComponent {
+            id: String::from("0x77146B0a1d08B6844376dF6d9da99bA7F1b19e71"),
+            protocol_system: String::from("vm:curve"),
+            static_attributes,
+            ..Default::default()
+        };
+
+        let swap = Swap {
+            component,
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
+            split: 0f64,
+        };
+
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder = SplitSwapStrategyEncoder::new(
+            eth_chain(),
+            swap_encoder_registry,
+            None,
+            Some(Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap()),
+        )
+        .unwrap();
+
+        let solution = Solution {
+            exact_out: false,
+            given_token: token_in,
+            given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+            checked_token: token_out,
+            expected_amount: None,
+            checked_amount: Some(BigUint::from_str("1").unwrap()),
+            slippage: None,
+            // Alice
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            swaps: vec![swap],
+            ..Default::default()
+        };
+
+        let (calldata, _) = encoder
+            .encode_strategy(solution)
+            .unwrap();
+
+        let hex_calldata = encode(&calldata);
+        println!("{}", hex_calldata);
+    }
 }

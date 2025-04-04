@@ -8,7 +8,7 @@
     "uniswap_v4": "0x042C0ebBEAb9d9987c2f64Ee05f2B3aeB86eAf70",
     "vm:balancer_v2": "0x00BE8EfAE40219Ff76287b0F9b9e497942f5BC91",
     "ekubo_v2": "0x4f88f6630a33dB05BEa1FeF7Dc7ff7508D1c531D",
-    "vm:curve": "0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"
+    "vm:curve": "0x1d1499e622D69689cdf9004d05Ec547d650Ff211"
   },
   "tenderly_ethereum": {
     "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",
