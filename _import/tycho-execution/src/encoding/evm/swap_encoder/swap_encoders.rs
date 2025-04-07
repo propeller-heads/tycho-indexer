@@ -18,7 +18,7 @@ use crate::encoding::{
             bytes_to_address, encode_input, get_runtime, get_static_attribute, pad_to_fixed_size,
         },
     },
-    models::{EncodingContext, Swap},
+    models::{Chain, EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
 
@@ -39,8 +39,8 @@ impl UniswapV2SwapEncoder {
 }
 
 impl SwapEncoder for UniswapV2SwapEncoder {
-    fn new(executor_address: String) -> Self {
-        Self { executor_address }
+    fn new(executor_address: String, _chain: Chain) -> Result<Self, EncodingError> {
+        Ok(Self { executor_address })
     }
 
     fn encode_swap(
@@ -93,8 +93,8 @@ impl UniswapV3SwapEncoder {
 }
 
 impl SwapEncoder for UniswapV3SwapEncoder {
-    fn new(executor_address: String) -> Self {
-        Self { executor_address }
+    fn new(executor_address: String, _chain: Chain) -> Result<Self, EncodingError> {
+        Ok(Self { executor_address })
     }
 
     fn encode_swap(
@@ -151,8 +151,8 @@ impl UniswapV4SwapEncoder {
 }
 
 impl SwapEncoder for UniswapV4SwapEncoder {
-    fn new(executor_address: String) -> Self {
-        Self { executor_address }
+    fn new(executor_address: String, _chain: Chain) -> Result<Self, EncodingError> {
+        Ok(Self { executor_address })
     }
 
     fn encode_swap(
@@ -224,11 +224,11 @@ pub struct BalancerV2SwapEncoder {
 }
 
 impl SwapEncoder for BalancerV2SwapEncoder {
-    fn new(executor_address: String) -> Self {
-        Self {
+    fn new(executor_address: String, _chain: Chain) -> Result<Self, EncodingError> {
+        Ok(Self {
             executor_address,
             vault_address: "0xba12222222228d8ba445958a75a0704d566bf2c8".to_string(),
-        }
+        })
     }
     fn encode_swap(
         &self,
@@ -282,8 +282,8 @@ pub struct EkuboSwapEncoder {
 }
 
 impl SwapEncoder for EkuboSwapEncoder {
-    fn new(executor_address: String) -> Self {
-        Self { executor_address }
+    fn new(executor_address: String, _chain: Chain) -> Result<Self, EncodingError> {
+        Ok(Self { executor_address })
     }
 
     fn encode_swap(
@@ -340,11 +340,16 @@ impl SwapEncoder for EkuboSwapEncoder {
 ///
 /// # Fields
 /// * `executor_address` - The address of the executor contract that will perform the swap.
-/// * `vault_address` - The address of the vault contract that will perform the swap.
+/// * `meta_registry_address` - The address of the Curve meta registry contract. Used to get coin
+///   indexes.
+/// * `native_token_curve_address` - The address used as native token in curve pools.
+/// * `native_token_address` - The address of the native token.
 #[derive(Clone)]
 pub struct CurveSwapEncoder {
     executor_address: String,
     meta_registry_address: String,
+    native_token_curve_address: Address,
+    native_token_address: Bytes,
 }
 
 impl CurveSwapEncoder {
@@ -416,7 +421,8 @@ impl CurveSwapEncoder {
                 let (i_256, j_256, _): ResponseType = ResponseType::abi_decode(&response, true)
                     .map_err(|_| {
                         EncodingError::FatalError(
-                            "Failed to decode response for allowance".to_string(),
+                            "Failed to decode response when getting coin indexes on a curve pool"
+                                .to_string(),
                         )
                     })?;
                 let i = U8::from(i_256);
@@ -432,11 +438,17 @@ impl CurveSwapEncoder {
 }
 
 impl SwapEncoder for CurveSwapEncoder {
-    fn new(executor_address: String) -> Self {
-        Self {
+    fn new(executor_address: String, chain: Chain) -> Result<Self, EncodingError> {
+        let native_token_curve_address =
+            Address::from_str("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE").map_err(|_| {
+                EncodingError::FatalError("Invalid Curve native token address".to_string())
+            })?;
+        Ok(Self {
             executor_address,
             meta_registry_address: "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC".to_string(),
-        }
+            native_token_address: chain.native_token()?,
+            native_token_curve_address,
+        })
     }
     fn encode_swap(
         &self,
@@ -444,18 +456,31 @@ impl SwapEncoder for CurveSwapEncoder {
         encoding_context: EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let token_approvals_manager = ProtocolApprovalsManager::new()?;
-        let token = bytes_to_address(&swap.token_in)?;
+        let token_in = if swap.token_in == self.native_token_address {
+            self.native_token_curve_address
+        } else {
+            bytes_to_address(&swap.token_in)?
+        };
+        let token_out = if swap.token_out == self.native_token_address {
+            self.native_token_curve_address
+        } else {
+            bytes_to_address(&swap.token_out)?
+        };
         let approval_needed: bool;
 
         let component_address = Address::from_str(&swap.component.id)
             .map_err(|_| EncodingError::FatalError("Invalid curve pool address".to_string()))?;
         if let Some(router_address) = encoding_context.router_address {
-            let tycho_router_address = bytes_to_address(&router_address)?;
-            approval_needed = token_approvals_manager.approval_needed(
-                token,
-                tycho_router_address,
-                component_address,
-            )?;
+            if token_in != self.native_token_curve_address {
+                let tycho_router_address = bytes_to_address(&router_address)?;
+                approval_needed = token_approvals_manager.approval_needed(
+                    token_in,
+                    tycho_router_address,
+                    component_address,
+                )?;
+            } else {
+                approval_needed = false;
+            }
         } else {
             approval_needed = true;
         }
@@ -469,15 +494,11 @@ impl SwapEncoder for CurveSwapEncoder {
 
         let pool_type = self.get_pool_type(&swap.component.id, factory.as_deref())?;
 
-        let (i, j) = self.get_coin_indexes(
-            component_address,
-            bytes_to_address(&swap.token_in)?,
-            bytes_to_address(&swap.token_out)?,
-        )?;
+        let (i, j) = self.get_coin_indexes(component_address, token_in, token_out)?;
 
         let args = (
-            bytes_to_address(&swap.token_in)?,
-            bytes_to_address(&swap.token_out)?,
+            token_in,
+            token_out,
             component_address,
             pool_type.to_be_bytes::<1>(),
             i.to_be_bytes::<1>(),
@@ -502,7 +523,10 @@ mod tests {
 
     use alloy::hex::encode;
     use num_bigint::BigInt;
-    use tycho_common::{models::protocol::ProtocolComponent, Bytes};
+    use tycho_common::{
+        models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
+        Bytes,
+    };
 
     use super::*;
 
@@ -528,8 +552,11 @@ mod tests {
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
         };
-        let encoder =
-            UniswapV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
+        let encoder = UniswapV2SwapEncoder::new(
+            String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+            TychoCoreChain::Ethereum.into(),
+        )
+        .unwrap();
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
@@ -575,8 +602,11 @@ mod tests {
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
         };
-        let encoder =
-            UniswapV3SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
+        let encoder = UniswapV3SwapEncoder::new(
+            String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+            TychoCoreChain::Ethereum.into(),
+        )
+        .unwrap();
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
@@ -623,8 +653,11 @@ mod tests {
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
         };
-        let encoder =
-            BalancerV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
+        let encoder = BalancerV2SwapEncoder::new(
+            String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+            TychoCoreChain::Ethereum.into(),
+        )
+        .unwrap();
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
@@ -682,8 +715,11 @@ mod tests {
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
         };
-        let encoder =
-            UniswapV4SwapEncoder::new(String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"));
+        let encoder = UniswapV4SwapEncoder::new(
+            String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
+            TychoCoreChain::Ethereum.into(),
+        )
+        .unwrap();
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
@@ -747,8 +783,11 @@ mod tests {
             group_token_out: token_out.clone(),
         };
 
-        let encoder =
-            UniswapV4SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
+        let encoder = UniswapV4SwapEncoder::new(
+            String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+            TychoCoreChain::Ethereum.into(),
+        )
+        .unwrap();
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
@@ -835,8 +874,11 @@ mod tests {
             split: 0f64,
         };
 
-        let encoder =
-            UniswapV4SwapEncoder::new(String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"));
+        let encoder = UniswapV4SwapEncoder::new(
+            String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
+            TychoCoreChain::Ethereum.into(),
+        )
+        .unwrap();
         let initial_encoded_swap = encoder
             .encode_swap(initial_swap, context.clone())
             .unwrap();
@@ -911,7 +953,8 @@ mod tests {
                 router_address: Some(Bytes::default()),
             };
 
-            let encoder = EkuboSwapEncoder::new(String::default());
+            let encoder =
+                EkuboSwapEncoder::new(String::default(), TychoCoreChain::Ethereum.into()).unwrap();
 
             let encoded_swap = encoder
                 .encode_swap(swap, encoding_context)
@@ -939,7 +982,8 @@ mod tests {
             let group_token_out = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
             let intermediary_token = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
 
-            let encoder = EkuboSwapEncoder::new(String::default());
+            let encoder =
+                EkuboSwapEncoder::new(String::default(), TychoCoreChain::Ethereum.into()).unwrap();
 
             let encoding_context = EncodingContext {
                 receiver: RECEIVER.into(),
@@ -1061,7 +1105,8 @@ mod tests {
             #[case] expected_i: u64,
             #[case] expected_j: u64,
         ) {
-            let encoder = CurveSwapEncoder::new(String::default());
+            let encoder =
+                CurveSwapEncoder::new(String::default(), TychoCoreChain::Ethereum.into()).unwrap();
             let (i, j) = encoder
                 .get_coin_indexes(
                     Address::from_str(pool).unwrap(),
@@ -1100,8 +1145,11 @@ mod tests {
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
         };
-        let encoder =
-            CurveSwapEncoder::new(String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"));
+        let encoder = CurveSwapEncoder::new(
+            String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
+            TychoCoreChain::Ethereum.into(),
+        )
+        .unwrap();
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
@@ -1155,8 +1203,11 @@ mod tests {
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
         };
-        let encoder =
-            CurveSwapEncoder::new(String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"));
+        let encoder = CurveSwapEncoder::new(
+            String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
+            TychoCoreChain::Ethereum.into(),
+        )
+        .unwrap();
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
@@ -1177,6 +1228,64 @@ mod tests {
                 "01",
                 // j index
                 "00",
+                // approval needed
+                "01",
+            ))
+        );
+    }
+    #[test]
+    fn test_curve_encode_st_eth() {
+        // This test is for the stETH pool, which is a special case in Curve
+        // where the token in is ETH but not as the zero address.
+        let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+        static_attributes.insert("factory".into(), Bytes::from(vec![]));
+        let curve_pool = ProtocolComponent {
+            id: String::from("0xDC24316b9AE028F1497c275EB9192a3Ea0f67022"),
+            protocol_system: String::from("vm:curve"),
+            static_attributes,
+            ..Default::default()
+        };
+        let token_in = Bytes::from("0x0000000000000000000000000000000000000000");
+        let token_out = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
+        let swap = Swap {
+            component: curve_pool,
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
+            split: 0f64,
+        };
+        let encoding_context = EncodingContext {
+            // The receiver was generated with `makeAddr("bob") using forge`
+            receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+            exact_out: false,
+            router_address: None,
+            group_token_in: token_in.clone(),
+            group_token_out: token_out.clone(),
+        };
+        let encoder = CurveSwapEncoder::new(
+            String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
+            TychoCoreChain::Ethereum.into(),
+        )
+        .unwrap();
+        let encoded_swap = encoder
+            .encode_swap(swap, encoding_context)
+            .unwrap();
+        let hex_swap = encode(&encoded_swap);
+
+        assert_eq!(
+            hex_swap,
+            String::from(concat!(
+                // token in
+                "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                // token out
+                "ae7ab96520de3a18e5e111b5eaab095312d7fe84",
+                // pool address
+                "dc24316b9ae028f1497c275eb9192a3ea0f67022",
+                // pool type 1
+                "01",
+                // i index
+                "00",
+                // j index
+                "01",
                 // approval needed
                 "01",
             ))

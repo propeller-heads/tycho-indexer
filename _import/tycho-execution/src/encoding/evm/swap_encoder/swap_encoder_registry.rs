@@ -38,7 +38,7 @@ impl SwapEncoderRegistry {
             .get(&chain.name)
             .ok_or(EncodingError::FatalError("No executors found for chain".to_string()))?;
         for (protocol, executor_address) in executors {
-            let builder = SwapEncoderBuilder::new(protocol, executor_address);
+            let builder = SwapEncoderBuilder::new(protocol, executor_address, chain.clone());
             let encoder = builder.build()?;
             encoders.insert(protocol.to_string(), encoder);
         }

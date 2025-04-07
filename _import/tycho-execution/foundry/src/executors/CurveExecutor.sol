@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-error CurveExecutor__InvalidAddresses();
+error CurveExecutor__AddressZero();
 
 interface CryptoPool {
     // slither-disable-next-line naming-convention
@@ -39,7 +39,7 @@ contract CurveExecutor is IExecutor {
 
     constructor(address _nativeToken) {
         if (_nativeToken == address(0)) {
-            revert CurveExecutor__InvalidAddresses();
+            revert CurveExecutor__AddressZero();
         }
         nativeToken = _nativeToken;
     }

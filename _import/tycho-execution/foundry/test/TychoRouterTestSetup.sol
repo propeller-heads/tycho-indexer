@@ -98,7 +98,7 @@ contract TychoRouterTestSetup is Test, Constants {
             new UniswapV3Executor(factoryPancakeV3, initCodePancakeV3);
         balancerv2Executor = new BalancerV2Executor();
         ekuboExecutor = new EkuboExecutor(ekuboCore);
-        curveExecutor = new CurveExecutor(ETH_ADDR);
+        curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE);
 
         address[] memory executors = new address[](7);
         executors[0] = address(usv2Executor);

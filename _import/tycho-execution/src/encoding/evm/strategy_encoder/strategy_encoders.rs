@@ -1831,4 +1831,59 @@ mod tests {
         let hex_calldata = encode(&calldata);
         println!("{}", hex_calldata);
     }
+
+    #[test]
+    fn test_split_encoding_strategy_curve_st_eth() {
+        //   ETH ──(curve stETH pool)──> STETH
+
+        let token_in = Bytes::from("0x0000000000000000000000000000000000000000"); // ETH
+        let token_out = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"); // STETH
+
+        let static_attributes = HashMap::from([("factory".to_string(), Bytes::from(vec![]))]);
+
+        let component = ProtocolComponent {
+            id: String::from("0xDC24316b9AE028F1497c275EB9192a3Ea0f67022"),
+            protocol_system: String::from("vm:curve"),
+            static_attributes,
+            ..Default::default()
+        };
+
+        let swap = Swap {
+            component,
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
+            split: 0f64,
+        };
+
+        let swap_encoder_registry = get_swap_encoder_registry();
+        let encoder = SplitSwapStrategyEncoder::new(
+            eth_chain(),
+            swap_encoder_registry,
+            None,
+            Some(Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap()),
+        )
+        .unwrap();
+
+        let solution = Solution {
+            exact_out: false,
+            given_token: token_in,
+            given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+            checked_token: token_out,
+            expected_amount: None,
+            checked_amount: Some(BigUint::from_str("1").unwrap()),
+            slippage: None,
+            // Alice
+            sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+            swaps: vec![swap],
+            ..Default::default()
+        };
+
+        let (calldata, _) = encoder
+            .encode_strategy(solution)
+            .unwrap();
+
+        let hex_calldata = encode(&calldata);
+        println!("{}", hex_calldata);
+    }
 }
