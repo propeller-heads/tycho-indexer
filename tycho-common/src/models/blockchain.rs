@@ -1,6 +1,6 @@
 use std::{
     any::Any,
-    collections::{hash_map::Entry, HashMap},
+    collections::{hash_map::Entry, HashMap, HashSet},
     sync::Arc,
 };
 
@@ -8,6 +8,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
+use super::StoreKey;
 use crate::{
     models::{
         contract::{AccountBalance, AccountChangesWithTx, AccountDelta},
@@ -340,6 +341,31 @@ pub enum BlockTag {
     Pending,
     /// Block by number
     Number(u64),
+}
+#[derive(Debug, Clone)]
+/// An entry point to trace. Different types of entry points tracing will be supported in the
+/// future. Like RPC debug tracing, symbolic execution, etc.
+pub enum EntryPoint {
+    /// Uses RPC calls to retrieve the called addresses and retriggers
+    RPCTracer(RPCTracerEntryPoint),
+}
+
+#[derive(Debug, Clone)]
+pub struct RPCTracerEntryPoint {
+    /// The address of the contract to trace.
+    pub target: Address,
+    // The args are a list of tuples, where the first element is the address of the caller, and the
+    // second element is the data of the call.
+    pub args: Vec<(Option<Address>, Bytes)>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TracedEntryPoint {
+    /// A set of (address, storage slot) pairs representing state that contain a called address.
+    /// If any of these storage slots change, the execution path might change.
+    pub retriggers: HashSet<(Address, StoreKey)>,
+    /// A set of all addresses that were called during the trace.
+    pub called_addresses: HashSet<Address>,
 }
 
 #[cfg(test)]
