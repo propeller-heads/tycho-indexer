@@ -264,14 +264,21 @@ contract TokenProxy {
                 balances[to] += amount;
             } else {
                 // Get receiver's balance from implementation and set it as custom
-                (bool balanceSuccess, bytes memory balanceData) = _implementation().staticcall(
-                    abi.encodeWithSignature("balanceOf(address)", to)
-                );
-                require(balanceSuccess && balanceData.length >= 32, "Failed to get receiver balance");
-                uint256 receiverBalance = abi.decode(balanceData, (uint256));
+                address impl = _implementation();
+                if (impl != address(0)) {
+                    (bool balanceSuccess, bytes memory balanceData) = impl.staticcall(
+                        abi.encodeWithSignature("balanceOf(address)", to)
+                    );
+                    require(balanceSuccess && balanceData.length >= 32, "Failed to get receiver balance");
+                    uint256 receiverBalance = abi.decode(balanceData, (uint256));
+                    
+                    // Set the receiver's balance as custom
+                    balances[to] = receiverBalance;
+                } else {
+                    // If no implementation, start with 0 balance
+                    balances[to] = 0;
+                }
                 
-                // Set the receiver's balance as custom
-                balances[to] = receiverBalance;
                 _setHasCustomBalance(to, true);
                 
                 // Now add the transfer amount
@@ -315,15 +322,22 @@ contract TokenProxy {
             if (hasCustomToBalance) {
                 balances[to] += amount;
             } else {
-                // Get receiver's balance from implementation and set it as custom
-                (bool balanceSuccess, bytes memory balanceData) = _implementation().staticcall(
-                    abi.encodeWithSignature("balanceOf(address)", to)
-                );
-                require(balanceSuccess && balanceData.length >= 32, "Failed to get receiver balance");
-                uint256 receiverBalance = abi.decode(balanceData, (uint256));
+                address impl = _implementation();
+                if (impl != address(0)) {
+                    // Get receiver's balance from implementation and set it as custom
+                    (bool balanceSuccess, bytes memory balanceData) = impl.staticcall(
+                        abi.encodeWithSignature("balanceOf(address)", to)
+                    );
+                    require(balanceSuccess && balanceData.length >= 32, "Failed to get receiver balance");
+                    uint256 receiverBalance = abi.decode(balanceData, (uint256));
+                    
+                    // Set the receiver's balance as custom
+                    balances[to] = receiverBalance;
+                } else {
+                    // If no implementation, start with 0 balance
+                    balances[to] = 0;
+                }
                 
-                // Set the receiver's balance as custom
-                balances[to] = receiverBalance;
                 _setHasCustomBalance(to, true);
                 
                 // Now add the transfer amount

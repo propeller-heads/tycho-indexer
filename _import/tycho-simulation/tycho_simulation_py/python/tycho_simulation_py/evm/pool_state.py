@@ -111,7 +111,7 @@ class ThirdPartyPool:
             token_storage_slots or {}
         )
         self.token_initial_state = token_initial_state
-        self.token_proxy_tokens = token_proxy_tokens
+        self.token_proxy_tokens = token_proxy_tokens or dict()
 
         """Allows the specification of custom storage slots for token allowances and
         balances. This is particularly useful for token contracts involved in protocol
@@ -192,7 +192,7 @@ class ThirdPartyPool:
                     t0,
                     t1,
                     [sell_amount],
-                    block=sef.block,
+                    block=self.block,
                     overwrites=self._get_overwrites(t0, t1),
                 )[0]
                 if Capability.ScaledPrices in self.capabilities:
