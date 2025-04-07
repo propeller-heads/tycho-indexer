@@ -1,3 +1,20 @@
+## [0.77.0](https://github.com/propeller-heads/tycho-execution/compare/0.76.0...0.77.0) (2025-04-07)
+
+
+### Features
+
+* add curve executor with router tests ([7cde513](https://github.com/propeller-heads/tycho-execution/commit/7cde5130d6038916dcb4a6a96c723c366b90da12))
+* allow executor to do native swaps, add diff pool type tests ([93bdc86](https://github.com/propeller-heads/tycho-execution/commit/93bdc86dc665e02d877bec1b749ee5cf7a399e32))
+* Refactor Curve Executor not to use the router ([9f21842](https://github.com/propeller-heads/tycho-execution/commit/9f2184258aab968f7d83df8a443c1a77b87a3e4c))
+
+
+### Bug Fixes
+
+* fix slither CI action ([42d1ab3](https://github.com/propeller-heads/tycho-execution/commit/42d1ab36fd71af7a10d17120e5f14edce9f6422a))
+* Improve curve executor tests and docstrings ([f468a78](https://github.com/propeller-heads/tycho-execution/commit/f468a7831a86eef96682504bc93207f33b28cf17))
+* Remove unnecessary test method ([49aefc8](https://github.com/propeller-heads/tycho-execution/commit/49aefc8c2ab25864b4056f44738a96c3905f8396))
+* resolve pr comments ([9e2a9f5](https://github.com/propeller-heads/tycho-execution/commit/9e2a9f5329f798990d4dde3e7e76af4896aef6f6))
+
 ## [0.76.0](https://github.com/propeller-heads/tycho-execution/compare/0.75.1...0.76.0) (2025-04-03)
 
 
