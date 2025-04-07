@@ -242,8 +242,6 @@ impl SequentialSwapStrategyEncoder {
     }
 }
 
-impl EVMStrategyEncoder for SequentialSwapStrategyEncoder {}
-
 impl StrategyEncoder for SequentialSwapStrategyEncoder {
     fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
         self.sequential_swap_validator
@@ -303,7 +301,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
             swaps.push(swap_data);
         }
 
-        let encoded_swaps = self.ple_encode(swaps);
+        let encoded_swaps = ple_encode(swaps);
         let method_calldata = if let Some(permit2) = self.permit2.clone() {
             let (permit, signature) = permit2.get_permit(
                 &self.router_address,
