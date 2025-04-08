@@ -1,3 +1,19 @@
+## [0.78.0](https://github.com/propeller-heads/tycho-execution/compare/0.77.0...0.78.0) (2025-04-08)
+
+
+### Features
+
+* Add protocol_specific_addresses.json file ([739fb46](https://github.com/propeller-heads/tycho-execution/commit/739fb46d205251e39188afe983d8ce5ff3cb5d60))
+* **curve:** Add CurveEncoder ([e9bb8c5](https://github.com/propeller-heads/tycho-execution/commit/e9bb8c576a96f3e523dc4e5011d48028cbc4d599))
+* **curve:** Add integration test ([1e47d0e](https://github.com/propeller-heads/tycho-execution/commit/1e47d0e25b7906d73981a26d0d8b882a5820b61a))
+* Support Curve ETH ([913d677](https://github.com/propeller-heads/tycho-execution/commit/913d677ffbfba61afae066a5a3d3c1f98e2a3f0f))
+
+
+### Bug Fixes
+
+* Add empty dicts for unichain and base in config ([c0b50c0](https://github.com/propeller-heads/tycho-execution/commit/c0b50c06616cf18c55cdbedf0196cda748a1a138))
+* Fix Ekubo test ([1838ccf](https://github.com/propeller-heads/tycho-execution/commit/1838ccf8a17d518e174ad926a979bc9d9c151cbd))
+
 ## [0.77.0](https://github.com/propeller-heads/tycho-execution/compare/0.76.0...0.77.0) (2025-04-07)
 
 
