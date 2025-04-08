@@ -5,7 +5,13 @@ use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::{group_swaps::group_swaps, swap_encoder::swap_encoder_registry::SwapEncoderRegistry},
+    evm::{
+        group_swaps::group_swaps,
+        strategy_encoder::strategy_encoders::{
+            SequentialSwapStrategyEncoder, SingleSwapStrategyEncoder, SplitSwapStrategyEncoder,
+        },
+        swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
+    },
     models::{Chain, EncodingContext, NativeAction, Solution, Transaction},
     strategy_encoder::StrategyEncoder,
     tycho_encoder::TychoEncoder,
@@ -14,24 +20,50 @@ use crate::encoding::{
 /// Encodes solutions to be used by the TychoRouter.
 ///
 /// # Fields
-/// * `strategy_encoder`: Strategy encoder to follow for encoding the solution
+/// * `single_swap_strategy`: Encoder for single swaps
+/// * `sequential_swap_strategy`: Encoder for sequential swaps
+/// * `split_swap_strategy`: Encoder for split swaps
 /// * `native_address`: Address of the chain's native token
 /// * `wrapped_address`: Address of the chain's wrapped native token
 pub struct TychoRouterEncoder {
-    strategy_encoder: Box<dyn StrategyEncoder>,
+    single_swap_strategy: SingleSwapStrategyEncoder,
+    sequential_swap_strategy: SequentialSwapStrategyEncoder,
+    split_swap_strategy: SplitSwapStrategyEncoder,
     native_address: Bytes,
     wrapped_address: Bytes,
 }
 
 impl TychoRouterEncoder {
     pub fn new(
-        chain: tycho_common::models::Chain,
-        strategy_encoder: Box<dyn StrategyEncoder>,
+        chain: Chain,
+        swap_encoder_registry: SwapEncoderRegistry,
+        swapper_pk: Option<String>,
+        router_address: Bytes,
     ) -> Result<Self, EncodingError> {
-        let chain: Chain = Chain::from(chain);
         let native_address = chain.native_token()?;
         let wrapped_address = chain.wrapped_token()?;
-        Ok(TychoRouterEncoder { strategy_encoder, native_address, wrapped_address })
+        Ok(TychoRouterEncoder {
+            single_swap_strategy: SingleSwapStrategyEncoder::new(
+                chain.clone(),
+                swap_encoder_registry.clone(),
+                swapper_pk.clone(),
+                router_address.clone(),
+            )?,
+            sequential_swap_strategy: SequentialSwapStrategyEncoder::new(
+                chain.clone(),
+                swap_encoder_registry.clone(),
+                swapper_pk.clone(),
+                router_address.clone(),
+            )?,
+            split_swap_strategy: SplitSwapStrategyEncoder::new(
+                chain,
+                swap_encoder_registry,
+                None,
+                router_address.clone(),
+            )?,
+            native_address,
+            wrapped_address,
+        })
     }
 }
 
@@ -40,10 +72,20 @@ impl TychoEncoder for TychoRouterEncoder {
         let mut transactions: Vec<Transaction> = Vec::new();
         for solution in solutions.iter() {
             self.validate_solution(solution)?;
-
-            let (contract_interaction, target_address) = self
-                .strategy_encoder
-                .encode_strategy(solution.clone())?;
+            let (contract_interaction, target_address) = if solution.swaps.len() == 1 {
+                self.single_swap_strategy
+                    .encode_strategy(solution.clone())?
+            } else if solution
+                .swaps
+                .iter()
+                .all(|swap| swap.split == 0.0)
+            {
+                self.sequential_swap_strategy
+                    .encode_strategy(solution.clone())?
+            } else {
+                self.split_swap_strategy
+                    .encode_strategy(solution.clone())?
+            };
 
             let value = if solution.given_token == self.native_address {
                 solution.given_amount.clone()
@@ -173,10 +215,9 @@ pub struct TychoExecutorEncoder {
 
 impl TychoExecutorEncoder {
     pub fn new(
-        chain: tycho_common::models::Chain,
+        chain: Chain,
         swap_encoder_registry: SwapEncoderRegistry,
     ) -> Result<Self, EncodingError> {
-        let chain: Chain = Chain::from(chain);
         let native_address = chain.native_token()?;
         Ok(TychoExecutorEncoder { swap_encoder_registry, native_address })
     }
@@ -269,12 +310,10 @@ impl TychoEncoder for TychoExecutorEncoder {
 mod tests {
     use std::str::FromStr;
 
-    use tycho_common::models::{protocol::ProtocolComponent, Chain as TychoCoreChain};
+    use tycho_common::models::{protocol::ProtocolComponent, Chain as TychoCommonChain};
 
     use super::*;
-    use crate::encoding::{
-        models::Swap, strategy_encoder::StrategyEncoder, swap_encoder::SwapEncoder,
-    };
+    use crate::encoding::models::Swap;
 
     fn dai() -> Bytes {
         Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap()
@@ -296,36 +335,25 @@ mod tests {
         Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap()
     }
 
+    fn get_swap_encoder_registry() -> SwapEncoderRegistry {
+        SwapEncoderRegistry::new(
+            Some("config/test_executor_addresses.json".to_string()),
+            TychoCommonChain::Ethereum.into(),
+        )
+        .unwrap()
+    }
+
     mod router_encoder {
         use super::*;
 
-        #[derive(Clone)]
-        struct MockStrategy;
-
-        impl StrategyEncoder for MockStrategy {
-            fn encode_strategy(
-                &self,
-                _solution: Solution,
-            ) -> Result<(Vec<u8>, Bytes), EncodingError> {
-                Ok((
-                    Bytes::from_str("0x1234")
-                        .unwrap()
-                        .to_vec(),
-                    Bytes::from_str("0xabcd").unwrap(),
-                ))
-            }
-
-            fn get_swap_encoder(&self, _protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
-                None
-            }
-            fn clone_box(&self) -> Box<dyn StrategyEncoder> {
-                Box::new(self.clone())
-            }
-        }
-
         fn get_mocked_tycho_router_encoder() -> TychoRouterEncoder {
-            let strategy_encoder = Box::new(MockStrategy {});
-            TychoRouterEncoder::new(TychoCoreChain::Ethereum, strategy_encoder).unwrap()
+            TychoRouterEncoder::new(
+                TychoCommonChain::Ethereum.into(),
+                get_swap_encoder_registry(),
+                None,
+                Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+            )
+            .unwrap()
         }
         #[test]
         fn test_encode_router_calldata() {
@@ -346,7 +374,9 @@ mod tests {
                 exact_out: false,
                 given_amount: eth_amount_in.clone(),
                 given_token: eth(),
+                checked_token: dai(),
                 swaps: vec![swap],
+                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 native_action: Some(NativeAction::Wrap),
                 ..Default::default()
             };
@@ -357,8 +387,10 @@ mod tests {
             let transactions = transactions.unwrap();
             assert_eq!(transactions.len(), 1);
             assert_eq!(transactions[0].value, eth_amount_in);
-            assert_eq!(transactions[0].data, Bytes::from_str("0x1234").unwrap());
-            assert_eq!(transactions[0].to, Bytes::from_str("0xabcd").unwrap());
+            assert_eq!(
+                transactions[0].to,
+                Bytes::from_str("0x3ede3eca2a72b3aecc820e955b36f38437d01395").unwrap()
+            );
         }
 
         #[test]
@@ -824,24 +856,14 @@ mod tests {
         use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
         use super::*;
-        use crate::encoding::{
-            evm::swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
-            models::{Solution, Swap},
-        };
-
-        fn get_swap_encoder_registry() -> SwapEncoderRegistry {
-            SwapEncoderRegistry::new(
-                Some("config/test_executor_addresses.json".to_string()),
-                TychoCoreChain::Ethereum,
-            )
-            .unwrap()
-        }
+        use crate::encoding::models::{Solution, Swap};
 
         #[test]
         fn test_executor_encoder_encode() {
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder =
-                TychoExecutorEncoder::new(TychoCoreChain::Ethereum, swap_encoder_registry).unwrap();
+                TychoExecutorEncoder::new(TychoCommonChain::Ethereum.into(), swap_encoder_registry)
+                    .unwrap();
 
             let token_in = weth();
             let token_out = dai();
@@ -902,7 +924,8 @@ mod tests {
         fn test_executor_encoder_too_many_swaps() {
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder =
-                TychoExecutorEncoder::new(TychoCoreChain::Ethereum, swap_encoder_registry).unwrap();
+                TychoExecutorEncoder::new(TychoCommonChain::Ethereum.into(), swap_encoder_registry)
+                    .unwrap();
 
             let token_in = weth();
             let token_out = dai();
@@ -939,7 +962,8 @@ mod tests {
         fn test_executor_encoder_grouped_swaps() {
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder =
-                TychoExecutorEncoder::new(TychoCoreChain::Ethereum, swap_encoder_registry).unwrap();
+                TychoExecutorEncoder::new(TychoCommonChain::Ethereum.into(), swap_encoder_registry)
+                    .unwrap();
 
             let eth = eth();
             let usdc = usdc();
