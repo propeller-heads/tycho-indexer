@@ -56,8 +56,8 @@ fn main() {
         given_token: weth.clone(),
         given_amount: BigUint::from_str("1_000000000000000000").expect("Failed to create amount"),
         checked_token: usdc.clone(),
-        exact_out: false,     // it's an exact in solution
-        checked_amount: None, // the amount out will not be checked in execution
+        exact_out: false, // it's an exact in solution
+        checked_amount: Some(BigUint::from(1u64)),
         swaps: vec![simple_swap],
         ..Default::default()
     };

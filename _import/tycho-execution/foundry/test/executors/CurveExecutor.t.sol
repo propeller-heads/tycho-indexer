@@ -21,19 +21,6 @@ interface MetaRegistry {
         returns (int128, int128, bool);
 }
 
-interface IAaveLendingPool {
-    function deposit(
-        address asset,
-        uint256 amount,
-        address onBehalfOf,
-        uint16 referralCode
-    ) external;
-
-    function withdraw(address asset, uint256 amount, address to)
-        external
-        returns (uint256);
-}
-
 contract CurveExecutorExposed is CurveExecutor {
     constructor(address _nativeToken) CurveExecutor(_nativeToken) {}
 
@@ -63,7 +50,7 @@ contract CurveExecutorTest is Test, Constants {
     function setUp() public {
         uint256 forkBlock = 22031795;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        curveExecutorExposed = new CurveExecutorExposed(ETH_ADDR);
+        curveExecutorExposed = new CurveExecutorExposed(ETH_ADDR_FOR_CURVE);
         metaRegistry = MetaRegistry(CURVE_META_REGISTRY);
     }
 
@@ -118,7 +105,8 @@ contract CurveExecutorTest is Test, Constants {
         uint256 amountIn = 1 ether;
         deal(address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(ETH_ADDR, STETH_ADDR, STETH_POOL, 1);
+        bytes memory data =
+            _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1);
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
@@ -216,7 +204,8 @@ contract CurveExecutorTest is Test, Constants {
         uint256 initialBalance = address(curveExecutorExposed).balance; // this address already has some ETH assigned to it
         deal(XYO_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(XYO_ADDR, ETH_ADDR, ETH_XYO_POOL, 2);
+        bytes memory data =
+            _getData(XYO_ADDR, ETH_ADDR_FOR_CURVE, ETH_XYO_POOL, 2);
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 

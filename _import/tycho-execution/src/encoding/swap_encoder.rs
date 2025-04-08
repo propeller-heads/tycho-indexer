@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use crate::encoding::{
     errors::EncodingError,
-    models::{EncodingContext, Swap},
+    models::{Chain, EncodingContext, Swap},
 };
 
 /// A trait for protocol-specific swap encoding, where each implementation should handle the
@@ -10,7 +12,14 @@ pub trait SwapEncoder: Sync + Send {
     ///
     /// # Arguments
     /// * `executor_address` - The address of the contract that will execute the swap
-    fn new(executor_address: String) -> Self
+    /// * `chain` - The chain on which the swap will be executed
+    /// * `config` - Additional configuration parameters for the encoder, like vault or registry
+    ///   address
+    fn new(
+        executor_address: String,
+        chain: Chain,
+        config: Option<HashMap<String, String>>,
+    ) -> Result<Self, EncodingError>
     where
         Self: Sized;
 
