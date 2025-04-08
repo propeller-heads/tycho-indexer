@@ -7,5 +7,7 @@
       "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
       "meta_registry_address": "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC"
     }
-  }
+  },
+  "base": {},
+  "unichain": {}
 }
