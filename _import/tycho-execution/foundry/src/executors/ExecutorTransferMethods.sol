@@ -40,7 +40,7 @@ contract ExecutorTransferMethods {
         if (method == TransferMethod.TRANSFER) {
             tokenIn.safeTransfer(receiver, amount);
         } else if (method == TransferMethod.TRANSFERFROM) {
-            tokenIn.safeTransferFrom(msg.sender, receiver, amount);
+            tokenIn.safeTransferFrom(sender, receiver, amount);
         } else if (method == TransferMethod.TRANSFERPERMIT2) {
             // Permit2.permit is already called from the TychoRouter
             permit2.transferFrom(

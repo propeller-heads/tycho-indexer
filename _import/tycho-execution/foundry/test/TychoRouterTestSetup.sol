@@ -198,7 +198,13 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper {
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
         return abi.encodePacked(
-            tokenIn, tokenOut, pool.fee(), receiver, target, zero2one
+            tokenIn,
+            tokenOut,
+            pool.fee(),
+            receiver,
+            target,
+            zero2one,
+            ExecutorTransferMethods.TransferMethod.TRANSFER
         );
     }
 }

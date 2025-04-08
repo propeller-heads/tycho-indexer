@@ -149,7 +149,7 @@ contract UniswapV3Executor is IExecutor, ICallback, ExecutorTransferMethods {
             TransferMethod method
         )
     {
-        if (data.length != 84) {
+        if (data.length != 85) {
             revert UniswapV3Executor__InvalidDataLength();
         }
         tokenIn = address(bytes20(data[0:20]));
@@ -158,7 +158,7 @@ contract UniswapV3Executor is IExecutor, ICallback, ExecutorTransferMethods {
         receiver = address(bytes20(data[43:63]));
         target = address(bytes20(data[63:83]));
         zeroForOne = uint8(data[83]) > 0;
-        method = TransferMethod.TRANSFER;
+        method = TransferMethod(uint8(data[84]));
     }
 
     function _makeV3CallbackData(
