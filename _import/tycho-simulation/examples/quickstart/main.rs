@@ -29,6 +29,7 @@ use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use tracing_subscriber::EnvFilter;
 use tycho_common::Bytes;
+pub mod utils;
 use tycho_execution::encoding::{
     evm::{
         encoder_builder::EVMEncoderBuilder, tycho_encoder::EVMTychoEncoder, utils::encode_input,
@@ -38,10 +39,15 @@ use tycho_execution::encoding::{
 };
 use tycho_simulation::{
     evm::{
+        engine_db::tycho_db::PreCachedDB,
         protocol::{
-            filters::uniswap_v4_pool_with_hook_filter, u256_num::biguint_to_u256,
-            uniswap_v2::state::UniswapV2State, uniswap_v3::state::UniswapV3State,
+            ekubo::state::EkuboState,
+            filters::{balancer_pool_filter, uniswap_v4_pool_with_hook_filter},
+            u256_num::biguint_to_u256,
+            uniswap_v2::state::UniswapV2State,
+            uniswap_v3::state::UniswapV3State,
             uniswap_v4::state::UniswapV4State,
+            vm::state::EVMPoolState,
         },
         stream::ProtocolStreamBuilder,
     },
@@ -51,6 +57,7 @@ use tycho_simulation::{
     tycho_common::models::Chain,
     utils::load_all_tokens,
 };
+use utils::get_default_url;
 
 const FAKE_PK: &str = "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234";
 
@@ -78,15 +85,19 @@ async fn main() {
         .with_target(false)
         .init();
 
-    let tycho_url =
-        env::var("TYCHO_URL").unwrap_or_else(|_| "tycho-beta.propellerheads.xyz".to_string());
+    let cli = Cli::parse();
+    let chain =
+        Chain::from_str(&cli.chain).unwrap_or_else(|_| panic!("Unknown chain {}", cli.chain));
+
+    let tycho_url = env::var("TYCHO_URL").unwrap_or_else(|_| {
+        get_default_url(&chain).unwrap_or_else(|| panic!("Unknown URL for chain {}", cli.chain))
+    });
+
     let tycho_api_key: String =
         env::var("TYCHO_API_KEY").unwrap_or_else(|_| "sampletoken".to_string());
 
-    let cli = Cli::parse();
     let tvl_filter = ComponentFilter::with_tvl_range(cli.tvl_threshold, cli.tvl_threshold);
 
-    let chain = Chain::from_str(&cli.chain).expect("Invalid chain");
     println!("Loading tokens from Tycho... {}", tycho_url.as_str());
     let all_tokens =
         load_all_tokens(tycho_url.as_str(), false, Some(tycho_api_key.as_str()), chain, None, None)
@@ -114,14 +125,52 @@ async fn main() {
     let mut pairs: HashMap<String, ProtocolComponent> = HashMap::new();
     let mut amounts_out: HashMap<String, BigUint> = HashMap::new();
 
-    let mut protocol_stream = ProtocolStreamBuilder::new(&tycho_url, chain)
-        .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
-        .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
-        .exchange::<UniswapV4State>(
-            "uniswap_v4",
-            tvl_filter.clone(),
-            Some(uniswap_v4_pool_with_hook_filter),
-        )
+    let mut protocol_stream = ProtocolStreamBuilder::new(&tycho_url, chain);
+
+    match chain {
+        Chain::Ethereum => {
+            protocol_stream = protocol_stream
+                .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
+                .exchange::<UniswapV2State>("sushiswap_v2", tvl_filter.clone(), None)
+                .exchange::<UniswapV2State>("pancakeswap_v2", tvl_filter.clone(), None)
+                .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
+                .exchange::<UniswapV3State>("pancakeswap_v3", tvl_filter.clone(), None)
+                .exchange::<EVMPoolState<PreCachedDB>>(
+                    "vm:balancer_v2",
+                    tvl_filter.clone(),
+                    Some(balancer_pool_filter),
+                )
+                .exchange::<UniswapV4State>(
+                    "uniswap_v4",
+                    tvl_filter.clone(),
+                    Some(uniswap_v4_pool_with_hook_filter),
+                )
+                .exchange::<EkuboState>("ekubo_v2", tvl_filter.clone(), None);
+        }
+        Chain::Base => {
+            protocol_stream = protocol_stream
+                .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
+                .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
+                .exchange::<UniswapV4State>(
+                    "uniswap_v4",
+                    tvl_filter.clone(),
+                    Some(uniswap_v4_pool_with_hook_filter),
+                )
+        }
+        Chain::Unichain => {
+            protocol_stream = protocol_stream
+                .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
+                .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
+                .exchange::<UniswapV4State>(
+                    "uniswap_v4",
+                    tvl_filter.clone(),
+                    Some(uniswap_v4_pool_with_hook_filter),
+                )
+        }
+        _ => {}
+    }
+
+    let mut protocol_stream = protocol_stream
         .auth_key(Some(tycho_api_key.clone()))
         .skip_state_decode_failures(true)
         .set_tokens(all_tokens.clone())
