@@ -97,11 +97,14 @@ contract TychoRouterTestSetup is Constants {
         address ekuboCore = 0xe0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444;
 
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
-        usv2Executor = new UniswapV2Executor(factoryV2, initCodeV2, PERMIT2_ADDRESS);
-        usv3Executor = new UniswapV3Executor(factoryV3, initCodeV3, PERMIT2_ADDRESS);
+        usv2Executor =
+            new UniswapV2Executor(factoryV2, initCodeV2, PERMIT2_ADDRESS);
+        usv3Executor =
+            new UniswapV3Executor(factoryV3, initCodeV3, PERMIT2_ADDRESS);
         usv4Executor = new UniswapV4Executor(poolManager);
-        pancakev3Executor =
-            new UniswapV3Executor(factoryPancakeV3, initCodePancakeV3);
+        pancakev3Executor = new UniswapV3Executor(
+            factoryPancakeV3, initCodePancakeV3, PERMIT2_ADDRESS
+        );
         balancerv2Executor = new BalancerV2Executor();
         ekuboExecutor = new EkuboExecutor(ekuboCore);
         curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE);
@@ -254,7 +257,13 @@ contract TychoRouterTestSetup is Constants {
         address receiver,
         bool zero2one
     ) internal pure returns (bytes memory) {
-        return abi.encodePacked(tokenIn, target, receiver, zero2one);
+        return abi.encodePacked(
+            tokenIn,
+            target,
+            receiver,
+            zero2one,
+            ExecutorTransferMethods.TransferMethod.TRANSFER
+        );
     }
 
     function encodeUniswapV3Swap(

@@ -14,9 +14,13 @@ contract ExecutorTransferMethods {
     IAllowanceTransfer public immutable permit2;
 
     enum TransferMethod {
+        // Assume funds are in the TychoRouter - transfer into the pool
         TRANSFER,
+        // Assume funds are in msg.sender's wallet - transferFrom into the pool
         TRANSFERFROM,
+        // Assume funds are in msg.sender's wallet - permit2TransferFrom into the pool
         TRANSFERPERMIT2,
+        // Assume funds have already been transferred into the pool. Do nothing.
         NONE
     }
 
@@ -39,10 +43,10 @@ contract ExecutorTransferMethods {
         } else if (method == TransferMethod.TRANSFERFROM) {
             tokenIn.safeTransferFrom(msg.sender, receiver, amount);
         } else if (method == TransferMethod.TRANSFERPERMIT2) {
-            // Permit2.permit is called from the TychoRouter
+            // Permit2.permit is already called from the TychoRouter
             permit2.transferFrom(
                 sender,
-                receiver, // Does this work if receiver is not address(this)?
+                receiver,
                 uint160(amount),
                 address(tokenIn)
             );

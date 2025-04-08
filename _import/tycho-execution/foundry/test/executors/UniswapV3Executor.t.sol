@@ -52,7 +52,9 @@ contract UniswapV3ExecutorTest is Test, Constants {
             USV3_FACTORY_ETHEREUM, USV3_POOL_CODE_INIT_HASH, PERMIT2_ADDRESS
         );
         pancakeV3Exposed = new UniswapV3ExecutorExposed(
-            PANCAKESWAPV3_DEPLOYER_ETHEREUM, PANCAKEV3_POOL_CODE_INIT_HASH, PERMIT2_ADDRESS
+            PANCAKESWAPV3_DEPLOYER_ETHEREUM,
+            PANCAKEV3_POOL_CODE_INIT_HASH,
+            PERMIT2_ADDRESS
         );
     }
 

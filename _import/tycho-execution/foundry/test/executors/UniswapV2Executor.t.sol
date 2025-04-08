@@ -56,6 +56,7 @@ contract UniswapV2ExecutorTest is Test, Constants {
     UniswapV2ExecutorExposed pancakeswapV2Exposed;
     IERC20 WETH = IERC20(WETH_ADDR);
     IERC20 DAI = IERC20(DAI_ADDR);
+    IAllowanceTransfer permit2;
 
     function setUp() public {
         uint256 forkBlock = 17323404;
@@ -64,16 +65,26 @@ contract UniswapV2ExecutorTest is Test, Constants {
             USV2_FACTORY_ETHEREUM, USV2_POOL_CODE_INIT_HASH, PERMIT2_ADDRESS
         );
         sushiswapV2Exposed = new UniswapV2ExecutorExposed(
-            SUSHISWAPV2_FACTORY_ETHEREUM, SUSHIV2_POOL_CODE_INIT_HASH, PERMIT2_ADDRESS
+            SUSHISWAPV2_FACTORY_ETHEREUM,
+            SUSHIV2_POOL_CODE_INIT_HASH,
+            PERMIT2_ADDRESS
         );
         pancakeswapV2Exposed = new UniswapV2ExecutorExposed(
-            PANCAKESWAPV2_FACTORY_ETHEREUM, PANCAKEV2_POOL_CODE_INIT_HASH, PERMIT2_ADDRESS
+            PANCAKESWAPV2_FACTORY_ETHEREUM,
+            PANCAKEV2_POOL_CODE_INIT_HASH,
+            PERMIT2_ADDRESS
         );
+        permit2 = IAllowanceTransfer(PERMIT2_ADDRESS);
     }
 
     function testDecodeParams() public view {
-        bytes memory params =
-            abi.encodePacked(WETH_ADDR, address(2), address(3), false);
+        bytes memory params = abi.encodePacked(
+            WETH_ADDR,
+            address(2),
+            address(3),
+            false,
+            ExecutorTransferMethods.TransferMethod.TRANSFER
+        );
 
         (
             IERC20 tokenIn,
@@ -137,14 +148,171 @@ contract UniswapV2ExecutorTest is Test, Constants {
         assertGe(amountOut, 0);
     }
 
-    function testSwap() public {
+    function testSwapWithTransfer() public {
         uint256 amountIn = 10 ** 18;
         uint256 amountOut = 1847751195973566072891;
         bool zeroForOne = false;
-        bytes memory protocolData =
-            abi.encodePacked(WETH_ADDR, WETH_DAI_POOL, BOB, zeroForOne);
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR,
+            WETH_DAI_POOL,
+            BOB,
+            zeroForOne,
+            uint8(ExecutorTransferMethods.TransferMethod.TRANSFER)
+        );
 
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
+        uniswapV2Exposed.swap(amountIn, protocolData);
+
+        uint256 finalBalance = DAI.balanceOf(BOB);
+        assertGe(finalBalance, amountOut);
+    }
+
+    function testSwapWithTransferFrom() public {
+        uint256 amountIn = 10 ** 18;
+        uint256 amountOut = 1847751195973566072891;
+        bool zeroForOne = false;
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR,
+            WETH_DAI_POOL,
+            BOB,
+            zeroForOne,
+            uint8(ExecutorTransferMethods.TransferMethod.TRANSFERFROM)
+        );
+
+        deal(WETH_ADDR, address(this), amountIn);
+        IERC20(WETH_ADDR).approve(address(uniswapV2Exposed), amountIn);
+
+        uniswapV2Exposed.swap(amountIn, protocolData);
+
+        uint256 finalBalance = DAI.balanceOf(BOB);
+        assertGe(finalBalance, amountOut);
+    }
+
+    // TODO generalize these next two methods - don't reuse from TychoRouterTestSetup
+    /**
+     * @dev Handles the Permit2 approval process for Alice, allowing the TychoRouter contract
+     *      to spend `amount_in` of `tokenIn` on her behalf.
+     *
+     * This function approves the Permit2 contract to transfer the specified token amount
+     * and constructs a `PermitSingle` struct for the approval. It also generates a valid
+     * EIP-712 signature for the approval using Alice's private key.
+     *
+     * @param tokenIn The address of the token being approved.
+     * @param amount_in The amount of tokens to approve for transfer.
+     * @return permitSingle The `PermitSingle` struct containing the approval details.
+     * @return signature The EIP-712 signature for the approval.
+     */
+    function handlePermit2Approval(address tokenIn, uint256 amount_in)
+        internal
+        returns (IAllowanceTransfer.PermitSingle memory, bytes memory)
+    {
+        IERC20(tokenIn).approve(PERMIT2_ADDRESS, amount_in);
+        IAllowanceTransfer.PermitSingle memory permitSingle = IAllowanceTransfer
+            .PermitSingle({
+            details: IAllowanceTransfer.PermitDetails({
+                token: tokenIn,
+                amount: uint160(amount_in),
+                expiration: uint48(block.timestamp + 1 days),
+                nonce: 0
+            }),
+            spender: address(uniswapV2Exposed),
+            sigDeadline: block.timestamp + 1 days
+        });
+
+        bytes memory signature = signPermit2(permitSingle, ALICE_PK);
+        return (permitSingle, signature);
+    }
+
+        /**
+     * @dev Signs a Permit2 `PermitSingle` struct with the given private key.
+     * @param permit The `PermitSingle` struct to sign.
+     * @param privateKey The private key of the signer.
+     * @return The signature as a `bytes` array.
+     */
+    function signPermit2(
+        IAllowanceTransfer.PermitSingle memory permit,
+        uint256 privateKey
+    ) internal view returns (bytes memory) {
+        bytes32 _PERMIT_DETAILS_TYPEHASH = keccak256(
+            "PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)"
+        );
+        bytes32 _PERMIT_SINGLE_TYPEHASH = keccak256(
+            "PermitSingle(PermitDetails details,address spender,uint256 sigDeadline)PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)"
+        );
+        bytes32 domainSeparator = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,uint256 chainId,address verifyingContract)"
+                ),
+                keccak256("Permit2"),
+                block.chainid,
+                PERMIT2_ADDRESS
+            )
+        );
+        bytes32 detailsHash =
+            keccak256(abi.encode(_PERMIT_DETAILS_TYPEHASH, permit.details));
+        bytes32 permitHash = keccak256(
+            abi.encode(
+                _PERMIT_SINGLE_TYPEHASH,
+                detailsHash,
+                permit.spender,
+                permit.sigDeadline
+            )
+        );
+
+        bytes32 digest =
+            keccak256(abi.encodePacked("\x19\x01", domainSeparator, permitHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
+
+        return abi.encodePacked(r, s, v);
+    }
+
+
+    function testSwapWithPermit2TransferFrom() public {
+        uint256 amountIn = 10 ** 18;
+        uint256 amountOut = 1847751195973566072891;
+        bool zeroForOne = false;
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR,
+            WETH_DAI_POOL,
+            ALICE,
+            zeroForOne,
+            uint8(ExecutorTransferMethods.TransferMethod.TRANSFERPERMIT2)
+        );
+
+
+        deal(WETH_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        (
+            IAllowanceTransfer.PermitSingle memory permitSingle,
+            bytes memory signature
+        ) = handlePermit2Approval(WETH_ADDR, amountIn);
+
+        // Assume the permit2.approve method will be called from the TychoRouter
+        // Replicate this secnario in this test.
+        permit2.permit(ALICE, permitSingle, signature);
+
+        uniswapV2Exposed.swap(amountIn, protocolData);
+        vm.stopPrank();
+
+        uint256 finalBalance = DAI.balanceOf(ALICE);
+        assertGe(finalBalance, amountOut);
+    }
+
+    function testSwapNoTransfer() public {
+        uint256 amountIn = 10 ** 18;
+        uint256 amountOut = 1847751195973566072891;
+        bool zeroForOne = false;
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR,
+            WETH_DAI_POOL,
+            BOB,
+            zeroForOne,
+            uint8(ExecutorTransferMethods.TransferMethod.NONE)
+        );
+
+        deal(WETH_ADDR, address(this), amountIn);
+        IERC20(WETH_ADDR).transfer(address(WETH_DAI_POOL), amountIn);
         uniswapV2Exposed.swap(amountIn, protocolData);
 
         uint256 finalBalance = DAI.balanceOf(BOB);
@@ -154,7 +322,7 @@ contract UniswapV2ExecutorTest is Test, Constants {
     function testDecodeIntegration() public view {
         // Generated by the ExecutorStrategyEncoder - test_executor_strategy_encode
         bytes memory protocolData =
-            hex"c02aaa39b223fe8d0a0e5c4f27ead9083c756cc288e6a0c2ddd26feeb64f039a2c41296fcb3f5640000000000000000000000000000000000000000100";
+            hex"c02aaa39b223fe8d0a0e5c4f27ead9083c756cc288e6a0c2ddd26feeb64f039a2c41296fcb3f564000000000000000000000000000000000000000010000";
 
         (
             IERC20 tokenIn,
@@ -175,7 +343,7 @@ contract UniswapV2ExecutorTest is Test, Constants {
     function testSwapIntegration() public {
         // Generated by the ExecutorStrategyEncoder - test_executor_strategy_encode
         bytes memory protocolData =
-            hex"c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a478c2975ab1ea89e8196811f51a7b7ade33eb111d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e00";
+            hex"c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a478c2975ab1ea89e8196811f51a7b7ade33eb111d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e0000";
         uint256 amountIn = 10 ** 18;
         uint256 amountOut = 1847751195973566072891;
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
@@ -189,8 +357,13 @@ contract UniswapV2ExecutorTest is Test, Constants {
         uint256 amountIn = 10 ** 18;
         bool zeroForOne = false;
         address fakePool = address(new FakeUniswapV2Pool(WETH_ADDR, DAI_ADDR));
-        bytes memory protocolData =
-            abi.encodePacked(WETH_ADDR, fakePool, BOB, zeroForOne);
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR,
+            fakePool,
+            BOB,
+            zeroForOne,
+            uint8(ExecutorTransferMethods.TransferMethod.TRANSFER)
+        );
 
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
         vm.expectRevert(UniswapV2Executor__InvalidTarget.selector);
@@ -204,8 +377,13 @@ contract UniswapV2ExecutorTest is Test, Constants {
         vm.rollFork(26857267);
         uint256 amountIn = 10 * 10 ** 6;
         bool zeroForOne = true;
-        bytes memory protocolData =
-            abi.encodePacked(BASE_USDC, USDC_MAG7_POOL, BOB, zeroForOne);
+        bytes memory protocolData = abi.encodePacked(
+            BASE_USDC,
+            USDC_MAG7_POOL,
+            BOB,
+            zeroForOne,
+            uint8(ExecutorTransferMethods.TransferMethod.TRANSFER)
+        );
 
         deal(BASE_USDC, address(uniswapV2Exposed), amountIn);
 

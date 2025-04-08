@@ -70,15 +70,14 @@ contract UniswapV2Executor is IExecutor, ExecutorTransferMethods {
             TransferMethod method
         )
     {
-        if (data.length != 61) {
+        if (data.length != 62) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         inToken = IERC20(address(bytes20(data[0:20])));
         target = address(bytes20(data[20:40]));
         receiver = address(bytes20(data[40:60]));
         zeroForOne = uint8(data[60]) > 0;
-        // TODO properly decode, assume encoded using just 1 byte.
-        method = TransferMethod.TRANSFER;
+        method = TransferMethod(uint8(data[61]));
     }
 
     function _getAmountOut(address target, uint256 amountIn, bool zeroForOne)
