@@ -56,7 +56,8 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
         );
         pancakeV3Exposed = new UniswapV3ExecutorExposed(
             PANCAKESWAPV3_DEPLOYER_ETHEREUM,
-            PANCAKEV3_POOL_CODE_INIT_HASH, PERMIT2_ADDRESS
+            PANCAKEV3_POOL_CODE_INIT_HASH,
+            PERMIT2_ADDRESS
         );
         permit2 = IAllowanceTransfer(PERMIT2_ADDRESS);
     }
