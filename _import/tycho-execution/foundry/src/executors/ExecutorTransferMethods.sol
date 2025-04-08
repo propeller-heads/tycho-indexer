@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
-import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 
 error ExecutorTransferMethods__InvalidPermit2();
 
@@ -45,10 +44,7 @@ contract ExecutorTransferMethods {
         } else if (method == TransferMethod.TRANSFERPERMIT2) {
             // Permit2.permit is already called from the TychoRouter
             permit2.transferFrom(
-                sender,
-                receiver,
-                uint160(amount),
-                address(tokenIn)
+                sender, receiver, uint160(amount), address(tokenIn)
             );
         } else {
             // Funds are likely already in pool. Do nothing.

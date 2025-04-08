@@ -19,7 +19,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         (
             IAllowanceTransfer.PermitSingle memory permitSingle,
             bytes memory signature
-        ) = handlePermit2Approval(WETH_ADDR, amountIn);
+        ) = handlePermit2Approval(WETH_ADDR, tychoRouterAddr, amountIn);
 
         bytes memory protocolData = encodeUniswapV2Swap(
             WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
@@ -230,7 +230,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         (
             IAllowanceTransfer.PermitSingle memory permitSingle,
             bytes memory signature
-        ) = handlePermit2Approval(DAI_ADDR, amountIn);
+        ) = handlePermit2Approval(DAI_ADDR, tychoRouterAddr, amountIn);
 
         bytes memory protocolData =
             encodeUniswapV2Swap(DAI_ADDR, WETH_DAI_POOL, tychoRouterAddr, true);

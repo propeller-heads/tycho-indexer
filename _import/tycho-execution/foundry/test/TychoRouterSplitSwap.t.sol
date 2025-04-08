@@ -81,7 +81,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         (
             IAllowanceTransfer.PermitSingle memory permitSingle,
             bytes memory signature
-        ) = handlePermit2Approval(WETH_ADDR, amountIn);
+        ) = handlePermit2Approval(WETH_ADDR, tychoRouterAddr, amountIn);
 
         bytes[] memory swaps = _getSplitSwaps();
 
@@ -191,7 +191,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         (
             IAllowanceTransfer.PermitSingle memory permitSingle,
             bytes memory signature
-        ) = handlePermit2Approval(WETH_ADDR, amountIn);
+        ) = handlePermit2Approval(WETH_ADDR, tychoRouterAddr, amountIn);
 
         bytes[] memory swaps = _getSplitSwaps();
 
@@ -282,7 +282,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         (
             IAllowanceTransfer.PermitSingle memory permitSingle,
             bytes memory signature
-        ) = handlePermit2Approval(DAI_ADDR, amountIn);
+        ) = handlePermit2Approval(DAI_ADDR, tychoRouterAddr, amountIn);
 
         bytes memory protocolData =
             encodeUniswapV2Swap(DAI_ADDR, WETH_DAI_POOL, tychoRouterAddr, true);
@@ -325,7 +325,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         (
             IAllowanceTransfer.PermitSingle memory permitSingle,
             bytes memory signature
-        ) = handlePermit2Approval(WETH_ADDR, amountIn);
+        ) = handlePermit2Approval(WETH_ADDR, tychoRouterAddr, amountIn);
 
         uint256 expAmountOut = 1205_128428842122129186; //Swap 1 WETH for 1205.12 DAI
         bool zeroForOne = false;
@@ -377,7 +377,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         (
             IAllowanceTransfer.PermitSingle memory permitSingle,
             bytes memory signature
-        ) = handlePermit2Approval(WETH_ADDR, amountIn);
+        ) = handlePermit2Approval(WETH_ADDR, tychoRouterAddr, amountIn);
 
         bytes memory protocolData = encodeUniswapV2Swap(
             WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
@@ -426,7 +426,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         (
             IAllowanceTransfer.PermitSingle memory permitSingle,
             bytes memory signature
-        ) = handlePermit2Approval(USDE_ADDR, amountIn);
+        ) = handlePermit2Approval(USDE_ADDR, tychoRouterAddr, amountIn);
 
         UniswapV4Executor.UniswapV4Pool[] memory pools =
             new UniswapV4Executor.UniswapV4Pool[](1);
