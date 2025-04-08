@@ -6,16 +6,21 @@ use std::{
     sync::Arc,
 };
 
-use alloy::primitives::Address;
+use alloy::primitives::{Address, U256};
+use revm::primitives::KECCAK_EMPTY;
 use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{debug, error, info, warn};
 use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage, Header};
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{
+    dto::{ChangeType, ProtocolStateDelta},
+    Bytes,
+};
 
 use crate::{
     evm::{
         engine_db::{update_engine, SHARED_TYCHO_DB},
+        protocol::vm::{constants::ERC20_PROXY_BYTECODE, erc20_token::IMPLEMENTATION_SLOT},
         tycho_models::{AccountUpdate, ResponseAccount},
     },
     models::{Balances, Token},
@@ -38,6 +43,8 @@ struct DecoderState {
     states: HashMap<String, Box<dyn ProtocolSim>>,
     // maps contract address to the pools they affect
     contracts_map: HashMap<Bytes, HashSet<String>>,
+    // Maps original token address to their new proxy token address
+    token_proxy_tokens: HashMap<Address, Address>,
 }
 
 type DecodeFut =
@@ -235,14 +242,62 @@ impl TychoStreamDecoder {
                     }),
             );
 
+            let mut state_guard = self.state.write().await;
             // UPDATE VM STORAGE
+            let mut token_proxy_accounts: HashMap<Address, AccountUpdate> = HashMap::new();
+
             let storage_by_address: HashMap<Address, ResponseAccount> = protocol_msg
-                .clone()
                 .snapshots
                 .get_vm_storage()
                 .iter()
-                .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
+                .map(|(key, value)| {
+                    let addr = Address::from_slice(&key[..20]);
+                    let mut response_account: ResponseAccount = value.clone().into();
+                    if state_guard.tokens.contains_key(key) {
+                        response_account.code = ERC20_PROXY_BYTECODE.to_vec();
+                        response_account.code_hash = KECCAK_EMPTY;
+
+                        // Get or create proxy token address
+                        let proxy_addr = if !state_guard
+                            .token_proxy_tokens
+                            .contains_key(&addr)
+                        {
+                            let new_address = generate_proxy_token_address(
+                                state_guard.token_proxy_tokens.len() as u32,
+                            );
+                            state_guard
+                                .token_proxy_tokens
+                                .insert(addr, new_address);
+                            new_address
+                        } else {
+                            *state_guard
+                                .token_proxy_tokens
+                                .get(&addr)
+                                .unwrap()
+                        };
+
+                        // Create proxy token account
+                        let proxy_state = AccountUpdate {
+                            address: proxy_addr,
+                            chain: value.chain.into(),
+                            slots: HashMap::new(),
+                            balance: None,
+                            code: Some(value.code.to_vec()),
+                            change: ChangeType::Creation,
+                        };
+                        token_proxy_accounts.insert(proxy_addr, proxy_state);
+
+                        response_account.slots.insert(
+                            *IMPLEMENTATION_SLOT,
+                            U256::from_be_slice(proxy_addr.as_slice()),
+                        );
+                    };
+                    (addr, response_account)
+                })
                 .collect();
+            drop(state_guard);
+
+            let state_guard = self.state.read().await;
             let account_balances = protocol_msg
                 .clone()
                 .snapshots
@@ -261,7 +316,7 @@ impl TychoStreamDecoder {
                 SHARED_TYCHO_DB.clone(),
                 block.clone().into(),
                 Some(storage_by_address),
-                HashMap::new(),
+                token_proxy_accounts,
             )
             .await;
             info!("Engine updated");
@@ -358,11 +413,55 @@ impl TychoStreamDecoder {
             // PROCESS DELTAS
             if let Some(deltas) = protocol_msg.deltas.clone() {
                 // Update engine with account changes
+                let mut state_guard = self.state.write().await;
+
+                let mut token_proxy_accounts: HashMap<Address, AccountUpdate> = HashMap::new();
                 let account_update_by_address: HashMap<Address, AccountUpdate> = deltas
                     .account_updates
                     .iter()
-                    .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
+                    .map(|(key, value)| {
+                        let mut value: AccountUpdate = value.clone().into();
+                        let addr = Address::from_slice(&key[..20]);
+
+                        if state_guard.tokens.contains_key(key) {
+                            value.code = Some(ERC20_PROXY_BYTECODE.to_vec());
+
+                            // Get or create proxy token address
+                            let proxy_addr = if !state_guard
+                                .token_proxy_tokens
+                                .contains_key(&addr)
+                            {
+                                let new_address = generate_proxy_token_address(
+                                    state_guard.token_proxy_tokens.len() as u32,
+                                );
+                                state_guard
+                                    .token_proxy_tokens
+                                    .insert(addr, new_address);
+                                new_address
+                            } else {
+                                *state_guard
+                                    .token_proxy_tokens
+                                    .get(&addr)
+                                    .unwrap()
+                            };
+
+                            // Create proxy token account
+                            let proxy_state = AccountUpdate {
+                                address: proxy_addr,
+                                chain: value.chain,
+                                slots: HashMap::new(),
+                                balance: None,
+                                code: value.code.clone(),
+                                change: ChangeType::Creation,
+                            };
+                            token_proxy_accounts.insert(proxy_addr, proxy_state);
+                        };
+                        (addr, value)
+                    })
                     .collect();
+                drop(state_guard);
+
+                let state_guard = self.state.read().await;
                 info!("Updating engine with {} contract deltas", deltas.state_updates.len());
                 update_engine(
                     SHARED_TYCHO_DB.clone(),
@@ -507,6 +606,14 @@ impl TychoStreamDecoder {
         }
         Ok(())
     }
+}
+
+fn generate_proxy_token_address(idx: u32) -> Address {
+    let padded_idx = format!("{:x}", idx);
+    let padded_zeroes = "0".repeat(33 - padded_idx.len());
+    let proxy_token_address = format!("0x{padded_zeroes}{padded_idx}badbabe");
+    Address::parse_checksummed(&proxy_token_address, None)
+        .expect("Failed to parse proxy token address")
 }
 
 #[cfg(test)]
@@ -699,5 +806,18 @@ mod tests {
             .expect("decode failure");
 
         // The mock framework will assert that `delta_transition` was called exactly once
+    }
+
+    #[test]
+    fn test_generate_proxy_token_address() {
+        let idx = 1;
+        let expected_address = "0x000000000000000000000000000000001badbabe";
+        let generated_address = generate_proxy_token_address(idx);
+        assert_eq!(generated_address, Address::parse_checksummed(expected_address, None).unwrap());
+
+        let idx = 123456;
+        let expected_address = "0x00000000000000000000000000001e240badbabe";
+        let generated_address = generate_proxy_token_address(idx);
+        assert_eq!(generated_address, Address::parse_checksummed(expected_address, None).unwrap());
     }
 }
