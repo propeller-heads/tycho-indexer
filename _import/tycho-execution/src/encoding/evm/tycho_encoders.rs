@@ -161,7 +161,9 @@ impl TychoEncoder for TychoRouterEncoder {
 
 /// Represents an encoder for one swap to be executed directly against an Executor. This is useful
 /// when you want to bypass the Tycho Router, use your own Router contract and just need the
-/// calldata for a particular swap. # Fields
+/// calldata for a particular swap.
+///
+/// # Fields
 /// * `swap_encoder_registry`: Registry of swap encoders
 /// * `native_address`: Address of the chain's native token
 pub struct TychoExecutorEncoder {
