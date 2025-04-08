@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy::primitives::{Address, U256};
+use alloy::primitives::{address, Address, U256};
 use revm::primitives::KECCAK_EMPTY;
 use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
@@ -611,9 +611,8 @@ impl TychoStreamDecoder {
 fn generate_proxy_token_address(idx: u32) -> Address {
     let padded_idx = format!("{:x}", idx);
     let padded_zeroes = "0".repeat(33 - padded_idx.len());
-    let proxy_token_address = format!("0x{padded_zeroes}{padded_idx}badbabe");
-    Address::parse_checksummed(&proxy_token_address, None)
-        .expect("Failed to parse proxy token address")
+    let proxy_token_address = format!("{padded_zeroes}{padded_idx}BAdbaBe");
+    Address::from_slice(&hex::decode(proxy_token_address).expect("Invalid string for spender"))
 }
 
 #[cfg(test)]
@@ -811,13 +810,11 @@ mod tests {
     #[test]
     fn test_generate_proxy_token_address() {
         let idx = 1;
-        let expected_address = "0x000000000000000000000000000000001badbabe";
         let generated_address = generate_proxy_token_address(idx);
-        assert_eq!(generated_address, Address::parse_checksummed(expected_address, None).unwrap());
+        assert_eq!(generated_address, address!("000000000000000000000000000000001badbabe"));
 
         let idx = 123456;
-        let expected_address = "0x00000000000000000000000000001e240badbabe";
         let generated_address = generate_proxy_token_address(idx);
-        assert_eq!(generated_address, Address::parse_checksummed(expected_address, None).unwrap());
+        assert_eq!(generated_address, address!("00000000000000000000000000001e240badbabe"));
     }
 }

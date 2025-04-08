@@ -5,20 +5,9 @@ use alloy::{
     sol_types::SolValue,
 };
 use lazy_static::lazy_static;
-use revm::DatabaseRef;
 
-use super::{
-    constants::EXTERNAL_ACCOUNT, tycho_simulation_contract::TychoSimulationContract,
-    utils::get_storage_slot_index_at_key,
-};
-use crate::{
-    evm::{
-        engine_db::{engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader},
-        simulation::SimulationEngine,
-        ContractCompiler, SlotId,
-    },
-    protocol::errors::SimulationError,
-};
+use super::utils::get_storage_slot_index_at_key;
+use crate::evm::{ContractCompiler, SlotId};
 
 #[derive(Clone, Debug, PartialEq)]
 /// A struct representing ERC20 tokens storage slots.
@@ -37,59 +26,9 @@ impl ERC20Slots {
 
 pub(crate) type Overwrites = HashMap<SlotId, U256>;
 
-pub(crate) struct ERC20OverwriteFactory {
-    token_address: Address,
-    overwrites: Overwrites,
-    balance_slot: SlotId,
-    allowance_slot: SlotId,
-    compiler: ContractCompiler,
-}
-
-impl ERC20OverwriteFactory {
-    pub fn new(
-        token_address: Address,
-        token_slots: ERC20Slots,
-        compiler: ContractCompiler,
-    ) -> Self {
-        ERC20OverwriteFactory {
-            token_address,
-            overwrites: HashMap::new(),
-            balance_slot: token_slots.balance_map,
-            allowance_slot: token_slots.allowance_map,
-            compiler,
-        }
-    }
-
-    pub fn set_balance(&mut self, balance: U256, owner: Address) {
-        let storage_index = get_storage_slot_index_at_key(owner, self.balance_slot, self.compiler);
-        self.overwrites
-            .insert(storage_index, balance);
-    }
-
-    pub fn set_allowance(&mut self, allowance: U256, spender: Address, owner: Address) {
-        let owner_slot = get_storage_slot_index_at_key(owner, self.allowance_slot, self.compiler);
-        let storage_index = get_storage_slot_index_at_key(spender, owner_slot, self.compiler);
-        self.overwrites
-            .insert(storage_index, allowance);
-    }
-
-    #[cfg(test)]
-    pub fn set_total_supply(&mut self, supply: U256) {
-        let total_supply_slot = SlotId::from(2);
-        self.overwrites
-            .insert(total_supply_slot, supply);
-    }
-
-    pub fn get_overwrites(&self) -> HashMap<Address, Overwrites> {
-        let mut result = HashMap::new();
-        result.insert(self.token_address, self.overwrites.clone());
-        result
-    }
-}
-
 // Storage slots constants for TokenProxy contract
 lazy_static! {
-    static ref IMPLEMENTATION_SLOT: SlotId =
+    pub static ref IMPLEMENTATION_SLOT: SlotId =
         U256::from_str("0x6677C72CDEB41ACAF2B17EC8A6E275C4205F27DBFE4DE34EBAF2E928A7E610DB")
             .unwrap();
     static ref BALANCES_MAPPING_POSITION: SlotId =
@@ -127,6 +66,7 @@ pub(crate) struct TokenProxyOverwriteFactory {
     compiler: ContractCompiler,
 }
 
+#[allow(dead_code)]
 impl TokenProxyOverwriteFactory {
     pub fn new(token_address: Address, proxy_address: Option<Address>) -> Self {
         let mut instance = Self {
@@ -384,144 +324,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use chrono::NaiveDateTime;
-
     use super::*;
-    use crate::evm::engine_db::{
-        simulation_db::{EVMProvider, SimulationDB},
-        utils::{get_client, get_runtime},
-    };
-
-    fn setup_factory() -> ERC20OverwriteFactory {
-        let token_address: Address = Address::from_slice(
-            &hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
-                .expect("Invalid token address"),
-        );
-
-        let slots = ERC20Slots::new(SlotId::from(5), SlotId::from(6));
-        ERC20OverwriteFactory::new(token_address, slots, ContractCompiler::Solidity)
-    }
 
     fn get_metadata_slot(key: &str) -> SlotId {
         let key_bytes = string_to_storage_bytes(key);
         let mapping_slot_bytes: [u8; 32] = HAS_CUSTOM_METADATA_POSITION.to_be_bytes();
         ContractCompiler::Solidity.compute_map_slot(&key_bytes, &mapping_slot_bytes)
-    }
-
-    #[test]
-    fn test_set_balance() {
-        let mut factory = setup_factory();
-        let owner = Address::random();
-        let balance = U256::from(1000);
-
-        factory.set_balance(balance, owner);
-
-        assert_eq!(factory.overwrites.len(), 1);
-        assert!(factory
-            .overwrites
-            .values()
-            .any(|&v| v == balance));
-    }
-
-    #[test]
-    fn test_set_allowance() {
-        let mut factory = setup_factory();
-        let owner = Address::random();
-        let spender = Address::random();
-        let allowance = U256::from(500);
-
-        factory.set_allowance(allowance, spender, owner);
-
-        assert_eq!(factory.overwrites.len(), 1);
-        assert!(factory
-            .overwrites
-            .values()
-            .any(|&v| v == allowance));
-    }
-
-    #[test]
-    fn test_set_total_supply() {
-        let mut factory = setup_factory();
-        let supply = U256::from(1_000_000);
-
-        factory.set_total_supply(supply);
-
-        assert_eq!(factory.overwrites.len(), 1);
-        let total_supply_slot = SlotId::from(2);
-        assert_eq!(factory.overwrites[&total_supply_slot], supply);
-    }
-
-    #[test]
-    fn test_get_overwrites() {
-        let mut factory = setup_factory();
-        let supply = U256::from(1_000_000);
-        factory.set_total_supply(supply);
-
-        let overwrites = factory.get_overwrites();
-
-        assert_eq!(overwrites.len(), 1);
-        assert!(overwrites.contains_key(&factory.token_address));
-        assert_eq!(overwrites[&factory.token_address].len(), 1);
-        let total_supply_slot = SlotId::from(2);
-        assert_eq!(overwrites[&factory.token_address][&total_supply_slot], supply);
-    }
-
-    fn new_state() -> SimulationDB<EVMProvider> {
-        let runtime = get_runtime();
-        let client = get_client(None);
-        SimulationDB::new(client, runtime, None)
-    }
-
-    #[test]
-    fn test_brute_force_slot_solidity() {
-        let state = new_state();
-
-        let eng = SimulationEngine::new(state, false);
-        let block = BlockHeader {
-            number: 20_000_000,
-            timestamp: NaiveDateTime::parse_from_str("2024-06-01T22:36:47", "%Y-%m-%dT%H:%M:%S")
-                .unwrap()
-                .and_utc()
-                .timestamp() as u64,
-            ..Default::default()
-        };
-
-        let (slots, compiler) = brute_force_slots(
-            &Address::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
-            &block,
-            &eng,
-        )
-        .unwrap();
-
-        assert_eq!(ERC20Slots::new(U256::from(9), U256::from(10)), slots);
-        assert_eq!(ContractCompiler::Solidity, compiler);
-    }
-
-    #[test]
-    fn test_brute_force_slot_vyper() {
-        let state = new_state();
-
-        let eng = SimulationEngine::new(state, false);
-        let block = BlockHeader {
-            number: 20_000_000,
-            timestamp: NaiveDateTime::parse_from_str("2024-06-01T22:36:47", "%Y-%m-%dT%H:%M:%S")
-                .unwrap()
-                .and_utc()
-                .timestamp() as u64,
-            ..Default::default()
-        };
-
-        let (slots, compiler) = brute_force_slots(
-            &Address::from_str("0xa5588f7cdf560811710a2d82d3c9c99769db1dcb").unwrap(),
-            &block,
-            &eng,
-        )
-        .unwrap();
-
-        assert_eq!(ERC20Slots::new(U256::from(38), U256::from(39)), slots);
-        assert_eq!(ContractCompiler::Vyper, compiler);
     }
 
     #[test]

@@ -14,7 +14,7 @@ use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
 use super::{
     constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
-    erc20_token::{ERC20OverwriteFactory, ERC20Slots, Overwrites},
+    erc20_token::{Overwrites, TokenProxyOverwriteFactory},
     models::Capability,
     tycho_simulation_contract::TychoSimulationContract,
 };
@@ -28,7 +28,6 @@ use crate::{
             u256_num::{u256_to_biguint, u256_to_f64},
             utils::bytes_to_address,
         },
-        ContractCompiler, SlotId,
     },
     models::{Balances, Token},
     protocol::{
@@ -68,12 +67,6 @@ where
     involved_contracts: HashSet<Address>,
     /// A map of contracts to their token balances.
     contract_balances: HashMap<Address, HashMap<Address, U256>>,
-    /// Allows the specification of custom storage slots for token allowances and
-    /// balances. This is particularly useful for token contracts involved in protocol
-    /// logic that extends beyond simple transfer functionality.
-    /// Each entry also specify the compiler with which the target contract was compiled. This is
-    /// later used to compute storage slot for maps.
-    token_storage_slots: HashMap<Address, (ERC20Slots, ContractCompiler)>,
     /// Indicates if the protocol uses custom update rules and requires update
     /// triggers to recalculate spot prices ect. Default is to update on all changes on
     /// the pool.
@@ -104,7 +97,6 @@ where
         capabilities: HashSet<Capability>,
         block_lasting_overwrites: HashMap<Address, Overwrites>,
         involved_contracts: HashSet<Address>,
-        token_storage_slots: HashMap<Address, (ERC20Slots, ContractCompiler)>,
         manual_updates: bool,
         adapter_contract: TychoSimulationContract<D>,
     ) -> Self {
@@ -119,7 +111,6 @@ where
             block_lasting_overwrites,
             involved_contracts,
             contract_balances,
-            token_storage_slots,
             manual_updates,
             adapter_contract,
         }
@@ -227,8 +218,8 @@ where
                         })?;
                         let sell_token_decimals = self.get_decimals(tokens, &sell_token_address)?;
                         let buy_token_decimals = self.get_decimals(tokens, &buy_token_address)?;
-                        *unscaled_price * 10f64.powi(sell_token_decimals as i32) /
-                            10f64.powi(buy_token_decimals as i32)
+                        *unscaled_price * 10f64.powi(sell_token_decimals as i32)
+                            / 10f64.powi(buy_token_decimals as i32)
                     };
 
                     self.spot_prices
@@ -249,8 +240,8 @@ where
                     // Calculate the first sell amount (x1) as 1% of the maximum limit.
                     let x1 = self
                         .get_amount_limits(vec![t0, t1], overwrites.clone())?
-                        .0 /
-                        U256::from(100);
+                        .0
+                        / U256::from(100);
 
                     // Calculate the second sell amount (x2) as x1 + 1% of x1. 1.01% of the max
                     // limit
@@ -434,16 +425,7 @@ where
             res.push(self.get_balance_overwrites()?);
         }
 
-        let (slots, compiler) = self
-            .token_storage_slots
-            .get(sell_token)
-            .cloned()
-            .unwrap_or((
-                ERC20Slots::new(SlotId::from(0), SlotId::from(1)),
-                ContractCompiler::Solidity,
-            ));
-
-        let mut overwrites = ERC20OverwriteFactory::new(*sell_token, slots.clone(), compiler);
+        let mut overwrites = TokenProxyOverwriteFactory::new(*sell_token, None);
 
         overwrites.set_balance(max_amount, Address::from_slice(&*EXTERNAL_ACCOUNT.0));
 
@@ -483,21 +465,7 @@ where
         };
         if let Some(address) = address {
             for (token, bal) in &self.balances {
-                let (slots, compiler) = if self.involved_contracts.contains(token) {
-                    self.token_storage_slots
-                        .get(token)
-                        .cloned()
-                        .ok_or_else(|| {
-                            SimulationError::FatalError(
-                                "Failed to get balance overwrites: Token storage slots not found"
-                                    .into(),
-                            )
-                        })?
-                } else {
-                    (ERC20Slots::new(SlotId::from(0), SlotId::from(1)), ContractCompiler::Solidity)
-                };
-
-                let mut overwrites = ERC20OverwriteFactory::new(*token, slots, compiler);
+                let mut overwrites = TokenProxyOverwriteFactory::new(*token, None);
                 overwrites.set_balance(*bal, address);
                 balance_overwrites.extend(overwrites.get_overwrites());
             }
@@ -507,16 +475,7 @@ where
         // for a contract we explicitly track balances for)
         for (contract, balances) in &self.contract_balances {
             for (token, balance) in balances {
-                let (slots, compiler) = self
-                    .token_storage_slots
-                    .get(token)
-                    .cloned()
-                    .unwrap_or((
-                        ERC20Slots::new(SlotId::from(0), SlotId::from(1)),
-                        ContractCompiler::Solidity,
-                    ));
-
-                let mut overwrites = ERC20OverwriteFactory::new(*token, slots, compiler);
+                let mut overwrites = TokenProxyOverwriteFactory::new(*token, None);
                 overwrites.set_balance(*balance, *contract);
                 balance_overwrites.extend(overwrites.get_overwrites());
             }
@@ -599,8 +558,8 @@ where
         )?;
         let (sell_amount_respecting_limit, sell_amount_exceeds_limit) = if self
             .capabilities
-            .contains(&Capability::HardLimits) &&
-            sell_amount_limit < sell_amount
+            .contains(&Capability::HardLimits)
+            && sell_amount_limit < sell_amount
         {
             (sell_amount_limit, true)
         } else {
