@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::encoding::{
     errors::EncodingError,
     models::{Chain, EncodingContext, Swap},
@@ -11,7 +13,13 @@ pub trait SwapEncoder: Sync + Send {
     /// # Arguments
     /// * `executor_address` - The address of the contract that will execute the swap
     /// * `chain` - The chain on which the swap will be executed
-    fn new(executor_address: String, chain: Chain) -> Result<Self, EncodingError>
+    /// * `config` - Additional configuration parameters for the encoder, like vault or registry
+    ///   address
+    fn new(
+        executor_address: String,
+        chain: Chain,
+        config: Option<HashMap<String, String>>,
+    ) -> Result<Self, EncodingError>
     where
         Self: Sized;
 
