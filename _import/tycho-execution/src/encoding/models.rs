@@ -2,7 +2,7 @@ use hex;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use tycho_common::{
-    models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
+    models::{protocol::ProtocolComponent, Chain as TychoCommonChain},
     Bytes,
 };
 
@@ -121,15 +121,15 @@ pub struct Chain {
     pub name: String,
 }
 
-impl From<TychoCoreChain> for Chain {
-    fn from(chain: TychoCoreChain) -> Self {
+impl From<TychoCommonChain> for Chain {
+    fn from(chain: TychoCommonChain) -> Self {
         match chain {
-            TychoCoreChain::Ethereum => Chain { id: 1, name: chain.to_string() },
-            TychoCoreChain::ZkSync => Chain { id: 324, name: chain.to_string() },
-            TychoCoreChain::Arbitrum => Chain { id: 42161, name: chain.to_string() },
-            TychoCoreChain::Starknet => Chain { id: 0, name: chain.to_string() },
-            TychoCoreChain::Base => Chain { id: 8453, name: chain.to_string() },
-            TychoCoreChain::Unichain => Chain { id: 130, name: chain.to_string() },
+            TychoCommonChain::Ethereum => Chain { id: 1, name: chain.to_string() },
+            TychoCommonChain::ZkSync => Chain { id: 324, name: chain.to_string() },
+            TychoCommonChain::Arbitrum => Chain { id: 42161, name: chain.to_string() },
+            TychoCommonChain::Starknet => Chain { id: 0, name: chain.to_string() },
+            TychoCommonChain::Base => Chain { id: 8453, name: chain.to_string() },
+            TychoCommonChain::Unichain => Chain { id: 130, name: chain.to_string() },
         }
     }
 }

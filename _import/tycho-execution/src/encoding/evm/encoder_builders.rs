@@ -1,13 +1,15 @@
-use tycho_common::{models::Chain, Bytes};
+use std::collections::HashMap;
+
+use tycho_common::{models::Chain as TychoCommonChain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
-        strategy_encoder::strategy_encoders::SplitSwapStrategyEncoder,
+        constants::DEFAULT_ROUTERS_JSON,
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         tycho_encoders::{TychoExecutorEncoder, TychoRouterEncoder},
     },
-    strategy_encoder::StrategyEncoder,
+    models::Chain,
     tycho_encoder::TychoEncoder,
 };
 
@@ -16,7 +18,6 @@ use crate::encoding::{
 /// This struct allows setting a chain and strategy encoder before building the final encoder.
 pub struct TychoRouterEncoderBuilder {
     swapper_pk: Option<String>,
-    strategy: Option<Box<dyn StrategyEncoder>>,
     chain: Option<Chain>,
     executors_file_path: Option<String>,
     router_address: Option<Bytes>,
@@ -33,13 +34,12 @@ impl TychoRouterEncoderBuilder {
         TychoRouterEncoderBuilder {
             swapper_pk: None,
             chain: None,
-            strategy: None,
             executors_file_path: None,
             router_address: None,
         }
     }
-    pub fn chain(mut self, chain: Chain) -> Self {
-        self.chain = Some(chain);
+    pub fn chain(mut self, chain: TychoCommonChain) -> Self {
+        self.chain = Some(chain.into());
         self
     }
 
@@ -62,32 +62,36 @@ impl TychoRouterEncoderBuilder {
         self
     }
 
-    /// Sets the `strategy_encoder` manually.
-    ///
-    /// **Note**: This method should not be used in combination with `tycho_router` or
-    /// `direct_execution`.
-    pub fn strategy_encoder(mut self, strategy: Box<dyn StrategyEncoder>) -> Self {
-        self.strategy = Some(strategy);
-        self
-    }
-
-    /// Builds the `TychoRouterEncoder` instance using the configured chain and strategy.
-    /// Returns an error if either the chain or strategy has not been set.
+    /// Builds the `TychoRouterEncoder` instance using the configured chain.
+    /// Returns an error if either the chain has not been set.
     pub fn build(self) -> Result<Box<dyn TychoEncoder>, EncodingError> {
         if let Some(chain) = self.chain {
-            let swap_encoder_registry =
-                SwapEncoderRegistry::new(self.executors_file_path.clone(), chain)?;
+            let tycho_router_address;
+            if let Some(address) = self.router_address {
+                tycho_router_address = address;
+            } else {
+                let default_routers: HashMap<String, Bytes> =
+                    serde_json::from_str(DEFAULT_ROUTERS_JSON)?;
+                tycho_router_address = default_routers
+                    .get(&chain.name)
+                    .ok_or(EncodingError::FatalError(
+                        "No default router address found for chain".to_string(),
+                    ))?
+                    .to_owned();
+            }
 
-            let strategy = Box::new(SplitSwapStrategyEncoder::new(
+            let swap_encoder_registry =
+                SwapEncoderRegistry::new(self.executors_file_path.clone(), chain.clone())?;
+
+            Ok(Box::new(TychoRouterEncoder::new(
                 chain,
                 swap_encoder_registry,
                 self.swapper_pk,
-                self.router_address.clone(),
-            )?);
-            Ok(Box::new(TychoRouterEncoder::new(chain, strategy)?))
+                tycho_router_address,
+            )?))
         } else {
             Err(EncodingError::FatalError(
-                "Please set the chain and strategy before building the encoder".to_string(),
+                "Please set the chain and router address before building the encoder".to_string(),
             ))
         }
     }
@@ -109,8 +113,8 @@ impl TychoExecutorEncoderBuilder {
     pub fn new() -> Self {
         TychoExecutorEncoderBuilder { chain: None, executors_file_path: None }
     }
-    pub fn chain(mut self, chain: Chain) -> Self {
-        self.chain = Some(chain);
+    pub fn chain(mut self, chain: TychoCommonChain) -> Self {
+        self.chain = Some(chain.into());
         self
     }
 
@@ -126,7 +130,7 @@ impl TychoExecutorEncoderBuilder {
     pub fn build(self) -> Result<Box<dyn TychoEncoder>, EncodingError> {
         if let Some(chain) = self.chain {
             let swap_encoder_registry =
-                SwapEncoderRegistry::new(self.executors_file_path.clone(), chain)?;
+                SwapEncoderRegistry::new(self.executors_file_path.clone(), chain.clone())?;
             Ok(Box::new(TychoExecutorEncoder::new(chain, swap_encoder_registry)?))
         } else {
             Err(EncodingError::FatalError(
