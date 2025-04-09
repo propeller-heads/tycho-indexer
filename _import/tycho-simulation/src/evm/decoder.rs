@@ -248,9 +248,12 @@ impl TychoStreamDecoder {
                 .snapshots
                 .get_vm_storage()
                 .iter()
-                .map(|(addr, acc)| {
+                .filter_map(|(addr, acc)| {
                     let balances = acc.token_balances.clone();
-                    (addr.clone(), balances)
+                    if balances.is_empty() {
+                        return None;
+                    }
+                    Some((addr.clone(), balances))
                 })
                 .collect::<AccountBalances>();
             info!("Updating engine with {} snapshots", storage_by_address.len());
