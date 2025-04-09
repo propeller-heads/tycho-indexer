@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IExecutor} from "@interfaces/IExecutor.sol";
+import {ICallback} from "@interfaces/ICallback.sol";
 import {ICore} from "@ekubo/interfaces/ICore.sol";
 import {ILocker, IPayer} from "@ekubo/interfaces/IFlashAccountant.sol";
 import {NATIVE_TOKEN_ADDRESS} from "@ekubo/math/constants.sol";
@@ -11,15 +12,18 @@ import {LibBytes} from "@solady/utils/LibBytes.sol";
 import {Config, EkuboPoolKey} from "@ekubo/types/poolKey.sol";
 import {MAX_SQRT_RATIO, MIN_SQRT_RATIO} from "@ekubo/types/sqrtRatio.sol";
 
-contract EkuboExecutor is IExecutor, ILocker, IPayer {
+contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
     error EkuboExecutor__InvalidDataLength();
     error EkuboExecutor__CoreOnly();
     error EkuboExecutor__UnknownCallback();
 
     ICore immutable core;
 
-    uint256 constant POOL_DATA_OFFSET = 92;
+    uint256 constant POOL_DATA_OFFSET = 56;
     uint256 constant HOP_BYTE_LEN = 52;
+
+    bytes4 constant LOCKED_SELECTOR = 0xb45a3c0e; // locked(uint256)
+    bytes4 constant PAY_CALLBACK_SELECTOR = 0x599d0714; // payCallback(uint256,address)
 
     constructor(address _core) {
         core = ICore(_core);
@@ -37,60 +41,45 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer {
             uint256(_lock(bytes.concat(bytes16(uint128(amountIn)), data)));
     }
 
-    function locked(uint256) external coreOnly {
-        int128 nextAmountIn = int128(uint128(bytes16(msg.data[36:52])));
-        uint128 tokenInDebtAmount = uint128(nextAmountIn);
+    function handleCallback(bytes calldata raw)
+        external
+        returns (bytes memory)
+    {
+        verifyCallback(raw);
 
-        address receiver = address(bytes20(msg.data[52:72]));
-        address tokenIn = address(bytes20(msg.data[72:POOL_DATA_OFFSET]));
+        // Without selector and locker id
+        bytes calldata stripped = raw[36:];
 
-        address nextTokenIn = tokenIn;
+        bytes4 selector = bytes4(raw[:4]);
 
-        uint256 hopsLength = (msg.data.length - POOL_DATA_OFFSET) / HOP_BYTE_LEN;
-
-        uint256 offset = POOL_DATA_OFFSET;
-
-        for (uint256 i = 0; i < hopsLength; i++) {
-            address nextTokenOut =
-                address(bytes20(LibBytes.loadCalldata(msg.data, offset)));
-            Config poolConfig =
-                Config.wrap(LibBytes.loadCalldata(msg.data, offset + 20));
-
-            (address token0, address token1, bool isToken1) = nextTokenIn
-                > nextTokenOut
-                ? (nextTokenOut, nextTokenIn, true)
-                : (nextTokenIn, nextTokenOut, false);
-
-            // slither-disable-next-line calls-loop
-            (int128 delta0, int128 delta1) = core.swap_611415377(
-                EkuboPoolKey(token0, token1, poolConfig),
-                nextAmountIn,
-                isToken1,
-                isToken1 ? MAX_SQRT_RATIO : MIN_SQRT_RATIO,
-                0
-            );
-
-            nextTokenIn = nextTokenOut;
-            nextAmountIn = -(isToken1 ? delta0 : delta1);
-
-            offset += HOP_BYTE_LEN;
+        bytes memory result = "";
+        if (selector == LOCKED_SELECTOR) {
+            int128 calculatedAmount = _locked(stripped);
+            result = abi.encodePacked(calculatedAmount);
+        } else if (selector == PAY_CALLBACK_SELECTOR) {
+            _payCallback(stripped);
+        } else {
+            revert EkuboExecutor__UnknownCallback();
         }
 
-        _pay(tokenIn, tokenInDebtAmount);
+        return result;
+    }
 
-        core.withdraw(nextTokenIn, receiver, uint128(nextAmountIn));
+    function verifyCallback(bytes calldata) public view coreOnly {}
 
+    function locked(uint256) external coreOnly {
+        // Without selector and locker id
+        int128 calculatedAmount = _locked(msg.data[36:]);
         // slither-disable-next-line assembly
         assembly ("memory-safe") {
-            mstore(0, nextAmountIn)
+            mstore(0, calculatedAmount)
             return(0x10, 16)
         }
     }
 
-    function payCallback(uint256, address token) external coreOnly {
-        uint128 amount = uint128(bytes16(msg.data[68:84]));
-
-        SafeTransferLib.safeTransfer(token, address(core), amount);
+    function payCallback(uint256, address /*token*/ ) external coreOnly {
+        // Without selector and locker id
+        _payCallback(msg.data[36:]);
     }
 
     function _lock(bytes memory data)
@@ -121,6 +110,52 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer {
         }
     }
 
+    function _locked(bytes calldata swapData) internal returns (int128) {
+        int128 nextAmountIn = int128(uint128(bytes16(swapData[0:16])));
+        uint128 tokenInDebtAmount = uint128(nextAmountIn);
+
+        address receiver = address(bytes20(swapData[16:36]));
+        address tokenIn = address(bytes20(swapData[36:POOL_DATA_OFFSET]));
+
+        address nextTokenIn = tokenIn;
+
+        uint256 hopsLength = (swapData.length - POOL_DATA_OFFSET) / HOP_BYTE_LEN;
+
+        uint256 offset = POOL_DATA_OFFSET;
+
+        for (uint256 i = 0; i < hopsLength; i++) {
+            address nextTokenOut =
+                address(bytes20(LibBytes.loadCalldata(swapData, offset)));
+            Config poolConfig =
+                Config.wrap(LibBytes.loadCalldata(swapData, offset + 20));
+
+            (address token0, address token1, bool isToken1) = nextTokenIn
+                > nextTokenOut
+                ? (nextTokenOut, nextTokenIn, true)
+                : (nextTokenIn, nextTokenOut, false);
+
+            // slither-disable-next-line calls-loop
+            (int128 delta0, int128 delta1) = core.swap_611415377(
+                EkuboPoolKey(token0, token1, poolConfig),
+                nextAmountIn,
+                isToken1,
+                isToken1 ? MAX_SQRT_RATIO : MIN_SQRT_RATIO,
+                0
+            );
+
+            nextTokenIn = nextTokenOut;
+            nextAmountIn = -(isToken1 ? delta0 : delta1);
+
+            offset += HOP_BYTE_LEN;
+        }
+
+        _pay(tokenIn, tokenInDebtAmount);
+
+        core.withdraw(nextTokenIn, receiver, uint128(nextAmountIn));
+
+        return nextAmountIn;
+    }
+
     function _pay(address token, uint128 amount) internal {
         address target = address(core);
 
@@ -142,6 +177,13 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer {
                 }
             }
         }
+    }
+
+    function _payCallback(bytes calldata payData) internal {
+        address token = address(bytes20(payData[12:32])); // This arg is abi-encoded
+        uint128 amount = uint128(bytes16(payData[32:48]));
+
+        SafeTransferLib.safeTransfer(token, address(core), amount);
     }
 
     // To receive withdrawals from Core

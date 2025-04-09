@@ -85,7 +85,10 @@ contract Dispatcher {
     }
 
     // slither-disable-next-line assembly
-    function _handleCallback(bytes calldata data) internal {
+    function _handleCallback(bytes calldata data)
+        internal
+        returns (bytes memory)
+    {
         address executor;
         assembly {
             executor := tload(0)
@@ -114,5 +117,9 @@ contract Dispatcher {
         assembly {
             tstore(0, 0)
         }
+
+        // this is necessary because the delegatecall will prepend extra bytes we don't want like the length and prefix
+        bytes memory decodedResult = abi.decode(result, (bytes));
+        return decodedResult;
     }
 }

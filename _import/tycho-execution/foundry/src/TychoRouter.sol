@@ -367,7 +367,12 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @dev We use the fallback function to allow flexibility on callback.
      */
     fallback() external {
-        _handleCallback(msg.data);
+        bytes memory result = _handleCallback(msg.data);
+        // slither-disable-next-line assembly
+        assembly ("memory-safe") {
+            // Propagate the calculatedAmount
+            return(add(result, 32), 16)
+        }
     }
 
     /**
