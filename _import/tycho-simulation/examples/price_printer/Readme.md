@@ -7,5 +7,5 @@ quotes from each pool.
 
 ```bash
 export RPC_URL=<your-node-rpc-url>
-cargo run --release --example price_printer -- --tvl-threshold 1000 --chain <ethereum | base>
+cargo run --release --example price_printer -- --tvl-threshold 1000 --chain <ethereum | base | unichain>
 ```
