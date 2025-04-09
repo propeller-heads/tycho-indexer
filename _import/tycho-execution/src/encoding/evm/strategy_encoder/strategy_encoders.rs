@@ -1783,7 +1783,11 @@ mod tests {
 
         let static_attributes = HashMap::from([(
             "factory".to_string(),
-            Bytes::from("0x98ee851a00abee0d95d08cf4ca2bdce32aeaaf7f"),
+            Bytes::from(
+                "0x98ee851a00abee0d95d08cf4ca2bdce32aeaaf7f"
+                    .as_bytes()
+                    .to_vec(),
+            ),
         )]);
 
         let component = ProtocolComponent {
@@ -1839,7 +1843,14 @@ mod tests {
         let token_in = Bytes::from("0x0000000000000000000000000000000000000000"); // ETH
         let token_out = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"); // STETH
 
-        let static_attributes = HashMap::from([("factory".to_string(), Bytes::from(vec![]))]);
+        let static_attributes = HashMap::from([(
+            "factory".to_string(),
+            Bytes::from(
+                "0x0000000000000000000000000000000000000000"
+                    .as_bytes()
+                    .to_vec(),
+            ),
+        )]);
 
         let component = ProtocolComponent {
             id: String::from("0xDC24316b9AE028F1497c275EB9192a3Ea0f67022"),

@@ -380,11 +380,7 @@ pub struct CurveSwapEncoder {
 }
 
 impl CurveSwapEncoder {
-    fn get_pool_type(
-        &self,
-        pool_id: &str,
-        factory_address: Option<&str>,
-    ) -> Result<U8, EncodingError> {
+    fn get_pool_type(&self, pool_id: &str, factory_address: &str) -> Result<U8, EncodingError> {
         match pool_id {
             // TriPool
             "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7" => Ok(U8::from(1)),
@@ -397,25 +393,22 @@ impl CurveSwapEncoder {
             // FRAXUSDCPool
             "0xDcEF968d416a41Cdac0ED8702fAC8128A64241A2" => Ok(U8::from(1)),
             _ => match factory_address {
-                Some(address) => match address {
-                    // CryptoSwapNG factory
-                    "0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf" => Ok(U8::from(1)),
-                    // Metapool factory
-                    "0xB9fC157394Af804a3578134A6585C0dc9cc990d4" => Ok(U8::from(1)),
-                    // CryptoPool factory
-                    "0xF18056Bbd320E96A48e3Fbf8bC061322531aac99" => Ok(U8::from(2)),
-                    // Tricrypto factory
-                    "0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963" => Ok(U8::from(3)),
-                    // Twocrypto factory
-                    "0x98EE851a00abeE0d95D08cF4CA2BdCE32aeaAF7F" => Ok(U8::from(2)),
-                    // StableSwap factory
-                    "0x4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d" => Ok(U8::from(1)),
-                    _ => Err(EncodingError::FatalError(format!(
-                        "Unsupported curve factory address: {}",
-                        address
-                    ))),
-                },
-                None => Err(EncodingError::FatalError("Unsupported curve pool type".to_string())),
+                // CryptoSwapNG factory
+                "0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf" => Ok(U8::from(1)),
+                // Metapool factory
+                "0xB9fC157394Af804a3578134A6585C0dc9cc990d4" => Ok(U8::from(1)),
+                // CryptoPool factory
+                "0xF18056Bbd320E96A48e3Fbf8bC061322531aac99" => Ok(U8::from(2)),
+                // Tricrypto factory
+                "0x0c0e5f2fF0ff18a3be9b835635039256dC4B4963" => Ok(U8::from(3)),
+                // Twocrypto factory
+                "0x98EE851a00abeE0d95D08cF4CA2BdCE32aeaAF7F" => Ok(U8::from(2)),
+                // StableSwap factory
+                "0x4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d" => Ok(U8::from(1)),
+                _ => Err(EncodingError::FatalError(format!(
+                    "Unsupported curve factory address: {}",
+                    factory_address
+                ))),
             },
         }
     }
@@ -532,14 +525,17 @@ impl SwapEncoder for CurveSwapEncoder {
             approval_needed = true;
         }
 
-        let factory_bytes = get_static_attribute(&swap, "factory")?;
-        let factory = if factory_bytes.is_empty() {
-            None
-        } else {
-            Some(Address::from_slice(&factory_bytes).to_string())
-        };
+        let factory_bytes = get_static_attribute(&swap, "factory")?.to_vec();
+        // the conversion to Address is necessary to checksum the address
+        let factory_address =
+            Address::from_str(std::str::from_utf8(&factory_bytes).map_err(|_| {
+                EncodingError::FatalError(
+                    "Failed to convert curve factory address to string".to_string(),
+                )
+            })?)
+            .map_err(|_| EncodingError::FatalError("Invalid curve factory address".to_string()))?;
 
-        let pool_type = self.get_pool_type(&swap.component.id, factory.as_deref())?;
+        let pool_type = self.get_pool_type(&swap.component.id, &factory_address.to_string())?;
 
         let (i, j) = self.get_coin_indexes(component_address, token_in, token_out)?;
 
@@ -1196,7 +1192,14 @@ mod tests {
         #[test]
         fn test_curve_encode_tripool() {
             let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-            static_attributes.insert("factory".into(), Bytes::from(vec![]));
+            static_attributes.insert(
+                "factory".into(),
+                Bytes::from(
+                    "0x0000000000000000000000000000000000000000"
+                        .as_bytes()
+                        .to_vec(),
+                ),
+            );
             let curve_tri_pool = ProtocolComponent {
                 id: String::from("0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7"),
                 protocol_system: String::from("vm:curve"),
@@ -1256,7 +1259,11 @@ mod tests {
             let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
             static_attributes.insert(
                 "factory".into(),
-                Bytes::from("0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf"),
+                Bytes::from(
+                    "0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf"
+                        .as_bytes()
+                        .to_vec(),
+                ),
             );
             let curve_pool = ProtocolComponent {
                 id: String::from("0x02950460E2b9529D0E00284A5fA2d7bDF3fA4d72"),
@@ -1316,7 +1323,14 @@ mod tests {
             // This test is for the stETH pool, which is a special case in Curve
             // where the token in is ETH but not as the zero address.
             let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-            static_attributes.insert("factory".into(), Bytes::from(vec![]));
+            static_attributes.insert(
+                "factory".into(),
+                Bytes::from(
+                    "0x0000000000000000000000000000000000000000"
+                        .as_bytes()
+                        .to_vec(),
+                ),
+            );
             let curve_pool = ProtocolComponent {
                 id: String::from("0xDC24316b9AE028F1497c275EB9192a3Ea0f67022"),
                 protocol_system: String::from("vm:curve"),
