@@ -1,3 +1,16 @@
+## [0.93.0](https://github.com/propeller-heads/tycho-simulation/compare/0.92.1...0.93.0) (2025-04-09)
+
+
+### Features
+
+* add EkuboState exchange support in `price_printer` ([47b1c0f](https://github.com/propeller-heads/tycho-simulation/commit/47b1c0fba659c7c6fecf250605033e05bf70aaa1))
+
+
+### Bug Fixes
+
+* correctly insert balances updates ([517e442](https://github.com/propeller-heads/tycho-simulation/commit/517e442911a009ffab6dcf6506d19692cb185c12))
+* filter out empty account balances in TychoStreamDecoder ([c41efe7](https://github.com/propeller-heads/tycho-simulation/commit/c41efe74fe79a71441d45d05be3ee6bc5a279f34))
+
 ## [0.92.1](https://github.com/propeller-heads/tycho-simulation/compare/0.92.0...0.92.1) (2025-04-08)
 
 ## [0.92.0](https://github.com/propeller-heads/tycho-simulation/compare/0.91.1...0.92.0) (2025-04-03)
