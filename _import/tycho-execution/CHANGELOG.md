@@ -1,3 +1,10 @@
+## [0.78.1](https://github.com/propeller-heads/tycho-execution/compare/0.78.0...0.78.1) (2025-04-09)
+
+
+### Bug Fixes
+
+* Curve factory addresses are utf-8 encoded ([ce71894](https://github.com/propeller-heads/tycho-execution/commit/ce7189423f90881cdaf9f8682d39fc47bfd1ce39))
+
 ## [0.78.0](https://github.com/propeller-heads/tycho-execution/compare/0.77.0...0.78.0) (2025-04-08)
 
 
