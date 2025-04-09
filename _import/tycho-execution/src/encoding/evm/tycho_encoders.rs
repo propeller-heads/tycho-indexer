@@ -12,7 +12,7 @@ use crate::encoding::{
         },
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
     },
-    models::{Chain, EncodingContext, NativeAction, Solution, Transaction},
+    models::{Chain, EncodingContext, NativeAction, Solution, Transaction, TransferType},
     strategy_encoder::StrategyEncoder,
     tycho_encoder::TychoEncoder,
 };
@@ -201,9 +201,10 @@ impl TychoEncoder for TychoRouterEncoder {
     }
 }
 
-/// Represents an encoder for one swap to be executed directly against an Executor. This is useful
-/// when you want to bypass the Tycho Router, use your own Router contract and just need the
-/// calldata for a particular swap.
+/// Represents an encoder for one swap to be executed directly against an Executor.
+///
+/// This is useful when you want to bypass the Tycho Router, use your own Router contract and
+/// just need the calldata for a particular swap.
 ///
 /// # Fields
 /// * `swap_encoder_registry`: Registry of swap encoders
@@ -259,6 +260,7 @@ impl TychoExecutorEncoder {
                 router_address: None,
                 group_token_in: grouped_swap.input_token.clone(),
                 group_token_out: grouped_swap.output_token.clone(),
+                transfer_type: TransferType::Transfer,
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
             grouped_protocol_data.extend(protocol_data);

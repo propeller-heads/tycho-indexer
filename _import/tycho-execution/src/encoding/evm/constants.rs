@@ -17,3 +17,12 @@ pub static GROUPABLE_PROTOCOLS: LazyLock<HashSet<&'static str>> = LazyLock::new(
     set.insert("ekubo_v2");
     set
 });
+
+/// These protocols support the optimization of transferring straight from the user.
+pub static IN_TRANSFER_OPTIMIZABLE_PROTOCOLS: LazyLock<HashSet<&'static str>> =
+    LazyLock::new(|| {
+        let mut set = HashSet::new();
+        set.insert("uniswap_v2");
+        set.insert("uniswap_v3");
+        set
+    });
