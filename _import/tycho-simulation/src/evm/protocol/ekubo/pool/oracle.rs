@@ -17,6 +17,7 @@ use crate::protocol::errors::{InvalidSnapshotError, SimulationError, TransitionE
 pub struct OraclePool {
     imp: quoting::oracle_pool::OraclePool,
     state: OraclePoolState,
+    swapped_this_block: bool,
 }
 
 impl PartialEq for OraclePool {
@@ -49,44 +50,7 @@ impl OraclePool {
                 InvalidSnapshotError::ValueError(format!("creating oracle pool: {err:?}"))
             })?,
             state,
-        })
-    }
-
-    pub fn set_last_snapshot_time(&mut self, last_snapshot_time: u64) {
-        self.state.last_snapshot_time = last_snapshot_time;
-    }
-
-    // TODO Add parameter when timestamps are supported
-    pub fn quote(
-        &self,
-        token_amount: TokenAmount, /* block_timestamp: u64 */
-    ) -> Result<EkuboPoolQuote, SimulationError> {
-        let quote = self
-            .imp
-            .quote(QuoteParams {
-                token_amount,
-                sqrt_ratio_limit: None,
-                override_state: None,
-                meta: 0, // TODO Set to timestamp
-            })
-            .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))?;
-
-        let state_after = quote.state_after;
-
-        let new_state = Self {
-            imp: impl_from_state(self.key(), &state_after).map_err(|err| {
-                SimulationError::RecoverableError(format!("recreating oracle pool: {err:?}"))
-            })?,
-            state: state_after,
-        }
-        .into();
-
-        Ok(EkuboPoolQuote {
-            consumed_amount: quote.consumed_amount,
-            calculated_amount: quote.calculated_amount,
-            gas: FullRangePool::gas_costs() + Self::GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT, /* TODO Depend on snapshots_written
-                                                                                           * when timestamps are supported */
-            new_state,
+            swapped_this_block: false,
         })
     }
 }
@@ -114,39 +78,44 @@ impl EkuboPool for OraclePool {
             .liquidity = liquidity;
     }
 
-    fn set_tick(&mut self, tick: Tick) -> Result<(), String> {
-        let idx = tick.index;
+    fn quote(
+        &self,
+        token_amount: TokenAmount,
+    ) -> Result<EkuboPoolQuote, SimulationError> {
+        // Not actual timestamps but the Ekubo SDK only cares about the existence of time differences
+        let timestamp = if self.swapped_this_block {
+            self.state.last_snapshot_time
+        } else {
+            self.state.last_snapshot_time + 1
+        };
 
-        if ![MIN_TICK, MAX_TICK].contains(&idx) {
-            return Err(format!("oracle is full-range but passed tick has index {idx}"));
+        let quote = self
+            .imp
+            .quote(QuoteParams {
+                token_amount,
+                sqrt_ratio_limit: None,
+                override_state: None,
+                meta: timestamp,
+            })
+            .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))?;
+
+        let state_after = quote.state_after;
+
+        let new_state = Self {
+            imp: impl_from_state(self.key(), &state_after).map_err(|err| {
+                SimulationError::RecoverableError(format!("recreating oracle pool: {err:?}"))
+            })?,
+            state: state_after,
+            swapped_this_block: true,
         }
+        .into();
 
-        self.set_liquidity(tick.liquidity_delta.unsigned_abs());
-
-        Ok(())
-    }
-
-    fn reinstantiate(&mut self) -> Result<(), TransitionError<String>> {
-        let key = self.key();
-
-        self.imp = quoting::oracle_pool::OraclePool::new(
-            key.token1,
-            key.config.extension,
-            self.state
-                .full_range_pool_state
-                .sqrt_ratio,
-            self.state
-                .full_range_pool_state
-                .liquidity,
-            self.state.last_snapshot_time,
-        )
-        .map_err(|err| {
-            TransitionError::SimulationError(SimulationError::RecoverableError(format!(
-                "reinstantiate base pool: {err:?}"
-            )))
-        })?;
-
-        Ok(())
+        Ok(EkuboPoolQuote {
+            consumed_amount: quote.consumed_amount,
+            calculated_amount: quote.calculated_amount,
+            gas: FullRangePool::gas_costs() + quote.execution_resources.snapshots_written as u64 * Self::GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT,
+            new_state,
+        })
     }
 
     fn get_limit(&self, token_in: U256) -> Result<u128, SimulationError> {
@@ -165,5 +134,18 @@ impl EkuboPool for OraclePool {
         u128::try_from(quote.consumed_amount).map_err(|_| {
             SimulationError::FatalError("consumed amount should be non-negative".to_string())
         })
+    }
+
+    fn finish_transition(&mut self) -> Result<(), TransitionError<String>> {
+        self.imp = impl_from_state(self.key(), &self.state)
+        .map_err(|err| {
+            TransitionError::SimulationError(SimulationError::RecoverableError(format!(
+                "reinstantiate oracle pool: {err:?}"
+            )))
+        })?;
+
+        self.swapped_this_block = false;
+
+        Ok(())
     }
 }

@@ -9,8 +9,8 @@ use num_bigint::BigUint;
 use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
 use super::{
-    pool::{base::BasePool, full_range::FullRangePool, oracle::OraclePool, EkuboPool},
-    tick::ticks_from_attributes,
+    pool::{base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool, EkuboPool},
+    tick::ticks_from_attributes, twamm_sale_rate_delta::sale_rate_deltas_from_attributes,
 };
 use crate::{
     evm::protocol::u256_num::u256_to_f64,
@@ -28,6 +28,7 @@ pub enum EkuboState {
     Base(BasePool),
     FullRange(FullRangePool),
     Oracle(OraclePool),
+    Twamm(TwammPool),
 }
 
 fn sqrt_price_q128_to_f64(x: U256, (token0_decimals, token1_decimals): (usize, usize)) -> f64 {
@@ -67,11 +68,7 @@ impl ProtocolSim for EkuboState {
             })?,
         };
 
-        let quote = match self {
-            Self::Base(p) => p.quote(token_amount),
-            Self::FullRange(p) => p.quote(token_amount),
-            Self::Oracle(p) => p.quote(token_amount),
-        }?;
+        let quote = self.quote(token_amount)?;
 
         let res = GetAmountOutResult {
             amount: BigUint::try_from(quote.calculated_amount).map_err(|_| {
@@ -103,6 +100,7 @@ impl ProtocolSim for EkuboState {
         {
             self.set_liquidity(liquidity.clone().into());
         }
+
         if let Some(sqrt_price) = delta
             .updated_attributes
             .get("sqrt_ratio")
@@ -112,33 +110,73 @@ impl ProtocolSim for EkuboState {
 
         match self {
             Self::Base(p) => {
+                // The exact tick is only required for CL pools
                 if let Some(tick) = delta.updated_attributes.get("tick") {
                     p.set_active_tick(tick.clone().into());
                 }
-            }
-            Self::Oracle(_) | Self::FullRange(_) => {} /* The exact tick is not required for full
-                                                        * range pools */
-        }
 
-        let changed_ticks = ticks_from_attributes(
-            delta
-                .updated_attributes
-                .into_iter()
-                .chain(
+                ticks_from_attributes(
                     delta
-                        .deleted_attributes
+                        .updated_attributes
                         .into_iter()
-                        .map(|key| (key, Bytes::new())),
-                ),
-        )
-        .map_err(TransitionError::DecodeError)?;
+                        .chain(
+                            delta
+                                .deleted_attributes
+                                .into_iter()
+                                .map(|key| (key, Bytes::new())),
+                        ),
+                )
+                .map_err(TransitionError::DecodeError)?
+                .into_iter()
+                .for_each(|changed_tick| {
+                    p.set_tick(changed_tick);
+                });
+            },
+            Self::FullRange(_) | Self::Oracle(_) => {},
+            Self::Twamm(p) => {
+                if let Some(token0_sale_rate) = delta
+                    .updated_attributes
+                    .get("token0_sale_rate")
+                {
+                    p.set_token0_sale_rate(token0_sale_rate.clone().into());
+                }
 
-        for changed_tick in changed_ticks {
-            self.set_tick(changed_tick)
-                .map_err(TransitionError::DecodeError)?;
+                if let Some(token1_sale_rate) = delta
+                    .updated_attributes
+                    .get("token1_sale_rate")
+                {
+                    p.set_token1_sale_rate(token1_sale_rate.clone().into());
+                }
+
+                if let Some(last_execution_time) = delta
+                    .updated_attributes
+                    .get("last_execution_time")
+                {
+                    p.set_last_execution_time(last_execution_time.clone().into());
+                }
+
+                let last_execution_time = p.last_execution_time();
+
+                sale_rate_deltas_from_attributes(
+                    delta
+                        .updated_attributes
+                        .into_iter()
+                        .chain(
+                            delta
+                                .deleted_attributes
+                                .into_iter()
+                                .map(|key| (key, Bytes::new())),
+                        ),
+                    last_execution_time,
+                )
+                .map_err(TransitionError::DecodeError)?
+                .for_each(|changed_delta| {
+                    p.set_sale_rate_delta(changed_delta);
+                });
+            }
         }
 
-        self.reinstantiate()
+        self.finish_transition()
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {

@@ -7,10 +7,6 @@ use tycho_common::Bytes;
 pub struct Ticks(Vec<Tick>);
 
 impl Ticks {
-    pub fn new(ticks: Vec<Tick>) -> Self {
-        Self(ticks)
-    }
-
     pub fn inner(&self) -> &Vec<Tick> {
         &self.0
     }
@@ -36,6 +32,12 @@ impl Ticks {
                 }
             }
         }
+    }
+}
+
+impl From<&Ticks> for Vec<Tick> {
+    fn from(value: &Ticks) -> Self {
+        value.inner().clone()
     }
 }
 

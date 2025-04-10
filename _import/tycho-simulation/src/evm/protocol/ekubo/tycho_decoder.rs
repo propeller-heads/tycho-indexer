@@ -3,21 +3,18 @@ use std::collections::HashMap;
 use evm_ekubo_sdk::{
     math::uint::U256,
     quoting::{
-        base_pool::BasePoolState,
-        full_range_pool::FullRangePoolState,
-        oracle_pool::OraclePoolState,
-        types::{Config, NodeKey},
-        util::find_nearest_initialized_tick_index,
+        base_pool::BasePoolState, full_range_pool::FullRangePoolState, oracle_pool::OraclePoolState, twamm_pool::TwammPoolState, types::{Config, NodeKey}, util::find_nearest_initialized_tick_index
     },
 };
+use itertools::Itertools;
 use num_traits::Zero;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_common::Bytes;
 
 use super::{
-    pool::{base::BasePool, full_range::FullRangePool, oracle::OraclePool},
+    pool::{base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool},
     state::EkuboState,
-    tick::{ticks_from_attributes, Ticks},
+    tick::ticks_from_attributes, twamm_sale_rate_delta::sale_rate_deltas_from_attributes,
 };
 use crate::{
     models::Token,
@@ -27,6 +24,7 @@ use crate::{
 enum EkuboExtension {
     Base,
     Oracle,
+    Twamm,
 }
 
 impl TryFrom<Bytes> for EkuboExtension {
@@ -38,6 +36,7 @@ impl TryFrom<Bytes> for EkuboExtension {
             0 => Err(InvalidSnapshotError::ValueError("unknown extension".to_string())),
             1 => Ok(Self::Base),
             2 => Ok(Self::Oracle),
+            3 => Ok(Self::Twamm),
             discriminant => Err(InvalidSnapshotError::ValueError(format!(
                 "unknown discriminant {discriminant}"
             ))),
@@ -54,36 +53,20 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
-        let extension_id = snapshot
-            .component
-            .static_attributes
-            .get("extension_id")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("extension_id".to_string()))?
+        let static_attrs = snapshot.component.static_attributes;
+        let state_attrs = snapshot.state.attributes;
+
+        let extension_id = attribute(&static_attrs, "extension_id")?
             .clone()
             .try_into()?;
 
-        let token0 = U256::from_big_endian(
-            snapshot
-                .component
-                .static_attributes
-                .get("token0")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("token0".to_string()))?,
-        );
-
-        let token1 = U256::from_big_endian(
-            snapshot
-                .component
-                .static_attributes
-                .get("token1")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("token1".to_string()))?,
+        let (token0, token1) = (
+            U256::from_big_endian(attribute(&static_attrs, "token0")?),
+            U256::from_big_endian(attribute(&static_attrs, "token1")?),
         );
 
         let fee = u64::from_be_bytes(
-            snapshot
-                .component
-                .static_attributes
-                .get("fee")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("fee".to_string()))?
+            attribute(&static_attrs, "fee")?
                 .as_ref()
                 .try_into()
                 .map_err(|err| {
@@ -92,11 +75,7 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
         );
 
         let tick_spacing = u32::from_be_bytes(
-            snapshot
-                .component
-                .static_attributes
-                .get("tick_spacing")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("tick_spacing".to_string()))?
+            attribute(&static_attrs, "tick_spacing")?
                 .as_ref()
                 .try_into()
                 .map_err(|err| {
@@ -106,44 +85,19 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
                 })?,
         );
 
-        let extension = U256::from_big_endian(
-            snapshot
-                .component
-                .static_attributes
-                .get("extension")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("extension".to_string()))?,
-        );
+        let extension = U256::from_big_endian(attribute(&static_attrs, "extension")?);
 
         let config = Config { fee, tick_spacing, extension };
 
-        let liquidity = snapshot
-            .state
-            .attributes
-            .get("liquidity")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity".to_string()))?
+        let liquidity = attribute(&state_attrs, "liquidity")?
             .clone()
             .into();
 
-        let sqrt_ratio = U256::from_big_endian(
-            snapshot
-                .state
-                .attributes
-                .get("sqrt_ratio")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("sqrt_ratio".to_string()))?,
-        );
+        let sqrt_ratio = U256::from_big_endian(attribute(&state_attrs, "sqrt_ratio")?);
 
-        let tick = snapshot
-            .state
-            .attributes
-            .get("tick")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("tick".to_string()))?
+        let tick = attribute(&state_attrs, "tick")?
             .clone()
             .into();
-
-        let mut ticks = ticks_from_attributes(snapshot.state.attributes)
-            .map_err(InvalidSnapshotError::ValueError)?;
-
-        ticks.sort_by_key(|tick| tick.index);
 
         let key = NodeKey { token0, token1, config };
 
@@ -155,6 +109,11 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
                         FullRangePoolState { sqrt_ratio, liquidity },
                     )?)
                 } else {
+                    let mut ticks = ticks_from_attributes(state_attrs)
+                        .map_err(InvalidSnapshotError::ValueError)?;
+
+                    ticks.sort_unstable_by_key(|tick| tick.index);
+
                     Self::Base(BasePool::new(
                         key,
                         BasePoolState {
@@ -162,7 +121,7 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
                             liquidity,
                             active_tick_index: find_nearest_initialized_tick_index(&ticks, tick),
                         },
-                        Ticks::new(ticks),
+                        ticks.into(),
                         tick,
                     )?)
                 }
@@ -170,13 +129,49 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
             EkuboExtension::Oracle => Self::Oracle(OraclePool::new(
                 &key,
                 OraclePoolState {
-                    full_range_pool_state: FullRangePoolState { liquidity, sqrt_ratio },
-                    last_snapshot_time: 0, /* TODO Fill with real value when timestamps are
-                                            * supported */
+                    full_range_pool_state: FullRangePoolState { sqrt_ratio, liquidity },
+                    last_snapshot_time: 0, // For the purpose of quote computation it isn't required to track actual timestamps
                 },
             )?),
+            EkuboExtension::Twamm => {
+                let (token0_sale_rate, token1_sale_rate) = (
+                    attribute(&state_attrs, "token0_sale_rate")?
+                        .clone()
+                        .into(),
+                    attribute(&state_attrs, "token1_sale_rate")?
+                        .clone()
+                        .into()
+                );
+
+                let last_execution_time: u64 = attribute(&state_attrs, "last_execution_time")?
+                    .clone()
+                    .into();
+
+                let mut virtual_order_deltas = sale_rate_deltas_from_attributes(state_attrs, last_execution_time)
+                    .map_err(InvalidSnapshotError::ValueError)?
+                    .collect_vec();
+
+                virtual_order_deltas.sort_unstable_by_key(|delta| delta.time);
+
+                Self::Twamm(TwammPool::new(
+                    &key,
+                    TwammPoolState {
+                        full_range_pool_state: FullRangePoolState { sqrt_ratio, liquidity },
+                        token0_sale_rate,
+                        token1_sale_rate,
+                        last_execution_time,
+                    },
+                    virtual_order_deltas,
+                )?)
+            }
         })
     }
+}
+
+fn attribute<'a>(map: &'a HashMap<String, Bytes>, key: &str) -> Result<&'a Bytes, InvalidSnapshotError> {
+    map
+        .get(key)
+        .ok_or_else(|| InvalidSnapshotError::MissingAttribute(key.to_string()))
 }
 
 #[cfg(test)]

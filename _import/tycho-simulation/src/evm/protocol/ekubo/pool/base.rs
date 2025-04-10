@@ -34,9 +34,9 @@ impl PartialEq for BasePool {
 fn impl_from_state(
     key: NodeKey,
     state: BasePoolState,
-    ticks: Vec<Tick>,
+    ticks: impl Into<Vec<Tick>>,
 ) -> Result<quoting::base_pool::BasePool, BasePoolError> {
-    quoting::base_pool::BasePool::new(key, state, ticks)
+    quoting::base_pool::BasePool::new(key, state, ticks.into())
 }
 
 impl BasePool {
@@ -44,6 +44,7 @@ impl BasePool {
     const GAS_COST_OF_ONE_TICK_SPACING_CROSSED: u64 = 4_000;
     const GAS_COST_OF_ONE_INITIALIZED_TICK_CROSSED: u64 = 20_000;
 
+    // Factor to be used in get_limit to account for computation inaccuracies due to not using tick bitmaps
     const WEI_UNDERESTIMATION_FACTOR: u128 = 2;
 
     pub fn new(
@@ -53,7 +54,7 @@ impl BasePool {
         active_tick: i32,
     ) -> Result<Self, InvalidSnapshotError> {
         Ok(Self {
-            imp: impl_from_state(key, state, ticks.inner().clone()).map_err(|err| {
+            imp: impl_from_state(key, state, &ticks).map_err(|err| {
                 InvalidSnapshotError::ValueError(format!("creating base pool: {err:?}"))
             })?,
             state,
@@ -66,35 +67,8 @@ impl BasePool {
         self.active_tick = Some(tick);
     }
 
-    pub fn quote(&self, token_amount: TokenAmount) -> Result<EkuboPoolQuote, SimulationError> {
-        let quote = self
-            .imp
-            .quote(QuoteParams {
-                token_amount,
-                sqrt_ratio_limit: None,
-                override_state: None,
-                meta: (),
-            })
-            .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))?;
-
-        let state_after = quote.state_after;
-
-        let new_state = Self {
-            imp: impl_from_state(*self.key(), state_after, self.ticks.inner().clone()).map_err(
-                |err| SimulationError::RecoverableError(format!("recreating base pool: {err:?}")),
-            )?,
-            state: state_after,
-            active_tick: None,
-            ticks: self.ticks.clone(),
-        }
-        .into();
-
-        Ok(EkuboPoolQuote {
-            consumed_amount: quote.consumed_amount,
-            calculated_amount: quote.calculated_amount,
-            gas: Self::gas_costs(&quote.execution_resources),
-            new_state,
-        })
+    pub fn set_tick(&mut self, tick: Tick) {
+        self.ticks.set(tick);
     }
 
     pub const fn gas_costs(resources: &BasePoolResources) -> u64 {
@@ -122,29 +96,35 @@ impl EkuboPool for BasePool {
         self.state.liquidity = liquidity;
     }
 
-    fn set_tick(&mut self, tick: Tick) -> Result<(), String> {
-        self.ticks.set(tick);
+    fn quote(&self, token_amount: TokenAmount) -> Result<EkuboPoolQuote, SimulationError> {
+        let quote = self
+            .imp
+            .quote(QuoteParams {
+                token_amount,
+                sqrt_ratio_limit: None,
+                override_state: None,
+                meta: (),
+            })
+            .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))?;
 
-        Ok(())
-    }
+        let state_after = quote.state_after;
 
-    fn reinstantiate(&mut self) -> Result<(), TransitionError<String>> {
-        // Only after a swap we set the active_tick to None. In this case, the active_tick_index is
-        // already correctly computed though
-        if let Some(active_tick) = self.active_tick {
-            self.state.active_tick_index =
-                find_nearest_initialized_tick_index(self.ticks.inner(), active_tick);
+        let new_state = Self {
+            imp: impl_from_state(*self.key(), state_after, &self.ticks).map_err(
+                |err| SimulationError::RecoverableError(format!("recreating base pool: {err:?}")),
+            )?,
+            state: state_after,
+            active_tick: None,
+            ticks: self.ticks.clone(),
         }
+        .into();
 
-        self.imp = impl_from_state(*self.key(), self.state, self.ticks.inner().clone()).map_err(
-            |err| {
-                TransitionError::SimulationError(SimulationError::RecoverableError(format!(
-                    "reinstantiate base pool: {err:?}"
-                )))
-            },
-        )?;
-
-        Ok(())
+        Ok(EkuboPoolQuote {
+            consumed_amount: quote.consumed_amount,
+            calculated_amount: quote.calculated_amount,
+            gas: Self::gas_costs(&quote.execution_resources),
+            new_state,
+        })
     }
 
     fn get_limit(&self, token_in: U256) -> Result<u128, SimulationError> {
@@ -201,5 +181,24 @@ impl EkuboPool for BasePool {
                         resources.tick_spacings_crossed as u128 / 256 +
                         1),
             ))
+    }
+
+    fn finish_transition(&mut self) -> Result<(), TransitionError<String>> {
+        // Only after a swap we set the active_tick to None. In this case, the active_tick_index is
+        // already correctly computed though
+        if let Some(active_tick) = self.active_tick {
+            self.state.active_tick_index =
+                find_nearest_initialized_tick_index(self.ticks.inner(), active_tick);
+        }
+
+        self.imp = impl_from_state(*self.key(), self.state, &self.ticks).map_err(
+            |err| {
+                TransitionError::SimulationError(SimulationError::RecoverableError(format!(
+                    "reinstantiate base pool: {err:?}"
+                )))
+            },
+        )?;
+
+        Ok(())
     }
 }

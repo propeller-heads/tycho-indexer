@@ -1,12 +1,11 @@
 use evm_ekubo_sdk::{
-    math::{
-        tick::{MAX_TICK, MIN_TICK},
-        uint::U256,
-    },
+    math::
+        uint::U256
+    ,
     quoting::{
         self,
         full_range_pool::{FullRangePoolError, FullRangePoolState},
-        types::{NodeKey, Pool, QuoteParams, Tick, TokenAmount},
+        types::{NodeKey, Pool, QuoteParams, TokenAmount},
     },
 };
 
@@ -48,7 +47,29 @@ impl FullRangePool {
         })
     }
 
-    pub fn quote(&self, token_amount: TokenAmount) -> Result<EkuboPoolQuote, SimulationError> {
+    pub const fn gas_costs() -> u64 {
+        Self::BASE_GAS_COST
+    }
+}
+
+impl EkuboPool for FullRangePool {
+    fn key(&self) -> &NodeKey {
+        self.imp.get_key()
+    }
+
+    fn sqrt_ratio(&self) -> U256 {
+        self.state.sqrt_ratio
+    }
+
+    fn set_sqrt_ratio(&mut self, sqrt_ratio: U256) {
+        self.state.sqrt_ratio = sqrt_ratio;
+    }
+
+    fn set_liquidity(&mut self, liquidity: u128) {
+        self.state.liquidity = liquidity;
+    }
+
+    fn quote(&self, token_amount: TokenAmount) -> Result<EkuboPoolQuote, SimulationError> {
         let quote = self
             .imp
             .quote(QuoteParams {
@@ -77,40 +98,6 @@ impl FullRangePool {
         })
     }
 
-    pub const fn gas_costs() -> u64 {
-        Self::BASE_GAS_COST
-    }
-}
-
-impl EkuboPool for FullRangePool {
-    fn key(&self) -> &NodeKey {
-        self.imp.get_key()
-    }
-
-    fn sqrt_ratio(&self) -> U256 {
-        self.state.sqrt_ratio
-    }
-
-    fn set_sqrt_ratio(&mut self, sqrt_ratio: U256) {
-        self.state.sqrt_ratio = sqrt_ratio;
-    }
-
-    fn set_liquidity(&mut self, liquidity: u128) {
-        self.state.liquidity = liquidity;
-    }
-
-    fn set_tick(&mut self, tick: Tick) -> Result<(), String> {
-        let idx = tick.index;
-
-        if ![MIN_TICK, MAX_TICK].contains(&idx) {
-            return Err(format!("pool is full range but passed tick has index {idx}"));
-        }
-
-        self.set_liquidity(tick.liquidity_delta.unsigned_abs());
-
-        Ok(())
-    }
-
     fn get_limit(&self, token_in: U256) -> Result<u128, SimulationError> {
         let max_in_token_amount = TokenAmount { amount: i128::MAX, token: token_in };
 
@@ -129,7 +116,7 @@ impl EkuboPool for FullRangePool {
         })
     }
 
-    fn reinstantiate(&mut self) -> Result<(), TransitionError<String>> {
+    fn finish_transition(&mut self) -> Result<(), TransitionError<String>> {
         self.imp = impl_from_state(*self.key(), self.state).map_err(|err| {
             TransitionError::SimulationError(SimulationError::RecoverableError(format!(
                 "reinstantiate full range pool: {err:?}"
