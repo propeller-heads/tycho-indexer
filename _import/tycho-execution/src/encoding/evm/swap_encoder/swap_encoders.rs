@@ -535,7 +535,10 @@ impl SwapEncoder for CurveSwapEncoder {
             })?)
             .map_err(|_| EncodingError::FatalError("Invalid curve factory address".to_string()))?;
 
-        let pool_type = self.get_pool_type(&swap.component.id, &factory_address.to_string())?;
+        let pool_address = Address::from_str(&swap.component.id)
+            .map_err(|_| EncodingError::FatalError("Invalid curve pool address".to_string()))?;
+        let pool_type =
+            self.get_pool_type(&pool_address.to_string(), &factory_address.to_string())?;
 
         let (i, j) = self.get_coin_indexes(component_address, token_in, token_out)?;
 
