@@ -2194,7 +2194,7 @@ mod tests {
             eth_chain(),
             swap_encoder_registry,
             None,
-            Some(Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap()),
+            Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
         )
         .unwrap();
 
@@ -2256,7 +2256,7 @@ mod tests {
             eth_chain(),
             swap_encoder_registry,
             None,
-            Some(Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap()),
+            Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
         )
         .unwrap();
 

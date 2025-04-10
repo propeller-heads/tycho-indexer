@@ -139,6 +139,19 @@ pub fn get_runtime() -> Result<(Handle, Option<Arc<Runtime>>), EncodingError> {
     }
 }
 
+/// Gets the client used for interacting with the EVM-compatible network.
+pub async fn get_client() -> Result<Arc<RootProvider<BoxTransport>>, EncodingError> {
+    dotenv::dotenv().ok();
+    let eth_rpc_url = env::var("RPC_URL")
+        .map_err(|_| EncodingError::FatalError("Missing RPC_URL in environment".to_string()))?;
+    let client = ProviderBuilder::new()
+        .on_builtin(&eth_rpc_url)
+        .await
+        .map_err(|_| EncodingError::FatalError("Failed to build provider".to_string()))?;
+    Ok(Arc::new(client))
+}
+
+
 /// Uses prefix-length encoding to efficient encode action data.
 ///
 /// Prefix-length encoding is a data encoding method where the beginning of a data segment
@@ -152,19 +165,6 @@ pub fn ple_encode(action_data_array: Vec<Vec<u8>>) -> Vec<u8> {
     }
 
     encoded_action_data
-}
-
-
-/// Gets the client used for interacting with the EVM-compatible network.
-pub async fn get_client() -> Result<Arc<RootProvider<BoxTransport>>, EncodingError> {
-    dotenv::dotenv().ok();
-    let eth_rpc_url = env::var("RPC_URL")
-        .map_err(|_| EncodingError::FatalError("Missing RPC_URL in environment".to_string()))?;
-    let client = ProviderBuilder::new()
-        .on_builtin(&eth_rpc_url)
-        .await
-        .map_err(|_| EncodingError::FatalError("Failed to build provider".to_string()))?;
-    Ok(Arc::new(client))
 }
 
 #[cfg(test)]
