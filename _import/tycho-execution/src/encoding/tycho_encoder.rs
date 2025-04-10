@@ -14,8 +14,7 @@ pub trait TychoEncoder {
     ///
     /// # Returns
     /// * `Result<Vec<Transaction>, EncodingError>` - Vector of executable transactions
-    fn encode_router_calldata(
-        &self,
-        solutions: Vec<Solution>,
-    ) -> Result<Vec<Transaction>, EncodingError>;
+    fn encode_calldata(&self, solutions: Vec<Solution>) -> Result<Vec<Transaction>, EncodingError>;
+
+    fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError>;
 }

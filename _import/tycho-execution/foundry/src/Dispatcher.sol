@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import "@interfaces/IExecutor.sol";
 import "@interfaces/ICallback.sol";
 
-error Dispatcher__UnapprovedExecutor();
+error Dispatcher__UnapprovedExecutor(address executor);
 error Dispatcher__NonContractExecutor();
 error Dispatcher__InvalidDataLength();
 
@@ -59,7 +59,7 @@ contract Dispatcher {
         bytes calldata data
     ) internal returns (uint256 calculatedAmount) {
         if (!executors[executor]) {
-            revert Dispatcher__UnapprovedExecutor();
+            revert Dispatcher__UnapprovedExecutor(executor);
         }
 
         assembly {
@@ -95,7 +95,7 @@ contract Dispatcher {
         }
 
         if (!executors[executor]) {
-            revert Dispatcher__UnapprovedExecutor();
+            revert Dispatcher__UnapprovedExecutor(executor);
         }
 
         // slither-disable-next-line controlled-delegatecall,low-level-calls
