@@ -5,14 +5,14 @@ import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 
-error ExecutorTransferMethods__InvalidPermit2();
+error TokenTransfer__InvalidPermit2();
 
-contract ExecutorTransferMethods {
+contract TokenTransfer {
     using SafeERC20 for IERC20;
 
     IAllowanceTransfer public immutable permit2;
 
-    enum TransferMethod {
+    enum TransferType {
         // Assume funds are in the TychoRouter - transfer into the pool
         TRANSFER,
         // Assume funds are in msg.sender's wallet - transferFrom into the pool
@@ -25,7 +25,7 @@ contract ExecutorTransferMethods {
 
     constructor(address _permit2) {
         if (_permit2 == address(0)) {
-            revert ExecutorTransferMethods__InvalidPermit2();
+            revert TokenTransfer__InvalidPermit2();
         }
         permit2 = IAllowanceTransfer(_permit2);
     }
@@ -35,20 +35,18 @@ contract ExecutorTransferMethods {
         address sender,
         address receiver,
         uint256 amount,
-        TransferMethod method
+        TransferType transferType
     ) internal {
-        if (method == TransferMethod.TRANSFER) {
+        if (transferType == TransferType.TRANSFER) {
             tokenIn.safeTransfer(receiver, amount);
-        } else if (method == TransferMethod.TRANSFERFROM) {
+        } else if (transferType == TransferType.TRANSFERFROM) {
             // slither-disable-next-line arbitrary-send-erc20
             tokenIn.safeTransferFrom(sender, receiver, amount);
-        } else if (method == TransferMethod.TRANSFERPERMIT2) {
+        } else if (transferType == TransferType.TRANSFERPERMIT2) {
             // Permit2.permit is already called from the TychoRouter
             permit2.transferFrom(
                 sender, receiver, uint160(amount), address(tokenIn)
             );
-        } else {
-            // Funds are likely already in pool. Do nothing.
         }
     }
 }

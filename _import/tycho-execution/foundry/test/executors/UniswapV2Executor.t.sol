@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import "@src/executors/UniswapV2Executor.sol";
-import "@src/executors/ExecutorTransferMethods.sol";
+import "@src/executors/TokenTransfer.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
 import {Permit2TestHelper} from "../Permit2TestHelper.sol";
@@ -20,7 +20,7 @@ contract UniswapV2ExecutorExposed is UniswapV2Executor {
             address target,
             address receiver,
             bool zeroForOne,
-            TransferMethod method
+            TransferType transferType
         )
     {
         return _decodeData(data);
@@ -84,7 +84,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             address(2),
             address(3),
             false,
-            ExecutorTransferMethods.TransferMethod.TRANSFER
+            TokenTransfer.TransferType.TRANSFER
         );
 
         (
@@ -92,7 +92,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             address target,
             address receiver,
             bool zeroForOne,
-            ExecutorTransferMethods.TransferMethod method
+            TokenTransfer.TransferType transferType
         ) = uniswapV2Exposed.decodeParams(params);
 
         assertEq(address(tokenIn), WETH_ADDR);
@@ -100,8 +100,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
         assertEq(receiver, address(3));
         assertEq(zeroForOne, false);
         assertEq(
-            uint8(ExecutorTransferMethods.TransferMethod.TRANSFER),
-            uint8(method)
+            uint8(TokenTransfer.TransferType.TRANSFER), uint8(transferType)
         );
     }
 
@@ -158,7 +157,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             WETH_DAI_POOL,
             BOB,
             zeroForOne,
-            uint8(ExecutorTransferMethods.TransferMethod.TRANSFER)
+            uint8(TokenTransfer.TransferType.TRANSFER)
         );
 
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
@@ -177,7 +176,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             WETH_DAI_POOL,
             BOB,
             zeroForOne,
-            uint8(ExecutorTransferMethods.TransferMethod.TRANSFERFROM)
+            uint8(TokenTransfer.TransferType.TRANSFERFROM)
         );
 
         deal(WETH_ADDR, address(this), amountIn);
@@ -198,7 +197,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             WETH_DAI_POOL,
             ALICE,
             zeroForOne,
-            uint8(ExecutorTransferMethods.TransferMethod.TRANSFERPERMIT2)
+            uint8(TokenTransfer.TransferType.TRANSFERPERMIT2)
         );
 
         deal(WETH_ADDR, ALICE, amountIn);
@@ -211,7 +210,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
         );
 
         // Assume the permit2.approve method will be called from the TychoRouter
-        // Replicate this secnario in this test.
+        // Replicate this scenario in this test.
         permit2.permit(ALICE, permitSingle, signature);
 
         uniswapV2Exposed.swap(amountIn, protocolData);
@@ -230,7 +229,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             WETH_DAI_POOL,
             BOB,
             zeroForOne,
-            uint8(ExecutorTransferMethods.TransferMethod.NONE)
+            uint8(TokenTransfer.TransferType.NONE)
         );
 
         deal(WETH_ADDR, address(this), amountIn);
@@ -251,7 +250,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             address target,
             address receiver,
             bool zeroForOne,
-            ExecutorTransferMethods.TransferMethod method
+            TokenTransfer.TransferType transferType
         ) = uniswapV2Exposed.decodeParams(protocolData);
 
         assertEq(address(tokenIn), WETH_ADDR);
@@ -259,7 +258,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
         assertEq(receiver, 0x0000000000000000000000000000000000000001);
         assertEq(zeroForOne, false);
         // TRANSFER = 0
-        assertEq(0, uint8(method));
+        assertEq(0, uint8(transferType));
     }
 
     function testSwapIntegration() public {
@@ -284,7 +283,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             fakePool,
             BOB,
             zeroForOne,
-            uint8(ExecutorTransferMethods.TransferMethod.TRANSFER)
+            uint8(TokenTransfer.TransferType.TRANSFER)
         );
 
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
@@ -304,7 +303,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             USDC_MAG7_POOL,
             BOB,
             zeroForOne,
-            uint8(ExecutorTransferMethods.TransferMethod.TRANSFER)
+            uint8(TokenTransfer.TransferType.TRANSFER)
         );
 
         deal(BASE_USDC, address(uniswapV2Exposed), amountIn);
