@@ -1044,8 +1044,6 @@ mod tests {
                     "6982508145454ce325ddbe47a25d4ec3d2311933",
                     // zero for one
                     "00",
-                    // executor address
-                    "f62849f9a0b5bf2913b396098f7c7019b51a820a",
                     // first pool intermediary token (ETH)
                     "0000000000000000000000000000000000000000",
                     // fee

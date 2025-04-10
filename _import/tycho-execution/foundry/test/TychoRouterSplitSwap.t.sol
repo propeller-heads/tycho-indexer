@@ -492,9 +492,8 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             tickSpacing: int24(1)
         });
 
-        bytes memory protocolData = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR, USDT_ADDR, true, address(usv4Executor), pools
-        );
+        bytes memory protocolData =
+            UniswapV4Utils.encodeExactInput(USDE_ADDR, USDT_ADDR, true, pools);
 
         bytes memory swap = encodeSplitSwap(
             uint8(0), uint8(1), uint24(0), address(usv4Executor), protocolData
@@ -540,9 +539,8 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             tickSpacing: int24(60)
         });
 
-        bytes memory protocolData = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR, WBTC_ADDR, true, address(usv4Executor), pools
-        );
+        bytes memory protocolData =
+            UniswapV4Utils.encodeExactInput(USDE_ADDR, WBTC_ADDR, true, pools);
 
         bytes memory swap = encodeSplitSwap(
             uint8(0), uint8(1), uint24(0), address(usv4Executor), protocolData
