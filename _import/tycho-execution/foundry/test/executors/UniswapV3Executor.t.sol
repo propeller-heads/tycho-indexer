@@ -90,9 +90,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
         assertEq(receiver, address(2));
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
-        assertEq(
-            uint8(transferType), uint8(TokenTransfer.TransferType.TRANSFER)
-        );
+        assertEq(uint8(transferType), uint8(TokenTransfer.TransferType.TRANSFER));
     }
 
     function testDecodeParamsInvalidDataLength() public {
