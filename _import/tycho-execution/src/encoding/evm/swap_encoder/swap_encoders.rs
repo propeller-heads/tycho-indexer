@@ -196,21 +196,11 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let group_token_out_address = bytes_to_address(&encoding_context.group_token_out)?;
 
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
-        let callback_executor =
-            bytes_to_address(&Bytes::from_str(&self.executor_address).map_err(|_| {
-                EncodingError::FatalError("Invalid UniswapV4 executor address".into())
-            })?)?;
 
         let pool_params =
             (token_out_address, pool_fee_u24, pool_tick_spacing_u24).abi_encode_packed();
 
-        let args = (
-            group_token_in_address,
-            group_token_out_address,
-            zero_to_one,
-            callback_executor,
-            pool_params,
-        );
+        let args = (group_token_in_address, group_token_out_address, zero_to_one, pool_params);
 
         Ok(args.abi_encode_packed())
     }
@@ -785,8 +775,6 @@ mod tests {
                 "dac17f958d2ee523a2206206994597c13d831ec7",
                 // zero for one
                 "01",
-                // executor address
-                "f62849f9a0b5bf2913b396098f7c7019b51a820a",
                 // pool params:
                 // - intermediary token
                 "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -950,8 +938,6 @@ mod tests {
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
                 // zero for one
                 "01",
-                // executor address
-                "f62849f9a0b5bf2913b396098f7c7019b51a820a",
                 // pool params:
                 // - intermediary token USDT
                 "dac17f958d2ee523a2206206994597c13d831ec7",
