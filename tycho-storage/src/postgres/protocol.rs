@@ -1741,6 +1741,47 @@ impl PostgresGateway {
 
         Ok(WithTotal { total: Some(total), entity: paginated_protocol_systems })
     }
+
+    pub async fn get_component_tvls(
+        &self,
+        chain: &Chain,
+        component_ids: Option<&[&str]>,
+        conn: &mut AsyncPgConnection,
+    ) -> Result<HashMap<String, f64>, StorageError> {
+        use schema::{component_tvl::dsl as ct, protocol_component::dsl as pc};
+
+        if !self.chain_id_cache.value_exists(chain) {
+            return Err(StorageError::NotFound("Chain".to_string(), chain.to_string()));
+        }
+
+        let chain_id_val = self.get_chain_id(chain);
+
+        let mut query = ct::component_tvl
+            .inner_join(pc::protocol_component)
+            .filter(pc::chain_id.eq(chain_id_val))
+            .into_boxed();
+
+        if let Some(ids) = component_ids {
+            query = query.filter(pc::external_id.eq_any(ids));
+        }
+
+        let rows: Vec<(String, f64)> = query
+            .select((pc::external_id, ct::tvl))
+            .load(conn)
+            .await
+            .map_err(|err| {
+                let id_hint = component_ids
+                    .and_then(|ids| ids.first().copied())
+                    .unwrap_or_default();
+                storage_error_from_diesel(err, "ComponentTVL", id_hint, None)
+            })?;
+
+        let result = rows
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
@@ -3880,5 +3921,55 @@ mod test {
         .await
         .unwrap()[0];
         assert_eq!(inserted_account.title, "Ethereum_🐶🐱🐰🦊🐻🐼🐨🐯🦁🐮🐷🐽🐸🐵🐔🐧🐦🐤🦅🦉🦇🐺🐗🐴🦄🐝🐛🪱🦋🐌🐞🐜🪰🪲🕷🦂🐢🐍🦎🦖🦕🐙🦑🦐🦞🦀🐡🐠🐟🐬🐳🐋🐊🐅🐆🦓🦍🦧🦣🐘🦛".to_string());
+    }
+
+    #[tokio::test]
+    async fn test_get_component_tvls() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+
+        let new_tvl = [("state1".to_owned(), 100.0), ("no_tvl".to_owned(), 1.0)]
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+        gw.upsert_component_tvl(&Chain::Ethereum, &new_tvl, &mut conn)
+            .await
+            .expect("upsert failed!");
+
+        let tvls = gw
+            .get_component_tvls(&Chain::Ethereum, Some(&["state1", "no_tvl"]), &mut conn)
+            .await
+            .expect("failed retrieving component tvl");
+
+        assert_eq!(tvls.get("state1"), Some(&100.0));
+        assert_eq!(tvls.get("no_tvl"), Some(&1.0));
+    }
+
+    #[tokio::test]
+    async fn test_get_component_tvls_not_exist() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+
+        let new_tvl = [("state1".to_owned(), 100.0), ("no_tvl".to_owned(), 1.0)]
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+        gw.upsert_component_tvl(&Chain::Ethereum, &new_tvl, &mut conn)
+            .await
+            .expect("upsert failed!");
+
+        let res = gw
+            .get_component_tvls(
+                &Chain::Ethereum,
+                Some(&["state1", "no_tvl", "not_exist"]),
+                &mut conn,
+            )
+            .await
+            .expect("failed retrieving component tvl");
+
+        assert_eq!(res.len(), 2);
+        assert_eq!(res.get("state1"), Some(&100.0));
+        assert_eq!(res.get("no_tvl"), Some(&1.0));
+        assert!(!res.contains_key("not_exist"));
     }
 }
