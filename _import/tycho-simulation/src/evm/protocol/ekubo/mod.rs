@@ -4,4 +4,4 @@ pub mod state;
 mod tycho_decoder;
 
 #[cfg(test)]
-mod test_pool;
+mod test_cases;

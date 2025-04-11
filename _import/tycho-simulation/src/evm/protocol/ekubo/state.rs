@@ -9,7 +9,10 @@ use num_bigint::BigUint;
 use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
 use super::{
-    attributes::{sale_rate_deltas_from_attributes, ticks_from_attributes}, pool::{base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool, EkuboPool}
+    attributes::{sale_rate_deltas_from_attributes, ticks_from_attributes},
+    pool::{
+        base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool, EkuboPool,
+    },
 };
 use crate::{
     evm::protocol::u256_num::u256_to_f64,
@@ -129,8 +132,8 @@ impl ProtocolSim for EkuboState {
                 .for_each(|changed_tick| {
                     p.set_tick(changed_tick);
                 });
-            },
-            Self::FullRange(_) | Self::Oracle(_) => {},
+            }
+            Self::FullRange(_) | Self::Oracle(_) => {}
             Self::Twamm(p) => {
                 if let Some(token0_sale_rate) = delta
                     .updated_attributes
@@ -212,79 +215,74 @@ impl ProtocolSim for EkuboState {
 
 #[cfg(test)]
 mod tests {
-    use evm_ekubo_sdk::{
-        math::tick::{MIN_SQRT_RATIO, MIN_TICK},
-        quoting::base_pool::BasePoolState,
-    };
-    use num_traits::Zero;
+    use rstest::*;
+    use rstest_reuse::apply;
 
     use super::*;
-    use crate::evm::protocol::ekubo::test_pool::*;
+    use crate::evm::protocol::ekubo::test_cases::*;
 
-    #[test]
-    fn test_delta_transition() {
-        let mut pool = EkuboState::Base(
-            BasePool::new(
-                POOL_KEY,
-                BasePoolState { sqrt_ratio: MIN_SQRT_RATIO, liquidity: 0, active_tick_index: None },
-                vec![].into(),
-                MIN_TICK,
+    #[apply(all_cases)]
+    fn test_delta_transition(case: TestCase) {
+        let mut state = case.state_before_transition;
+
+        state
+            .delta_transition(
+                ProtocolStateDelta {
+                    updated_attributes: case.transition_attributes,
+                    ..Default::default()
+                },
+                &HashMap::default(),
+                &Balances::default(),
             )
-            .unwrap(),
-        );
+            .expect("executing transition");
 
-        let delta = ProtocolStateDelta { updated_attributes: attributes(), ..Default::default() };
-
-        pool.delta_transition(delta, &HashMap::default(), &Balances::default())
-            .unwrap();
-
-        assert_eq!(state(), pool);
+        assert_eq!(state, case.state);
     }
 
-    #[test]
-    // Compare against the reference implementation
-    fn test_get_amount_out() {
-        let state = state();
+    #[apply(all_cases)]
+    fn test_get_amount_out(case: TestCase) {
+        let (token0, token1) = (case.token0(), case.token1());
+        let (amount_in, expected_out) = case.swap_token0;
 
-        let amount = 100_u8;
+        let res = case
+            .state
+            .get_amount_out(amount_in, &token0, &token1)
+            .expect("computing quote");
 
-        let tycho_quote = state
-            .get_amount_out(BigUint::from(amount), &token0(), &token1())
-            .unwrap();
-
-        let EkuboState::Base(pool) = state else {
-            panic!();
-        };
-
-        let reference_quote = pool
-            .quote(TokenAmount { token: POOL_KEY.token0, amount: amount.into() })
-            .unwrap();
-
-        let tycho_out: u64 = tycho_quote.amount.try_into().unwrap();
-        let reference_out: u64 = reference_quote
-            .calculated_amount
-            .try_into()
-            .unwrap();
-
-        assert_eq!(tycho_out, reference_out);
+        assert_eq!(res.amount, expected_out);
     }
 
-    #[test]
-    fn test_get_limits() {
-        let state = state();
+    #[apply(all_cases)]
+    fn test_get_limits(case: TestCase) {
+        use std::ops::Deref;
+
+        let (token0, token1) = (case.token0(), case.token1());
+        let state = case.state;
 
         let max_amount_in = state
             .get_limits(
-                Address::from_word(POOL_KEY.token0.to_big_endian().into()),
-                Address::from_word(POOL_KEY.token1.to_big_endian().into()),
+                Address::from_word(
+                    token0
+                        .address
+                        .deref()
+                        .try_into()
+                        .unwrap(),
+                ),
+                Address::from_word(
+                    token1
+                        .address
+                        .deref()
+                        .try_into()
+                        .unwrap(),
+                ),
             )
-            .unwrap()
+            .expect("computing limits for token0")
             .0;
 
-        assert!(!max_amount_in.is_zero());
+        assert_eq!(max_amount_in, case.expected_limit_token0);
 
         state
-            .get_amount_out(max_amount_in, &token0(), &token1())
-            .unwrap();
+            .get_amount_out(max_amount_in, &token0, &token1)
+            .expect("quoting with limit");
     }
 }

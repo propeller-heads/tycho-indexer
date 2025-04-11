@@ -1,5 +1,8 @@
 use evm_ekubo_sdk::{
-    math::{tick::to_sqrt_ratio, uint::U256},
+    math::{
+        tick::{to_sqrt_ratio, MIN_SQRT_RATIO},
+        uint::U256,
+    },
     quoting::{
         self,
         base_pool::{BasePoolError, BasePoolState},
@@ -10,9 +13,7 @@ use evm_ekubo_sdk::{
 use num_traits::Zero;
 
 use super::{EkuboPool, EkuboPoolQuote};
-use crate::
-    protocol::errors::{InvalidSnapshotError, SimulationError, TransitionError}
-;
+use crate::protocol::errors::{InvalidSnapshotError, SimulationError, TransitionError};
 
 #[derive(Debug, Clone, Eq)]
 pub struct BasePool {
@@ -25,16 +26,20 @@ pub struct BasePool {
 
 impl PartialEq for BasePool {
     fn eq(&self, other: &Self) -> bool {
-        self.key() == other.key() && self.imp.get_sorted_ticks() == other.imp.get_sorted_ticks() && self.state == other.state
+        self.key() == other.key() &&
+            self.imp.get_sorted_ticks() == other.imp.get_sorted_ticks() &&
+            self.state == other.state
     }
 }
 
+const DUMMY_STATE: BasePoolState =
+    BasePoolState { active_tick_index: None, sqrt_ratio: MIN_SQRT_RATIO, liquidity: 0 };
+
 fn impl_from_state(
     key: NodeKey,
-    state: BasePoolState,
     ticks: Vec<Tick>,
 ) -> Result<quoting::base_pool::BasePool, BasePoolError> {
-    quoting::base_pool::BasePool::new(key, state, ticks)
+    quoting::base_pool::BasePool::new(key, DUMMY_STATE, ticks)
 }
 
 impl BasePool {
@@ -42,7 +47,8 @@ impl BasePool {
     const GAS_COST_OF_ONE_TICK_SPACING_CROSSED: u64 = 4_000;
     const GAS_COST_OF_ONE_INITIALIZED_TICK_CROSSED: u64 = 20_000;
 
-    // Factor to be used in get_limit to account for computation inaccuracies due to not using tick bitmaps
+    // Factor to be used in get_limit to account for computation inaccuracies due to not using tick
+    // bitmaps
     const WEI_UNDERESTIMATION_FACTOR: u128 = 2;
 
     pub fn new(
@@ -52,7 +58,7 @@ impl BasePool {
         active_tick: i32,
     ) -> Result<Self, InvalidSnapshotError> {
         Ok(Self {
-            imp: impl_from_state(key, state, ticks).map_err(|err| {
+            imp: impl_from_state(key, ticks).map_err(|err| {
                 InvalidSnapshotError::ValueError(format!("creating base pool: {err:?}"))
             })?,
             state,
@@ -114,8 +120,10 @@ impl EkuboPool for BasePool {
             consumed_amount: quote.consumed_amount,
             calculated_amount: quote.calculated_amount,
             gas: Self::BASE_GAS_COST +
-                resources.tick_spacings_crossed as u64 * Self::GAS_COST_OF_ONE_TICK_SPACING_CROSSED +
-                resources.initialized_ticks_crossed as u64 * Self::GAS_COST_OF_ONE_INITIALIZED_TICK_CROSSED,
+                resources.tick_spacings_crossed as u64 *
+                    Self::GAS_COST_OF_ONE_TICK_SPACING_CROSSED +
+                resources.initialized_ticks_crossed as u64 *
+                    Self::GAS_COST_OF_ONE_INITIALIZED_TICK_CROSSED,
             new_state,
         })
     }
@@ -197,19 +205,18 @@ impl EkuboPool for BasePool {
                 }
             }
 
-            self.imp = impl_from_state(*self.key(), self.state, ticks).map_err(
-                |err| {
-                    TransitionError::SimulationError(SimulationError::RecoverableError(format!(
-                        "reinstantiate base pool: {err:?}"
-                    )))
-                },
-            )?;
+            self.imp = impl_from_state(*self.key(), ticks).map_err(|err| {
+                TransitionError::SimulationError(SimulationError::RecoverableError(format!(
+                    "reinstantiate base pool: {err:?}"
+                )))
+            })?;
         }
 
         // Only after a swap we set the active_tick to None. In this case, the active_tick_index is
         // already correctly computed though
         if let Some(active_tick) = self.active_tick {
-            self.state.active_tick_index = find_nearest_initialized_tick_index(self.imp.get_sorted_ticks(), active_tick);
+            self.state.active_tick_index =
+                find_nearest_initialized_tick_index(self.imp.get_sorted_ticks(), active_tick);
         }
 
         Ok(())

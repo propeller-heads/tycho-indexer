@@ -26,7 +26,10 @@ pub trait EkuboPool {
     fn set_sqrt_ratio(&mut self, sqrt_ratio: U256);
     fn set_liquidity(&mut self, liquidity: u128);
 
-    fn quote(&self, token_amount: TokenAmount) -> Result<super::pool::EkuboPoolQuote, SimulationError>;
+    fn quote(
+        &self,
+        token_amount: TokenAmount,
+    ) -> Result<super::pool::EkuboPoolQuote, SimulationError>;
     fn get_limit(&self, token_in: U256) -> Result<u128, SimulationError>;
 
     fn finish_transition(&mut self) -> Result<(), TransitionError<String>>;

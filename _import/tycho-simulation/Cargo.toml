@@ -76,6 +76,7 @@ evm_ekubo_sdk = "0.4.2"
 tokio-test = "0.4.4"
 approx = "0.5.1"
 rstest = "0.23.0"
+rstest_reuse = "0.7.0"
 tracing-subscriber = { version = "0.3.17", default-features = false, features = [
     "env-filter",
     "fmt",

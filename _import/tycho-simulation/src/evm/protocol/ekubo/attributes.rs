@@ -32,11 +32,8 @@ pub fn sale_rate_deltas_from_attributes<T: IntoIterator<Item = (String, Bytes)>>
     let size_hint = iter.size_hint().0;
 
     let update_delta = |delta: &mut TwammSaleRateDelta, is_token1, value| {
-        *(if is_token1 {
-            &mut delta.sale_rate_delta1
-        } else {
-            &mut delta.sale_rate_delta0
-        }) = value;
+        *(if is_token1 { &mut delta.sale_rate_delta1 } else { &mut delta.sale_rate_delta0 }) =
+            value;
     };
 
     Ok(iter
@@ -49,7 +46,9 @@ pub fn sale_rate_deltas_from_attributes<T: IntoIterator<Item = (String, Bytes)>>
             let splits_len = splits.len();
 
             if splits_len != 3 {
-                return Some(Err(format!("orders attribute should have 3 segments but received {splits_len}")));
+                return Some(Err(format!(
+                    "orders attribute should have 3 segments but received {splits_len}"
+                )));
             }
 
             let time: u64 = match splits[2].parse() {
@@ -64,27 +63,23 @@ pub fn sale_rate_deltas_from_attributes<T: IntoIterator<Item = (String, Bytes)>>
             let is_token1 = match splits[1] {
                 "token0" => false,
                 "token1" => true,
-                token => return Some(Err(format!("expected token0 or token1 but received {token}"))),
+                token => {
+                    return Some(Err(format!("expected token0 or token1 but received {token}")))
+                }
             };
 
-            let delta: i128 = value
-                .clone()
-                .into();
+            let delta: i128 = value.clone().into();
 
             Some(Ok((time, is_token1, delta)))
         })
         .try_collect::<_, Vec<_>, _>()?
         .into_iter()
         .fold(HashMap::with_capacity(size_hint), |mut map, (time, is_token1, value)| {
-            map
-                .entry(time)
+            map.entry(time)
                 .and_modify(|delta| update_delta(delta, is_token1, value))
                 .or_insert_with(|| {
-                    let mut delta = TwammSaleRateDelta {
-                        time,
-                        sale_rate_delta0: 0,
-                        sale_rate_delta1: 0,
-                    };
+                    let mut delta =
+                        TwammSaleRateDelta { time, sale_rate_delta0: 0, sale_rate_delta1: 0 };
 
                     update_delta(&mut delta, is_token1, value);
 
@@ -93,6 +88,5 @@ pub fn sale_rate_deltas_from_attributes<T: IntoIterator<Item = (String, Bytes)>>
 
             map
         })
-        .into_values()
-    )
+        .into_values())
 }

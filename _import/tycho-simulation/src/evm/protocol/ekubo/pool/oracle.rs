@@ -1,9 +1,8 @@
 use evm_ekubo_sdk::{
-    math::
-        uint::U256
-    ,
+    math::{tick::MIN_SQRT_RATIO, uint::U256},
     quoting::{
         self,
+        full_range_pool::FullRangePoolState,
         oracle_pool::OraclePoolState,
         types::{NodeKey, Pool, QuoteParams, TokenAmount},
     },
@@ -26,6 +25,11 @@ impl PartialEq for OraclePool {
     }
 }
 
+const DUMMY_STATE: OraclePoolState = OraclePoolState {
+    full_range_pool_state: FullRangePoolState { liquidity: 0, sqrt_ratio: MIN_SQRT_RATIO },
+    last_snapshot_time: 0,
+};
+
 impl OraclePool {
     const GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT: u64 = 15_000;
 
@@ -34,10 +38,15 @@ impl OraclePool {
             imp: quoting::oracle_pool::OraclePool::new(
                 key.token1,
                 key.config.extension,
-                state.full_range_pool_state.sqrt_ratio,
-                state.full_range_pool_state.liquidity,
-                state.last_snapshot_time,
-            ).map_err(|err| {
+                DUMMY_STATE
+                    .full_range_pool_state
+                    .sqrt_ratio,
+                DUMMY_STATE
+                    .full_range_pool_state
+                    .liquidity,
+                DUMMY_STATE.last_snapshot_time,
+            )
+            .map_err(|err| {
                 InvalidSnapshotError::ValueError(format!("creating oracle pool: {err:?}"))
             })?,
             state,
@@ -69,11 +78,9 @@ impl EkuboPool for OraclePool {
             .liquidity = liquidity;
     }
 
-    fn quote(
-        &self,
-        token_amount: TokenAmount,
-    ) -> Result<EkuboPoolQuote, SimulationError> {
-        // Not actual timestamps but the Ekubo SDK only cares about the existence of time differences
+    fn quote(&self, token_amount: TokenAmount) -> Result<EkuboPoolQuote, SimulationError> {
+        // Not actual timestamps but the Ekubo SDK only cares about the existence of time
+        // differences
         let timestamp = if self.swapped_this_block {
             self.state.last_snapshot_time
         } else {
@@ -93,12 +100,17 @@ impl EkuboPool for OraclePool {
         Ok(EkuboPoolQuote {
             consumed_amount: quote.consumed_amount,
             calculated_amount: quote.calculated_amount,
-            gas: FullRangePool::gas_costs() + quote.execution_resources.snapshots_written as u64 * Self::GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT,
+            gas: FullRangePool::gas_costs() +
+                quote
+                    .execution_resources
+                    .snapshots_written as u64 *
+                    Self::GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT,
             new_state: Self {
                 imp: self.imp.clone(),
                 state: quote.state_after,
                 swapped_this_block: true,
-            }.into(),
+            }
+            .into(),
         })
     }
 

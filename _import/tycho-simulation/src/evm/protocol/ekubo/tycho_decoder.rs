@@ -3,7 +3,12 @@ use std::collections::HashMap;
 use evm_ekubo_sdk::{
     math::uint::U256,
     quoting::{
-        base_pool::BasePoolState, full_range_pool::FullRangePoolState, oracle_pool::OraclePoolState, twamm_pool::TwammPoolState, types::{Config, NodeKey}, util::find_nearest_initialized_tick_index
+        base_pool::BasePoolState,
+        full_range_pool::FullRangePoolState,
+        oracle_pool::OraclePoolState,
+        twamm_pool::TwammPoolState,
+        types::{Config, NodeKey},
+        util::find_nearest_initialized_tick_index,
     },
 };
 use itertools::Itertools;
@@ -12,9 +17,9 @@ use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_common::Bytes;
 
 use super::{
+    attributes::{sale_rate_deltas_from_attributes, ticks_from_attributes},
     pool::{base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool},
     state::EkuboState,
-    attributes::{sale_rate_deltas_from_attributes, ticks_from_attributes},
 };
 use crate::{
     models::Token,
@@ -95,10 +100,6 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
 
         let sqrt_ratio = U256::from_big_endian(attribute(&state_attrs, "sqrt_ratio")?);
 
-        let tick = attribute(&state_attrs, "tick")?
-            .clone()
-            .into();
-
         let key = NodeKey { token0, token1, config };
 
         Ok(match extension_id {
@@ -109,6 +110,10 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
                         FullRangePoolState { sqrt_ratio, liquidity },
                     )?)
                 } else {
+                    let tick = attribute(&state_attrs, "tick")?
+                        .clone()
+                        .into();
+
                     let mut ticks = ticks_from_attributes(state_attrs)
                         .map_err(InvalidSnapshotError::ValueError)?;
 
@@ -121,7 +126,7 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
                             liquidity,
                             active_tick_index: find_nearest_initialized_tick_index(&ticks, tick),
                         },
-                        ticks.into(),
+                        ticks,
                         tick,
                     )?)
                 }
@@ -130,7 +135,8 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
                 &key,
                 OraclePoolState {
                     full_range_pool_state: FullRangePoolState { sqrt_ratio, liquidity },
-                    last_snapshot_time: 0, // For the purpose of quote computation it isn't required to track actual timestamps
+                    last_snapshot_time: 0, /* For the purpose of quote computation it isn't
+                                            * required to track actual timestamps */
                 },
             )?),
             EkuboExtension::Twamm => {
@@ -140,16 +146,17 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
                         .into(),
                     attribute(&state_attrs, "token1_sale_rate")?
                         .clone()
-                        .into()
+                        .into(),
                 );
 
                 let last_execution_time: u64 = attribute(&state_attrs, "last_execution_time")?
                     .clone()
                     .into();
 
-                let mut virtual_order_deltas = sale_rate_deltas_from_attributes(state_attrs, last_execution_time)
-                    .map_err(InvalidSnapshotError::ValueError)?
-                    .collect_vec();
+                let mut virtual_order_deltas =
+                    sale_rate_deltas_from_attributes(state_attrs, last_execution_time)
+                        .map_err(InvalidSnapshotError::ValueError)?
+                        .collect_vec();
 
                 virtual_order_deltas.sort_unstable_by_key(|delta| delta.time);
 
@@ -168,25 +175,32 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
     }
 }
 
-fn attribute<'a>(map: &'a HashMap<String, Bytes>, key: &str) -> Result<&'a Bytes, InvalidSnapshotError> {
-    map
-        .get(key)
+fn attribute<'a>(
+    map: &'a HashMap<String, Bytes>,
+    key: &str,
+) -> Result<&'a Bytes, InvalidSnapshotError> {
+    map.get(key)
         .ok_or_else(|| InvalidSnapshotError::MissingAttribute(key.to_string()))
 }
 
 #[cfg(test)]
 mod tests {
-    use rstest::rstest;
+    use rstest::*;
+    use rstest_reuse::apply;
     use tycho_common::dto::ResponseProtocolState;
 
     use super::*;
-    use crate::evm::protocol::ekubo::test_pool::{attributes, component, state};
+    use crate::evm::protocol::ekubo::test_cases::*;
 
+    #[apply(all_cases)]
     #[tokio::test]
-    async fn test_try_from_with_block() {
+    async fn test_try_from_with_block(case: TestCase) {
         let snapshot = ComponentWithState {
-            state: ResponseProtocolState { attributes: attributes(), ..Default::default() },
-            component: component(),
+            state: ResponseProtocolState {
+                attributes: case.state_attributes,
+                ..Default::default()
+            },
+            component: case.component,
         };
 
         let result = EkuboState::try_from_with_block(
@@ -196,53 +210,41 @@ mod tests {
             &HashMap::new(),
         )
         .await
-        .unwrap();
+        .expect("reconstructing state");
 
-        assert_eq!(state(), result);
+        assert_eq!(result, case.state);
     }
 
+    #[apply(all_cases)]
     #[tokio::test]
-    #[rstest]
-    #[case::missing_extension_id("extension_id")]
-    #[case::missing_token0("token0")]
-    #[case::missing_token1("token1")]
-    #[case::missing_fee("fee")]
-    #[case::missing_tick_spacing("tick_spacing")]
-    #[case::missing_extension("extension")]
-    #[case::missing_liquidity("liquidity")]
-    #[case::missing_sqrt_ratio("sqrt_ratio")]
-    #[case::missing_tick("tick")]
-    async fn test_try_from_invalid(#[case] missing_attribute: String) {
-        let mut component = component();
-        let mut attributes = attributes();
+    async fn test_try_from_invalid(case: TestCase) {
+        for missing_attribute in case.required_attributes {
+            let mut component = case.component.clone();
+            let mut attributes = case.state_attributes.clone();
 
-        component
-            .static_attributes
-            .remove(&missing_attribute);
-        attributes.remove(&missing_attribute);
+            component
+                .static_attributes
+                .remove(&missing_attribute);
+            attributes.remove(&missing_attribute);
 
-        let snapshot = ComponentWithState {
-            state: ResponseProtocolState {
-                component_id: "State1".to_owned(),
-                attributes,
-                balances: HashMap::new(),
-            },
-            component,
-        };
+            let snapshot = ComponentWithState {
+                state: ResponseProtocolState {
+                    attributes,
+                    component_id: Default::default(),
+                    balances: Default::default(),
+                },
+                component,
+            };
 
-        let result = EkuboState::try_from_with_block(
-            snapshot,
-            Header::default(),
-            &HashMap::default(),
-            &HashMap::default(),
-        )
-        .await;
+            let result = EkuboState::try_from_with_block(
+                snapshot,
+                Header::default(),
+                &HashMap::default(),
+                &HashMap::default(),
+            )
+            .await;
 
-        let err = result.unwrap_err();
-
-        assert!(matches!(
-            err,
-            InvalidSnapshotError::MissingAttribute(attr) if attr == missing_attribute
-        ));
+            assert!(result.is_err());
+        }
     }
 }
