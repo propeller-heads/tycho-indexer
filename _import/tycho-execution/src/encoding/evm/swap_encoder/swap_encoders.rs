@@ -570,9 +570,14 @@ pub struct MaverickV2SwapEncoder {
 }
 
 impl SwapEncoder for MaverickV2SwapEncoder {
-    fn new(executor_address: String) -> Self {
-        Self { executor_address }
+    fn new(
+        executor_address: String,
+        _chain: Chain,
+        _config: Option<HashMap<String, String>>,
+    ) -> Result<Self, EncodingError> {
+        Ok(Self { executor_address })
     }
+
     fn encode_swap(
         &self,
         swap: Swap,
@@ -1451,12 +1456,17 @@ mod tests {
             // The receiver was generated with `makeAddr("bob") using forge`
             receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
             exact_out: false,
-            router_address: Bytes::zero(20),
+            router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
         };
-        let encoder =
-            MaverickV2SwapEncoder::new(String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"));
+        let encoder = MaverickV2SwapEncoder::new(
+            String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+            TychoCoreChain::Ethereum.into(),
+            None,
+        )
+        .unwrap();
+
         let encoded_swap = encoder
             .encode_swap(swap, encoding_context)
             .unwrap();
