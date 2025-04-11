@@ -9,23 +9,23 @@ use evm_ekubo_sdk::{
         self, twamm_pool::{TwammPoolError, TwammPoolState, TwammSaleRateDelta}, types::{NodeKey, Pool, QuoteParams, TokenAmount}
     },
 };
+use num_traits::Zero;
 
 use super::{full_range::FullRangePool, EkuboPool, EkuboPoolQuote};
-use crate::{evm::protocol::ekubo::twamm_sale_rate_delta::TwammSaleRateDeltas, protocol::errors::{InvalidSnapshotError, SimulationError, TransitionError}};
+use crate::protocol::errors::{InvalidSnapshotError, SimulationError, TransitionError};
 
 #[derive(Debug, Eq, Clone)]
 pub struct TwammPool {
     imp: quoting::twamm_pool::TwammPool,
-    virtual_order_deltas: TwammSaleRateDeltas,
     state: TwammPoolState,
+
+    changed_virtual_order_deltas: Vec<TwammSaleRateDelta>,
     swapped_this_block: bool,
 }
 
 impl PartialEq for TwammPool {
-    // The other properties are just helpers for keeping the underlying pool implementation
-    // up-to-date
     fn eq(&self, other: &Self) -> bool {
-        self.imp == other.imp
+        self.key() == other.key() && self.imp.get_sale_rate_deltas() == other.imp.get_sale_rate_deltas() && self.state == other.state
     }
 }
 
@@ -56,11 +56,11 @@ impl TwammPool {
 
     pub fn new(key: &NodeKey, state: TwammPoolState, virtual_order_deltas: Vec<TwammSaleRateDelta>) -> Result<Self, InvalidSnapshotError> {
         Ok(Self {
-            imp: impl_from_state(key, &state, virtual_order_deltas.clone()).map_err(|err| {
-                InvalidSnapshotError::ValueError(format!("creating oracle pool: {err:?}"))
+            imp: impl_from_state(key, &state, virtual_order_deltas).map_err(|err| {
+                InvalidSnapshotError::ValueError(format!("creating TWAMM pool: {err:?}"))
             })?,
-            virtual_order_deltas: virtual_order_deltas.into(),
             state,
+            changed_virtual_order_deltas: vec![],
             swapped_this_block: false,
         })
     }
@@ -82,7 +82,7 @@ impl TwammPool {
     }
 
     pub fn set_sale_rate_delta(&mut self, delta: TwammSaleRateDelta) {
-        self.virtual_order_deltas.set(delta);
+        self.changed_virtual_order_deltas.push(delta);
     }
 
     fn estimate_block_timestamp(&self) -> u64 {
@@ -127,22 +127,10 @@ impl EkuboPool for TwammPool {
             .quote(QuoteParams {
                 token_amount,
                 sqrt_ratio_limit: None,
-                override_state: None,
+                override_state: Some(self.state),
                 meta: self.estimate_block_timestamp(),
             })
             .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))?;
-
-        let state_after = quote.state_after;
-
-        let new_state = Self {
-            imp: impl_from_state(self.key(), &state_after, &self.virtual_order_deltas).map_err(|err| {
-                SimulationError::RecoverableError(format!("recreating TWAMM pool: {err:?}"))
-            })?,
-            virtual_order_deltas: self.virtual_order_deltas.clone(),
-            state: state_after,
-            swapped_this_block: true,
-        }
-        .into();
 
         Ok(EkuboPoolQuote {
             consumed_amount: quote.consumed_amount,
@@ -150,7 +138,12 @@ impl EkuboPool for TwammPool {
             gas: FullRangePool::gas_costs()
                 + quote.execution_resources.virtual_orders_executed as u64 * Self::BASE_GAS_COST_OF_EXECUTING_VIRTUAL_ORDERS
                 + quote.execution_resources.virtual_order_delta_times_crossed as u64 * Self::GAS_COST_OF_ONE_VIRTUAL_ORDER_DELTA,
-            new_state,
+            new_state: Self {
+                imp: self.imp.clone(),
+                state: quote.state_after,
+                changed_virtual_order_deltas: self.changed_virtual_order_deltas.clone(),
+                swapped_this_block: true,
+            }.into(),
         })
     }
 
@@ -167,7 +160,7 @@ impl EkuboPool for TwammPool {
                     amount: 0,
                 },
                 sqrt_ratio_limit: None,
-                override_state: None,
+                override_state: Some(self.state),
                 meta: estimated_timestamp + Self::UNDERESTIMATION_SLOT_COUNT * SLOT_DURATION_SECS,
             })
             .map_err(|err| SimulationError::RecoverableError(format!("executing virtual orders quote: {err:?}")))?;
@@ -175,18 +168,20 @@ impl EkuboPool for TwammPool {
         // If letting some virtual orders execute leads to a less favorable price for the given swap direction
         let moved_to_unfavorable_price = (virtual_order_quote.state_after.full_range_pool_state.sqrt_ratio < self.state.full_range_pool_state.sqrt_ratio) == (token_in == key.token0);
 
+        let (override_state, meta) = if moved_to_unfavorable_price {
+            (virtual_order_quote.state_after, virtual_order_quote.state_after.last_execution_time)
+        } else {
+            (self.state, estimated_timestamp)
+        };
+
         // Quote with the less favorable state (either the current one or the one where future virtual orders are already executed)
         let quote = self
             .imp
             .quote(QuoteParams {
                 token_amount: TokenAmount { amount: i128::MAX, token: token_in },
                 sqrt_ratio_limit: None,
-                override_state: moved_to_unfavorable_price.then_some(virtual_order_quote.state_after),
-                meta: if moved_to_unfavorable_price {
-                    virtual_order_quote.state_after.last_execution_time
-                } else {
-                    estimated_timestamp
-                },
+                override_state: Some(override_state),
+                meta,
             })
             .map_err(|err| SimulationError::RecoverableError(format!("quoting error: {err:?}")))?;
 
@@ -196,12 +191,34 @@ impl EkuboPool for TwammPool {
     }
 
     fn finish_transition(&mut self) -> Result<(), TransitionError<String>> {
-        self.imp = impl_from_state(self.key(), &self.state, &self.virtual_order_deltas)
-        .map_err(|err| {
-            TransitionError::SimulationError(SimulationError::RecoverableError(format!(
-                "reinstantiate TWAMM pool: {err:?}"
-            )))
-        })?;
+        if !self.changed_virtual_order_deltas.is_empty() {
+            let mut virtual_order_deltas = self.imp.get_sale_rate_deltas().clone();
+
+            for virtual_order_delta in self.changed_virtual_order_deltas.drain(..) {
+                let res = virtual_order_deltas.binary_search_by_key(&virtual_order_delta.time, |d| d.time);
+
+                match res {
+                    Ok(idx) => {
+                        if virtual_order_delta.sale_rate_delta0.is_zero() && virtual_order_delta.sale_rate_delta1.is_zero() {
+                            virtual_order_deltas.remove(idx);
+                        } else {
+                            virtual_order_deltas[idx] = virtual_order_delta;
+                        }
+                    }
+                    Err(idx) => {
+                        virtual_order_deltas.insert(idx, virtual_order_delta);
+                    }
+                }
+            }
+
+            self.imp = impl_from_state(self.key(), &self.state, virtual_order_deltas).map_err(
+                |err| {
+                    TransitionError::SimulationError(SimulationError::RecoverableError(format!(
+                        "reinstantiate TWAMM pool: {err:?}"
+                    )))
+                },
+            )?;
+        }
 
         self.swapped_this_block = false;
 

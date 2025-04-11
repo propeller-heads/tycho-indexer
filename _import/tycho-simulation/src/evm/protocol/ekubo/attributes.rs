@@ -1,48 +1,27 @@
 use std::collections::HashMap;
 
-use evm_ekubo_sdk::quoting::twamm_pool::TwammSaleRateDelta;
+use evm_ekubo_sdk::quoting::{twamm_pool::TwammSaleRateDelta, types::Tick};
 use itertools::Itertools;
-use num_traits::Zero;
 use tycho_common::Bytes;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TwammSaleRateDeltas(Vec<TwammSaleRateDelta>);
-
-impl TwammSaleRateDeltas {
-    pub fn set(&mut self, delta: TwammSaleRateDelta) {
-        let res = self
-            .0
-            .binary_search_by_key(&delta.time, |d| d.time);
-
-        let remove = delta.sale_rate_delta0.is_zero() && delta.sale_rate_delta1.is_zero();
-
-        match res {
-            Ok(idx) => {
-                if remove {
-                    self.0.remove(idx);
-                } else {
-                    self.0[idx] = delta;
-                }
-            }
-            Err(idx) => {
-                if !remove {
-                    self.0.insert(idx, delta);
-                }
-            }
-        }
-    }
-}
-
-impl From<&TwammSaleRateDeltas> for Vec<TwammSaleRateDelta> {
-    fn from(value: &TwammSaleRateDeltas) -> Self {
-        value.0.clone()
-    }
-}
-
-impl From<Vec<TwammSaleRateDelta>> for TwammSaleRateDeltas {
-    fn from(value: Vec<TwammSaleRateDelta>) -> Self {
-        Self(value)
-    }
+pub fn ticks_from_attributes<T: IntoIterator<Item = (String, Bytes)>>(
+    attributes: T,
+) -> Result<Vec<Tick>, String> {
+    attributes
+        .into_iter()
+        .filter_map(|(key, value)| {
+            key.starts_with("ticks/").then(|| {
+                key.split('/')
+                    .nth(1)
+                    .ok_or_else(|| "expected key name to contain tick index".to_string())?
+                    .parse::<i32>()
+                    .map_or_else(
+                        |err| Err(format!("tick index can't be parsed as i32: {err}")),
+                        |index| Ok(Tick { index, liquidity_delta: i128::from(value.clone()) }),
+                    )
+            })
+        })
+        .try_collect()
 }
 
 pub fn sale_rate_deltas_from_attributes<T: IntoIterator<Item = (String, Bytes)>>(
@@ -94,7 +73,7 @@ pub fn sale_rate_deltas_from_attributes<T: IntoIterator<Item = (String, Bytes)>>
 
             Some(Ok((time, is_token1, delta)))
         })
-        .collect::<Result<Vec<_>, _>>()?
+        .try_collect::<_, Vec<_>, _>()?
         .into_iter()
         .fold(HashMap::with_capacity(size_hint), |mut map, (time, is_token1, value)| {
             map

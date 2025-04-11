@@ -14,7 +14,7 @@ use tycho_common::Bytes;
 use super::{
     pool::{base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool},
     state::EkuboState,
-    tick::ticks_from_attributes, twamm_sale_rate_delta::sale_rate_deltas_from_attributes,
+    attributes::{sale_rate_deltas_from_attributes, ticks_from_attributes},
 };
 use crate::{
     models::Token,

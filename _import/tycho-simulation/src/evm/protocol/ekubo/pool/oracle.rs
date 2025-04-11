@@ -1,12 +1,11 @@
 use evm_ekubo_sdk::{
-    math::{
-        tick::{MAX_TICK, MIN_TICK},
-        uint::U256,
-    },
+    math::
+        uint::U256
+    ,
     quoting::{
         self,
-        oracle_pool::{OraclePoolError, OraclePoolState},
-        types::{NodeKey, Pool, QuoteParams, Tick, TokenAmount},
+        oracle_pool::OraclePoolState,
+        types::{NodeKey, Pool, QuoteParams, TokenAmount},
     },
 };
 
@@ -17,28 +16,14 @@ use crate::protocol::errors::{InvalidSnapshotError, SimulationError, TransitionE
 pub struct OraclePool {
     imp: quoting::oracle_pool::OraclePool,
     state: OraclePoolState,
+
     swapped_this_block: bool,
 }
 
 impl PartialEq for OraclePool {
-    // The other properties are just helpers for keeping the underlying pool implementation
-    // up-to-date
     fn eq(&self, other: &Self) -> bool {
-        self.imp == other.imp
+        self.key() == other.key() && self.state == other.state
     }
-}
-
-fn impl_from_state(
-    key: &NodeKey,
-    state: &OraclePoolState,
-) -> Result<quoting::oracle_pool::OraclePool, OraclePoolError> {
-    quoting::oracle_pool::OraclePool::new(
-        key.token1,
-        key.config.extension,
-        state.full_range_pool_state.sqrt_ratio,
-        state.full_range_pool_state.liquidity,
-        state.last_snapshot_time,
-    )
 }
 
 impl OraclePool {
@@ -46,7 +31,13 @@ impl OraclePool {
 
     pub fn new(key: &NodeKey, state: OraclePoolState) -> Result<Self, InvalidSnapshotError> {
         Ok(Self {
-            imp: impl_from_state(key, &state).map_err(|err| {
+            imp: quoting::oracle_pool::OraclePool::new(
+                key.token1,
+                key.config.extension,
+                state.full_range_pool_state.sqrt_ratio,
+                state.full_range_pool_state.liquidity,
+                state.last_snapshot_time,
+            ).map_err(|err| {
                 InvalidSnapshotError::ValueError(format!("creating oracle pool: {err:?}"))
             })?,
             state,
@@ -94,27 +85,20 @@ impl EkuboPool for OraclePool {
             .quote(QuoteParams {
                 token_amount,
                 sqrt_ratio_limit: None,
-                override_state: None,
+                override_state: Some(self.state),
                 meta: timestamp,
             })
             .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))?;
-
-        let state_after = quote.state_after;
-
-        let new_state = Self {
-            imp: impl_from_state(self.key(), &state_after).map_err(|err| {
-                SimulationError::RecoverableError(format!("recreating oracle pool: {err:?}"))
-            })?,
-            state: state_after,
-            swapped_this_block: true,
-        }
-        .into();
 
         Ok(EkuboPoolQuote {
             consumed_amount: quote.consumed_amount,
             calculated_amount: quote.calculated_amount,
             gas: FullRangePool::gas_costs() + quote.execution_resources.snapshots_written as u64 * Self::GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT,
-            new_state,
+            new_state: Self {
+                imp: self.imp.clone(),
+                state: quote.state_after,
+                swapped_this_block: true,
+            }.into(),
         })
     }
 
@@ -126,7 +110,7 @@ impl EkuboPool for OraclePool {
             .quote(QuoteParams {
                 token_amount: max_in_token_amount,
                 sqrt_ratio_limit: None,
-                override_state: None,
+                override_state: Some(self.state),
                 meta: 0,
             })
             .map_err(|err| SimulationError::RecoverableError(format!("quoting error: {err:?}")))?;
@@ -137,13 +121,6 @@ impl EkuboPool for OraclePool {
     }
 
     fn finish_transition(&mut self) -> Result<(), TransitionError<String>> {
-        self.imp = impl_from_state(self.key(), &self.state)
-        .map_err(|err| {
-            TransitionError::SimulationError(SimulationError::RecoverableError(format!(
-                "reinstantiate oracle pool: {err:?}"
-            )))
-        })?;
-
         self.swapped_this_block = false;
 
         Ok(())

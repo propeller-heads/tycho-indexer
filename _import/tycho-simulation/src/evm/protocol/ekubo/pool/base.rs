@@ -2,41 +2,39 @@ use evm_ekubo_sdk::{
     math::{tick::to_sqrt_ratio, uint::U256},
     quoting::{
         self,
-        base_pool::{BasePoolError, BasePoolResources, BasePoolState},
+        base_pool::{BasePoolError, BasePoolState},
         types::{NodeKey, Pool, QuoteParams, Tick, TokenAmount},
         util::find_nearest_initialized_tick_index,
     },
 };
+use num_traits::Zero;
 
 use super::{EkuboPool, EkuboPoolQuote};
-use crate::{
-    evm::protocol::ekubo::tick::Ticks,
-    protocol::errors::{InvalidSnapshotError, SimulationError, TransitionError},
-};
+use crate::
+    protocol::errors::{InvalidSnapshotError, SimulationError, TransitionError}
+;
 
 #[derive(Debug, Clone, Eq)]
 pub struct BasePool {
-    state: BasePoolState,
-    active_tick: Option<i32>,
-    ticks: Ticks,
-
     imp: quoting::base_pool::BasePool,
+    state: BasePoolState,
+
+    changed_ticks: Vec<Tick>,
+    active_tick: Option<i32>,
 }
 
 impl PartialEq for BasePool {
-    // The other properties are just helpers for keeping the underlying pool implementation
-    // up-to-date
     fn eq(&self, other: &Self) -> bool {
-        self.imp == other.imp
+        self.key() == other.key() && self.imp.get_sorted_ticks() == other.imp.get_sorted_ticks() && self.state == other.state
     }
 }
 
 fn impl_from_state(
     key: NodeKey,
     state: BasePoolState,
-    ticks: impl Into<Vec<Tick>>,
+    ticks: Vec<Tick>,
 ) -> Result<quoting::base_pool::BasePool, BasePoolError> {
-    quoting::base_pool::BasePool::new(key, state, ticks.into())
+    quoting::base_pool::BasePool::new(key, state, ticks)
 }
 
 impl BasePool {
@@ -50,16 +48,16 @@ impl BasePool {
     pub fn new(
         key: NodeKey,
         state: BasePoolState,
-        ticks: Ticks,
+        ticks: Vec<Tick>,
         active_tick: i32,
     ) -> Result<Self, InvalidSnapshotError> {
         Ok(Self {
-            imp: impl_from_state(key, state, &ticks).map_err(|err| {
+            imp: impl_from_state(key, state, ticks).map_err(|err| {
                 InvalidSnapshotError::ValueError(format!("creating base pool: {err:?}"))
             })?,
             state,
             active_tick: Some(active_tick),
-            ticks,
+            changed_ticks: vec![],
         })
     }
 
@@ -68,14 +66,7 @@ impl BasePool {
     }
 
     pub fn set_tick(&mut self, tick: Tick) {
-        self.ticks.set(tick);
-    }
-
-    pub const fn gas_costs(resources: &BasePoolResources) -> u64 {
-        Self::BASE_GAS_COST +
-            resources.tick_spacings_crossed as u64 * Self::GAS_COST_OF_ONE_TICK_SPACING_CROSSED +
-            resources.initialized_ticks_crossed as u64 *
-                Self::GAS_COST_OF_ONE_INITIALIZED_TICK_CROSSED
+        self.changed_ticks.push(tick);
     }
 }
 
@@ -102,7 +93,7 @@ impl EkuboPool for BasePool {
             .quote(QuoteParams {
                 token_amount,
                 sqrt_ratio_limit: None,
-                override_state: None,
+                override_state: Some(self.state),
                 meta: (),
             })
             .map_err(|err| SimulationError::RecoverableError(format!("{err:?}")))?;
@@ -110,19 +101,21 @@ impl EkuboPool for BasePool {
         let state_after = quote.state_after;
 
         let new_state = Self {
-            imp: impl_from_state(*self.key(), state_after, &self.ticks).map_err(
-                |err| SimulationError::RecoverableError(format!("recreating base pool: {err:?}")),
-            )?,
+            imp: self.imp.clone(),
             state: state_after,
             active_tick: None,
-            ticks: self.ticks.clone(),
+            changed_ticks: self.changed_ticks.clone(),
         }
         .into();
+
+        let resources = quote.execution_resources;
 
         Ok(EkuboPoolQuote {
             consumed_amount: quote.consumed_amount,
             calculated_amount: quote.calculated_amount,
-            gas: Self::gas_costs(&quote.execution_resources),
+            gas: Self::BASE_GAS_COST +
+                resources.tick_spacings_crossed as u64 * Self::GAS_COST_OF_ONE_TICK_SPACING_CROSSED +
+                resources.initialized_ticks_crossed as u64 * Self::GAS_COST_OF_ONE_INITIALIZED_TICK_CROSSED,
             new_state,
         })
     }
@@ -131,7 +124,7 @@ impl EkuboPool for BasePool {
         let max_in_token_amount = TokenAmount { amount: i128::MAX, token: token_in };
 
         let sqrt_ratio = self.sqrt_ratio();
-        let ticks = self.ticks.inner();
+        let ticks = self.imp.get_sorted_ticks();
 
         let sqrt_ratio_limit = if token_in == self.key().token0 {
             ticks
@@ -164,7 +157,7 @@ impl EkuboPool for BasePool {
             .quote(QuoteParams {
                 token_amount: max_in_token_amount,
                 sqrt_ratio_limit: Some(sqrt_ratio_limit),
-                override_state: None,
+                override_state: Some(self.state),
                 meta: (),
             })
             .map_err(|err| SimulationError::RecoverableError(format!("quoting error: {err:?}")))?;
@@ -184,20 +177,40 @@ impl EkuboPool for BasePool {
     }
 
     fn finish_transition(&mut self) -> Result<(), TransitionError<String>> {
+        if !self.changed_ticks.is_empty() {
+            let mut ticks = self.imp.get_sorted_ticks().clone();
+
+            for tick in self.changed_ticks.drain(..) {
+                let res = ticks.binary_search_by_key(&tick.index, |t| t.index);
+
+                match res {
+                    Ok(idx) => {
+                        if tick.liquidity_delta.is_zero() {
+                            ticks.remove(idx);
+                        } else {
+                            ticks[idx] = tick;
+                        }
+                    }
+                    Err(idx) => {
+                        ticks.insert(idx, tick);
+                    }
+                }
+            }
+
+            self.imp = impl_from_state(*self.key(), self.state, ticks).map_err(
+                |err| {
+                    TransitionError::SimulationError(SimulationError::RecoverableError(format!(
+                        "reinstantiate base pool: {err:?}"
+                    )))
+                },
+            )?;
+        }
+
         // Only after a swap we set the active_tick to None. In this case, the active_tick_index is
         // already correctly computed though
         if let Some(active_tick) = self.active_tick {
-            self.state.active_tick_index =
-                find_nearest_initialized_tick_index(self.ticks.inner(), active_tick);
+            self.state.active_tick_index = find_nearest_initialized_tick_index(self.imp.get_sorted_ticks(), active_tick);
         }
-
-        self.imp = impl_from_state(*self.key(), self.state, &self.ticks).map_err(
-            |err| {
-                TransitionError::SimulationError(SimulationError::RecoverableError(format!(
-                    "reinstantiate base pool: {err:?}"
-                )))
-            },
-        )?;
 
         Ok(())
     }

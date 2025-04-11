@@ -5,7 +5,7 @@ pub mod twamm;
 
 use evm_ekubo_sdk::{
     math::uint::U256,
-    quoting::types::{NodeKey, Tick, TokenAmount},
+    quoting::types::{NodeKey, TokenAmount},
 };
 
 use super::state::EkuboState;

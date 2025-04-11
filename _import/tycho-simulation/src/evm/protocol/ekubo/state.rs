@@ -3,14 +3,13 @@ use std::{any::Any, collections::HashMap, fmt::Debug};
 use alloy_primitives::Address;
 use evm_ekubo_sdk::{
     math::uint::U256,
-    quoting::types::{NodeKey, Tick, TokenAmount},
+    quoting::types::{NodeKey, TokenAmount},
 };
 use num_bigint::BigUint;
 use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
 use super::{
-    pool::{base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool, EkuboPool},
-    tick::ticks_from_attributes, twamm_sale_rate_delta::sale_rate_deltas_from_attributes,
+    attributes::{sale_rate_deltas_from_attributes, ticks_from_attributes}, pool::{base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool, EkuboPool}
 };
 use crate::{
     evm::protocol::u256_num::u256_to_f64,
@@ -54,7 +53,6 @@ impl ProtocolSim for EkuboState {
         })
     }
 
-    // TODO Need a timestamp here for the Oracle pool (and TWAMM in the future)
     fn get_amount_out(
         &self,
         amount_in: BigUint,
