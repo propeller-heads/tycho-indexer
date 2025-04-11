@@ -1,3 +1,18 @@
+## [0.79.0](https://github.com/propeller-heads/tycho-execution/compare/0.78.1...0.79.0) (2025-04-11)
+
+
+### Features
+
+* Add new CurveExecutor address ([916c2b7](https://github.com/propeller-heads/tycho-execution/commit/916c2b7dba2c1c424efcbf884932a05427816cf8))
+* Deploy Curve Executor ([5d4d6d1](https://github.com/propeller-heads/tycho-execution/commit/5d4d6d1ff891766c067e3ff6355ffbb5c50bbf16))
+
+
+### Bug Fixes
+
+* Checksum curve pool addresses ([9e68ab8](https://github.com/propeller-heads/tycho-execution/commit/9e68ab8b0127831ee9dbc1f168e8aac9e28991c0))
+* Support pools that hold ETH but the coin is WETH ([2e8392a](https://github.com/propeller-heads/tycho-execution/commit/2e8392ab40c6c0e99089fae71873755dedb6e925))
+* Use forceApprove instead of regular Approve ([c963f3b](https://github.com/propeller-heads/tycho-execution/commit/c963f3b2f61e9d1a6e333149b091c3df90fd857b))
+
 ## [0.78.1](https://github.com/propeller-heads/tycho-execution/compare/0.78.0...0.78.1) (2025-04-09)
 
 
