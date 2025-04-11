@@ -42,7 +42,7 @@ use tycho_simulation::{
         engine_db::tycho_db::PreCachedDB,
         protocol::{
             ekubo::state::EkuboState,
-            filters::{balancer_pool_filter, uniswap_v4_pool_with_hook_filter},
+            filters::{balancer_pool_filter, curve_pool_filter, uniswap_v4_pool_with_hook_filter},
             u256_num::biguint_to_u256,
             uniswap_v2::state::UniswapV2State,
             uniswap_v3::state::UniswapV3State,
@@ -145,7 +145,12 @@ async fn main() {
                     tvl_filter.clone(),
                     Some(uniswap_v4_pool_with_hook_filter),
                 )
-                .exchange::<EkuboState>("ekubo_v2", tvl_filter.clone(), None);
+                .exchange::<EkuboState>("ekubo_v2", tvl_filter.clone(), None)
+                .exchange::<EVMPoolState<PreCachedDB>>(
+                    "vm:curve",
+                    tvl_filter.clone(),
+                    Some(curve_pool_filter),
+                );
         }
         Chain::Base => {
             protocol_stream = protocol_stream
@@ -388,7 +393,9 @@ fn get_best_swap(
     for (id, state) in message.states.iter() {
         if let Some(component) = pairs.get(id) {
             let tokens = &component.tokens;
-            if HashSet::from([&sell_token, &buy_token]) == HashSet::from([&tokens[0], &tokens[1]]) {
+            if HashSet::from([&sell_token, &buy_token])
+                .is_subset(&HashSet::from_iter(tokens.iter()))
+            {
                 let amount_out = state
                     .get_amount_out(amount_in.clone(), &sell_token, &buy_token)
                     .map_err(|e| {
@@ -541,7 +548,7 @@ async fn get_tx_requests(
         from: Some(user_address),
         value: Some(biguint_to_u256(&tx.value)),
         input: TransactionInput { input: Some(AlloyBytes::from(tx.data)), data: None },
-        gas: Some(300_000u64),
+        gas: Some(800_000u64),
         chain_id: Some(chain_id),
         max_fee_per_gas: Some(max_fee_per_gas.into()),
         max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),

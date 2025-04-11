@@ -1368,9 +1368,9 @@ dependencies = [
 
 [[package]]
 name = "async-compression"
-version = "0.4.21"
+version = "0.4.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0cf008e5e1a9e9e22a7d3c9a4992e21a350290069e36d8fb72304ed17e8f2d2"
+checksum = "59a194f9d963d8099596278594b3107448656ba73831c9d8c783e613ce86da64"
 dependencies = [
  "flate2",
  "futures-core",
@@ -4664,15 +4664,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "itertools"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
-dependencies = [
- "either",
-]
-
-[[package]]
 name = "itoa"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5813,7 +5804,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 2.0.100",
@@ -8153,9 +8144,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.76.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2db0989066664237fcd640bb5f723ded0e7b0377441a670786f25dfdf2b274b5"
+version = "0.78.1"
+source = "git+https://github.com/propeller-heads/tycho-execution.git?rev=916c2b7dba2c1c424efcbf884932a05427816cf8#916c2b7dba2c1c424efcbf884932a05427816cf8"
 dependencies = [
  "alloy 0.9.2",
  "alloy-primitives",
