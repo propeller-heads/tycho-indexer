@@ -148,7 +148,7 @@ pub fn base() -> TestCase {
                     liquidity: LIQUIDITY_BETWEEN,
                     active_tick_index: Some(0),
                 },
-                vec![LOWER_TICK, UPPER_TICK].into(),
+                vec![LOWER_TICK, UPPER_TICK],
                 TICK_INDEX_BETWEEN,
             )
             .unwrap(),
