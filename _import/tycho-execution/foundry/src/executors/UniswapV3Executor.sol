@@ -111,7 +111,7 @@ contract UniswapV3Executor is IExecutor, ICallback, TokenTransfer {
         uint256 amountOwed =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
 
-        _transfer(IERC20(tokenIn), sender, msg.sender, amountOwed, transferType);
+        _transfer(tokenIn, sender, msg.sender, amountOwed, transferType);
 
         return abi.encode(amountOwed, tokenIn);
     }

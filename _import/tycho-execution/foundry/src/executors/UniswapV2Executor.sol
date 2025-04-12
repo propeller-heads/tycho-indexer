@@ -50,7 +50,9 @@ contract UniswapV2Executor is IExecutor, TokenTransfer {
         _verifyPairAddress(target);
 
         calculatedAmount = _getAmountOut(target, givenAmount, zeroForOne);
-        _transfer(tokenIn, msg.sender, target, givenAmount, transferType);
+        _transfer(
+            address(tokenIn), msg.sender, target, givenAmount, transferType
+        );
 
         IUniswapV2Pair pool = IUniswapV2Pair(target);
         if (zeroForOne) {

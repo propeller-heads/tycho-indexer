@@ -1048,6 +1048,8 @@ mod tests {
                     "6982508145454ce325ddbe47a25d4ec3d2311933",
                     // zero for one
                     "00",
+                    // transfer type
+                    "00",
                     // first pool intermediary token (ETH)
                     "0000000000000000000000000000000000000000",
                     // fee

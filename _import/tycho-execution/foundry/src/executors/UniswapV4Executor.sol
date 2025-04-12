@@ -17,10 +17,11 @@ import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {IV4Router} from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
 import {PathKey} from "@uniswap/v4-periphery/src/libraries/PathKey.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
+import {TokenTransfer} from "./TokenTransfer.sol";
 
 error UniswapV4Executor__InvalidDataLength();
 
-contract UniswapV4Executor is IExecutor, V4Router, ICallback {
+contract UniswapV4Executor is IExecutor, V4Router, ICallback, TokenTransfer {
     using SafeERC20 for IERC20;
     using CurrencyLibrary for Currency;
 
@@ -30,7 +31,10 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback {
         int24 tickSpacing;
     }
 
-    constructor(IPoolManager _poolManager) V4Router(_poolManager) {}
+    constructor(IPoolManager _poolManager, address _permit2)
+        V4Router(_poolManager)
+        TokenTransfer(_permit2)
+    {}
 
     function swap(uint256 amountIn, bytes calldata data)
         external
@@ -41,8 +45,18 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback {
             address tokenIn,
             address tokenOut,
             bool zeroForOne,
+            TransferType transferType,
             UniswapV4Executor.UniswapV4Pool[] memory pools
         ) = _decodeData(data);
+
+        // TODO move this into callback when we implement callback transfer type support
+        _transfer(
+            tokenIn,
+            msg.sender,
+            address(this), // irrelevant attribute
+            amountIn,
+            transferType
+        );
 
         bytes memory swapData;
         if (pools.length == 1) {
@@ -138,6 +152,7 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback {
             address tokenIn,
             address tokenOut,
             bool zeroForOne,
+            TransferType transferType,
             UniswapV4Pool[] memory pools
         )
     {
@@ -148,10 +163,11 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback {
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         zeroForOne = (data[40] != 0);
+        transferType = TransferType(uint8(data[41]));
 
-        uint256 poolsLength = (data.length - 41) / 26; // 26 bytes per pool object
+        uint256 poolsLength = (data.length - 42) / 26; // 26 bytes per pool object
         pools = new UniswapV4Pool[](poolsLength);
-        bytes memory poolsData = data[41:];
+        bytes memory poolsData = data[42:];
         uint256 offset = 0;
         for (uint256 i = 0; i < poolsLength; i++) {
             address intermediaryToken;

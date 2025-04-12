@@ -8,23 +8,38 @@ import "./executors/UniswapV4Utils.sol";
 import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 
 contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
-    function _getSequentialSwaps() internal view returns (bytes[] memory) {
+    function _getSequentialSwaps(bool permit2)
+        internal
+        view
+        returns (bytes[] memory)
+    {
         // Trade 1 WETH for USDC through DAI with 2 swaps on Uniswap V2
         // 1 WETH   ->   DAI   ->   USDC
         //       (univ2)     (univ2)
+
+        TokenTransfer.TransferType transferType = permit2
+            ? TokenTransfer.TransferType.TRANSFER_PERMIT2
+            : TokenTransfer.TransferType.TRANSFER_FROM;
+
         bytes[] memory swaps = new bytes[](2);
         // WETH -> DAI
         swaps[0] = encodeSequentialSwap(
             address(usv2Executor),
             encodeUniswapV2Swap(
-                WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
+                WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false, transferType
             )
         );
 
         // DAI -> USDC
         swaps[1] = encodeSequentialSwap(
             address(usv2Executor),
-            encodeUniswapV2Swap(DAI_ADDR, DAI_USDC_POOL, tychoRouterAddr, true)
+            encodeUniswapV2Swap(
+                DAI_ADDR,
+                DAI_USDC_POOL,
+                tychoRouterAddr,
+                true,
+                TokenTransfer.TransferType.TRANSFER
+            )
         );
         return swaps;
     }
@@ -32,10 +47,13 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
     function testSequentialSwapInternalMethod() public {
         // Trade 1 WETH for USDC through DAI - see _getSequentialSwaps for more info
         uint256 amountIn = 1 ether;
-        deal(WETH_ADDR, tychoRouterAddr, amountIn);
+        deal(WETH_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
 
-        bytes[] memory swaps = _getSequentialSwaps();
+        bytes[] memory swaps = _getSequentialSwaps(false);
         tychoRouter.exposedSequentialSwap(amountIn, pleEncode(swaps));
+        vm.stopPrank();
 
         uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(tychoRouterAddr);
         assertEq(usdcBalance, 2644659787);
@@ -53,7 +71,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             bytes memory signature
         ) = handlePermit2Approval(WETH_ADDR, tychoRouterAddr, amountIn);
 
-        bytes[] memory swaps = _getSequentialSwaps();
+        bytes[] memory swaps = _getSequentialSwaps(true);
         tychoRouter.sequentialSwapPermit2(
             amountIn,
             WETH_ADDR,
@@ -80,7 +98,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
 
-        bytes[] memory swaps = _getSequentialSwaps();
+        bytes[] memory swaps = _getSequentialSwaps(false);
         tychoRouter.sequentialSwap(
             amountIn,
             WETH_ADDR,
@@ -105,7 +123,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
 
-        bytes[] memory swaps = _getSequentialSwaps();
+        bytes[] memory swaps = _getSequentialSwaps(false);
         vm.expectRevert(TychoRouter__UndefinedMinAmountOut.selector);
         tychoRouter.sequentialSwap(
             amountIn,
@@ -127,7 +145,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn - 1);
 
-        bytes[] memory swaps = _getSequentialSwaps();
+        bytes[] memory swaps = _getSequentialSwaps(false);
         vm.expectRevert();
         tychoRouter.sequentialSwap(
             amountIn,
@@ -152,7 +170,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             bytes memory signature
         ) = handlePermit2Approval(WETH_ADDR, tychoRouterAddr, amountIn);
 
-        bytes[] memory swaps = _getSequentialSwaps();
+        bytes[] memory swaps = _getSequentialSwaps(true);
 
         uint256 minAmountOut = 3000 * 1e18;
 
@@ -195,7 +213,30 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             sigDeadline: 0
         });
 
-        bytes[] memory swaps = _getSequentialSwaps();
+        bytes[] memory swaps = new bytes[](2);
+        // WETH -> DAI
+        swaps[0] = encodeSequentialSwap(
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                WETH_ADDR,
+                WETH_DAI_POOL,
+                tychoRouterAddr,
+                false,
+                TokenTransfer.TransferType.TRANSFER
+            )
+        );
+
+        // DAI -> USDC
+        swaps[1] = encodeSequentialSwap(
+            address(usv2Executor),
+            encodeUniswapV2Swap(
+                DAI_ADDR,
+                DAI_USDC_POOL,
+                tychoRouterAddr,
+                true,
+                TokenTransfer.TransferType.TRANSFER
+            )
+        );
 
         uint256 amountOut = tychoRouter.sequentialSwapPermit2{value: amountIn}(
             amountIn,
@@ -237,14 +278,24 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         swaps[0] = encodeSequentialSwap(
             address(usv2Executor),
             encodeUniswapV2Swap(
-                USDC_ADDR, DAI_USDC_POOL, tychoRouterAddr, false
+                USDC_ADDR,
+                DAI_USDC_POOL,
+                tychoRouterAddr,
+                false,
+                TokenTransfer.TransferType.TRANSFER_PERMIT2
             )
         );
 
         // DAI -> WETH
         swaps[1] = encodeSequentialSwap(
             address(usv2Executor),
-            encodeUniswapV2Swap(DAI_ADDR, WETH_DAI_POOL, tychoRouterAddr, true)
+            encodeUniswapV2Swap(
+                DAI_ADDR,
+                WETH_DAI_POOL,
+                tychoRouterAddr,
+                true,
+                TokenTransfer.TransferType.TRANSFER
+            )
         );
 
         uint256 amountOut = tychoRouter.sequentialSwapPermit2(
@@ -275,11 +326,21 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         deal(USDC_ADDR, tychoRouterAddr, amountIn);
 
         bytes memory usdcWethV3Pool1ZeroOneData = encodeUniswapV3Swap(
-            USDC_ADDR, WETH_ADDR, tychoRouterAddr, USDC_WETH_USV3, true
+            USDC_ADDR,
+            WETH_ADDR,
+            tychoRouterAddr,
+            USDC_WETH_USV3,
+            true,
+            TokenTransfer.TransferType.TRANSFER
         );
 
         bytes memory usdcWethV3Pool2OneZeroData = encodeUniswapV3Swap(
-            WETH_ADDR, USDC_ADDR, tychoRouterAddr, USDC_WETH_USV3_2, false
+            WETH_ADDR,
+            USDC_ADDR,
+            tychoRouterAddr,
+            USDC_WETH_USV3_2,
+            false,
+            TokenTransfer.TransferType.TRANSFER
         );
 
         bytes[] memory swaps = new bytes[](2);

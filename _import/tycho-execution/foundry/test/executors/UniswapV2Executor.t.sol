@@ -176,7 +176,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             WETH_DAI_POOL,
             BOB,
             zeroForOne,
-            uint8(TokenTransfer.TransferType.TRANSFERFROM)
+            uint8(TokenTransfer.TransferType.TRANSFER_FROM)
         );
 
         deal(WETH_ADDR, address(this), amountIn);
@@ -197,7 +197,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             WETH_DAI_POOL,
             ALICE,
             zeroForOne,
-            uint8(TokenTransfer.TransferType.TRANSFERPERMIT2)
+            uint8(TokenTransfer.TransferType.TRANSFER_PERMIT2)
         );
 
         deal(WETH_ADDR, ALICE, amountIn);

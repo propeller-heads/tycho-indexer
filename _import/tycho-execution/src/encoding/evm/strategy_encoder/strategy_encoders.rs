@@ -39,6 +39,7 @@ pub struct SingleSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
     permit2: Option<Permit2>,
     selector: String,
+    native_address: Bytes,
     router_address: Bytes,
 }
 
@@ -57,7 +58,13 @@ impl SingleSwapStrategyEncoder {
                 "singleSwap(uint256,address,address,uint256,bool,bool,address,bytes)".to_string(),
             )
         };
-        Ok(Self { permit2, selector, swap_encoder_registry, router_address })
+        Ok(Self {
+            permit2,
+            selector,
+            swap_encoder_registry,
+            native_address: chain.native_token()?,
+            router_address,
+        })
     }
 
     /// Encodes information necessary for performing a single hop against a given executor for
@@ -117,6 +124,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
             let transfer_type = self.get_transfer_method(
                 swap.clone(),
                 solution.given_token.clone(),
+                self.native_address.clone(),
                 self.permit2.clone().is_some(),
             );
 
@@ -289,6 +297,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 let transfer_type = self.get_transfer_method(
                     swap.clone(),
                     solution.given_token.clone(),
+                    self.native_address.clone(),
                     self.permit2.clone().is_some(),
                 );
 
@@ -515,6 +524,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 let transfer_type = self.get_transfer_method(
                     swap.clone(),
                     solution.given_token.clone(),
+                    self.native_address.clone(),
                     self.permit2.clone().is_some(),
                 );
 
@@ -857,6 +867,7 @@ mod tests {
             "0000000000000000000000000000",             // padding
         ));
         let hex_calldata = encode(&calldata);
+        println!("{}", hex_calldata);
 
         assert_eq!(hex_calldata[..456], expected_input);
         assert_eq!(hex_calldata[1224..], expected_swap);
@@ -1354,9 +1365,9 @@ mod tests {
 
         let expected_swaps = String::from(concat!(
             // length of ple encoded swaps without padding
-            "0000000000000000000000000000000000000000000000000000000000000078",
+            "0000000000000000000000000000000000000000000000000000000000000079",
             // ple encoded swaps
-            "0076",   // Swap length
+            "0077",   // Swap length
             "00",     // token in index
             "01",     // token out index
             "000000", // split
@@ -1366,6 +1377,7 @@ mod tests {
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // group token in
             "6982508145454ce325ddbe47a25d4ec3d2311933", // group token in
             "00",                                       // zero2one
+            "04",                                       // transfer type (transfer to router)
             // First pool params
             "0000000000000000000000000000000000000000", // intermediary token (ETH)
             "000bb8",                                   // fee
@@ -1374,7 +1386,7 @@ mod tests {
             "6982508145454ce325ddbe47a25d4ec3d2311933", // intermediary token (PEPE)
             "0061a8",                                   // fee
             "0001f4",                                   // tick spacing
-            "0000000000000000"                          // padding
+            "00000000000000"                          // padding
         ));
 
         let hex_calldata = encode(&calldata);

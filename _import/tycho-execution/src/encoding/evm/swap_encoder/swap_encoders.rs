@@ -202,7 +202,13 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let pool_params =
             (token_out_address, pool_fee_u24, pool_tick_spacing_u24).abi_encode_packed();
 
-        let args = (group_token_in_address, group_token_out_address, zero_to_one, pool_params);
+        let args = (
+            group_token_in_address,
+            group_token_out_address,
+            zero_to_one,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
+            pool_params,
+        );
 
         Ok(args.abi_encode_packed())
     }
@@ -786,6 +792,8 @@ mod tests {
                 "dac17f958d2ee523a2206206994597c13d831ec7",
                 // zero for one
                 "01",
+                // transfer type
+                "00",
                 // pool params:
                 // - intermediary token
                 "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -942,6 +950,7 @@ mod tests {
         let combined_hex =
             format!("{}{}", encode(&initial_encoded_swap), encode(&second_encoded_swap));
 
+        println!("{}", combined_hex);
         assert_eq!(
             combined_hex,
             String::from(concat!(
@@ -951,6 +960,8 @@ mod tests {
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
                 // zero for one
                 "01",
+                // transfer type
+                "00",
                 // pool params:
                 // - intermediary token USDT
                 "dac17f958d2ee523a2206206994597c13d831ec7",
