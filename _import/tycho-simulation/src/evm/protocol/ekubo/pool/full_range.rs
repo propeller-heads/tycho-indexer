@@ -1,5 +1,5 @@
 use evm_ekubo_sdk::{
-    math::{tick::MIN_SQRT_RATIO, uint::U256},
+    math::uint::U256,
     quoting::{
         self,
         full_range_pool::FullRangePoolState,
@@ -22,16 +22,13 @@ impl PartialEq for FullRangePool {
     }
 }
 
-const DUMMY_STATE: FullRangePoolState =
-    FullRangePoolState { sqrt_ratio: MIN_SQRT_RATIO, liquidity: 0 };
-
 impl FullRangePool {
     const BASE_GAS_COST: u64 = 20_000;
 
     pub fn new(key: NodeKey, state: FullRangePoolState) -> Result<Self, InvalidSnapshotError> {
         Ok(Self {
             state,
-            imp: quoting::full_range_pool::FullRangePool::new(key, DUMMY_STATE).map_err(|err| {
+            imp: quoting::full_range_pool::FullRangePool::new(key, state).map_err(|err| {
                 InvalidSnapshotError::ValueError(format!("creating full range pool: {err:?}"))
             })?,
         })

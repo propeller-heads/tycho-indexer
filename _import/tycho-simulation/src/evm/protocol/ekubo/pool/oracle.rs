@@ -1,8 +1,7 @@
 use evm_ekubo_sdk::{
-    math::{tick::MIN_SQRT_RATIO, uint::U256},
+    math::uint::U256,
     quoting::{
         self,
-        full_range_pool::FullRangePoolState,
         oracle_pool::OraclePoolState,
         types::{NodeKey, Pool, QuoteParams, TokenAmount},
     },
@@ -25,11 +24,6 @@ impl PartialEq for OraclePool {
     }
 }
 
-const DUMMY_STATE: OraclePoolState = OraclePoolState {
-    full_range_pool_state: FullRangePoolState { liquidity: 0, sqrt_ratio: MIN_SQRT_RATIO },
-    last_snapshot_time: 0,
-};
-
 impl OraclePool {
     const GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT: u64 = 15_000;
 
@@ -38,13 +32,9 @@ impl OraclePool {
             imp: quoting::oracle_pool::OraclePool::new(
                 key.token1,
                 key.config.extension,
-                DUMMY_STATE
-                    .full_range_pool_state
-                    .sqrt_ratio,
-                DUMMY_STATE
-                    .full_range_pool_state
-                    .liquidity,
-                DUMMY_STATE.last_snapshot_time,
+                state.full_range_pool_state.sqrt_ratio,
+                state.full_range_pool_state.liquidity,
+                state.last_snapshot_time,
             )
             .map_err(|err| {
                 InvalidSnapshotError::ValueError(format!("creating oracle pool: {err:?}"))

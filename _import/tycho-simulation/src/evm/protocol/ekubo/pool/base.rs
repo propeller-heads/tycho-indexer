@@ -1,8 +1,5 @@
 use evm_ekubo_sdk::{
-    math::{
-        tick::{to_sqrt_ratio, MIN_SQRT_RATIO},
-        uint::U256,
-    },
+    math::{tick::to_sqrt_ratio, uint::U256},
     quoting::{
         self,
         base_pool::{BasePoolError, BasePoolState},
@@ -32,14 +29,12 @@ impl PartialEq for BasePool {
     }
 }
 
-const DUMMY_STATE: BasePoolState =
-    BasePoolState { active_tick_index: None, sqrt_ratio: MIN_SQRT_RATIO, liquidity: 0 };
-
 fn impl_from_state(
     key: NodeKey,
+    state: BasePoolState,
     ticks: Vec<Tick>,
 ) -> Result<quoting::base_pool::BasePool, BasePoolError> {
-    quoting::base_pool::BasePool::new(key, DUMMY_STATE, ticks)
+    quoting::base_pool::BasePool::new(key, state, ticks)
 }
 
 impl BasePool {
@@ -58,7 +53,7 @@ impl BasePool {
         active_tick: i32,
     ) -> Result<Self, InvalidSnapshotError> {
         Ok(Self {
-            imp: impl_from_state(key, ticks).map_err(|err| {
+            imp: impl_from_state(key, state, ticks).map_err(|err| {
                 InvalidSnapshotError::ValueError(format!("creating base pool: {err:?}"))
             })?,
             state,
@@ -185,7 +180,7 @@ impl EkuboPool for BasePool {
     }
 
     fn finish_transition(&mut self) -> Result<(), TransitionError<String>> {
-        if !self.changed_ticks.is_empty() {
+        let updated_ticks = (!self.changed_ticks.is_empty()).then(|| {
             let mut ticks = self.imp.get_sorted_ticks().clone();
 
             for tick in self.changed_ticks.drain(..) {
@@ -205,18 +200,26 @@ impl EkuboPool for BasePool {
                 }
             }
 
-            self.imp = impl_from_state(*self.key(), ticks).map_err(|err| {
-                TransitionError::SimulationError(SimulationError::RecoverableError(format!(
-                    "reinstantiate base pool: {err:?}"
-                )))
-            })?;
-        }
+            ticks
+        });
 
         // Only after a swap we set the active_tick to None. In this case, the active_tick_index is
         // already correctly computed though
         if let Some(active_tick) = self.active_tick {
-            self.state.active_tick_index =
-                find_nearest_initialized_tick_index(self.imp.get_sorted_ticks(), active_tick);
+            self.state.active_tick_index = find_nearest_initialized_tick_index(
+                updated_ticks
+                    .as_ref()
+                    .unwrap_or_else(|| self.imp.get_sorted_ticks()),
+                active_tick,
+            );
+        }
+
+        if let Some(ticks) = updated_ticks {
+            self.imp = impl_from_state(*self.key(), self.state, ticks).map_err(|err| {
+                TransitionError::SimulationError(SimulationError::RecoverableError(format!(
+                    "reinstantiate base pool: {err:?}"
+                )))
+            })?;
         }
 
         Ok(())

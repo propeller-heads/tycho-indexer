@@ -3,10 +3,9 @@ use std::time::SystemTime;
 
 use alloy::eips::merge::SLOT_DURATION_SECS;
 use evm_ekubo_sdk::{
-    math::{tick::MIN_SQRT_RATIO, uint::U256},
+    math::uint::U256,
     quoting::{
         self,
-        full_range_pool::FullRangePoolState,
         twamm_pool::{TwammPoolError, TwammPoolState, TwammSaleRateDelta},
         types::{NodeKey, Pool, QuoteParams, TokenAmount},
     },
@@ -33,15 +32,9 @@ impl PartialEq for TwammPool {
     }
 }
 
-const DUMMY_STATE: TwammPoolState = TwammPoolState {
-    full_range_pool_state: FullRangePoolState { liquidity: 0, sqrt_ratio: MIN_SQRT_RATIO },
-    token0_sale_rate: 0,
-    token1_sale_rate: 0,
-    last_execution_time: 0,
-};
-
 fn impl_from_state(
     key: &NodeKey,
+    state: TwammPoolState,
     virtual_order_deltas: Vec<TwammSaleRateDelta>,
 ) -> Result<quoting::twamm_pool::TwammPool, TwammPoolError> {
     quoting::twamm_pool::TwammPool::new(
@@ -49,15 +42,11 @@ fn impl_from_state(
         key.token1,
         key.config.fee,
         key.config.extension,
-        DUMMY_STATE
-            .full_range_pool_state
-            .sqrt_ratio,
-        DUMMY_STATE
-            .full_range_pool_state
-            .liquidity,
-        DUMMY_STATE.last_execution_time,
-        DUMMY_STATE.token0_sale_rate,
-        DUMMY_STATE.token1_sale_rate,
+        state.full_range_pool_state.sqrt_ratio,
+        state.full_range_pool_state.liquidity,
+        state.last_execution_time,
+        state.token0_sale_rate,
+        state.token1_sale_rate,
         virtual_order_deltas,
     )
 }
@@ -74,7 +63,7 @@ impl TwammPool {
         virtual_order_deltas: Vec<TwammSaleRateDelta>,
     ) -> Result<Self, InvalidSnapshotError> {
         Ok(Self {
-            imp: impl_from_state(key, virtual_order_deltas).map_err(|err| {
+            imp: impl_from_state(key, state, virtual_order_deltas).map_err(|err| {
                 InvalidSnapshotError::ValueError(format!("creating TWAMM pool: {err:?}"))
             })?,
             state,
@@ -264,11 +253,12 @@ impl EkuboPool for TwammPool {
                 }
             }
 
-            self.imp = impl_from_state(self.key(), virtual_order_deltas).map_err(|err| {
-                TransitionError::SimulationError(SimulationError::RecoverableError(format!(
-                    "reinstantiate TWAMM pool: {err:?}"
-                )))
-            })?;
+            self.imp =
+                impl_from_state(self.key(), self.state, virtual_order_deltas).map_err(|err| {
+                    TransitionError::SimulationError(SimulationError::RecoverableError(format!(
+                        "reinstantiate TWAMM pool: {err:?}"
+                    )))
+                })?;
         }
 
         self.swapped_this_block = false;
