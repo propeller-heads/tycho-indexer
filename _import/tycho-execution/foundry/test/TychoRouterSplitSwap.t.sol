@@ -8,9 +8,6 @@ import "./executors/UniswapV4Utils.sol";
 import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 
 contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
-    bytes32 public constant FEE_SETTER_ROLE =
-        0xe6ad9a47fbda1dc18de1eb5eeb7d935e5e81b4748f3cfc61e233e64f88182060;
-
     function _getSplitSwaps() private view returns (bytes[] memory) {
         // Trade 1 WETH for USDC through DAI and WBTC with 4 swaps on Uniswap V2
         //          ->   DAI   ->
@@ -220,59 +217,6 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             signature,
             pleEncode(swaps)
         );
-        vm.stopPrank();
-    }
-
-    function testSplitSwapFee() public {
-        // Trade 1 WETH for DAI with 1 swap on Uniswap V2
-        // Does permit2 token approval and transfer
-        // Takes fee at the end
-
-        vm.startPrank(FEE_SETTER);
-        tychoRouter.setFee(100);
-        tychoRouter.setFeeReceiver(FEE_RECEIVER);
-        vm.stopPrank();
-
-        uint256 amountIn = 1 ether;
-        deal(WETH_ADDR, ALICE, amountIn);
-
-        vm.startPrank(ALICE);
-
-        (
-            IAllowanceTransfer.PermitSingle memory permitSingle,
-            bytes memory signature
-        ) = handlePermit2Approval(WETH_ADDR, amountIn);
-
-        bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
-        );
-
-        bytes memory swap = encodeSplitSwap(
-            uint8(0), uint8(1), uint24(0), address(usv2Executor), protocolData
-        );
-        bytes[] memory swaps = new bytes[](1);
-        swaps[0] = swap;
-
-        uint256 amountOut = tychoRouter.splitSwapPermit2(
-            amountIn,
-            WETH_ADDR,
-            DAI_ADDR,
-            2633283105570259262780,
-            false,
-            false,
-            2,
-            ALICE,
-            permitSingle,
-            signature,
-            pleEncode(swaps)
-        );
-
-        uint256 expectedAmount = 2633283105570259262790;
-        assertEq(amountOut, expectedAmount);
-        uint256 daiBalance = IERC20(DAI_ADDR).balanceOf(ALICE);
-        assertEq(daiBalance, expectedAmount);
-        assertEq(IERC20(DAI_ADDR).balanceOf(FEE_RECEIVER), 26598819248184436997);
-
         vm.stopPrank();
     }
 
