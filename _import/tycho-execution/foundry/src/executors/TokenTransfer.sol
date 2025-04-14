@@ -5,7 +5,7 @@ import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 
-error TokenTransfer__InvalidPermit2();
+error TokenTransfer__AddressZero();
 
 contract TokenTransfer {
     using SafeERC20 for IERC20;
@@ -25,7 +25,7 @@ contract TokenTransfer {
 
     constructor(address _permit2) {
         if (_permit2 == address(0)) {
-            revert TokenTransfer__InvalidPermit2();
+            revert TokenTransfer__AddressZero();
         }
         permit2 = IAllowanceTransfer(_permit2);
     }

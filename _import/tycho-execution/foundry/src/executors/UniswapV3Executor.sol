@@ -11,6 +11,7 @@ error UniswapV3Executor__InvalidDataLength();
 error UniswapV3Executor__InvalidFactory();
 error UniswapV3Executor__InvalidTarget();
 error UniswapV3Executor__InvalidInitCode();
+error UniswapV3Executor__InvalidTransferType(uint8 transferType);
 
 contract UniswapV3Executor is IExecutor, ICallback, TokenTransfer {
     using SafeERC20 for IERC20;
@@ -97,12 +98,13 @@ contract UniswapV3Executor is IExecutor, ICallback, TokenTransfer {
 
         address tokenIn = address(bytes20(msgData[132:152]));
 
-        require(
-            uint8(msgData[171]) <= uint8(TransferType.NONE),
-            "InvalidTransferMethod"
-        );
-        TransferType transferType = TransferType(uint8(msgData[171]));
-        address sender = address(bytes20(msgData[172:192]));
+        // Transfer type does not exist
+        if (uint8(msgData[175]) > uint8(TransferType.NONE)) {
+            revert UniswapV3Executor__InvalidTransferType(uint8(msgData[175]));
+        }
+
+        TransferType transferType = TransferType(uint8(msgData[175]));
+        address sender = address(bytes20(msgData[176:196]));
 
         verifyCallback(msgData[132:]);
 
@@ -168,7 +170,7 @@ contract UniswapV3Executor is IExecutor, ICallback, TokenTransfer {
         TransferType transferType
     ) internal view returns (bytes memory) {
         return abi.encodePacked(
-            tokenIn, tokenOut, fee, uint8(transferType), msg.sender, self
+            tokenIn, tokenOut, fee, uint8(transferType), msg.sender
         );
     }
 

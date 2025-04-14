@@ -916,7 +916,7 @@ mod tests {
                     "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                     // zero for one
                     "00",
-                    // transfer method
+                    // transfer type
                     "00",
                 ))
             );

@@ -722,7 +722,7 @@ mod tests {
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
             "00",                                       // zero2one
-            "00",                                       // transfer method
+            "00",                                       // transfer type
             "00000000000000",                           // padding
         ));
         let hex_calldata = encode(&calldata);
@@ -826,7 +826,7 @@ mod tests {
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
             "00",                                       // zero2one
             "00",                                       // exact out
-            "00",                                       // transfer method
+            "00",                                       // transfer type
             "00000000000000000000000000",               // padding
         ));
         let hex_calldata = encode(&calldata);
@@ -1485,7 +1485,7 @@ mod tests {
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
             "00",                                       // zero2one
             "00",                                       // exact out
-            "00",                                       // transfer method
+            "00",                                       // transfer type
             "00000000000000000000000000",               // padding
         ]
             .join("");
@@ -1569,7 +1569,7 @@ mod tests {
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
             "00",                                       // zero2one
             "00",                                       // exact out
-            "00",                                       // transfer method
+            "00",                                       // transfer type
             "000000000000",                                   // padding
         ]
             .join("");
@@ -1821,7 +1821,7 @@ mod tests {
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
             "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
             "01",                                       // zero2one
-            "00",                                       // transfer method
+            "00",                                       // transfer type
             "006e",                                     // ple encoded swaps
             "01",                                       // token in index
             "00000000",                                 // split
@@ -1832,7 +1832,7 @@ mod tests {
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
             "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
             "00",                                       // zero2one
-            "00",                                       // transfer method
+            "00",                                       // transfer type
         ]
         .join("");
 
@@ -1975,7 +1975,7 @@ mod tests {
         "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
         "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
         "01", // zero2one
-        "00", // transfer method
+        "00", // transfer type
         "006e", // ple encoded swaps
         "00", // token in index
         "01", // token out index
@@ -1987,7 +1987,7 @@ mod tests {
         "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "01", // zero2one
-        "00", // transfer method
+        "00", // transfer type
         "0057", // ple encoded swaps
         "01", // token in index
         "00", // token out index
@@ -1997,7 +1997,7 @@ mod tests {
         "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id,
         "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
         "00", // zero2one
-        "00", // transfer method
+        "00", // transfer type
         "00000000000000" // padding
         ]
         .join("");
@@ -2135,7 +2135,7 @@ mod tests {
         "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id
         "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
         "01", // zero2one
-        "00", // transfer method
+        "00", // transfer type
         "006e", // ple encoded swaps
         "01", // token in index
         "00", // token out index
@@ -2147,7 +2147,7 @@ mod tests {
         "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
         "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
         "00", // zero2one
-        "00", // transfer method
+        "00", // transfer type
         "006e", // ple encoded swaps
         "01", // token in index
         "00", // token out index
@@ -2159,7 +2159,7 @@ mod tests {
         "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "00", // zero2one
-        "00", // transfer method
+        "00", // transfer type
         "00000000000000" // padding
     ]
     .join("");

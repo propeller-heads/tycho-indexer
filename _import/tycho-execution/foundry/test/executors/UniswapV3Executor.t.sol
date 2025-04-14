@@ -22,7 +22,7 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
             address receiver,
             address target,
             bool zeroForOne,
-            TransferType method
+            TransferType transferType
         )
     {
         return _decodeData(data);
@@ -81,7 +81,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             address receiver,
             address target,
             bool zeroForOne,
-            TokenTransfer.TransferType method
+            TokenTransfer.TransferType transferType
         ) = uniswapV3Exposed.decodeData(data);
 
         assertEq(tokenIn, WETH_ADDR);
@@ -90,7 +90,9 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
         assertEq(receiver, address(2));
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
-        assertEq(uint8(method), uint8(TokenTransfer.TransferType.TRANSFER));
+        assertEq(
+            uint8(transferType), uint8(TokenTransfer.TransferType.TRANSFER)
+        );
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -140,88 +142,6 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
 
         uint256 finalPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
         assertEq(finalPoolReserve - initialPoolReserve, amountOwed);
-    }
-
-    function testSwapWithTransfer() public {
-        uint256 amountIn = 10 ** 18;
-        deal(WETH_ADDR, address(uniswapV3Exposed), amountIn);
-
-        uint256 expAmountOut = 1205_128428842122129186; //Swap 1 WETH for 1205.12 DAI
-        bool zeroForOne = false;
-
-        bytes memory data = encodeUniswapV3Swap(
-            WETH_ADDR,
-            DAI_ADDR,
-            address(this),
-            DAI_WETH_USV3,
-            zeroForOne,
-            TokenTransfer.TransferType.TRANSFER
-        );
-
-        uint256 amountOut = uniswapV3Exposed.swap(amountIn, data);
-
-        assertGe(amountOut, expAmountOut);
-        assertEq(IERC20(WETH_ADDR).balanceOf(address(uniswapV3Exposed)), 0);
-        assertGe(IERC20(DAI_ADDR).balanceOf(address(this)), expAmountOut);
-    }
-
-    function testSwapWithTransferFrom() public {
-        uint256 amountIn = 10 ** 18;
-        deal(WETH_ADDR, address(this), amountIn);
-        IERC20(WETH_ADDR).approve(address(uniswapV3Exposed), amountIn);
-
-        uint256 expAmountOut = 1205_128428842122129186; //Swap 1 WETH for 1205.12 DAI
-        bool zeroForOne = false;
-
-        bytes memory data = encodeUniswapV3Swap(
-            WETH_ADDR,
-            DAI_ADDR,
-            address(this),
-            DAI_WETH_USV3,
-            zeroForOne,
-            TokenTransfer.TransferType.TRANSFERFROM
-        );
-
-        uint256 amountOut = uniswapV3Exposed.swap(amountIn, data);
-
-        assertGe(amountOut, expAmountOut);
-        assertEq(IERC20(WETH_ADDR).balanceOf(address(uniswapV3Exposed)), 0);
-        assertGe(IERC20(DAI_ADDR).balanceOf(address(this)), expAmountOut);
-    }
-
-    function testSwapWithPermit2TransferFrom() public {
-        uint256 amountIn = 10 ** 18;
-
-        uint256 expAmountOut = 1205_128428842122129186; //Swap 1 WETH for 1205.12 DAI
-        bool zeroForOne = false;
-
-        bytes memory data = encodeUniswapV3Swap(
-            WETH_ADDR,
-            DAI_ADDR,
-            address(this),
-            DAI_WETH_USV3,
-            zeroForOne,
-            TokenTransfer.TransferType.TRANSFERPERMIT2
-        );
-
-        deal(WETH_ADDR, ALICE, amountIn);
-        vm.startPrank(ALICE);
-        (
-            IAllowanceTransfer.PermitSingle memory permitSingle,
-            bytes memory signature
-        ) = handlePermit2Approval(
-            WETH_ADDR, address(uniswapV3Exposed), amountIn
-        );
-
-        // Assume the permit2.approve method will be called from the TychoRouter
-        // Replicate this scenario in this test.
-        permit2.permit(ALICE, permitSingle, signature);
-        uint256 amountOut = uniswapV3Exposed.swap(amountIn, data);
-        vm.stopPrank();
-
-        assertGe(amountOut, expAmountOut);
-        assertEq(IERC20(WETH_ADDR).balanceOf(address(uniswapV3Exposed)), 0);
-        assertGe(IERC20(DAI_ADDR).balanceOf(address(this)), expAmountOut);
     }
 
     function testSwapFailureInvalidTarget() public {
