@@ -40,6 +40,7 @@ pub struct SingleSwapStrategyEncoder {
     permit2: Option<Permit2>,
     selector: String,
     native_address: Bytes,
+    wrapped_address: Bytes,
     router_address: Bytes,
 }
 
@@ -63,6 +64,7 @@ impl SingleSwapStrategyEncoder {
             selector,
             swap_encoder_registry,
             native_address: chain.native_token()?,
+            wrapped_address: chain.wrapped_token()?,
             router_address,
         })
     }
@@ -121,11 +123,13 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 
         let mut grouped_protocol_data: Vec<u8> = vec![];
         for swap in grouped_swap.swaps.iter() {
-            let transfer_type = self.get_transfer_method(
+            let transfer_type = self.get_transfer_type(
                 swap.clone(),
                 solution.given_token.clone(),
                 self.native_address.clone(),
+                self.wrapped_address.clone(),
                 self.permit2.clone().is_some(),
+                wrap,
             );
 
             let encoding_context = EncodingContext {
@@ -294,11 +298,13 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
-                let transfer_type = self.get_transfer_method(
+                let transfer_type = self.get_transfer_type(
                     swap.clone(),
                     solution.given_token.clone(),
                     self.native_address.clone(),
+                    self.wrapped_address.clone(),
                     self.permit2.clone().is_some(),
+                    wrap,
                 );
 
                 let encoding_context = EncodingContext {
@@ -521,11 +527,13 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
-                let transfer_type = self.get_transfer_method(
+                let transfer_type = self.get_transfer_type(
                     swap.clone(),
                     solution.given_token.clone(),
                     self.native_address.clone(),
+                    self.wrapped_address.clone(),
                     self.permit2.clone().is_some(),
+                    wrap,
                 );
 
                 let encoding_context = EncodingContext {
