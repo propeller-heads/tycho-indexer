@@ -27,11 +27,11 @@ pub trait TransferOptimization {
         let is_first_swap =
             (swap.token_in == given_token) || ((swap.token_in == wrapped_token) && wrap);
 
-        if is_first_swap && send_funds_to_pool {
-            if swap.token_in == native_token {
-                // Funds are already in router. Protocol takes care of native transfer.
-                TransferType::None
-            } else if permit2 {
+        if swap.token_in == native_token {
+            // Funds are already in router. All protocols currently take care of native transfers.
+            TransferType::None
+        } else if is_first_swap && send_funds_to_pool {
+            if permit2 {
                 // Transfer from swapper to pool using permit2.
                 TransferType::Permit2Transfer
             } else {
@@ -39,10 +39,7 @@ pub trait TransferOptimization {
                 TransferType::TransferFrom
             }
         } else if is_first_swap && funds_expected_in_router {
-            if swap.token_in == native_token {
-                // Funds already in router. Do nothing.
-                TransferType::None
-            } else if permit2 {
+            if permit2 {
                 // Transfer from swapper to router using permit2.
                 TransferType::Permit2TransferToRouter
             } else {

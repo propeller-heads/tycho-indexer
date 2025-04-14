@@ -545,6 +545,7 @@ impl SwapEncoder for CurveSwapEncoder {
             i.to_be_bytes::<1>(),
             j.to_be_bytes::<1>(),
             approval_needed,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
         );
 
         Ok(args.abi_encode_packed())
@@ -1263,6 +1264,8 @@ mod tests {
                     "01",
                     // approval needed
                     "01",
+                    // transfer type
+                    "05",
                 ))
             );
         }
@@ -1329,6 +1332,8 @@ mod tests {
                     "00",
                     // approval needed
                     "01",
+                    // transfer type
+                    "05",
                 ))
             );
         }
@@ -1405,6 +1410,8 @@ mod tests {
                     "01",
                     // approval needed
                     "01",
+                    // transfer type
+                    "05",
                 ))
             );
         }

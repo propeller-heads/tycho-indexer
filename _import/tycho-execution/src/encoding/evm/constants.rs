@@ -31,7 +31,7 @@ pub static IN_TRANSFER_OPTIMIZABLE_PROTOCOLS: LazyLock<HashSet<&'static str>> =
 pub static PROTOCOLS_EXPECTING_FUNDS_IN_ROUTER: LazyLock<HashSet<&'static str>> =
     LazyLock::new(|| {
         let mut set = HashSet::new();
-        set.insert("curve");
+        set.insert("vm:curve");
         set.insert("balancer_v2");
         // TODO remove uniswap_v4 when we add callback support for transfer optimizations
         set.insert("uniswap_v4");

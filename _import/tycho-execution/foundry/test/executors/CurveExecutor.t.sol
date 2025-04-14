@@ -22,7 +22,9 @@ interface MetaRegistry {
 }
 
 contract CurveExecutorExposed is CurveExecutor {
-    constructor(address _nativeToken) CurveExecutor(_nativeToken) {}
+    constructor(address _nativeToken, address _permit2)
+        CurveExecutor(_nativeToken, _permit2)
+    {}
 
     function decodeData(bytes calldata data)
         external
@@ -34,7 +36,8 @@ contract CurveExecutorExposed is CurveExecutor {
             uint8 poolType,
             int128 i,
             int128 j,
-            bool tokenApprovalNeeded
+            bool tokenApprovalNeeded,
+            TokenTransfer.TransferType transferType
         )
     {
         return _decodeData(data);
@@ -50,7 +53,8 @@ contract CurveExecutorTest is Test, Constants {
     function setUp() public {
         uint256 forkBlock = 22031795;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        curveExecutorExposed = new CurveExecutorExposed(ETH_ADDR_FOR_CURVE);
+        curveExecutorExposed =
+            new CurveExecutorExposed(ETH_ADDR_FOR_CURVE, PERMIT2_ADDRESS);
         metaRegistry = MetaRegistry(CURVE_META_REGISTRY);
     }
 
@@ -62,7 +66,8 @@ contract CurveExecutorTest is Test, Constants {
             uint8(3),
             uint8(2),
             uint8(0),
-            true
+            true,
+            TokenTransfer.TransferType.NONE
         );
 
         (
@@ -72,7 +77,8 @@ contract CurveExecutorTest is Test, Constants {
             uint8 poolType,
             int128 i,
             int128 j,
-            bool tokenApprovalNeeded
+            bool tokenApprovalNeeded,
+            TokenTransfer.TransferType transferType
         ) = curveExecutorExposed.decodeData(data);
 
         assertEq(tokenIn, WETH_ADDR);
@@ -82,6 +88,7 @@ contract CurveExecutorTest is Test, Constants {
         assertEq(i, 2);
         assertEq(j, 0);
         assertEq(tokenApprovalNeeded, true);
+        assertEq(uint8(transferType), uint8(TokenTransfer.TransferType.NONE));
     }
 
     function testTriPool() public {
@@ -311,7 +318,8 @@ contract CurveExecutorTest is Test, Constants {
             poolType,
             uint8(uint256(uint128(i))),
             uint8(uint256(uint128(j))),
-            true
+            true,
+            TokenTransfer.TransferType.NONE
         );
     }
 

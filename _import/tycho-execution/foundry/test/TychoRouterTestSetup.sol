@@ -108,7 +108,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper {
         );
         balancerv2Executor = new BalancerV2Executor();
         ekuboExecutor = new EkuboExecutor(ekuboCore);
-        curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE);
+        curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, PERMIT2_ADDRESS);
 
         address[] memory executors = new address[](7);
         executors[0] = address(usv2Executor);
