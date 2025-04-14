@@ -90,7 +90,9 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
         assertEq(receiver, address(2));
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
-        assertEq(uint8(transferType), uint8(TokenTransfer.TransferType.TRANSFER));
+        assertEq(
+            uint8(transferType), uint8(TokenTransfer.TransferType.TRANSFER)
+        );
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -121,7 +123,11 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
 
         vm.startPrank(DAI_WETH_USV3);
         bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR, DAI_ADDR, poolFee, TokenTransfer.TransferType.TRANSFER
+            WETH_ADDR,
+            DAI_ADDR,
+            poolFee,
+            TokenTransfer.TransferType.TRANSFER,
+            address(uniswapV3Exposed)
         );
         uint256 dataOffset = 3; // some offset
         uint256 dataLength = protocolData.length;

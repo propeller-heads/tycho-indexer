@@ -522,18 +522,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
 
         amountOut = _sequentialSwap(amountIn, swaps);
 
-        uint256 currentBalance = tokenIn == address(0)
-            ? address(this).balance
-            : IERC20(tokenIn).balanceOf(address(this));
-
-        uint256 amountConsumed = initialBalance - currentBalance;
-
-        if (tokenIn != tokenOut && amountConsumed != amountIn) {
-            revert TychoRouter__AmountInDiffersFromConsumed(
-                amountIn, amountConsumed
-            );
-        }
-
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
         }

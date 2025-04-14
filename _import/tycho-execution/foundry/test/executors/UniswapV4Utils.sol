@@ -23,11 +23,7 @@ library UniswapV4Utils {
         }
 
         return abi.encodePacked(
-            tokenIn,
-            tokenOut,
-            zeroForOne,
-            transferType,
-            encodedPools
+            tokenIn, tokenOut, zeroForOne, transferType, encodedPools
         );
     }
 }

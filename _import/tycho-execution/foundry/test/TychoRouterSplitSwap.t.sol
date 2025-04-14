@@ -476,11 +476,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         });
 
         bytes memory protocolData = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR,
-            WBTC_ADDR,
-            true,
-            TokenTransfer.TransferType.NONE,
-            pools
+            USDE_ADDR, WBTC_ADDR, true, TokenTransfer.TransferType.NONE, pools
         );
 
         bytes memory swap = encodeSplitSwap(
