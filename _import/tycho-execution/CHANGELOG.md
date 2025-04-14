@@ -1,3 +1,10 @@
+## [0.80.0](https://github.com/propeller-heads/tycho-execution/compare/0.79.0...0.80.0) (2025-04-14)
+
+
+### Features
+
+* Redeploy balancer with forceApprove fix for USDT ([a6b0f8d](https://github.com/propeller-heads/tycho-execution/commit/a6b0f8d1f67a49848e90d2c4102195c4ac40c5a8))
+
 ## [0.79.0](https://github.com/propeller-heads/tycho-execution/compare/0.78.1...0.79.0) (2025-04-11)
 
 
