@@ -34,7 +34,7 @@ contract BalancerV2Executor is IExecutor {
 
         if (needsApproval) {
             // slither-disable-next-line unused-return
-            tokenIn.approve(VAULT, type(uint256).max);
+            tokenIn.forceApprove(VAULT, type(uint256).max);
         }
 
         IVault.SingleSwap memory singleSwap = IVault.SingleSwap({
