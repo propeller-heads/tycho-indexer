@@ -13,6 +13,8 @@ use crate::{
     Bytes,
 };
 
+// TODO: Maybe deprecate if we don't need this on the testing module anymore, but I think it will be
+// needed for fetching full snapshots of non-DCI accounts
 #[async_trait]
 pub trait AccountExtractor {
     type Error;
@@ -22,6 +24,23 @@ pub trait AccountExtractor {
         block: Block,
         account_addresses: Vec<Address>,
     ) -> Result<HashMap<Bytes, AccountDelta>, Self::Error>; //TODO: do not return `AccountUpdate` but `Account`
+}
+
+#[derive(Debug, Clone)]
+pub struct StorageSnapshotRequest {
+    pub address: Address,
+    pub slots: Option<Vec<Bytes>>,
+}
+
+#[async_trait]
+pub trait AccountStorageSource {
+    type Error;
+
+    async fn get_storage_snapshots(
+        &self,
+        requests: &[StorageSnapshotRequest],
+        block: &Block,
+    ) -> Result<HashMap<Address, AccountDelta>, Self::Error>;
 }
 
 /// Trait for analyzing a token, including its quality, transfer cost, and transfer tax.
