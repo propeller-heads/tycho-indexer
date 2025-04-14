@@ -22,6 +22,15 @@ use crate::encoding::{
     swap_encoder::SwapEncoder,
 };
 
+#[allow(dead_code)]
+#[repr(u8)]
+pub enum TransferType {
+    Transfer = 0,
+    TransferFrom = 1,
+    Permit2Transfer = 2,
+    None = 3,
+}
+
 /// Encodes a swap on a Uniswap V2 pool through the given executor address.
 ///
 /// # Fields
@@ -66,6 +75,7 @@ impl SwapEncoder for UniswapV2SwapEncoder {
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
             zero_to_one,
+            (TransferType::Transfer as u8).to_be_bytes(),
         );
 
         Ok(args.abi_encode_packed())
@@ -128,6 +138,7 @@ impl SwapEncoder for UniswapV3SwapEncoder {
             bytes_to_address(&encoding_context.receiver)?,
             component_id,
             zero_to_one,
+            (TransferType::Transfer as u8).to_be_bytes(),
         );
 
         Ok(args.abi_encode_packed())
@@ -606,6 +617,8 @@ mod tests {
                 "0000000000000000000000000000000000000001",
                 // zero for one
                 "00",
+                // transfer type (transfer)
+                "00",
             ))
         );
     }
@@ -660,6 +673,8 @@ mod tests {
                 // pool id
                 "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
                 // zero for one
+                "00",
+                // transfer type (transfer)
                 "00",
             ))
         );
