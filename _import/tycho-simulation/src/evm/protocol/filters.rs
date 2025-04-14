@@ -123,6 +123,26 @@ pub fn curve_pool_filter(component: &ComponentWithState) -> bool {
             return false;
         }
     }
+    if let Some(factory_attribute) = component
+        .component
+        .static_attributes
+        .get("factory")
+    {
+        let factory = std::str::from_utf8(factory_attribute).expect("Invalid UTF-8 data");
+        if factory.to_lowercase() == "0xf18056bbd320e96a48e3fbf8bc061322531aac99" {
+            info!(
+                "Filtering out Curve pool {} because it belongs to an unsupported factory",
+                component.component.id
+            );
+            return false
+        }
+    };
+
+    if component.component.id.to_lowercase() == "0xdc24316b9ae028f1497c275eb9192a3ea0f67022" {
+        info!("Filtering out Curve pool {} because it is not supported", component.component.id);
+        return false
+    }
+
     true
 }
 
