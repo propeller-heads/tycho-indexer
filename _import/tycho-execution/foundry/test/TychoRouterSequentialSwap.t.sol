@@ -8,9 +8,6 @@ import "./executors/UniswapV4Utils.sol";
 import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 
 contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
-    bytes32 public constant FEE_SETTER_ROLE =
-        0xe6ad9a47fbda1dc18de1eb5eeb7d935e5e81b4748f3cfc61e233e64f88182060;
-
     function _getSequentialSwaps() internal view returns (bytes[] memory) {
         // Trade 1 WETH for USDC through DAI with 2 swaps on Uniswap V2
         // 1 WETH   ->   DAI   ->   USDC
@@ -178,49 +175,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             signature,
             pleEncode(swaps)
         );
-        vm.stopPrank();
-    }
-
-    function testSequentialSwapFee() public {
-        // Trade 1 WETH for USDC
-        // Takes 1% fee at the end
-
-        vm.startPrank(FEE_SETTER);
-        tychoRouter.setFee(100);
-        tychoRouter.setFeeReceiver(FEE_RECEIVER);
-        vm.stopPrank();
-
-        uint256 amountIn = 1 ether;
-        deal(WETH_ADDR, ALICE, amountIn);
-
-        vm.startPrank(ALICE);
-
-        (
-            IAllowanceTransfer.PermitSingle memory permitSingle,
-            bytes memory signature
-        ) = handlePermit2Approval(WETH_ADDR, amountIn);
-
-        bytes[] memory swaps = _getSequentialSwaps();
-
-        uint256 amountOut = tychoRouter.sequentialSwapPermit2(
-            amountIn,
-            WETH_ADDR,
-            USDC_ADDR,
-            1000_000000,
-            false,
-            false,
-            ALICE,
-            permitSingle,
-            signature,
-            pleEncode(swaps)
-        );
-
-        uint256 expectedAmount = 2618213190;
-        assertEq(amountOut, expectedAmount);
-        uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(ALICE);
-        assertEq(usdcBalance, expectedAmount);
-        assertEq(IERC20(USDC_ADDR).balanceOf(FEE_RECEIVER), 26446597);
-
         vm.stopPrank();
     }
 

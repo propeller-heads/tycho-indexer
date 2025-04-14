@@ -76,8 +76,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     //keccak256("NAME_OF_ROLE") : save gas on deployment
     bytes32 public constant EXECUTOR_SETTER_ROLE =
         0x6a1dd52dcad5bd732e45b6af4e7344fa284e2d7d4b23b5b09cb55d36b0685c87;
-    bytes32 public constant FEE_SETTER_ROLE =
-        0xe6ad9a47fbda1dc18de1eb5eeb7d935e5e81b4748f3cfc61e233e64f88182060;
     bytes32 public constant PAUSER_ROLE =
         0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a;
     bytes32 public constant UNPAUSER_ROLE =
@@ -85,19 +83,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     bytes32 public constant FUND_RESCUER_ROLE =
         0x912e45d663a6f4cc1d0491d8f046e06c616f40352565ea1cdb86a0e1aaefa41b;
 
-    address public feeReceiver;
-
-    // Fee should be expressed in basis points (1/100th of a percent)
-    // For example, 100 = 1%, 500 = 5%, 1000 = 10%
-    uint256 public fee;
-
     event Withdrawal(
         address indexed token, uint256 amount, address indexed receiver
     );
-    event FeeReceiverSet(
-        address indexed oldFeeReceiver, address indexed newFeeReceiver
-    );
-    event FeeSet(uint256 indexed oldFee, uint256 indexed newFee);
 
     constructor(address _permit2, address weth) {
         if (_permit2 == address(0) || weth == address(0)) {
@@ -117,7 +105,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
      * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
      * - Swaps are executed sequentially using the `_swap` function.
-     * - A fee is deducted from the output token if `fee > 0`, and the remaining amount is sent to the receiver.
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
      * @param amountIn The input token amount to be swapped.
@@ -130,7 +117,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @param receiver The address to receive the output tokens.
      * @param swaps Encoded swap graph data containing details of each swap.
      *
-     * @return amountOut The total amount of the output token received by the receiver, after deducting fees if applicable.
+     * @return amountOut The total amount of the output token received by the receiver.
      */
     function splitSwap(
         uint256 amountIn,
@@ -171,7 +158,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
      * - For ERC20 tokens, Permit2 is used to approve and transfer tokens from the caller to the router.
      * - Swaps are executed sequentially using the `_swap` function.
-     * - A fee is deducted from the output token if `fee > 0`, and the remaining amount is sent to the receiver.
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
      * @param amountIn The input token amount to be swapped.
@@ -186,7 +172,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
      * @param swaps Encoded swap graph data containing details of each swap.
      *
-     * @return amountOut The total amount of the output token received by the receiver, after deducting fees if applicable.
+     * @return amountOut The total amount of the output token received by the receiver.
      */
     function splitSwapPermit2(
         uint256 amountIn,
@@ -234,7 +220,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
      * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
      * - Swaps are executed sequentially using the `_swap` function.
-     * - A fee is deducted from the output token if `fee > 0`, and the remaining amount is sent to the receiver.
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
      * @param amountIn The input token amount to be swapped.
@@ -246,7 +231,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @param receiver The address to receive the output tokens.
      * @param swaps Encoded swap graph data containing details of each swap.
      *
-     * @return amountOut The total amount of the output token received by the receiver, after deducting fees if applicable.
+     * @return amountOut The total amount of the output token received by the receiver.
      */
     function sequentialSwap(
         uint256 amountIn,
@@ -280,7 +265,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
      * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
      * - For ERC20 tokens, Permit2 is used to approve and transfer tokens from the caller to the router.
-     * - A fee is deducted from the output token if `fee > 0`, and the remaining amount is sent to the receiver.
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
      * @param amountIn The input token amount to be swapped.
@@ -294,7 +278,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
      * @param swaps Encoded swap graph data containing details of each swap.
      *
-     * @return amountOut The total amount of the output token received by the receiver, after deducting fees if applicable.
+     * @return amountOut The total amount of the output token received by the receiver.
      */
     function sequentialSwapPermit2(
         uint256 amountIn,
@@ -339,7 +323,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @dev
      * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
      * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
-     * - A fee is deducted from the output token if `fee > 0`, and the remaining amount is sent to the receiver.
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
      * @param amountIn The input token amount to be swapped.
@@ -351,7 +334,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @param receiver The address to receive the output tokens.
      * @param swapData Encoded swap details.
      *
-     * @return amountOut The total amount of the output token received by the receiver, after deducting fees if applicable.
+     * @return amountOut The total amount of the output token received by the receiver.
      */
     function singleSwap(
         uint256 amountIn,
@@ -385,7 +368,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * - If `wrapEth` is true, the contract wraps the provided native ETH into WETH and uses it as the sell token.
      * - If `unwrapEth` is true, the contract converts the resulting WETH back into native ETH before sending it to the receiver.
      * - For ERC20 tokens, Permit2 is used to approve and transfer tokens from the caller to the router.
-     * - A fee is deducted from the output token if `fee > 0`, and the remaining amount is sent to the receiver.
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut` and `minAmountOut` is greater than 0.
      *
      * @param amountIn The input token amount to be swapped.
@@ -399,7 +381,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
      * @param swapData Encoded swap details.
      *
-     * @return amountOut The total amount of the output token received by the receiver, after deducting fees if applicable.
+     * @return amountOut The total amount of the output token received by the receiver.
      */
     function singleSwapPermit2(
         uint256 amountIn,
@@ -485,12 +467,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             );
         }
 
-        if (fee > 0) {
-            uint256 feeAmount = (amountOut * fee) / 10000;
-            amountOut -= feeAmount;
-            IERC20(tokenOut).safeTransfer(feeReceiver, feeAmount);
-        }
-
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
         }
@@ -556,12 +532,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             );
         }
 
-        if (fee > 0) {
-            uint256 feeAmount = (amountOut * fee) / 10000;
-            amountOut -= feeAmount;
-            IERC20(tokenOut).safeTransfer(feeReceiver, feeAmount);
-        }
-
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
         }
@@ -623,12 +593,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             revert TychoRouter__AmountInDiffersFromConsumed(
                 amountIn, amountConsumed
             );
-        }
-
-        if (fee > 0) {
-            uint256 feeAmount = (amountOut * fee) / 10000;
-            amountOut -= feeAmount;
-            IERC20(tokenOut).safeTransfer(feeReceiver, feeAmount);
         }
 
         if (amountOut < minAmountOut) {
@@ -801,26 +765,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         onlyRole(EXECUTOR_SETTER_ROLE)
     {
         _removeExecutor(target);
-    }
-
-    /**
-     * @dev Allows setting the fee receiver.
-     */
-    function setFeeReceiver(address newfeeReceiver)
-        external
-        onlyRole(FEE_SETTER_ROLE)
-    {
-        if (newfeeReceiver == address(0)) revert TychoRouter__AddressZero();
-        emit FeeReceiverSet(feeReceiver, newfeeReceiver);
-        feeReceiver = newfeeReceiver;
-    }
-
-    /**
-     * @dev Allows setting the fee.
-     */
-    function setFee(uint256 newFee) external onlyRole(FEE_SETTER_ROLE) {
-        emit FeeSet(fee, newFee);
-        fee = newFee;
     }
 
     /**

@@ -8,9 +8,6 @@ import "./executors/UniswapV4Utils.sol";
 import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 
 contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
-    bytes32 public constant FEE_SETTER_ROLE =
-        0xe6ad9a47fbda1dc18de1eb5eeb7d935e5e81b4748f3cfc61e233e64f88182060;
-
     function testSingleSwapPermit2() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2 using Permit2
         // 1 WETH   ->   DAI
@@ -177,50 +174,6 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             ALICE,
             swap
         );
-    }
-
-    function testSingleSwapFee() public {
-        // Trade 1 WETH for DAI with 1 swap on Uniswap V2
-        // Takes 1% fee at the end
-
-        vm.startPrank(FEE_SETTER);
-        tychoRouter.setFee(100);
-        tychoRouter.setFeeReceiver(FEE_RECEIVER);
-        vm.stopPrank();
-
-        uint256 amountIn = 1 ether;
-
-        deal(WETH_ADDR, ALICE, amountIn);
-        vm.startPrank(ALICE);
-        // Approve the tokenIn to be transferred to the router
-        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
-
-        bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false
-        );
-
-        bytes memory swap =
-            encodeSingleSwap(address(usv2Executor), protocolData);
-
-        uint256 minAmountOut = 2600 * 1e18;
-        uint256 amountOut = tychoRouter.singleSwap(
-            amountIn,
-            WETH_ADDR,
-            DAI_ADDR,
-            minAmountOut,
-            false,
-            false,
-            ALICE,
-            swap
-        );
-
-        uint256 expectedAmount = 2633283105570259262790;
-        assertEq(amountOut, expectedAmount);
-        uint256 usdcBalance = IERC20(DAI_ADDR).balanceOf(ALICE);
-        assertEq(usdcBalance, expectedAmount);
-        assertEq(IERC20(DAI_ADDR).balanceOf(FEE_RECEIVER), 26598819248184436997);
-
-        vm.stopPrank();
     }
 
     function testSingleSwapWrapETH() public {
