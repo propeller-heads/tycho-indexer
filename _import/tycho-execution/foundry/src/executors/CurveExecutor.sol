@@ -64,7 +64,15 @@ contract CurveExecutor is IExecutor, TokenTransfer {
             TransferType transferType
         ) = _decodeData(data);
 
-        _transfer(tokenIn, msg.sender, pool, amountIn, transferType);
+        _transfer(
+            tokenIn,
+            msg.sender,
+            // Receiver can never be the pool, since the pool expects funds in the router contract
+            // Thus, this call will only ever be used to transfer funds from the user into the router.
+            address(this),
+            amountIn,
+            transferType
+        );
 
         if (tokenApprovalNeeded && tokenIn != nativeToken) {
             // slither-disable-next-line unused-return

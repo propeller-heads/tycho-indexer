@@ -106,7 +106,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper {
         pancakev3Executor = new UniswapV3Executor(
             factoryPancakeV3, initCodePancakeV3, PERMIT2_ADDRESS
         );
-        balancerv2Executor = new BalancerV2Executor();
+        balancerv2Executor = new BalancerV2Executor(PERMIT2_ADDRESS);
         ekuboExecutor = new EkuboExecutor(ekuboCore);
         curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, PERMIT2_ADDRESS);
 

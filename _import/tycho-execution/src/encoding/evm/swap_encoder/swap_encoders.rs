@@ -281,6 +281,7 @@ impl SwapEncoder for BalancerV2SwapEncoder {
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
             approval_needed,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
         );
         Ok(args.abi_encode_packed())
     }
@@ -703,7 +704,7 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
+            transfer_type: TransferType::None,
         };
         let encoder = BalancerV2SwapEncoder::new(
             String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -731,7 +732,9 @@ mod tests {
                 // receiver
                 "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                 // approval needed
-                "01"
+                "01",
+                // transfer type
+                "05"
             ))
         );
     }

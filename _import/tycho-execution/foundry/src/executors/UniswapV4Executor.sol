@@ -53,7 +53,9 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback, TokenTransfer {
         _transfer(
             tokenIn,
             msg.sender,
-            address(this), // irrelevant attribute
+            // Receiver can never be the pool, since the pool expects funds in the router contract
+            // Thus, this call will only ever be used to transfer funds from the user into the router.
+            address(this),
             amountIn,
             transferType
         );
