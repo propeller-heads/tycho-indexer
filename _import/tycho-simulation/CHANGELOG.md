@@ -1,3 +1,15 @@
+## [0.94.0](https://github.com/propeller-heads/tycho-simulation/compare/0.93.0...0.94.0) (2025-04-14)
+
+
+### Features
+
+* Add curve in the quickstart ([9052911](https://github.com/propeller-heads/tycho-simulation/commit/905291171b950ae3271dc4e2d9ef389533027c94))
+
+
+### Bug Fixes
+
+* Update tycho-execution version to 0.79.0 ([ecfe109](https://github.com/propeller-heads/tycho-simulation/commit/ecfe109138379157f16cce3854223b036b9c1045))
+
 ## [0.93.0](https://github.com/propeller-heads/tycho-simulation/compare/0.92.1...0.93.0) (2025-04-09)
 
 
