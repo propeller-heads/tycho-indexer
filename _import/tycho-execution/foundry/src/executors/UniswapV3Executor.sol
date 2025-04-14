@@ -166,7 +166,7 @@ contract UniswapV3Executor is IExecutor, ICallback, TokenTransfer {
         address tokenOut,
         uint24 fee,
         TransferType transferType
-    ) internal pure returns (bytes memory) {
+    ) internal view returns (bytes memory) {
         return abi.encodePacked(
             tokenIn, tokenOut, fee, uint8(transferType), msg.sender, self
         );
