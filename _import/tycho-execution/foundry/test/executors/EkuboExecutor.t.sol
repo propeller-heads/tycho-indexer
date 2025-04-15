@@ -44,7 +44,7 @@ contract EkuboExecutorTest is Test, Constants {
         uint256 usdcBalanceBeforeExecutor = USDC.balanceOf(address(executor));
 
         bytes memory data = abi.encodePacked(
-            uint8(TokenTransfer.TransferType.TRANSFER), // transferType (transfer from executor to core)
+            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL), // transferType (transfer from executor to core)
             address(executor), // receiver
             NATIVE_TOKEN_ADDRESS, // tokenIn
             USDC_ADDR, // tokenOut
@@ -81,7 +81,7 @@ contract EkuboExecutorTest is Test, Constants {
         uint256 ethBalanceBeforeExecutor = address(executor).balance;
 
         bytes memory data = abi.encodePacked(
-            uint8(TokenTransfer.TransferType.TRANSFER), // transferType (transfer from executor to core)
+            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL), // transferType (transfer from executor to core)
             address(executor), // receiver
             USDC_ADDR, // tokenIn
             NATIVE_TOKEN_ADDRESS, // tokenOut
@@ -139,7 +139,7 @@ contract EkuboExecutorTest is Test, Constants {
     // Same test case as in swap_encoder::tests::ekubo::test_encode_swap_multi
     function testMultiHopSwap() public {
         bytes memory data = abi.encodePacked(
-            uint8(TokenTransfer.TransferType.TRANSFER), // transferType
+            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL), // transferType
             address(executor), // receiver
             NATIVE_TOKEN_ADDRESS, // tokenIn
             USDC_ADDR, // tokenOut of 1st swap
