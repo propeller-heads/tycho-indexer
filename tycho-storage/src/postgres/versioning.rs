@@ -351,6 +351,7 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
         .collect();
     let mut archived = Vec::new();
     let mut deleted = HashSet::new();
+    let mut to_skip = HashSet::new();
     for item in new_data.iter() {
         let id = item.get_id();
         match item {
@@ -365,7 +366,7 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
                             "Skipping update for {:?} since it's older than the latest version",
                             id
                         );
-                        latest.remove(&id);
+                        to_skip.insert(id.clone());
                         continue;
                     }
                 }
@@ -386,7 +387,7 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
                             "Skipping delete for {:?} since it's older than the latest version",
                             id
                         );
-                        latest.remove(id);
+                        to_skip.insert(id.clone());
                         continue;
                     }
                 }
@@ -404,6 +405,7 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
             }
         }
     }
+    latest.retain(|id, _| !to_skip.contains(id));
     Ok((latest.into_values().collect(), archived, deleted.into_iter().collect()))
 }
 
@@ -628,13 +630,24 @@ mod test {
             valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
             valid_to: NaiveDateTime::from_timestamp_micros(999).unwrap(),
         });
-        // outdated row should get filtered out and not be part of the returned versioning
+        // outdated row - should get filtered out and not be part of the returned versioning
         let outdated_row = VersioningEntry::Update(NewProtocolState {
             protocol_component_id: component_id,
             attribute_name: "liquidity".to_string(),
             attribute_value: Bytes::from(4u8),
             previous_value: None,
             modify_tx: 4,
+            valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
+            valid_to: NaiveDateTime::from_timestamp_micros(999).unwrap(),
+        });
+        // outdated row for same attribute - should get filtered out and not be part of the returned
+        // versioning
+        let outdated_row_repeat = VersioningEntry::Update(NewProtocolState {
+            protocol_component_id: component_id,
+            attribute_name: "liquidity".to_string(),
+            attribute_value: Bytes::from(4u8),
+            previous_value: None,
+            modify_tx: 5,
             valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
             valid_to: NaiveDateTime::from_timestamp_micros(999).unwrap(),
         });
@@ -651,7 +664,7 @@ mod test {
         ));
 
         let (latest, to_archive, to_delete) = apply_partitioned_versioning(
-            &[row1, delete_row1, row2, row3, outdated_row, outdated_delete],
+            &[row1, delete_row1, row2, row3, outdated_row, outdated_row_repeat, outdated_delete],
             NaiveDateTime::from_timestamp_micros(0).unwrap(),
             &mut conn,
         )
@@ -751,7 +764,7 @@ mod test {
             valid_from: db_fixtures::yesterday_one_am(),
             valid_to: None,
         };
-        // outdated row should get filtered out and not be part of the returned versioning
+        // outdated row - should get filtered out and not be part of the returned versioning
         let outdated_row = NewAccountBalance {
             account_id: acc,
             token_id: token1,
@@ -760,8 +773,18 @@ mod test {
             valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
             valid_to: None,
         };
+        // repeated outdated row - should get filtered out and not be part of the returned
+        // versioning
+        let outdated_row_repeat = NewAccountBalance {
+            account_id: acc,
+            token_id: token1,
+            balance: Bytes::from(150u64),
+            modify_tx: 3,
+            valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
+            valid_to: None,
+        };
 
-        let mut new_data = vec![row1.clone(), outdated_row];
+        let mut new_data = vec![row1.clone(), outdated_row, outdated_row_repeat];
 
         apply_versioning::<_, AccountBalance>(&mut new_data, &mut conn)
             .await
