@@ -548,6 +548,7 @@ impl SwapEncoder for CurveSwapEncoder {
             j.to_be_bytes::<1>(),
             approval_needed,
             (encoding_context.transfer_type as u8).to_be_bytes(),
+            bytes_to_address(&encoding_context.receiver)?,
         );
 
         Ok(args.abi_encode_packed())
@@ -1276,6 +1277,8 @@ mod tests {
                     "01",
                     // transfer type
                     "05",
+                    // receiver,
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"
                 ))
             );
         }
@@ -1344,6 +1347,8 @@ mod tests {
                     "01",
                     // transfer type
                     "05",
+                    // receiver
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"
                 ))
             );
         }
@@ -1422,6 +1427,8 @@ mod tests {
                     "01",
                     // transfer type
                     "05",
+                    // receiver
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"
                 ))
             );
         }

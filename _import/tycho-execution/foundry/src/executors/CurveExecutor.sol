@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./TokenTransfer.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
 error CurveExecutor__AddressZero();
 error CurveExecutor__InvalidDataLength();
@@ -64,7 +65,8 @@ contract CurveExecutor is IExecutor, TokenTransfer {
             int128 i,
             int128 j,
             bool tokenApprovalNeeded,
-            TransferType transferType
+            TransferType transferType,
+            address receiver
         ) = _decodeData(data);
 
         _transfer(
@@ -109,7 +111,16 @@ contract CurveExecutor is IExecutor, TokenTransfer {
         }
 
         uint256 balanceAfter = _balanceOf(tokenOut);
-        return balanceAfter - balanceBefore;
+        uint256 amountOut = balanceAfter - balanceBefore;
+
+        if (receiver != address(this)) {
+            if (tokenOut == nativeToken) {
+                Address.sendValue(payable(receiver), amountOut);
+            } else {
+                IERC20(tokenOut).safeTransfer(receiver, amountOut);
+            }
+        }
+        return amountOut;
     }
 
     function _decodeData(bytes calldata data)
@@ -123,7 +134,7 @@ contract CurveExecutor is IExecutor, TokenTransfer {
             int128 i,
             int128 j,
             bool tokenApprovalNeeded,
-            TransferType transferType
+            address receiver
         )
     {
         tokenIn = address(bytes20(data[0:20]));
@@ -134,6 +145,7 @@ contract CurveExecutor is IExecutor, TokenTransfer {
         j = int128(uint128(uint8(data[62])));
         tokenApprovalNeeded = data[63] != 0;
         transferType = TransferType(uint8(data[64]));
+        receiver = address(bytes20(data[65:85]));
     }
 
     receive() external payable {
