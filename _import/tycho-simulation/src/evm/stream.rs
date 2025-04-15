@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use futures::{Stream, StreamExt};
 use tokio_stream::wrappers::ReceiverStream;
+use tracing::warn;
 use tycho_client::{
     feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState},
     stream::{StreamError, TychoStreamBuilder},
@@ -83,6 +84,11 @@ impl ProtocolStreamBuilder {
             self.decoder
                 .register_filter(name, predicate);
         }
+
+        if ["uniswap_v4", "vm:balancer_v2", "vm:curve"].contains(&name) && filter_fn.is_none() {
+            warn!("Warning: For exchange type '{}', it is necessary to set a filter function because not all pools are supported. See all filters at src/evm/protocol/filters.rs", name);
+        }
+
         self
     }
 
