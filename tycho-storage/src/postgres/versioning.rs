@@ -294,10 +294,11 @@ pub trait PartitionedVersionedRow: Clone + Send + Sync + Debug {
     /// Any attribute changes when deleting a struct need to happen in this method.
     fn delete(&mut self, delete_version: NaiveDateTime);
 
-    /// Retrieves the currently active rows by entity ids.
+    /// Retrieves the latest version rows by entity ids.
     ///
     /// This method is used to provide the latest stored version of an entity id
-    /// during application side versioning.
+    /// during application side versioning. If an entity was deleted, the latest version
+    /// is the one before the deletion (with a valid_to set to the deletion time).
     async fn latest_versions_by_ids(
         ids: Vec<Self::EntityId>,
         conn: &mut AsyncPgConnection,
@@ -443,7 +444,7 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
 ///
 /// This function will execute the following steps:
 ///
-/// - Retrieve the current state of all entities to be updated or deleted.
+/// - Retrieve the latest version state of all entities to be updated or deleted.
 /// - Filter out any updates that are older than what's already in the database.
 /// - Apply application side versioning, calling either delete or archive on the respective rows.
 /// - Filter any archived rows by the retention horizon.
@@ -514,9 +515,8 @@ mod test {
 
     use super::*;
     use crate::postgres::{
-        self,
-        db_fixtures::{self, yesterday_one_am},
-        orm::{NewAccountBalance, NewProtocolState},
+        db_fixtures,
+        orm::{AccountBalance, NewAccountBalance, NewProtocolState},
         schema,
     };
 
@@ -535,11 +535,15 @@ mod test {
     async fn setup_state_data(conn: &mut AsyncPgConnection) {
         let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
         let blk = db_fixtures::insert_blocks(conn, chain_id).await;
-        let txn = db_fixtures::insert_txns(
+        let tx_hashes = [
+            "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945".to_string(),
+            "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54".to_string(),
+        ];
+        let txns = db_fixtures::insert_txns(
             conn,
-            &[(blk[0], 1i64, "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945")],
+            &[(blk[0], 1i64, &tx_hashes[0]), (blk[1], 2i64, &tx_hashes[1])],
         )
-        .await[0];
+        .await;
 
         // set up protocol state data
         let protocol_system_id =
@@ -558,7 +562,7 @@ mod test {
             chain_id,
             protocol_system_id,
             protocol_type_id,
-            txn,
+            txns[0],
             None,
             None,
         )
@@ -567,11 +571,22 @@ mod test {
         db_fixtures::insert_protocol_state(
             conn,
             protocol_component_id,
-            txn,
+            txns[0],
             "liquidity".to_owned(),
             Bytes::from(1100u64).lpad(32, 0),
             None,
             None,
+        )
+        .await;
+        // protocol state for component1-fee
+        db_fixtures::insert_protocol_state(
+            conn,
+            protocol_component_id,
+            txns[0],
+            "fee".to_owned(),
+            Bytes::from(0u64).lpad(32, 0),
+            None,
+            Some(txns[1]),
         )
         .await;
     }
@@ -623,6 +638,12 @@ mod test {
             valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
             valid_to: NaiveDateTime::from_timestamp_micros(999).unwrap(),
         });
+        // re-delete previously deleted row - should get filtered out and not be part of the
+        // returned versioning
+        let outdated_delete = VersioningEntry::Deletion((
+            (component_id, "fee".to_string()),
+            NaiveDateTime::from_timestamp_micros(1).unwrap(),
+        ));
 
         let delete_row1 = VersioningEntry::Deletion((
             (0i64, "tick".to_string()),
@@ -630,7 +651,7 @@ mod test {
         ));
 
         let (latest, to_archive, to_delete) = apply_partitioned_versioning(
-            &[row1, delete_row1, row2, row3, outdated_row],
+            &[row1, delete_row1, row2, row3, outdated_row, outdated_delete],
             NaiveDateTime::from_timestamp_micros(0).unwrap(),
             &mut conn,
         )
@@ -672,6 +693,7 @@ mod test {
                 }
             ]
         );
+        // outdated re-delete should not appear here
         assert_eq!(to_delete, vec![]);
     }
 
@@ -726,7 +748,7 @@ mod test {
             token_id: token0,
             balance: Bytes::from(150u64),
             modify_tx: 2,
-            valid_from: yesterday_one_am(),
+            valid_from: db_fixtures::yesterday_one_am(),
             valid_to: None,
         };
         // outdated row should get filtered out and not be part of the returned versioning
@@ -741,7 +763,7 @@ mod test {
 
         let mut new_data = vec![row1.clone(), outdated_row];
 
-        apply_versioning::<_, postgres::orm::AccountBalance>(&mut new_data, &mut conn)
+        apply_versioning::<_, AccountBalance>(&mut new_data, &mut conn)
             .await
             .unwrap();
         dbg!(&new_data);

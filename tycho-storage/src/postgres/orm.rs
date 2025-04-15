@@ -455,13 +455,17 @@ impl PartitionedVersionedRow for NewComponentBalance {
 
         Ok(component_balance::table
             .select(ComponentBalance::as_select())
-            .into_boxed()
             .filter(
                 component_balance::protocol_component_id
                     .eq_any(&component_ids)
-                    .and(component_balance::token_id.eq_any(&token_ids))
-                    .and(component_balance::valid_to.eq(MAX_TS)),
+                    .and(component_balance::token_id.eq_any(&token_ids)),
             )
+            .distinct_on((component_balance::protocol_component_id, component_balance::token_id))
+            .order_by((
+                component_balance::protocol_component_id,
+                component_balance::token_id,
+                component_balance::valid_to.desc(),
+            ))
             .get_results(conn)
             .await
             .map_err(PostgresError::from)?
@@ -1087,13 +1091,17 @@ impl PartitionedVersionedRow for NewProtocolState {
             .collect::<HashSet<_>>();
         Ok(protocol_state::table
             .select(ProtocolState::as_select())
-            .into_boxed()
             .filter(
                 protocol_state::protocol_component_id
                     .eq_any(&pc_id)
-                    .and(protocol_state::attribute_name.eq_any(&attr_name))
-                    .and(protocol_state::valid_to.eq(MAX_TS)),
+                    .and(protocol_state::attribute_name.eq_any(&attr_name)),
             )
+            .distinct_on((protocol_state::protocol_component_id, protocol_state::attribute_name))
+            .order_by((
+                protocol_state::protocol_component_id,
+                protocol_state::attribute_name,
+                protocol_state::valid_to.desc(),
+            ))
             .get_results(conn)
             .await
             .map_err(PostgresError::from)?
@@ -1640,13 +1648,17 @@ impl PartitionedVersionedRow for NewSlot {
 
         Ok(contract_storage::table
             .select(ContractStorage::as_select())
-            .into_boxed()
             .filter(
                 contract_storage::account_id
                     .eq_any(&accounts)
-                    .and(contract_storage::slot.eq_any(&slots))
-                    .and(contract_storage::valid_to.eq(MAX_TS)),
+                    .and(contract_storage::slot.eq_any(&slots)),
             )
+            .distinct_on((contract_storage::account_id, contract_storage::slot))
+            .order_by((
+                contract_storage::account_id,
+                contract_storage::slot,
+                contract_storage::valid_to.desc(),
+            ))
             .get_results(conn)
             .await
             .map_err(PostgresError::from)?
