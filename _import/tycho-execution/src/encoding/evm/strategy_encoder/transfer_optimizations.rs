@@ -33,21 +33,21 @@ pub trait TransferOptimization {
         } else if is_first_swap && send_funds_to_pool {
             if permit2 {
                 // Transfer from swapper to pool using permit2.
-                TransferType::Permit2Transfer
+                TransferType::TransferPermit2ToProtocol
             } else {
                 // Transfer from swapper to pool.
-                TransferType::TransferFrom
+                TransferType::TransferFromToProtocol
             }
         } else if is_first_swap && funds_expected_in_router {
             if permit2 {
                 // Transfer from swapper to router using permit2.
-                TransferType::Permit2TransferToRouter
+                TransferType::TransferPermit2ToRouter
             } else {
                 // Transfer from swapper to router.
-                TransferType::TransferToRouter
+                TransferType::TransferFromToRouter
             }
         } else {
-            TransferType::Transfer
+            TransferType::TransferToProtocol
         }
     }
 }
@@ -93,7 +93,7 @@ mod tests {
         let strategy = MockStrategy {};
         let transfer_method =
             strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), true, false);
-        assert_eq!(transfer_method, TransferType::Permit2Transfer);
+        assert_eq!(transfer_method, TransferType::TransferPermit2ToProtocol);
     }
 
     #[test]
@@ -111,7 +111,7 @@ mod tests {
         let strategy = MockStrategy {};
         let transfer_method =
             strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), false, false);
-        assert_eq!(transfer_method, TransferType::TransferFrom);
+        assert_eq!(transfer_method, TransferType::TransferFromToProtocol);
     }
 
     #[test]
@@ -149,7 +149,7 @@ mod tests {
         let strategy = MockStrategy {};
         let transfer_method =
             strategy.get_transfer_type(swap.clone(), eth(), eth(), weth(), false, true);
-        assert_eq!(transfer_method, TransferType::TransferFrom);
+        assert_eq!(transfer_method, TransferType::TransferFromToProtocol);
     }
 
     #[test]
@@ -168,6 +168,6 @@ mod tests {
         let strategy = MockStrategy {};
         let transfer_method =
             strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), false, false);
-        assert_eq!(transfer_method, TransferType::Transfer);
+        assert_eq!(transfer_method, TransferType::TransferToProtocol);
     }
 }

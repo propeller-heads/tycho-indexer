@@ -595,7 +595,7 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
+            transfer_type: TransferType::TransferToProtocol,
         };
         let encoder = UniswapV2SwapEncoder::new(
             String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -649,7 +649,7 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
+            transfer_type: TransferType::TransferToProtocol,
         };
         let encoder = UniswapV3SwapEncoder::new(
             String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -773,7 +773,7 @@ mod tests {
 
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
+            transfer_type: TransferType::TransferToProtocol,
         };
         let encoder = UniswapV4SwapEncoder::new(
             String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
@@ -842,7 +842,7 @@ mod tests {
             group_token_in: group_token_in.clone(),
             // Token out is the same as the group token out
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
+            transfer_type: TransferType::TransferToProtocol,
         };
 
         let encoder = UniswapV4SwapEncoder::new(
@@ -885,7 +885,7 @@ mod tests {
             router_address: Some(router_address.clone()),
             group_token_in: usde_address.clone(),
             group_token_out: wbtc_address.clone(),
-            transfer_type: TransferType::Transfer,
+            transfer_type: TransferType::TransferToProtocol,
         };
 
         // Setup - First sequence: USDE -> USDT
@@ -1017,7 +1017,7 @@ mod tests {
                 group_token_out: token_out.clone(),
                 exact_out: false,
                 router_address: Some(Bytes::default()),
-                transfer_type: TransferType::Transfer,
+                transfer_type: TransferType::TransferToProtocol,
             };
 
             let encoder =
@@ -1060,7 +1060,7 @@ mod tests {
                 group_token_out: group_token_out.clone(),
                 exact_out: false,
                 router_address: Some(Bytes::default()),
-                transfer_type: TransferType::Transfer,
+                transfer_type: TransferType::TransferToProtocol,
             };
 
             let first_swap = Swap {

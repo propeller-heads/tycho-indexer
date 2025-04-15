@@ -84,7 +84,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             address(2),
             address(3),
             false,
-            TokenTransfer.TransferType.TRANSFER
+            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
         );
 
         (
@@ -100,7 +100,8 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
         assertEq(receiver, address(3));
         assertEq(zeroForOne, false);
         assertEq(
-            uint8(TokenTransfer.TransferType.TRANSFER), uint8(transferType)
+            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL),
+            uint8(transferType)
         );
     }
 
@@ -157,7 +158,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             WETH_DAI_POOL,
             BOB,
             zeroForOne,
-            uint8(TokenTransfer.TransferType.TRANSFER)
+            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL)
         );
 
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
@@ -176,7 +177,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             WETH_DAI_POOL,
             BOB,
             zeroForOne,
-            uint8(TokenTransfer.TransferType.TRANSFER_FROM)
+            uint8(TokenTransfer.TransferType.TRANSFER_FROM_TO_PROTOCOL)
         );
 
         deal(WETH_ADDR, address(this), amountIn);
@@ -197,7 +198,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             WETH_DAI_POOL,
             ALICE,
             zeroForOne,
-            uint8(TokenTransfer.TransferType.TRANSFER_PERMIT2)
+            uint8(TokenTransfer.TransferType.TRANSFER_PERMIT2_TO_PROTOCOL)
         );
 
         deal(WETH_ADDR, ALICE, amountIn);
@@ -283,7 +284,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             fakePool,
             BOB,
             zeroForOne,
-            uint8(TokenTransfer.TransferType.TRANSFER)
+            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL)
         );
 
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
@@ -303,7 +304,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             USDC_MAG7_POOL,
             BOB,
             zeroForOne,
-            uint8(TokenTransfer.TransferType.TRANSFER)
+            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL)
         );
 
         deal(BASE_USDC, address(uniswapV2Exposed), amountIn);

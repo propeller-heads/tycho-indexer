@@ -52,7 +52,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
         uint24 pool2Fee = 1000;
         int24 tickSpacing2 = -10;
         TokenTransfer.TransferType transferType =
-            TokenTransfer.TransferType.TRANSFER_FROM;
+            TokenTransfer.TransferType.TRANSFER_FROM_TO_PROTOCOL;
 
         UniswapV4Executor.UniswapV4Pool[] memory pools =
             new UniswapV4Executor.UniswapV4Pool[](2);

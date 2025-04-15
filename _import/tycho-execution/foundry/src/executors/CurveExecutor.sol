@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./TokenTransfer.sol";
 
 error CurveExecutor__AddressZero();
+error CurveExecutor__InvalidDataLength();
 
 interface CryptoPool {
     // slither-disable-next-line naming-convention
@@ -53,6 +54,8 @@ contract CurveExecutor is IExecutor, TokenTransfer {
         payable
         returns (uint256)
     {
+        if (data.length != 65) revert CurveExecutor__InvalidDataLength();
+
         (
             address tokenIn,
             address tokenOut,

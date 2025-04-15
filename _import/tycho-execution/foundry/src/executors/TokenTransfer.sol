@@ -14,15 +14,15 @@ contract TokenTransfer {
 
     enum TransferType {
         // Assume funds are in the TychoRouter - transfer into the pool
-        TRANSFER,
+        TRANSFER_TO_PROTOCOL,
         // Assume funds are in msg.sender's wallet - transferFrom into the pool
-        TRANSFER_FROM,
+        TRANSFER_FROM_TO_PROTOCOL,
         // Assume funds are in msg.sender's wallet - permit2TransferFrom into the pool
-        TRANSFER_PERMIT2,
+        TRANSFER_PERMIT2_TO_PROTOCOL,
         // Assume funds are in msg.sender's wallet - but the pool requires it to be
         // in the router contract when calling swap - transferFrom into the router
         // contract
-        TRANSFER_TO_ROUTER,
+        TRANSFER_FROM_TO_ROUTER,
         // Assume funds are in msg.sender's wallet - but the pool requires it to be
         // in the router contract when calling swap - transferFrom into the router
         // contract using permit2
@@ -45,19 +45,19 @@ contract TokenTransfer {
         uint256 amount,
         TransferType transferType
     ) internal {
-        if (transferType == TransferType.TRANSFER) {
+        if (transferType == TransferType.TRANSFER_TO_PROTOCOL) {
             if (tokenIn == address(0)) {
                 payable(receiver).transfer(amount);
             } else {
                 IERC20(tokenIn).safeTransfer(receiver, amount);
             }
-        } else if (transferType == TransferType.TRANSFER_FROM) {
+        } else if (transferType == TransferType.TRANSFER_FROM_TO_PROTOCOL) {
             // slither-disable-next-line arbitrary-send-erc20
             IERC20(tokenIn).safeTransferFrom(sender, receiver, amount);
-        } else if (transferType == TransferType.TRANSFER_PERMIT2) {
+        } else if (transferType == TransferType.TRANSFER_PERMIT2_TO_PROTOCOL) {
             // Permit2.permit is already called from the TychoRouter
             permit2.transferFrom(sender, receiver, uint160(amount), tokenIn);
-        } else if (transferType == TransferType.TRANSFER_TO_ROUTER) {
+        } else if (transferType == TransferType.TRANSFER_FROM_TO_ROUTER) {
             // slither-disable-next-line arbitrary-send-erc20
             IERC20(tokenIn).safeTransferFrom(sender, address(this), amount);
         } else if (transferType == TransferType.TRANSFER_PERMIT2_TO_ROUTER) {

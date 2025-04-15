@@ -18,8 +18,8 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         //       (univ2)     (univ2)
 
         TokenTransfer.TransferType transferType = permit2
-            ? TokenTransfer.TransferType.TRANSFER_PERMIT2
-            : TokenTransfer.TransferType.TRANSFER_FROM;
+            ? TokenTransfer.TransferType.TRANSFER_PERMIT2_TO_PROTOCOL
+            : TokenTransfer.TransferType.TRANSFER_FROM_TO_PROTOCOL;
 
         bytes[] memory swaps = new bytes[](2);
         // WETH -> DAI
@@ -38,7 +38,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
                 DAI_USDC_POOL,
                 tychoRouterAddr,
                 true,
-                TokenTransfer.TransferType.TRANSFER
+                TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
             )
         );
         return swaps;
@@ -222,7 +222,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
                 WETH_DAI_POOL,
                 tychoRouterAddr,
                 false,
-                TokenTransfer.TransferType.TRANSFER
+                TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
             )
         );
 
@@ -234,7 +234,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
                 DAI_USDC_POOL,
                 tychoRouterAddr,
                 true,
-                TokenTransfer.TransferType.TRANSFER
+                TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
             )
         );
 
@@ -282,7 +282,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
                 DAI_USDC_POOL,
                 tychoRouterAddr,
                 false,
-                TokenTransfer.TransferType.TRANSFER_PERMIT2
+                TokenTransfer.TransferType.TRANSFER_PERMIT2_TO_PROTOCOL
             )
         );
 
@@ -294,7 +294,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
                 WETH_DAI_POOL,
                 tychoRouterAddr,
                 true,
-                TokenTransfer.TransferType.TRANSFER
+                TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
             )
         );
 
@@ -331,7 +331,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             tychoRouterAddr,
             USDC_WETH_USV3,
             true,
-            TokenTransfer.TransferType.TRANSFER
+            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
         );
 
         bytes memory usdcWethV3Pool2OneZeroData = encodeUniswapV3Swap(
@@ -340,7 +340,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             tychoRouterAddr,
             USDC_WETH_USV3_2,
             false,
-            TokenTransfer.TransferType.TRANSFER
+            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
         );
 
         bytes[] memory swaps = new bytes[](2);

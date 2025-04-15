@@ -71,7 +71,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             address(2),
             address(3),
             false,
-            TokenTransfer.TransferType.TRANSFER
+            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
         );
 
         (
@@ -91,7 +91,8 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
         assertEq(
-            uint8(transferType), uint8(TokenTransfer.TransferType.TRANSFER)
+            uint8(transferType),
+            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL)
         );
     }
 
@@ -126,7 +127,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             WETH_ADDR,
             DAI_ADDR,
             poolFee,
-            TokenTransfer.TransferType.TRANSFER,
+            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL,
             address(uniswapV3Exposed)
         );
         uint256 dataOffset = 3; // some offset
@@ -160,7 +161,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             address(this),
             fakePool,
             zeroForOne,
-            TokenTransfer.TransferType.TRANSFER
+            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
         );
 
         vm.expectRevert(UniswapV3Executor__InvalidTarget.selector);

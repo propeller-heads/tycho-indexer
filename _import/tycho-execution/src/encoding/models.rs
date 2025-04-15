@@ -100,20 +100,20 @@ pub struct Transaction {
 ///
 /// # Fields
 ///
-/// * `Transfer`: Transfer the token from the router into the pool.
-/// * `TransferFrom`: Transfer the token from the swapper to the pool.
-/// * `Permit2Transfer`: Transfer the token from the sender to the pool using Permit2.
-/// * `TransferToRouter`: Transfer the token from the swapper to the router.
-/// * `Permit2TransferToRouter`: Transfer the token from the swapper to the router using Permit2.
+/// * `TransferToProtocol`: Transfer the token from the router into the protocol.
+/// * `TransferFromToProtocol`: Transfer the token from the sender to the protocol.
+/// * `TransferPermit2ToProtocol`: Transfer the token from the sender to the protocol using Permit2.
+/// * `TransferFromToRouter`: Transfer the token from the sender to the router.
+/// * `TransferPermit2ToRouter`: Transfer the token from the sender to the router using Permit2.
 /// * `None`: No transfer is needed. Tokens are already in the pool.
 #[repr(u8)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum TransferType {
-    Transfer = 0,
-    TransferFrom = 1,
-    Permit2Transfer = 2,
-    TransferToRouter = 3,
-    Permit2TransferToRouter = 4,
+    TransferToProtocol = 0,
+    TransferFromToProtocol = 1,
+    TransferPermit2ToProtocol = 2,
+    TransferFromToRouter = 3,
+    TransferPermit2ToRouter = 4,
     None = 5,
 }
 

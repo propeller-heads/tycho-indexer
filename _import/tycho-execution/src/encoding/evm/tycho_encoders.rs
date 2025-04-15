@@ -260,7 +260,7 @@ impl TychoExecutorEncoder {
                 router_address: None,
                 group_token_in: grouped_swap.input_token.clone(),
                 group_token_out: grouped_swap.output_token.clone(),
-                transfer_type: TransferType::Transfer,
+                transfer_type: TransferType::TransferToProtocol,
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
             grouped_protocol_data.extend(protocol_data);
