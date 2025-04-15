@@ -96,6 +96,27 @@ pub struct Transaction {
     pub data: Vec<u8>,
 }
 
+/// Represents the type of transfer to be performed into the pool.
+///
+/// # Fields
+///
+/// * `TransferToProtocol`: Transfer the token from the router into the protocol.
+/// * `TransferFromToProtocol`: Transfer the token from the sender to the protocol.
+/// * `TransferPermit2ToProtocol`: Transfer the token from the sender to the protocol using Permit2.
+/// * `TransferFromToRouter`: Transfer the token from the sender to the router.
+/// * `TransferPermit2ToRouter`: Transfer the token from the sender to the router using Permit2.
+/// * `None`: No transfer is needed. Tokens are already in the pool.
+#[repr(u8)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum TransferType {
+    TransferToProtocol = 0,
+    TransferFromToProtocol = 1,
+    TransferPermit2ToProtocol = 2,
+    TransferFromToRouter = 3,
+    TransferPermit2ToRouter = 4,
+    None = 5,
+}
+
 /// Represents necessary attributes for encoding an order.
 ///
 /// # Fields
@@ -113,6 +134,7 @@ pub struct EncodingContext {
     pub router_address: Option<Bytes>,
     pub group_token_in: Bytes,
     pub group_token_out: Bytes,
+    pub transfer_type: TransferType,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]

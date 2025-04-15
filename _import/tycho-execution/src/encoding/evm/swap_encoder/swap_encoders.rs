@@ -22,15 +22,6 @@ use crate::encoding::{
     swap_encoder::SwapEncoder,
 };
 
-#[allow(dead_code)]
-#[repr(u8)]
-pub enum TransferType {
-    Transfer = 0,
-    TransferFrom = 1,
-    Permit2Transfer = 2,
-    None = 3,
-}
-
 /// Encodes a swap on a Uniswap V2 pool through the given executor address.
 ///
 /// # Fields
@@ -75,7 +66,7 @@ impl SwapEncoder for UniswapV2SwapEncoder {
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
             zero_to_one,
-            (TransferType::Transfer as u8).to_be_bytes(),
+            (encoding_context.transfer_type as u8).to_be_bytes(),
         );
 
         Ok(args.abi_encode_packed())
@@ -138,7 +129,7 @@ impl SwapEncoder for UniswapV3SwapEncoder {
             bytes_to_address(&encoding_context.receiver)?,
             component_id,
             zero_to_one,
-            (TransferType::Transfer as u8).to_be_bytes(),
+            (encoding_context.transfer_type as u8).to_be_bytes(),
         );
 
         Ok(args.abi_encode_packed())
@@ -211,7 +202,13 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let pool_params =
             (token_out_address, pool_fee_u24, pool_tick_spacing_u24).abi_encode_packed();
 
-        let args = (group_token_in_address, group_token_out_address, zero_to_one, pool_params);
+        let args = (
+            group_token_in_address,
+            group_token_out_address,
+            zero_to_one,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
+            pool_params,
+        );
 
         Ok(args.abi_encode_packed())
     }
@@ -284,6 +281,7 @@ impl SwapEncoder for BalancerV2SwapEncoder {
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
             approval_needed,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
         );
         Ok(args.abi_encode_packed())
     }
@@ -548,6 +546,7 @@ impl SwapEncoder for CurveSwapEncoder {
             i.to_be_bytes::<1>(),
             j.to_be_bytes::<1>(),
             approval_needed,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
         );
 
         Ok(args.abi_encode_packed())
@@ -573,6 +572,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::encoding::models::TransferType;
 
     #[test]
     fn test_encode_uniswap_v2() {
@@ -595,6 +595,7 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
+            transfer_type: TransferType::TransferToProtocol,
         };
         let encoder = UniswapV2SwapEncoder::new(
             String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -648,6 +649,7 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
+            transfer_type: TransferType::TransferToProtocol,
         };
         let encoder = UniswapV3SwapEncoder::new(
             String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -702,6 +704,7 @@ mod tests {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
+            transfer_type: TransferType::None,
         };
         let encoder = BalancerV2SwapEncoder::new(
             String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -729,7 +732,9 @@ mod tests {
                 // receiver
                 "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                 // approval needed
-                "01"
+                "01",
+                // transfer type
+                "05"
             ))
         );
     }
@@ -768,6 +773,7 @@ mod tests {
 
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
+            transfer_type: TransferType::TransferToProtocol,
         };
         let encoder = UniswapV4SwapEncoder::new(
             String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
@@ -790,6 +796,8 @@ mod tests {
                 "dac17f958d2ee523a2206206994597c13d831ec7",
                 // zero for one
                 "01",
+                // transfer type
+                "00",
                 // pool params:
                 // - intermediary token
                 "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -834,6 +842,7 @@ mod tests {
             group_token_in: group_token_in.clone(),
             // Token out is the same as the group token out
             group_token_out: token_out.clone(),
+            transfer_type: TransferType::TransferToProtocol,
         };
 
         let encoder = UniswapV4SwapEncoder::new(
@@ -876,6 +885,7 @@ mod tests {
             router_address: Some(router_address.clone()),
             group_token_in: usde_address.clone(),
             group_token_out: wbtc_address.clone(),
+            transfer_type: TransferType::TransferToProtocol,
         };
 
         // Setup - First sequence: USDE -> USDT
@@ -944,6 +954,7 @@ mod tests {
         let combined_hex =
             format!("{}{}", encode(&initial_encoded_swap), encode(&second_encoded_swap));
 
+        println!("{}", combined_hex);
         assert_eq!(
             combined_hex,
             String::from(concat!(
@@ -953,6 +964,8 @@ mod tests {
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
                 // zero for one
                 "01",
+                // transfer type
+                "00",
                 // pool params:
                 // - intermediary token USDT
                 "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -1004,6 +1017,7 @@ mod tests {
                 group_token_out: token_out.clone(),
                 exact_out: false,
                 router_address: Some(Bytes::default()),
+                transfer_type: TransferType::TransferToProtocol,
             };
 
             let encoder =
@@ -1046,6 +1060,7 @@ mod tests {
                 group_token_out: group_token_out.clone(),
                 exact_out: false,
                 router_address: Some(Bytes::default()),
+                transfer_type: TransferType::TransferToProtocol,
             };
 
             let first_swap = Swap {
@@ -1222,6 +1237,7 @@ mod tests {
                 router_address: None,
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
+                transfer_type: TransferType::None,
             };
             let encoder = CurveSwapEncoder::new(
                 String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
@@ -1251,6 +1267,8 @@ mod tests {
                     "01",
                     // approval needed
                     "01",
+                    // transfer type
+                    "05",
                 ))
             );
         }
@@ -1287,6 +1305,7 @@ mod tests {
                 router_address: None,
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
+                transfer_type: TransferType::None,
             };
             let encoder = CurveSwapEncoder::new(
                 String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
@@ -1316,6 +1335,8 @@ mod tests {
                     "00",
                     // approval needed
                     "01",
+                    // transfer type
+                    "05",
                 ))
             );
         }
@@ -1353,6 +1374,7 @@ mod tests {
                 router_address: None,
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
+                transfer_type: TransferType::None,
             };
             let encoder = CurveSwapEncoder::new(
                 String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
@@ -1391,6 +1413,8 @@ mod tests {
                     "01",
                     // approval needed
                     "01",
+                    // transfer type
+                    "05",
                 ))
             );
         }

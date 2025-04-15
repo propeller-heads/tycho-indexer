@@ -71,7 +71,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             address(2),
             address(3),
             false,
-            TokenTransfer.TransferType.TRANSFER
+            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
         );
 
         (
@@ -91,7 +91,8 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
         assertEq(
-            uint8(transferType), uint8(TokenTransfer.TransferType.TRANSFER)
+            uint8(transferType),
+            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL)
         );
     }
 
@@ -123,7 +124,11 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
 
         vm.startPrank(DAI_WETH_USV3);
         bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR, DAI_ADDR, poolFee, TokenTransfer.TransferType.TRANSFER
+            WETH_ADDR,
+            DAI_ADDR,
+            poolFee,
+            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL,
+            address(uniswapV3Exposed)
         );
         uint256 dataOffset = 3; // some offset
         uint256 dataLength = protocolData.length;
@@ -134,8 +139,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             int256(0), // amount1Delta
             dataOffset,
             dataLength,
-            protocolData,
-            address(uniswapV3Exposed) // transferFrom sender (irrelevant in this case)
+            protocolData
         );
         uniswapV3Exposed.handleCallback(callbackData);
         vm.stopPrank();
@@ -157,7 +161,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             address(this),
             fakePool,
             zeroForOne,
-            TokenTransfer.TransferType.TRANSFER
+            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
         );
 
         vm.expectRevert(UniswapV3Executor__InvalidTarget.selector);

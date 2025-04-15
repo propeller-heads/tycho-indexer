@@ -102,13 +102,13 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper {
             new UniswapV2Executor(factoryV2, initCodeV2, PERMIT2_ADDRESS);
         usv3Executor =
             new UniswapV3Executor(factoryV3, initCodeV3, PERMIT2_ADDRESS);
-        usv4Executor = new UniswapV4Executor(poolManager);
+        usv4Executor = new UniswapV4Executor(poolManager, PERMIT2_ADDRESS);
         pancakev3Executor = new UniswapV3Executor(
             factoryPancakeV3, initCodePancakeV3, PERMIT2_ADDRESS
         );
-        balancerv2Executor = new BalancerV2Executor();
+        balancerv2Executor = new BalancerV2Executor(PERMIT2_ADDRESS);
         ekuboExecutor = new EkuboExecutor(ekuboCore);
-        curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE);
+        curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, PERMIT2_ADDRESS);
 
         address[] memory executors = new address[](7);
         executors[0] = address(usv2Executor);
@@ -178,15 +178,11 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper {
         address tokenIn,
         address target,
         address receiver,
-        bool zero2one
+        bool zero2one,
+        TokenTransfer.TransferType transferType
     ) internal pure returns (bytes memory) {
-        return abi.encodePacked(
-            tokenIn,
-            target,
-            receiver,
-            zero2one,
-            TokenTransfer.TransferType.TRANSFER
-        );
+        return
+            abi.encodePacked(tokenIn, target, receiver, zero2one, transferType);
     }
 
     function encodeUniswapV3Swap(
@@ -194,7 +190,8 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper {
         address tokenOut,
         address receiver,
         address target,
-        bool zero2one
+        bool zero2one,
+        TokenTransfer.TransferType transferType
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
         return abi.encodePacked(
@@ -204,7 +201,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper {
             receiver,
             target,
             zero2one,
-            TokenTransfer.TransferType.TRANSFER
+            transferType
         );
     }
 }
