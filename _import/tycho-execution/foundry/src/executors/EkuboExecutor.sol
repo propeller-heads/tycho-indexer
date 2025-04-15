@@ -11,21 +11,28 @@ import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
 import {LibBytes} from "@solady/utils/LibBytes.sol";
 import {Config, EkuboPoolKey} from "@ekubo/types/poolKey.sol";
 import {MAX_SQRT_RATIO, MIN_SQRT_RATIO} from "@ekubo/types/sqrtRatio.sol";
+import {TokenTransfer} from "./TokenTransfer.sol";
 
-contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
+contract EkuboExecutor is
+    IExecutor,
+    ILocker,
+    IPayer,
+    ICallback,
+    TokenTransfer
+{
     error EkuboExecutor__InvalidDataLength();
     error EkuboExecutor__CoreOnly();
     error EkuboExecutor__UnknownCallback();
 
     ICore immutable core;
 
-    uint256 constant POOL_DATA_OFFSET = 56;
+    uint256 constant POOL_DATA_OFFSET = 77;
     uint256 constant HOP_BYTE_LEN = 52;
 
     bytes4 constant LOCKED_SELECTOR = 0xb45a3c0e; // locked(uint256)
     bytes4 constant PAY_CALLBACK_SELECTOR = 0x599d0714; // payCallback(uint256,address)
 
-    constructor(address _core) {
+    constructor(address _core, address _permit2) TokenTransfer(_permit2) {
         core = ICore(_core);
     }
 
@@ -34,11 +41,16 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         payable
         returns (uint256 calculatedAmount)
     {
-        if (data.length < 92) revert EkuboExecutor__InvalidDataLength();
+        if (data.length < 93) revert EkuboExecutor__InvalidDataLength();
 
         // amountIn must be at most type(int128).MAX
-        calculatedAmount =
-            uint256(_lock(bytes.concat(bytes16(uint128(amountIn)), data)));
+        calculatedAmount = uint256(
+            _lock(
+                bytes.concat(
+                    bytes16(uint128(amountIn)), bytes20(msg.sender), data
+                )
+            )
+        );
     }
 
     function handleCallback(bytes calldata raw)
@@ -113,9 +125,11 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
     function _locked(bytes calldata swapData) internal returns (int128) {
         int128 nextAmountIn = int128(uint128(bytes16(swapData[0:16])));
         uint128 tokenInDebtAmount = uint128(nextAmountIn);
+        address sender = address(bytes20(swapData[16:36]));
+        uint8 transferType = uint8(swapData[36]);
 
-        address receiver = address(bytes20(swapData[16:36]));
-        address tokenIn = address(bytes20(swapData[36:POOL_DATA_OFFSET]));
+        address receiver = address(bytes20(swapData[37:57]));
+        address tokenIn = address(bytes20(swapData[57:77]));
 
         address nextTokenIn = tokenIn;
 
@@ -149,14 +163,17 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
             offset += HOP_BYTE_LEN;
         }
 
-        _pay(tokenIn, tokenInDebtAmount);
-
+        _pay(tokenIn, tokenInDebtAmount, sender, transferType);
         core.withdraw(nextTokenIn, receiver, uint128(nextAmountIn));
-
         return nextAmountIn;
     }
 
-    function _pay(address token, uint128 amount) internal {
+    function _pay(
+        address token,
+        uint128 amount,
+        address sender,
+        uint8 transferType
+    ) internal {
         address target = address(core);
 
         if (token == NATIVE_TOKEN_ADDRESS) {
@@ -169,9 +186,11 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
                 mstore(free, shl(224, 0x0c11dedd))
                 mstore(add(free, 4), token)
                 mstore(add(free, 36), shl(128, amount))
+                mstore(add(free, 52), shl(96, sender))
+                mstore(add(free, 72), shl(248, transferType))
 
-                // if it failed, pass through revert
-                if iszero(call(gas(), target, 0, free, 52, 0, 0)) {
+                // 4 (selector) + 32 (token) + 16 (amount) + 20 (recipient) + 1 (transferType) = 73
+                if iszero(call(gas(), target, 0, free, 132, 0, 0)) {
                     returndatacopy(0, 0, returndatasize())
                     revert(0, returndatasize())
                 }
@@ -182,8 +201,9 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
     function _payCallback(bytes calldata payData) internal {
         address token = address(bytes20(payData[12:32])); // This arg is abi-encoded
         uint128 amount = uint128(bytes16(payData[32:48]));
-
-        SafeTransferLib.safeTransfer(token, address(core), amount);
+        address sender = address(bytes20(payData[48:68]));
+        TransferType transferType = TransferType(uint8(payData[68]));
+        _transfer(token, sender, address(core), amount, transferType);
     }
 
     // To receive withdrawals from Core
