@@ -208,7 +208,9 @@ fn build_batch_update_query<'a, O: StoredVersionedRow>(
 ///
 /// ## Important note:
 /// This function requires that new_data is sorted by ascending execution order (block, transaction,
-/// index) for conflicting entity_id.
+/// index) for conflicting entity_id. It also assumes that full block-scoped data is inserted in the
+/// database, meaning that if one version of a database entry exists for a block, it is assumed that
+/// all updates for that entry on that block have been inserted.
 pub async fn apply_versioning<N, S>(
     new_data: &mut Vec<N>,
     conn: &mut AsyncPgConnection,
@@ -456,7 +458,9 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
 ///
 /// ## Important note:
 /// This function requires that new_data is sorted by ascending execution order (block, transaction
-/// index) for conflicting entity_id.
+/// index) for conflicting entity_id. It also assumes that full block-scoped data is inserted in the
+/// database, meaning that if one version of a database entry exists for a block, it is assumed that
+/// all updates for that entry on that block have been inserted.
 ///
 /// ## Note
 /// This method may only works for rows that have a primary key know before insert. So e.g.
