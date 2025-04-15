@@ -1,3 +1,16 @@
+## [0.95.0](https://github.com/propeller-heads/tycho-simulation/compare/0.94.0...0.95.0) (2025-04-15)
+
+
+### Features
+
+* Update tycho-execution tag (balancer v2 redeployment) ([a0409f1](https://github.com/propeller-heads/tycho-simulation/commit/a0409f184b861e40a3c854e864da9d37a07ca0dc))
+
+
+### Bug Fixes
+
+* Extend curve filter ([fb95870](https://github.com/propeller-heads/tycho-simulation/commit/fb958705203129b5a551f889233f739494c0a415))
+* Improve warning message ([2ff5b54](https://github.com/propeller-heads/tycho-simulation/commit/2ff5b5411c7ecc5286583e7437d5b3759d0777a7))
+
 ## [0.94.0](https://github.com/propeller-heads/tycho-simulation/compare/0.93.0...0.94.0) (2025-04-14)
 
 
