@@ -24,7 +24,7 @@ pub static IN_TRANSFER_OPTIMIZABLE_PROTOCOLS: LazyLock<HashSet<&'static str>> =
         let mut set = HashSet::new();
         set.insert("uniswap_v2");
         set.insert("uniswap_v3");
-        set.insert("ekubo");
+        set.insert("ekubo_v2");
         set
     });
 
