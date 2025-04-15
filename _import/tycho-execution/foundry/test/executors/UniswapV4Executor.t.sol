@@ -22,6 +22,7 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
             address tokenOut,
             bool zeroForOne,
             TokenTransfer.TransferType transferType,
+            address receiver,
             UniswapV4Pool[] memory pools
         )
     {
@@ -68,7 +69,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR, USDT_ADDR, zeroForOne, transferType, pools
+            USDE_ADDR, USDT_ADDR, zeroForOne, transferType, ALICE, pools
         );
 
         (
@@ -76,6 +77,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
             address tokenOut,
             bool zeroForOneDecoded,
             TokenTransfer.TransferType transferTypeDecoded,
+            address receiver,
             UniswapV4Executor.UniswapV4Pool[] memory decodedPools
         ) = uniswapV4Exposed.decodeData(data);
 
@@ -83,6 +85,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
         assertEq(tokenOut, USDT_ADDR);
         assertEq(zeroForOneDecoded, zeroForOne);
         assertEq(uint8(transferTypeDecoded), uint8(transferType));
+        assertEq(receiver, ALICE);
         assertEq(decodedPools.length, 2);
         assertEq(decodedPools[0].intermediaryToken, USDT_ADDR);
         assertEq(decodedPools[0].fee, pool1Fee);
@@ -108,7 +111,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR, USDT_ADDR, true, TokenTransfer.TransferType.NONE, pools
+            USDE_ADDR, USDT_ADDR, true, TokenTransfer.TransferType.NONE, ALICE, pools
         );
 
         uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
@@ -117,7 +120,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
             USDE.balanceOf(address(uniswapV4Exposed)),
             usdeBalanceBeforeSwapExecutor - amountIn
         );
-        assertTrue(USDT.balanceOf(address(uniswapV4Exposed)) == amountOut);
+        assertTrue(USDT.balanceOf(ALICE) == amountOut);
     }
 
     function testSingleSwapIntegration() public {
@@ -134,10 +137,10 @@ contract UniswapV4ExecutorTest is Test, Constants {
         uint256 amountOut = uniswapV4Exposed.swap(amountIn, protocolData);
         assertEq(USDE.balanceOf(poolManager), usdeBalanceBeforePool + amountIn);
         assertEq(
-            USDE.balanceOf(address(uniswapV4Exposed)),
+            USDE.balanceOf(ALICE),
             usdeBalanceBeforeSwapExecutor - amountIn
         );
-        assertTrue(USDT.balanceOf(address(uniswapV4Exposed)) == amountOut);
+        assertTrue(USDT.balanceOf(ALICE) == amountOut);
     }
 
     function testMultipleSwap() public {
@@ -162,7 +165,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR, WBTC_ADDR, true, TokenTransfer.TransferType.NONE, pools
+            USDE_ADDR, WBTC_ADDR, true, TokenTransfer.TransferType.NONE, ALICE, pools
         );
 
         uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
@@ -172,7 +175,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
             usdeBalanceBeforeSwapExecutor - amountIn
         );
         assertTrue(
-            IERC20(WBTC_ADDR).balanceOf(address(uniswapV4Exposed)) == amountOut
+            IERC20(WBTC_ADDR).balanceOf(ALICE) == amountOut
         );
     }
 
@@ -196,7 +199,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
             usdeBalanceBeforeSwapExecutor - amountIn
         );
         assertTrue(
-            IERC20(WBTC_ADDR).balanceOf(address(uniswapV4Exposed)) == amountOut
+            IERC20(WBTC_ADDR).balanceOf(ALICE) == amountOut
         );
     }
 }

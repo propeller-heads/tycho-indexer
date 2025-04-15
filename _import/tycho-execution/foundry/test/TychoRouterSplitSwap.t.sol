@@ -423,6 +423,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             USDT_ADDR,
             true,
             TokenTransfer.TransferType.TRANSFER_PERMIT2_TO_ROUTER,
+            ALICE,
             pools
         );
 
@@ -471,7 +472,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         });
 
         bytes memory protocolData = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR, WBTC_ADDR, true, TokenTransfer.TransferType.NONE, pools
+            USDE_ADDR, WBTC_ADDR, true, TokenTransfer.TransferType.NONE, ALICE, pools
         );
 
         bytes memory swap = encodeSplitSwap(
@@ -483,7 +484,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
 
         tychoRouter.exposedSplitSwap(amountIn, 2, pleEncode(swaps));
 
-        assertEq(IERC20(WBTC_ADDR).balanceOf(tychoRouterAddr), 102718);
+        assertEq(IERC20(WBTC_ADDR).balanceOf(ALICE), 102718);
     }
 
     function testSplitInputCyclicSwapInternalMethod() public {

@@ -46,6 +46,7 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback, TokenTransfer {
             address tokenOut,
             bool zeroForOne,
             TransferType transferType,
+            address receiver,
             UniswapV4Executor.UniswapV4Pool[] memory pools
         ) = _decodeData(data);
 
@@ -72,7 +73,7 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback, TokenTransfer {
             bytes memory actions = abi.encodePacked(
                 uint8(Actions.SWAP_EXACT_IN_SINGLE),
                 uint8(Actions.SETTLE_ALL),
-                uint8(Actions.TAKE_ALL)
+                uint8(Actions.TAKE)
             );
 
             bytes[] memory params = new bytes[](3);
@@ -87,7 +88,7 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback, TokenTransfer {
                 })
             );
             params[1] = abi.encode(tokenIn, amountIn); // currency to settle
-            params[2] = abi.encode(tokenOut, uint256(0)); // currency to take
+            params[2] = abi.encode(tokenOut, receiver, uint256(0)); // currency to take. 0 means to take the full amount
             swapData = abi.encode(actions, params);
         } else {
             PathKey[] memory path = new PathKey[](pools.length);
@@ -104,7 +105,7 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback, TokenTransfer {
             bytes memory actions = abi.encodePacked(
                 uint8(Actions.SWAP_EXACT_IN),
                 uint8(Actions.SETTLE_ALL),
-                uint8(Actions.TAKE_ALL)
+                uint8(Actions.TAKE)
             );
 
             bytes[] memory params = new bytes[](3);
@@ -119,22 +120,22 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback, TokenTransfer {
                 })
             );
             params[1] = abi.encode(currencyIn, amountIn);
-            params[2] = abi.encode(Currency.wrap(tokenOut), uint256(0));
+            params[2] = abi.encode(Currency.wrap(tokenOut), receiver, uint256(0));
             swapData = abi.encode(actions, params);
         }
         uint256 tokenOutBalanceBefore;
 
         tokenOutBalanceBefore = tokenOut == address(0)
-            ? address(this).balance
-            : IERC20(tokenOut).balanceOf(address(this));
+            ? receiver.balance
+            : IERC20(tokenOut).balanceOf(receiver);
 
         executeActions(swapData);
 
         uint256 tokenOutBalanceAfter;
 
         tokenOutBalanceAfter = tokenOut == address(0)
-            ? address(this).balance
-            : IERC20(tokenOut).balanceOf(address(this));
+            ? receiver.balance
+            : IERC20(tokenOut).balanceOf(receiver);
 
         calculatedAmount = tokenOutBalanceAfter - tokenOutBalanceBefore;
 
@@ -155,10 +156,11 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback, TokenTransfer {
             address tokenOut,
             bool zeroForOne,
             TransferType transferType,
+            address receiver,
             UniswapV4Pool[] memory pools
         )
     {
-        if (data.length < 67) {
+        if (data.length < 88) {
             revert UniswapV4Executor__InvalidDataLength();
         }
 
@@ -166,10 +168,11 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback, TokenTransfer {
         tokenOut = address(bytes20(data[20:40]));
         zeroForOne = (data[40] != 0);
         transferType = TransferType(uint8(data[41]));
+        receiver = address(bytes20(data[42:62]));
 
-        uint256 poolsLength = (data.length - 42) / 26; // 26 bytes per pool object
+        uint256 poolsLength = (data.length - 62) / 26; // 26 bytes per pool object
         pools = new UniswapV4Pool[](poolsLength);
-        bytes memory poolsData = data[42:];
+        bytes memory poolsData = data[62:];
         uint256 offset = 0;
         for (uint256 i = 0; i < poolsLength; i++) {
             address intermediaryToken;
