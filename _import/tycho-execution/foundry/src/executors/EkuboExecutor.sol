@@ -189,8 +189,8 @@ contract EkuboExecutor is
                 mstore(add(free, 52), shl(96, sender))
                 mstore(add(free, 72), shl(248, transferType))
 
-                // 4 (selector) + 32 (token) + 16 (amount) + 20 (recipient) + 1 (transferType) = 73
-                if iszero(call(gas(), target, 0, free, 132, 0, 0)) {
+                // 4 (selector) + 32 (token) + 16 (amount) + 20 (sender) + 1 (transferType) = 73
+                if iszero(call(gas(), target, 0, free, 73, 0, 0)) {
                     returndatacopy(0, 0, returndatasize())
                     revert(0, returndatasize())
                 }
