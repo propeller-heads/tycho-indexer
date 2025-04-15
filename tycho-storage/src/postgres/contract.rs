@@ -1690,6 +1690,28 @@ mod test {
     async fn setup_data(conn: &mut AsyncPgConnection) -> i64 {
         let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
         let blk = db_fixtures::insert_blocks(conn, chain_id).await;
+        // add block 3 with no linked data (to be used to test updates)
+        diesel::insert_into(schema::block::table)
+            .values((
+                schema::block::hash.eq(Vec::from(
+                    Bytes::from_str(
+                        "f2d7c8b6e3a1905f4c8d26b7e9513a0d7f8e2c9b1a6d5e4f3c2b1a0e9d8c7f61",
+                    )
+                    .unwrap(),
+                )),
+                schema::block::parent_hash.eq(Vec::from(
+                    Bytes::from_str(
+                        "b495a1d7e6663152ae92708da4843337b958146015a2802f4193a410044698c9",
+                    )
+                    .unwrap(),
+                )),
+                schema::block::number.eq(3),
+                schema::block::ts.eq(yesterday_one_am()),
+                schema::block::chain_id.eq(chain_id),
+            ))
+            .execute(conn)
+            .await
+            .unwrap();
         let ts = db_fixtures::yesterday_midnight();
         let ts_p1 = db_fixtures::yesterday_one_am();
         let tx_hashes = [
@@ -2289,7 +2311,7 @@ mod test {
         let gw = EVMGateway::from_connection(&mut conn).await;
         let modify_txhash = "62f4d4f29d10db8722cb66a2adb0049478b11988c8b43cd446b755afb8954678";
         let tx_hash_bytes = Bytes::from(modify_txhash);
-        let block = orm::Block::by_number(Chain::Ethereum, 2, &mut conn)
+        let block = orm::Block::by_number(Chain::Ethereum, 3, &mut conn)
             .await
             .expect("block found");
         db_fixtures::insert_txns(&mut conn, &[(block.id, 100, modify_txhash)]).await;
