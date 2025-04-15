@@ -343,6 +343,7 @@ impl SwapEncoder for EkuboSwapEncoder {
         let mut encoded = vec![];
 
         if encoding_context.group_token_in == swap.token_in {
+            encoded.extend((encoding_context.transfer_type as u8).to_be_bytes());
             encoded.extend(bytes_to_address(&encoding_context.receiver)?);
             encoded.extend(bytes_to_address(&swap.token_in)?);
         }
@@ -1032,15 +1033,18 @@ mod tests {
 
             assert_eq!(
                 hex_swap,
-                RECEIVER.to_string() +
-                    concat!(
-                        // group token in
-                        "0000000000000000000000000000000000000000",
-                        // token out 1st swap
-                        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-                        // pool config 1st swap
-                        "51d02a5948496a67827242eabc5725531342527c000000000000000000000000",
-                    ),
+                concat!(
+                    // transfer type
+                    "00",
+                    // receiver
+                    "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6",
+                    // group token in
+                    "0000000000000000000000000000000000000000",
+                    // token out 1st swap
+                    "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                    // pool config 1st swap
+                    "51d02a5948496a67827242eabc5725531342527c000000000000000000000000",
+                ),
             );
         }
 
@@ -1107,22 +1111,25 @@ mod tests {
                 format!("{}{}", encode(first_encoded_swap), encode(second_encoded_swap));
 
             println!("{}", combined_hex);
-
             assert_eq!(
                 combined_hex,
-                RECEIVER.to_string() +
-                    concat!(
-                        // group token in
-                        "0000000000000000000000000000000000000000",
-                        // token out 1st swap
-                        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-                        // pool config 1st swap
-                        "51d02a5948496a67827242eabc5725531342527c000000000000000000000000",
-                        // token out 2nd swap
-                        "dac17f958d2ee523a2206206994597c13d831ec7",
-                        // pool config 2nd swap
-                        "00000000000000000000000000000000000000000001a36e2eb1c43200000032",
-                    ),
+                // transfer type
+                concat!(
+                    // transfer type
+                    "00",
+                    // receiver
+                    "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6",
+                    // group token in
+                    "0000000000000000000000000000000000000000",
+                    // token out 1st swap
+                    "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                    // pool config 1st swap
+                    "51d02a5948496a67827242eabc5725531342527c000000000000000000000000",
+                    // token out 2nd swap
+                    "dac17f958d2ee523a2206206994597c13d831ec7",
+                    // pool config 2nd swap
+                    "00000000000000000000000000000000000000000001a36e2eb1c43200000032",
+                ),
             );
         }
     }
