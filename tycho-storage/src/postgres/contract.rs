@@ -1661,10 +1661,7 @@ mod test {
     };
 
     use super::*;
-    use crate::postgres::{
-        db_fixtures,
-        db_fixtures::{yesterday_midnight, yesterday_one_am},
-    };
+    use crate::postgres::db_fixtures;
 
     type EVMGateway = PostgresGateway;
     type MaybeTS = Option<NaiveDateTime>;
@@ -1706,14 +1703,14 @@ mod test {
                     .unwrap(),
                 )),
                 schema::block::number.eq(3),
-                schema::block::ts.eq(yesterday_one_am()),
+                schema::block::ts.eq(db_fixtures::yesterday_one_am()),
                 schema::block::chain_id.eq(chain_id),
             ))
             .execute(conn)
             .await
             .unwrap();
         let ts = db_fixtures::yesterday_midnight();
-        let ts_p1 = db_fixtures::yesterday_one_am();
+        let ts_p1 = db_fixtures::yesterday_half_past_midnight();
         let tx_hashes = [
             "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945".to_string(),
             "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54".to_string(),
@@ -2763,8 +2760,8 @@ mod test {
             .await
             .unwrap();
         exp.insert(account_id, storage);
-        let end_ts = yesterday_one_am() + Duration::from_secs(3600);
-        let start_ts = yesterday_midnight();
+        let end_ts = db_fixtures::yesterday_one_am() + Duration::from_secs(3600);
+        let start_ts = db_fixtures::yesterday_midnight();
 
         let res = gw
             .get_slots_delta(chain_id, &start_ts, &end_ts, &mut conn)
@@ -2792,8 +2789,8 @@ mod test {
             .await
             .unwrap();
         exp.insert(account_id, storage);
-        let start_ts = yesterday_one_am() + Duration::from_secs(3600);
-        let end_ts = yesterday_midnight();
+        let start_ts = db_fixtures::yesterday_one_am() + Duration::from_secs(3600);
+        let end_ts = db_fixtures::yesterday_midnight();
 
         let res = gw
             .get_slots_delta(chain_id, &start_ts, &end_ts, &mut conn)
