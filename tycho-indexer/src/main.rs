@@ -24,7 +24,7 @@ use tycho_common::{
         Address, Chain, ExtractionState, ImplementationType,
     },
     storage::{ChainGateway, ContractStateGateway, ExtractionStateGateway},
-    traits::AccountExtractor,
+    traits::{AccountExtractor, StorageSnapshotRequest},
     Bytes,
 };
 use tycho_ethereum::{
@@ -511,8 +511,13 @@ async fn get_accounts_data(
         .await
         .expect("Failed to get block data");
 
+    let requests = accounts
+        .iter()
+        .map(|address| StorageSnapshotRequest { address: address.clone(), slots: None })
+        .collect::<Vec<_>>();
+
     let extracted_accounts: HashMap<Bytes, AccountDelta> = account_extractor
-        .get_accounts(block.clone(), accounts)
+        .get_accounts_at_block(&block, &requests)
         .await
         .expect("Failed to extract accounts");
     (block, extracted_accounts)
