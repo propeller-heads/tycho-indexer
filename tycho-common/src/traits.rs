@@ -13,34 +13,40 @@ use crate::{
     Bytes,
 };
 
-// TODO: Maybe deprecate if we don't need this on the testing module anymore, but I think it will be
-// needed for fetching full snapshots of non-DCI accounts
-#[async_trait]
-pub trait AccountExtractor {
-    type Error;
-
-    async fn get_accounts(
-        &self,
-        block: Block,
-        account_addresses: Vec<Address>,
-    ) -> Result<HashMap<Bytes, AccountDelta>, Self::Error>; //TODO: do not return `AccountUpdate` but `Account`
-}
-
 #[derive(Debug, Clone)]
 pub struct StorageSnapshotRequest {
     pub address: Address,
     pub slots: Option<Vec<Bytes>>,
 }
 
+/// Trait for getting multiple account states from chain data.
 #[async_trait]
-pub trait AccountStorageSource {
+pub trait AccountExtractor {
     type Error;
 
-    async fn get_storage_snapshots(
+    ///
+    ///
+    /// # Arguments
+    ///
+    /// * `block`: The block at which to retrieve the account states.
+    /// * `requests`: A slice of `StorageSnapshotRequest` objects, each containing an address and
+    ///   optional slots.
+    /// Note: If the `slots` field is `None`, the function will return the entire account state.
+    /// That could be a lot of data, so use with caution.
+    ///
+    /// returns: Result<HashMap<Bytes, AccountDelta, RandomState>, Self::Error>
+    /// A result containing a HashMap where the keys are `Bytes` (addresses) and the values are
+    /// `AccountDelta` objects.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// ```
+    async fn get_accounts_at_block(
         &self,
-        requests: &[StorageSnapshotRequest],
         block: &Block,
-    ) -> Result<HashMap<Address, AccountDelta>, Self::Error>;
+        requests: &[StorageSnapshotRequest],
+    ) -> Result<HashMap<Bytes, AccountDelta>, Self::Error>; //TODO: do not return `AccountUpdate` but `Account`
 }
 
 /// Trait for analyzing a token, including its quality, transfer cost, and transfer tax.
