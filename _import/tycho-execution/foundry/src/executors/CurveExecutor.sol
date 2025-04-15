@@ -55,7 +55,7 @@ contract CurveExecutor is IExecutor, TokenTransfer {
         payable
         returns (uint256)
     {
-        if (data.length != 65) revert CurveExecutor__InvalidDataLength();
+        if (data.length != 85) revert CurveExecutor__InvalidDataLength();
 
         (
             address tokenIn,
@@ -134,6 +134,7 @@ contract CurveExecutor is IExecutor, TokenTransfer {
             int128 i,
             int128 j,
             bool tokenApprovalNeeded,
+            TransferType transferType,
             address receiver
         )
     {

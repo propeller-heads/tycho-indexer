@@ -433,10 +433,14 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             Address.sendValue(payable(receiver), amountOut);
         }
 
-        uint256 currentBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
-        if (userAmount != amountOut) {
-            revert TychoRouter__AmountOutNotFullyReceived(userAmount, amountOut);
+        if (tokenIn != tokenOut) {
+            uint256 currentBalanceTokenOut = _balanceOf(tokenOut, receiver);
+            uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
+            if (userAmount != amountOut) {
+                revert TychoRouter__AmountOutNotFullyReceived(
+                    userAmount, amountOut
+                );
+            }
         }
     }
 
@@ -483,11 +487,14 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             Address.sendValue(payable(receiver), amountOut);
         }
 
-        uint256 currentBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
-
-        if (userAmount != amountOut) {
-            revert TychoRouter__AmountOutNotFullyReceived(userAmount, amountOut);
+        if (tokenIn != tokenOut) {
+            uint256 currentBalanceTokenOut = _balanceOf(tokenOut, receiver);
+            uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
+            if (userAmount != amountOut) {
+                revert TychoRouter__AmountOutNotFullyReceived(
+                    userAmount, amountOut
+                );
+            }
         }
     }
 
@@ -531,11 +538,15 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             _unwrapETH(amountOut);
             Address.sendValue(payable(receiver), amountOut);
         }
-        uint256 currentBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
 
-        if (userAmount != amountOut) {
-            revert TychoRouter__AmountOutNotFullyReceived(userAmount, amountOut);
+        if (tokenIn != tokenOut) {
+            uint256 currentBalanceTokenOut = _balanceOf(tokenOut, receiver);
+            uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
+            if (userAmount != amountOut) {
+                revert TychoRouter__AmountOutNotFullyReceived(
+                    userAmount, amountOut
+                );
+            }
         }
     }
 

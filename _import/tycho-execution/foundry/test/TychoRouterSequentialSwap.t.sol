@@ -216,7 +216,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(
                 DAI_ADDR,
                 DAI_USDC_POOL,
-                tychoRouterAddr,
+                ALICE,
                 true,
                 TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
             )

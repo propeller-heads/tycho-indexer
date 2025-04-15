@@ -787,7 +787,7 @@ mod tests {
             .encode_swap(swap, encoding_context)
             .unwrap();
         let hex_swap = encode(&encoded_swap);
-        println!("{}", hex_swap);
+        println!("test_encode_uniswap_v4_simple_swap: {}", hex_swap);
 
         assert_eq!(
             hex_swap,
@@ -958,7 +958,7 @@ mod tests {
         let combined_hex =
             format!("{}{}", encode(&initial_encoded_swap), encode(&second_encoded_swap));
 
-        println!("{}", combined_hex);
+        println!("test_encode_uniswap_v4_sequential_swap: {}", combined_hex);
         assert_eq!(
             combined_hex,
             String::from(concat!(

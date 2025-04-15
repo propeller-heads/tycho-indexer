@@ -536,7 +536,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                     ))
                 })?;
 
-            let receiver = if !wrap && grouped_swap.output_token == solution.checked_token {
+            let receiver = if !unwrap && grouped_swap.output_token == solution.checked_token {
                 solution.receiver.clone()
             } else {
                 self.router_address.clone()
@@ -892,7 +892,7 @@ mod tests {
             "0000000000000000000000000000",             // padding
         ));
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_single_swap_strategy_encoder: {}", hex_calldata);
 
         assert_eq!(hex_calldata[..456], expected_input);
         assert_eq!(hex_calldata[1224..], expected_swap);
@@ -947,7 +947,7 @@ mod tests {
             .unwrap();
 
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_single_swap_strategy_encoder_wrap: {}", hex_calldata);
     }
 
     #[test]
@@ -999,7 +999,7 @@ mod tests {
             .unwrap();
 
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_split_swap_strategy_encoder_wrap: {}", hex_calldata);
     }
 
     #[test]
@@ -1051,7 +1051,7 @@ mod tests {
             .unwrap();
 
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_split_swap_strategy_encoder_unwrap: {}", hex_calldata);
     }
 
     #[test]
@@ -1143,7 +1143,7 @@ mod tests {
             .unwrap();
 
         let _hex_calldata = encode(&calldata);
-        println!("{}", _hex_calldata);
+        println!("test_split_swap_strategy_encoder_complex_route: {}", _hex_calldata);
     }
 
     #[test]
@@ -1209,7 +1209,7 @@ mod tests {
             .unwrap();
 
         let _hex_calldata = encode(&calldata);
-        println!("{}", _hex_calldata);
+        println!("test_sequential_swap_strategy_encoder_complex_route: {}", _hex_calldata);
     }
 
     #[test]
@@ -1268,7 +1268,7 @@ mod tests {
             .unwrap();
 
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_sequential_swap_strategy_encoder_no_permit2: {}", hex_calldata);
 
         let expected = String::from(concat!(
             "e8a980d7",                                                         /* function selector */
@@ -1289,7 +1289,7 @@ mod tests {
             "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id
             "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver (router)
             "00",                                       // zero to one
-            "00",                                       // transfer type
+            "01",                                       // transfer type
             // swap 2
             "0052",                                             // swap length
             "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f",         // executor address
@@ -1420,9 +1420,9 @@ mod tests {
 
         let expected_swaps = String::from(concat!(
             // length of ple encoded swaps without padding
-            "0000000000000000000000000000000000000000000000000000000000000079",
+            "000000000000000000000000000000000000000000000000000000000000008d",
             // ple encoded swaps
-            "0077",   // Swap length
+            "008b",   // Swap length
             "00",     // token in index
             "01",     // token out index
             "000000", // split
@@ -1442,14 +1442,14 @@ mod tests {
             "6982508145454ce325ddbe47a25d4ec3d2311933", // intermediary token (PEPE)
             "0061a8",                                   // fee
             "0001f4",                                   // tick spacing
-            "00000000000000"                            // padding
+            "00000000000000000000000000000000000000"    // padding
         ));
 
         let hex_calldata = encode(&calldata);
 
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
-        println!("{}", hex_calldata);
+        println!("test_split_encoding_strategy_usv4: {}", hex_calldata);
     }
 
     #[test]
@@ -1509,7 +1509,7 @@ mod tests {
             .unwrap();
 
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_split_encoding_strategy_ekubo: {}", hex_calldata);
     }
 
     #[test]
@@ -1587,7 +1587,7 @@ mod tests {
         let hex_calldata = encode(&calldata);
 
         assert_eq!(hex_calldata, expected_input);
-        println!("{}", hex_calldata);
+        println!("test_single_swap_strategy_encoder_no_permit2: {}", hex_calldata);
     }
 
     #[test]
@@ -1670,7 +1670,7 @@ mod tests {
         let hex_calldata = encode(&calldata);
 
         assert_eq!(hex_calldata, expected_input);
-        println!("{}", hex_calldata);
+        println!("test_split_swap_strategy_encoder_no_permit2: {}", hex_calldata);
     }
 
     #[test]
@@ -1734,7 +1734,7 @@ mod tests {
             .unwrap();
         let hex_calldata = encode(&calldata);
 
-        println!("{}", hex_calldata);
+        println!("test_split_encoding_strategy_usv4_eth_in: {}", hex_calldata);
     }
     #[test]
     fn test_split_encoding_strategy_usv4_eth_out() {
@@ -1801,7 +1801,7 @@ mod tests {
             .unwrap();
 
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_split_encoding_strategy_usv4_eth_out: {}", hex_calldata);
     }
 
     #[test]
@@ -1931,7 +1931,7 @@ mod tests {
 
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
-        println!("{}", hex_calldata);
+        println!("test_cyclic_sequential_swap_split_strategy: {}", hex_calldata);
     }
 
     #[test]
@@ -2096,7 +2096,7 @@ mod tests {
         .join("");
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
-        println!("{}", hex_calldata);
+        println!("test_split_input_cyclic_swap: {}", hex_calldata);
     }
 
     #[test]
@@ -2259,7 +2259,7 @@ mod tests {
 
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
-        println!("{}", hex_calldata);
+        println!("test_split_output_cyclic_swap: {}", hex_calldata);
     }
 
     #[test]
@@ -2321,7 +2321,7 @@ mod tests {
             .unwrap();
 
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_split_encoding_strategy_curve: {}", hex_calldata);
     }
 
     #[test]
@@ -2383,6 +2383,6 @@ mod tests {
             .unwrap();
 
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_split_encoding_strategy_curve_st_eth: {}", hex_calldata);
     }
 }

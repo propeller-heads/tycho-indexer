@@ -120,7 +120,8 @@ contract UniswapV4Executor is IExecutor, V4Router, ICallback, TokenTransfer {
                 })
             );
             params[1] = abi.encode(currencyIn, amountIn);
-            params[2] = abi.encode(Currency.wrap(tokenOut), receiver, uint256(0));
+            params[2] =
+                abi.encode(Currency.wrap(tokenOut), receiver, uint256(0));
             swapData = abi.encode(actions, params);
         }
         uint256 tokenOutBalanceBefore;

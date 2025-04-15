@@ -44,7 +44,11 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             uint8(2),
             uint24(0),
             address(usv2Executor),
-            encodeUniswapV2Swap(WBTC_ADDR, USDC_WBTC_POOL, ALICE, true,
+            encodeUniswapV2Swap(
+                WBTC_ADDR,
+                USDC_WBTC_POOL,
+                ALICE,
+                true,
                 TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
             )
         );
@@ -261,10 +265,11 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             spender: address(0),
             sigDeadline: 0
         });
-        bytes memory protocolData =
-            encodeUniswapV2Swap(WETH_ADDR,
+        bytes memory protocolData = encodeUniswapV2Swap(
+            WETH_ADDR,
             WETH_DAI_POOL,
-            ALICE, false,
+            ALICE,
+            false,
             TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
         );
 
@@ -472,7 +477,12 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         });
 
         bytes memory protocolData = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR, WBTC_ADDR, true, TokenTransfer.TransferType.NONE, ALICE, pools
+            USDE_ADDR,
+            WBTC_ADDR,
+            true,
+            TokenTransfer.TransferType.NONE,
+            ALICE,
+            pools
         );
 
         bytes memory swap = encodeSplitSwap(
