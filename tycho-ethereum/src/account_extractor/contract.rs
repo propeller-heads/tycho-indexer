@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use alloy::{
     eips::BlockNumberOrTag,
-    primitives::{Uint, U64},
+    primitives::Uint,
     rpc::client::{ClientBuilder, RpcClient},
 };
 use async_trait::async_trait;
@@ -179,6 +179,159 @@ impl EVMBatchAccountExtractor {
         let provider = ClientBuilder::default().http(url);
         Ok(Self { provider, chain })
     }
+
+    async fn batch_fetch_account_code_and_balance(
+        &self,
+        block: &&Block,
+        max_batch_size: usize,
+        chunk: &[StorageSnapshotRequest],
+    ) -> Result<(HashMap<Bytes, Bytes>, HashMap<Bytes, Bytes>), RPCError> {
+        let mut batch = self.provider.new_batch();
+        let mut code_requests = Vec::with_capacity(max_batch_size);
+        let mut balance_requests = Vec::with_capacity(max_batch_size);
+
+        for request in chunk {
+            code_requests.push(Box::pin(
+                batch
+                    .add_call(
+                        "eth_getCode",
+                        &(&request.address, BlockNumberOrTag::from(block.number)),
+                    )
+                    .map_err(|_| {
+                        RPCError::RequestError(ProviderError::CustomError(
+                            "Failed to get code".to_string(),
+                        ))
+                    })?
+                    .map_resp(|resp: Bytes| resp.to_vec()),
+            ));
+
+            balance_requests.push(Box::pin(
+                batch
+                    .add_call::<_, Uint<256, 4>>(
+                        "eth_getBalance",
+                        &(&request.address, BlockNumberOrTag::from(block.number)),
+                    )
+                    .map_err(|_| {
+                        RPCError::RequestError(ProviderError::CustomError(
+                            "Failed to get balance".to_string(),
+                        ))
+                    })?,
+            ));
+        }
+
+        batch.send().await.map_err(|e| {
+            RPCError::RequestError(ProviderError::CustomError(format!(
+                "Failed to send batch request: {}",
+                e
+            )))
+        })?;
+
+        let mut codes: HashMap<Bytes, Bytes> = HashMap::with_capacity(max_batch_size);
+        let mut balances: HashMap<Bytes, Bytes> = HashMap::with_capacity(max_batch_size);
+
+        for (idx, request) in chunk.iter().enumerate() {
+            let address = &request.address;
+
+            let code_result = code_requests[idx]
+                .as_mut()
+                .await
+                .map_err(|e| {
+                    RPCError::RequestError(ProviderError::CustomError(format!(
+                        "Failed to collect code request data: {}",
+                        e
+                    )))
+                })?;
+
+            codes.insert(address.clone(), code_result.into());
+
+            let balance_result = balance_requests[idx]
+                .as_mut()
+                .await
+                .map_err(|e| {
+                    RPCError::RequestError(ProviderError::CustomError(format!(
+                        "Failed to collect balance request data: {}",
+                        e
+                    )))
+                })?;
+
+            // TODO: Check if this should be big-endian or little-endian
+            balances.insert(address.clone(), Bytes::from(balance_result.to_be_bytes::<32>()));
+        }
+        Ok((codes, balances))
+    }
+
+    async fn fetch_account_storage(
+        &self,
+        block: &Block,
+        max_batch_size: usize,
+        request: &StorageSnapshotRequest,
+    ) -> Result<HashMap<Bytes, Option<Bytes>>, RPCError> {
+        let mut storage_batch = self.provider.new_batch();
+        let mut storage_requests = Vec::with_capacity(max_batch_size);
+
+        let mut result = HashMap::new();
+
+        match request.slots {
+            Some(slots) => {
+                for slot_batch in slots.chunks(max_batch_size) {
+                    for slot in slot_batch {
+                        storage_requests.push(Box::pin(
+                            storage_batch
+                                .add_call(
+                                    "eth_getStorageAt",
+                                    &(&request.address, BlockNumberOrTag::from(block.number), slot),
+                                )
+                                .map_err(|_| {
+                                    RPCError::RequestError(ProviderError::CustomError(
+                                        "Failed to get storage".to_string(),
+                                    ))
+                                })?,
+                        ));
+                    }
+
+                    storage_batch
+                        .send()
+                        .await
+                        .map_err(|e| {
+                            RPCError::RequestError(ProviderError::CustomError(format!(
+                                "Failed to send batch request: {}",
+                                e
+                            )))
+                        })?;
+
+                    // for (idx, slot) in slot_batch.iter().enumerate() {
+                    //     let address = &request.address;
+                    //     let storage_result = storage_requests[idx]
+                    //         .as_mut()
+                    //         .await
+                    //         .map_err(|e| {
+                    //             RPCError::RequestError(ProviderError::CustomError(format!(
+                    //                 "Failed to collect storage request data: {}",
+                    //                 e
+                    //             )))
+                    //         })?;
+
+                    //     result.insert(slot.clone(), Some(Bytes::from(storage_result)));
+                    // }
+                    for slot_future in storage_requests {
+                        let slot_result = slot_future.await.map_err(|e| {
+                            RPCError::RequestError(ProviderError::CustomError(format!(
+                                "Failed to collect storage request data: {}",
+                                e
+                            )))
+                        })?;
+                        result.insert(slot_result.key.clone(), Some(slot_result.value.clone()));
+                    }
+                }
+            }
+            None => {
+                // TODO: Implement this -> Call get_storage_range
+                return Ok(result);
+            }
+        }
+
+        Ok(result)
+    }
 }
 
 #[async_trait]
@@ -192,89 +345,37 @@ impl AccountStorageSource for EVMBatchAccountExtractor {
     ) -> Result<HashMap<Address, AccountDelta>, Self::Error> {
         let mut updates = HashMap::new();
 
+        // TODO: Make these configurable and optimize for preventing rate limiting
         let max_batch_size = 100;
+        let storage_max_batch_size = 10000;
         for chunk in requests.chunks(max_batch_size) {
-            let mut batch = self.provider.new_batch();
-            let mut code_requests = Vec::with_capacity(max_batch_size);
-            let mut balance_requests = Vec::with_capacity(max_batch_size);
+            // let (code, balances)
+            let metadata_fut =
+                self.batch_fetch_account_code_and_balance(&block, max_batch_size, chunk);
+            self.batch_fetch_account_code_and_balance(&block, max_batch_size, chunk);
 
-            for request in chunk {
-                code_requests.push(Box::pin(
-                    batch
-                        .add_call(
-                            "eth_getCode",
-                            &(&request.address, BlockNumberOrTag::from(block.number)),
-                        )
-                        .map_err(|_| {
-                            RPCError::RequestError(ProviderError::CustomError(
-                                "Failed to get code".to_string(),
-                            ))
-                        })?
-                        .map_resp(|resp: Bytes| resp.to_vec()),
-                ));
-
-                balance_requests.push(Box::pin(
-                    batch
-                        .add_call::<_, Uint<256, 4>>(
-                            "eth_getBalance",
-                            &(&request.address, BlockNumberOrTag::from(block.number)),
-                        )
-                        .map_err(|_| {
-                            RPCError::RequestError(ProviderError::CustomError(
-                                "Failed to get balance".to_string(),
-                            ))
-                        })?,
+            let mut storage_futures = Vec::new();
+            for request in chunk.iter() {
+                storage_futures.push(self.fetch_account_storage(
+                    &block,
+                    storage_max_batch_size,
+                    request,
                 ));
             }
 
-            batch.send().await.map_err(|e| {
-                RPCError::RequestError(ProviderError::CustomError(format!(
-                    "Failed to send batch request: {}",
-                    e
-                )))
-            })?;
-
-            let mut codes: HashMap<Bytes, Bytes> = HashMap::with_capacity(max_batch_size);
-            let mut balances: HashMap<Bytes, Bytes> = HashMap::with_capacity(max_batch_size);
+            let (codes, balances) = metadata_fut.await?;
+            let storage_results = try_join_all(storage_futures).await?;
 
             for (idx, request) in chunk.iter().enumerate() {
                 let address = &request.address;
-
-                let code_result = code_requests[idx]
-                    .as_mut()
-                    .await
-                    .map_err(|e| {
-                        RPCError::RequestError(ProviderError::CustomError(format!(
-                            "Failed to collect code request data: {}",
-                            e
-                        )))
-                    })?;
-
-                codes.insert(address.clone(), code_result.into());
-
-                let balance_result = balance_requests[idx]
-                    .as_mut()
-                    .await
-                    .map_err(|e| {
-                        RPCError::RequestError(ProviderError::CustomError(format!(
-                            "Failed to collect balance request data: {}",
-                            e
-                        )))
-                    })?;
-
-                // TODO: Check if this should be big-endian or little-endian
-                balances.insert(address.clone(), Bytes::from(balance_result.to_be_bytes::<32>()));
-            }
-
-            for request in chunk.iter() {
-                let address = &request.address;
                 let code = codes.get(address).cloned();
                 let balance = balances.get(address).cloned();
+                let storage = storage_results[idx].expect("Failed to get storage");
 
                 let account_delta = AccountDelta {
                     address: address.clone(),
                     chain: self.chain,
-                    slots: HashMap::new(),
+                    slots: storage,
                     balance,
                     code,
                     change: ChangeType::Creation,
