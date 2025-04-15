@@ -58,6 +58,9 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 error TychoRouter__AddressZero();
 error TychoRouter__EmptySwaps();
 error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
+error TychoRouter__AmountOutNotFullyReceived(
+    uint256 amountIn, uint256 amountConsumed
+);
 error TychoRouter__MessageValueMismatch(uint256 value, uint256 amount);
 error TychoRouter__InvalidDataLength();
 error TychoRouter__UndefinedMinAmountOut();
@@ -408,9 +411,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         address receiver,
         bytes calldata swaps
     ) internal returns (uint256 amountOut) {
-        if (receiver == address(0)) {
-            revert TychoRouter__AddressZero();
-        }
         if (minAmountOut == 0) {
             revert TychoRouter__UndefinedMinAmountOut();
         }
@@ -420,6 +420,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             _wrapETH(amountIn);
             tokenIn = address(_weth);
         }
+
+        uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         amountOut = _splitSwap(amountIn, nTokens, swaps);
 
         if (amountOut < minAmountOut) {
@@ -428,11 +430,13 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
 
         if (unwrapEth) {
             _unwrapETH(amountOut);
-        }
-        if (tokenOut == address(0)) {
             Address.sendValue(payable(receiver), amountOut);
-        } else {
-            IERC20(tokenOut).safeTransfer(receiver, amountOut);
+        }
+
+        uint256 currentBalanceTokenOut = _balanceOf(tokenOut, receiver);
+        uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
+        if (userAmount != amountOut) {
+            revert TychoRouter__AmountOutNotFullyReceived(userAmount, amountOut);
         }
     }
 
@@ -454,9 +458,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         address receiver,
         bytes calldata swap_
     ) internal returns (uint256 amountOut) {
-        if (receiver == address(0)) {
-            revert TychoRouter__AddressZero();
-        }
         if (minAmountOut == 0) {
             revert TychoRouter__UndefinedMinAmountOut();
         }
@@ -470,6 +471,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         (address executor, bytes calldata protocolData) =
             swap_.decodeSingleSwap();
 
+        uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         amountOut = _callExecutor(executor, amountIn, protocolData);
 
         if (amountOut < minAmountOut) {
@@ -478,11 +480,14 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
 
         if (unwrapEth) {
             _unwrapETH(amountOut);
-        }
-        if (tokenOut == address(0)) {
             Address.sendValue(payable(receiver), amountOut);
-        } else {
-            IERC20(tokenOut).safeTransfer(receiver, amountOut);
+        }
+
+        uint256 currentBalanceTokenOut = _balanceOf(tokenOut, receiver);
+        uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
+
+        if (userAmount != amountOut) {
+            revert TychoRouter__AmountOutNotFullyReceived(userAmount, amountOut);
         }
     }
 
@@ -504,9 +509,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         address receiver,
         bytes calldata swaps
     ) internal returns (uint256 amountOut) {
-        if (receiver == address(0)) {
-            revert TychoRouter__AddressZero();
-        }
         if (minAmountOut == 0) {
             revert TychoRouter__UndefinedMinAmountOut();
         }
@@ -517,7 +519,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             tokenIn = address(_weth);
         }
 
+        uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         amountOut = _sequentialSwap(amountIn, swaps);
+        uint256 currentBalanceTokenIn = _balanceOf(tokenIn, address(this));
 
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
@@ -525,11 +529,13 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
 
         if (unwrapEth) {
             _unwrapETH(amountOut);
-        }
-        if (tokenOut == address(0)) {
             Address.sendValue(payable(receiver), amountOut);
-        } else {
-            IERC20(tokenOut).safeTransfer(receiver, amountOut);
+        }
+        uint256 currentBalanceTokenOut = _balanceOf(tokenOut, receiver);
+        uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
+
+        if (userAmount != amountOut) {
+            revert TychoRouter__AmountOutNotFullyReceived(userAmount, amountOut);
         }
     }
 
@@ -763,5 +769,14 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         if (data.length < 24) revert TychoRouter__InvalidDataLength();
         _handleCallback(data);
         return "";
+    }
+
+    function _balanceOf(address token, address owner)
+        internal
+        view
+        returns (uint256)
+    {
+        return
+            token == address(0) ? owner.balance : IERC20(token).balanceOf(owner);
     }
 }

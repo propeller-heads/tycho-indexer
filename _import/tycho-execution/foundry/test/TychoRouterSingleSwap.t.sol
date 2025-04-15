@@ -21,11 +21,10 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             bytes memory signature
         ) = handlePermit2Approval(WETH_ADDR, tychoRouterAddr, amountIn);
 
-        bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR,
+        bytes memory protocolData =
+            encodeUniswapV2Swap(WETH_ADDR,
             WETH_DAI_POOL,
-            tychoRouterAddr,
-            false,
+            ALICE, false,
             TokenTransfer.TransferType.TRANSFER_PERMIT2_TO_PROTOCOL
         );
 
@@ -62,11 +61,10 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         // Approve the tokenIn to be transferred to the router
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
-        bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR,
+        bytes memory protocolData =
+            encodeUniswapV2Swap(WETH_ADDR,
             WETH_DAI_POOL,
-            tychoRouterAddr,
-            false,
+            ALICE, false,
             TokenTransfer.TransferType.TRANSFER_FROM_TO_PROTOCOL
         );
 
@@ -103,11 +101,10 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
-        bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR,
+        bytes memory protocolData =
+            encodeUniswapV2Swap(WETH_ADDR,
             WETH_DAI_POOL,
-            tychoRouterAddr,
-            false,
+            ALICE, false,
             TokenTransfer.TransferType.TRANSFER_FROM_TO_PROTOCOL
         );
 
@@ -129,11 +126,10 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn - 1);
 
-        bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR,
+        bytes memory protocolData =
+            encodeUniswapV2Swap(WETH_ADDR,
             WETH_DAI_POOL,
-            tychoRouterAddr,
-            false,
+            ALICE, false,
             TokenTransfer.TransferType.TRANSFER_FROM_TO_PROTOCOL
         );
 
@@ -164,11 +160,10 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         // Approve the tokenIn to be transferred to the router
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
-        bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR,
+        bytes memory protocolData =
+            encodeUniswapV2Swap(WETH_ADDR,
             WETH_DAI_POOL,
-            tychoRouterAddr,
-            false,
+            ALICE, false,
             TokenTransfer.TransferType.TRANSFER_FROM_TO_PROTOCOL
         );
 
@@ -213,11 +208,10 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             sigDeadline: 0
         });
 
-        bytes memory protocolData = encodeUniswapV2Swap(
-            WETH_ADDR,
+        bytes memory protocolData =
+            encodeUniswapV2Swap(WETH_ADDR,
             WETH_DAI_POOL,
-            tychoRouterAddr,
-            false,
+            ALICE, false,
             TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
         );
 
