@@ -24,12 +24,13 @@ pub trait TransferOptimization {
 
         // In the case of wrapping, check if the swap's token in is the wrapped token to
         // determine if it's the first swap. Otherwise, compare to the given token.
-        let is_first_swap =
-            (swap.token_in == given_token) || ((swap.token_in == wrapped_token) && wrap);
+        let is_first_swap = swap.token_in == given_token;
 
         if swap.token_in == native_token {
             // Funds are already in router. All protocols currently take care of native transfers.
             TransferType::None
+        } else if (swap.token_in == wrapped_token) && wrap {
+            TransferType::TransferToProtocol
         } else if is_first_swap && send_funds_to_pool {
             if permit2 {
                 // Transfer from swapper to pool using permit2.
@@ -149,7 +150,7 @@ mod tests {
         let strategy = MockStrategy {};
         let transfer_method =
             strategy.get_transfer_type(swap.clone(), eth(), eth(), weth(), false, true);
-        assert_eq!(transfer_method, TransferType::TransferFromToProtocol);
+        assert_eq!(transfer_method, TransferType::TransferToProtocol);
     }
 
     #[test]

@@ -111,15 +111,18 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
                 NativeAction::Unwrap => unwrap = true,
             }
         }
-
+        let protocol = grouped_swap.protocol_system.clone();
         let swap_encoder = self
-            .get_swap_encoder(&grouped_swap.protocol_system)
+            .get_swap_encoder(&protocol)
             .ok_or_else(|| {
                 EncodingError::InvalidInput(format!(
                     "Swap encoder not found for protocol: {}",
-                    grouped_swap.protocol_system
+                    protocol
                 ))
             })?;
+
+        let swap_receiver =
+            if !unwrap { solution.receiver.clone() } else { self.router_address.clone() };
 
         let mut grouped_protocol_data: Vec<u8> = vec![];
         for swap in grouped_swap.swaps.iter() {
@@ -133,7 +136,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
             );
 
             let encoding_context = EncodingContext {
-                receiver: self.router_address.clone(),
+                receiver: swap_receiver.clone(),
                 exact_out: solution.exact_out,
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.input_token.clone(),
@@ -286,15 +289,24 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
         }
 
         let mut swaps = vec![];
-        for grouped_swap in grouped_swaps.iter() {
+        for (i, grouped_swap) in grouped_swaps.iter().enumerate() {
+            let protocol = grouped_swap.protocol_system.clone();
             let swap_encoder = self
-                .get_swap_encoder(&grouped_swap.protocol_system)
+                .get_swap_encoder(&protocol)
                 .ok_or_else(|| {
                     EncodingError::InvalidInput(format!(
                         "Swap encoder not found for protocol: {}",
-                        grouped_swap.protocol_system
+                        protocol
                     ))
                 })?;
+
+            // if it is the last swap and there isn't an unwrap at the end, we can set the receiver
+            // to the final user
+            let swap_receiver = if i == grouped_swaps.len() - 1 && !unwrap {
+                solution.receiver.clone()
+            } else {
+                self.router_address.clone()
+            };
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
@@ -308,7 +320,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 );
 
                 let encoding_context = EncodingContext {
-                    receiver: self.router_address.clone(),
+                    receiver: swap_receiver.clone(),
                     exact_out: solution.exact_out,
                     router_address: Some(self.router_address.clone()),
                     group_token_in: grouped_swap.input_token.clone(),
@@ -516,14 +528,21 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 
         let mut swaps = vec![];
         for grouped_swap in grouped_swaps.iter() {
+            let protocol = grouped_swap.protocol_system.clone();
             let swap_encoder = self
-                .get_swap_encoder(&grouped_swap.protocol_system)
+                .get_swap_encoder(&protocol)
                 .ok_or_else(|| {
                     EncodingError::InvalidInput(format!(
                         "Swap encoder not found for protocol: {}",
-                        grouped_swap.protocol_system
+                        protocol
                     ))
                 })?;
+
+            let swap_receiver = if !unwrap && grouped_swap.output_token == solution.checked_token {
+                solution.receiver.clone()
+            } else {
+                self.router_address.clone()
+            };
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
@@ -537,7 +556,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 );
 
                 let encoding_context = EncodingContext {
-                    receiver: self.router_address.clone(),
+                    receiver: swap_receiver.clone(),
                     exact_out: solution.exact_out,
                     router_address: Some(self.router_address.clone()),
                     group_token_in: grouped_swap.input_token.clone(),
@@ -766,7 +785,7 @@ mod tests {
             "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
-            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
+            "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
             "00",                                       // zero2one
             "02",                                       // transfer type
             "00000000000000",                           // padding
@@ -869,13 +888,13 @@ mod tests {
             "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
-            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
+            "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
             "00",                                       // zero2one
             "02",                                       // transfer type
             "0000000000000000000000000000",             // padding
         ));
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_single_swap_strategy_encoder: {}", hex_calldata);
 
         assert_eq!(hex_calldata[..456], expected_input);
         assert_eq!(hex_calldata[1224..], expected_swap);
@@ -930,7 +949,7 @@ mod tests {
             .unwrap();
 
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_single_swap_strategy_encoder_wrap: {}", hex_calldata);
     }
 
     #[test]
@@ -982,7 +1001,7 @@ mod tests {
             .unwrap();
 
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_split_swap_strategy_encoder_wrap: {}", hex_calldata);
     }
 
     #[test]
@@ -1034,7 +1053,7 @@ mod tests {
             .unwrap();
 
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_split_swap_strategy_encoder_unwrap: {}", hex_calldata);
     }
 
     #[test]
@@ -1126,7 +1145,7 @@ mod tests {
             .unwrap();
 
         let _hex_calldata = encode(&calldata);
-        println!("{}", _hex_calldata);
+        println!("test_split_swap_strategy_encoder_complex_route: {}", _hex_calldata);
     }
 
     #[test]
@@ -1192,14 +1211,11 @@ mod tests {
             .unwrap();
 
         let _hex_calldata = encode(&calldata);
-        println!("{}", _hex_calldata);
+        println!("test_sequential_swap_strategy_encoder_complex_route: {}", _hex_calldata);
     }
 
     #[test]
     fn test_sequential_swap_strategy_encoder_no_permit2() {
-        // Note: This test does not assert anything. It is only used to obtain integration test
-        // data for our router solidity test.
-        //
         // Performs a split swap from WETH to USDC though WBTC and DAI using USV2 pools
         //
         //   WETH ───(USV2)──> WBTC ───(USV2)──> USDC
@@ -1253,8 +1269,41 @@ mod tests {
             .encode_strategy(solution)
             .unwrap();
 
-        let _hex_calldata = encode(&calldata);
-        println!("{}", _hex_calldata);
+        let hex_calldata = encode(&calldata);
+        println!("test_sequential_swap_strategy_encoder_no_permit2: {}", hex_calldata);
+
+        let expected = String::from(concat!(
+            "e8a980d7",                                                         /* function selector */
+            "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
+            "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
+            "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token ou
+            "00000000000000000000000000000000000000000000000000000000018f61ec", // min amount out
+            "0000000000000000000000000000000000000000000000000000000000000000", // wrap
+            "0000000000000000000000000000000000000000000000000000000000000000", // unwrap
+            "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+            "0000000000000000000000000000000000000000000000000000000000000100", /* length ple
+                                                                                 * encode */
+            "00000000000000000000000000000000000000000000000000000000000000a8",
+            // swap 1
+            "0052",                                     // swap length
+            "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
+            "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
+            "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id
+            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver (router)
+            "00",                                       // zero to one
+            "01",                                       // transfer type
+            // swap 2
+            "0052",                                             // swap length
+            "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f",         // executor address
+            "2260fac5e5542a773aa44fbcfedf7c193bc2c599",         // token in
+            "004375dff511095cc5a197a54140a24efef3a416",         // component id
+            "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",         // receiver (final user)
+            "01",                                               // zero to one
+            "00",                                               // transfer type
+            "000000000000000000000000000000000000000000000000", // padding
+        ));
+
+        assert_eq!(hex_calldata, expected);
     }
 
     #[test]
@@ -1373,9 +1422,9 @@ mod tests {
 
         let expected_swaps = String::from(concat!(
             // length of ple encoded swaps without padding
-            "0000000000000000000000000000000000000000000000000000000000000079",
+            "000000000000000000000000000000000000000000000000000000000000008d",
             // ple encoded swaps
-            "0077",   // Swap length
+            "008b",   // Swap length
             "00",     // token in index
             "01",     // token out index
             "000000", // split
@@ -1386,6 +1435,7 @@ mod tests {
             "6982508145454ce325ddbe47a25d4ec3d2311933", // group token in
             "00",                                       // zero2one
             "04",                                       // transfer type (transfer to router)
+            "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
             // First pool params
             "0000000000000000000000000000000000000000", // intermediary token (ETH)
             "000bb8",                                   // fee
@@ -1394,14 +1444,14 @@ mod tests {
             "6982508145454ce325ddbe47a25d4ec3d2311933", // intermediary token (PEPE)
             "0061a8",                                   // fee
             "0001f4",                                   // tick spacing
-            "00000000000000"                            // padding
+            "00000000000000000000000000000000000000"    // padding
         ));
 
         let hex_calldata = encode(&calldata);
 
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
-        println!("{}", hex_calldata);
+        println!("test_split_encoding_strategy_usv4: {}", hex_calldata);
     }
 
     #[test]
@@ -1461,7 +1511,7 @@ mod tests {
             .unwrap();
 
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_split_encoding_strategy_ekubo: {}", hex_calldata);
     }
 
     #[test]
@@ -1529,7 +1579,7 @@ mod tests {
             "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
-            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
+            "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
             "00",                                       // zero2one
             "01",                                       // transfer type
             "0000000000000000000000000000",               // padding
@@ -1539,7 +1589,7 @@ mod tests {
         let hex_calldata = encode(&calldata);
 
         assert_eq!(hex_calldata, expected_input);
-        println!("{}", hex_calldata);
+        println!("test_single_swap_strategy_encoder_no_permit2: {}", hex_calldata);
     }
 
     #[test]
@@ -1612,7 +1662,7 @@ mod tests {
             "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
-            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
+            "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
             "00",                                       // zero2one
             "01",                                       // transfer type
             "00000000000000",                             // padding
@@ -1622,7 +1672,7 @@ mod tests {
         let hex_calldata = encode(&calldata);
 
         assert_eq!(hex_calldata, expected_input);
-        println!("{}", hex_calldata);
+        println!("test_split_swap_strategy_encoder_no_permit2: {}", hex_calldata);
     }
 
     #[test]
@@ -1686,7 +1736,7 @@ mod tests {
             .unwrap();
         let hex_calldata = encode(&calldata);
 
-        println!("{}", hex_calldata);
+        println!("test_split_encoding_strategy_usv4_eth_in: {}", hex_calldata);
     }
     #[test]
     fn test_split_encoding_strategy_usv4_eth_out() {
@@ -1753,7 +1803,7 @@ mod tests {
             .unwrap();
 
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_split_encoding_strategy_usv4_eth_out: {}", hex_calldata);
     }
 
     #[test]
@@ -1863,7 +1913,7 @@ mod tests {
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
             "0001f4",                                   // pool fee
-            "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+            "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
             "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
             "01",                                       // zero2one
             "02",                                       // transfer type
@@ -1874,7 +1924,7 @@ mod tests {
             "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
             "000bb8",                                   // pool fee
-            "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+            "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
             "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
             "00",                                       // zero2one
             "00",                                       // transfer type
@@ -1883,7 +1933,7 @@ mod tests {
 
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
-        println!("{}", hex_calldata);
+        println!("test_cyclic_sequential_swap_split_strategy: {}", hex_calldata);
     }
 
     #[test]
@@ -2017,7 +2067,7 @@ mod tests {
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
         "0001f4", // pool fee
-        "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+        "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
         "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
         "01", // zero2one
         "02", // transfer type
@@ -2029,7 +2079,7 @@ mod tests {
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out
         "000bb8", // pool fee
-        "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+        "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "01", // zero2one
         "02", // transfer type
@@ -2040,7 +2090,7 @@ mod tests {
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address,
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id,
-        "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "00", // zero2one
         "00", // transfer type
         "00000000000000" // padding
@@ -2048,7 +2098,7 @@ mod tests {
         .join("");
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
-        println!("{}", hex_calldata);
+        println!("test_split_input_cyclic_swap: {}", hex_calldata);
     }
 
     #[test]
@@ -2178,7 +2228,7 @@ mod tests {
         "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in
         "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id
-        "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+        "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
         "01", // zero2one
         "02", // transfer type
         "006e", // ple encoded swaps
@@ -2189,7 +2239,7 @@ mod tests {
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "0001f4", // pool fee
-        "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
         "00", // zero2one
         "00", // transfer type
@@ -2201,7 +2251,7 @@ mod tests {
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out
         "000bb8", // pool fee
-        "3ede3eca2a72b3aecc820e955b36f38437d01395", // router address
+        "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "00", // zero2one
         "00", // transfer type
@@ -2211,7 +2261,7 @@ mod tests {
 
         assert_eq!(hex_calldata[..520], expected_input);
         assert_eq!(hex_calldata[1288..], expected_swaps);
-        println!("{}", hex_calldata);
+        println!("test_split_output_cyclic_swap: {}", hex_calldata);
     }
 
     #[test]
@@ -2273,7 +2323,7 @@ mod tests {
             .unwrap();
 
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_split_encoding_strategy_curve: {}", hex_calldata);
     }
 
     #[test]
@@ -2335,6 +2385,6 @@ mod tests {
             .unwrap();
 
         let hex_calldata = encode(&calldata);
-        println!("{}", hex_calldata);
+        println!("test_split_encoding_strategy_curve_st_eth: {}", hex_calldata);
     }
 }

@@ -1050,6 +1050,8 @@ mod tests {
                     "00",
                     // transfer type
                     "00",
+                    // receiver
+                    "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                     // first pool intermediary token (ETH)
                     "0000000000000000000000000000000000000000",
                     // fee

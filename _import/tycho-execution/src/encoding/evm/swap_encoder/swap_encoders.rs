@@ -207,6 +207,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             group_token_out_address,
             zero_to_one,
             (encoding_context.transfer_type as u8).to_be_bytes(),
+            bytes_to_address(&encoding_context.receiver)?,
             pool_params,
         );
 
@@ -548,6 +549,7 @@ impl SwapEncoder for CurveSwapEncoder {
             j.to_be_bytes::<1>(),
             approval_needed,
             (encoding_context.transfer_type as u8).to_be_bytes(),
+            bytes_to_address(&encoding_context.receiver)?,
         );
 
         Ok(args.abi_encode_packed())
@@ -765,9 +767,8 @@ mod tests {
             split: 0f64,
         };
         let encoding_context = EncodingContext {
-            // The receiver address was taken from `address(uniswapV4Exposed)` in the
-            // UniswapV4Executor.t.sol
-            receiver: Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f"),
+            // The receiver is ALICE to match the solidity tests
+            receiver: Bytes::from("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2"),
             exact_out: false,
             // Same as the executor address
             router_address: Some(Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f")),
@@ -786,7 +787,7 @@ mod tests {
             .encode_swap(swap, encoding_context)
             .unwrap();
         let hex_swap = encode(&encoded_swap);
-        println!("{}", hex_swap);
+        println!("test_encode_uniswap_v4_simple_swap: {}", hex_swap);
 
         assert_eq!(
             hex_swap,
@@ -799,6 +800,8 @@ mod tests {
                 "01",
                 // transfer type
                 "00",
+                // receiver
+                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                 // pool params:
                 // - intermediary token
                 "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -877,11 +880,11 @@ mod tests {
         let usdt_address = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7");
         let wbtc_address = Bytes::from("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599");
         let router_address = Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f");
-        let receiver_address = router_address.clone();
 
         // The context is the same for both swaps, since the group token in and out are the same
         let context = EncodingContext {
-            receiver: receiver_address.clone(),
+            // The receiver is ALICE to match the solidity tests
+            receiver: Bytes::from("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2"),
             exact_out: false,
             router_address: Some(router_address.clone()),
             group_token_in: usde_address.clone(),
@@ -955,7 +958,7 @@ mod tests {
         let combined_hex =
             format!("{}{}", encode(&initial_encoded_swap), encode(&second_encoded_swap));
 
-        println!("{}", combined_hex);
+        println!("test_encode_uniswap_v4_sequential_swap: {}", combined_hex);
         assert_eq!(
             combined_hex,
             String::from(concat!(
@@ -967,6 +970,8 @@ mod tests {
                 "01",
                 // transfer type
                 "00",
+                // receiver
+                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                 // pool params:
                 // - intermediary token USDT
                 "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -982,6 +987,7 @@ mod tests {
                 "00003c"
             ))
         );
+        println!("{}", combined_hex)
     }
 
     mod ekubo {
@@ -1276,6 +1282,8 @@ mod tests {
                     "01",
                     // transfer type
                     "05",
+                    // receiver,
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"
                 ))
             );
         }
@@ -1344,6 +1352,8 @@ mod tests {
                     "01",
                     // transfer type
                     "05",
+                    // receiver
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"
                 ))
             );
         }
@@ -1422,6 +1432,8 @@ mod tests {
                     "01",
                     // transfer type
                     "05",
+                    // receiver
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"
                 ))
             );
         }
