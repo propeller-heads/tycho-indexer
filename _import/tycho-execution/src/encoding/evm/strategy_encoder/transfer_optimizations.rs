@@ -1,13 +1,14 @@
 use tycho_common::Bytes;
 
 use crate::encoding::{
-    evm::constants::{IN_TRANSFER_OPTIMIZABLE_PROTOCOLS, PROTOCOLS_EXPECTING_FUNDS_IN_ROUTER},
+    evm::constants::IN_TRANSFER_OPTIMIZABLE_PROTOCOLS,
     models::{Swap, TransferType},
 };
 
 /// A trait that defines how the tokens will be transferred into the given pool given the solution.
 pub trait TransferOptimization {
     /// Returns the transfer method that should be used for the given swap and solution.
+    #[allow(clippy::too_many_arguments)]
     fn get_transfer_type(
         &self,
         swap: Swap,
@@ -16,37 +17,40 @@ pub trait TransferOptimization {
         wrapped_token: Bytes,
         permit2: bool,
         wrap: bool,
+        in_between_swap_optimization: bool,
     ) -> TransferType {
-        let send_funds_to_pool: bool =
+        let in_transfer_optimizable: bool =
             IN_TRANSFER_OPTIMIZABLE_PROTOCOLS.contains(&swap.component.protocol_system.as_str());
-        let funds_expected_in_router: bool =
-            PROTOCOLS_EXPECTING_FUNDS_IN_ROUTER.contains(&swap.component.protocol_system.as_str());
 
-        // In the case of wrapping, check if the swap's token in is the wrapped token to
-        // determine if it's the first swap. Otherwise, compare to the given token.
         let is_first_swap = swap.token_in == given_token;
 
         if swap.token_in == native_token {
             // Funds are already in router. All protocols currently take care of native transfers.
             TransferType::None
         } else if (swap.token_in == wrapped_token) && wrap {
+            // Wrapping already happened in the router so we can just use a normal transfer.
             TransferType::TransferToProtocol
-        } else if is_first_swap && send_funds_to_pool {
-            if permit2 {
-                // Transfer from swapper to pool using permit2.
-                TransferType::TransferPermit2ToProtocol
-            } else {
-                // Transfer from swapper to pool.
-                TransferType::TransferFromToProtocol
-            }
-        } else if is_first_swap && funds_expected_in_router {
-            if permit2 {
+            // first swap
+        } else if is_first_swap {
+            if in_transfer_optimizable {
+                if permit2 {
+                    // Transfer from swapper to pool using permit2.
+                    TransferType::TransferPermit2ToProtocol
+                } else {
+                    // Transfer from swapper to pool.
+                    TransferType::TransferFromToProtocol
+                }
+            } else if permit2 {
                 // Transfer from swapper to router using permit2.
                 TransferType::TransferPermit2ToRouter
             } else {
                 // Transfer from swapper to router.
                 TransferType::TransferFromToRouter
             }
+        // all other swaps
+        } else if !in_transfer_optimizable || in_between_swap_optimization {
+            // funds should already be in the router or in the next pool
+            TransferType::None
         } else {
             TransferType::TransferToProtocol
         }
@@ -93,7 +97,7 @@ mod tests {
         };
         let strategy = MockStrategy {};
         let transfer_method =
-            strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), true, false);
+            strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), true, false, false);
         assert_eq!(transfer_method, TransferType::TransferPermit2ToProtocol);
     }
 
@@ -111,7 +115,7 @@ mod tests {
         };
         let strategy = MockStrategy {};
         let transfer_method =
-            strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), false, false);
+            strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), false, false, false);
         assert_eq!(transfer_method, TransferType::TransferFromToProtocol);
     }
 
@@ -130,7 +134,7 @@ mod tests {
         };
         let strategy = MockStrategy {};
         let transfer_method =
-            strategy.get_transfer_type(swap.clone(), eth(), eth(), weth(), false, false);
+            strategy.get_transfer_type(swap.clone(), eth(), eth(), weth(), false, false, false);
         assert_eq!(transfer_method, TransferType::None);
     }
 
@@ -149,7 +153,7 @@ mod tests {
         };
         let strategy = MockStrategy {};
         let transfer_method =
-            strategy.get_transfer_type(swap.clone(), eth(), eth(), weth(), false, true);
+            strategy.get_transfer_type(swap.clone(), eth(), eth(), weth(), false, true, false);
         assert_eq!(transfer_method, TransferType::TransferToProtocol);
     }
 
@@ -168,7 +172,45 @@ mod tests {
         };
         let strategy = MockStrategy {};
         let transfer_method =
-            strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), false, false);
+            strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), false, false, false);
         assert_eq!(transfer_method, TransferType::TransferToProtocol);
+    }
+
+    #[test]
+    fn test_not_first_swap_funds_in_router() {
+        // Not the first swap and the protocol requires the funds to be in the router (which they
+        // already are, so the transfer type is None)
+        let swap = Swap {
+            component: ProtocolComponent {
+                protocol_system: "vm:curve".to_string(),
+                ..Default::default()
+            },
+            token_in: usdc(),
+            token_out: dai(),
+            split: 0f64,
+        };
+        let strategy = MockStrategy {};
+        let transfer_method =
+            strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), false, false, false);
+        assert_eq!(transfer_method, TransferType::None);
+    }
+
+    #[test]
+    fn test_not_first_swap_in_between_swap_optimization() {
+        // Not the first swap and the in between swaps are optimized. The funds should already be in
+        // the next pool or in the router
+        let swap = Swap {
+            component: ProtocolComponent {
+                protocol_system: "uniswap_v2".to_string(),
+                ..Default::default()
+            },
+            token_in: usdc(),
+            token_out: dai(),
+            split: 0f64,
+        };
+        let strategy = MockStrategy {};
+        let transfer_method =
+            strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), false, false, true);
+        assert_eq!(transfer_method, TransferType::None);
     }
 }
