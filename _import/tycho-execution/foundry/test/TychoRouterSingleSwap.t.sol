@@ -290,7 +290,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
     function testSingleSwapIntegration() public {
         // Tests swapping WETH -> DAI on a USV2 pool with regular approvals
         deal(WETH_ADDR, ALICE, 1 ether);
-        uint256 balancerBefore = IERC20(DAI_ADDR).balanceOf(ALICE);
+        uint256 balanceBefore = IERC20(DAI_ADDR).balanceOf(ALICE);
 
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
@@ -301,15 +301,15 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
 
         vm.stopPrank();
 
-        uint256 balancerAfter = IERC20(DAI_ADDR).balanceOf(ALICE);
+        uint256 balanceAfter = IERC20(DAI_ADDR).balanceOf(ALICE);
         assertTrue(success, "Call Failed");
-        assertEq(balancerAfter - balancerBefore, 2659881924818443699787);
+        assertEq(balanceAfter - balanceBefore, 2659881924818443699787);
     }
 
     function testSingleSwapIntegrationPermit2() public {
         // Tests swapping WETH -> DAI on a USV2 pool with permit2
         deal(WETH_ADDR, ALICE, 1 ether);
-        uint256 balancerBefore = IERC20(DAI_ADDR).balanceOf(ALICE);
+        uint256 balanceBefore = IERC20(DAI_ADDR).balanceOf(ALICE);
 
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
@@ -320,8 +320,8 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
 
         vm.stopPrank();
 
-        uint256 balancerAfter = IERC20(DAI_ADDR).balanceOf(ALICE);
+        uint256 balanceAfter = IERC20(DAI_ADDR).balanceOf(ALICE);
         assertTrue(success, "Call Failed");
-        assertEq(balancerAfter - balancerBefore, 2659881924818443699787);
+        assertEq(balanceAfter - balanceBefore, 2659881924818443699787);
     }
 }
