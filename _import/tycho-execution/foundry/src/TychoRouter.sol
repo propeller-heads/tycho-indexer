@@ -411,6 +411,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         address receiver,
         bytes calldata swaps
     ) internal returns (uint256 amountOut) {
+        if (receiver == address(0)) {
+            revert TychoRouter__AddressZero();
+        }
         if (minAmountOut == 0) {
             revert TychoRouter__UndefinedMinAmountOut();
         }
@@ -462,6 +465,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         address receiver,
         bytes calldata swap_
     ) internal returns (uint256 amountOut) {
+        if (receiver == address(0)) {
+            revert TychoRouter__AddressZero();
+        }
         if (minAmountOut == 0) {
             revert TychoRouter__UndefinedMinAmountOut();
         }
@@ -516,6 +522,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         address receiver,
         bytes calldata swaps
     ) internal returns (uint256 amountOut) {
+        if (receiver == address(0)) {
+            revert TychoRouter__AddressZero();
+        }
         if (minAmountOut == 0) {
             revert TychoRouter__UndefinedMinAmountOut();
         }

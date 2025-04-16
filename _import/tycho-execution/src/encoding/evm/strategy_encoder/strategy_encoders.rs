@@ -121,7 +121,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
                 ))
             })?;
 
-        let receiver =
+        let swap_receiver =
             if !unwrap { solution.receiver.clone() } else { self.router_address.clone() };
 
         let mut grouped_protocol_data: Vec<u8> = vec![];
@@ -136,7 +136,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
             );
 
             let encoding_context = EncodingContext {
-                receiver: receiver.clone(),
+                receiver: swap_receiver.clone(),
                 exact_out: solution.exact_out,
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.input_token.clone(),
@@ -300,7 +300,9 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                     ))
                 })?;
 
-            let receiver = if i == grouped_swaps.len() - 1 && !unwrap {
+            // if it is the last swap and there isn't an unwrap at the end, we can set the receiver
+            // to the final user
+            let swap_receiver = if i == grouped_swaps.len() - 1 && !unwrap {
                 solution.receiver.clone()
             } else {
                 self.router_address.clone()
@@ -318,7 +320,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 );
 
                 let encoding_context = EncodingContext {
-                    receiver: receiver.clone(),
+                    receiver: swap_receiver.clone(),
                     exact_out: solution.exact_out,
                     router_address: Some(self.router_address.clone()),
                     group_token_in: grouped_swap.input_token.clone(),
@@ -536,7 +538,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                     ))
                 })?;
 
-            let receiver = if !unwrap && grouped_swap.output_token == solution.checked_token {
+            let swap_receiver = if !unwrap && grouped_swap.output_token == solution.checked_token {
                 solution.receiver.clone()
             } else {
                 self.router_address.clone()
@@ -554,7 +556,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 );
 
                 let encoding_context = EncodingContext {
-                    receiver: receiver.clone(),
+                    receiver: swap_receiver.clone(),
                     exact_out: solution.exact_out,
                     router_address: Some(self.router_address.clone()),
                     group_token_in: grouped_swap.input_token.clone(),
