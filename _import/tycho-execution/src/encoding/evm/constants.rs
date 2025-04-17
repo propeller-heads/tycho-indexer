@@ -19,6 +19,7 @@ pub static GROUPABLE_PROTOCOLS: LazyLock<HashSet<&'static str>> = LazyLock::new(
 });
 
 /// These protocols support the optimization of transferring straight from the user.
+/// Any protocols that are not defined here expect funds to be in the router at the time of swap.
 pub static IN_TRANSFER_OPTIMIZABLE_PROTOCOLS: LazyLock<HashSet<&'static str>> =
     LazyLock::new(|| {
         let mut set = HashSet::new();
@@ -31,10 +32,12 @@ pub static IN_TRANSFER_OPTIMIZABLE_PROTOCOLS: LazyLock<HashSet<&'static str>> =
         set
     });
 
-// These protocols do not support chained swaps from the same protocol. This is the case for uniswap
-// v3 because of the callback logic. The only way for this to work it would be to call the second
-// swap during the callback of the first swap. This is currently not supported.
-pub static PROTOCOLS_NOT_OPTIMIZED_CHAINED_SWAPS: LazyLock<HashSet<&'static str>> =
+// These protocols do not support chained swaps. The tokens can not be sent directly from the
+// previous pool into a pool of this protocol. The tokens need to be sent to the router and only
+// then transferred into the pool. This is the case for uniswap v3 because of the callback logic.
+// The only way for this to work it would be to call the second swap during the callback of the
+// first swap. This is currently not supported.
+pub static UNSUPPORTED_PROTOCOLS_FOR_CHAINED_SWAPS: LazyLock<HashSet<&'static str>> =
     LazyLock::new(|| {
         let mut set = HashSet::new();
         set.insert("uniswap_v3");

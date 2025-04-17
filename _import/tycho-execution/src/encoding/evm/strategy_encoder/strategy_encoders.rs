@@ -8,7 +8,7 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::Permit2,
-        constants::{IN_TRANSFER_OPTIMIZABLE_PROTOCOLS, PROTOCOLS_NOT_OPTIMIZED_CHAINED_SWAPS},
+        constants::{IN_TRANSFER_OPTIMIZABLE_PROTOCOLS, UNSUPPORTED_PROTOCOLS_FOR_CHAINED_SWAPS},
         group_swaps::group_swaps,
         strategy_encoder::{
             strategy_validators::{SequentialSwapValidator, SplitSwapValidator, SwapValidator},
@@ -311,9 +311,8 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 if IN_TRANSFER_OPTIMIZABLE_PROTOCOLS.contains(&next.protocol_system.as_str()) {
                     // if the protocol does not allow for chained swaps, we can't optimize the
                     // receiver of this swap nor the transfer in of the next swap
-                    if PROTOCOLS_NOT_OPTIMIZED_CHAINED_SWAPS
-                        .contains(&next.protocol_system.as_str()) &&
-                        PROTOCOLS_NOT_OPTIMIZED_CHAINED_SWAPS.contains(protocol.as_str())
+                    if UNSUPPORTED_PROTOCOLS_FOR_CHAINED_SWAPS
+                        .contains(&next.protocol_system.as_str())
                     {
                         next_in_between_swap_optimization = false;
                         self.router_address.clone()

@@ -30,7 +30,6 @@ pub trait TransferOptimization {
         } else if (swap.token_in == wrapped_token) && wrap {
             // Wrapping already happened in the router so we can just use a normal transfer.
             TransferType::TransferToProtocol
-            // first swap
         } else if is_first_swap {
             if in_transfer_optimizable {
                 if permit2 {
