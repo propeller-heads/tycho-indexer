@@ -1,7 +1,7 @@
 use tycho_common::Bytes;
 
 use crate::encoding::{
-    evm::constants::IN_TRANSFER_OPTIMIZABLE_PROTOCOLS,
+    evm::constants::IN_TRANSFER_REQUIRED_PROTOCOLS,
     models::{Swap, TransferType},
 };
 
@@ -19,8 +19,8 @@ pub trait TransferOptimization {
         wrap: bool,
         in_between_swap_optimization: bool,
     ) -> TransferType {
-        let in_transfer_optimizable: bool =
-            IN_TRANSFER_OPTIMIZABLE_PROTOCOLS.contains(&swap.component.protocol_system.as_str());
+        let in_transfer_required: bool =
+            IN_TRANSFER_REQUIRED_PROTOCOLS.contains(&swap.component.protocol_system.as_str());
 
         let is_first_swap = swap.token_in == given_token;
 
@@ -31,7 +31,7 @@ pub trait TransferOptimization {
             // Wrapping already happened in the router so we can just use a normal transfer.
             TransferType::TransferToProtocol
         } else if is_first_swap {
-            if in_transfer_optimizable {
+            if in_transfer_required {
                 if permit2 {
                     // Transfer from swapper to pool using permit2.
                     TransferType::TransferPermit2ToProtocol
@@ -47,7 +47,7 @@ pub trait TransferOptimization {
                 TransferType::TransferFromToRouter
             }
         // all other swaps
-        } else if !in_transfer_optimizable || in_between_swap_optimization {
+        } else if !in_transfer_required || in_between_swap_optimization {
             // funds should already be in the router or in the next pool
             TransferType::None
         } else {
