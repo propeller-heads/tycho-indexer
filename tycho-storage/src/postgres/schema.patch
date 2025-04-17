@@ -1,6 +1,6 @@
---- schema_old.rs	2025-04-14 18:43:16
-+++ schema.rs	2025-04-14 18:43:03
-@@ -65,6 +65,34 @@
+--- schema_old.rs	2025-04-17 23:16:57
++++ schema.rs	2025-04-17 23:16:49
+@@ -69,6 +69,34 @@
  }
  
  diesel::table! {
@@ -35,7 +35,7 @@
      component_tvl (id) {
          id -> Int8,
          protocol_component_id -> Int8,
-@@ -83,6 +111,36 @@
+@@ -87,6 +115,36 @@
          modify_tx -> Int8,
          valid_from -> Timestamptz,
          valid_to -> Nullable<Timestamptz>,
@@ -72,7 +72,7 @@
          inserted_ts -> Timestamptz,
          modified_ts -> Timestamptz,
      }
-@@ -141,6 +199,34 @@
+@@ -178,6 +236,34 @@
  }
  
  diesel::table! {
@@ -107,7 +107,7 @@
      protocol_system (id) {
          id -> Int8,
          #[max_length = 255]
-@@ -210,9 +296,19 @@
+@@ -255,12 +341,22 @@
  diesel::joinable!(account_balance -> token (token_id));
  diesel::joinable!(account_balance -> transaction (modify_tx));
  diesel::joinable!(block -> chain (chain_id));
@@ -120,6 +120,9 @@
  diesel::joinable!(component_tvl -> protocol_component (protocol_component_id));
  diesel::joinable!(contract_code -> account (account_id));
  diesel::joinable!(contract_code -> transaction (modify_tx));
+ diesel::joinable!(entry_point_calls_account -> account (account_id));
+ diesel::joinable!(entry_point_calls_account -> entry_point (entry_point_id));
+ diesel::joinable!(entry_point_tracing_data -> entry_point (entry_point_id));
 +diesel::joinable!(contract_storage -> account (account_id));
 +diesel::joinable!(contract_storage -> transaction (modify_tx));
 +diesel::joinable!(contract_storage_default -> account (account_id));
@@ -127,8 +130,8 @@
  diesel::joinable!(extraction_state -> block (block_id));
  diesel::joinable!(extraction_state -> chain (chain_id));
  diesel::joinable!(protocol_component -> chain (chain_id));
-@@ -222,6 +318,10 @@
- diesel::joinable!(protocol_component_holds_contract -> protocol_component (protocol_component_id));
+@@ -272,6 +368,10 @@
+ diesel::joinable!(protocol_component_holds_entry_point -> protocol_component (protocol_component_id));
  diesel::joinable!(protocol_component_holds_token -> protocol_component (protocol_component_id));
  diesel::joinable!(protocol_component_holds_token -> token (token_id));
 +diesel::joinable!(protocol_state -> protocol_component (protocol_component_id));
@@ -137,8 +140,8 @@
 +diesel::joinable!(protocol_state_default -> transaction (modify_tx));
  diesel::joinable!(token -> account (account_id));
  diesel::joinable!(token_price -> token (token_id));
- diesel::joinable!(transaction -> block (block_id));
-@@ -231,12 +331,18 @@
+ diesel::joinable!(traced_entry_point -> block (detection_block));
+@@ -283,8 +383,12 @@
      account_balance,
      block,
      chain,
@@ -148,9 +151,12 @@
      contract_code,
 +    contract_storage,
 +    contract_storage_default,
-     extraction_state,
-     protocol_component,
+     entry_point,
+     entry_point_calls_account,
+     entry_point_tracing_data,
+@@ -293,6 +397,8 @@
      protocol_component_holds_contract,
+     protocol_component_holds_entry_point,
      protocol_component_holds_token,
 +    protocol_state,
 +    protocol_state_default,
