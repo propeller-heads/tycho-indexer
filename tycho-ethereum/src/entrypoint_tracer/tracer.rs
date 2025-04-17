@@ -16,7 +16,7 @@ use thiserror::Error;
 use tycho_common::{
     keccak256,
     models::{
-        blockchain::{EntryPoint, TracedEntryPoint},
+        blockchain::{EntryPointTracingData, EntryPointWithData, TracedEntryPoint, TracingResult},
         Address, BlockHash,
     },
     traits::EntryPointTracer,
@@ -73,20 +73,21 @@ impl EntryPointTracer for EVMEntrypointService {
     async fn trace(
         &self,
         block_hash: BlockHash,
-        entry_points: Vec<EntryPoint>,
+        entry_points: Vec<EntryPointWithData>,
     ) -> Result<Vec<TracedEntryPoint>, Self::Error> {
         let mut results = Vec::new();
-        for entry_point in entry_points {
-            match entry_point {
-                EntryPoint::RPCTracer(rpc_entry_point) => {
-                    for (caller, data) in rpc_entry_point.args {
+        for entry_point in &entry_points {
+            for data in &entry_point.data {
+                match data {
+                    EntryPointTracingData::RPCTracer(ref rpc_entry_point) => {
                         let call_trace = self
                             .trace_call(
-                                &rpc_entry_point.target,
-                                caller
+                                &entry_point.entry_point.target,
+                                rpc_entry_point
+                                    .caller
                                     .as_ref()
                                     .unwrap_or(&EthersAddress::zero().to_bytes()),
-                                &data,
+                                &rpc_entry_point.data,
                                 &block_hash,
                                 GethDebugBuiltInTracerType::CallTracer,
                             )
@@ -102,11 +103,12 @@ impl EntryPointTracer for EVMEntrypointService {
 
                         let pre_state_trace = self
                             .trace_call(
-                                &rpc_entry_point.target,
-                                caller
+                                &entry_point.entry_point.target,
+                                rpc_entry_point
+                                    .caller
                                     .as_ref()
                                     .unwrap_or(&EthersAddress::zero().to_bytes()),
-                                &data,
+                                &rpc_entry_point.data,
                                 &block_hash,
                                 GethDebugBuiltInTracerType::PreStateTracer,
                             )
@@ -144,13 +146,17 @@ impl EntryPointTracer for EVMEntrypointService {
                         } else {
                             return Err(RPCError::UnknownError("PreStateTracer failed".to_string()));
                         };
-                        results.push(TracedEntryPoint {
-                            retriggers,
-                            called_addresses: called_addresses
-                                .into_iter()
-                                .map(BytesCodec::to_bytes)
-                                .collect(),
-                        });
+                        results.push(TracedEntryPoint::new(
+                            entry_point.entry_point.clone(),
+                            block_hash.clone(),
+                            TracingResult::new(
+                                retriggers,
+                                called_addresses
+                                    .into_iter()
+                                    .map(BytesCodec::to_bytes)
+                                    .collect(),
+                            ),
+                        ));
                     }
                 }
             }
@@ -174,7 +180,10 @@ fn flatten_calls(call: &CallFrame) -> Vec<EthersAddress> {
 mod tests {
     use std::env;
 
-    use tycho_common::{models::blockchain::RPCTracerEntryPoint, Bytes};
+    use tycho_common::{
+        models::blockchain::{EntryPoint, RPCTracerEntryPoint},
+        Bytes,
+    };
 
     use super::*;
 
@@ -184,14 +193,26 @@ mod tests {
         let url = env::var("RPC_URL").expect("RPC_URL is not set");
         let tracer = EVMEntrypointService::new_from_url(&url);
         let entry_points = vec![
-            EntryPoint::RPCTracer(RPCTracerEntryPoint {
-                target: Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
-                args: vec![(None, Bytes::from(keccak256("getRate()")))],
-            }),
-            EntryPoint::RPCTracer(RPCTracerEntryPoint {
-                target: Bytes::from_str("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9").unwrap(),
-                args: vec![(None, Bytes::from(keccak256("getRate()")))],
-            }),
+            EntryPointWithData::new(
+                EntryPoint::new(
+                    Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
+                    "getRate()".to_string(),
+                ),
+                vec![EntryPointTracingData::RPCTracer(RPCTracerEntryPoint::new(
+                    None,
+                    Bytes::from(keccak256("getRate()")),
+                ))],
+            ),
+            EntryPointWithData::new(
+                EntryPoint::new(
+                    Bytes::from_str("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9").unwrap(),
+                    "getRate()".to_string(),
+                ),
+                vec![EntryPointTracingData::RPCTracer(RPCTracerEntryPoint::new(
+                    None,
+                    Bytes::from(keccak256("getRate()")),
+                ))],
+            ),
         ];
         let traced_entry_points = tracer
             .trace(
@@ -208,9 +229,15 @@ mod tests {
             traced_entry_points,
             vec![
                 TracedEntryPoint {
-                    retriggers: HashSet::from([
-                        (
-                            Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(),
+                    entry_point: EntryPoint::new(
+                        Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
+                        "getRate()".to_string(),
+                    ),
+                    detection_block_hash: Bytes::from_str("0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2").unwrap(),
+                    tracing_result: TracingResult::new(
+                        HashSet::from([
+                            (
+                                Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(),
                             Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
                         ),
                         (
@@ -218,17 +245,23 @@ mod tests {
                             Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
                         ),
                     ]),
-                    called_addresses: HashSet::from([
+                    HashSet::from([
                         Bytes::from_str("0xef434e4573b90b6ecd4a00f4888381e4d0cc5ccd").unwrap(),
                         Bytes::from_str("0x487c2c53c0866f0a73ae317bd1a28f63adcd9ad1").unwrap(),
                         Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
                         Bytes::from_str("0xedf63cce4ba70cbe74064b7687882e71ebb0e988").unwrap(),
                         Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(),
-                    ]),
+                        ]),
+                    ),
                 },
                 TracedEntryPoint {
-                    retriggers: HashSet::from([
-                        (
+                    entry_point: EntryPoint::new(
+                        Bytes::from_str("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9").unwrap(),
+                        "getRate()".to_string(),
+                    ),                    detection_block_hash: Bytes::from_str("0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2").unwrap(),
+                    tracing_result: TracingResult::new(
+                        HashSet::from([
+                            (
                             Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(),
                             Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
                         ),
@@ -237,14 +270,15 @@ mod tests {
                             Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
                         ),
                     ]),
-                    called_addresses: HashSet::from([
+                    HashSet::from([
                         Bytes::from_str("0x8f4e8439b970363648421c692dd897fb9c0bd1d9").unwrap(),
                         Bytes::from_str("0x487c2c53c0866f0a73ae317bd1a28f63adcd9ad1").unwrap(),
                         Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(),
                         Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
                         Bytes::from_str("0xef434e4573b90b6ecd4a00f4888381e4d0cc5ccd").unwrap(),
                     ]),
-                },
+                ),
+            },
             ]
         );
     }

@@ -60,6 +60,12 @@ pub(crate) enum WriteOp {
     InsertComponentBalances(Vec<models::protocol::ComponentBalance>),
     // Simply merge
     UpsertProtocolState(Vec<(TxHash, models::protocol::ProtocolComponentStateDelta)>),
+    // Simply merge
+    #[allow(unused)] //TODO: Remove this once we have usage in extractors
+    UpsertEntryPoints((Vec<models::blockchain::EntryPointWithData>, models::ComponentId)),
+    // Simply merge
+    #[allow(unused)] //TODO: Remove this once we have usage in extractors
+    UpsertTracedEntryPoints(Vec<models::blockchain::TracedEntryPoint>),
 }
 
 impl WriteOp {
@@ -76,6 +82,8 @@ impl WriteOp {
             WriteOp::UpdateTokens(_) => "UpdateTokens",
             WriteOp::InsertComponentBalances(_) => "InsertComponentBalances",
             WriteOp::UpsertProtocolState(_) => "UpsertProtocolState",
+            WriteOp::UpsertEntryPoints(_) => "UpsertEntryPoints",
+            WriteOp::UpsertTracedEntryPoints(_) => "UpsertTracedEntryPoints",
         }
     }
 
@@ -91,7 +99,9 @@ impl WriteOp {
             WriteOp::InsertProtocolComponents(_) => 7,
             WriteOp::InsertComponentBalances(_) => 8,
             WriteOp::UpsertProtocolState(_) => 9,
-            WriteOp::SaveExtractionState(_) => 10,
+            WriteOp::UpsertEntryPoints(_) => 10,
+            WriteOp::UpsertTracedEntryPoints(_) => 11,
+            WriteOp::SaveExtractionState(_) => 12,
         }
     }
 }
@@ -466,6 +476,16 @@ impl DBCacheWriteExecutor {
                 let changes_slice = collected_changes.as_slice();
                 self.state_gateway
                     .update_protocol_states(&self.chain, changes_slice, conn)
+                    .await?
+            }
+            WriteOp::UpsertTracedEntryPoints(traced_entry_points) => {
+                self.state_gateway
+                    .upsert_traced_entry_points(traced_entry_points.as_slice(), conn)
+                    .await?
+            }
+            WriteOp::UpsertEntryPoints((entry_points, component_id)) => {
+                self.state_gateway
+                    .upsert_entry_points(entry_points.as_slice(), component_id, &self.chain, conn)
                     .await?
             }
         };

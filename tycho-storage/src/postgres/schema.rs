@@ -2,6 +2,10 @@
 
 pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "entry_point_tracing_type"))]
+    pub struct EntryPointTracingType;
+
+    #[derive(diesel::query_builder::QueryId, diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "financial_type"))]
     pub struct FinancialType;
 
@@ -147,6 +151,32 @@ diesel::table! {
 }
 
 diesel::table! {
+    entry_point (id) {
+        id -> Int8,
+        target -> Bytea,
+        signature -> Text,
+    }
+}
+
+diesel::table! {
+    entry_point_calls_account (entry_point_id, account_id) {
+        entry_point_id -> Int8,
+        account_id -> Int8,
+    }
+}
+
+diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::EntryPointTracingType;
+
+    entry_point_tracing_data (entry_point_id, tracing_type, data) {
+        entry_point_id -> Int8,
+        tracing_type -> EntryPointTracingType,
+        data -> Jsonb,
+    }
+}
+
+diesel::table! {
     extraction_state (id) {
         id -> Int8,
         #[max_length = 255]
@@ -186,6 +216,13 @@ diesel::table! {
         contract_code_id -> Int8,
         inserted_ts -> Timestamptz,
         modified_ts -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    protocol_component_holds_entry_point (protocol_component_id, entry_point_id) {
+        protocol_component_id -> Int8,
+        entry_point_id -> Int8,
     }
 }
 
@@ -279,6 +316,14 @@ diesel::table! {
 }
 
 diesel::table! {
+    traced_entry_point (entry_point_id) {
+        entry_point_id -> Int8,
+        detection_block -> Int8,
+        detection_data -> Jsonb,
+    }
+}
+
+diesel::table! {
     transaction (id) {
         id -> Int8,
         hash -> Bytea,
@@ -305,6 +350,9 @@ diesel::joinable!(component_balance_default -> transaction (modify_tx));
 diesel::joinable!(component_tvl -> protocol_component (protocol_component_id));
 diesel::joinable!(contract_code -> account (account_id));
 diesel::joinable!(contract_code -> transaction (modify_tx));
+diesel::joinable!(entry_point_calls_account -> account (account_id));
+diesel::joinable!(entry_point_calls_account -> entry_point (entry_point_id));
+diesel::joinable!(entry_point_tracing_data -> entry_point (entry_point_id));
 diesel::joinable!(contract_storage -> account (account_id));
 diesel::joinable!(contract_storage -> transaction (modify_tx));
 diesel::joinable!(contract_storage_default -> account (account_id));
@@ -316,6 +364,8 @@ diesel::joinable!(protocol_component -> protocol_system (protocol_system_id));
 diesel::joinable!(protocol_component -> protocol_type (protocol_type_id));
 diesel::joinable!(protocol_component_holds_contract -> contract_code (contract_code_id));
 diesel::joinable!(protocol_component_holds_contract -> protocol_component (protocol_component_id));
+diesel::joinable!(protocol_component_holds_entry_point -> entry_point (entry_point_id));
+diesel::joinable!(protocol_component_holds_entry_point -> protocol_component (protocol_component_id));
 diesel::joinable!(protocol_component_holds_token -> protocol_component (protocol_component_id));
 diesel::joinable!(protocol_component_holds_token -> token (token_id));
 diesel::joinable!(protocol_state -> protocol_component (protocol_component_id));
@@ -324,6 +374,8 @@ diesel::joinable!(protocol_state_default -> protocol_component (protocol_compone
 diesel::joinable!(protocol_state_default -> transaction (modify_tx));
 diesel::joinable!(token -> account (account_id));
 diesel::joinable!(token_price -> token (token_id));
+diesel::joinable!(traced_entry_point -> block (detection_block));
+diesel::joinable!(traced_entry_point -> entry_point (entry_point_id));
 diesel::joinable!(transaction -> block (block_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
@@ -337,9 +389,13 @@ diesel::allow_tables_to_appear_in_same_query!(
     contract_code,
     contract_storage,
     contract_storage_default,
+    entry_point,
+    entry_point_calls_account,
+    entry_point_tracing_data,
     extraction_state,
     protocol_component,
     protocol_component_holds_contract,
+    protocol_component_holds_entry_point,
     protocol_component_holds_token,
     protocol_state,
     protocol_state_default,
@@ -347,5 +403,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     protocol_type,
     token,
     token_price,
+    traced_entry_point,
     transaction,
 );
