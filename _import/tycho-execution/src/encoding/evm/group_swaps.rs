@@ -255,7 +255,7 @@ mod tests {
 
         let swap_weth_wbtc = Swap {
             component: ProtocolComponent {
-                protocol_system: "balancer_v3".to_string(),
+                protocol_system: "vm:balancer_v3".to_string(),
                 ..Default::default()
             },
             token_in: weth.clone(),
@@ -264,7 +264,7 @@ mod tests {
         };
         let swap_wbtc_usdc = Swap {
             component: ProtocolComponent {
-                protocol_system: "balancer_v3".to_string(),
+                protocol_system: "vm:balancer_v3".to_string(),
                 ..Default::default()
             },
             token_in: wbtc.clone(),
@@ -306,7 +306,7 @@ mod tests {
                     swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
                     input_token: weth.clone(),
                     output_token: usdc.clone(),
-                    protocol_system: "balancer_v3".to_string(),
+                    protocol_system: "vm:balancer_v3".to_string(),
                     split: 0.5f64,
                 },
                 SwapGroup {
