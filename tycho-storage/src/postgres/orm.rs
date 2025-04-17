@@ -25,9 +25,11 @@ use tycho_common::{
 use super::{
     schema::{
         account, account_balance, block, chain, component_balance, component_balance_default,
-        component_tvl, contract_code, contract_storage, contract_storage_default, extraction_state,
-        protocol_component, protocol_component_holds_contract, protocol_component_holds_token,
-        protocol_state, protocol_state_default, protocol_system, protocol_type, token, transaction,
+        component_tvl, contract_code, contract_storage, contract_storage_default, entry_point,
+        entry_point_calls_account, entry_point_tracing_data, extraction_state, protocol_component,
+        protocol_component_holds_contract, protocol_component_holds_entry_point,
+        protocol_component_holds_token, protocol_state, protocol_state_default, protocol_system,
+        protocol_type, token, traced_entry_point, transaction,
     },
     versioning::{StoredVersionedRow, VersionedRow},
     PostgresError, MAX_TS, MAX_VERSION_TS,
@@ -245,14 +247,13 @@ impl Transaction {
     ) -> Result<HashMap<TxHash, i64>, StorageError> {
         use super::schema::transaction::dsl::*;
 
-        let results = transaction
+        transaction
             .filter(hash.eq_any(hashes))
             .select((hash, id))
             .load::<(TxHash, i64)>(conn)
             .await
-            .map_err(PostgresError::from)?;
-
-        Ok(results.into_iter().collect())
+            .map_err(|e| StorageError::from(PostgresError::from(e)))
+            .map(|results| results.into_iter().collect())
     }
 
     // fetches the transaction id, hash, index and block timestamp for a given set of hashes
@@ -288,6 +289,20 @@ pub struct ProtocolSystem {
     pub name: String,
     pub inserted_ts: NaiveDateTime,
     pub modified_ts: NaiveDateTime,
+}
+
+impl ProtocolSystem {
+    pub async fn id_by_name(
+        name: &String,
+        conn: &mut AsyncPgConnection,
+    ) -> Result<i64, StorageError> {
+        protocol_system::table
+            .filter(protocol_system::name.eq(name))
+            .select(protocol_system::id)
+            .first::<i64>(conn)
+            .await
+            .map_err(|e| StorageError::from(PostgresError::from(e)))
+    }
 }
 
 #[derive(Insertable, Debug)]
@@ -1748,4 +1763,123 @@ impl ComponentTVL {
         }
         q
     }
+}
+
+#[derive(Debug, DbEnum, Clone, PartialEq)]
+#[ExistingTypePath = "crate::postgres::schema::sql_types::EntryPointTracingType"]
+pub enum EntryPointTracingType {
+    RpcTracer,
+}
+
+#[derive(Identifiable, Queryable, Selectable)]
+#[diesel(table_name = entry_point)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct EntryPoint {
+    pub id: i64,
+    pub target: Bytes,
+    pub signature: String,
+}
+
+impl EntryPoint {
+    pub(crate) async fn ids_by_target_and_signature(
+        pairs: &[(Bytes, String)],
+        conn: &mut AsyncPgConnection,
+    ) -> Result<HashMap<(Bytes, String), i64>, StorageError> {
+        use crate::postgres::schema::entry_point::dsl::*;
+
+        let entry_pairs: Vec<(Bytes, String)> = pairs
+            .iter()
+            .map(|(t, s)| (t.clone(), s.clone()))
+            .collect();
+
+        // This fetches a little more than strictly needed but it shouldn't be a crazy amount of
+        // data
+        // TODO: Optimize by filtering on the target AND signature
+        let existing_entries = entry_point
+            .select((id, target, signature))
+            .filter(target.eq_any(entry_pairs.iter().map(|(t, _)| t)))
+            .load::<(i64, Bytes, String)>(conn)
+            .await
+            .map_err(PostgresError::from)?;
+
+        Ok(existing_entries
+            .into_iter()
+            .filter(|(_, t, s)| entry_pairs.contains(&(t.clone(), s.clone())))
+            .map(|(ep_id, t, s)| ((t, s), ep_id))
+            .collect::<HashMap<_, _>>())
+    }
+}
+
+#[derive(Insertable, AsChangeset)]
+#[diesel(table_name = entry_point)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewEntryPoint {
+    pub target: Bytes,
+    pub signature: String,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = entry_point_tracing_data)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewEntryPointTracingData {
+    pub entry_point_id: i64,
+    pub tracing_type: EntryPointTracingType,
+    pub data: serde_json::Value,
+}
+
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = traced_entry_point)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct TracedEntryPoint {
+    #[allow(dead_code)]
+    entry_point_id: i64,
+    pub detection_block: i64,
+    pub detection_data: serde_json::Value,
+}
+
+#[derive(Insertable, AsChangeset)]
+#[diesel(table_name = traced_entry_point)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewTracedEntryPoint {
+    pub entry_point_id: i64,
+    pub detection_block: i64,
+    pub detection_data: serde_json::Value,
+}
+
+#[derive(Identifiable, Queryable, Associations, Selectable)]
+#[diesel(belongs_to(ProtocolComponent))]
+#[diesel(belongs_to(EntryPoint))]
+#[diesel(table_name = protocol_component_holds_entry_point)]
+#[diesel(primary_key(protocol_component_id, entry_point_id))]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct ProtocolComponentHoldsEntryPoint {
+    pub protocol_component_id: i64,
+    pub entry_point_id: i64,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = protocol_component_holds_entry_point)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewProtocolComponentHoldsEntryPoint {
+    pub protocol_component_id: i64,
+    pub entry_point_id: i64,
+}
+
+#[derive(Identifiable, Queryable, Associations, Selectable)]
+#[diesel(belongs_to(EntryPoint))]
+#[diesel(belongs_to(Account))]
+#[diesel(table_name = entry_point_calls_account)]
+#[diesel(primary_key(entry_point_id, account_id))]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct EntryPointCallsAccount {
+    pub entry_point_id: i64,
+    pub account_id: i64,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = entry_point_calls_account)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewEntryPointCallsAccount {
+    pub entry_point_id: i64,
+    pub account_id: i64,
 }
