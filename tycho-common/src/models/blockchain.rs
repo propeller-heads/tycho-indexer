@@ -8,7 +8,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
-use super::StoreKey;
+use super::{BlockHash, StoreKey};
 use crate::{
     models::{
         contract::{AccountBalance, AccountChangesWithTx, AccountDelta},
@@ -342,30 +342,87 @@ pub enum BlockTag {
     /// Block by number
     Number(u64),
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct EntryPoint {
+    /// The address of the contract to trace.
+    pub target: Address,
+    /// The signature of the function to trace.
+    pub signature: String,
+}
+
+impl EntryPoint {
+    pub fn new(target: Address, signature: String) -> Self {
+        Self { target, signature }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EntryPointWithData {
+    pub entry_point: EntryPoint,
+    pub data: Vec<EntryPointTracingData>,
+}
+
+impl EntryPointWithData {
+    pub fn new(entry_point: EntryPoint, data: Vec<EntryPointTracingData>) -> Self {
+        Self { entry_point, data }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 /// An entry point to trace. Different types of entry points tracing will be supported in the
 /// future. Like RPC debug tracing, symbolic execution, etc.
-pub enum EntryPoint {
+pub enum EntryPointTracingData {
     /// Uses RPC calls to retrieve the called addresses and retriggers
     RPCTracer(RPCTracerEntryPoint),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RPCTracerEntryPoint {
-    /// The address of the contract to trace.
-    pub target: Address,
-    // The args are a list of tuples, where the first element is the address of the caller, and the
-    // second element is the data of the call.
-    pub args: Vec<(Option<Address>, Bytes)>,
+    pub caller: Option<Address>,
+    pub data: Bytes,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct TracedEntryPoint {
+impl RPCTracerEntryPoint {
+    pub fn new(caller: Option<Address>, data: Bytes) -> Self {
+        Self { caller, data }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TracingResult {
     /// A set of (address, storage slot) pairs representing state that contain a called address.
     /// If any of these storage slots change, the execution path might change.
     pub retriggers: HashSet<(Address, StoreKey)>,
     /// A set of all addresses that were called during the trace.
     pub called_addresses: HashSet<Address>,
+}
+
+impl TracingResult {
+    pub fn new(
+        retriggers: HashSet<(Address, StoreKey)>,
+        called_addresses: HashSet<Address>,
+    ) -> Self {
+        Self { retriggers, called_addresses }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TracedEntryPoint {
+    pub entry_point: EntryPoint,
+    /// The block hash of the block that the entry point was traced on.
+    pub detection_block_hash: BlockHash,
+    /// The results of the tracing operation
+    pub tracing_result: TracingResult,
+}
+
+impl TracedEntryPoint {
+    pub fn new(
+        entry_point: EntryPoint,
+        detection_block_hash: BlockHash,
+        result: TracingResult,
+    ) -> Self {
+        Self { entry_point, detection_block_hash, tracing_result: result }
+    }
 }
 
 #[cfg(test)]
