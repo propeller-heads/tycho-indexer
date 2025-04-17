@@ -786,8 +786,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         returns (bytes memory)
     {
         if (data.length < 24) revert TychoRouter__InvalidDataLength();
-        _handleCallback(data);
-        return "";
+        bytes memory result = _handleCallback(data);
+        return result;
     }
 
     function _balanceOf(address token, address owner)
