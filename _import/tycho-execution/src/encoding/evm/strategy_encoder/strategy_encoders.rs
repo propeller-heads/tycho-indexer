@@ -2314,7 +2314,7 @@ mod tests {
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // group token in
                 "6982508145454ce325ddbe47a25d4ec3d2311933", // group token in
                 "00",                                       // zero2one
-                "04",                                       // transfer type (transfer to router)
+                "02",                                       // transfer type (transfer to router)
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 // First pool params
                 "0000000000000000000000000000000000000000", // intermediary token (ETH)

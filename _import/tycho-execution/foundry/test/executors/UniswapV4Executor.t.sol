@@ -114,7 +114,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
             USDE_ADDR,
             USDT_ADDR,
             true,
-            TokenTransfer.TransferType.NONE,
+            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL,
             ALICE,
             pools
         );
@@ -172,7 +172,7 @@ contract UniswapV4ExecutorTest is Test, Constants {
             USDE_ADDR,
             WBTC_ADDR,
             true,
-            TokenTransfer.TransferType.NONE,
+            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL,
             ALICE,
             pools
         );

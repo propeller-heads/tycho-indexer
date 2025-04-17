@@ -80,18 +80,6 @@ contract UniswapV4Executor is
             address receiver,
             UniswapV4Executor.UniswapV4Pool[] memory pools
         ) = _decodeData(data);
-
-        // TODO move this into callback when we implement callback transfer type support
-        _transfer(
-            tokenIn,
-            msg.sender,
-            // Receiver can never be the pool, since the pool expects funds in the router contract
-            // Thus, this call will only ever be used to transfer funds from the user into the router.
-            address(this),
-            amountIn,
-            transferType
-        );
-
         bytes memory swapData;
         if (pools.length == 1) {
             PoolKey memory key = PoolKey({
@@ -106,6 +94,8 @@ contract UniswapV4Executor is
                 key,
                 zeroForOne,
                 amountIn,
+                msg.sender,
+                transferType,
                 receiver,
                 bytes("")
             );
@@ -127,6 +117,8 @@ contract UniswapV4Executor is
                 currencyIn,
                 path,
                 amountIn,
+                msg.sender,
+                transferType,
                 receiver
             );
         }
@@ -240,6 +232,8 @@ contract UniswapV4Executor is
      * @param poolKey The key of the pool to swap in.
      * @param zeroForOne Whether the swap is from token0 to token1 (true) or vice versa (false).
      * @param amountIn The amount of tokens to swap in.
+     * @param sender The address of the sender.
+     * @param transferType The type of transfer in to use.
      * @param receiver The address of the receiver.
      * @param hookData Additional data for hook contracts.
      */
@@ -247,6 +241,8 @@ contract UniswapV4Executor is
         PoolKey memory poolKey,
         bool zeroForOne,
         uint128 amountIn,
+        address sender,
+        TransferType transferType,
         address receiver,
         bytes calldata hookData
     ) external returns (uint128) {
@@ -259,7 +255,7 @@ contract UniswapV4Executor is
         if (amount > amountIn) {
             revert UniswapV4Executor__V4TooMuchRequested(amountIn, amount);
         }
-        _settle(currencyIn, address(this), amount);
+        _settle(currencyIn, amount, sender, transferType);
 
         Currency currencyOut =
             zeroForOne ? poolKey.currency1 : poolKey.currency0;
@@ -272,12 +268,16 @@ contract UniswapV4Executor is
      * @param currencyIn The currency of the input token.
      * @param path The path to swap along.
      * @param amountIn The amount of tokens to swap in.
+     * @param sender The address of the sender.
+     * @param transferType The type of transfer in to use.
      * @param receiver The address of the receiver.
      */
     function swapExactInput(
         Currency currencyIn,
         PathKey[] calldata path,
         uint128 amountIn,
+        address sender,
+        TransferType transferType,
         address receiver
     ) external returns (uint128) {
         uint128 amountOut = 0;
@@ -308,7 +308,7 @@ contract UniswapV4Executor is
         if (amount > amountIn) {
             revert UniswapV4Executor__V4TooMuchRequested(amountIn, amount);
         }
-        _settle(currencyIn, address(this), amount);
+        _settle(currencyIn, amount, sender, transferType);
 
         _take(
             swapCurrencyIn, // at the end of the loop this is actually currency out
@@ -379,30 +379,33 @@ contract UniswapV4Executor is
      * @notice Pays and settles a currency to the pool manager.
      * @dev The implementing contract must ensure that the `payer` is a secure address.
      * @param currency The currency to settle.
-     * @param payer The address of the payer.
      * @param amount The amount to send.
+     * @param sender The address of the payer.
+     * @param transferType The type of transfer to use.
      * @dev Returns early if the amount is 0.
      */
-    function _settle(Currency currency, address payer, uint256 amount)
-        internal
-    {
+    function _settle(
+        Currency currency,
+        uint256 amount,
+        address sender,
+        TransferType transferType
+    ) internal {
         if (amount == 0) return;
-
         poolManager.sync(currency);
         if (currency.isAddressZero()) {
             // slither-disable-next-line unused-return
             poolManager.settle{value: amount}();
         } else {
-            _pay(currency, payer, amount);
+            _transfer(
+                Currency.unwrap(currency),
+                sender,
+                address(poolManager),
+                amount,
+                transferType
+            );
             // slither-disable-next-line unused-return
             poolManager.settle();
         }
-    }
-
-    function _pay(Currency token, address, uint256 amount) internal {
-        IERC20(Currency.unwrap(token)).safeTransfer(
-            address(poolManager), amount
-        );
     }
 
     /**
