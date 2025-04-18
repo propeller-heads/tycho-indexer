@@ -431,7 +431,7 @@ async fn main() {
                                             sell_token.symbol
                                         );
                                         return; // Exit the program after successful execution
-                                    },
+                                    }
                                     Err(e) => {
                                         eprintln!("\nFailed to execute transaction: {:?}\n", e);
                                         continue;
