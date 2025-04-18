@@ -67,7 +67,7 @@ struct Cli {
     sell_token: Option<String>,
     #[arg(short, long)]
     buy_token: Option<String>,
-    #[arg(short, long, default_value_t = 1.0)]
+    #[arg(short, long, default_value_t = 10.0)]
     sell_amount: f64,
     /// The tvl threshold to filter the graph by
     #[arg(short, long, default_value_t = 100.0)]
@@ -80,10 +80,10 @@ struct Cli {
 
 impl Cli {
     fn with_defaults(mut self) -> Self {
-        // By default, we swap WETH to USDC on whatever chain we choose
+        // By default, we swap a small amount of USDC to WETH on whatever chain we choose
 
-        if self.sell_token.is_none() {
-            self.sell_token = Some(match self.chain.as_str() {
+        if self.buy_token.is_none() {
+            self.buy_token = Some(match self.chain.as_str() {
                 "ethereum" => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(),
                 "base" => "0x4200000000000000000000000000000000000006".to_string(),
                 "unichain" => "0x4200000000000000000000000000000000000006".to_string(),
@@ -91,8 +91,8 @@ impl Cli {
             });
         }
 
-        if self.buy_token.is_none() {
-            self.buy_token = Some(match self.chain.as_str() {
+        if self.sell_token.is_none() {
+            self.sell_token = Some(match self.chain.as_str() {
                 "ethereum" => "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
                 "base" => "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913".to_string(),
                 "unichain" => "0x078d782b760474a361dda0af3839290b0ef57ad6".to_string(),
@@ -267,6 +267,9 @@ async fn main() {
                 .expect("Best pool not found")
                 .clone();
 
+            // Clone expected_amount to avoid ownership issues
+            let expected_amount_copy = expected_amount.clone();
+
             let tx = encode(
                 encoder.clone(),
                 component,
@@ -277,13 +280,57 @@ async fn main() {
                 expected_amount,
             );
 
+            // Print token balances before showing the swap options
+            if cli.swapper_pk != FAKE_PK {
+                match get_token_balance(
+                    &provider,
+                    Address::from_slice(&sell_token.address),
+                    wallet.address(),
+                )
+                .await
+                {
+                    Ok(balance) => {
+                        let formatted_balance = format_token_amount(&balance, &sell_token);
+                        println!("\nYour balance: {} {}", formatted_balance, sell_token.symbol);
+
+                        if balance < amount_in {
+                            let required = format_token_amount(&amount_in, &sell_token);
+                            println!("⚠️ Warning: Insufficient balance for swap. You have {} {} but need {} {}",
+                                formatted_balance, sell_token.symbol,
+                                required, sell_token.symbol);
+                        }
+                    }
+                    Err(e) => eprintln!("Failed to get token balance: {}", e),
+                }
+
+                // Also show buy token balance
+                match get_token_balance(
+                    &provider,
+                    Address::from_slice(&buy_token.address),
+                    wallet.address(),
+                )
+                .await
+                {
+                    Ok(balance) => {
+                        let formatted_balance = format_token_amount(&balance, &buy_token);
+                        println!(
+                            "Your {} balance: {} {}\n",
+                            buy_token.symbol, formatted_balance, buy_token.symbol
+                        );
+                    }
+                    Err(e) => eprintln!("Failed to get {} balance: {}", buy_token.symbol, e),
+                }
+            }
+
             if cli.swapper_pk == FAKE_PK {
-                println!("Signer private key was not provided. Skipping simulation/execution...");
-                continue
+                println!(
+                    "\nSigner private key was not provided. Skipping simulation/execution...\n"
+                );
+                continue;
             }
             println!("Would you like to simulate or execute this swap?");
             println!("Please be aware that the market might move while you make your decision, which might lead to a revert if you've set a min amount out or slippage.");
-            println!("Warning: slippage is set to 0.25% during execution by default.");
+            println!("Warning: slippage is set to 0.25% during execution by default.\n");
             let options = vec!["Simulate the swap", "Execute the swap", "Skip this swap"];
             let selection = Select::with_theme(&ColorfulTheme::default())
                 .with_prompt("What would you like to do?")
@@ -300,7 +347,7 @@ async fn main() {
 
             match choice {
                 "simulate" => {
-                    println!("Simulating by performing an approval (for permit2) and a swap transaction...");
+                    println!("\nSimulating by performing an approval (for permit2) and a swap transaction...");
 
                     let (approval_request, swap_request) = get_tx_requests(
                         provider.clone(),
@@ -326,7 +373,7 @@ async fn main() {
                     match provider.simulate(&payload).await {
                         Ok(output) => {
                             for block in output.iter() {
-                                println!("Simulated Block {}:", block.inner.header.number);
+                                println!("\nSimulated Block {}:", block.inner.header.number);
                                 for (j, transaction) in block.calls.iter().enumerate() {
                                     println!(
                                         "  Transaction {}: Status: {:?}, Gas Used: {}",
@@ -336,11 +383,13 @@ async fn main() {
                                     );
                                 }
                             }
+                            println!(); // Add empty line after simulation results
+                            continue;
                         }
                         Err(e) => {
-                            eprintln!("Simulation failed: {:?}", e);
+                            eprintln!("\nSimulation failed: {:?}", e);
                             println!("Your RPC provider does not support transaction simulation.");
-                            println!("Do you want to proceed with execution instead?");
+                            println!("Do you want to proceed with execution instead?\n");
                             let yes_no_options = vec!["Yes", "No"];
                             let yes_no_selection = Select::with_theme(&ColorfulTheme::default())
                                 .with_prompt("Do you want to proceed with execution instead?")
@@ -360,20 +409,18 @@ async fn main() {
                                 )
                                 .await
                                 {
-                                    Ok(_) => return,
+                                    Ok(_) => continue,
                                     Err(e) => {
-                                        eprintln!("Failed to execute transaction: {:?}", e);
+                                        eprintln!("\nFailed to execute transaction: {:?}\n", e);
                                         continue;
                                     }
                                 }
                             } else {
-                                println!("Skipping this swap...");
+                                println!("\nSkipping this swap...\n");
                                 continue;
                             }
                         }
                     }
-                    // println!("Full simulation logs: {:?}", output);
-                    return;
                 }
                 "execute" => {
                     match execute_swap_transaction(
@@ -386,19 +433,41 @@ async fn main() {
                     )
                     .await
                     {
-                        Ok(_) => return,
+                        Ok(_) => {
+                            println!("\n✅ Swap executed successfully! Exiting the session...\n");
+
+                            // Calculate the correct price ratio
+                            let (forward_price, _reverse_price) = format_price_ratios(
+                                &amount_in,
+                                &expected_amount_copy,
+                                &sell_token,
+                                &buy_token,
+                            );
+
+                            println!(
+                                "Summary: Swapped {} {} → {} {} at a price of {:.6} {} per {}",
+                                format_token_amount(&amount_in, &sell_token),
+                                sell_token.symbol,
+                                format_token_amount(&expected_amount_copy, &buy_token),
+                                buy_token.symbol,
+                                forward_price,
+                                buy_token.symbol,
+                                sell_token.symbol
+                            );
+                            return; // Exit the program after successful execution
+                        }
                         Err(e) => {
-                            eprintln!("Failed to execute transaction: {:?}", e);
+                            eprintln!("\nFailed to execute transaction: {:?}\n", e);
                             continue;
                         }
                     }
                 }
                 "skip" => {
-                    println!("Skipping this swap...");
+                    println!("\nSkipping this swap...\n");
                     continue;
                 }
                 _ => {
-                    println!("Invalid input. Please choose 'simulate', 'execute' or 'skip'.");
+                    println!("\nInvalid input. Please choose 'simulate', 'execute' or 'skip'.\n");
                     continue;
                 }
             }
@@ -414,7 +483,10 @@ fn get_best_swap(
     buy_token: Token,
     amounts_out: &mut HashMap<String, BigUint>,
 ) -> Option<(String, BigUint)> {
-    println!("==================== Received block {:?} ====================", message.block_number);
+    println!(
+        "\n==================== Received block {:?} ====================",
+        message.block_number
+    );
     for (id, comp) in message.new_pairs.iter() {
         pairs
             .entry(id.clone())
@@ -450,7 +522,7 @@ fn get_best_swap(
         .iter()
         .max_by_key(|(_, value)| value.to_owned())
     {
-        println!("The best swap (out of {} possible pools) is:", amounts_out.len());
+        println!("\nThe best swap (out of {} possible pools) is:", amounts_out.len());
         println!(
             "Protocol: {:?}",
             pairs
@@ -479,7 +551,7 @@ fn get_best_swap(
         );
         Some((key.to_string(), amount_out.clone()))
     } else {
-        println!("There aren't pools with the tokens we are looking for");
+        println!("\nThere aren't pools with the tokens we are looking for");
         None
     }
 }
@@ -617,6 +689,38 @@ fn format_price_ratios(
     }
 }
 
+async fn get_token_balance(
+    provider: &FillProvider<
+        JoinFill<Identity, WalletFiller<EthereumWallet>>,
+        ReqwestProvider,
+        Http<Client>,
+        Ethereum,
+    >,
+    token_address: Address,
+    wallet_address: Address,
+) -> Result<BigUint, Box<dyn std::error::Error>> {
+    let balance_of_signature = "balanceOf(address)";
+    let args = (wallet_address,);
+    let data = encode_input(balance_of_signature, args.abi_encode());
+
+    let result = provider
+        .call(&TransactionRequest {
+            to: Some(TxKind::Call(token_address)),
+            input: TransactionInput { input: Some(AlloyBytes::from(data)), data: None },
+            ..Default::default()
+        })
+        .await?;
+
+    let balance = U256::from_be_bytes(
+        result
+            .to_vec()
+            .try_into()
+            .unwrap_or([0u8; 32]),
+    );
+    // Convert the U256 to BigUint
+    Ok(num_bigint::BigUint::from_bytes_be(&balance.to_be_bytes::<32>()))
+}
+
 async fn execute_swap_transaction(
     provider: FillProvider<
         JoinFill<Identity, WalletFiller<EthereumWallet>>,
@@ -630,7 +734,22 @@ async fn execute_swap_transaction(
     tx: Transaction,
     chain_id: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Executing by performing an approval (for permit2) and a swap transaction...");
+    // Check token balance first
+    let token_contract = Address::from_slice(sell_token_address);
+    let token_balance = get_token_balance(&provider, token_contract, wallet_address).await?;
+
+    // Get a more human-readable representation of the balance check
+    let decimal_balance = token_balance.to_f64().unwrap_or(0.0);
+    let decimal_required = amount_in.to_f64().unwrap_or(0.0);
+
+    if token_balance < *amount_in {
+        return Err(format!(
+            "\nInsufficient token balance. You have {} tokens but need {} tokens (raw values: have {}, need {})\n",
+            decimal_balance, decimal_required, token_balance, amount_in
+        ).into());
+    }
+
+    println!("\nExecuting by performing an approval (for permit2) and a swap transaction...");
     let (approval_request, swap_request) = get_tx_requests(
         provider.clone(),
         biguint_to_u256(amount_in),
@@ -647,7 +766,7 @@ async fn execute_swap_transaction(
 
     let approval_result = approval_receipt.get_receipt().await?;
     println!(
-        "Approval transaction sent with hash: {:?} and status: {:?}",
+        "\nApproval transaction sent with hash: {:?} and status: {:?}",
         approval_result.transaction_hash,
         approval_result.status()
     );
@@ -658,7 +777,7 @@ async fn execute_swap_transaction(
 
     let swap_result = swap_receipt.get_receipt().await?;
     println!(
-        "Swap transaction sent with hash: {:?} and status: {:?}",
+        "\nSwap transaction sent with hash: {:?} and status: {:?}\n",
         swap_result.transaction_hash,
         swap_result.status()
     );
