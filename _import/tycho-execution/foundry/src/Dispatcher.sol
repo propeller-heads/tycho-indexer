@@ -62,7 +62,7 @@ contract Dispatcher {
             revert Dispatcher__UnapprovedExecutor();
         }
 
-        // slither-disable-next-line controlled-delegatecall,low-level-calls
+        // slither-disable-next-line controlled-delegatecall,low-level-calls,calls-loop
         (bool success, bytes memory result) = executor.delegatecall(
             abi.encodeWithSelector(IExecutor.swap.selector, amount, data)
         );
