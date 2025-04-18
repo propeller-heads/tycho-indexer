@@ -287,7 +287,7 @@ async fn main() {
                         let formatted_balance = format_token_amount(&balance, &sell_token);
                         println!("\nYour balance: {} {}", formatted_balance, sell_token.symbol);
                         
-                        if &balance < &amount_in {
+                        if balance < amount_in {
                             let required = format_token_amount(&amount_in, &sell_token);
                             println!("⚠️ Warning: Insufficient balance for swap. You have {} {} but need {} {}", 
                                 formatted_balance, sell_token.symbol, 
@@ -710,7 +710,7 @@ async fn execute_swap_transaction(
     let decimal_balance = token_balance.to_f64().unwrap_or(0.0);
     let decimal_required = amount_in.to_f64().unwrap_or(0.0);
     
-    if &token_balance < amount_in {
+    if token_balance < *amount_in {
         return Err(format!(
             "\nInsufficient token balance. You have {} tokens but need {} tokens (raw values: have {}, need {})\n", 
             decimal_balance, decimal_required, token_balance, amount_in
