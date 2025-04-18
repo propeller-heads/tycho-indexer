@@ -1,3 +1,10 @@
+## [0.97.0](https://github.com/propeller-heads/tycho-simulation/compare/0.96.0...0.97.0) (2025-04-18)
+
+
+### Features
+
+* update tycho client to 0.66.4 ([25178ea](https://github.com/propeller-heads/tycho-simulation/commit/25178ea4a6e294a42483a2113a6a287cdb758604))
+
 ## [0.96.0](https://github.com/propeller-heads/tycho-simulation/compare/0.95.0...0.96.0) (2025-04-18)
 
 
