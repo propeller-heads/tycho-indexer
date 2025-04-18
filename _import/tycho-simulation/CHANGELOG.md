@@ -1,3 +1,10 @@
+## [0.98.1](https://github.com/propeller-heads/tycho-simulation/compare/0.98.0...0.98.1) (2025-04-18)
+
+
+### Bug Fixes
+
+* Quickstart - only give success msg if tx succeeded ([7d627ce](https://github.com/propeller-heads/tycho-simulation/commit/7d627ce2dead888e5933551530e8c0ba7a68a521))
+
 ## [0.98.0](https://github.com/propeller-heads/tycho-simulation/compare/0.97.0...0.98.0) (2025-04-18)
 
 
