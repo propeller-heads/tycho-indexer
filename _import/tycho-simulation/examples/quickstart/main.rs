@@ -282,33 +282,50 @@ async fn main() {
 
             // Print token balances before showing the swap options
             if cli.swapper_pk != FAKE_PK {
-                match get_token_balance(&provider, Address::from_slice(&sell_token.address), wallet.address()).await {
+                match get_token_balance(
+                    &provider,
+                    Address::from_slice(&sell_token.address),
+                    wallet.address(),
+                )
+                .await
+                {
                     Ok(balance) => {
                         let formatted_balance = format_token_amount(&balance, &sell_token);
                         println!("\nYour balance: {} {}", formatted_balance, sell_token.symbol);
-                        
+
                         if balance < amount_in {
                             let required = format_token_amount(&amount_in, &sell_token);
-                            println!("⚠️ Warning: Insufficient balance for swap. You have {} {} but need {} {}", 
-                                formatted_balance, sell_token.symbol, 
+                            println!("⚠️ Warning: Insufficient balance for swap. You have {} {} but need {} {}",
+                                formatted_balance, sell_token.symbol,
                                 required, sell_token.symbol);
                         }
-                    },
-                    Err(e) => eprintln!("Failed to get token balance: {}", e)
+                    }
+                    Err(e) => eprintln!("Failed to get token balance: {}", e),
                 }
-                
+
                 // Also show buy token balance
-                match get_token_balance(&provider, Address::from_slice(&buy_token.address), wallet.address()).await {
+                match get_token_balance(
+                    &provider,
+                    Address::from_slice(&buy_token.address),
+                    wallet.address(),
+                )
+                .await
+                {
                     Ok(balance) => {
                         let formatted_balance = format_token_amount(&balance, &buy_token);
-                        println!("Your {} balance: {} {}\n", buy_token.symbol, formatted_balance, buy_token.symbol);
-                    },
-                    Err(e) => eprintln!("Failed to get {} balance: {}", buy_token.symbol, e)
+                        println!(
+                            "Your {} balance: {} {}\n",
+                            buy_token.symbol, formatted_balance, buy_token.symbol
+                        );
+                    }
+                    Err(e) => eprintln!("Failed to get {} balance: {}", buy_token.symbol, e),
                 }
             }
 
             if cli.swapper_pk == FAKE_PK {
-                println!("\nSigner private key was not provided. Skipping simulation/execution...\n");
+                println!(
+                    "\nSigner private key was not provided. Skipping simulation/execution...\n"
+                );
                 continue;
             }
             println!("Would you like to simulate or execute this swap?");
@@ -418,17 +435,27 @@ async fn main() {
                     {
                         Ok(_) => {
                             println!("\n✅ Swap executed successfully! Exiting the session...\n");
-                            
+
                             // Calculate the correct price ratio
-                            let (forward_price, _reverse_price) = 
-                                format_price_ratios(&amount_in, &expected_amount_copy, &sell_token, &buy_token);
-                                
-                            println!("Summary: Swapped {} {} → {} {} at a price of {:.6} {} per {}", 
-                                format_token_amount(&amount_in, &sell_token), sell_token.symbol,
-                                format_token_amount(&expected_amount_copy, &buy_token), buy_token.symbol,
-                                forward_price, buy_token.symbol, sell_token.symbol);
-                            return;  // Exit the program after successful execution
-                        },
+                            let (forward_price, _reverse_price) = format_price_ratios(
+                                &amount_in,
+                                &expected_amount_copy,
+                                &sell_token,
+                                &buy_token,
+                            );
+
+                            println!(
+                                "Summary: Swapped {} {} → {} {} at a price of {:.6} {} per {}",
+                                format_token_amount(&amount_in, &sell_token),
+                                sell_token.symbol,
+                                format_token_amount(&expected_amount_copy, &buy_token),
+                                buy_token.symbol,
+                                forward_price,
+                                buy_token.symbol,
+                                sell_token.symbol
+                            );
+                            return; // Exit the program after successful execution
+                        }
                         Err(e) => {
                             eprintln!("\nFailed to execute transaction: {:?}\n", e);
                             continue;
@@ -456,7 +483,10 @@ fn get_best_swap(
     buy_token: Token,
     amounts_out: &mut HashMap<String, BigUint>,
 ) -> Option<(String, BigUint)> {
-    println!("\n==================== Received block {:?} ====================", message.block_number);
+    println!(
+        "\n==================== Received block {:?} ====================",
+        message.block_number
+    );
     for (id, comp) in message.new_pairs.iter() {
         pairs
             .entry(id.clone())
@@ -672,19 +702,21 @@ async fn get_token_balance(
     let balance_of_signature = "balanceOf(address)";
     let args = (wallet_address,);
     let data = encode_input(balance_of_signature, args.abi_encode());
-    
-    let result = provider.call(
-        &TransactionRequest {
+
+    let result = provider
+        .call(&TransactionRequest {
             to: Some(TxKind::Call(token_address)),
-            input: TransactionInput { 
-                input: Some(AlloyBytes::from(data)), 
-                data: None 
-            },
+            input: TransactionInput { input: Some(AlloyBytes::from(data)), data: None },
             ..Default::default()
-        }
-    ).await?;
-    
-    let balance = U256::from_be_bytes(result.to_vec().try_into().unwrap_or([0u8; 32]));
+        })
+        .await?;
+
+    let balance = U256::from_be_bytes(
+        result
+            .to_vec()
+            .try_into()
+            .unwrap_or([0u8; 32]),
+    );
     // Convert the U256 to BigUint
     Ok(num_bigint::BigUint::from_bytes_be(&balance.to_be_bytes::<32>()))
 }
@@ -705,14 +737,14 @@ async fn execute_swap_transaction(
     // Check token balance first
     let token_contract = Address::from_slice(sell_token_address);
     let token_balance = get_token_balance(&provider, token_contract, wallet_address).await?;
-    
+
     // Get a more human-readable representation of the balance check
     let decimal_balance = token_balance.to_f64().unwrap_or(0.0);
     let decimal_required = amount_in.to_f64().unwrap_or(0.0);
-    
+
     if token_balance < *amount_in {
         return Err(format!(
-            "\nInsufficient token balance. You have {} tokens but need {} tokens (raw values: have {}, need {})\n", 
+            "\nInsufficient token balance. You have {} tokens but need {} tokens (raw values: have {}, need {})\n",
             decimal_balance, decimal_required, token_balance, amount_in
         ).into());
     }
