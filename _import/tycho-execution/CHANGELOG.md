@@ -1,3 +1,15 @@
+## [0.81.0](https://github.com/propeller-heads/tycho-execution/compare/0.80.0...0.81.0) (2025-04-18)
+
+
+### Features
+
+* update tycho-common version to 0.66.4 ([134c73e](https://github.com/propeller-heads/tycho-execution/commit/134c73e82be74fb5590e19c3d9b27304043bbbd8))
+
+
+### Bug Fixes
+
+* add slither disable after slither actions update ([20573cb](https://github.com/propeller-heads/tycho-execution/commit/20573cbaf320ba99aa721e6e76a69447ab3f9694))
+
 ## [0.80.0](https://github.com/propeller-heads/tycho-execution/compare/0.79.0...0.80.0) (2025-04-14)
 
 
