@@ -1,3 +1,10 @@
+## [0.98.0](https://github.com/propeller-heads/tycho-simulation/compare/0.97.0...0.98.0) (2025-04-18)
+
+
+### Features
+
+* check balance, swap direction ([8176d3f](https://github.com/propeller-heads/tycho-simulation/commit/8176d3f4d46d456c4d858bb2eb853063b39719fb))
+
 ## [0.97.0](https://github.com/propeller-heads/tycho-simulation/compare/0.96.0...0.97.0) (2025-04-18)
 
 
