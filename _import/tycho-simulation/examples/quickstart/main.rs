@@ -63,10 +63,10 @@ const FAKE_PK: &str = "0x123456789abcdef123456789abcdef123456789abcdef123456789a
 
 #[derive(Parser)]
 struct Cli {
-    #[arg(short, long, default_value = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")]
-    sell_token: String,
-    #[arg(short, long, default_value = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")]
-    buy_token: String,
+    #[arg(short, long)]
+    sell_token: Option<String>,
+    #[arg(short, long)]
+    buy_token: Option<String>,
     #[arg(short, long, default_value_t = 1.0)]
     sell_amount: f64,
     /// The tvl threshold to filter the graph by
@@ -78,6 +78,32 @@ struct Cli {
     chain: String,
 }
 
+impl Cli {
+    fn with_defaults(mut self) -> Self {
+        // By default, we swap WETH to USDC on whatever chain we choose
+
+        if self.sell_token.is_none() {
+            self.sell_token = Some(match self.chain.as_str() {
+                "ethereum" => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(),
+                "base" => "0x4200000000000000000000000000000000000006".to_string(),
+                "unichain" => "0x4200000000000000000000000000000000000006".to_string(),
+                _ => panic!("Execution does not yet support chain {}", self.chain),
+            });
+        }
+
+        if self.buy_token.is_none() {
+            self.buy_token = Some(match self.chain.as_str() {
+                "ethereum" => "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
+                "base" => "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913".to_string(),
+                "unichain" => "0x078d782b760474a361dda0af3839290b0ef57ad6".to_string(),
+                _ => panic!("Execution does not yet support chain {}", self.chain),
+            });
+        }
+
+        self
+    }
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -85,7 +111,8 @@ async fn main() {
         .with_target(false)
         .init();
 
-    let cli = Cli::parse();
+    let cli = Cli::parse().with_defaults();
+
     let chain =
         Chain::from_str(&cli.chain).unwrap_or_else(|_| panic!("Unknown chain {}", cli.chain));
 
@@ -104,9 +131,16 @@ async fn main() {
             .await;
     println!("Tokens loaded: {}", all_tokens.len());
 
-    let sell_token_address =
-        Bytes::from_str(&cli.sell_token).expect("Invalid address for sell token");
-    let buy_token_address = Bytes::from_str(&cli.buy_token).expect("Invalid address for buy token");
+    let sell_token_address = Bytes::from_str(
+        &cli.sell_token
+            .expect("Sell token not provided"),
+    )
+    .expect("Invalid address for sell token");
+    let buy_token_address = Bytes::from_str(
+        &cli.buy_token
+            .expect("NBuy token not provided"),
+    )
+    .expect("Invalid address for buy token");
     let sell_token = all_tokens
         .get(&sell_token_address)
         .expect("Sell token not found")
