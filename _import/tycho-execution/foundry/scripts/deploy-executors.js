@@ -5,25 +5,28 @@ const hre = require("hardhat");
 // Comment out the executors you don't want to deploy
 const executors_to_deploy = {
     "ethereum": [
-        // USV2 - Args: Factory, Pool Init Code Hash
+        // USV2 - Args: Factory, Pool Init Code Hash, Fee BPS
         {
             exchange: "UniswapV2Executor", args: [
                 "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
-                "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f"
+                "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f",
+                30
             ]
         },
-        // SUSHISWAP - Args: Factory, Pool Init Code Hash
+        // SUSHISWAP - Args: Factory, Pool Init Code Hash, Fee BPS, Fee BPS
         {
             exchange: "UniswapV2Executor", args: [
                 "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac",
-                "0xe18a34eb0e04b04f7a0ac29a6e80748dca96319b42c54d679cb821dca90c6303"
+                "0xe18a34eb0e04b04f7a0ac29a6e80748dca96319b42c54d679cb821dca90c6303",
+                30
             ]
         },
-        // PANCAKESWAP V2 - Args: Factory, Pool Init Code Hash
+        // PANCAKESWAP V2 - Args: Factory, Pool Init Code Hash, Fee BPS
         {
             exchange: "UniswapV2Executor", args: [
                 "0x1097053Fd2ea711dad45caCcc45EfF7548fCB362",
-                "0x57224589c67f3f30a6b0d7a1b54cf3153ab84563bc609ef41dfb34f8b2974d2d"
+                "0x57224589c67f3f30a6b0d7a1b54cf3153ab84563bc609ef41dfb34f8b2974d2d",
+                25
             ]
         },
         // USV3 -Args: Factory, Pool Init Code Hash
@@ -57,25 +60,28 @@ const executors_to_deploy = {
         }
     ],
     "base": [
-        // Args: Factory, Pool Init Code Hash
+        // Args: Factory, Pool Init Code Hash, Fee BPS
         {
             exchange: "UniswapV2Executor", args: [
                 "0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6",
-                "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f"
+                "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f",
+                30
             ]
         },
-        // SUSHISWAP V2 - Args: Factory, Pool Init Code Hash
+        // SUSHISWAP V2 - Args: Factory, Pool Init Code Hash, Fee BPS
         {
             exchange: "UniswapV2Executor", args: [
                 "0x71524B4f93c58fcbF659783284E38825f0622859",
-                "0xe18a34eb0e04b04f7a0ac29a6e80748dca96319b42c54d679cb821dca90c6303"
+                "0xe18a34eb0e04b04f7a0ac29a6e80748dca96319b42c54d679cb821dca90c6303",
+                30
             ]
         },
-        // PANCAKESWAP V2 - Args: Factory, Pool Init Code Hash
+        // PANCAKESWAP V2 - Args: Factory, Pool Init Code Hash, Fee BPS
         {
             exchange: "UniswapV2Executor", args: [
                 "0x02a84c1b3BBD7401a5f7fa98a384EBC70bB5749E",
-                "0x57224589c67f3f30a6b0d7a1b54cf3153ab84563bc609ef41dfb34f8b2974d2d"
+                "0x57224589c67f3f30a6b0d7a1b54cf3153ab84563bc609ef41dfb34f8b2974d2d",
+                25
             ]
         },
         // USV3 - Args: Factory, Pool Init Code Hash
@@ -97,11 +103,12 @@ const executors_to_deploy = {
         {exchange: "BalancerV2Executor", args: []},
     ],
     "unichain": [
-        // Args: Factory, Pool Init Code Hash
+        // Args: Factory, Pool Init Code Hash, Fee BPS
         {
             exchange: "UniswapV2Executor", args: [
                 "0x1f98400000000000000000000000000000000002",
-                "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f"
+                "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f",
+                30
             ]
         },
         // USV3 - Args: Factory, Pool Init Code Hash

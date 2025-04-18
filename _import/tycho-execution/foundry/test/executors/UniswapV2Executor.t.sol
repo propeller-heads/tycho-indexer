@@ -8,8 +8,8 @@ import {Constants} from "../Constants.sol";
 import {Permit2TestHelper} from "../Permit2TestHelper.sol";
 
 contract UniswapV2ExecutorExposed is UniswapV2Executor {
-    constructor(address _factory, bytes32 _initCode, address _permit2)
-        UniswapV2Executor(_factory, _initCode, _permit2)
+    constructor(address _factory, bytes32 _initCode, address _permit2, uint256 _feeBps)
+        UniswapV2Executor(_factory, _initCode, _permit2, _feeBps)
     {}
 
     function decodeParams(bytes calldata data)
@@ -63,17 +63,19 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
         uint256 forkBlock = 17323404;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         uniswapV2Exposed = new UniswapV2ExecutorExposed(
-            USV2_FACTORY_ETHEREUM, USV2_POOL_CODE_INIT_HASH, PERMIT2_ADDRESS
+            USV2_FACTORY_ETHEREUM, USV2_POOL_CODE_INIT_HASH, PERMIT2_ADDRESS, 30
         );
         sushiswapV2Exposed = new UniswapV2ExecutorExposed(
             SUSHISWAPV2_FACTORY_ETHEREUM,
             SUSHIV2_POOL_CODE_INIT_HASH,
-            PERMIT2_ADDRESS
+            PERMIT2_ADDRESS,
+        30
         );
         pancakeswapV2Exposed = new UniswapV2ExecutorExposed(
             PANCAKESWAPV2_FACTORY_ETHEREUM,
             PANCAKEV2_POOL_CODE_INIT_HASH,
-            PERMIT2_ADDRESS
+            PERMIT2_ADDRESS,
+     25
         );
         permit2 = IAllowanceTransfer(PERMIT2_ADDRESS);
     }
