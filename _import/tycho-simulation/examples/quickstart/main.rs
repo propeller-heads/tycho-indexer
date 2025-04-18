@@ -409,7 +409,29 @@ async fn main() {
                                 )
                                 .await
                                 {
-                                    Ok(_) => continue,
+                                    Ok(_) => {
+                                        println!("\n✅ Swap executed successfully! Exiting the session...\n");
+
+                                        // Calculate the correct price ratio
+                                        let (forward_price, _reverse_price) = format_price_ratios(
+                                            &amount_in,
+                                            &expected_amount_copy,
+                                            &sell_token,
+                                            &buy_token,
+                                        );
+
+                                        println!(
+                                            "Summary: Swapped {} {} → {} {} at a price of {:.6} {} per {}",
+                                            format_token_amount(&amount_in, &sell_token),
+                                            sell_token.symbol,
+                                            format_token_amount(&expected_amount_copy, &buy_token),
+                                            buy_token.symbol,
+                                            forward_price,
+                                            buy_token.symbol,
+                                            sell_token.symbol
+                                        );
+                                        return; // Exit the program after successful execution
+                                    },
                                     Err(e) => {
                                         eprintln!("\nFailed to execute transaction: {:?}\n", e);
                                         continue;
@@ -781,6 +803,14 @@ async fn execute_swap_transaction(
         swap_result.transaction_hash,
         swap_result.status()
     );
+
+    if !swap_result.status() {
+        return Err(format!(
+            "Swap transaction with hash {:?} failed.",
+            swap_result.transaction_hash
+        )
+        .into());
+    }
 
     Ok(())
 }
