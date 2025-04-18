@@ -1,3 +1,10 @@
+## [0.96.0](https://github.com/propeller-heads/tycho-simulation/compare/0.95.0...0.96.0) (2025-04-18)
+
+
+### Features
+
+* default tokens per chain in quickstart ([8e9bdaf](https://github.com/propeller-heads/tycho-simulation/commit/8e9bdaf9466cd434f13fc66906f140beca77b0bc))
+
 ## [0.95.0](https://github.com/propeller-heads/tycho-simulation/compare/0.94.0...0.95.0) (2025-04-15)
 
 
