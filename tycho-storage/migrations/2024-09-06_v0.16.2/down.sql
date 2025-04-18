@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS component_balance_old(
     inserted_ts timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     valid_from timestamptz NOT NULL,
     valid_to timestamptz NOT NULL
-)
+);
 CREATE TABLE IF NOT EXISTS contract_storage_old(
     slot bytea NOT NULL,
     value bytea NULL,
@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS contract_storage_old(
     valid_to timestamptz NOT NULL,
     inserted_ts timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     modified_ts timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
-)
+);
 CREATE TABLE IF NOT EXISTS protocol_state_old(
     attribute_name varchar NOT NULL,
     attribute_value bytea NOT NULL,
@@ -31,4 +31,4 @@ CREATE TABLE IF NOT EXISTS protocol_state_old(
     inserted_ts timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     modified_ts timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     protocol_component_id int8 NOT NULL
-)
+);

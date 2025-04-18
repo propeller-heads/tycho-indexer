@@ -426,6 +426,10 @@ impl PartitionedVersionedRow for NewComponentBalance {
         self.valid_to
     }
 
+    fn get_valid_from(&self) -> NaiveDateTime {
+        self.valid_from
+    }
+
     fn archive(&mut self, next_version: &mut Self) {
         next_version.previous_value = self.new_balance.clone();
         self.valid_to = next_version.valid_from;
@@ -451,13 +455,17 @@ impl PartitionedVersionedRow for NewComponentBalance {
 
         Ok(component_balance::table
             .select(ComponentBalance::as_select())
-            .into_boxed()
             .filter(
                 component_balance::protocol_component_id
                     .eq_any(&component_ids)
-                    .and(component_balance::token_id.eq_any(&token_ids))
-                    .and(component_balance::valid_to.eq(MAX_TS)),
+                    .and(component_balance::token_id.eq_any(&token_ids)),
             )
+            .distinct_on((component_balance::protocol_component_id, component_balance::token_id))
+            .order_by((
+                component_balance::protocol_component_id,
+                component_balance::token_id,
+                component_balance::valid_to.desc(),
+            ))
             .get_results(conn)
             .await
             .map_err(PostgresError::from)?
@@ -1056,6 +1064,10 @@ impl PartitionedVersionedRow for NewProtocolState {
         self.valid_to
     }
 
+    fn get_valid_from(&self) -> NaiveDateTime {
+        self.valid_from
+    }
+
     fn archive(&mut self, next_version: &mut Self) {
         next_version.previous_value = Some(self.attribute_value.clone());
         self.valid_to = next_version.valid_from;
@@ -1079,13 +1091,17 @@ impl PartitionedVersionedRow for NewProtocolState {
             .collect::<HashSet<_>>();
         Ok(protocol_state::table
             .select(ProtocolState::as_select())
-            .into_boxed()
             .filter(
                 protocol_state::protocol_component_id
                     .eq_any(&pc_id)
-                    .and(protocol_state::attribute_name.eq_any(&attr_name))
-                    .and(protocol_state::valid_to.eq(MAX_TS)),
+                    .and(protocol_state::attribute_name.eq_any(&attr_name)),
             )
+            .distinct_on((protocol_state::protocol_component_id, protocol_state::attribute_name))
+            .order_by((
+                protocol_state::protocol_component_id,
+                protocol_state::attribute_name,
+                protocol_state::valid_to.desc(),
+            ))
             .get_results(conn)
             .await
             .map_err(PostgresError::from)?
@@ -1325,6 +1341,10 @@ impl StoredVersionedRow for AccountBalance {
         (self.account_id, self.token_id)
     }
 
+    fn get_valid_from(&self) -> NaiveDateTime {
+        self.valid_from
+    }
+
     async fn latest_versions_by_ids<I: IntoIterator<Item = Self::EntityId> + Send + Sync>(
         ids: I,
         conn: &mut AsyncPgConnection,
@@ -1357,7 +1377,7 @@ impl StoredVersionedRow for AccountBalance {
     }
 }
 
-#[derive(Insertable, Debug)]
+#[derive(Insertable, Debug, PartialEq, Clone)]
 #[diesel(table_name = account_balance)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewAccountBalance {
@@ -1430,6 +1450,10 @@ impl StoredVersionedRow for ContractCode {
 
     fn get_entity_id(&self) -> Self::EntityId {
         self.account_id
+    }
+
+    fn get_valid_from(&self) -> NaiveDateTime {
+        self.valid_from
     }
 
     async fn latest_versions_by_ids<I: IntoIterator<Item = Self::EntityId> + Send + Sync>(
@@ -1593,6 +1617,10 @@ impl PartitionedVersionedRow for NewSlot {
         self.valid_to
     }
 
+    fn get_valid_from(&self) -> NaiveDateTime {
+        self.valid_from
+    }
+
     fn archive(&mut self, next_version: &mut Self) {
         next_version
             .previous_value
@@ -1620,13 +1648,17 @@ impl PartitionedVersionedRow for NewSlot {
 
         Ok(contract_storage::table
             .select(ContractStorage::as_select())
-            .into_boxed()
             .filter(
                 contract_storage::account_id
                     .eq_any(&accounts)
-                    .and(contract_storage::slot.eq_any(&slots))
-                    .and(contract_storage::valid_to.eq(MAX_TS)),
+                    .and(contract_storage::slot.eq_any(&slots)),
             )
+            .distinct_on((contract_storage::account_id, contract_storage::slot))
+            .order_by((
+                contract_storage::account_id,
+                contract_storage::slot,
+                contract_storage::valid_to.desc(),
+            ))
             .get_results(conn)
             .await
             .map_err(PostgresError::from)?

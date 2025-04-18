@@ -270,10 +270,7 @@ mod test {
     use tycho_common::models::Chain;
 
     use super::*;
-    use crate::postgres::{
-        db_fixtures,
-        db_fixtures::{yesterday_midnight, yesterday_one_am},
-    };
+    use crate::postgres::db_fixtures::{self, yesterday_half_past_midnight, yesterday_midnight};
 
     type EVMGateway = PostgresGateway;
 
@@ -317,7 +314,7 @@ mod test {
             Chain::Ethereum,
             Bytes::from(hash),
             Bytes::from("0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6"),
-            yesterday_one_am(),
+            yesterday_half_past_midnight(),
         )
     }
 
