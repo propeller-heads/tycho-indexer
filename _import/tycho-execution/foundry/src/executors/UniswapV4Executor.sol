@@ -213,6 +213,7 @@ contract UniswapV4Executor is
         if (executor == address(0)) {
             executor = address(this);
         }
+        // here we expect to call either `swapExactInputSingle` or `swapExactInput`. See `swap` to see how we encode the selector and the calldata
         // slither-disable-next-line low-level-calls
         (bool success, bytes memory returnData) = executor.delegatecall(data);
         if (!success) {
