@@ -7,7 +7,7 @@ mod tests {
     use tycho_client::feed::{synchronizer::ComponentWithState, Header};
     use tycho_common::{dto::ResponseProtocolState, Bytes};
 
-    use super::super::state::UniswapV2State;
+    use super::super::state::PancakeswapV2State;
     use crate::protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock};
 
     fn header() -> Header {
@@ -20,7 +20,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_usv2_try_from() {
+    async fn test_pancakeswap_v2_try_from() {
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
                 component_id: "State1".to_owned(),
@@ -33,7 +33,7 @@ mod tests {
             component: Default::default(),
         };
 
-        let result = UniswapV2State::try_from_with_block(
+        let result = PancakeswapV2State::try_from_with_block(
             snapshot,
             header(),
             &HashMap::new(),
@@ -42,14 +42,14 @@ mod tests {
         .await;
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), UniswapV2State::new(U256::from(0u64), U256::from(0u64)));
+        assert_eq!(result.unwrap(), PancakeswapV2State::new(U256::from(0u64), U256::from(0u64)));
     }
 
     #[tokio::test]
     #[rstest]
     #[case::missing_reserve0("reserve0")]
     #[case::missing_reserve1("reserve1")]
-    async fn test_usv2_try_from_missing_attribute(#[case] missing_attribute: &str) {
+    async fn test_pancakeswap_v2_try_from_missing_attribute(#[case] missing_attribute: &str) {
         let mut attributes = HashMap::from([
             ("reserve0".to_string(), Bytes::from(vec![0; 32])),
             ("reserve1".to_string(), Bytes::from(vec![0; 32])),
@@ -65,7 +65,7 @@ mod tests {
             component: Default::default(),
         };
 
-        let result = UniswapV2State::try_from_with_block(
+        let result = PancakeswapV2State::try_from_with_block(
             snapshot,
             header(),
             &HashMap::new(),
