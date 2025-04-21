@@ -427,7 +427,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             USDE_ADDR,
             USDT_ADDR,
             true,
-            TokenTransfer.TransferType.TRANSFER_PERMIT2_TO_ROUTER,
+            TokenTransfer.TransferType.TRANSFER_PERMIT2_TO_PROTOCOL,
             ALICE,
             pools
         );
@@ -480,7 +480,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             USDE_ADDR,
             WBTC_ADDR,
             true,
-            TokenTransfer.TransferType.NONE,
+            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL,
             ALICE,
             pools
         );
