@@ -1268,7 +1268,7 @@ mod tests {
             println!("test_cyclic_sequential_swap_split_strategy: {}", hex_calldata);
         }
 
-        mod chained_swaps {
+        mod optimized_transfers {
             // In this module we test the ability to chain swaps or not. Different protocols are
             // tested. The encoded data is used for solidity tests as well
             use super::*;
