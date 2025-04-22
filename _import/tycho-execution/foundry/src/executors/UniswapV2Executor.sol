@@ -20,9 +20,12 @@ contract UniswapV2Executor is IExecutor, TokenTransfer {
     address private immutable self;
     uint256 public immutable feeBps;
 
-    constructor(address _factory, bytes32 _initCode, address _permit2, uint256 _feeBps)
-        TokenTransfer(_permit2)
-    {
+    constructor(
+        address _factory,
+        bytes32 _initCode,
+        address _permit2,
+        uint256 _feeBps
+    ) TokenTransfer(_permit2) {
         if (_factory == address(0)) {
             revert UniswapV2Executor__InvalidFactory();
         }

@@ -8,9 +8,12 @@ import {Constants} from "../Constants.sol";
 import {Permit2TestHelper} from "../Permit2TestHelper.sol";
 
 contract UniswapV2ExecutorExposed is UniswapV2Executor {
-    constructor(address _factory, bytes32 _initCode, address _permit2, uint256 _feeBps)
-        UniswapV2Executor(_factory, _initCode, _permit2, _feeBps)
-    {}
+    constructor(
+        address _factory,
+        bytes32 _initCode,
+        address _permit2,
+        uint256 _feeBps
+    ) UniswapV2Executor(_factory, _initCode, _permit2, _feeBps) {}
 
     function decodeParams(bytes calldata data)
         external
@@ -69,13 +72,13 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             SUSHISWAPV2_FACTORY_ETHEREUM,
             SUSHIV2_POOL_CODE_INIT_HASH,
             PERMIT2_ADDRESS,
-        30
+            30
         );
         pancakeswapV2Exposed = new UniswapV2ExecutorExposed(
             PANCAKESWAPV2_FACTORY_ETHEREUM,
             PANCAKEV2_POOL_CODE_INIT_HASH,
             PERMIT2_ADDRESS,
-     25
+            25
         );
         permit2 = IAllowanceTransfer(PERMIT2_ADDRESS);
     }
