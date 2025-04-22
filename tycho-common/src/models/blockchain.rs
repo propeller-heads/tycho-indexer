@@ -354,21 +354,24 @@ impl EntryPoint {
     pub fn new(target: Address, signature: String) -> Self {
         Self { target, signature }
     }
+    pub fn external_id(&self) -> String {
+        format!("{}-{}", self.target, self.signature)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EntryPointWithData {
     pub entry_point: EntryPoint,
-    pub data: Vec<EntryPointTracingData>,
+    pub data: EntryPointTracingData,
 }
 
 impl EntryPointWithData {
-    pub fn new(entry_point: EntryPoint, data: Vec<EntryPointTracingData>) -> Self {
+    pub fn new(entry_point: EntryPoint, data: EntryPointTracingData) -> Self {
         Self { entry_point, data }
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 /// An entry point to trace. Different types of entry points tracing will be supported in the
 /// future. Like RPC debug tracing, symbolic execution, etc.
 pub enum EntryPointTracingData {
@@ -376,7 +379,7 @@ pub enum EntryPointTracingData {
     RPCTracer(RPCTracerEntryPoint),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)] //TODO: Make serde consistent
 pub struct RPCTracerEntryPoint {
     pub caller: Option<Address>,
     pub data: Bytes,
@@ -408,7 +411,7 @@ impl TracingResult {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TracedEntryPoint {
-    pub entry_point: EntryPoint,
+    pub entry_point: EntryPointWithData,
     /// The block hash of the block that the entry point was traced on.
     pub detection_block_hash: BlockHash,
     /// The results of the tracing operation
@@ -417,7 +420,7 @@ pub struct TracedEntryPoint {
 
 impl TracedEntryPoint {
     pub fn new(
-        entry_point: EntryPoint,
+        entry_point: EntryPointWithData,
         detection_block_hash: BlockHash,
         result: TracingResult,
     ) -> Self {

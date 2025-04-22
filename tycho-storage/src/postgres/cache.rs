@@ -33,6 +33,7 @@ use tycho_common::{
 };
 
 use super::{PostgresError, PostgresGateway};
+use crate::postgres::entry_point::EntryPointGateway;
 
 /// Represents different types of database write operations.
 #[derive(PartialEq, Clone, Debug)]
