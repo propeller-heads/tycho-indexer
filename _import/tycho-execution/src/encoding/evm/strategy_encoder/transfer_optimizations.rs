@@ -5,17 +5,23 @@ use crate::encoding::{
     models::{Swap, TransferType},
 };
 
-/// A trait that defines how the tokens will be transferred into the given pool given the solution.
-pub trait TransferOptimization {
+/// A struct that defines how the tokens will be transferred into the given pool given the solution.
+#[derive(Clone)]
+pub struct TransferOptimization {
+    native_token: Bytes,
+    wrapped_token: Bytes,
+    permit2: bool,
+}
+
+impl TransferOptimization {
+    pub fn new(native_token: Bytes, wrapped_token: Bytes, permit2: bool) -> Self {
+        TransferOptimization { native_token, wrapped_token, permit2 }
+    }
     /// Returns the transfer method that should be used for the given swap and solution.
-    #[allow(clippy::too_many_arguments)]
-    fn get_transfer_type(
+    pub fn get_transfer_type(
         &self,
         swap: Swap,
         given_token: Bytes,
-        native_token: Bytes,
-        wrapped_token: Bytes,
-        permit2: bool,
         wrap: bool,
         in_between_swap_optimization: bool,
     ) -> TransferType {
@@ -24,22 +30,22 @@ pub trait TransferOptimization {
 
         let is_first_swap = swap.token_in == given_token;
 
-        if swap.token_in == native_token {
+        if swap.token_in == self.native_token {
             // Funds are already in router. All protocols currently take care of native transfers.
             TransferType::None
-        } else if (swap.token_in == wrapped_token) && wrap {
+        } else if (swap.token_in == self.wrapped_token) && wrap {
             // Wrapping already happened in the router so we can just use a normal transfer.
             TransferType::TransferToProtocol
         } else if is_first_swap {
             if in_transfer_required {
-                if permit2 {
+                if self.permit2 {
                     // Transfer from swapper to pool using permit2.
                     TransferType::TransferPermit2ToProtocol
                 } else {
                     // Transfer from swapper to pool.
                     TransferType::TransferFromToProtocol
                 }
-            } else if permit2 {
+            } else if self.permit2 {
                 // Transfer from swapper to router using permit2.
                 TransferType::TransferPermit2ToRouter
             } else {
@@ -62,9 +68,6 @@ mod tests {
     use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
-
-    struct MockStrategy {}
-    impl TransferOptimization for MockStrategy {}
 
     fn weth() -> Bytes {
         Bytes::from(hex!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").to_vec())
@@ -94,9 +97,8 @@ mod tests {
             token_out: dai(),
             split: 0f64,
         };
-        let strategy = MockStrategy {};
-        let transfer_method =
-            strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), true, false, false);
+        let optimization = TransferOptimization::new(eth(), weth(), true);
+        let transfer_method = optimization.get_transfer_type(swap.clone(), weth(), false, false);
         assert_eq!(transfer_method, TransferType::TransferPermit2ToProtocol);
     }
 
@@ -112,9 +114,8 @@ mod tests {
             token_out: dai(),
             split: 0f64,
         };
-        let strategy = MockStrategy {};
-        let transfer_method =
-            strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), false, false, false);
+        let optimization = TransferOptimization::new(eth(), weth(), false);
+        let transfer_method = optimization.get_transfer_type(swap.clone(), weth(), false, false);
         assert_eq!(transfer_method, TransferType::TransferFromToProtocol);
     }
 
@@ -131,9 +132,8 @@ mod tests {
             token_out: dai(),
             split: 0f64,
         };
-        let strategy = MockStrategy {};
-        let transfer_method =
-            strategy.get_transfer_type(swap.clone(), eth(), eth(), weth(), false, false, false);
+        let optimization = TransferOptimization::new(eth(), weth(), false);
+        let transfer_method = optimization.get_transfer_type(swap.clone(), eth(), false, false);
         assert_eq!(transfer_method, TransferType::None);
     }
 
@@ -150,9 +150,8 @@ mod tests {
             token_out: dai(),
             split: 0f64,
         };
-        let strategy = MockStrategy {};
-        let transfer_method =
-            strategy.get_transfer_type(swap.clone(), eth(), eth(), weth(), false, true, false);
+        let optimization = TransferOptimization::new(eth(), weth(), false);
+        let transfer_method = optimization.get_transfer_type(swap.clone(), eth(), true, false);
         assert_eq!(transfer_method, TransferType::TransferToProtocol);
     }
 
@@ -169,9 +168,8 @@ mod tests {
             token_out: dai(),
             split: 0f64,
         };
-        let strategy = MockStrategy {};
-        let transfer_method =
-            strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), false, false, false);
+        let optimization = TransferOptimization::new(eth(), weth(), false);
+        let transfer_method = optimization.get_transfer_type(swap.clone(), weth(), false, false);
         assert_eq!(transfer_method, TransferType::TransferToProtocol);
     }
 
@@ -188,9 +186,8 @@ mod tests {
             token_out: dai(),
             split: 0f64,
         };
-        let strategy = MockStrategy {};
-        let transfer_method =
-            strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), false, false, false);
+        let optimization = TransferOptimization::new(eth(), weth(), false);
+        let transfer_method = optimization.get_transfer_type(swap.clone(), weth(), false, false);
         assert_eq!(transfer_method, TransferType::None);
     }
 
@@ -207,9 +204,8 @@ mod tests {
             token_out: dai(),
             split: 0f64,
         };
-        let strategy = MockStrategy {};
-        let transfer_method =
-            strategy.get_transfer_type(swap.clone(), weth(), eth(), weth(), false, false, true);
+        let optimization = TransferOptimization::new(eth(), weth(), false);
+        let transfer_method = optimization.get_transfer_type(swap.clone(), weth(), false, true);
         assert_eq!(transfer_method, TransferType::None);
     }
 }

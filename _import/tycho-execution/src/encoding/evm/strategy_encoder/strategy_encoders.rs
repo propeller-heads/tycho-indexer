@@ -32,17 +32,15 @@ use crate::encoding::{
 /// * `permit2`: Permit2, responsible for managing permit2 operations and providing necessary
 ///   signatures and permit2 objects for calling the router
 /// * `selector`: String, the selector for the swap function in the router contract
-/// * `native_address`: Address of the chain's native token
-/// * `wrapped_address`: Address of the chain's wrapped token
 /// * `router_address`: Address of the router to be used to execute swaps
+/// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
 #[derive(Clone)]
 pub struct SingleSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
     permit2: Option<Permit2>,
     selector: String,
-    native_address: Bytes,
-    wrapped_address: Bytes,
     router_address: Bytes,
+    transfer_optimization: TransferOptimization,
 }
 
 impl SingleSwapStrategyEncoder {
@@ -60,13 +58,17 @@ impl SingleSwapStrategyEncoder {
                 "singleSwap(uint256,address,address,uint256,bool,bool,address,bytes)".to_string(),
             )
         };
+        let permit2_is_active = permit2.is_some();
         Ok(Self {
             permit2,
             selector,
             swap_encoder_registry,
-            native_address: chain.native_token()?,
-            wrapped_address: chain.wrapped_token()?,
             router_address,
+            transfer_optimization: TransferOptimization::new(
+                chain.native_token()?,
+                chain.wrapped_token()?,
+                permit2_is_active,
+            ),
         })
     }
 
@@ -79,8 +81,6 @@ impl SingleSwapStrategyEncoder {
         encoded
     }
 }
-
-impl TransferOptimization for SingleSwapStrategyEncoder {}
 
 impl StrategyEncoder for SingleSwapStrategyEncoder {
     fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
@@ -127,15 +127,9 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 
         let mut grouped_protocol_data: Vec<u8> = vec![];
         for swap in grouped_swap.swaps.iter() {
-            let transfer_type = self.get_transfer_type(
-                swap.clone(),
-                solution.given_token.clone(),
-                self.native_address.clone(),
-                self.wrapped_address.clone(),
-                self.permit2.clone().is_some(),
-                wrap,
-                false,
-            );
+            let transfer_type = self
+                .transfer_optimization
+                .get_transfer_type(swap.clone(), solution.given_token.clone(), wrap, false);
 
             let encoding_context = EncodingContext {
                 receiver: swap_receiver.clone(),
@@ -215,6 +209,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 /// * `router_address`: Address of the router to be used to execute swaps
 /// * `sequential_swap_validator`: SequentialSwapValidator, responsible for checking validity of
 ///   sequential swap solutions
+/// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
 #[derive(Clone)]
 pub struct SequentialSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -224,9 +219,8 @@ pub struct SequentialSwapStrategyEncoder {
     native_address: Bytes,
     wrapped_address: Bytes,
     sequential_swap_validator: SequentialSwapValidator,
+    transfer_optimization: TransferOptimization,
 }
-
-impl TransferOptimization for SequentialSwapStrategyEncoder {}
 
 impl SequentialSwapStrategyEncoder {
     pub fn new(
@@ -244,6 +238,7 @@ impl SequentialSwapStrategyEncoder {
                     .to_string(),
             )
         };
+        let permit2_is_active = permit2.is_some();
         Ok(Self {
             permit2,
             selector,
@@ -252,6 +247,11 @@ impl SequentialSwapStrategyEncoder {
             native_address: chain.native_token()?,
             wrapped_address: chain.wrapped_token()?,
             sequential_swap_validator: SequentialSwapValidator,
+            transfer_optimization: TransferOptimization::new(
+                chain.native_token()?,
+                chain.wrapped_token()?,
+                permit2_is_active,
+            ),
         })
     }
 
@@ -329,15 +329,14 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
-                let transfer_type = self.get_transfer_type(
-                    swap.clone(),
-                    solution.given_token.clone(),
-                    self.native_address.clone(),
-                    self.wrapped_address.clone(),
-                    self.permit2.clone().is_some(),
-                    wrap,
-                    in_between_swap_optimization,
-                );
+                let transfer_type = self
+                    .transfer_optimization
+                    .get_transfer_type(
+                        swap.clone(),
+                        solution.given_token.clone(),
+                        wrap,
+                        in_between_swap_optimization,
+                    );
 
                 let encoding_context = EncodingContext {
                     receiver: swap_receiver.clone(),
@@ -422,6 +421,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 /// * `split_swap_validator`: SplitSwapValidator, responsible for checking validity of split swap
 ///   solutions
 /// * `router_address`: Address of the router to be used to execute swaps
+/// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
 #[derive(Clone)]
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -431,6 +431,7 @@ pub struct SplitSwapStrategyEncoder {
     wrapped_address: Bytes,
     split_swap_validator: SplitSwapValidator,
     router_address: Bytes,
+    transfer_optimization: TransferOptimization,
 }
 
 impl SplitSwapStrategyEncoder {
@@ -449,7 +450,7 @@ impl SplitSwapStrategyEncoder {
                     .to_string(),
             )
         };
-
+        let permit2_is_active = permit2.is_some();
         Ok(Self {
             permit2,
             selector,
@@ -458,6 +459,11 @@ impl SplitSwapStrategyEncoder {
             wrapped_address: chain.wrapped_token()?,
             split_swap_validator: SplitSwapValidator,
             router_address,
+            transfer_optimization: TransferOptimization::new(
+                chain.native_token()?,
+                chain.wrapped_token()?,
+                permit2_is_active,
+            ),
         })
     }
 
@@ -480,8 +486,6 @@ impl SplitSwapStrategyEncoder {
         encoded
     }
 }
-
-impl TransferOptimization for SplitSwapStrategyEncoder {}
 
 impl StrategyEncoder for SplitSwapStrategyEncoder {
     fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
@@ -566,15 +570,9 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
-                let transfer_type = self.get_transfer_type(
-                    swap.clone(),
-                    solution.given_token.clone(),
-                    self.native_address.clone(),
-                    self.wrapped_address.clone(),
-                    self.permit2.clone().is_some(),
-                    wrap,
-                    false,
-                );
+                let transfer_type = self
+                    .transfer_optimization
+                    .get_transfer_type(swap.clone(), solution.given_token.clone(), wrap, false);
 
                 let encoding_context = EncodingContext {
                     receiver: swap_receiver.clone(),
