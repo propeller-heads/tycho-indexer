@@ -472,14 +472,18 @@ async fn initialize_accounts(
         .expect("Failed to insert tx");
 
     for account_update in extracted_accounts.into_values() {
-        let new_account = account_update.into_account(&tx);
+        let new_account = account_update.ref_into_account(&tx);
         info!(block_number = block.number, contract_address = ?new_account.address, "NewContract");
 
         // Insert new accounts
         cached_gw
-            .upsert_contract(&new_account)
+            .insert_contract(&new_account)
             .await
             .expect("Failed to insert contract");
+        cached_gw
+            .update_contracts(&[(tx.hash.clone(), account_update)])
+            .await
+            .expect("Failed to update contract");
     }
 
     let state = ExtractionState::new(

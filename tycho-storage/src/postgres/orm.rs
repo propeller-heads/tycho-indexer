@@ -1523,9 +1523,6 @@ pub struct NewContract {
     pub created_at: Option<NaiveDateTime>,
     #[allow(dead_code)]
     pub deleted_at: Option<NaiveDateTime>,
-    pub balance: Balance,
-    pub code: Code,
-    pub code_hash: CodeHash,
 }
 
 impl NewContract {
@@ -1537,39 +1534,6 @@ impl NewContract {
             creation_tx: self.creation_tx,
             created_at: self.created_at,
             deleted_at: None,
-        }
-    }
-
-    pub fn new_balance(
-        &self,
-        account_id: i64,
-        token_id: i64,
-        modify_tx: i64,
-        modify_ts: NaiveDateTime,
-    ) -> NewAccountBalance {
-        NewAccountBalance {
-            balance: self.balance.clone(),
-            account_id,
-            token_id,
-            modify_tx,
-            valid_from: modify_ts,
-            valid_to: None,
-        }
-    }
-
-    pub fn new_code(
-        &self,
-        account_id: i64,
-        modify_tx: i64,
-        modify_ts: NaiveDateTime,
-    ) -> NewContractCode {
-        NewContractCode {
-            code: &self.code,
-            hash: self.code_hash.clone(),
-            account_id,
-            modify_tx,
-            valid_from: modify_ts,
-            valid_to: None,
         }
     }
 }

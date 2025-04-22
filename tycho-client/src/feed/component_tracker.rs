@@ -85,11 +85,11 @@ pub struct ComponentTracker<R: RPCClient> {
     chain: Chain,
     protocol_system: String,
     filter: ComponentFilter,
-    // We will need to request a snapshot for components/Contracts that we did not emit as
+    // We will need to request a snapshot for components/contracts that we did not emit as
     // snapshot for yet but are relevant now, e.g. because min tvl threshold exceeded.
     pub components: HashMap<String, ProtocolComponent>,
-    /// derived from tracked components, we need this if subscribed to a vm extractor cause updates
-    /// are emitted on a contract level instead of on a component level.
+    /// Derived from tracked components. We need this if subscribed to a vm extractor because
+    /// updates are emitted on a contract level instead of a component level.
     pub contracts: HashSet<Bytes>,
     /// Client to retrieve necessary protocol components from the rpc.
     rpc_client: R,

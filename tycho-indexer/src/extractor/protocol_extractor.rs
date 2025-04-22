@@ -1343,10 +1343,14 @@ impl ExtractorGateway for ExtractorPgGateway {
                     let new: Account = account_update.ref_into_account(&tx_update.tx);
                     info!(block_number = ?changes.block.number, contract_address = ?new.address, "NewContract");
 
-                    // Insert new accounts
+                    // Insert new account static values
                     self.state_gateway
-                        .upsert_contract(&new)
+                        .insert_contract(&new)
                         .await?;
+
+                    // Collect new account dynamic values for block-scoped batch insert (necessary
+                    // for correct versioning)
+                    account_changes.push((tx_update.tx.hash.clone(), account_update.clone()));
                 } else if account_update.is_update() {
                     account_changes.push((tx_update.tx.hash.clone(), account_update.clone()));
                 } else {
@@ -1411,6 +1415,7 @@ impl ExtractorGateway for ExtractorPgGateway {
         }
 
         // Insert component balance changes
+        dbg!(&component_balance_changes);
         if !component_balance_changes.is_empty() {
             self.state_gateway
                 .add_component_balances(component_balance_changes.as_slice())
@@ -2173,10 +2178,7 @@ mod test_serial_db {
         storage::BlockOrTimestamp,
         traits::TokenOwnerFinding,
     };
-    use tycho_storage::postgres::{
-        builder::GatewayBuilder, db_fixtures, db_fixtures::yesterday_midnight,
-        testing::run_against_db,
-    };
+    use tycho_storage::postgres::{builder::GatewayBuilder, db_fixtures, testing::run_against_db};
 
     use super::*;
     use crate::{
@@ -2341,7 +2343,7 @@ mod test_serial_db {
                     )
                     .unwrap(),
                     parent_hash: Bytes::default(),
-                    ts: db_fixtures::yesterday_one_am(),
+                    ts: db_fixtures::yesterday_half_past_midnight(),
                 }])
                 .await
                 .expect("block insertion succeeded");
@@ -2582,8 +2584,6 @@ mod test_serial_db {
     }
 
     // Tests a forward call with a native contract creation and an account update
-    // TODO: Fix this test. It was already disabled for native extractors, because of
-    // protocol_type_name mismatch
     #[ignore]
     #[tokio::test]
     async fn test_forward_native_protocol() {
@@ -2591,7 +2591,7 @@ mod test_serial_db {
             let (gw, _) = setup_gw(pool, ImplementationType::Custom).await;
             let msg = native_pool_creation();
 
-            let _exp = [ProtocolComponent {
+            let exp = [ProtocolComponent {
                 id: NATIVE_CREATED_CONTRACT.to_string(),
                 protocol_system: "test".to_string(),
                 protocol_type_name: "pool".to_string(),
@@ -2628,8 +2628,7 @@ mod test_serial_db {
                 .entity;
             println!("{res:?}");
 
-            // TODO: This is failing because protocol_type_name is wrong in the gateway - waiting
-            // assert_eq!(res, exp);
+            assert_eq!(res, exp);
         })
         .await;
     }
@@ -2682,6 +2681,7 @@ mod test_serial_db {
                 .unwrap();
 
             // TODO: improve asserts
+            dbg!(&component_balances);
             assert_eq!(component_balances.len(), 1);
             assert_eq!(component_balances[0].component_id, "ambient_USDC_ETH");
         })
@@ -3138,7 +3138,7 @@ mod test_serial_db {
             .expect("Failed to create extractor");
 
             // Send a sequence of block scoped data with the same timestamp.
-            let base_ts = yesterday_midnight().timestamp() as u64;
+            let base_ts = db_fixtures::yesterday_midnight().timestamp() as u64;
             let versions = [1, 2, 3, 4];
 
             let inp_sequence = versions
