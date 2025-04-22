@@ -25,7 +25,7 @@ use tycho_common::{
 
 use crate::{BytesCodec, RPCError};
 
-struct EVMEntrypointService {
+pub struct EVMEntrypointService {
     provider: Provider<Http>,
 }
 

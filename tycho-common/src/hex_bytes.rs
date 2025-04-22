@@ -289,6 +289,12 @@ impl PartialEq<bytes::Bytes> for Bytes {
 #[error("Failed to parse bytes: {0}")]
 pub struct ParseBytesError(String);
 
+impl ParseBytesError {
+    pub fn new(msg: &str) -> Self {
+        Self(msg.to_string())
+    }
+}
+
 impl FromStr for Bytes {
     type Err = ParseBytesError;
 
