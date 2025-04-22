@@ -1,3 +1,37 @@
+## [0.81.0](https://github.com/propeller-heads/tycho-execution/compare/0.80.0...0.81.0) (2025-04-18)
+
+
+### Features
+
+* update tycho-common version to 0.66.4 ([134c73e](https://github.com/propeller-heads/tycho-execution/commit/134c73e82be74fb5590e19c3d9b27304043bbbd8))
+
+
+### Bug Fixes
+
+* add slither disable after slither actions update ([20573cb](https://github.com/propeller-heads/tycho-execution/commit/20573cbaf320ba99aa721e6e76a69447ab3f9694))
+
+## [0.80.0](https://github.com/propeller-heads/tycho-execution/compare/0.79.0...0.80.0) (2025-04-14)
+
+
+### Features
+
+* Redeploy balancer with forceApprove fix for USDT ([a6b0f8d](https://github.com/propeller-heads/tycho-execution/commit/a6b0f8d1f67a49848e90d2c4102195c4ac40c5a8))
+
+## [0.79.0](https://github.com/propeller-heads/tycho-execution/compare/0.78.1...0.79.0) (2025-04-11)
+
+
+### Features
+
+* Add new CurveExecutor address ([916c2b7](https://github.com/propeller-heads/tycho-execution/commit/916c2b7dba2c1c424efcbf884932a05427816cf8))
+* Deploy Curve Executor ([5d4d6d1](https://github.com/propeller-heads/tycho-execution/commit/5d4d6d1ff891766c067e3ff6355ffbb5c50bbf16))
+
+
+### Bug Fixes
+
+* Checksum curve pool addresses ([9e68ab8](https://github.com/propeller-heads/tycho-execution/commit/9e68ab8b0127831ee9dbc1f168e8aac9e28991c0))
+* Support pools that hold ETH but the coin is WETH ([2e8392a](https://github.com/propeller-heads/tycho-execution/commit/2e8392ab40c6c0e99089fae71873755dedb6e925))
+* Use forceApprove instead of regular Approve ([c963f3b](https://github.com/propeller-heads/tycho-execution/commit/c963f3b2f61e9d1a6e333149b091c3df90fd857b))
+
 ## [0.78.1](https://github.com/propeller-heads/tycho-execution/compare/0.78.0...0.78.1) (2025-04-09)
 
 

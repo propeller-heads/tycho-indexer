@@ -254,15 +254,15 @@ contract CurveExecutorTest is Test, Constants {
     function testStableSwapPool() public {
         // Swapping CRVUSD -> USDT on a StableSwap pool, deployed by factory 0x4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d (plain pool)
         uint256 amountIn = 1 ether;
-        deal(CRVUSD_ADDR, address(curveExecutorExposed), amountIn);
+        deal(USDT_ADDR, address(curveExecutorExposed), amountIn);
 
         bytes memory data =
-            _getData(CRVUSD_ADDR, USDT_ADDR, CRVUSD_USDT_POOL, 1, ALICE);
+            _getData(USDT_ADDR, CRVUSD_ADDR, CRVUSD_USDT_POOL, 1, ALICE);
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
-        assertEq(amountOut, 999910);
-        assertEq(IERC20(USDT_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(amountOut, 10436946786333182306400100);
+        assertEq(IERC20(CRVUSD_ADDR).balanceOf(ALICE), amountOut);
     }
 
     function testMetaPool() public {
