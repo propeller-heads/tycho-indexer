@@ -8,7 +8,6 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::Permit2,
-        constants::{CALLBACK_CONSTRAINED_PROTOCOLS, IN_TRANSFER_REQUIRED_PROTOCOLS},
         group_swaps::group_swaps,
         strategy_encoder::{
             strategy_validators::{SequentialSwapValidator, SplitSwapValidator, SwapValidator},
@@ -64,12 +63,13 @@ impl SingleSwapStrategyEncoder {
             permit2,
             selector,
             swap_encoder_registry,
-            router_address,
+            router_address: router_address.clone(),
             transfer_optimization: TransferOptimization::new(
                 chain.native_token()?,
                 chain.wrapped_token()?,
                 permit2_is_active,
                 token_in_already_in_router,
+                router_address,
             ),
         })
     }
@@ -246,7 +246,7 @@ impl SequentialSwapStrategyEncoder {
             permit2,
             selector,
             swap_encoder_registry,
-            router_address,
+            router_address: router_address.clone(),
             native_address: chain.native_token()?,
             wrapped_address: chain.wrapped_token()?,
             sequential_swap_validator: SequentialSwapValidator,
@@ -255,6 +255,7 @@ impl SequentialSwapStrategyEncoder {
                 chain.wrapped_token()?,
                 permit2_is_active,
                 token_in_already_in_router,
+                router_address,
             ),
         })
     }
@@ -295,7 +296,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
         }
 
         let mut swaps = vec![];
-        let mut next_in_between_swap_optimization = true;
+        let mut next_in_between_swap_optimization_allowed = true;
         for (i, grouped_swap) in grouped_swaps.iter().enumerate() {
             let protocol = grouped_swap.protocol_system.clone();
             let swap_encoder = self
@@ -307,37 +308,19 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                     ))
                 })?;
 
-            let in_between_swap_optimization = next_in_between_swap_optimization;
+            let in_between_swap_optimization_allowed = next_in_between_swap_optimization_allowed;
             let next_swap = grouped_swaps.get(i + 1);
-            // if there is a next swap
-            let swap_receiver = if let Some(next) = next_swap {
-                // if the protocol of the next swap supports transfer in optimization
-                if IN_TRANSFER_REQUIRED_PROTOCOLS.contains(&next.protocol_system.as_str()) {
-                    // if the protocol does not allow for chained swaps, we can't optimize the
-                    // receiver of this swap nor the transfer in of the next swap
-                    if CALLBACK_CONSTRAINED_PROTOCOLS.contains(&next.protocol_system.as_str()) {
-                        next_in_between_swap_optimization = false;
-                        self.router_address.clone()
-                    } else {
-                        Bytes::from_str(&next.swaps[0].component.id.clone()).map_err(|_| {
-                            EncodingError::FatalError("Invalid component id".to_string())
-                        })?
-                    }
-                } else {
-                    // the protocol of the next swap does not support transfer in optimization
-                    self.router_address.clone()
-                }
-            } else {
-                solution.receiver.clone() // last swap - there is not next swap
-            };
-
+            let (swap_receiver, next_swap_optimization) = self
+                .transfer_optimization
+                .get_receiver(solution.receiver.clone(), next_swap)?;
+            next_in_between_swap_optimization_allowed = next_swap_optimization;
             let transfer_type = self
                 .transfer_optimization
                 .get_transfer_type(
                     grouped_swap.clone(),
                     solution.given_token.clone(),
                     wrap,
-                    in_between_swap_optimization,
+                    in_between_swap_optimization_allowed,
                 );
             let encoding_context = EncodingContext {
                 receiver: swap_receiver.clone(),
@@ -463,12 +446,13 @@ impl SplitSwapStrategyEncoder {
             native_address: chain.native_token()?,
             wrapped_address: chain.wrapped_token()?,
             split_swap_validator: SplitSwapValidator,
-            router_address,
+            router_address: router_address.clone(),
             transfer_optimization: TransferOptimization::new(
                 chain.native_token()?,
                 chain.wrapped_token()?,
                 permit2_is_active,
                 token_in_already_in_router,
+                router_address,
             ),
         })
     }
