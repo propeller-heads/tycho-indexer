@@ -11,11 +11,17 @@ pub struct TransferOptimization {
     native_token: Bytes,
     wrapped_token: Bytes,
     permit2: bool,
+    token_in_already_in_router: bool,
 }
 
 impl TransferOptimization {
-    pub fn new(native_token: Bytes, wrapped_token: Bytes, permit2: bool) -> Self {
-        TransferOptimization { native_token, wrapped_token, permit2 }
+    pub fn new(
+        native_token: Bytes,
+        wrapped_token: Bytes,
+        permit2: bool,
+        token_in_already_in_router: bool,
+    ) -> Self {
+        TransferOptimization { native_token, wrapped_token, permit2, token_in_already_in_router }
     }
     /// Returns the transfer method that should be used for the given swap and solution.
     pub fn get_transfer_type(
@@ -38,19 +44,28 @@ impl TransferOptimization {
             TransferType::TransferToProtocol
         } else if is_first_swap {
             if in_transfer_required {
-                if self.permit2 {
+                if self.token_in_already_in_router {
+                    // Transfer from router to pool.
+                    TransferType::TransferToProtocol
+                } else if self.permit2 {
                     // Transfer from swapper to pool using permit2.
                     TransferType::TransferPermit2ToProtocol
                 } else {
                     // Transfer from swapper to pool.
                     TransferType::TransferFromToProtocol
                 }
-            } else if self.permit2 {
-                // Transfer from swapper to router using permit2.
-                TransferType::TransferPermit2ToRouter
+                // in transfer is not necessary for these protocols. Only make a transfer if the
+                // tokens are not already in the router
+            } else if !self.token_in_already_in_router {
+                if self.permit2 {
+                    // Transfer from swapper to router using permit2.
+                    TransferType::TransferPermit2ToRouter
+                } else {
+                    // Transfer from swapper to router.
+                    TransferType::TransferFromToRouter
+                }
             } else {
-                // Transfer from swapper to router.
-                TransferType::TransferFromToRouter
+                TransferType::None
             }
         // all other swaps
         } else if !in_transfer_required || in_between_swap_optimization {
@@ -65,7 +80,6 @@ impl TransferOptimization {
 #[cfg(test)]
 mod tests {
     use alloy_primitives::hex;
-    use tycho_common::Bytes;
 
     use super::*;
 
@@ -95,7 +109,7 @@ mod tests {
             split: 0f64,
             swaps: vec![],
         };
-        let optimization = TransferOptimization::new(eth(), weth(), true);
+        let optimization = TransferOptimization::new(eth(), weth(), true, false);
         let transfer_method = optimization.get_transfer_type(swap.clone(), weth(), false, false);
         assert_eq!(transfer_method, TransferType::TransferPermit2ToProtocol);
     }
@@ -110,7 +124,7 @@ mod tests {
             split: 0f64,
             swaps: vec![],
         };
-        let optimization = TransferOptimization::new(eth(), weth(), false);
+        let optimization = TransferOptimization::new(eth(), weth(), false, false);
         let transfer_method = optimization.get_transfer_type(swap.clone(), weth(), false, false);
         assert_eq!(transfer_method, TransferType::TransferFromToProtocol);
     }
@@ -126,7 +140,7 @@ mod tests {
             split: 0f64,
             swaps: vec![],
         };
-        let optimization = TransferOptimization::new(eth(), weth(), false);
+        let optimization = TransferOptimization::new(eth(), weth(), false, false);
         let transfer_method = optimization.get_transfer_type(swap.clone(), eth(), false, false);
         assert_eq!(transfer_method, TransferType::None);
     }
@@ -142,7 +156,7 @@ mod tests {
             split: 0f64,
             swaps: vec![],
         };
-        let optimization = TransferOptimization::new(eth(), weth(), false);
+        let optimization = TransferOptimization::new(eth(), weth(), false, false);
         let transfer_method = optimization.get_transfer_type(swap.clone(), eth(), true, false);
         assert_eq!(transfer_method, TransferType::TransferToProtocol);
     }
@@ -158,7 +172,7 @@ mod tests {
             split: 0f64,
             swaps: vec![],
         };
-        let optimization = TransferOptimization::new(eth(), weth(), false);
+        let optimization = TransferOptimization::new(eth(), weth(), false, false);
         let transfer_method = optimization.get_transfer_type(swap.clone(), weth(), false, false);
         assert_eq!(transfer_method, TransferType::TransferToProtocol);
     }
@@ -174,7 +188,7 @@ mod tests {
             split: 0f64,
             swaps: vec![],
         };
-        let optimization = TransferOptimization::new(eth(), weth(), false);
+        let optimization = TransferOptimization::new(eth(), weth(), false, false);
         let transfer_method = optimization.get_transfer_type(swap.clone(), weth(), false, false);
         assert_eq!(transfer_method, TransferType::None);
     }
@@ -190,8 +204,40 @@ mod tests {
             split: 0f64,
             swaps: vec![],
         };
-        let optimization = TransferOptimization::new(eth(), weth(), false);
+        let optimization = TransferOptimization::new(eth(), weth(), false, false);
         let transfer_method = optimization.get_transfer_type(swap.clone(), weth(), false, true);
+        assert_eq!(transfer_method, TransferType::None);
+    }
+
+    #[test]
+    fn test_first_swap_tokens_already_in_router_optimization() {
+        // It is the first swap, tokens are already in the router and the protocol requires the
+        // transfer in
+        let swap = SwapGroup {
+            protocol_system: "uniswap_v2".to_string(),
+            token_in: usdc(),
+            token_out: dai(),
+            split: 0f64,
+            swaps: vec![],
+        };
+        let optimization = TransferOptimization::new(eth(), weth(), false, true);
+        let transfer_method = optimization.get_transfer_type(swap.clone(), usdc(), false, false);
+        assert_eq!(transfer_method, TransferType::TransferToProtocol);
+    }
+
+    #[test]
+    fn test_first_swap_tokens_already_in_router_no_transfer_needed_optimization() {
+        // It is the first swap, tokens are already in the router and the protocol does not require
+        // the transfer in
+        let swap = SwapGroup {
+            protocol_system: "vm:curve".to_string(),
+            token_in: usdc(),
+            token_out: dai(),
+            split: 0f64,
+            swaps: vec![],
+        };
+        let optimization = TransferOptimization::new(eth(), weth(), false, true);
+        let transfer_method = optimization.get_transfer_type(swap.clone(), usdc(), false, false);
         assert_eq!(transfer_method, TransferType::None);
     }
 }

@@ -49,6 +49,7 @@ impl SingleSwapStrategyEncoder {
         swap_encoder_registry: SwapEncoderRegistry,
         swapper_pk: Option<String>,
         router_address: Bytes,
+        token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
         let (permit2, selector) = if let Some(swapper_pk) = swapper_pk {
             (Some(Permit2::new(swapper_pk, chain.clone())?), "singleSwapPermit2(uint256,address,address,uint256,bool,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
@@ -68,6 +69,7 @@ impl SingleSwapStrategyEncoder {
                 chain.native_token()?,
                 chain.wrapped_token()?,
                 permit2_is_active,
+                token_in_already_in_router,
             ),
         })
     }
@@ -228,6 +230,7 @@ impl SequentialSwapStrategyEncoder {
         swap_encoder_registry: SwapEncoderRegistry,
         swapper_pk: Option<String>,
         router_address: Bytes,
+        token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
         let (permit2, selector) = if let Some(swapper_pk) = swapper_pk {
             (Some(Permit2::new(swapper_pk, chain.clone())?), "sequentialSwapPermit2(uint256,address,address,uint256,bool,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
@@ -251,6 +254,7 @@ impl SequentialSwapStrategyEncoder {
                 chain.native_token()?,
                 chain.wrapped_token()?,
                 permit2_is_active,
+                token_in_already_in_router,
             ),
         })
     }
@@ -440,6 +444,7 @@ impl SplitSwapStrategyEncoder {
         swap_encoder_registry: SwapEncoderRegistry,
         swapper_pk: Option<String>,
         router_address: Bytes,
+        token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
         let (permit2, selector) = if let Some(swapper_pk) = swapper_pk {
             (Some(Permit2::new(swapper_pk, chain.clone())?), "splitSwapPermit2(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
@@ -463,6 +468,7 @@ impl SplitSwapStrategyEncoder {
                 chain.native_token()?,
                 chain.wrapped_token()?,
                 permit2_is_active,
+                token_in_already_in_router,
             ),
         })
     }
@@ -741,6 +747,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -824,6 +831,7 @@ mod tests {
                 swap_encoder_registry,
                 None,
                 Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -901,6 +909,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -953,6 +962,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -1024,6 +1034,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -1083,6 +1094,7 @@ mod tests {
                 swap_encoder_registry,
                 None,
                 Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -1201,6 +1213,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
 
@@ -1318,6 +1331,7 @@ mod tests {
                     swap_encoder_registry,
                     None,
                     Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                    false,
                 )
                 .unwrap();
                 let solution = Solution {
@@ -1399,6 +1413,7 @@ mod tests {
                     swap_encoder_registry,
                     None,
                     Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                    false,
                 )
                 .unwrap();
                 let solution = Solution {
@@ -1484,6 +1499,7 @@ mod tests {
                     swap_encoder_registry,
                     None,
                     Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                    false,
                 )
                 .unwrap();
                 let solution = Solution {
@@ -1550,6 +1566,7 @@ mod tests {
                     swap_encoder_registry,
                     None,
                     Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                    false,
                 )
                 .unwrap();
                 let solution = Solution {
@@ -1649,6 +1666,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -1758,6 +1776,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key.clone()),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
 
@@ -1920,6 +1939,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key.clone()),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
 
@@ -2045,6 +2065,7 @@ mod tests {
                 swap_encoder_registry,
                 None,
                 Bytes::from_str("0xA4AD4f68d0b91CFD19687c881e50f3A00242828c").unwrap(),
+                false,
             )
             .unwrap();
 
@@ -2110,6 +2131,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
 
@@ -2178,6 +2200,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
 
@@ -2265,6 +2288,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -2367,6 +2391,7 @@ mod tests {
                 swap_encoder_registry,
                 None,
                 Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
             )
             .unwrap();
 
@@ -2429,6 +2454,7 @@ mod tests {
                 swap_encoder_registry,
                 None,
                 Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
             )
             .unwrap();
 

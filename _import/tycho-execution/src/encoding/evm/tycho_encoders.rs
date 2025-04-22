@@ -39,6 +39,7 @@ impl TychoRouterEncoder {
         swap_encoder_registry: SwapEncoderRegistry,
         swapper_pk: Option<String>,
         router_address: Bytes,
+        token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
         let native_address = chain.native_token()?;
         let wrapped_address = chain.wrapped_token()?;
@@ -48,18 +49,21 @@ impl TychoRouterEncoder {
                 swap_encoder_registry.clone(),
                 swapper_pk.clone(),
                 router_address.clone(),
+                token_in_already_in_router,
             )?,
             sequential_swap_strategy: SequentialSwapStrategyEncoder::new(
                 chain.clone(),
                 swap_encoder_registry.clone(),
                 swapper_pk.clone(),
                 router_address.clone(),
+                token_in_already_in_router,
             )?,
             split_swap_strategy: SplitSwapStrategyEncoder::new(
                 chain,
                 swap_encoder_registry,
                 None,
                 router_address.clone(),
+                token_in_already_in_router,
             )?,
             native_address,
             wrapped_address,
@@ -258,8 +262,8 @@ impl TychoExecutorEncoder {
                 receiver: receiver.clone(),
                 exact_out: solution.exact_out,
                 router_address: None,
-                group_token_in: grouped_swap.input_token.clone(),
-                group_token_out: grouped_swap.output_token.clone(),
+                group_token_in: grouped_swap.token_in.clone(),
+                group_token_out: grouped_swap.token_out.clone(),
                 transfer_type: TransferType::TransferToProtocol,
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
@@ -354,6 +358,7 @@ mod tests {
                 get_swap_encoder_registry(),
                 None,
                 Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
             )
             .unwrap()
         }
