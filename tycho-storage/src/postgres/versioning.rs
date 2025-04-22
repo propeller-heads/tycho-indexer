@@ -71,7 +71,7 @@ pub trait VersionedRow {
     /// Exposes the entity identifier.
     fn get_entity_id(&self) -> Self::EntityId;
 
-    /// Allows setting `valid_to`` column, thereby invalidating this version.
+    /// Allows setting `valid_to` column, thereby invalidating this version.
     fn set_valid_to(&mut self, end_version: Self::Version);
 
     /// Exposes the starting version.
@@ -345,10 +345,13 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
     current_latest_data: &[N],
     new_data: &[VersioningEntry<N>],
 ) -> Result<RowsChanges<N>, StorageError> {
-    let mut latest: HashMap<N::EntityId, N> = current_latest_data
+    // current latest data from db
+    let db_latest: HashMap<N::EntityId, N> = current_latest_data
         .iter()
         .map(|row| (row.get_id(), row.clone()))
         .collect();
+    // versioned data
+    let mut latest = db_latest.clone();
     let mut archived = Vec::new();
     let mut deleted = HashSet::new();
     let mut to_skip = HashSet::new();
@@ -359,11 +362,11 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
                 // Handle updated rows
                 let mut row = r.clone();
 
-                // Skip if new version is older than the latest version in the db
-                if let Some(latest_row) = latest.get(&id) {
-                    if latest_row.get_valid_from() > row.get_valid_from() {
+                // Skip if new version is older than/equal to the latest version in the db
+                if let Some(latest_row) = db_latest.get(&id) {
+                    if latest_row.get_valid_from() >= row.get_valid_from() {
                         trace!(
-                            "Skipping update for {:?} since it's older than the latest version",
+                            "Skipping update for {:?} since it's older than/equal to the latest version",
                             id
                         );
                         to_skip.insert(id.clone());
@@ -377,14 +380,17 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
                 }
                 // If it's updated after being deleted, it doesn't need to be marked as deleted
                 deleted.remove(&id);
+                // If it is updated after being skipped, it doesn't need to be skipped
+                to_skip.remove(&id);
+
                 latest.insert(id, row);
             }
             VersioningEntry::Deletion((id, delete_version)) => {
-                // Skip if new version is older than the latest version in the db
-                if let Some(latest_row) = latest.get(id) {
-                    if latest_row.get_valid_from() > *delete_version {
+                // Skip if new version is older than/equal to the latest version in the db
+                if let Some(latest_row) = db_latest.get(id) {
+                    if latest_row.get_valid_from() >= *delete_version {
                         trace!(
-                            "Skipping delete for {:?} since it's older than the latest version",
+                            "Skipping delete for {:?} since it's older than/equal to the latest version",
                             id
                         );
                         to_skip.insert(id.clone());
@@ -789,7 +795,6 @@ mod test {
         apply_versioning::<_, AccountBalance>(&mut new_data, &mut conn)
             .await
             .unwrap();
-        dbg!(&new_data);
 
         // Only new data should be present, outdated row should be filtered out
         assert_eq!(new_data, vec![row1]);
