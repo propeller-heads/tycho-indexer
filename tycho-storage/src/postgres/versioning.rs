@@ -21,6 +21,12 @@
 //!
 //! # Design Decisions
 //!
+//! The versioning logic assumes data is inserted as block-scoped data. This means that if a row
+//! is inserted for a block, it is assumed that all updates for that EntityId on that block have
+//! been inserted. This is important to be aware of when inserting data to the db: you should batch
+//! insert all updates of a given type for a given block at once i.e. all account balance updates
+//! for a given block should be inserted in one call to the gateway.
+//!
 //! Initially we would support references in EntityId, to reduce the number of clones necessary for
 //! complex entity id types. This would lead to a strange situation, where these trait bounds
 //! for the `apply_versioning` method would not be expressible. Reasons for this are not 100% clear,
