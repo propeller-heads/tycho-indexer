@@ -31,7 +31,7 @@ contract UniswapV2Executor is IExecutor, TokenTransfer {
         }
         factory = _factory;
         initCode = _initCode;
-        if (_feeBps > 10000) {
+        if (_feeBps > 30) {
             revert UniswapV2Executor__InvalidFee();
         }
         feeBps = _feeBps;
