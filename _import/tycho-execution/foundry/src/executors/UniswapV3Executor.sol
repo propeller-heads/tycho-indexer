@@ -129,13 +129,7 @@ contract UniswapV3Executor is IExecutor, ICallback, TokenTransfer {
         int256, /* amount1Delta */
         bytes calldata /* data */
     ) external {
-        uint256 dataOffset = 4 + 32 + 32 + 32; // Skip selector + 2 ints + data_offset
-        uint256 dataLength =
-            uint256(bytes32(msg.data[dataOffset:dataOffset + 32]));
-
-        bytes calldata fullData = msg.data[4:dataOffset + 32 + dataLength];
-
-        handleCallback(fullData);
+        handleCallback(msg.data);
     }
 
     function _decodeData(bytes calldata data)
