@@ -882,6 +882,85 @@ mod tests {
         }
 
         #[test]
+        fn test_single_swap_strategy_encoder_no_transfer_in() {
+            // Performs a single swap from WETH to DAI on a USV2 pool assuming that the tokens are
+            // already in the router
+
+            let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+            let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
+            let expected_amount = Some(BigUint::from_str("2_650_000000000000000000").unwrap());
+            let slippage = Some(0.01f64);
+            let checked_amount = Some(BigUint::from_str("2_640_000000000000000000").unwrap());
+            let expected_min_amount = U256::from_str("2_640_000000000000000000").unwrap();
+
+            let swap = Swap {
+                component: ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth.clone(),
+                token_out: dai.clone(),
+                split: 0f64,
+            };
+            let swap_encoder_registry = get_swap_encoder_registry();
+            let encoder = SingleSwapStrategyEncoder::new(
+                eth_chain(),
+                swap_encoder_registry,
+                None,
+                Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                true,
+            )
+            .unwrap();
+            let solution = Solution {
+                exact_out: false,
+                given_token: weth,
+                given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+                checked_token: dai,
+                expected_amount,
+                slippage,
+                checked_amount,
+                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                swaps: vec![swap],
+                ..Default::default()
+            };
+
+            let (calldata, _) = encoder
+                .encode_strategy(solution)
+                .unwrap();
+            let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
+            let expected_input = [
+                "20144a07",                                                           // Function selector
+                "0000000000000000000000000000000000000000000000000de0b6b3a7640000",   // amount in
+                "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",   // token in
+                "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",   // token out
+                &expected_min_amount_encoded,                                         // min amount out
+                "0000000000000000000000000000000000000000000000000000000000000000",   // wrap
+                "0000000000000000000000000000000000000000000000000000000000000000",   // unwrap
+                "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",   // receiver
+                "0000000000000000000000000000000000000000000000000000000000000100",   // offset of swap bytes
+                "0000000000000000000000000000000000000000000000000000000000000052",   // length of swap bytes without padding
+
+                // Swap data
+                "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
+                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
+                "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
+                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+                "00",                                       // zero2one
+                "00",                                       // transfer type
+                "0000000000000000000000000000",             // padding
+            ]
+                .join("");
+
+            let hex_calldata = encode(&calldata);
+
+            assert_eq!(hex_calldata, expected_input);
+            println!("test_single_swap_strategy_encoder_no_transfer_in: {}", hex_calldata);
+        }
+
+        #[test]
         fn test_single_swap_strategy_encoder_wrap() {
             // Performs a single swap from WETH to DAI on a USV2 pool, wrapping ETH
             // Note: This test does not assert anything. It is only used to obtain integration test
