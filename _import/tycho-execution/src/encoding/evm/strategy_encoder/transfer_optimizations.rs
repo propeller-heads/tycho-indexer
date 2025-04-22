@@ -1,8 +1,8 @@
 use tycho_common::Bytes;
 
 use crate::encoding::{
-    evm::constants::IN_TRANSFER_REQUIRED_PROTOCOLS,
-    models::{Swap, TransferType},
+    evm::{constants::IN_TRANSFER_REQUIRED_PROTOCOLS, group_swaps::SwapGroup},
+    models::TransferType,
 };
 
 /// A struct that defines how the tokens will be transferred into the given pool given the solution.
@@ -20,13 +20,13 @@ impl TransferOptimization {
     /// Returns the transfer method that should be used for the given swap and solution.
     pub fn get_transfer_type(
         &self,
-        swap: Swap,
+        swap: SwapGroup,
         given_token: Bytes,
         wrap: bool,
         in_between_swap_optimization: bool,
     ) -> TransferType {
         let in_transfer_required: bool =
-            IN_TRANSFER_REQUIRED_PROTOCOLS.contains(&swap.component.protocol_system.as_str());
+            IN_TRANSFER_REQUIRED_PROTOCOLS.contains(&swap.protocol_system.as_str());
 
         let is_first_swap = swap.token_in == given_token;
 
@@ -65,7 +65,7 @@ impl TransferOptimization {
 #[cfg(test)]
 mod tests {
     use alloy_primitives::hex;
-    use tycho_common::{models::protocol::ProtocolComponent, Bytes};
+    use tycho_common::Bytes;
 
     use super::*;
 
@@ -88,14 +88,12 @@ mod tests {
     #[test]
     fn test_first_swap_transfer_from_permit2() {
         // The swap token is the same as the given token, which is not the native token
-        let swap = Swap {
-            component: ProtocolComponent {
-                protocol_system: "uniswap_v2".to_string(),
-                ..Default::default()
-            },
+        let swap = SwapGroup {
+            protocol_system: "uniswap_v2".to_string(),
             token_in: weth(),
             token_out: dai(),
             split: 0f64,
+            swaps: vec![],
         };
         let optimization = TransferOptimization::new(eth(), weth(), true);
         let transfer_method = optimization.get_transfer_type(swap.clone(), weth(), false, false);
@@ -105,14 +103,12 @@ mod tests {
     #[test]
     fn test_first_swap_transfer_from() {
         // The swap token is the same as the given token, which is not the native token
-        let swap = Swap {
-            component: ProtocolComponent {
-                protocol_system: "uniswap_v2".to_string(),
-                ..Default::default()
-            },
+        let swap = SwapGroup {
+            protocol_system: "uniswap_v2".to_string(),
             token_in: weth(),
             token_out: dai(),
             split: 0f64,
+            swaps: vec![],
         };
         let optimization = TransferOptimization::new(eth(), weth(), false);
         let transfer_method = optimization.get_transfer_type(swap.clone(), weth(), false, false);
@@ -123,14 +119,12 @@ mod tests {
     fn test_first_swap_native() {
         // The swap token is the same as the given token, and it's the native token.
         // No transfer action is needed.
-        let swap = Swap {
-            component: ProtocolComponent {
-                protocol_system: "uniswap_v2".to_string(),
-                ..Default::default()
-            },
+        let swap = SwapGroup {
+            protocol_system: "uniswap_v2".to_string(),
             token_in: eth(),
             token_out: dai(),
             split: 0f64,
+            swaps: vec![],
         };
         let optimization = TransferOptimization::new(eth(), weth(), false);
         let transfer_method = optimization.get_transfer_type(swap.clone(), eth(), false, false);
@@ -141,14 +135,12 @@ mod tests {
     fn test_first_swap_wrapped() {
         // The swap token is NOT the same as the given token, but we are wrapping.
         // Since the swap's token in is the wrapped token - this is the first swap.
-        let swap = Swap {
-            component: ProtocolComponent {
-                protocol_system: "uniswap_v2".to_string(),
-                ..Default::default()
-            },
+        let swap = SwapGroup {
+            protocol_system: "uniswap_v2".to_string(),
             token_in: weth(),
             token_out: dai(),
             split: 0f64,
+            swaps: vec![],
         };
         let optimization = TransferOptimization::new(eth(), weth(), false);
         let transfer_method = optimization.get_transfer_type(swap.clone(), eth(), true, false);
@@ -159,14 +151,12 @@ mod tests {
     fn test_not_first_swap() {
         // The swap token is NOT the same as the given token, and we are NOT wrapping.
         // Thus, this is not the first swap.
-        let swap = Swap {
-            component: ProtocolComponent {
-                protocol_system: "uniswap_v2".to_string(),
-                ..Default::default()
-            },
+        let swap = SwapGroup {
+            protocol_system: "uniswap_v2".to_string(),
             token_in: usdc(),
             token_out: dai(),
             split: 0f64,
+            swaps: vec![],
         };
         let optimization = TransferOptimization::new(eth(), weth(), false);
         let transfer_method = optimization.get_transfer_type(swap.clone(), weth(), false, false);
@@ -177,14 +167,12 @@ mod tests {
     fn test_not_first_swap_funds_in_router() {
         // Not the first swap and the protocol requires the funds to be in the router (which they
         // already are, so the transfer type is None)
-        let swap = Swap {
-            component: ProtocolComponent {
-                protocol_system: "vm:curve".to_string(),
-                ..Default::default()
-            },
+        let swap = SwapGroup {
+            protocol_system: "vm:curve".to_string(),
             token_in: usdc(),
             token_out: dai(),
             split: 0f64,
+            swaps: vec![],
         };
         let optimization = TransferOptimization::new(eth(), weth(), false);
         let transfer_method = optimization.get_transfer_type(swap.clone(), weth(), false, false);
@@ -195,14 +183,12 @@ mod tests {
     fn test_not_first_swap_in_between_swap_optimization() {
         // Not the first swap and the in between swaps are optimized. The funds should already be in
         // the next pool or in the router
-        let swap = Swap {
-            component: ProtocolComponent {
-                protocol_system: "uniswap_v2".to_string(),
-                ..Default::default()
-            },
+        let swap = SwapGroup {
+            protocol_system: "uniswap_v2".to_string(),
             token_in: usdc(),
             token_out: dai(),
             split: 0f64,
+            swaps: vec![],
         };
         let optimization = TransferOptimization::new(eth(), weth(), false);
         let transfer_method = optimization.get_transfer_type(swap.clone(), weth(), false, true);

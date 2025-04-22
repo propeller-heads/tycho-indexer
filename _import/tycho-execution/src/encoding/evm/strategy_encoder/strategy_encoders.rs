@@ -125,20 +125,20 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
         let swap_receiver =
             if !unwrap { solution.receiver.clone() } else { self.router_address.clone() };
 
+        let transfer_type = self
+            .transfer_optimization
+            .get_transfer_type(grouped_swap.clone(), solution.given_token.clone(), wrap, false);
+        let encoding_context = EncodingContext {
+            receiver: swap_receiver.clone(),
+            exact_out: solution.exact_out,
+            router_address: Some(self.router_address.clone()),
+            group_token_in: grouped_swap.token_in.clone(),
+            group_token_out: grouped_swap.token_out.clone(),
+            transfer_type: transfer_type.clone(),
+        };
+
         let mut grouped_protocol_data: Vec<u8> = vec![];
         for swap in grouped_swap.swaps.iter() {
-            let transfer_type = self
-                .transfer_optimization
-                .get_transfer_type(swap.clone(), solution.given_token.clone(), wrap, false);
-
-            let encoding_context = EncodingContext {
-                receiver: swap_receiver.clone(),
-                exact_out: solution.exact_out,
-                router_address: Some(self.router_address.clone()),
-                group_token_in: grouped_swap.input_token.clone(),
-                group_token_out: grouped_swap.output_token.clone(),
-                transfer_type: transfer_type.clone(),
-            };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
             grouped_protocol_data.extend(protocol_data);
         }
@@ -327,25 +327,25 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 solution.receiver.clone() // last swap - there is not next swap
             };
 
+            let transfer_type = self
+                .transfer_optimization
+                .get_transfer_type(
+                    grouped_swap.clone(),
+                    solution.given_token.clone(),
+                    wrap,
+                    in_between_swap_optimization,
+                );
+            let encoding_context = EncodingContext {
+                receiver: swap_receiver.clone(),
+                exact_out: solution.exact_out,
+                router_address: Some(self.router_address.clone()),
+                group_token_in: grouped_swap.token_in.clone(),
+                group_token_out: grouped_swap.token_out.clone(),
+                transfer_type: transfer_type.clone(),
+            };
+
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
-                let transfer_type = self
-                    .transfer_optimization
-                    .get_transfer_type(
-                        swap.clone(),
-                        solution.given_token.clone(),
-                        wrap,
-                        in_between_swap_optimization,
-                    );
-
-                let encoding_context = EncodingContext {
-                    receiver: swap_receiver.clone(),
-                    exact_out: solution.exact_out,
-                    router_address: Some(self.router_address.clone()),
-                    group_token_in: grouped_swap.input_token.clone(),
-                    group_token_out: grouped_swap.output_token.clone(),
-                    transfer_type: transfer_type.clone(),
-                };
                 let protocol_data =
                     swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
                 grouped_protocol_data.extend(protocol_data);
@@ -517,7 +517,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         let intermediary_tokens: HashSet<Bytes> = grouped_swaps
             .iter()
             .flat_map(|grouped_swap| {
-                vec![grouped_swap.input_token.clone(), grouped_swap.output_token.clone()]
+                vec![grouped_swap.token_in.clone(), grouped_swap.token_out.clone()]
             })
             .collect();
         let mut intermediary_tokens: Vec<Bytes> = intermediary_tokens
@@ -562,34 +562,33 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                     ))
                 })?;
 
-            let swap_receiver = if !unwrap && grouped_swap.output_token == solution.checked_token {
+            let swap_receiver = if !unwrap && grouped_swap.token_out == solution.checked_token {
                 solution.receiver.clone()
             } else {
                 self.router_address.clone()
             };
+            let transfer_type = self
+                .transfer_optimization
+                .get_transfer_type(grouped_swap.clone(), solution.given_token.clone(), wrap, false);
+            let encoding_context = EncodingContext {
+                receiver: swap_receiver.clone(),
+                exact_out: solution.exact_out,
+                router_address: Some(self.router_address.clone()),
+                group_token_in: grouped_swap.token_in.clone(),
+                group_token_out: grouped_swap.token_out.clone(),
+                transfer_type: transfer_type.clone(),
+            };
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
-                let transfer_type = self
-                    .transfer_optimization
-                    .get_transfer_type(swap.clone(), solution.given_token.clone(), wrap, false);
-
-                let encoding_context = EncodingContext {
-                    receiver: swap_receiver.clone(),
-                    exact_out: solution.exact_out,
-                    router_address: Some(self.router_address.clone()),
-                    group_token_in: grouped_swap.input_token.clone(),
-                    group_token_out: grouped_swap.output_token.clone(),
-                    transfer_type: transfer_type.clone(),
-                };
                 let protocol_data =
                     swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
                 grouped_protocol_data.extend(protocol_data);
             }
 
             let swap_data = self.encode_swap_header(
-                get_token_position(tokens.clone(), grouped_swap.input_token.clone())?,
-                get_token_position(tokens.clone(), grouped_swap.output_token.clone())?,
+                get_token_position(tokens.clone(), grouped_swap.token_in.clone())?,
+                get_token_position(tokens.clone(), grouped_swap.token_out.clone())?,
                 percentage_to_uint24(grouped_swap.split),
                 Bytes::from_str(swap_encoder.executor_address()).map_err(|_| {
                     EncodingError::FatalError("Invalid executor address".to_string())
