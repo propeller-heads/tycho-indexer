@@ -15,6 +15,10 @@ use diesel_derive_enum::DbEnum;
 use tycho_common::{
     models,
     models::{
+        blockchain::{
+            EntryPointTracingData as EntryPointTracingDataCommon,
+            EntryPointWithData as EntryPointWithDataCommon,
+        },
         Address, AttrStoreKey, Balance, BlockHash, Code, CodeHash, ComponentId, ContractId,
         PaginationParams, StoreVal, TxHash,
     },
@@ -26,10 +30,11 @@ use super::{
     schema::{
         account, account_balance, block, chain, component_balance, component_balance_default,
         component_tvl, contract_code, contract_storage, contract_storage_default, entry_point,
-        entry_point_calls_account, entry_point_tracing_data, extraction_state, protocol_component,
-        protocol_component_holds_contract, protocol_component_holds_entry_point,
+        entry_point_tracing_data, entry_point_tracing_data_calls_account,
+        entry_point_tracing_result, extraction_state, protocol_component,
+        protocol_component_holds_contract, protocol_component_holds_entry_point_tracing_data,
         protocol_component_holds_token, protocol_state, protocol_state_default, protocol_system,
-        protocol_type, token, traced_entry_point, transaction,
+        protocol_type, token, transaction,
     },
     versioning::{StoredVersionedRow, VersionedRow},
     PostgresError, MAX_TS, MAX_VERSION_TS,
@@ -1767,8 +1772,11 @@ pub enum EntryPointTracingType {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct EntryPoint {
     pub id: i64,
+    pub external_id: String,
     pub target: Bytes,
     pub signature: String,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 impl EntryPoint {
@@ -1805,8 +1813,60 @@ impl EntryPoint {
 #[diesel(table_name = entry_point)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewEntryPoint {
+    pub external_id: String,
     pub target: Bytes,
     pub signature: String,
+}
+
+#[derive(Identifiable, Queryable, Associations, Selectable)]
+#[diesel(belongs_to(EntryPoint))]
+#[diesel(table_name = entry_point_tracing_data)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct EntryPointTracingData {
+    pub id: i64,
+    pub entry_point_id: i64,
+    pub tracing_type: EntryPointTracingType,
+    pub data: Option<serde_json::Value>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+impl EntryPointTracingData {
+    pub(crate) async fn id_from_entry_point_with_data(
+        entry_point: &EntryPointWithDataCommon,
+        conn: &mut AsyncPgConnection,
+    ) -> Result<i64, StorageError> {
+        let tracing_type = match &entry_point.data {
+            EntryPointTracingDataCommon::RPCTracer(_) => EntryPointTracingType::RpcTracer,
+        };
+        let data = match &entry_point.data {
+            EntryPointTracingDataCommon::RPCTracer(rpc_tracer) => serde_json::to_value(rpc_tracer)
+                .map_err(|e| {
+                    StorageError::Unexpected(format!(
+                        "Failed to serialize RPCTracerEntryPoint: {}",
+                        e
+                    ))
+                })?,
+        };
+
+        let id_ = super::schema::entry_point_tracing_data::table
+            .inner_join(super::schema::entry_point::table)
+            .filter(super::schema::entry_point::target.eq(entry_point.entry_point.target.clone()))
+            .filter(
+                super::schema::entry_point::signature.eq(entry_point
+                    .entry_point
+                    .signature
+                    .clone()),
+            )
+            .filter(super::schema::entry_point_tracing_data::tracing_type.eq(tracing_type))
+            .filter(super::schema::entry_point_tracing_data::data.eq(data))
+            .select(super::schema::entry_point_tracing_data::id)
+            .first::<i64>(conn)
+            .await
+            .map_err(PostgresError::from)?;
+
+        Ok(id_)
+    }
 }
 
 #[derive(Insertable)]
@@ -1815,62 +1875,67 @@ pub struct NewEntryPoint {
 pub struct NewEntryPointTracingData {
     pub entry_point_id: i64,
     pub tracing_type: EntryPointTracingType,
-    pub data: serde_json::Value,
+    pub data: Option<serde_json::Value>,
 }
 
 #[derive(Queryable, Selectable)]
-#[diesel(table_name = traced_entry_point)]
+#[diesel(table_name = entry_point_tracing_result)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct TracedEntryPoint {
+pub struct EntryPointTracingResult {
     #[allow(dead_code)]
-    entry_point_id: i64,
-    pub detection_block: i64,
+    entry_point_tracing_data_id: i64,
+    #[allow(dead_code)]
+    detection_block: i64,
     pub detection_data: serde_json::Value,
+    #[allow(dead_code)]
+    created_at: NaiveDateTime,
+    #[allow(dead_code)]
+    updated_at: NaiveDateTime,
 }
 
 #[derive(Insertable, AsChangeset)]
-#[diesel(table_name = traced_entry_point)]
+#[diesel(table_name = entry_point_tracing_result)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct NewTracedEntryPoint {
-    pub entry_point_id: i64,
+pub struct NewEntryPointTracingResult {
+    pub entry_point_tracing_data_id: i64,
     pub detection_block: i64,
     pub detection_data: serde_json::Value,
 }
 
 #[derive(Identifiable, Queryable, Associations, Selectable)]
 #[diesel(belongs_to(ProtocolComponent))]
-#[diesel(belongs_to(EntryPoint))]
-#[diesel(table_name = protocol_component_holds_entry_point)]
-#[diesel(primary_key(protocol_component_id, entry_point_id))]
+#[diesel(belongs_to(EntryPointTracingData))]
+#[diesel(table_name = protocol_component_holds_entry_point_tracing_data)]
+#[diesel(primary_key(protocol_component_id, entry_point_tracing_data_id))]
 #[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct ProtocolComponentHoldsEntryPoint {
+pub struct ProtocolComponentHoldsEntryPointTracingData {
     pub protocol_component_id: i64,
-    pub entry_point_id: i64,
+    pub entry_point_tracing_data_id: i64,
 }
 
 #[derive(Insertable)]
-#[diesel(table_name = protocol_component_holds_entry_point)]
+#[diesel(table_name = protocol_component_holds_entry_point_tracing_data)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct NewProtocolComponentHoldsEntryPoint {
+pub struct NewProtocolComponentHoldsEntryPointTracingData {
     pub protocol_component_id: i64,
-    pub entry_point_id: i64,
+    pub entry_point_tracing_data_id: i64,
 }
 
 #[derive(Identifiable, Queryable, Associations, Selectable)]
-#[diesel(belongs_to(EntryPoint))]
+#[diesel(belongs_to(EntryPointTracingData))]
 #[diesel(belongs_to(Account))]
-#[diesel(table_name = entry_point_calls_account)]
-#[diesel(primary_key(entry_point_id, account_id))]
+#[diesel(table_name = entry_point_tracing_data_calls_account)]
+#[diesel(primary_key(entry_point_tracing_data_id, account_id))]
 #[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct EntryPointCallsAccount {
-    pub entry_point_id: i64,
+pub struct EntryPointTracingDataCallsAccount {
+    pub entry_point_tracing_data_id: i64,
     pub account_id: i64,
 }
 
 #[derive(Insertable)]
-#[diesel(table_name = entry_point_calls_account)]
+#[diesel(table_name = entry_point_tracing_data_calls_account)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct NewEntryPointCallsAccount {
-    pub entry_point_id: i64,
+pub struct NewEntryPointTracingDataCallsAccount {
+    pub entry_point_tracing_data_id: i64,
     pub account_id: i64,
 }

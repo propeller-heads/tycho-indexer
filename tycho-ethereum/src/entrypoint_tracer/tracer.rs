@@ -77,87 +77,84 @@ impl EntryPointTracer for EVMEntrypointService {
     ) -> Result<Vec<TracedEntryPoint>, Self::Error> {
         let mut results = Vec::new();
         for entry_point in &entry_points {
-            for data in &entry_point.data {
-                match data {
-                    EntryPointTracingData::RPCTracer(ref rpc_entry_point) => {
-                        let call_trace = self
-                            .trace_call(
-                                &entry_point.entry_point.target,
-                                rpc_entry_point
-                                    .caller
-                                    .as_ref()
-                                    .unwrap_or(&EthersAddress::zero().to_bytes()),
-                                &rpc_entry_point.data,
-                                &block_hash,
-                                GethDebugBuiltInTracerType::CallTracer,
-                            )
-                            .await?;
+            match &entry_point.data {
+                EntryPointTracingData::RPCTracer(ref rpc_entry_point) => {
+                    let call_trace = self
+                        .trace_call(
+                            &entry_point.entry_point.target,
+                            rpc_entry_point
+                                .caller
+                                .as_ref()
+                                .unwrap_or(&EthersAddress::zero().to_bytes()),
+                            &rpc_entry_point.data,
+                            &block_hash,
+                            GethDebugBuiltInTracerType::CallTracer,
+                        )
+                        .await?;
 
-                        let called_addresses =
-                            if let GethTrace::Known(GethTraceFrame::CallTracer(frame)) = call_trace
-                            {
-                                flatten_calls(&frame)
-                            } else {
-                                return Err(RPCError::UnknownError("CallTracer failed".to_string()));
-                            };
+                    let called_addresses =
+                        if let GethTrace::Known(GethTraceFrame::CallTracer(frame)) = call_trace {
+                            flatten_calls(&frame)
+                        } else {
+                            return Err(RPCError::UnknownError("CallTracer failed".to_string()));
+                        };
 
-                        let pre_state_trace = self
-                            .trace_call(
-                                &entry_point.entry_point.target,
-                                rpc_entry_point
-                                    .caller
-                                    .as_ref()
-                                    .unwrap_or(&EthersAddress::zero().to_bytes()),
-                                &rpc_entry_point.data,
-                                &block_hash,
-                                GethDebugBuiltInTracerType::PreStateTracer,
-                            )
-                            .await?;
+                    let pre_state_trace = self
+                        .trace_call(
+                            &entry_point.entry_point.target,
+                            rpc_entry_point
+                                .caller
+                                .as_ref()
+                                .unwrap_or(&EthersAddress::zero().to_bytes()),
+                            &rpc_entry_point.data,
+                            &block_hash,
+                            GethDebugBuiltInTracerType::PreStateTracer,
+                        )
+                        .await?;
 
-                        // Provides a very simplistic way of finding retriggers. A better way would
-                        // involve using the structure of callframes. So basically iterate the call
-                        // tree in a parent child manner then search the
-                        // childs address in the prestate of parent.
-                        let retriggers = if let GethTrace::Known(GethTraceFrame::PreStateTracer(
-                            PreStateFrame::Default(PreStateMode(frame)),
-                        )) = pre_state_trace
-                        {
-                            let mut retriggers = HashSet::new();
-                            for (address, account) in frame.iter() {
-                                if let Some(storage) = &account.storage {
-                                    for (slot, val) in storage.iter() {
-                                        for call_address in called_addresses.iter() {
-                                            let address_bytes = call_address.as_bytes();
-                                            let value_bytes = val.as_bytes();
-                                            if value_bytes
-                                                .windows(address_bytes.len())
-                                                .any(|window| window == address_bytes)
-                                            {
-                                                retriggers.insert((
-                                                    (*address).to_bytes(),
-                                                    (*slot).to_bytes(),
-                                                ));
-                                            }
+                    // Provides a very simplistic way of finding retriggers. A better way would
+                    // involve using the structure of callframes. So basically iterate the call
+                    // tree in a parent child manner then search the
+                    // childs address in the prestate of parent.
+                    let retriggers = if let GethTrace::Known(GethTraceFrame::PreStateTracer(
+                        PreStateFrame::Default(PreStateMode(frame)),
+                    )) = pre_state_trace
+                    {
+                        let mut retriggers = HashSet::new();
+                        for (address, account) in frame.iter() {
+                            if let Some(storage) = &account.storage {
+                                for (slot, val) in storage.iter() {
+                                    for call_address in called_addresses.iter() {
+                                        let address_bytes = call_address.as_bytes();
+                                        let value_bytes = val.as_bytes();
+                                        if value_bytes
+                                            .windows(address_bytes.len())
+                                            .any(|window| window == address_bytes)
+                                        {
+                                            retriggers.insert((
+                                                (*address).to_bytes(),
+                                                (*slot).to_bytes(),
+                                            ));
                                         }
                                     }
                                 }
                             }
-                            retriggers
-                        } else {
-                            return Err(RPCError::UnknownError("PreStateTracer failed".to_string()));
-                        };
-                        results.push(TracedEntryPoint::new(
-                            entry_point.entry_point.clone(),
-                            block_hash.clone(),
-                            TracingResult::new(
-                                retriggers,
-                                called_addresses
-                                    .into_iter()
-                                    .map(BytesCodec::to_bytes)
-                                    .collect(),
-                            ),
-                        ));
-                    }
+                        }
+                        retriggers
+                    } else {
+                        return Err(RPCError::UnknownError("PreStateTracer failed".to_string()));
+                    };
+                    results.push(TracedEntryPoint::new(
+                        entry_point.clone(),
+                        block_hash.clone(),
+                        TracingResult::new(
+                            retriggers,
+                            called_addresses
+                                .into_iter()
+                                .map(BytesCodec::to_bytes)
+                                .collect(),
+                        ),
+                    ));
                 }
             }
         }
@@ -198,20 +195,20 @@ mod tests {
                     Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
                     "getRate()".to_string(),
                 ),
-                vec![EntryPointTracingData::RPCTracer(RPCTracerEntryPoint::new(
+                EntryPointTracingData::RPCTracer(RPCTracerEntryPoint::new(
                     None,
                     Bytes::from(keccak256("getRate()")),
-                ))],
+                )),
             ),
             EntryPointWithData::new(
                 EntryPoint::new(
                     Bytes::from_str("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9").unwrap(),
                     "getRate()".to_string(),
                 ),
-                vec![EntryPointTracingData::RPCTracer(RPCTracerEntryPoint::new(
+                EntryPointTracingData::RPCTracer(RPCTracerEntryPoint::new(
                     None,
                     Bytes::from(keccak256("getRate()")),
-                ))],
+                )),
             ),
         ];
         let traced_entry_points = tracer
@@ -220,7 +217,7 @@ mod tests {
                     "0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2",
                 )
                 .unwrap(),
-                entry_points,
+                entry_points.clone(),
             )
             .await
             .unwrap();
@@ -229,10 +226,7 @@ mod tests {
             traced_entry_points,
             vec![
                 TracedEntryPoint {
-                    entry_point: EntryPoint::new(
-                        Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
-                        "getRate()".to_string(),
-                    ),
+                    entry_point: entry_points[0].clone(),
                     detection_block_hash: Bytes::from_str("0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2").unwrap(),
                     tracing_result: TracingResult::new(
                         HashSet::from([
@@ -255,10 +249,8 @@ mod tests {
                     ),
                 },
                 TracedEntryPoint {
-                    entry_point: EntryPoint::new(
-                        Bytes::from_str("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9").unwrap(),
-                        "getRate()".to_string(),
-                    ),                    detection_block_hash: Bytes::from_str("0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2").unwrap(),
+                    entry_point: entry_points[1].clone(),
+                    detection_block_hash: Bytes::from_str("0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2").unwrap(),
                     tracing_result: TracingResult::new(
                         HashSet::from([
                             (
