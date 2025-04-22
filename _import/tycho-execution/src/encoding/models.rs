@@ -2,7 +2,7 @@ use hex;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use tycho_common::{
-    models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
+    models::{protocol::ProtocolComponent, Chain as TychoCommonChain},
     Bytes,
 };
 
@@ -96,6 +96,27 @@ pub struct Transaction {
     pub data: Vec<u8>,
 }
 
+/// Represents the type of transfer to be performed into the pool.
+///
+/// # Fields
+///
+/// * `TransferToProtocol`: Transfer the token from the router into the protocol.
+/// * `TransferFromToProtocol`: Transfer the token from the sender to the protocol.
+/// * `TransferPermit2ToProtocol`: Transfer the token from the sender to the protocol using Permit2.
+/// * `TransferFromToRouter`: Transfer the token from the sender to the router.
+/// * `TransferPermit2ToRouter`: Transfer the token from the sender to the router using Permit2.
+/// * `None`: No transfer is needed. Tokens are already in the pool.
+#[repr(u8)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum TransferType {
+    TransferToProtocol = 0,
+    TransferFromToProtocol = 1,
+    TransferPermit2ToProtocol = 2,
+    TransferFromToRouter = 3,
+    TransferPermit2ToRouter = 4,
+    None = 5,
+}
+
 /// Represents necessary attributes for encoding an order.
 ///
 /// # Fields
@@ -113,6 +134,7 @@ pub struct EncodingContext {
     pub router_address: Option<Bytes>,
     pub group_token_in: Bytes,
     pub group_token_out: Bytes,
+    pub transfer_type: TransferType,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -121,15 +143,15 @@ pub struct Chain {
     pub name: String,
 }
 
-impl From<TychoCoreChain> for Chain {
-    fn from(chain: TychoCoreChain) -> Self {
+impl From<TychoCommonChain> for Chain {
+    fn from(chain: TychoCommonChain) -> Self {
         match chain {
-            TychoCoreChain::Ethereum => Chain { id: 1, name: chain.to_string() },
-            TychoCoreChain::ZkSync => Chain { id: 324, name: chain.to_string() },
-            TychoCoreChain::Arbitrum => Chain { id: 42161, name: chain.to_string() },
-            TychoCoreChain::Starknet => Chain { id: 0, name: chain.to_string() },
-            TychoCoreChain::Base => Chain { id: 8453, name: chain.to_string() },
-            TychoCoreChain::Unichain => Chain { id: 130, name: chain.to_string() },
+            TychoCommonChain::Ethereum => Chain { id: 1, name: chain.to_string() },
+            TychoCommonChain::ZkSync => Chain { id: 324, name: chain.to_string() },
+            TychoCommonChain::Arbitrum => Chain { id: 42161, name: chain.to_string() },
+            TychoCommonChain::Starknet => Chain { id: 0, name: chain.to_string() },
+            TychoCommonChain::Base => Chain { id: 8453, name: chain.to_string() },
+            TychoCommonChain::Unichain => Chain { id: 130, name: chain.to_string() },
         }
     }
 }

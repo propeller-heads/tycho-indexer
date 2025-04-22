@@ -7,92 +7,10 @@ use crate::encoding::{
     models::{NativeAction, Solution, Swap},
 };
 
-/// Validates whether a sequence of split swaps represents a valid solution.
-#[derive(Clone)]
-pub struct SplitSwapValidator;
-
-impl SplitSwapValidator {
-    /// Raises an error if the split percentages are invalid.
-    ///
-    /// Split percentages are considered valid if all the following conditions are met:
-    /// * Each split amount is < 1 (100%)
-    /// * There is exactly one 0% split for each token, and it's the last swap specified, signifying
-    ///   to the router to send the remainder of the token to the designated protocol
-    /// * The sum of all non-remainder splits for each token is < 1 (100%)
-    /// * There are no negative split amounts
-    pub fn validate_split_percentages(&self, swaps: &[Swap]) -> Result<(), EncodingError> {
-        let mut swaps_by_token: HashMap<Bytes, Vec<&Swap>> = HashMap::new();
-        for swap in swaps {
-            if swap.split >= 1.0 {
-                return Err(EncodingError::InvalidInput(format!(
-                    "Split percentage must be less than 1 (100%), got {}",
-                    swap.split
-                )));
-            }
-            swaps_by_token
-                .entry(swap.token_in.clone())
-                .or_default()
-                .push(swap);
-        }
-
-        for (token, token_swaps) in swaps_by_token {
-            // Single swaps don't need remainder handling
-            if token_swaps.len() == 1 {
-                if token_swaps[0].split != 0.0 {
-                    return Err(EncodingError::InvalidInput(format!(
-                        "Single swap must have 0% split for token {:?}",
-                        token
-                    )));
-                }
-                continue;
-            }
-
-            let mut found_zero_split = false;
-            let mut total_percentage = 0.0;
-            for (i, swap) in token_swaps.iter().enumerate() {
-                match (swap.split == 0.0, i == token_swaps.len() - 1) {
-                    (true, false) => {
-                        return Err(EncodingError::InvalidInput(format!(
-                            "The 0% split for token {:?} must be the last swap",
-                            token
-                        )))
-                    }
-                    (true, true) => found_zero_split = true,
-                    (false, _) => {
-                        if swap.split < 0.0 {
-                            return Err(EncodingError::InvalidInput(format!(
-                                "All splits must be >= 0% for token {:?}",
-                                token
-                            )));
-                        }
-                        total_percentage += swap.split;
-                    }
-                }
-            }
-
-            if !found_zero_split {
-                return Err(EncodingError::InvalidInput(format!(
-                    "Token {:?} must have exactly one 0% split for remainder handling",
-                    token
-                )));
-            }
-
-            // Total must be <100% to leave room for remainder
-            if total_percentage >= 1.0 {
-                return Err(EncodingError::InvalidInput(format!(
-                    "Total of non-remainder splits for token {:?} must be <100%, got {}%",
-                    token,
-                    total_percentage * 100.0
-                )));
-            }
-        }
-
-        Ok(())
-    }
-
+pub trait SwapValidator {
     /// Raises an error if the solution does not have checked amount set or slippage with checked
     /// amount set.
-    pub fn validate_solution_min_amounts(&self, solution: &Solution) -> Result<(), EncodingError> {
+    fn validate_solution_min_amounts(&self, solution: &Solution) -> Result<(), EncodingError> {
         if solution.checked_amount.is_none() &&
             (solution.slippage.is_none() || solution.expected_amount.is_none())
         {
@@ -113,7 +31,7 @@ impl SplitSwapValidator {
     /// If the given token is the native token and the native action is WRAP, it will be converted
     /// to the wrapped token before validating the swap path. The same principle applies for the
     /// checked token and the UNWRAP action.
-    pub fn validate_swap_path(
+    fn validate_swap_path(
         &self,
         swaps: &[Swap],
         given_token: &Bytes,
@@ -196,6 +114,98 @@ impl SplitSwapValidator {
         }
     }
 }
+
+/// Validates whether a sequence of split swaps represents a valid solution.
+#[derive(Clone)]
+pub struct SplitSwapValidator;
+
+impl SwapValidator for SplitSwapValidator {}
+
+impl SplitSwapValidator {
+    /// Raises an error if the split percentages are invalid.
+    ///
+    /// Split percentages are considered valid if all the following conditions are met:
+    /// * Each split amount is < 1 (100%)
+    /// * There is exactly one 0% split for each token, and it's the last swap specified, signifying
+    ///   to the router to send the remainder of the token to the designated protocol
+    /// * The sum of all non-remainder splits for each token is < 1 (100%)
+    /// * There are no negative split amounts
+    pub fn validate_split_percentages(&self, swaps: &[Swap]) -> Result<(), EncodingError> {
+        let mut swaps_by_token: HashMap<Bytes, Vec<&Swap>> = HashMap::new();
+        for swap in swaps {
+            if swap.split >= 1.0 {
+                return Err(EncodingError::InvalidInput(format!(
+                    "Split percentage must be less than 1 (100%), got {}",
+                    swap.split
+                )));
+            }
+            swaps_by_token
+                .entry(swap.token_in.clone())
+                .or_default()
+                .push(swap);
+        }
+
+        for (token, token_swaps) in swaps_by_token {
+            // Single swaps don't need remainder handling
+            if token_swaps.len() == 1 {
+                if token_swaps[0].split != 0.0 {
+                    return Err(EncodingError::InvalidInput(format!(
+                        "Single swap must have 0% split for token {:?}",
+                        token
+                    )));
+                }
+                continue;
+            }
+
+            let mut found_zero_split = false;
+            let mut total_percentage = 0.0;
+            for (i, swap) in token_swaps.iter().enumerate() {
+                match (swap.split == 0.0, i == token_swaps.len() - 1) {
+                    (true, false) => {
+                        return Err(EncodingError::InvalidInput(format!(
+                            "The 0% split for token {:?} must be the last swap",
+                            token
+                        )))
+                    }
+                    (true, true) => found_zero_split = true,
+                    (false, _) => {
+                        if swap.split < 0.0 {
+                            return Err(EncodingError::InvalidInput(format!(
+                                "All splits must be >= 0% for token {:?}",
+                                token
+                            )));
+                        }
+                        total_percentage += swap.split;
+                    }
+                }
+            }
+
+            if !found_zero_split {
+                return Err(EncodingError::InvalidInput(format!(
+                    "Token {:?} must have exactly one 0% split for remainder handling",
+                    token
+                )));
+            }
+
+            // Total must be <100% to leave room for remainder
+            if total_percentage >= 1.0 {
+                return Err(EncodingError::InvalidInput(format!(
+                    "Total of non-remainder splits for token {:?} must be <100%, got {}%",
+                    token,
+                    total_percentage * 100.0
+                )));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Validates whether a sequence of sequential swaps represents a valid solution.
+#[derive(Clone)]
+pub struct SequentialSwapValidator;
+
+impl SwapValidator for SequentialSwapValidator {}
 
 #[cfg(test)]
 mod tests {
