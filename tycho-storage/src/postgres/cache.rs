@@ -15,7 +15,9 @@ use tracing::{debug, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
     models::{
         self,
-        blockchain::{Block, Transaction},
+        blockchain::{
+            Block, EntryPoint, EntryPointWithData, TracedEntryPoint, TracingResult, Transaction,
+        },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
@@ -26,15 +28,14 @@ use tycho_common::{
         TxHash,
     },
     storage::{
-        BlockIdentifier, BlockOrTimestamp, ChainGateway, ContractStateGateway,
-        ExtractionStateGateway, Gateway, ProtocolGateway, StorageError, Version, WithTotal,
+        BlockIdentifier, BlockOrTimestamp, ChainGateway, ContractStateGateway, EntryPointFilter,
+        EntryPointGateway, ExtractionStateGateway, Gateway, ProtocolGateway, StorageError, Version,
+        WithTotal,
     },
     Bytes,
 };
 
 use super::{PostgresError, PostgresGateway};
-use crate::postgres::entry_point::EntryPointGateway;
-
 /// Represents different types of database write operations.
 #[derive(PartialEq, Clone, Debug)]
 pub(crate) enum WriteOp {
@@ -1113,6 +1114,58 @@ impl ProtocolGateway for CachedGateway {
     ) -> Result<WithTotal<Vec<String>>, StorageError> {
         self.state_gateway
             .get_protocol_systems(chain, pagination_params)
+            .await
+    }
+}
+
+#[async_trait]
+impl EntryPointGateway for CachedGateway {
+    #[instrument(skip_all)]
+    async fn upsert_entry_points(
+        &self,
+        entry_points: &[EntryPointWithData],
+        component_id: &str,
+    ) -> Result<(), StorageError> {
+        self.add_op(WriteOp::UpsertEntryPoints((entry_points.to_vec(), component_id.to_string())))
+            .await?;
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
+    async fn get_entry_points(
+        &self,
+        filter: EntryPointFilter,
+    ) -> Result<Vec<EntryPoint>, StorageError> {
+        let mut conn =
+            self.pool.get().await.map_err(|e| {
+                StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
+            })?;
+        self.state_gateway
+            .get_entry_points(filter, &mut conn)
+            .await
+    }
+
+    #[instrument(skip_all)]
+    async fn upsert_traced_entry_points(
+        &self,
+        traced_entry_points: &[TracedEntryPoint],
+    ) -> Result<(), StorageError> {
+        self.add_op(WriteOp::UpsertTracedEntryPoints(traced_entry_points.to_vec()))
+            .await?;
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
+    async fn get_traced_entry_point(
+        &self,
+        entry_point: EntryPoint,
+    ) -> Result<Vec<TracingResult>, StorageError> {
+        let mut conn =
+            self.pool.get().await.map_err(|e| {
+                StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
+            })?;
+        self.state_gateway
+            .get_traced_entry_point(entry_point, &mut conn)
             .await
     }
 }
