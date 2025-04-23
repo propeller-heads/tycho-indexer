@@ -1,12 +1,3 @@
-## [1.0.1](https://github.com/propeller-heads/tycho-execution/compare/1.0.0...1.0.1) (2025-04-23)
-
-
-### Bug Fixes
-
-* Changes after rebase ([d39a2ac](https://github.com/propeller-heads/tycho-execution/commit/d39a2accce2d533f8d26223156853b442c02355b))
-* Configurable fee on USV2 executor. ([826aa54](https://github.com/propeller-heads/tycho-execution/commit/826aa54631b71fd209c6cc56c90dc373a4da966d))
-* Tighten max feeBps in USV2 executor ([e07573b](https://github.com/propeller-heads/tycho-execution/commit/e07573bbb8db7ab5c88728dcaea8f537bc2520d4))
-
 ## [1.0.0](https://github.com/propeller-heads/tycho-execution/compare/0.81.0...1.0.0) (2025-04-22)
 
 
