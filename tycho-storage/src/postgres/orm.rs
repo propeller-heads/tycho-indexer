@@ -1767,6 +1767,14 @@ pub enum EntryPointTracingType {
     RpcTracer,
 }
 
+impl From<&models::blockchain::EntryPointTracingData> for EntryPointTracingType {
+    fn from(value: &models::blockchain::EntryPointTracingData) -> Self {
+        match value {
+            models::blockchain::EntryPointTracingData::RPCTracer(_) => Self::RpcTracer,
+        }
+    }
+}
+
 #[derive(Identifiable, Queryable, Selectable)]
 #[diesel(table_name = entry_point)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -1779,7 +1787,14 @@ pub struct EntryPoint {
     pub updated_at: NaiveDateTime,
 }
 
+impl From<EntryPoint> for models::blockchain::EntryPoint {
+    fn from(value: EntryPoint) -> Self {
+        Self { target: value.target.clone(), signature: value.signature.clone() }
+    }
+}
+
 impl EntryPoint {
+    #[allow(dead_code)]
     pub(crate) async fn ids_by_target_and_signature(
         pairs: &[(Bytes, String)],
         conn: &mut AsyncPgConnection,
@@ -1806,6 +1821,22 @@ impl EntryPoint {
             .filter(|(_, t, s)| entry_pairs.contains(&(t.clone(), s.clone())))
             .map(|(ep_id, t, s)| ((t, s), ep_id))
             .collect::<HashMap<_, _>>())
+    }
+
+    pub(crate) async fn id_by_target_and_signature(
+        target_: &Bytes,
+        signature_: &String,
+        conn: &mut AsyncPgConnection,
+    ) -> Result<i64, StorageError> {
+        use crate::postgres::schema::entry_point::dsl::*;
+
+        Ok(entry_point
+            .select(id)
+            .filter(target.eq(target_))
+            .filter(signature.eq(signature_))
+            .first::<i64>(conn)
+            .await
+            .map_err(PostgresError::from)?)
     }
 }
 
@@ -1836,9 +1867,7 @@ impl EntryPointTracingData {
         entry_point: &EntryPointWithDataCommon,
         conn: &mut AsyncPgConnection,
     ) -> Result<i64, StorageError> {
-        let tracing_type = match &entry_point.data {
-            EntryPointTracingDataCommon::RPCTracer(_) => EntryPointTracingType::RpcTracer,
-        };
+        let tracing_type = EntryPointTracingType::from(&entry_point.data);
         let data = match &entry_point.data {
             EntryPointTracingDataCommon::RPCTracer(rpc_tracer) => serde_json::to_value(rpc_tracer)
                 .map_err(|e| {
@@ -1886,7 +1915,8 @@ pub struct EntryPointTracingResult {
     entry_point_tracing_data_id: i64,
     #[allow(dead_code)]
     detection_block: i64,
-    pub detection_data: serde_json::Value,
+    #[allow(dead_code)]
+    detection_data: serde_json::Value,
     #[allow(dead_code)]
     created_at: NaiveDateTime,
     #[allow(dead_code)]

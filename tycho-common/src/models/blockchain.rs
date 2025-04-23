@@ -5,7 +5,7 @@ use std::{
 };
 
 use chrono::NaiveDateTime;
-use serde::{Deserialize, Serialize};
+use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use tracing::warn;
 
 use super::{BlockHash, StoreKey};
@@ -379,7 +379,7 @@ pub enum EntryPointTracingData {
     RPCTracer(RPCTracerEntryPoint),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)] //TODO: Make serde consistent
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RPCTracerEntryPoint {
     pub caller: Option<Address>,
     pub data: Bytes,
@@ -388,6 +388,19 @@ pub struct RPCTracerEntryPoint {
 impl RPCTracerEntryPoint {
     pub fn new(caller: Option<Address>, data: Bytes) -> Self {
         Self { caller, data }
+    }
+}
+
+// Ensure serialization order, required by the storage layer
+impl Serialize for RPCTracerEntryPoint {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("RPCTracerEntryPoint", 2)?;
+        state.serialize_field("caller", &self.caller)?;
+        state.serialize_field("data", &self.data)?;
+        state.end()
     }
 }
 
@@ -670,5 +683,26 @@ pub mod fixtures {
         );
 
         assert!(tx1.merge(tx2).is_err());
+    }
+
+    #[test]
+    fn test_rpc_tracer_entry_point_serialization_order() {
+        use std::str::FromStr;
+
+        use serde_json;
+
+        let entry_point = RPCTracerEntryPoint::new(
+            Some(Address::from_str("0x1234567890123456789012345678901234567890").unwrap()),
+            Bytes::from_str("0xabcdef").unwrap(),
+        );
+
+        let serialized = serde_json::to_string(&entry_point).unwrap();
+
+        // Verify that "caller" comes before "data" in the serialized output
+        assert!(serialized.find("\"caller\"").unwrap() < serialized.find("\"data\"").unwrap());
+
+        // Verify we can deserialize it back
+        let deserialized: RPCTracerEntryPoint = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(entry_point, deserialized);
     }
 }
