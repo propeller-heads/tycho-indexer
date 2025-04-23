@@ -10,6 +10,7 @@ error UniswapV2Executor__InvalidDataLength();
 error UniswapV2Executor__InvalidTarget();
 error UniswapV2Executor__InvalidFactory();
 error UniswapV2Executor__InvalidInitCode();
+error UniswapV2Executor__InvalidFee();
 
 contract UniswapV2Executor is IExecutor, TokenTransfer {
     using SafeERC20 for IERC20;
@@ -17,10 +18,14 @@ contract UniswapV2Executor is IExecutor, TokenTransfer {
     address public immutable factory;
     bytes32 public immutable initCode;
     address private immutable self;
+    uint256 public immutable feeBps;
 
-    constructor(address _factory, bytes32 _initCode, address _permit2)
-        TokenTransfer(_permit2)
-    {
+    constructor(
+        address _factory,
+        bytes32 _initCode,
+        address _permit2,
+        uint256 _feeBps
+    ) TokenTransfer(_permit2) {
         if (_factory == address(0)) {
             revert UniswapV2Executor__InvalidFactory();
         }
@@ -29,6 +34,10 @@ contract UniswapV2Executor is IExecutor, TokenTransfer {
         }
         factory = _factory;
         initCode = _initCode;
+        if (_feeBps > 30) {
+            revert UniswapV2Executor__InvalidFee();
+        }
+        feeBps = _feeBps;
         self = address(this);
     }
 
@@ -100,9 +109,9 @@ contract UniswapV2Executor is IExecutor, TokenTransfer {
         }
 
         require(reserveIn > 0 && reserveOut > 0, "L");
-        uint256 amountInWithFee = amountIn * 997;
+        uint256 amountInWithFee = amountIn * (10000 - feeBps);
         uint256 numerator = amountInWithFee * uint256(reserveOut);
-        uint256 denominator = (uint256(reserveIn) * 1000) + amountInWithFee;
+        uint256 denominator = (uint256(reserveIn) * 10000) + amountInWithFee;
         amount = numerator / denominator;
     }
 
