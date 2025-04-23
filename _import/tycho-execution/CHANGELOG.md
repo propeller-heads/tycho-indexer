@@ -1,10 +1,3 @@
-## [1.0.2](https://github.com/propeller-heads/tycho-execution/compare/1.0.1...1.0.2) (2025-04-23)
-
-
-### Bug Fixes
-
-* After merge test fixes ([4ac108e](https://github.com/propeller-heads/tycho-execution/commit/4ac108e7d1c2f65f8ecfadb606c6e365eb2c00db))
-
 ## [1.0.1](https://github.com/propeller-heads/tycho-execution/compare/1.0.0...1.0.1) (2025-04-23)
 
 
