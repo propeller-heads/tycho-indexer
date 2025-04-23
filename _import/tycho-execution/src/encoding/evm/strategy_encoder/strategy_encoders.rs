@@ -873,10 +873,10 @@ mod tests {
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-            let expected_amount = Some(BigUint::from_str("2_650_000000000000000000").unwrap());
+            let expected_amount = Some(BigUint::from_str("1_650_000000000000000000").unwrap());
             let slippage = Some(0.01f64);
-            let checked_amount = Some(BigUint::from_str("2_640_000000000000000000").unwrap());
-            let expected_min_amount = U256::from_str("2_640_000000000000000000").unwrap();
+            let checked_amount = Some(BigUint::from_str("1_640_000000000000000000").unwrap());
+            let expected_min_amount = U256::from_str("1_640_000000000000000000").unwrap();
 
             let swap = Swap {
                 component: ProtocolComponent {
@@ -1772,6 +1772,7 @@ mod tests {
                     swap_encoder_registry,
                     Some(private_key),
                     Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                    false,
                 )
                 .unwrap();
                 let solution = Solution {
