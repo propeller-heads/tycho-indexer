@@ -1149,16 +1149,16 @@ impl EntryPointGateway for CachedGateway {
     }
 
     #[instrument(skip_all)]
-    async fn get_entry_points(
+    async fn get_entry_points_with_data(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<Vec<EntryPoint>, StorageError> {
+    ) -> Result<Vec<EntryPointWithData>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_entry_points(filter, &mut conn)
+            .get_entry_points_with_data(filter, &mut conn)
             .await
     }
 

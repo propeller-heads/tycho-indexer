@@ -1770,7 +1770,7 @@ impl ComponentTVL {
     }
 }
 
-#[derive(Debug, DbEnum, Clone, PartialEq)]
+#[derive(Debug, DbEnum, Clone, PartialEq, Eq, Hash)]
 #[ExistingTypePath = "crate::postgres::schema::sql_types::EntryPointTracingType"]
 pub enum EntryPointTracingType {
     RpcTracer,

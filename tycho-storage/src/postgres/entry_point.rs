@@ -140,17 +140,17 @@ impl PostgresGateway {
         Ok(())
     }
 
-    pub(crate) async fn get_entry_points(
+    pub(crate) async fn get_entry_points_with_data(
         &self,
         filter: EntryPointFilter,
         conn: &mut AsyncPgConnection,
-    ) -> Result<Vec<EntryPoint>, StorageError> {
+    ) -> Result<Vec<EntryPointWithData>, StorageError> {
         use schema::{
             entry_point::dsl::*, entry_point_tracing_data as eptd, protocol_component as pc,
             protocol_component_holds_entry_point_tracing_data as pchep,
         };
 
-        let orm_results = if let Some(ref protocol) = filter.protocol_system {
+        let orm_ep = if let Some(ref protocol) = filter.protocol_system {
             let ps_id = ProtocolSystem::id_by_name(protocol, conn).await?;
             schema::entry_point::table
                 .inner_join(eptd::table.on(schema::entry_point::id.eq(eptd::entry_point_id)))
@@ -175,10 +175,30 @@ impl PostgresGateway {
                 .map_err(|err| storage_error_from_diesel(err, "EntryPoint", "None", None))?
         };
 
-        Ok(orm_results
+        let ep_ids = orm_ep
+            .iter()
+            .map(|ep| ep.id)
+            .collect::<Vec<_>>();
+
+        let orm_ep_data = schema::entry_point_tracing_data::table
+            .filter(schema::entry_point_tracing_data::entry_point_id.eq_any(ep_ids))
+            .select(ORMEntryPointTracingData::as_select())
+            .load::<ORMEntryPointTracingData>(conn)
+            .await
+            .map_err(|err| storage_error_from_diesel(err, "EntryPointData", "None", None))?;
+
+        let results = orm_ep
             .into_iter()
-            .map(Into::into)
-            .collect())
+            .map(|ep| {
+                let data = orm_ep_data
+                    .iter()
+                    .find(|data| data.entry_point_id == ep.id)
+                    .unwrap();
+                EntryPointWithData { entry_point: ep.into(), data: data.into() }
+            })
+            .collect::<Vec<_>>();
+
+        Ok(results)
     }
 
     pub(crate) async fn upsert_traced_entry_points(
@@ -461,11 +481,11 @@ mod test {
 
         let filter = EntryPointFilter::new(None);
         let retrieved_entry_points = gw
-            .get_entry_points(filter, &mut conn)
+            .get_entry_points_with_data(filter, &mut conn)
             .await
             .unwrap();
 
-        assert_eq!(retrieved_entry_points[0], entry_point.entry_point);
+        assert_eq!(retrieved_entry_points[0], entry_point);
     }
 
     #[tokio::test]
@@ -482,14 +502,14 @@ mod test {
         // Filter by protocol name
         let filter = EntryPointFilter::new(Some("test_protocol".to_string()));
         let retrieved_entry_points = gw
-            .get_entry_points(filter, &mut conn)
+            .get_entry_points_with_data(filter, &mut conn)
             .await
             .unwrap();
-        assert_eq!(retrieved_entry_points, vec![entry_point.entry_point]);
+        assert_eq!(retrieved_entry_points, vec![entry_point]);
 
         let filter = EntryPointFilter::new(Some("unknown".to_string()));
         let retrieved_entry_points = gw
-            .get_entry_points(filter, &mut conn)
+            .get_entry_points_with_data(filter, &mut conn)
             .await
             .unwrap();
         assert_eq!(retrieved_entry_points, vec![]);
