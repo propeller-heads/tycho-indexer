@@ -197,7 +197,7 @@ mod tests {
                 ),
                 EntryPointTracingData::RPCTracer(RPCTracerEntryPoint::new(
                     None,
-                    Bytes::from(keccak256("getRate()")),
+                    Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
                 )),
             ),
             EntryPointWithData::new(
@@ -207,7 +207,7 @@ mod tests {
                 ),
                 EntryPointTracingData::RPCTracer(RPCTracerEntryPoint::new(
                     None,
-                    Bytes::from(keccak256("getRate()")),
+                    Bytes::from(&keccak256("getRate()")[0..4]),
                 )),
             ),
         ];

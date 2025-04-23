@@ -107,16 +107,20 @@ impl PostgresGateway {
             })
             .collect::<Result<Vec<_>, StorageError>>()?;
 
-        let data_ids = diesel::insert_into(entry_point_tracing_data)
+        // Fetch entry points by their external_ids, we can't use .returning() on the insert above
+        // because it doesn't return the ids on conflicts.
+        diesel::insert_into(entry_point_tracing_data)
             .values(&new_tracing_data)
             .on_conflict_do_nothing()
-            .returning(schema::entry_point_tracing_data::id)
-            .get_results::<i64>(conn)
+            .execute(conn)
             .await
             .map_err(|e| storage_error_from_diesel(e, "EntryPointData", "Batch upsert", None))?;
 
+        let data_ids =
+            ORMEntryPointTracingData::ids_by_entry_point_with_data(entry_points, conn).await?;
+
         let pc_links = data_ids
-            .into_iter()
+            .into_values()
             .map(|data_id| NewProtocolComponentHoldsEntryPointTracingData {
                 protocol_component_id: *pc_id,
                 entry_point_tracing_data_id: data_id,
@@ -439,7 +443,7 @@ mod test {
             },
             data: EntryPointTracingData::RPCTracer(RPCTracerEntryPoint {
                 caller: None,
-                data: Bytes::from(keccak256("getRate()")),
+                data: Bytes::from(&keccak256("getRate()")[0..4]),
             }),
         }
     }
