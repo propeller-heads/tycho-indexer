@@ -8,7 +8,9 @@ use thiserror::Error;
 use crate::{
     dto,
     models::{
-        blockchain::{Block, Transaction},
+        blockchain::{
+            Block, EntryPoint, EntryPointWithData, TracedEntryPoint, TracingResult, Transaction,
+        },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
@@ -16,7 +18,7 @@ use crate::{
         },
         token::CurrencyToken,
         Address, BlockHash, Chain, ComponentId, ContractId, ExtractionState, PaginationParams,
-        ProtocolType, TxHash,
+        ProtocolSystem, ProtocolType, TxHash,
     },
     Bytes,
 };
@@ -500,6 +502,44 @@ pub trait ProtocolGateway {
         ids: Option<&[&str]>,
         pagination_params: Option<&PaginationParams>,
     ) -> Result<WithTotal<HashMap<String, f64>>, StorageError>;
+}
+pub struct EntryPointFilter {
+    pub protocol_system: Option<ProtocolSystem>,
+}
+
+impl EntryPointFilter {
+    pub fn new(protocol: Option<String>) -> Self {
+        Self { protocol_system: protocol }
+    }
+}
+
+// Trait for entry point gateway operations.
+#[async_trait]
+pub trait EntryPointGateway {
+    /// Upserts a list of entry points into the database.
+    async fn upsert_entry_points(
+        &self,
+        entry_points: &[EntryPointWithData],
+        component_id: &str,
+    ) -> Result<(), StorageError>;
+
+    /// Retrieves a list of entry points from the database.
+    async fn get_entry_points(
+        &self,
+        filter: EntryPointFilter,
+    ) -> Result<Vec<EntryPoint>, StorageError>;
+
+    /// Upserts a list of traced entry points into the database.
+    async fn upsert_traced_entry_points(
+        &self,
+        traced_entry_points: &[TracedEntryPoint],
+    ) -> Result<(), StorageError>;
+
+    /// Retrieves the tracing results for an entry point from the database.
+    async fn get_traced_entry_point(
+        &self,
+        entry_point: EntryPoint,
+    ) -> Result<Vec<TracingResult>, StorageError>;
 }
 
 /// Manage contracts and their state in storage.

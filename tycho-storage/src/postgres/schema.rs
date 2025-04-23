@@ -201,8 +201,8 @@ diesel::table! {
         external_id -> Text,
         target -> Bytea,
         signature -> Text,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
+        inserted_ts -> Timestamptz,
+        modified_ts -> Timestamptz,
     }
 }
 
@@ -215,8 +215,8 @@ diesel::table! {
         entry_point_id -> Int8,
         tracing_type -> EntryPointTracingType,
         data -> Nullable<Jsonb>,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
+        inserted_ts -> Timestamptz,
+        modified_ts -> Timestamptz,
     }
 }
 
@@ -232,8 +232,8 @@ diesel::table! {
         entry_point_tracing_data_id -> Int8,
         detection_block -> Int8,
         detection_data -> Jsonb,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
+        inserted_ts -> Timestamptz,
+        modified_ts -> Timestamptz,
     }
 }
 

@@ -8,8 +8,8 @@ CREATE TABLE IF NOT EXISTS "entry_point"(
     "external_id" text UNIQUE NOT NULL,
     "target" bytea NOT NULL,
     "signature" text NOT NULL,
-    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
-    "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+    "inserted_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "modified_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE ("target", "signature")
 );
 
@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS "entry_point_tracing_data"(
     "entry_point_id" bigint REFERENCES "entry_point"(id) ON DELETE CASCADE NOT NULL,
     "tracing_type" entry_point_tracing_type NOT NULL,
     "data" JSONB,
-    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
-    "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
+    "inserted_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "modified_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE ("entry_point_id", "tracing_type", "data")
 );
 
@@ -33,8 +33,8 @@ CREATE TABLE IF NOT EXISTS "entry_point_tracing_result"(
     "entry_point_tracing_data_id" bigint NOT NULL REFERENCES "entry_point_tracing_data"(id) ON DELETE CASCADE PRIMARY KEY,
     "detection_block" bigint NOT NULL REFERENCES "block"(id),
     "detection_data" JSONB NOT NULL,
-    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
-    "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+    "inserted_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "modified_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Keep tracks of the m2m relation between entry_points and accounts
