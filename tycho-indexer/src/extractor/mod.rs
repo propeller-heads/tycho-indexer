@@ -24,6 +24,7 @@ use crate::{
 };
 
 pub mod chain_state;
+mod dynamic_contract_indexer;
 pub mod models;
 pub mod post_processors;
 pub mod protobuf_deserialisation;
