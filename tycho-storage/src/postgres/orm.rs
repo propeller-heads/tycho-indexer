@@ -16,7 +16,7 @@ use tycho_common::{
     models,
     models::{
         blockchain::{
-            EntryPointTracingData as EntryPointTracingDataCommon,
+            EntryPoint as EntryPointCommon, EntryPointTracingData as EntryPointTracingDataCommon,
             EntryPointWithData as EntryPointWithDataCommon,
         },
         Address, AttrStoreKey, Balance, BlockHash, Code, CodeHash, ComponentId, ContractId,
@@ -1863,6 +1863,18 @@ pub struct EntryPointTracingData {
     pub modified_ts: NaiveDateTime,
 }
 
+impl From<&EntryPointTracingData> for models::blockchain::EntryPointTracingData {
+    fn from(value: &EntryPointTracingData) -> Self {
+        match value.tracing_type {
+            EntryPointTracingType::RpcTracer => {
+                let rpc_tracer: models::blockchain::RPCTracerEntryPoint =
+                    serde_json::from_value(value.data.clone().unwrap()).unwrap();
+                models::blockchain::EntryPointTracingData::RPCTracer(rpc_tracer)
+            }
+        }
+    }
+}
+
 impl EntryPointTracingData {
     /// Retrieves the database id of an entry point tracing data from an `EntryPointWithData`.
     pub(crate) async fn id_from_entry_point_with_data(
@@ -1897,6 +1909,92 @@ impl EntryPointTracingData {
             .map_err(PostgresError::from)?;
 
         Ok(id_)
+    }
+
+    // Retrieves the database ids of entry point tracing data from a list of entry points with data.
+    pub(crate) async fn ids_by_entry_point_with_data(
+        entry_point_with_data: &[EntryPointWithDataCommon],
+        conn: &mut AsyncPgConnection,
+    ) -> Result<HashMap<EntryPointWithDataCommon, i64>, StorageError> {
+        if entry_point_with_data.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let (external_ids, data): (HashSet<_>, HashSet<_>) = entry_point_with_data
+            .iter()
+            .map(|ep| {
+                let data = match &ep.data {
+                    EntryPointTracingDataCommon::RPCTracer(rpc_tracer) => {
+                        serde_json::to_value(rpc_tracer).unwrap()
+                    }
+                };
+                (ep.entry_point.external_id(), data)
+            })
+            .unzip();
+
+        let tuple_data: Vec<(String, EntryPointTracingType, EntryPointTracingDataCommon)> =
+            entry_point_with_data
+                .iter()
+                .map(|ep| {
+                    (
+                        ep.entry_point.external_id(),
+                        EntryPointTracingType::from(&ep.data),
+                        ep.data.clone(),
+                    )
+                })
+                .collect::<Vec<_>>();
+
+        let tuple_ids: Vec<(&String, &EntryPointTracingType, &EntryPointTracingDataCommon)> =
+            tuple_data
+                .iter()
+                .map(|(ext_id, tracing_type, data)| (ext_id, tracing_type, data))
+                .collect::<Vec<_>>();
+
+        let res = super::schema::entry_point_tracing_data::table
+            .inner_join(super::schema::entry_point::table)
+            .filter(
+                // Not filtered by tracing type eq_any because of a diesel bug with OID, shouldn't
+                // affect results much because of data filtering and the application side filterin
+                // below.
+                super::schema::entry_point::external_id
+                    .eq_any(external_ids)
+                    .and(super::schema::entry_point_tracing_data::data.eq_any(data)),
+            )
+            .select((
+                super::schema::entry_point::external_id,
+                super::schema::entry_point::target,
+                super::schema::entry_point::signature,
+                super::schema::entry_point_tracing_data::tracing_type,
+                super::schema::entry_point_tracing_data::data,
+                super::schema::entry_point_tracing_data::id,
+            ))
+            .load::<(String, Bytes, String, EntryPointTracingType, Option<serde_json::Value>, i64)>(
+                conn,
+            )
+            .await
+            .map_err(PostgresError::from)?
+            .into_iter()
+            .filter(|(ext_id, _, _, tracing_type, data, _)| {
+                let tracing_data = match tracing_type {
+                    EntryPointTracingType::RpcTracer => {
+                        let data = serde_json::from_value(data.clone().unwrap()).unwrap();
+                        EntryPointTracingDataCommon::RPCTracer(data)
+                    }
+                };
+                tuple_ids.contains(&(ext_id, tracing_type, &tracing_data))
+            })
+            .map(|(_, target, signature, tracing_type, data, id)| {
+                dbg!(&data);
+                let data = match tracing_type {
+                    EntryPointTracingType::RpcTracer => EntryPointTracingDataCommon::RPCTracer(
+                        serde_json::from_value(data.unwrap()).unwrap(),
+                    ),
+                };
+                (EntryPointWithDataCommon::new(EntryPointCommon::new(target, signature), data), id)
+            })
+            .collect::<HashMap<_, _>>();
+
+        Ok(res)
     }
 }
 
