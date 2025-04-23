@@ -1,3 +1,10 @@
+## [1.1.0](https://github.com/propeller-heads/tycho-execution/compare/1.0.2...1.1.0) (2025-04-23)
+
+
+### Features
+
+* Update tycho-encode bin with new arguments ([7646a57](https://github.com/propeller-heads/tycho-execution/commit/7646a5705c3c5b703c5c121f4e666f167220ea13))
+
 ## [1.0.2](https://github.com/propeller-heads/tycho-execution/compare/1.0.1...1.0.2) (2025-04-23)
 
 
