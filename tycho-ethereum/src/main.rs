@@ -3,7 +3,6 @@ use std::str::FromStr;
 use clap::{Args, Parser, Subcommand};
 use tycho_common::{
     hex_bytes::ParseBytesError,
-    keccak256,
     models::blockchain::{
         EntryPoint, EntryPointTracingData, EntryPointWithData, RPCTracerEntryPoint,
     },
@@ -57,9 +56,9 @@ impl<const N: usize> FromStr for HexBytes<N> {
     }
 }
 
-impl<const N: usize> Into<Bytes> for HexBytes<N> {
-    fn into(self) -> Bytes {
-        self.0
+impl<const N: usize> From<HexBytes<N>> for Bytes {
+    fn from(val: HexBytes<N>) -> Self {
+        val.0
     }
 }
 

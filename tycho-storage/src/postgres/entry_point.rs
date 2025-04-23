@@ -417,10 +417,10 @@ mod test {
                 target: Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
                 signature: "getRate()".to_string(),
             },
-            data: EntryPointTracingData::RPCTracer(RPCTracerEntryPoint {
-                caller: None,
-                data: Bytes::from(keccak256("getRate()")),
-            }),
+            data: EntryPointTracingData::RPCTracer(RPCTracerEntryPoint::new(
+                None,
+                Bytes::from(keccak256("getRate()")),
+            )),
         }
     }
 

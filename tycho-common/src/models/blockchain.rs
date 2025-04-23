@@ -8,7 +8,7 @@ use chrono::NaiveDateTime;
 use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use tracing::warn;
 
-use super::{BlockHash, StoreKey};
+use super::{Balance, BlockHash, Code, StoreKey, StoreVal};
 use crate::{
     models::{
         contract::{AccountBalance, AccountChangesWithTx, AccountDelta},
@@ -391,11 +391,31 @@ pub struct RPCTracerEntryPoint {
     pub caller: Option<Address>,
     /// The data used for the tracing call, this needs to include the function selector
     pub data: Bytes,
+    /// Optionally allow for state overrides so that the call works as expected
+    pub state_overrides: Option<HashMap<Address, AccountOverrides>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AccountOverrides {
+    pub slots: Option<Storage>,
+    pub native_balance: Option<Balance>,
+    pub code: Option<Code>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Storage {
+    Diff(HashMap<StoreKey, StoreVal>),
+    Replace(HashMap<StoreKey, StoreVal>),
 }
 
 impl RPCTracerEntryPoint {
     pub fn new(caller: Option<Address>, data: Bytes) -> Self {
-        Self { caller, data }
+        Self { caller, data, state_overrides: None }
+    }
+
+    pub fn with_state_overrides(mut self, state: HashMap<Address, AccountOverrides>) -> Self {
+        self.state_overrides = Some(state);
+        self
     }
 }
 
@@ -405,9 +425,10 @@ impl Serialize for RPCTracerEntryPoint {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("RPCTracerEntryPoint", 2)?;
+        let mut state = serializer.serialize_struct("RPCTracerEntryPoint", 3)?;
         state.serialize_field("caller", &self.caller)?;
         state.serialize_field("data", &self.data)?;
+        state.serialize_field("state_overrides", &self.state_overrides)?;
         state.end()
     }
 }
