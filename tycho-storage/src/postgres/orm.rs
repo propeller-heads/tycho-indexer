@@ -1782,8 +1782,8 @@ pub struct EntryPoint {
     pub external_id: String,
     pub target: Bytes,
     pub signature: String,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub inserted_ts: NaiveDateTime,
+    pub modified_ts: NaiveDateTime,
 }
 
 impl From<EntryPoint> for models::blockchain::EntryPoint {
@@ -1793,35 +1793,27 @@ impl From<EntryPoint> for models::blockchain::EntryPoint {
 }
 
 impl EntryPoint {
-    #[allow(dead_code)]
-    pub(crate) async fn ids_by_target_and_signature(
-        pairs: &[(Bytes, String)],
+    /// Retrieves the database ids of entry points from a list of external ids.
+    pub(crate) async fn ids_by_external_ids(
+        external_ids: &[String],
         conn: &mut AsyncPgConnection,
-    ) -> Result<HashMap<(Bytes, String), i64>, StorageError> {
+    ) -> Result<HashMap<String, i64>, StorageError> {
         use crate::postgres::schema::entry_point::dsl::*;
 
-        let entry_pairs: Vec<(Bytes, String)> = pairs
-            .iter()
-            .map(|(t, s)| (t.clone(), s.clone()))
-            .collect();
-
-        // This fetches a little more than strictly needed but it shouldn't be a crazy amount of
-        // data
-        // TODO: Optimize by filtering on the target AND signature
         let existing_entries = entry_point
-            .select((id, target, signature))
-            .filter(target.eq_any(entry_pairs.iter().map(|(t, _)| t)))
-            .load::<(i64, Bytes, String)>(conn)
+            .filter(external_id.eq_any(external_ids))
+            .select((id, external_id))
+            .load::<(i64, String)>(conn)
             .await
             .map_err(PostgresError::from)?;
 
         Ok(existing_entries
             .into_iter()
-            .filter(|(_, t, s)| entry_pairs.contains(&(t.clone(), s.clone())))
-            .map(|(ep_id, t, s)| ((t, s), ep_id))
+            .map(|(ep_id, ext_id)| (ext_id, ep_id))
             .collect::<HashMap<_, _>>())
     }
 
+    /// Retrieves the database id of an entry point from a target address and function signature.
     pub(crate) async fn id_by_target_and_signature(
         target_: &Bytes,
         signature_: &String,
@@ -1857,11 +1849,12 @@ pub struct EntryPointTracingData {
     pub entry_point_id: i64,
     pub tracing_type: EntryPointTracingType,
     pub data: Option<serde_json::Value>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
+    pub inserted_ts: NaiveDateTime,
+    pub modified_ts: NaiveDateTime,
 }
 
 impl EntryPointTracingData {
+    /// Retrieves the database id of an entry point tracing data from an `EntryPointWithData`.
     pub(crate) async fn id_from_entry_point_with_data(
         entry_point: &EntryPointWithDataCommon,
         conn: &mut AsyncPgConnection,
@@ -1917,9 +1910,9 @@ pub struct EntryPointTracingResult {
     #[allow(dead_code)]
     detection_data: serde_json::Value,
     #[allow(dead_code)]
-    created_at: NaiveDateTime,
+    inserted_ts: NaiveDateTime,
     #[allow(dead_code)]
-    updated_at: NaiveDateTime,
+    modified_ts: NaiveDateTime,
 }
 
 #[derive(Insertable, AsChangeset)]
@@ -1929,6 +1922,7 @@ pub struct NewEntryPointTracingResult {
     pub entry_point_tracing_data_id: i64,
     pub detection_block: i64,
     pub detection_data: serde_json::Value,
+    pub modified_ts: Option<NaiveDateTime>,
 }
 
 #[derive(Identifiable, Queryable, Associations, Selectable)]

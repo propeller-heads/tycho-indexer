@@ -354,14 +354,20 @@ impl EntryPoint {
     pub fn new(target: Address, signature: String) -> Self {
         Self { target, signature }
     }
+
+    /// Returns the external id of the entry point, which is a combination of the target address and
+    /// the function signature.
     pub fn external_id(&self) -> String {
-        format!("{}-{}", self.target, self.signature)
+        format!("{}:{}", self.target, self.signature)
     }
 }
 
+/// A struct that combines an entry point with its associated tracing data.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EntryPointWithData {
+    /// The entry point to trace, containing the target contract address and function signature
     pub entry_point: EntryPoint,
+    /// The tracing configuration and data for this entry point
     pub data: EntryPointTracingData,
 }
 
@@ -381,7 +387,9 @@ pub enum EntryPointTracingData {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RPCTracerEntryPoint {
+    /// The caller address of the transaction, will use the vm default if not provided
     pub caller: Option<Address>,
+    /// The data used for the tracing call, this needs to include the function selector
     pub data: Bytes,
 }
 
@@ -423,7 +431,9 @@ impl TracingResult {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// Represents a traced entry point and the results of the tracing operation.
 pub struct TracedEntryPoint {
+    /// The combined entry point and tracing data that was traced
     pub entry_point: EntryPointWithData,
     /// The block hash of the block that the entry point was traced on.
     pub detection_block_hash: BlockHash,

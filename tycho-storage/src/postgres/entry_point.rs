@@ -11,7 +11,7 @@ use tycho_common::{
         },
         Chain, ProtocolSystem as ProtocolSystemType,
     },
-    storage::StorageError,
+    storage::{EntryPointFilter, StorageError},
     Bytes,
 };
 
@@ -31,49 +31,8 @@ use crate::postgres::{
     PostgresError,
 };
 
-pub struct EntryPointFilter {
-    protocol_system: Option<ProtocolSystemType>,
-}
-
-impl EntryPointFilter {
-    pub fn new(protocol: Option<String>) -> Self {
-        Self { protocol_system: protocol }
-    }
-}
-
-/// Trait for entry point gateway operations.
-#[async_trait]
-pub trait EntryPointGateway {
-    async fn upsert_entry_points(
-        &self,
-        entry_points: &[EntryPointWithData],
-        component_id: &str,
-        chain: &Chain,
-        conn: &mut AsyncPgConnection,
-    ) -> Result<(), StorageError>;
-
-    async fn get_entry_points(
-        &self,
-        filter: EntryPointFilter,
-        conn: &mut AsyncPgConnection,
-    ) -> Result<Vec<EntryPoint>, StorageError>;
-
-    async fn upsert_traced_entry_points(
-        &self,
-        traced_entry_points: &[TracedEntryPoint],
-        conn: &mut AsyncPgConnection,
-    ) -> Result<(), StorageError>;
-
-    async fn get_traced_entry_point(
-        &self,
-        entry_point: EntryPoint,
-        conn: &mut AsyncPgConnection,
-    ) -> Result<Vec<TracingResult>, StorageError>;
-}
-
-#[async_trait]
-impl EntryPointGateway for PostgresGateway {
-    async fn upsert_entry_points(
+impl PostgresGateway {
+    pub(crate) async fn upsert_entry_points(
         &self,
         entry_points: &[EntryPointWithData],
         component_id: &str,
@@ -108,35 +67,29 @@ impl EntryPointGateway for PostgresGateway {
             })
             .collect::<Vec<_>>();
 
-        let inserted_entries = diesel::insert_into(entry_point)
+        diesel::insert_into(entry_point)
             .values(&new_entry_points)
             .on_conflict_do_nothing()
-            // Returning doesn't ensure order, so we can't only return the ids
-            .returning((
-                schema::entry_point::id,
-                schema::entry_point::target,
-                schema::entry_point::signature,
-            ))
-            .get_results::<(i64, Bytes, String)>(conn)
+            .execute(conn)
             .await
             .map_err(|e| storage_error_from_diesel(e, "EntryPoint", "Batch upsert", None))?;
 
-        let entry_point_ids = inserted_entries
-            .into_iter()
-            .map(|(id_, target_, sig)| ((target_, sig), id_))
-            .collect::<HashMap<_, _>>();
+        // Fetch entry points by their external_ids, we can't use .returning() on the insert above
+        // because it doesn't return the ids on conflicts.
+        let input_external_ids: Vec<String> = entry_points
+            .iter()
+            .map(|ep| ep.entry_point.external_id())
+            .collect();
+
+        let entry_point_ids = ORMEntryPoint::ids_by_external_ids(&input_external_ids, conn).await?;
 
         let new_tracing_data = entry_points
             .iter()
             .map(|ep| {
+                let ext_id = ep.entry_point.external_id();
                 let ep_id = entry_point_ids
-                    .get(&(ep.entry_point.target.clone(), ep.entry_point.signature.clone()))
-                    .ok_or_else(|| {
-                        StorageError::NotFound(
-                            "EntryPoint".to_string(),
-                            ep.entry_point.external_id(),
-                        )
-                    })?;
+                    .get(&ext_id)
+                    .ok_or_else(|| StorageError::NotFound("EntryPoint".to_string(), ext_id))?;
 
                 let ep_data = match &ep.data {
                     EntryPointTracingData::RPCTracer(rpc_tracer) => {
@@ -187,7 +140,7 @@ impl EntryPointGateway for PostgresGateway {
         Ok(())
     }
 
-    async fn get_entry_points(
+    pub(crate) async fn get_entry_points(
         &self,
         filter: EntryPointFilter,
         conn: &mut AsyncPgConnection,
@@ -228,7 +181,7 @@ impl EntryPointGateway for PostgresGateway {
             .collect())
     }
 
-    async fn upsert_traced_entry_points(
+    pub(crate) async fn upsert_traced_entry_points(
         &self,
         traced_entry_points: &[TracedEntryPoint],
         conn: &mut AsyncPgConnection,
@@ -275,6 +228,7 @@ impl EntryPointGateway for PostgresGateway {
                 entry_point_tracing_data_id: data_id,
                 detection_block: block_id,
                 detection_data: tracing_data,
+                modified_ts: Some(chrono::Utc::now().naive_utc()),
             });
         }
 
@@ -285,6 +239,7 @@ impl EntryPointGateway for PostgresGateway {
             .set((
                 detection_block.eq(excluded(detection_block)),
                 detection_data.eq(excluded(detection_data)),
+                modified_ts.eq(excluded(modified_ts)),
             ))
             .execute(conn)
             .await
@@ -342,7 +297,7 @@ impl EntryPointGateway for PostgresGateway {
         Ok(())
     }
 
-    async fn get_traced_entry_point(
+    pub(crate) async fn get_traced_entry_point(
         &self,
         entry_point: EntryPoint,
         conn: &mut AsyncPgConnection,
