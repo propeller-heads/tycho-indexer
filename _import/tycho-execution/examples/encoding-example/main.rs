@@ -6,9 +6,8 @@ use tycho_common::{
     Bytes,
 };
 use tycho_execution::encoding::{
-    evm::encoder_builder::EVMEncoderBuilder,
+    evm::encoder_builders::TychoRouterEncoderBuilder,
     models::{Solution, Swap},
-    tycho_encoder::TychoEncoder,
 };
 
 fn main() {
@@ -19,10 +18,9 @@ fn main() {
         .expect("Failed to create user address");
 
     // Initialize the encoder
-    let encoder = EVMEncoderBuilder::new()
+    let encoder = TychoRouterEncoderBuilder::new()
         .chain(Chain::Ethereum)
-        .initialize_tycho_router_with_permit2(swapper_pk)
-        .expect("Failed to create encoder builder")
+        .swapper_pk(swapper_pk)
         .build()
         .expect("Failed to build encoder");
 
@@ -64,7 +62,7 @@ fn main() {
 
     // Encode the solution
     let tx = encoder
-        .encode_router_calldata(vec![solution.clone()])
+        .encode_calldata(vec![solution.clone()])
         .expect("Failed to encode router calldata")[0]
         .clone();
     println!(" ====== Simple swap WETH -> USDC ======");
@@ -137,7 +135,7 @@ fn main() {
 
     // Encode the solution
     let complex_tx = encoder
-        .encode_router_calldata(vec![complex_solution])
+        .encode_calldata(vec![complex_solution])
         .expect("Failed to encode router calldata")[0]
         .clone();
 

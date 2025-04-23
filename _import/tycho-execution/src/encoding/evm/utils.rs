@@ -5,6 +5,7 @@ use alloy::{
     transports::BoxTransport,
 };
 use alloy_primitives::{aliases::U24, keccak256, Address, FixedBytes, Keccak256, U256, U8};
+use alloy_sol_types::SolValue;
 use num_bigint::BigUint;
 use tokio::runtime::{Handle, Runtime};
 use tycho_common::Bytes;
@@ -148,6 +149,21 @@ pub async fn get_client() -> Result<Arc<RootProvider<BoxTransport>>, EncodingErr
         .await
         .map_err(|_| EncodingError::FatalError("Failed to build provider".to_string()))?;
     Ok(Arc::new(client))
+}
+
+/// Uses prefix-length encoding to efficient encode action data.
+///
+/// Prefix-length encoding is a data encoding method where the beginning of a data segment
+/// (the "prefix") contains information about the length of the following data.
+pub fn ple_encode(action_data_array: Vec<Vec<u8>>) -> Vec<u8> {
+    let mut encoded_action_data: Vec<u8> = Vec::new();
+
+    for action_data in action_data_array {
+        let args = (encoded_action_data, action_data.len() as u16, action_data);
+        encoded_action_data = args.abi_encode_packed();
+    }
+
+    encoded_action_data
 }
 
 #[cfg(test)]

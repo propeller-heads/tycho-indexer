@@ -172,7 +172,7 @@ mod tests {
 
     use alloy_primitives::Uint;
     use num_bigint::BigUint;
-    use tycho_common::models::Chain as TychoCoreChain;
+    use tycho_common::models::Chain as TychoCommonChain;
 
     use super::*;
 
@@ -208,7 +208,7 @@ mod tests {
     }
 
     fn eth_chain() -> Chain {
-        TychoCoreChain::Ethereum.into()
+        TychoCommonChain::Ethereum.into()
     }
 
     #[test]

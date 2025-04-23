@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import "@interfaces/IExecutor.sol";
 import "@interfaces/ICallback.sol";
 
-error Dispatcher__UnapprovedExecutor();
+error Dispatcher__UnapprovedExecutor(address executor);
 error Dispatcher__NonContractExecutor();
 error Dispatcher__InvalidDataLength();
 
@@ -52,14 +52,18 @@ contract Dispatcher {
      * @dev Calls an executor, assumes swap.protocolData contains
      *  protocol-specific data required by the executor.
      */
-    // slither-disable-next-line delegatecall-loop
+    // slither-disable-next-line delegatecall-loop,assembly
     function _callExecutor(
         address executor,
         uint256 amount,
         bytes calldata data
     ) internal returns (uint256 calculatedAmount) {
         if (!executors[executor]) {
-            revert Dispatcher__UnapprovedExecutor();
+            revert Dispatcher__UnapprovedExecutor(executor);
+        }
+
+        assembly {
+            tstore(0, executor)
         }
 
         // slither-disable-next-line controlled-delegatecall,low-level-calls,calls-loop
@@ -80,11 +84,18 @@ contract Dispatcher {
         calculatedAmount = abi.decode(result, (uint256));
     }
 
-    function _handleCallback(bytes calldata data) internal {
-        address executor = address(uint160(bytes20(data[data.length - 20:])));
+    // slither-disable-next-line assembly
+    function _handleCallback(bytes calldata data)
+        internal
+        returns (bytes memory)
+    {
+        address executor;
+        assembly {
+            executor := tload(0)
+        }
 
         if (!executors[executor]) {
-            revert Dispatcher__UnapprovedExecutor();
+            revert Dispatcher__UnapprovedExecutor(executor);
         }
 
         // slither-disable-next-line controlled-delegatecall,low-level-calls
@@ -101,5 +112,14 @@ contract Dispatcher {
                 )
             );
         }
+
+        // to prevent multiple callbacks
+        assembly {
+            tstore(0, 0)
+        }
+
+        // this is necessary because the delegatecall will prepend extra bytes we don't want like the length and prefix
+        bytes memory decodedResult = abi.decode(result, (bytes));
+        return decodedResult;
     }
 }

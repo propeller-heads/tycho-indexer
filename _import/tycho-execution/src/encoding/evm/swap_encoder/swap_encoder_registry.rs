@@ -20,11 +20,7 @@ pub struct SwapEncoderRegistry {
 impl SwapEncoderRegistry {
     /// Populates the registry with the `SwapEncoders` for the given blockchain by parsing the
     /// executors' addresses in the file at the given path.
-    pub fn new(
-        executors_file_path: Option<String>,
-        blockchain: tycho_common::models::Chain,
-    ) -> Result<Self, EncodingError> {
-        let chain = Chain::from(blockchain);
+    pub fn new(executors_file_path: Option<String>, chain: Chain) -> Result<Self, EncodingError> {
         let config_str = if let Some(ref path) = executors_file_path {
             fs::read_to_string(path).map_err(|e| {
                 EncodingError::FatalError(format!(

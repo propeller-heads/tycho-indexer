@@ -8,7 +8,8 @@ library UniswapV4Utils {
         address tokenIn,
         address tokenOut,
         bool zeroForOne,
-        address callbackExecutor,
+        UniswapV4Executor.TransferType transferType,
+        address receiver,
         UniswapV4Executor.UniswapV4Pool[] memory pools
     ) public pure returns (bytes memory) {
         bytes memory encodedPools;
@@ -23,7 +24,7 @@ library UniswapV4Utils {
         }
 
         return abi.encodePacked(
-            tokenIn, tokenOut, zeroForOne, callbackExecutor, encodedPools
+            tokenIn, tokenOut, zeroForOne, transferType, receiver, encodedPools
         );
     }
 }

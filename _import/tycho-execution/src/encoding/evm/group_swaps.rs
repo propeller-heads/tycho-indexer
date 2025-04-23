@@ -6,15 +6,15 @@ use crate::encoding::{evm::constants::GROUPABLE_PROTOCOLS, models::Swap};
 /// optimization.
 ///
 /// # Fields
-/// * `input_token`: Bytes, the input token of the first swap
-/// * `output_token`: Bytes, the output token of the final swap
+/// * `token_in`: Bytes, the input token of the first swap
+/// * `token_out`: Bytes, the output token of the final swap
 /// * `protocol_system`: String, the protocol system of the swaps
 /// * `swaps`: Vec<Swap>, the sequence of swaps to be executed as a group
 /// * `split`: f64, the split percentage of the first swap in the group
 #[derive(Clone, PartialEq, Debug)]
 pub struct SwapGroup {
-    pub input_token: Bytes,
-    pub output_token: Bytes,
+    pub token_in: Bytes,
+    pub token_out: Bytes,
     pub protocol_system: String,
     pub swaps: Vec<Swap>,
     pub split: f64,
@@ -44,7 +44,7 @@ pub fn group_swaps(swaps: Vec<Swap>) -> Vec<SwapGroup> {
             if let Some(group) = current_group.as_mut() {
                 group.swaps.push(swap.clone());
                 // Update the output token of the current group.
-                group.output_token = swap.token_out.clone();
+                group.token_out = swap.token_out.clone();
             }
         } else {
             // Not second or later USV4 pool. Push the current group (if it exists) and then
@@ -53,8 +53,8 @@ pub fn group_swaps(swaps: Vec<Swap>) -> Vec<SwapGroup> {
                 grouped_swaps.push(group.clone());
             }
             current_group = Some(SwapGroup {
-                input_token: swap.token_in.clone(),
-                output_token: swap.token_out.clone(),
+                token_in: swap.token_in.clone(),
+                token_out: swap.token_out.clone(),
                 protocol_system: current_swap_protocol.clone(),
                 swaps: vec![swap.clone()],
                 split: swap.split,
@@ -135,15 +135,15 @@ mod tests {
             vec![
                 SwapGroup {
                     swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
-                    input_token: weth,
-                    output_token: usdc.clone(),
+                    token_in: weth,
+                    token_out: usdc.clone(),
                     protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
                 },
                 SwapGroup {
                     swaps: vec![swap_usdc_dai],
-                    input_token: usdc,
-                    output_token: dai,
+                    token_in: usdc,
+                    token_out: dai,
                     protocol_system: "uniswap_v2".to_string(),
                     split: 0f64,
                 }
@@ -216,22 +216,22 @@ mod tests {
             vec![
                 SwapGroup {
                     swaps: vec![swap_wbtc_weth],
-                    input_token: wbtc.clone(),
-                    output_token: weth.clone(),
+                    token_in: wbtc.clone(),
+                    token_out: weth.clone(),
                     protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
                 },
                 SwapGroup {
                     swaps: vec![swap_weth_usdc],
-                    input_token: weth.clone(),
-                    output_token: usdc.clone(),
+                    token_in: weth.clone(),
+                    token_out: usdc.clone(),
                     protocol_system: "uniswap_v4".to_string(),
                     split: 0.5f64,
                 },
                 SwapGroup {
                     swaps: vec![swap_weth_dai, swap_dai_usdc],
-                    input_token: weth,
-                    output_token: usdc,
+                    token_in: weth,
+                    token_out: usdc,
                     protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
                 }
@@ -255,7 +255,7 @@ mod tests {
 
         let swap_weth_wbtc = Swap {
             component: ProtocolComponent {
-                protocol_system: "balancer_v3".to_string(),
+                protocol_system: "vm:balancer_v3".to_string(),
                 ..Default::default()
             },
             token_in: weth.clone(),
@@ -264,7 +264,7 @@ mod tests {
         };
         let swap_wbtc_usdc = Swap {
             component: ProtocolComponent {
-                protocol_system: "balancer_v3".to_string(),
+                protocol_system: "vm:balancer_v3".to_string(),
                 ..Default::default()
             },
             token_in: wbtc.clone(),
@@ -304,15 +304,15 @@ mod tests {
             vec![
                 SwapGroup {
                     swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
-                    input_token: weth.clone(),
-                    output_token: usdc.clone(),
-                    protocol_system: "balancer_v3".to_string(),
+                    token_in: weth.clone(),
+                    token_out: usdc.clone(),
+                    protocol_system: "vm:balancer_v3".to_string(),
                     split: 0.5f64,
                 },
                 SwapGroup {
                     swaps: vec![swap_weth_dai, swap_dai_usdc],
-                    input_token: weth,
-                    output_token: usdc,
+                    token_in: weth,
+                    token_out: usdc,
                     protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
                 }
