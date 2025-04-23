@@ -44,11 +44,15 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
     #[arg(short, long)]
+    chain: Chain,
+    #[arg(short, long)]
     executors_file_path: Option<String>,
     #[arg(short, long)]
     router_address: Option<Bytes>,
     #[arg(short, long)]
     swapper_pk: Option<String>,
+    #[arg(short, long)]
+    token_in_already_in_router: Option<bool>,
 }
 
 #[derive(Subcommand)]
@@ -61,8 +65,6 @@ pub enum Commands {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    let chain = Chain::Ethereum;
-
     // Read from stdin until EOF
     let mut buffer = String::new();
     io::stdin()
@@ -74,6 +76,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let solution: Solution = serde_json::from_str(&buffer)?;
 
+    let chain = cli.chain;
     let encoder: Box<dyn TychoEncoder> = match cli.command {
         Commands::TychoRouter => {
             let mut builder = TychoRouterEncoderBuilder::new().chain(chain);
@@ -85,6 +88,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             if let Some(swapper_pk) = cli.swapper_pk {
                 builder = builder.swapper_pk(swapper_pk);
+            }
+            if let Some(token_in_already_in_router) = cli.token_in_already_in_router {
+                builder = builder.token_in_already_in_router(token_in_already_in_router);
             }
             builder.build()?
         }
