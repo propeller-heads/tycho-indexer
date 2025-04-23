@@ -96,6 +96,29 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
         );
     }
 
+    function testSwapIntegration() public {
+        uint256 amountIn = 10 ** 18;
+        deal(WETH_ADDR, address(uniswapV3Exposed), amountIn);
+
+        uint256 expAmountOut = 1205_128428842122129186; //Swap 1 WETH for 1205.12 DAI
+        bool zeroForOne = false;
+
+        bytes memory data = encodeUniswapV3Swap(
+            WETH_ADDR,
+            DAI_ADDR,
+            address(this),
+            DAI_WETH_USV3,
+            zeroForOne,
+            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
+        );
+
+        uint256 amountOut = uniswapV3Exposed.swap(amountIn, data);
+
+        assertGe(amountOut, expAmountOut);
+        assertEq(IERC20(WETH_ADDR).balanceOf(address(uniswapV3Exposed)), 0);
+        assertGe(IERC20(DAI_ADDR).balanceOf(address(this)), expAmountOut);
+    }
+
     function testDecodeParamsInvalidDataLength() public {
         bytes memory invalidParams =
             abi.encodePacked(WETH_ADDR, address(2), address(3));

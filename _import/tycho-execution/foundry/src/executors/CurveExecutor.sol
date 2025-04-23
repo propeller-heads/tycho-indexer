@@ -81,7 +81,7 @@ contract CurveExecutor is IExecutor, TokenTransfer {
 
         if (tokenApprovalNeeded && tokenIn != nativeToken) {
             // slither-disable-next-line unused-return
-            IERC20(tokenIn).approve(address(pool), type(uint256).max);
+            IERC20(tokenIn).forceApprove(address(pool), type(uint256).max);
         }
 
         /// Inspired by Curve's router contract: https://github.com/curvefi/curve-router-ng/blob/9ab006ca848fc7f1995b6fbbecfecc1e0eb29e2a/contracts/Router.vy#L44

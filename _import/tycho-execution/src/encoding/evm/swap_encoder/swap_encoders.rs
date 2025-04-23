@@ -378,6 +378,7 @@ pub struct CurveSwapEncoder {
     meta_registry_address: String,
     native_token_curve_address: String,
     native_token_address: Bytes,
+    wrapped_native_token_address: Bytes,
 }
 
 impl CurveSwapEncoder {
@@ -450,10 +451,34 @@ impl CurveSwapEncoder {
                 let j = U8::from(j_256);
                 Ok((i, j))
             }
-            Err(err) => Err(EncodingError::RecoverableError(format!(
-                "Curve meta registry call failed with error: {:?}",
-                err
-            ))),
+            Err(err) => {
+                // Temporary until we get the coin indexes from the indexer
+                // This is because some curve pools hold ETH but the coin is defined as WETH
+                // Our indexer reports this pool as holding ETH but then here we need to use WETH
+                // This is valid only for some pools, that's why we are doing the trial and error
+                // approach
+                let native_token_curve_address =
+                    Address::from_str(&self.native_token_curve_address).map_err(|_| {
+                        EncodingError::FatalError(
+                            "Invalid Curve native token curve address".to_string(),
+                        )
+                    })?;
+                if token_in != native_token_curve_address && token_out != native_token_curve_address
+                {
+                    Err(EncodingError::RecoverableError(format!(
+                        "Curve meta registry call failed with error: {:?}",
+                        err
+                    )))
+                } else {
+                    let wrapped_token = bytes_to_address(&self.wrapped_native_token_address)?;
+                    let (i, j) = if token_in == native_token_curve_address {
+                        self.get_coin_indexes(pool_id, wrapped_token, token_out)?
+                    } else {
+                        self.get_coin_indexes(pool_id, token_in, wrapped_token)?
+                    };
+                    Ok((i, j))
+                }
+            }
         }
     }
 }
@@ -483,6 +508,7 @@ impl SwapEncoder for CurveSwapEncoder {
             executor_address,
             meta_registry_address,
             native_token_address: chain.native_token()?,
+            wrapped_native_token_address: chain.wrapped_token()?,
             native_token_curve_address,
         })
     }
@@ -536,7 +562,10 @@ impl SwapEncoder for CurveSwapEncoder {
             })?)
             .map_err(|_| EncodingError::FatalError("Invalid curve factory address".to_string()))?;
 
-        let pool_type = self.get_pool_type(&swap.component.id, &factory_address.to_string())?;
+        let pool_address = Address::from_str(&swap.component.id)
+            .map_err(|_| EncodingError::FatalError("Invalid curve pool address".to_string()))?;
+        let pool_type =
+            self.get_pool_type(&pool_address.to_string(), &factory_address.to_string())?;
 
         let (i, j) = self.get_coin_indexes(component_address, token_in, token_out)?;
 
@@ -1209,6 +1238,22 @@ mod tests {
             "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
             2,
             0
+        )]
+        // Pool that holds ETH but coin is WETH
+        #[case(
+            "0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B",
+            "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            2,
+            0
+        )]
+        // Pool that holds ETH but coin is WETH
+        #[case(
+            "0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+            0,
+            2
         )]
         fn test_curve_get_coin_indexes(
             #[case] pool: &str,

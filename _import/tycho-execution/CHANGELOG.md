@@ -1,3 +1,119 @@
+## [1.0.1](https://github.com/propeller-heads/tycho-execution/compare/1.0.0...1.0.1) (2025-04-23)
+
+
+### Bug Fixes
+
+* Changes after rebase ([d39a2ac](https://github.com/propeller-heads/tycho-execution/commit/d39a2accce2d533f8d26223156853b442c02355b))
+* Configurable fee on USV2 executor. ([826aa54](https://github.com/propeller-heads/tycho-execution/commit/826aa54631b71fd209c6cc56c90dc373a4da966d))
+* Tighten max feeBps in USV2 executor ([e07573b](https://github.com/propeller-heads/tycho-execution/commit/e07573bbb8db7ab5c88728dcaea8f537bc2520d4))
+
+## [1.0.0](https://github.com/propeller-heads/tycho-execution/compare/0.81.0...1.0.0) (2025-04-22)
+
+
+### Features
+
+* (WIP) Support selection of transfer into router ([528bd74](https://github.com/propeller-heads/tycho-execution/commit/528bd746f7546ff2cca35c0397af073c8cbdb39b))
+* Add sequential swap methods ([2e3ffa2](https://github.com/propeller-heads/tycho-execution/commit/2e3ffa2c70f5af63a5f3b11556cd87ce535da3dc))
+* Add SequentialSwap integration test with regular approvals ([8836598](https://github.com/propeller-heads/tycho-execution/commit/8836598e5348d9ef48b1777619b89bdb26db842e))
+* Add SingleSwap integration test and fix bug in method signatures ([9c4dfef](https://github.com/propeller-heads/tycho-execution/commit/9c4dfef80de051f24979bc81f4f66f22f93e5f02))
+* Add TokenTransfer class to BalancerV2 ([8e7dd0b](https://github.com/propeller-heads/tycho-execution/commit/8e7dd0b9e7749996f25c82a4be4cd9e4101e6308))
+* Add TokenTransfer class to Curve ([0e0dff7](https://github.com/propeller-heads/tycho-execution/commit/0e0dff7f5a712a1271c030e968d263239f450c6d))
+* Add transfer out for Curve ([005c5a6](https://github.com/propeller-heads/tycho-execution/commit/005c5a6207d449ac59fd117156e487fb228a08c7))
+* Add transfer out for Uniswap V4 ([534e4f0](https://github.com/propeller-heads/tycho-execution/commit/534e4f00db3005e6d4eda363721818b9661d11d6))
+* Allow for token_in_already_in_router ([655c0b2](https://github.com/propeller-heads/tycho-execution/commit/655c0b263590d84d2f86c7b86db1a6be2308107c))
+* allow to pass msg.sender to USV3 callback ([bf4b229](https://github.com/propeller-heads/tycho-execution/commit/bf4b229268bcdd4aeb7e127a01dada3328634da0))
+* allow to pass msg.sender to USV3 callback ([e71a0bb](https://github.com/propeller-heads/tycho-execution/commit/e71a0bb3549fea326996fc378442a353d30d620f))
+* Decode single and sequential swaps in LibSwap ([9be4845](https://github.com/propeller-heads/tycho-execution/commit/9be48456e5b573b74ade5b3cedd4e58a1a2967dc))
+* Delete EVMStrategyEncoder (this is now unnecessary) ([1fabef7](https://github.com/propeller-heads/tycho-execution/commit/1fabef7a972e795e3adbbbcd63a38cb597de8f12))
+* Do not use V4Router for uniswap v4 ([09b5a73](https://github.com/propeller-heads/tycho-execution/commit/09b5a732efe32e36cca4f7bf406bbaf394932284))
+* ExecutorTransferMethods helper contract ([abd9db9](https://github.com/propeller-heads/tycho-execution/commit/abd9db937df58ea76bc45744d7c0fa34226d9357))
+* ExecutorTransferMethods in UniswapV3Executor ([dbbd30e](https://github.com/propeller-heads/tycho-execution/commit/dbbd30e5964fbae6a82ff2a09a82e0d041774362))
+* ExecutorTransferMethods in UniswapV3Executor ([e5426f3](https://github.com/propeller-heads/tycho-execution/commit/e5426f3038325038b63e8c5389b83b205b18ffe4))
+* Fix rollFork usage for Ekubo test ([d7b5e6d](https://github.com/propeller-heads/tycho-execution/commit/d7b5e6dba5e0ae8fbf67dfb102fca51477f0127b))
+* Make USV3 callback work with direct executor call ([51a7910](https://github.com/propeller-heads/tycho-execution/commit/51a791084448842e70c22e457e5318c778cfebb3))
+* No more fee taking ([89f9121](https://github.com/propeller-heads/tycho-execution/commit/89f9121e4ca2d91260bb883a3a62c2caaae3205c))
+* Optimize transfer to first pool ([bf63696](https://github.com/propeller-heads/tycho-execution/commit/bf63696142aa33452690bb7a7088716a9a8dac7b))
+* Proper USV2Executor transfer decoding + tests ([b7ff870](https://github.com/propeller-heads/tycho-execution/commit/b7ff870a7cb318bdd89d6563bdbd2a73a9f67925))
+* Proper USV2Executor transfer decoding + tests ([9dce2c7](https://github.com/propeller-heads/tycho-execution/commit/9dce2c7465eaf6a68ccdd40134bf9c82336f3401))
+* Proper USV3Executor transfer decoding + tests ([1e37320](https://github.com/propeller-heads/tycho-execution/commit/1e373200875097526a558c8b0aa2b93389c138bc))
+* Refactor callback for pancakeV3 and Ekubo to use transient storage ([deb10b8](https://github.com/propeller-heads/tycho-execution/commit/deb10b82deba12ee7d68d586ba04498a3f3ca208))
+* Refactor callback to use transient storage ([af44956](https://github.com/propeller-heads/tycho-execution/commit/af449562b0c4038cf666194a52eea582855495fc))
+* Refactor TychoEncoder ([1996fd3](https://github.com/propeller-heads/tycho-execution/commit/1996fd39e848aede11fbff7c8f3f914931c6b28a))
+* sequential swap solution validation ([efa5096](https://github.com/propeller-heads/tycho-execution/commit/efa50966613f94abcc27b74e8f08b6322ec75b28))
+* Single swap methods. ([72ccadc](https://github.com/propeller-heads/tycho-execution/commit/72ccadcaaebda9ca3ea16a9eb88dc0e73651b76e))
+* SingleSwapStrategyEncoder ([5efeb8b](https://github.com/propeller-heads/tycho-execution/commit/5efeb8b305d20aefb7876b34d232bbe92f65624f))
+* SingleSwapStrategyEncoder ([03f6961](https://github.com/propeller-heads/tycho-execution/commit/03f6961b13d064352b2dd8ec7ab7d591d1e12ba5))
+* SingleSwapStrategyEncoder ([dbf5d1d](https://github.com/propeller-heads/tycho-execution/commit/dbf5d1ddda1d84325d4562a1660a92d5524ab853))
+* Support in between swaps optimizations ([83d3721](https://github.com/propeller-heads/tycho-execution/commit/83d3721bf19ee6fc6a4fffd58e9e89b515c2473e))
+* Support out transfer straight to the receiver ([d28c254](https://github.com/propeller-heads/tycho-execution/commit/d28c254225e3388adcf6df596c40b15e7d335ddc))
+* Support returning values from the callback ([fb35a53](https://github.com/propeller-heads/tycho-execution/commit/fb35a5305a91c377b9617965b4ed36c06be3bd42))
+* Support using the TransferType in uniswap v4 ([2ecbabe](https://github.com/propeller-heads/tycho-execution/commit/2ecbabeafc36b7d47247e44388c53f3015f832d7))
+* **tycho-router-encoder:** Select strategy depending on the solution ([7f14f1a](https://github.com/propeller-heads/tycho-execution/commit/7f14f1a4ffe2f108fb2e25f030a40e3e344eefce))
+* Use TokenTransfer optimization helper in Ekubo ([d4e8642](https://github.com/propeller-heads/tycho-execution/commit/d4e864272d346c9020f4e21c6953a980f58b6e5b))
+
+
+### Bug Fixes
+
+* Add slither ignore for loop call ([15f4ed5](https://github.com/propeller-heads/tycho-execution/commit/15f4ed5d36ba743c1a5f82b2ca903a0272f42f8f))
+* After rebase fixes ([ae30218](https://github.com/propeller-heads/tycho-execution/commit/ae30218842d23ecea0331f6bc086e9be08250911))
+* bad merge ([03ef744](https://github.com/propeller-heads/tycho-execution/commit/03ef744373429fc245d1aa6b4a726f1c0bfed20a))
+* Bring back receiver address zero check ([8e60b6b](https://github.com/propeller-heads/tycho-execution/commit/8e60b6beba77e0dd729b9621c320d7abd5454733))
+* Calldata size for Ekubo pay callback ([fb855d0](https://github.com/propeller-heads/tycho-execution/commit/fb855d00a445904301e2b5a7dd6004ce7b58edbc))
+* Conscious slither silencing ([a645fc7](https://github.com/propeller-heads/tycho-execution/commit/a645fc72ab3082e9d8526428c7738aca7d5a07be))
+* consider wrapping scenario when getting transfer type ([028e860](https://github.com/propeller-heads/tycho-execution/commit/028e8605a173b2407e7a3113337d3937656a2fe6))
+* Fix after merge with main ([3de5a19](https://github.com/propeller-heads/tycho-execution/commit/3de5a192b645ed337addc2b2923109d45339a890))
+* Fix executor address in test and remove duplicated test ([9456dc7](https://github.com/propeller-heads/tycho-execution/commit/9456dc7b0bb3df70c36811366c94a1716123ed57))
+* Fix integration tests with transfer in method support ([0f3a910](https://github.com/propeller-heads/tycho-execution/commit/0f3a9101b9e3f98ae27fa55bcd14d4ce78449982))
+* fix slither CI action ([7431b26](https://github.com/propeller-heads/tycho-execution/commit/7431b266e169e442aacbb8113273151aca5145b8))
+* Fixes after merge with feature branch ([26e6c6c](https://github.com/propeller-heads/tycho-execution/commit/26e6c6c2664105869ae6a418477d8ae37fc6da84))
+* Integration tests after merge ([55242fb](https://github.com/propeller-heads/tycho-execution/commit/55242fb8c4bc506c0cb9f649d00a88469f28f72a))
+* No more EVMStrategyEncoder ([fbbc4c5](https://github.com/propeller-heads/tycho-execution/commit/fbbc4c5277eb747608b5157117f11e175f113dab))
+* Post rebase fixes ([01483c4](https://github.com/propeller-heads/tycho-execution/commit/01483c4407d048e8225944b6218d6115de214669))
+* Prevent multiple callbacks ([f91b101](https://github.com/propeller-heads/tycho-execution/commit/f91b101a94c85b78b5b3033915c74649d6916070))
+* properly add ekubo_v2 to constants ([24dd814](https://github.com/propeller-heads/tycho-execution/commit/24dd814098768f8b3abf8c7a9f2dba091199bb90))
+* Remove --ignore-compile flag for slither ([353667e](https://github.com/propeller-heads/tycho-execution/commit/353667e56506fe042c82098eca6d55b4d0714b01))
+* Remove router_address from Solution object ([9eb18f4](https://github.com/propeller-heads/tycho-execution/commit/9eb18f4474f82c8af65c9da75580184e25e87e57))
+* Rename constants and update docstrings for clarity ([11dffdc](https://github.com/propeller-heads/tycho-execution/commit/11dffdcb2861499901b714a79a308185cb6e4041))
+* test fix after rebase ([e05ffed](https://github.com/propeller-heads/tycho-execution/commit/e05ffedd5dd38473677d465f50afed40b222422a))
+* Test+formatting fixes after rebase. ([6cf0f52](https://github.com/propeller-heads/tycho-execution/commit/6cf0f523c1c2f474574860c3d1c313f0ec2d5f98))
+* TransferType renaming after rebase ([12c410b](https://github.com/propeller-heads/tycho-execution/commit/12c410bb03853acecc6255f3089e988b416917a1))
+* unsupported protocols for chained swaps are always unsupported ([9ce6fc0](https://github.com/propeller-heads/tycho-execution/commit/9ce6fc015334f91e50b9ec4597c383eba3ad006c))
+* USV3 encoding/decoding after rebase ([2d0a3ac](https://github.com/propeller-heads/tycho-execution/commit/2d0a3ac3fd82ac45086f402916c7591e09b616f9))
+
+## [0.81.0](https://github.com/propeller-heads/tycho-execution/compare/0.80.0...0.81.0) (2025-04-18)
+
+
+### Features
+
+* update tycho-common version to 0.66.4 ([134c73e](https://github.com/propeller-heads/tycho-execution/commit/134c73e82be74fb5590e19c3d9b27304043bbbd8))
+
+
+### Bug Fixes
+
+* add slither disable after slither actions update ([20573cb](https://github.com/propeller-heads/tycho-execution/commit/20573cbaf320ba99aa721e6e76a69447ab3f9694))
+
+## [0.80.0](https://github.com/propeller-heads/tycho-execution/compare/0.79.0...0.80.0) (2025-04-14)
+
+
+### Features
+
+* Redeploy balancer with forceApprove fix for USDT ([a6b0f8d](https://github.com/propeller-heads/tycho-execution/commit/a6b0f8d1f67a49848e90d2c4102195c4ac40c5a8))
+
+## [0.79.0](https://github.com/propeller-heads/tycho-execution/compare/0.78.1...0.79.0) (2025-04-11)
+
+
+### Features
+
+* Add new CurveExecutor address ([916c2b7](https://github.com/propeller-heads/tycho-execution/commit/916c2b7dba2c1c424efcbf884932a05427816cf8))
+* Deploy Curve Executor ([5d4d6d1](https://github.com/propeller-heads/tycho-execution/commit/5d4d6d1ff891766c067e3ff6355ffbb5c50bbf16))
+
+
+### Bug Fixes
+
+* Checksum curve pool addresses ([9e68ab8](https://github.com/propeller-heads/tycho-execution/commit/9e68ab8b0127831ee9dbc1f168e8aac9e28991c0))
+* Support pools that hold ETH but the coin is WETH ([2e8392a](https://github.com/propeller-heads/tycho-execution/commit/2e8392ab40c6c0e99089fae71873755dedb6e925))
+* Use forceApprove instead of regular Approve ([c963f3b](https://github.com/propeller-heads/tycho-execution/commit/c963f3b2f61e9d1a6e333149b091c3df90fd857b))
+
 ## [0.78.1](https://github.com/propeller-heads/tycho-execution/compare/0.78.0...0.78.1) (2025-04-09)
 
 

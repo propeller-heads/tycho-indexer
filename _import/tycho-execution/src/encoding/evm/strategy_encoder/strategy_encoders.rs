@@ -8,7 +8,6 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::Permit2,
-        constants::{CALLBACK_CONSTRAINED_PROTOCOLS, IN_TRANSFER_REQUIRED_PROTOCOLS},
         group_swaps::group_swaps,
         strategy_encoder::{
             strategy_validators::{SequentialSwapValidator, SplitSwapValidator, SwapValidator},
@@ -32,17 +31,15 @@ use crate::encoding::{
 /// * `permit2`: Permit2, responsible for managing permit2 operations and providing necessary
 ///   signatures and permit2 objects for calling the router
 /// * `selector`: String, the selector for the swap function in the router contract
-/// * `native_address`: Address of the chain's native token
-/// * `wrapped_address`: Address of the chain's wrapped token
 /// * `router_address`: Address of the router to be used to execute swaps
+/// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
 #[derive(Clone)]
 pub struct SingleSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
     permit2: Option<Permit2>,
     selector: String,
-    native_address: Bytes,
-    wrapped_address: Bytes,
     router_address: Bytes,
+    transfer_optimization: TransferOptimization,
 }
 
 impl SingleSwapStrategyEncoder {
@@ -51,6 +48,7 @@ impl SingleSwapStrategyEncoder {
         swap_encoder_registry: SwapEncoderRegistry,
         swapper_pk: Option<String>,
         router_address: Bytes,
+        token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
         let (permit2, selector) = if let Some(swapper_pk) = swapper_pk {
             (Some(Permit2::new(swapper_pk, chain.clone())?), "singleSwapPermit2(uint256,address,address,uint256,bool,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
@@ -60,13 +58,19 @@ impl SingleSwapStrategyEncoder {
                 "singleSwap(uint256,address,address,uint256,bool,bool,address,bytes)".to_string(),
             )
         };
+        let permit2_is_active = permit2.is_some();
         Ok(Self {
             permit2,
             selector,
             swap_encoder_registry,
-            native_address: chain.native_token()?,
-            wrapped_address: chain.wrapped_token()?,
-            router_address,
+            router_address: router_address.clone(),
+            transfer_optimization: TransferOptimization::new(
+                chain.native_token()?,
+                chain.wrapped_token()?,
+                permit2_is_active,
+                token_in_already_in_router,
+                router_address,
+            ),
         })
     }
 
@@ -79,8 +83,6 @@ impl SingleSwapStrategyEncoder {
         encoded
     }
 }
-
-impl TransferOptimization for SingleSwapStrategyEncoder {}
 
 impl StrategyEncoder for SingleSwapStrategyEncoder {
     fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
@@ -125,26 +127,20 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
         let swap_receiver =
             if !unwrap { solution.receiver.clone() } else { self.router_address.clone() };
 
+        let transfer_type = self
+            .transfer_optimization
+            .get_transfer_type(grouped_swap.clone(), solution.given_token.clone(), wrap, false);
+        let encoding_context = EncodingContext {
+            receiver: swap_receiver.clone(),
+            exact_out: solution.exact_out,
+            router_address: Some(self.router_address.clone()),
+            group_token_in: grouped_swap.token_in.clone(),
+            group_token_out: grouped_swap.token_out.clone(),
+            transfer_type: transfer_type.clone(),
+        };
+
         let mut grouped_protocol_data: Vec<u8> = vec![];
         for swap in grouped_swap.swaps.iter() {
-            let transfer_type = self.get_transfer_type(
-                swap.clone(),
-                solution.given_token.clone(),
-                self.native_address.clone(),
-                self.wrapped_address.clone(),
-                self.permit2.clone().is_some(),
-                wrap,
-                false,
-            );
-
-            let encoding_context = EncodingContext {
-                receiver: swap_receiver.clone(),
-                exact_out: solution.exact_out,
-                router_address: Some(self.router_address.clone()),
-                group_token_in: grouped_swap.input_token.clone(),
-                group_token_out: grouped_swap.output_token.clone(),
-                transfer_type: transfer_type.clone(),
-            };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
             grouped_protocol_data.extend(protocol_data);
         }
@@ -215,6 +211,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 /// * `router_address`: Address of the router to be used to execute swaps
 /// * `sequential_swap_validator`: SequentialSwapValidator, responsible for checking validity of
 ///   sequential swap solutions
+/// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
 #[derive(Clone)]
 pub struct SequentialSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -224,9 +221,8 @@ pub struct SequentialSwapStrategyEncoder {
     native_address: Bytes,
     wrapped_address: Bytes,
     sequential_swap_validator: SequentialSwapValidator,
+    transfer_optimization: TransferOptimization,
 }
-
-impl TransferOptimization for SequentialSwapStrategyEncoder {}
 
 impl SequentialSwapStrategyEncoder {
     pub fn new(
@@ -234,6 +230,7 @@ impl SequentialSwapStrategyEncoder {
         swap_encoder_registry: SwapEncoderRegistry,
         swapper_pk: Option<String>,
         router_address: Bytes,
+        token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
         let (permit2, selector) = if let Some(swapper_pk) = swapper_pk {
             (Some(Permit2::new(swapper_pk, chain.clone())?), "sequentialSwapPermit2(uint256,address,address,uint256,bool,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
@@ -244,14 +241,22 @@ impl SequentialSwapStrategyEncoder {
                     .to_string(),
             )
         };
+        let permit2_is_active = permit2.is_some();
         Ok(Self {
             permit2,
             selector,
             swap_encoder_registry,
-            router_address,
+            router_address: router_address.clone(),
             native_address: chain.native_token()?,
             wrapped_address: chain.wrapped_token()?,
             sequential_swap_validator: SequentialSwapValidator,
+            transfer_optimization: TransferOptimization::new(
+                chain.native_token()?,
+                chain.wrapped_token()?,
+                permit2_is_active,
+                token_in_already_in_router,
+                router_address,
+            ),
         })
     }
 
@@ -291,7 +296,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
         }
 
         let mut swaps = vec![];
-        let mut next_in_between_swap_optimization = true;
+        let mut next_in_between_swap_optimization_allowed = true;
         for (i, grouped_swap) in grouped_swaps.iter().enumerate() {
             let protocol = grouped_swap.protocol_system.clone();
             let swap_encoder = self
@@ -303,50 +308,31 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                     ))
                 })?;
 
-            let in_between_swap_optimization = next_in_between_swap_optimization;
+            let in_between_swap_optimization_allowed = next_in_between_swap_optimization_allowed;
             let next_swap = grouped_swaps.get(i + 1);
-            // if there is a next swap
-            let swap_receiver = if let Some(next) = next_swap {
-                // if the protocol of the next swap supports transfer in optimization
-                if IN_TRANSFER_REQUIRED_PROTOCOLS.contains(&next.protocol_system.as_str()) {
-                    // if the protocol does not allow for chained swaps, we can't optimize the
-                    // receiver of this swap nor the transfer in of the next swap
-                    if CALLBACK_CONSTRAINED_PROTOCOLS.contains(&next.protocol_system.as_str()) {
-                        next_in_between_swap_optimization = false;
-                        self.router_address.clone()
-                    } else {
-                        Bytes::from_str(&next.swaps[0].component.id.clone()).map_err(|_| {
-                            EncodingError::FatalError("Invalid component id".to_string())
-                        })?
-                    }
-                } else {
-                    // the protocol of the next swap does not support transfer in optimization
-                    self.router_address.clone()
-                }
-            } else {
-                solution.receiver.clone() // last swap - there is not next swap
+            let (swap_receiver, next_swap_optimization) = self
+                .transfer_optimization
+                .get_receiver(solution.receiver.clone(), next_swap)?;
+            next_in_between_swap_optimization_allowed = next_swap_optimization;
+            let transfer_type = self
+                .transfer_optimization
+                .get_transfer_type(
+                    grouped_swap.clone(),
+                    solution.given_token.clone(),
+                    wrap,
+                    in_between_swap_optimization_allowed,
+                );
+            let encoding_context = EncodingContext {
+                receiver: swap_receiver.clone(),
+                exact_out: solution.exact_out,
+                router_address: Some(self.router_address.clone()),
+                group_token_in: grouped_swap.token_in.clone(),
+                group_token_out: grouped_swap.token_out.clone(),
+                transfer_type: transfer_type.clone(),
             };
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
-                let transfer_type = self.get_transfer_type(
-                    swap.clone(),
-                    solution.given_token.clone(),
-                    self.native_address.clone(),
-                    self.wrapped_address.clone(),
-                    self.permit2.clone().is_some(),
-                    wrap,
-                    in_between_swap_optimization,
-                );
-
-                let encoding_context = EncodingContext {
-                    receiver: swap_receiver.clone(),
-                    exact_out: solution.exact_out,
-                    router_address: Some(self.router_address.clone()),
-                    group_token_in: grouped_swap.input_token.clone(),
-                    group_token_out: grouped_swap.output_token.clone(),
-                    transfer_type: transfer_type.clone(),
-                };
                 let protocol_data =
                     swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
                 grouped_protocol_data.extend(protocol_data);
@@ -422,6 +408,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 /// * `split_swap_validator`: SplitSwapValidator, responsible for checking validity of split swap
 ///   solutions
 /// * `router_address`: Address of the router to be used to execute swaps
+/// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
 #[derive(Clone)]
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -431,6 +418,7 @@ pub struct SplitSwapStrategyEncoder {
     wrapped_address: Bytes,
     split_swap_validator: SplitSwapValidator,
     router_address: Bytes,
+    transfer_optimization: TransferOptimization,
 }
 
 impl SplitSwapStrategyEncoder {
@@ -439,6 +427,7 @@ impl SplitSwapStrategyEncoder {
         swap_encoder_registry: SwapEncoderRegistry,
         swapper_pk: Option<String>,
         router_address: Bytes,
+        token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
         let (permit2, selector) = if let Some(swapper_pk) = swapper_pk {
             (Some(Permit2::new(swapper_pk, chain.clone())?), "splitSwapPermit2(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
@@ -449,7 +438,7 @@ impl SplitSwapStrategyEncoder {
                     .to_string(),
             )
         };
-
+        let permit2_is_active = permit2.is_some();
         Ok(Self {
             permit2,
             selector,
@@ -457,7 +446,14 @@ impl SplitSwapStrategyEncoder {
             native_address: chain.native_token()?,
             wrapped_address: chain.wrapped_token()?,
             split_swap_validator: SplitSwapValidator,
-            router_address,
+            router_address: router_address.clone(),
+            transfer_optimization: TransferOptimization::new(
+                chain.native_token()?,
+                chain.wrapped_token()?,
+                permit2_is_active,
+                token_in_already_in_router,
+                router_address,
+            ),
         })
     }
 
@@ -480,8 +476,6 @@ impl SplitSwapStrategyEncoder {
         encoded
     }
 }
-
-impl TransferOptimization for SplitSwapStrategyEncoder {}
 
 impl StrategyEncoder for SplitSwapStrategyEncoder {
     fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
@@ -513,7 +507,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         let intermediary_tokens: HashSet<Bytes> = grouped_swaps
             .iter()
             .flat_map(|grouped_swap| {
-                vec![grouped_swap.input_token.clone(), grouped_swap.output_token.clone()]
+                vec![grouped_swap.token_in.clone(), grouped_swap.token_out.clone()]
             })
             .collect();
         let mut intermediary_tokens: Vec<Bytes> = intermediary_tokens
@@ -558,40 +552,33 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                     ))
                 })?;
 
-            let swap_receiver = if !unwrap && grouped_swap.output_token == solution.checked_token {
+            let swap_receiver = if !unwrap && grouped_swap.token_out == solution.checked_token {
                 solution.receiver.clone()
             } else {
                 self.router_address.clone()
             };
+            let transfer_type = self
+                .transfer_optimization
+                .get_transfer_type(grouped_swap.clone(), solution.given_token.clone(), wrap, false);
+            let encoding_context = EncodingContext {
+                receiver: swap_receiver.clone(),
+                exact_out: solution.exact_out,
+                router_address: Some(self.router_address.clone()),
+                group_token_in: grouped_swap.token_in.clone(),
+                group_token_out: grouped_swap.token_out.clone(),
+                transfer_type: transfer_type.clone(),
+            };
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
-                let transfer_type = self.get_transfer_type(
-                    swap.clone(),
-                    solution.given_token.clone(),
-                    self.native_address.clone(),
-                    self.wrapped_address.clone(),
-                    self.permit2.clone().is_some(),
-                    wrap,
-                    false,
-                );
-
-                let encoding_context = EncodingContext {
-                    receiver: swap_receiver.clone(),
-                    exact_out: solution.exact_out,
-                    router_address: Some(self.router_address.clone()),
-                    group_token_in: grouped_swap.input_token.clone(),
-                    group_token_out: grouped_swap.output_token.clone(),
-                    transfer_type: transfer_type.clone(),
-                };
                 let protocol_data =
                     swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
                 grouped_protocol_data.extend(protocol_data);
             }
 
             let swap_data = self.encode_swap_header(
-                get_token_position(tokens.clone(), grouped_swap.input_token.clone())?,
-                get_token_position(tokens.clone(), grouped_swap.output_token.clone())?,
+                get_token_position(tokens.clone(), grouped_swap.token_in.clone())?,
+                get_token_position(tokens.clone(), grouped_swap.token_out.clone())?,
                 percentage_to_uint24(grouped_swap.split),
                 Bytes::from_str(swap_encoder.executor_address()).map_err(|_| {
                     EncodingError::FatalError("Invalid executor address".to_string())
@@ -744,6 +731,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -827,6 +815,7 @@ mod tests {
                 swap_encoder_registry,
                 None,
                 Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -877,6 +866,85 @@ mod tests {
         }
 
         #[test]
+        fn test_single_swap_strategy_encoder_no_transfer_in() {
+            // Performs a single swap from WETH to DAI on a USV2 pool assuming that the tokens are
+            // already in the router
+
+            let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+            let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
+            let expected_amount = Some(BigUint::from_str("2_650_000000000000000000").unwrap());
+            let slippage = Some(0.01f64);
+            let checked_amount = Some(BigUint::from_str("2_640_000000000000000000").unwrap());
+            let expected_min_amount = U256::from_str("2_640_000000000000000000").unwrap();
+
+            let swap = Swap {
+                component: ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth.clone(),
+                token_out: dai.clone(),
+                split: 0f64,
+            };
+            let swap_encoder_registry = get_swap_encoder_registry();
+            let encoder = SingleSwapStrategyEncoder::new(
+                eth_chain(),
+                swap_encoder_registry,
+                None,
+                Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                true,
+            )
+            .unwrap();
+            let solution = Solution {
+                exact_out: false,
+                given_token: weth,
+                given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+                checked_token: dai,
+                expected_amount,
+                slippage,
+                checked_amount,
+                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                swaps: vec![swap],
+                ..Default::default()
+            };
+
+            let (calldata, _) = encoder
+                .encode_strategy(solution)
+                .unwrap();
+            let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
+            let expected_input = [
+                "20144a07",                                                           // Function selector
+                "0000000000000000000000000000000000000000000000000de0b6b3a7640000",   // amount in
+                "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",   // token in
+                "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",   // token out
+                &expected_min_amount_encoded,                                         // min amount out
+                "0000000000000000000000000000000000000000000000000000000000000000",   // wrap
+                "0000000000000000000000000000000000000000000000000000000000000000",   // unwrap
+                "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",   // receiver
+                "0000000000000000000000000000000000000000000000000000000000000100",   // offset of swap bytes
+                "0000000000000000000000000000000000000000000000000000000000000052",   // length of swap bytes without padding
+
+                // Swap data
+                "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
+                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
+                "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
+                "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+                "00",                                       // zero2one
+                "00",                                       // transfer type
+                "0000000000000000000000000000",             // padding
+            ]
+                .join("");
+
+            let hex_calldata = encode(&calldata);
+
+            assert_eq!(hex_calldata, expected_input);
+            println!("test_single_swap_strategy_encoder_no_transfer_in: {}", hex_calldata);
+        }
+
+        #[test]
         fn test_single_swap_strategy_encoder_wrap() {
             // Performs a single swap from WETH to DAI on a USV2 pool, wrapping ETH
             // Note: This test does not assert anything. It is only used to obtain integration test
@@ -904,6 +972,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -956,6 +1025,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -1027,6 +1097,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -1086,6 +1157,7 @@ mod tests {
                 swap_encoder_registry,
                 None,
                 Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -1204,6 +1276,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
 
@@ -1321,6 +1394,7 @@ mod tests {
                     swap_encoder_registry,
                     None,
                     Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                    false,
                 )
                 .unwrap();
                 let solution = Solution {
@@ -1402,6 +1476,7 @@ mod tests {
                     swap_encoder_registry,
                     None,
                     Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                    false,
                 )
                 .unwrap();
                 let solution = Solution {
@@ -1487,6 +1562,7 @@ mod tests {
                     swap_encoder_registry,
                     None,
                     Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                    false,
                 )
                 .unwrap();
                 let solution = Solution {
@@ -1553,6 +1629,7 @@ mod tests {
                     swap_encoder_registry,
                     None,
                     Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                    false,
                 )
                 .unwrap();
                 let solution = Solution {
@@ -1800,6 +1877,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -1909,6 +1987,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key.clone()),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
 
@@ -2071,6 +2150,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key.clone()),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
 
@@ -2196,6 +2276,7 @@ mod tests {
                 swap_encoder_registry,
                 None,
                 Bytes::from_str("0xA4AD4f68d0b91CFD19687c881e50f3A00242828c").unwrap(),
+                false,
             )
             .unwrap();
 
@@ -2261,6 +2342,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
 
@@ -2329,6 +2411,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
 
@@ -2416,6 +2499,7 @@ mod tests {
                 swap_encoder_registry,
                 Some(private_key),
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -2518,6 +2602,7 @@ mod tests {
                 swap_encoder_registry,
                 None,
                 Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
             )
             .unwrap();
 
@@ -2580,6 +2665,7 @@ mod tests {
                 swap_encoder_registry,
                 None,
                 Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
             )
             .unwrap();
 
