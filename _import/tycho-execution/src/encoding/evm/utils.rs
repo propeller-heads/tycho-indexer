@@ -151,7 +151,6 @@ pub async fn get_client() -> Result<Arc<RootProvider<BoxTransport>>, EncodingErr
     Ok(Arc::new(client))
 }
 
-
 /// Uses prefix-length encoding to efficient encode action data.
 ///
 /// Prefix-length encoding is a data encoding method where the beginning of a data segment
