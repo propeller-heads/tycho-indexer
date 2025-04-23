@@ -501,11 +501,11 @@ pub trait EntryPointGateway {
         component_id: &str,
     ) -> Result<(), StorageError>;
 
-    /// Retrieves a list of entry points from the database.
-    async fn get_entry_points(
+    /// Retrieves a list of entry points with their tracing data from the database.
+    async fn get_entry_points_with_data(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<Vec<EntryPoint>, StorageError>;
+    ) -> Result<Vec<EntryPointWithData>, StorageError>;
 
     /// Upserts a list of traced entry points into the database.
     async fn upsert_traced_entry_points(

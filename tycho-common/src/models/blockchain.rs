@@ -342,7 +342,7 @@ pub enum BlockTag {
     /// Block by number
     Number(u64),
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EntryPoint {
     /// The address of the contract to trace.
     pub target: Address,
@@ -363,7 +363,7 @@ impl EntryPoint {
 }
 
 /// A struct that combines an entry point with its associated tracing data.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EntryPointWithData {
     /// The entry point to trace, containing the target contract address and function signature
     pub entry_point: EntryPoint,
@@ -377,7 +377,7 @@ impl EntryPointWithData {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
 /// An entry point to trace. Different types of entry points tracing will be supported in the
 /// future. Like RPC debug tracing, symbolic execution, etc.
 pub enum EntryPointTracingData {
@@ -385,7 +385,7 @@ pub enum EntryPointTracingData {
     RPCTracer(RPCTracerEntryPoint),
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Eq, Hash)]
 pub struct RPCTracerEntryPoint {
     /// The caller address of the transaction, will use the vm default if not provided
     pub caller: Option<Address>,
