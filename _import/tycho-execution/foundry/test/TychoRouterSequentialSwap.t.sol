@@ -70,7 +70,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         );
 
         uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(ALICE);
-        assertEq(usdcBalance, 2644659787);
+        assertEq(usdcBalance, 2005810530);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
@@ -95,7 +95,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         );
 
         uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(ALICE);
-        assertEq(usdcBalance, 2644659787);
+        assertEq(usdcBalance, 2005810530);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
@@ -161,7 +161,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         vm.expectRevert(
             abi.encodeWithSelector(
                 TychoRouter__NegativeSlippage.selector,
-                2644659787, // actual amountOut
+                2005810530, // actual amountOut
                 minAmountOut
             )
         );
@@ -234,7 +234,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             "",
             pleEncode(swaps)
         );
-        uint256 expectedAmount = 2644659787;
+        uint256 expectedAmount = 2005810530;
         assertEq(amountOut, expectedAmount);
         uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(ALICE);
         assertEq(usdcBalance, expectedAmount);
@@ -295,7 +295,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             pleEncode(swaps)
         );
 
-        uint256 expectedAmount = 1111174255471849849; // 1.11 ETH
+        uint256 expectedAmount = 1466332452295613768; // 1.11 ETH
         assertEq(amountOut, expectedAmount);
         assertEq(ALICE.balance, expectedAmount);
 
@@ -338,7 +338,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         );
 
         tychoRouter.exposedSequentialSwap(amountIn, pleEncode(swaps));
-        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99889294);
+        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99792554);
     }
 
     function testSequentialSwapIntegrationPermit2() public {
@@ -361,7 +361,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         uint256 balanceAfter = IERC20(USDC_ADDR).balanceOf(ALICE);
 
         assertTrue(success, "Call Failed");
-        assertEq(balanceAfter - balanceBefore, 2552915143);
+        assertEq(balanceAfter - balanceBefore, 1951856272);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
@@ -385,11 +385,12 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         uint256 balanceAfter = IERC20(USDC_ADDR).balanceOf(ALICE);
 
         assertTrue(success, "Call Failed");
-        assertEq(balanceAfter - balanceBefore, 2552915143);
+        assertEq(balanceAfter - balanceBefore, 1951856272);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
     function testSequentialCyclicSwapIntegration() public {
+        // USDC -> WETH -> USDC  using two pools
         deal(USDC_ADDR, ALICE, 100 * 10 ** 6);
 
         // Approve permit2
@@ -397,11 +398,11 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
         // Encoded solution generated using `test_sequential_strategy_cyclic_swap`
         (bool success,) = tychoRouterAddr.call(
-            hex"51bcc7b60000000000000000000000000000000000000000000000000000000005f5e100000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000005f4308e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000005f5e10000000000000000000000000000000000000000000000000000000000682dbba300000000000000000000000000000000000000000000000000000000000000000000000000000000000000003ede3eca2a72b3aecc820e955b36f38437d0139500000000000000000000000000000000000000000000000000000000680635ab00000000000000000000000000000000000000000000000000000000000001e000000000000000000000000000000000000000000000000000000000000002600000000000000000000000000000000000000000000000000000000000000041adc1487dd76b622c3762cfeb017fc51d2e3513e8e2e2a6a8d8e153d79192474735457ed064158c007ffc2a42cc8ee7ccc256155dbe4ef3b5404c4addbeb5612a1c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000d600692e234dae75c793f67a35089c9d99245e1c58470ba0b86991c6218b36c1d19d4a2e9eb0ce3606eb48c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20001f43ede3eca2a72b3aecc820e955b36f38437d0139588e6a0c2ddd26feeb64f039a2c41296fcb3f5640010200692e234dae75c793f67a35089c9d99245e1c58470bc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000bb8cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc28ad599c3a0ff1de082011efddc58f1908eb6e6d8000000000000000000000000"
+            hex"51bcc7b60000000000000000000000000000000000000000000000000000000005f5e100000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000005ec8f6e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000005f5e10000000000000000000000000000000000000000000000000000000000682f96a300000000000000000000000000000000000000000000000000000000000000000000000000000000000000003ede3eca2a72b3aecc820e955b36f38437d0139500000000000000000000000000000000000000000000000000000000680810ab00000000000000000000000000000000000000000000000000000000000001e0000000000000000000000000000000000000000000000000000000000000026000000000000000000000000000000000000000000000000000000000000000415de1a1f5644d780aa3e22af583e87639ff7d519518576da5b10c15748d75d7f64b9d4fc2439869fc226ca4a8b69c6cc4b284427b0d5d73c72e54f115cdf2bbca1b0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000d600692e234dae75c793f67a35089c9d99245e1c58470ba0b86991c6218b36c1d19d4a2e9eb0ce3606eb48c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20001f43ede3eca2a72b3aecc820e955b36f38437d0139588e6a0c2ddd26feeb64f039a2c41296fcb3f5640010200692e234dae75c793f67a35089c9d99245e1c58470bc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000bb8cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc28ad599c3a0ff1de082011efddc58f1908eb6e6d8000000000000000000000000"
         );
 
         assertTrue(success, "Call Failed");
-        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 99889294);
+        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 99792554);
 
         vm.stopPrank();
     }
@@ -426,7 +427,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         uint256 balanceAfter = IERC20(USDC_ADDR).balanceOf(ALICE);
 
         assertTrue(success, "Call Failed");
-        assertEq(balanceAfter - balanceBefore, 2554299052);
+        assertEq(balanceAfter - balanceBefore, 1952973189);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
@@ -450,7 +451,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         uint256 balanceAfter = IERC20(USDC_ADDR).balanceOf(ALICE);
 
         assertTrue(success, "Call Failed");
-        assertEq(balanceAfter - balanceBefore, 2647438249);
+        assertEq(balanceAfter - balanceBefore, 2015740345);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
@@ -474,7 +475,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         uint256 balanceAfter = IERC20(USDT_ADDR).balanceOf(ALICE);
 
         assertTrue(success, "Call Failed");
-        assertEq(balanceAfter - balanceBefore, 2650183330);
+        assertEq(balanceAfter - balanceBefore, 2018869128);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
@@ -498,7 +499,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         uint256 balanceAfter = IERC20(USDC_ADDR).balanceOf(ALICE);
 
         assertTrue(success, "Call Failed");
-        assertEq(balanceAfter - balanceBefore, 2549391308);
+        assertEq(balanceAfter - balanceBefore, 1949668893);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 }

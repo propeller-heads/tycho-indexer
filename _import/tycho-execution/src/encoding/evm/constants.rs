@@ -42,5 +42,7 @@ pub static CALLBACK_CONSTRAINED_PROTOCOLS: LazyLock<HashSet<&'static str>> = Laz
     let mut set = HashSet::new();
     set.insert("uniswap_v3");
     set.insert("pancakeswap_v3");
+    set.insert("uniswap_v4");
+    set.insert("ekubo_v2");
     set
 });

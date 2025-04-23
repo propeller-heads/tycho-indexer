@@ -688,16 +688,16 @@ mod tests {
             U256::from_str("2659881924818443699787").unwrap(),
         )]
         #[case::no_check_with_slippage(
-            Some(BigUint::from_str("3_000_000000000000000000").unwrap()),
+            Some(BigUint::from_str("2_000_000000000000000000").unwrap()),
             Some(0.01f64),
             None,
-            U256::from_str("2_970_000000000000000000").unwrap(),
+            U256::from_str("1_980_000000000000000000").unwrap(),
         )]
         #[case::with_check_and_slippage(
-            Some(BigUint::from_str("3_000_000000000000000000").unwrap()),
+            Some(BigUint::from_str("2_000_000000000000000000").unwrap()),
             Some(0.01f64),
-            Some(BigUint::from_str("2_999_000000000000000000").unwrap()),
-            U256::from_str("2_999_000000000000000000").unwrap(),
+            Some(BigUint::from_str("1_999_000000000000000000").unwrap()),
+            U256::from_str("1_999_000000000000000000").unwrap(),
         )]
         fn test_single_swap_strategy_encoder(
             #[case] expected_amount: Option<BigUint>,
@@ -794,10 +794,10 @@ mod tests {
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-            let expected_amount = Some(BigUint::from_str("2_650_000000000000000000").unwrap());
+            let expected_amount = Some(BigUint::from_str("1_650_000000000000000000").unwrap());
             let slippage = Some(0.01f64);
-            let checked_amount = Some(BigUint::from_str("2_640_000000000000000000").unwrap());
-            let expected_min_amount = U256::from_str("2_640_000000000000000000").unwrap();
+            let checked_amount = Some(BigUint::from_str("1_640_000000000000000000").unwrap());
+            let expected_min_amount = U256::from_str("1_640_000000000000000000").unwrap();
 
             let swap = Swap {
                 component: ProtocolComponent {
@@ -873,10 +873,10 @@ mod tests {
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-            let expected_amount = Some(BigUint::from_str("2_650_000000000000000000").unwrap());
+            let expected_amount = Some(BigUint::from_str("1_650_000000000000000000").unwrap());
             let slippage = Some(0.01f64);
-            let checked_amount = Some(BigUint::from_str("2_640_000000000000000000").unwrap());
-            let expected_min_amount = U256::from_str("2_640_000000000000000000").unwrap();
+            let checked_amount = Some(BigUint::from_str("1_640_000000000000000000").unwrap());
+            let expected_min_amount = U256::from_str("1_640_000000000000000000").unwrap();
 
             let swap = Swap {
                 component: ProtocolComponent {
@@ -981,7 +981,7 @@ mod tests {
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: dai,
                 expected_amount: None,
-                checked_amount: Some(BigUint::from_str("2659881924818443699787").unwrap()),
+                checked_amount: Some(BigUint::from_str("1659881924818443699787").unwrap()),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap],
@@ -1286,7 +1286,7 @@ mod tests {
                 given_amount: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
                 checked_token: usdc.clone(),
                 expected_amount: None,
-                checked_amount: Some(BigUint::from_str("99889294").unwrap()), /* Expected output
+                checked_amount: Some(BigUint::from_str("99389294").unwrap()), /* Expected output
                                                                                * from
                                                                                * test */
                 slippage: None,
@@ -1305,7 +1305,7 @@ mod tests {
                 "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
                 "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
                 "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
-                "0000000000000000000000000000000000000000000000000000000005f4308e", // min amount out
+                "0000000000000000000000000000000000000000000000000000000005ec8f6e", // min amount out
                 "0000000000000000000000000000000000000000000000000000000000000000", // wrap action
                 "0000000000000000000000000000000000000000000000000000000000000000", // unwrap action
                 "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
@@ -1652,6 +1652,155 @@ mod tests {
 
                 let _hex_calldata = encode(&calldata);
                 println!("test_balancer_v2_uniswap_v2: {}", _hex_calldata);
+            }
+
+            #[test]
+            fn test_multi_protocol() {
+                // Note: This test does not assert anything. It is only used to obtain integration
+                // test data for our router solidity test.
+                //
+                // Performs the following swap:
+                //
+                //   DAI ─(USV2)-> WETH ─(bal)─> WBTC ─(curve)─> USDT ─(ekubo)─> USDC ─(USV4)─> ETH
+
+                let weth = weth();
+                let eth = eth();
+                let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
+                let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+                let usdt = Bytes::from_str("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
+                let dai = Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap();
+
+                // Set up a mock private key for signing (Alice's pk in our router tests)
+                let private_key =
+                    "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234"
+                        .to_string();
+
+                let usv2_swap_dai_weth = Swap {
+                    component: ProtocolComponent {
+                        id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                        protocol_system: "uniswap_v2".to_string(),
+                        ..Default::default()
+                    },
+                    token_in: dai.clone(),
+                    token_out: weth.clone(),
+                    split: 0f64,
+                };
+
+                let balancer_swap_weth_wbtc = Swap {
+                    component: ProtocolComponent {
+                        id: "0xa6f548df93de924d73be7d25dc02554c6bd66db500020000000000000000000e"
+                            .to_string(),
+                        protocol_system: "vm:balancer_v2".to_string(),
+                        ..Default::default()
+                    },
+                    token_in: weth.clone(),
+                    token_out: wbtc.clone(),
+                    split: 0f64,
+                };
+
+                let curve_swap_wbtc_usdt = Swap {
+                    component: ProtocolComponent {
+                        id: String::from("0xD51a44d3FaE010294C616388b506AcdA1bfAAE46"),
+                        protocol_system: String::from("vm:curve"),
+                        static_attributes: {
+                            let mut attrs: HashMap<String, Bytes> = HashMap::new();
+                            attrs.insert(
+                                "factory".into(),
+                                Bytes::from(
+                                    "0x0000000000000000000000000000000000000000"
+                                        .as_bytes()
+                                        .to_vec(),
+                                ),
+                            );
+                            attrs
+                        },
+                        ..Default::default()
+                    },
+                    token_in: wbtc.clone(),
+                    token_out: usdt.clone(),
+                    split: 0f64,
+                };
+
+                // Ekubo
+
+                let component = ProtocolComponent {
+                    // All Ekubo swaps go through the core contract - not necessary to specify pool
+                    // id for test
+                    protocol_system: "ekubo_v2".to_string(),
+                    // 0.0025% fee & 0.005% base pool
+                    static_attributes: HashMap::from([
+                        ("fee".to_string(), Bytes::from(461168601842738_u64)),
+                        ("tick_spacing".to_string(), Bytes::from(50_u32)),
+                        ("extension".to_string(), Bytes::zero(20)),
+                    ]),
+                    ..Default::default()
+                };
+                let ekubo_swap_usdt_usdc = Swap {
+                    component,
+                    token_in: usdt.clone(),
+                    token_out: usdc.clone(),
+                    split: 0f64,
+                };
+
+                // USV4
+                // Fee and tick spacing information for this test is obtained by querying the
+                // USV4 Position Manager contract: 0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e
+                // Using the poolKeys function with the first 25 bytes of the pool id
+                let pool_fee_usdc_eth = Bytes::from(BigInt::from(3000).to_signed_bytes_be());
+                let tick_spacing_usdc_eth = Bytes::from(BigInt::from(60).to_signed_bytes_be());
+                let mut static_attributes_usdc_eth: HashMap<String, Bytes> = HashMap::new();
+                static_attributes_usdc_eth.insert("key_lp_fee".into(), pool_fee_usdc_eth);
+                static_attributes_usdc_eth.insert("tick_spacing".into(), tick_spacing_usdc_eth);
+
+                let usv4_swap_usdc_eth = Swap {
+                    component: ProtocolComponent {
+                        id: "0xdce6394339af00981949f5f3baf27e3610c76326a700af57e4b3e3ae4977f78d"
+                            .to_string(),
+                        protocol_system: "uniswap_v4".to_string(),
+                        static_attributes: static_attributes_usdc_eth,
+                        ..Default::default()
+                    },
+                    token_in: usdc.clone(),
+                    token_out: eth.clone(),
+                    split: 0f64,
+                };
+
+                // Put all components together
+                let swap_encoder_registry = get_swap_encoder_registry();
+                let encoder = SequentialSwapStrategyEncoder::new(
+                    eth_chain(),
+                    swap_encoder_registry,
+                    Some(private_key),
+                    Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                    false,
+                )
+                .unwrap();
+                let solution = Solution {
+                    exact_out: false,
+                    given_token: dai,
+                    given_amount: BigUint::from_str("1500_000000000000000000").unwrap(),
+                    checked_token: eth,
+                    expected_amount: None,
+                    checked_amount: Some(BigUint::from_str("732214216964381330").unwrap()),
+                    sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                    receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
+                        .unwrap(),
+                    swaps: vec![
+                        usv2_swap_dai_weth,
+                        balancer_swap_weth_wbtc,
+                        curve_swap_wbtc_usdt,
+                        ekubo_swap_usdt_usdc,
+                        usv4_swap_usdc_eth,
+                    ],
+                    ..Default::default()
+                };
+
+                let (calldata, _) = encoder
+                    .encode_strategy(solution)
+                    .unwrap();
+
+                let _hex_calldata = encode(&calldata);
+                println!("multi_protocol: {}", _hex_calldata);
             }
         }
     }
@@ -2012,7 +2161,7 @@ mod tests {
                 given_amount: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
                 checked_token: usdc.clone(),
                 expected_amount: None,
-                checked_amount: Some(BigUint::from_str("99525908").unwrap()), /* Expected output
+                checked_amount: Some(BigUint::from_str("99025908").unwrap()), /* Expected output
                                                                                * from
                                                                                * test */
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -2032,7 +2181,7 @@ mod tests {
                 "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
                 "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
                 "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
-                "0000000000000000000000000000000000000000000000000000000005eea514", // min amount out
+                "0000000000000000000000000000000000000000000000000000000005e703f4", // min amount out
                 "0000000000000000000000000000000000000000000000000000000000000000", // wrap action
                 "0000000000000000000000000000000000000000000000000000000000000000", // unwrap action
                 "0000000000000000000000000000000000000000000000000000000000000002", // tokens length
@@ -2138,7 +2287,7 @@ mod tests {
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: token_out,
                 expected_amount: None,
-                checked_amount: Some(BigUint::from_str("1").unwrap()),
+                checked_amount: Some(BigUint::from_str("1000").unwrap()),
                 slippage: None,
                 // Alice
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -2204,7 +2353,7 @@ mod tests {
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: pepe,
                 expected_amount: None,
-                checked_amount: Some(BigUint::from_str("242373460199848577067005852").unwrap()),
+                checked_amount: Some(BigUint::from_str("152373460199848577067005852").unwrap()),
                 slippage: None,
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
