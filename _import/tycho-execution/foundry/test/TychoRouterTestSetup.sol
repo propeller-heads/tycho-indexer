@@ -99,7 +99,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper {
 
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
         usv2Executor =
-            new UniswapV2Executor(factoryV2, initCodeV2, PERMIT2_ADDRESS);
+            new UniswapV2Executor(factoryV2, initCodeV2, PERMIT2_ADDRESS, 30);
         usv3Executor =
             new UniswapV3Executor(factoryV3, initCodeV3, PERMIT2_ADDRESS);
         usv4Executor = new UniswapV4Executor(poolManager, PERMIT2_ADDRESS);
