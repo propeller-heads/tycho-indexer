@@ -408,8 +408,7 @@ impl CurveSwapEncoder {
                 // StableSwap factory
                 "0x4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d" => Ok(U8::from(1)),
                 _ => Err(EncodingError::FatalError(format!(
-                    "Unsupported curve factory address: {}",
-                    factory_address
+                    "Unsupported curve factory address: {factory_address}"
                 ))),
             },
         }
@@ -466,8 +465,7 @@ impl CurveSwapEncoder {
                 if token_in != native_token_curve_address && token_out != native_token_curve_address
                 {
                     Err(EncodingError::RecoverableError(format!(
-                        "Curve meta registry call failed with error: {:?}",
-                        err
+                        "Curve meta registry call failed with error: {err}"
                     )))
                 } else {
                     let wrapped_token = bytes_to_address(&self.wrapped_native_token_address)?;
@@ -832,7 +830,7 @@ mod tests {
                 .encode_swap(swap, encoding_context)
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
-            println!("test_encode_uniswap_v4_simple_swap: {}", hex_swap);
+            println!("test_encode_uniswap_v4_simple_swap: {hex_swap}");
 
             assert_eq!(
                 hex_swap,
@@ -1003,7 +1001,7 @@ mod tests {
             let combined_hex =
                 format!("{}{}", encode(&initial_encoded_swap), encode(&second_encoded_swap));
 
-            println!("test_encode_uniswap_v4_sequential_swap: {}", combined_hex);
+            println!("test_encode_uniswap_v4_sequential_swap: {combined_hex}");
             assert_eq!(
                 combined_hex,
                 String::from(concat!(
@@ -1032,7 +1030,7 @@ mod tests {
                     "00003c"
                 ))
             );
-            println!("{}", combined_hex)
+            println!("{combined_hex}")
         }
     }
     mod ekubo {
@@ -1161,7 +1159,7 @@ mod tests {
             let combined_hex =
                 format!("{}{}", encode(first_encoded_swap), encode(second_encoded_swap));
 
-            println!("{}", combined_hex);
+            println!("{combined_hex}");
             assert_eq!(
                 combined_hex,
                 // transfer type

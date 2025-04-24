@@ -790,6 +790,9 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         return result;
     }
 
+    /**
+     * @dev Gets balance of a token for a given address. Supports both native ETH and ERC20 tokens.
+     */
     function _balanceOf(address token, address owner)
         internal
         view

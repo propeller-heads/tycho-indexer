@@ -235,8 +235,7 @@ impl TychoExecutorEncoder {
         let number_of_groups = grouped_swaps.len();
         if number_of_groups > 1 {
             return Err(EncodingError::InvalidInput(format!(
-                "Tycho executor encoder only supports one swap. Found {}",
-                number_of_groups
+                "Tycho executor encoder only supports one swap. Found {number_of_groups}"
             )))
         }
 
