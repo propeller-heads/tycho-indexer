@@ -1,3 +1,10 @@
+## [0.82.1](https://github.com/propeller-heads/tycho-execution/compare/0.82.0...0.82.1) (2025-04-24)
+
+
+### Bug Fixes
+
+* Make clippy happy after new format! format ([7bf0b48](https://github.com/propeller-heads/tycho-execution/commit/7bf0b48ea6ac536ba7d52b1e2e3bfb50deecd1cf))
+
 ## [0.82.0](https://github.com/propeller-heads/tycho-execution/compare/0.81.0...0.82.0) (2025-04-23)
 
 
