@@ -165,7 +165,7 @@ where
                 )?
                 .return_value;
             let decoded: U256Return = U256Return::abi_decode(&res, true).map_err(|e| {
-                SimulationError::FatalError(format!("Failed to decode swap return value: {:?}", e))
+                SimulationError::FatalError(format!("Failed to decode swap return value: {e:?}"))
             })?;
             if decoded == *MARKER_VALUE {
                 balance_slot = Some(i);
@@ -205,7 +205,7 @@ where
             )?
             .return_value;
         let decoded: U256Return = U256Return::abi_decode(&res, true).map_err(|e| {
-            SimulationError::FatalError(format!("Failed to decode swap return value: {:?}", e))
+            SimulationError::FatalError(format!("Failed to decode swap return value: {e:?}"))
         })?;
         if decoded == *MARKER_VALUE {
             allowance_slot = Some(i);

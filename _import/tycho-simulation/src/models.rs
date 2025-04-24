@@ -56,7 +56,7 @@ impl Token {
     pub fn new(address: &str, decimals: usize, symbol: &str, gas: BigUint) -> Self {
         let addr = Bytes::from(
             hexstring_to_vec(address)
-                .unwrap_or_else(|_| panic!("Invalid token address: {:?}", address)),
+                .unwrap_or_else(|_| panic!("Invalid token address: {address:?}")),
         );
         let sym = symbol.to_string();
         Token { address: addr, decimals, symbol: sym, gas }
@@ -97,7 +97,7 @@ impl TryFrom<ResponseToken> for Token {
         Ok(Self {
             address: value.address,
             decimals: value.decimals.try_into().map_err(|e| {
-                ModelError::ConversionError(format!("Failed to convert decimals: {}", e))
+                ModelError::ConversionError(format!("Failed to convert decimals: {e}"))
             })?,
             symbol: value.symbol.to_string(),
             gas: BigUint::from(
@@ -140,7 +140,10 @@ mod tests {
 
         assert_eq!(token.symbol, "USDC");
         assert_eq!(token.decimals, 6);
-        assert_eq!(format!("{:#x}", token.address), "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
+        assert_eq!(
+            format!("{token_address:#x}", token_address = token.address),
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        );
     }
 
     #[test]

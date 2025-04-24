@@ -308,8 +308,7 @@ where
                 for (token, bal) in bals {
                     let addr = bytes_to_address(token).map_err(|_| {
                         SimulationError::FatalError(format!(
-                            "Invalid token address in balance update: {:?}",
-                            token
+                            "Invalid token address in balance update: {token:?}"
                         ))
                     })?;
                     self.balances
@@ -330,8 +329,7 @@ where
                     for (token, bal) in bals {
                         let addr = bytes_to_address(token).map_err(|_| {
                             SimulationError::FatalError(format!(
-                                "Invalid token address in balance update: {:?}",
-                                token
+                                "Invalid token address in balance update: {token:?}"
                             ))
                         })?;
                         contract_entry.insert(addr, U256::from_be_slice(bal));
@@ -515,8 +513,7 @@ where
             .get(&(base_address, quote_address))
             .cloned()
             .ok_or(SimulationError::FatalError(format!(
-                "Spot price not found for base token {} and quote token {}",
-                base_address, quote_address
+                "Spot price not found for base token {base_address} and quote token {quote_address}"
             )))
     }
 
@@ -597,7 +594,7 @@ where
 
         if sell_amount_exceeds_limit {
             return Err(SimulationError::InvalidInput(
-                format!("Sell amount exceeds limit {}", sell_amount_limit),
+                format!("Sell amount exceeds limit {sell_amount_limit}"),
                 Some(GetAmountOutResult::new(
                     u256_to_biguint(buy_amount),
                     u256_to_biguint(trade.gas_used),

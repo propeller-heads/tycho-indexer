@@ -71,7 +71,7 @@ where
             .return_value;
 
         let decoded: PriceReturn = PriceReturn::abi_decode(&res, true).map_err(|e| {
-            SimulationError::FatalError(format!("Failed to decode price return value: {:?}", e))
+            SimulationError::FatalError(format!("Failed to decode price return value: {e:?}"))
         })?;
 
         let price = self.calculate_price(decoded)?;
@@ -132,8 +132,7 @@ where
 
         let decoded: LimitsReturn = LimitsReturn::abi_decode(&res, true).map_err(|e| {
             SimulationError::FatalError(format!(
-                "Adapter get_limits call failed: Failed to decode return value: {:?}",
-                e
+                "Adapter get_limits call failed: Failed to decode return value: {e:?}"
             ))
         })?;
 
@@ -154,8 +153,7 @@ where
         let decoded: CapabilitiesReturn =
             CapabilitiesReturn::abi_decode(&res, true).map_err(|e| {
                 SimulationError::FatalError(format!(
-                    "Adapter get_capabilities call failed: Failed to decode return value: {:?}",
-                    e
+                    "Adapter get_capabilities call failed: Failed to decode return value: {e:?}"
                 ))
             })?;
 
@@ -178,8 +176,7 @@ where
         let decoded: MinGasUsageReturn =
             MinGasUsageReturn::abi_decode(&res, true).map_err(|e| {
                 SimulationError::FatalError(format!(
-                    "Adapter min gas usage call failed: Failed to decode return value: {:?}",
-                    e
+                    "Adapter min gas usage call failed: Failed to decode return value: {e:?}"
                 ))
             })?;
         decoded

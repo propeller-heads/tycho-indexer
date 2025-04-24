@@ -14,7 +14,7 @@ pub(crate) fn bytes_to_address(address: &Bytes) -> Result<Address, SimulationErr
         Ok(Address::from_slice(address))
     } else {
         Err(SimulationError::InvalidInput(
-            format!("Invalid ERC20 token address: {:?}", address),
+            format!("Invalid ERC20 token address: {address:?}"),
             None,
         ))
     }

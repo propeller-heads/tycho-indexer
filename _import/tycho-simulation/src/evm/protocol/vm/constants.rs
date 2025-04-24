@@ -18,8 +18,6 @@ pub fn get_adapter_file(protocol: &str) -> Result<&'static [u8], SimulationError
     match protocol {
         "balancer_v2" => Ok(BALANCER_V2),
         "curve" => Ok(CURVE),
-        _ => {
-            Err(SimulationError::FatalError(format!("Adapter for protocol {} not found", protocol)))
-        }
+        _ => Err(SimulationError::FatalError(format!("Adapter for protocol {protocol} not found"))),
     }
 }

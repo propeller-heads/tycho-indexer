@@ -83,7 +83,7 @@ impl ProtocolSim for EkuboState {
 
         if quote.consumed_amount != token_amount.amount {
             return Err(SimulationError::InvalidInput(
-                format!("pool does not have enough liquidity to support complete swap. input amount: {}, consumed amount: {}", token_amount.amount, quote.consumed_amount),
+                format!("pool does not have enough liquidity to support complete swap. input amount: {input_amount}, consumed amount: {consumed_amount}", input_amount = token_amount.amount, consumed_amount = quote.consumed_amount),
                 Some(res),
             ));
         }

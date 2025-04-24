@@ -28,7 +28,7 @@ pub(crate) fn coerce_error(
         {
             let reason = parse_solidity_error_message(data);
             let err = SimulationEngineError::TransactionError {
-                data: format!("Revert! Reason: {}", reason),
+                data: format!("Revert! Reason: {reason}"),
                 gas_used: *gas_used,
             };
 
@@ -50,10 +50,7 @@ pub(crate) fn coerce_error(
                     );
                 }
             }
-            SimulationError::FatalError(format!(
-                "Simulation reverted for unknown reason: {}",
-                reason
-            ))
+            SimulationError::FatalError(format!("Simulation reverted for unknown reason: {reason}"))
         }
         // Check if "OutOfGas" is part of the error message
         SimulationEngineError::TransactionError { ref data, ref gas_used }
@@ -68,14 +65,13 @@ pub(crate) fn coerce_error(
 
             SimulationError::InvalidInput(
                 format!(
-                    "SimulationError: out-of-gas. {} Original error: {}. Pool state: {}",
-                    usage_msg, data, pool_state
+                    "SimulationError: out-of-gas. {usage_msg} Original error: {data}. Pool state: {pool_state}"
                 ),
                 None,
             )
         }
         SimulationEngineError::TransactionError { ref data, .. } => {
-            SimulationError::FatalError(format!("TransactionError: {}", data))
+            SimulationError::FatalError(format!("TransactionError: {data}"))
         }
         SimulationEngineError::StorageError(message) => {
             SimulationError::RecoverableError(message.clone())
@@ -90,7 +86,7 @@ fn parse_solidity_error_message(data: &str) -> String {
     if data.len() >= 10 {
         let data_bytes = match Vec::from_hex(&data[2..]) {
             Ok(bytes) => bytes,
-            Err(_) => return format!("Failed to decode: {}", data),
+            Err(_) => return format!("Failed to decode: {data}"),
         };
 
         // Check for specific error selectors:
@@ -107,7 +103,7 @@ fn parse_solidity_error_message(data: &str) -> String {
                 return panic_codes
                     .get(&decoded.as_limbs()[0])
                     .cloned()
-                    .unwrap_or_else(|| format!("Panic({})", decoded));
+                    .unwrap_or_else(|| format!("Panic({decoded})"));
             }
         }
 
@@ -122,7 +118,7 @@ fn parse_solidity_error_message(data: &str) -> String {
         }
     }
     // Fallback if no decoding succeeded
-    format!("Failed to decode: {}", data)
+    format!("Failed to decode: {data}")
 }
 
 /// Get storage slot index of a value stored at a certain key in a mapping
@@ -251,12 +247,10 @@ pub(crate) async fn get_code_for_contract(
         }
         Err(e) => match e {
             RpcError::Transport(err) => Err(SimulationError::RecoverableError(format!(
-                "Failed to get code for contract due to internal RPC error: {:?}",
-                err
+                "Failed to get code for contract due to internal RPC error: {err:?}"
             ))),
             _ => Err(SimulationError::FatalError(format!(
-                "Failed to get code for contract. Invalid response from RPC: {:?}",
-                e
+                "Failed to get code for contract. Invalid response from RPC: {e:?}"
             ))),
         },
     }
@@ -312,7 +306,7 @@ pub fn string_to_bytes32(pool_id: &str) -> Result<[u8; 32], SimulationError> {
     let pool_id_no_prefix =
         if let Some(stripped) = pool_id.strip_prefix("0x") { stripped } else { pool_id };
     let bytes = hex::decode(pool_id_no_prefix)
-        .map_err(|e| SimulationError::FatalError(format!("Invalid hex string: {}", e)))?;
+        .map_err(|e| SimulationError::FatalError(format!("Invalid hex string: {e}")))?;
     if bytes.len() > 32 {
         return Err(SimulationError::FatalError(format!(
             "Hex string exceeds 32 bytes: length {}",
@@ -356,7 +350,7 @@ pub fn string_to_bytes32(pool_id: &str) -> Result<[u8; 32], SimulationError> {
 /// ```
 pub fn json_deserialize_address_list(input: &[u8]) -> Result<Vec<Vec<u8>>, SimulationError> {
     let json_value: Value = serde_json::from_slice(input)
-        .map_err(|_| SimulationError::FatalError(format!("Invalid JSON: {:?}", input)))?;
+        .map_err(|_| SimulationError::FatalError(format!("Invalid JSON: {input:?}")))?;
 
     if let Value::Array(hex_strings) = json_value {
         let mut result = Vec::new();
@@ -364,7 +358,7 @@ pub fn json_deserialize_address_list(input: &[u8]) -> Result<Vec<Vec<u8>>, Simul
         for val in hex_strings {
             if let Value::String(hexstring) = val {
                 let bytes = hex::decode(hexstring.trim_start_matches("0x")).map_err(|_| {
-                    SimulationError::FatalError(format!("Invalid hex string: {}", hexstring))
+                    SimulationError::FatalError(format!("Invalid hex string: {hexstring}"))
                 })?;
                 result.push(bytes);
             } else {
@@ -411,7 +405,7 @@ pub fn json_deserialize_address_list(input: &[u8]) -> Result<Vec<Vec<u8>>, Simul
 /// ```
 pub fn json_deserialize_be_bigint_list(input: &[u8]) -> Result<Vec<BigInt>, SimulationError> {
     let json_value: Value = serde_json::from_slice(input)
-        .map_err(|_| SimulationError::FatalError(format!("Invalid JSON: {:?}", input)))?;
+        .map_err(|_| SimulationError::FatalError(format!("Invalid JSON: {input:?}")))?;
 
     if let Value::Array(hex_strings) = json_value {
         let mut result = Vec::new();
@@ -419,7 +413,7 @@ pub fn json_deserialize_be_bigint_list(input: &[u8]) -> Result<Vec<BigInt>, Simu
         for val in hex_strings {
             if let Value::String(hexstring) = val {
                 let bytes = hex::decode(hexstring.trim_start_matches("0x")).map_err(|_| {
-                    SimulationError::FatalError(format!("Invalid hex string: {}", hexstring))
+                    SimulationError::FatalError(format!("Invalid hex string: {hexstring}"))
                 })?;
                 let bigint = BigInt::from_signed_bytes_be(&bytes);
                 result.push(bigint);
@@ -519,7 +513,7 @@ mod tests {
         if let SimulationError::RecoverableError(message) = result {
             assert_eq!(message, "Storage error:");
         } else {
-            println!("{:?}", result);
+            println!("{result:?}");
             panic!("Expected RetryLater error");
         }
     }

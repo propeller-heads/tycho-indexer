@@ -62,7 +62,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
         let mut index = 0;
 
         loop {
-            let address_key = format!("stateless_contract_addr_{}", index);
+            let address_key = format!("stateless_contract_addr_{index}");
             if let Some(encoded_address_bytes) = snapshot
                 .state
                 .attributes
@@ -82,7 +82,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
                     Err(_) => continue,
                 };
 
-                let code_key = format!("stateless_contract_code_{}", index);
+                let code_key = format!("stateless_contract_code_{index}");
                 let code = snapshot
                     .state
                     .attributes
@@ -143,12 +143,15 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
                     .as_str()
             });
         let adapter_bytecode = Bytecode::new_raw(get_adapter_file(protocol_name)?.into());
-        let adapter_contract_address =
-            Address::from_str(&format!("{:0>40}", hex::encode(protocol_name))).map_err(|_| {
-                InvalidSnapshotError::ValueError(
-                    "Error converting protocol name to address".to_string(),
-                )
-            })?;
+        let adapter_contract_address = Address::from_str(&format!(
+            "{hex_protocol_name:0>40}",
+            hex_protocol_name = hex::encode(protocol_name)
+        ))
+        .map_err(|_| {
+            InvalidSnapshotError::ValueError(
+                "Error converting protocol name to address".to_string(),
+            )
+        })?;
 
         let mut pool_state_builder =
             EVMPoolStateBuilder::new(id.clone(), tokens.clone(), block, adapter_contract_address)

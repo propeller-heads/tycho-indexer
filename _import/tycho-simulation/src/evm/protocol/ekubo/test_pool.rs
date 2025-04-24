@@ -78,14 +78,14 @@ pub fn attributes() -> HashMap<String, Bytes> {
         ),
         ("tick".to_string(), TICK_INDEX_BETWEEN.to_be_bytes().into()),
         (
-            format!("ticks/{}", LOWER_TICK.index),
+            format!("ticks/{index}", index = LOWER_TICK.index),
             LOWER_TICK
                 .liquidity_delta
                 .to_be_bytes()
                 .into(),
         ),
         (
-            format!("ticks/{}", UPPER_TICK.index),
+            format!("ticks/{index}", index = UPPER_TICK.index),
             UPPER_TICK
                 .liquidity_delta
                 .to_be_bytes()
