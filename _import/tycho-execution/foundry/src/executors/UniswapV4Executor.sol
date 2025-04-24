@@ -44,6 +44,7 @@ contract UniswapV4Executor is
     using TransientStateLibrary for IPoolManager;
 
     IPoolManager public immutable poolManager;
+    address private immutable _self;
 
     struct UniswapV4Pool {
         address intermediaryToken;
@@ -55,6 +56,7 @@ contract UniswapV4Executor is
         TokenTransfer(_permit2)
     {
         poolManager = _poolManager;
+        _self = address(this);
     }
 
     /**
@@ -204,18 +206,9 @@ contract UniswapV4Executor is
         internal
         returns (bytes memory)
     {
-        address executor;
-        // slither-disable-next-line assembly
-        assembly {
-            executor := tload(0)
-        }
-
-        if (executor == address(0)) {
-            executor = address(this);
-        }
         // here we expect to call either `swapExactInputSingle` or `swapExactInput`. See `swap` to see how we encode the selector and the calldata
         // slither-disable-next-line low-level-calls
-        (bool success, bytes memory returnData) = executor.delegatecall(data);
+        (bool success, bytes memory returnData) = _self.delegatecall(data);
         if (!success) {
             revert(
                 string(
