@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut buffer = String::new();
     io::stdin()
         .read_to_string(&mut buffer)
-        .map_err(|e| format!("Failed to read from stdin: {}", e))?;
+        .map_err(|e| format!("Failed to read from stdin: {e}"))?;
 
     if buffer.trim().is_empty() {
         return Err("No input provided. Expected JSON input on stdin.".into());
@@ -108,8 +108,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Output the encoded result as JSON to stdout
     println!(
         "{}",
-        serde_json::to_string(&encoded)
-            .map_err(|e| format!("Failed to serialize output: {}", e))?
+        serde_json::to_string(&encoded).map_err(|e| format!("Failed to serialize output: {e}"))?
     );
 
     Ok(())

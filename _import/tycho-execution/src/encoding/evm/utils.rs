@@ -23,7 +23,7 @@ pub fn bytes_to_address(address: &Bytes) -> Result<Address, EncodingError> {
     if address.len() == 20 {
         Ok(Address::from_slice(address))
     } else {
-        Err(EncodingError::InvalidInput(format!("Invalid address: {:?}", address)))
+        Err(EncodingError::InvalidInput(format!("Invalid address: {address}",)))
     }
 }
 
@@ -95,7 +95,7 @@ pub fn get_token_position(tokens: Vec<Bytes>, token: Bytes) -> Result<U8, Encodi
             .iter()
             .position(|t| *t == token)
             .ok_or_else(|| {
-                EncodingError::InvalidInput(format!("Token {:?} not found in tokens array", token))
+                EncodingError::InvalidInput(format!("Token {token} not found in tokens array"))
             })?,
     );
     Ok(position)
@@ -121,9 +121,7 @@ pub fn get_static_attribute(swap: &Swap, attribute_name: &str) -> Result<Vec<u8>
         .component
         .static_attributes
         .get(attribute_name)
-        .ok_or_else(|| {
-            EncodingError::FatalError(format!("Attribute {} not found", attribute_name))
-        })?
+        .ok_or_else(|| EncodingError::FatalError(format!("Attribute {attribute_name} not found")))?
         .to_vec())
 }
 

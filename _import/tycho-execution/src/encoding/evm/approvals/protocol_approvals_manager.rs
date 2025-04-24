@@ -64,8 +64,7 @@ impl ProtocolApprovalsManager {
                 Ok(allowance.is_zero())
             }
             Err(err) => Err(EncodingError::RecoverableError(format!(
-                "Allowance call failed with error: {:?}",
-                err
+                "Allowance call failed with error: {err}"
             ))),
         }
     }

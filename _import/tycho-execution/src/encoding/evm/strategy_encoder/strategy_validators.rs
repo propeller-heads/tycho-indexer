@@ -150,8 +150,7 @@ impl SplitSwapValidator {
             if token_swaps.len() == 1 {
                 if token_swaps[0].split != 0.0 {
                     return Err(EncodingError::InvalidInput(format!(
-                        "Single swap must have 0% split for token {:?}",
-                        token
+                        "Single swap must have 0% split for token {token}",
                     )));
                 }
                 continue;
@@ -163,16 +162,14 @@ impl SplitSwapValidator {
                 match (swap.split == 0.0, i == token_swaps.len() - 1) {
                     (true, false) => {
                         return Err(EncodingError::InvalidInput(format!(
-                            "The 0% split for token {:?} must be the last swap",
-                            token
+                            "The 0% split for token {token} must be the last swap",
                         )))
                     }
                     (true, true) => found_zero_split = true,
                     (false, _) => {
                         if swap.split < 0.0 {
                             return Err(EncodingError::InvalidInput(format!(
-                                "All splits must be >= 0% for token {:?}",
-                                token
+                                "All splits must be >= 0% for token {token}"
                             )));
                         }
                         total_percentage += swap.split;
@@ -182,8 +179,7 @@ impl SplitSwapValidator {
 
             if !found_zero_split {
                 return Err(EncodingError::InvalidInput(format!(
-                    "Token {:?} must have exactly one 0% split for remainder handling",
-                    token
+                    "Token {token} must have exactly one 0% split for remainder handling"
                 )));
             }
 

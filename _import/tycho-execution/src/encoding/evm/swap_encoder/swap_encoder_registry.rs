@@ -24,8 +24,7 @@ impl SwapEncoderRegistry {
         let config_str = if let Some(ref path) = executors_file_path {
             fs::read_to_string(path).map_err(|e| {
                 EncodingError::FatalError(format!(
-                    "Error reading executors file from {:?}: {}",
-                    executors_file_path, e
+                    "Error reading executors file from {executors_file_path:?}: {e}",
                 ))
             })?
         } else {
