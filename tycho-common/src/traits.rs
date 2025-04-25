@@ -108,9 +108,9 @@ pub trait EntryPointTracer {
     ///
     /// # Returns
     /// Returns a vector of `TracedEntryPoint`, where each element contains:
-    /// * `retriggers` - A set of (address, storage slot) pairs representing state that could alter
-    ///   tracing results. If any of these storage slots change, the set of called contract might be
-    ///   outdated.
+    /// * `retriggers` - A set of (address, storage slot) pairs representing storage locations that
+    ///   could alter tracing results. If any of these storage slots change, the set of called
+    ///   contract might be outdated.
     /// * `called_addresses` - A set of all contract addresses that were called during the trace
     async fn trace(
         &self,
