@@ -387,7 +387,8 @@ pub enum EntryPointTracingData {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Eq, Hash)]
 pub struct RPCTracerEntryPoint {
-    /// The caller address of the transaction, will use the vm default if not provided
+    /// The caller address of the transaction, if not provided tracing will use the default value
+    /// for an address defined by the VM.
     pub caller: Option<Address>,
     /// The data used for the tracing call, this needs to include the function selector
     pub data: Bytes,
@@ -434,7 +435,7 @@ impl TracingResult {
 /// Represents a traced entry point and the results of the tracing operation.
 pub struct TracedEntryPoint {
     /// The combined entry point and tracing data that was traced
-    pub entry_point: EntryPointWithData,
+    pub entry_point_with_data: EntryPointWithData,
     /// The block hash of the block that the entry point was traced on.
     pub detection_block_hash: BlockHash,
     /// The results of the tracing operation
@@ -447,7 +448,7 @@ impl TracedEntryPoint {
         detection_block_hash: BlockHash,
         result: TracingResult,
     ) -> Self {
-        Self { entry_point, detection_block_hash, tracing_result: result }
+        Self { entry_point_with_data: entry_point, detection_block_hash, tracing_result: result }
     }
 }
 
