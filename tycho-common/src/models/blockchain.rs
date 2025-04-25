@@ -344,6 +344,8 @@ pub enum BlockTag {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EntryPoint {
+    /// The id of the protocol component that the entry point belongs to.
+    pub external_id: String,
     /// The address of the contract to trace.
     pub target: Address,
     /// The signature of the function to trace.
@@ -351,14 +353,8 @@ pub struct EntryPoint {
 }
 
 impl EntryPoint {
-    pub fn new(target: Address, signature: String) -> Self {
-        Self { target, signature }
-    }
-
-    /// Returns the external id of the entry point, which is a combination of the target address and
-    /// the function signature.
-    pub fn external_id(&self) -> String {
-        format!("{}:{}", self.target, self.signature)
+    pub fn new(external_id: String, target: Address, signature: String) -> Self {
+        Self { external_id, target, signature }
     }
 }
 

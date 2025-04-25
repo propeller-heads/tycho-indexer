@@ -58,7 +58,7 @@ impl PostgresGateway {
             .flat_map(|(_, ep)| {
                 ep.iter()
                     .map(|ep| NewEntryPoint {
-                        external_id: ep.entry_point.external_id(),
+                        external_id: ep.entry_point.external_id.clone(),
                         target: ep.entry_point.target.clone(),
                         signature: ep.entry_point.signature.clone(),
                     })
@@ -80,7 +80,7 @@ impl PostgresGateway {
             .iter()
             .flat_map(|(_, ep)| {
                 ep.iter()
-                    .map(|ep| ep.entry_point.external_id())
+                    .map(|ep| ep.entry_point.external_id.clone())
             })
             .collect();
 
@@ -91,7 +91,7 @@ impl PostgresGateway {
             .iter()
             .flat_map(|(_, ep)| {
                 ep.iter().map(|ep| {
-                    let ext_id = ep.entry_point.external_id();
+                    let ext_id = ep.entry_point.external_id.clone();
                     let ep_id = entry_point_ids
                         .get(&ext_id)
                         .ok_or_else(|| StorageError::NotFound("EntryPoint".to_string(), ext_id))?;
@@ -148,7 +148,7 @@ impl PostgresGateway {
                         entry_point_tracing_data_id: *data_ids.get(ep).ok_or_else(|| {
                             StorageError::NotFound(
                                 "EntryPointTracingData".to_string(),
-                                ep.entry_point.external_id(),
+                                ep.entry_point.external_id.clone(),
                             )
                         })?,
                     })
@@ -247,7 +247,8 @@ impl PostgresGateway {
                         "EntryPointTracingData".to_string(),
                         tep.entry_point_with_data
                             .entry_point
-                            .external_id(),
+                            .external_id
+                            .clone(),
                     )
                 })?;
 
@@ -455,6 +456,7 @@ mod test {
     fn rpc_tracer_entry_point() -> EntryPointWithData {
         EntryPointWithData {
             entry_point: EntryPoint {
+                external_id: "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()".to_string(),
                 target: Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
                 signature: "getRate()".to_string(),
             },

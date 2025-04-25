@@ -1787,7 +1787,11 @@ pub struct EntryPoint {
 
 impl From<EntryPoint> for models::blockchain::EntryPoint {
     fn from(value: EntryPoint) -> Self {
-        Self { target: value.target.clone(), signature: value.signature.clone() }
+        Self {
+            external_id: value.external_id.clone(),
+            target: value.target.clone(),
+            signature: value.signature.clone(),
+        }
     }
 }
 
@@ -1923,7 +1927,7 @@ impl EntryPointTracingData {
                         })?
                     }
                 };
-                Ok((ep.entry_point.external_id(), data))
+                Ok((ep.entry_point.external_id.clone(), data))
             })
             .collect::<Result<Vec<_>, StorageError>>()?
             .into_iter()
@@ -1934,7 +1938,7 @@ impl EntryPointTracingData {
                 .iter()
                 .map(|ep| {
                     (
-                        ep.entry_point.external_id(),
+                        ep.entry_point.external_id.clone(),
                         EntryPointTracingType::from(&ep.data),
                         ep.data.clone(),
                     )
