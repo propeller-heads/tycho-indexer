@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS "protocol_component_holds_entry_point_tracing_data"(
 );
 
 CREATE TABLE IF NOT EXISTS "entry_point_tracing_result"(
-    "entry_point_tracing_data_id" bigint NOT NULL REFERENCES "entry_point_tracing_data"(id) ON DELETE CASCADE PRIMARY KEY,
+    "id" bigserial PRIMARY KEY,
+    "entry_point_tracing_data_id" bigint UNIQUE NOT NULL REFERENCES "entry_point_tracing_data"(id) ON DELETE CASCADE, -- Currently only one result per entry point tracing data, if we want to allow multiple results per entry point tracing data (like for versioning), we need to remove the UNIQUE constraint
     "detection_block" bigint NOT NULL REFERENCES "block"(id),
     "detection_data" JSONB NOT NULL,
     "inserted_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -42,7 +43,7 @@ CREATE TABLE IF NOT EXISTS "entry_point_tracing_data_calls_account"(
     "entry_point_tracing_data_id" bigint NOT NULL REFERENCES "entry_point_tracing_data"(id) ON DELETE CASCADE,
     "account_id" bigint NOT NULL REFERENCES "account"(id) ON DELETE CASCADE,
     PRIMARY KEY("entry_point_tracing_data_id","account_id")
-)
+);
 
 CREATE TRIGGER update_modtime_entry_point
     BEFORE UPDATE ON "entry_point"
