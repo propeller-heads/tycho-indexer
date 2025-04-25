@@ -64,7 +64,7 @@ pub(crate) enum WriteOp {
     // Simply merge
     UpsertProtocolState(Vec<(TxHash, models::protocol::ProtocolComponentStateDelta)>),
     // Simply merge
-    UpsertEntryPoints((Vec<models::blockchain::EntryPointWithData>, models::ComponentId)),
+    UpsertEntryPoints(Vec<(models::ComponentId, Vec<models::blockchain::EntryPointWithData>)>),
     // Simply merge
     UpsertTracedEntryPoints(Vec<models::blockchain::TracedEntryPoint>),
 }
@@ -200,6 +200,16 @@ impl DBTransaction {
                     return Ok(());
                 }
                 (WriteOp::UpsertProtocolState(l), WriteOp::UpsertProtocolState(r)) => {
+                    self.size += r.len();
+                    l.extend(r.iter().cloned());
+                    return Ok(());
+                }
+                (WriteOp::UpsertEntryPoints(l), WriteOp::UpsertEntryPoints(r)) => {
+                    self.size += r.len();
+                    l.extend(r.iter().cloned());
+                    return Ok(());
+                }
+                (WriteOp::UpsertTracedEntryPoints(l), WriteOp::UpsertTracedEntryPoints(r)) => {
                     self.size += r.len();
                     l.extend(r.iter().cloned());
                     return Ok(());
@@ -484,9 +494,19 @@ impl DBCacheWriteExecutor {
                     .upsert_traced_entry_points(traced_entry_points.as_slice(), conn)
                     .await?
             }
-            WriteOp::UpsertEntryPoints((entry_points, component_id)) => {
+            WriteOp::UpsertEntryPoints(new_entry_points) => {
                 self.state_gateway
-                    .insert_entry_points(entry_points.as_slice(), component_id, &self.chain, conn)
+                    .insert_entry_points(
+                        new_entry_points
+                            .iter()
+                            .map(|(component_id, entry_points)| {
+                                (component_id.as_str(), entry_points)
+                            })
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                        &self.chain,
+                        conn,
+                    )
                     .await?
             }
         };
@@ -1139,10 +1159,9 @@ impl EntryPointGateway for CachedGateway {
     #[instrument(skip_all)]
     async fn upsert_entry_points_with_data(
         &self,
-        entry_points: &[EntryPointWithData],
-        component_id: &str,
+        entry_points: &[(models::ComponentId, Vec<models::blockchain::EntryPointWithData>)],
     ) -> Result<(), StorageError> {
-        self.add_op(WriteOp::UpsertEntryPoints((entry_points.to_vec(), component_id.to_string())))
+        self.add_op(WriteOp::UpsertEntryPoints(entry_points.to_vec()))
             .await?;
         Ok(())
     }
