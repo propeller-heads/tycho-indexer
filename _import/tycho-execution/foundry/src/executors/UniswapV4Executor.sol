@@ -26,6 +26,7 @@ import {TransientStateLibrary} from
 
 error UniswapV4Executor__InvalidDataLength();
 error UniswapV4Executor__NotPoolManager();
+error UniswapV4Executor__UnknownCallback(bytes4 selector);
 error UniswapV4Executor__DeltaNotPositive(Currency currency);
 error UniswapV4Executor__DeltaNotNegative(Currency currency);
 error UniswapV4Executor__V4TooMuchRequested(
@@ -45,6 +46,9 @@ contract UniswapV4Executor is
 
     IPoolManager public immutable poolManager;
     address private immutable _self;
+
+    bytes4 constant SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0x8bc6d0d7;
+    bytes4 constant SWAP_EXACT_INPUT_SELECTOR = 0xaf90aeb1;
 
     struct UniswapV4Pool {
         address intermediaryToken;
@@ -206,6 +210,14 @@ contract UniswapV4Executor is
         internal
         returns (bytes memory)
     {
+        bytes4 selector = bytes4(data[:4]);
+        if (
+            selector != SWAP_EXACT_INPUT_SELECTOR
+                && selector != SWAP_EXACT_INPUT_SINGLE_SELECTOR
+        ) {
+            revert UniswapV4Executor__UnknownCallback(selector);
+        }
+
         // here we expect to call either `swapExactInputSingle` or `swapExactInput`. See `swap` to see how we encode the selector and the calldata
         // slither-disable-next-line low-level-calls
         (bool success, bytes memory returnData) = _self.delegatecall(data);
