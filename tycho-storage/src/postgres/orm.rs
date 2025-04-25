@@ -453,6 +453,11 @@ impl PartitionedVersionedRow for NewComponentBalance {
             .zip(token_ids.iter())
             .collect::<HashSet<_>>();
 
+        // PERF: The removal of the filter 'valid_to = MAX_TS' means we now search in archived
+        // tables as well. A possible optimisation would be to add the valid_to filter back
+        // and then use a second query for balances still missing that will access the
+        // archived tables. Therefore, performance is not impacted in the common case
+        // (balances are rarely deleted).
         Ok(component_balance::table
             .select(ComponentBalance::as_select())
             .filter(
@@ -1089,6 +1094,11 @@ impl PartitionedVersionedRow for NewProtocolState {
             .iter()
             .zip(attr_name.iter())
             .collect::<HashSet<_>>();
+
+        // PERF: The removal of the filter 'valid_to = MAX_TS' means we now search in archived
+        // tables as well. A possible optimisation would be to add the valid_to filter back
+        // and then use a second query for states still missing that will access the
+        // archived tables. Therefore, performance is not impacted in the common case.
         Ok(protocol_state::table
             .select(ProtocolState::as_select())
             .filter(
@@ -1610,6 +1620,10 @@ impl PartitionedVersionedRow for NewSlot {
             .zip(slots.iter())
             .collect::<HashSet<_>>();
 
+        // PERF: The removal of the filter 'valid_to = MAX_TS' means we now search in archived
+        // tables as well. A possible optimisation would be to add the valid_to filter back
+        // and then use a second query for storage still missing that will access the
+        // archived tables. Therefore, performance is not impacted in the common case.
         Ok(contract_storage::table
             .select(ContractStorage::as_select())
             .filter(
