@@ -228,7 +228,8 @@ diesel::table! {
 }
 
 diesel::table! {
-    entry_point_tracing_result (entry_point_tracing_data_id) {
+    entry_point_tracing_result (id) {
+        id -> Int8,
         entry_point_tracing_data_id -> Int8,
         detection_block -> Int8,
         detection_data -> Jsonb,
