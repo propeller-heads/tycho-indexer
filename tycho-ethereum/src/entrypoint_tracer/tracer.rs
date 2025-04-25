@@ -200,6 +200,7 @@ mod tests {
         let entry_points = vec![
             EntryPointWithData::new(
                 EntryPoint::new(
+                    "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()".to_string(),
                     Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
                     "getRate()".to_string(),
                 ),
@@ -210,6 +211,7 @@ mod tests {
             ),
             EntryPointWithData::new(
                 EntryPoint::new(
+                    "0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9:getRate()".to_string(),
                     Bytes::from_str("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9").unwrap(),
                     "getRate()".to_string(),
                 ),
