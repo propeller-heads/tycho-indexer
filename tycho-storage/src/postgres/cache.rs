@@ -36,6 +36,7 @@ use tycho_common::{
 };
 
 use super::{PostgresError, PostgresGateway};
+
 /// Represents different types of database write operations.
 #[derive(PartialEq, Clone, Debug)]
 pub(crate) enum WriteOp {
@@ -63,10 +64,8 @@ pub(crate) enum WriteOp {
     // Simply merge
     UpsertProtocolState(Vec<(TxHash, models::protocol::ProtocolComponentStateDelta)>),
     // Simply merge
-    #[allow(unused)] //TODO: Remove this once we have usage in extractors
     UpsertEntryPoints((Vec<models::blockchain::EntryPointWithData>, models::ComponentId)),
     // Simply merge
-    #[allow(unused)] //TODO: Remove this once we have usage in extractors
     UpsertTracedEntryPoints(Vec<models::blockchain::TracedEntryPoint>),
 }
 
@@ -487,7 +486,7 @@ impl DBCacheWriteExecutor {
             }
             WriteOp::UpsertEntryPoints((entry_points, component_id)) => {
                 self.state_gateway
-                    .upsert_entry_points(entry_points.as_slice(), component_id, &self.chain, conn)
+                    .insert_entry_points(entry_points.as_slice(), component_id, &self.chain, conn)
                     .await?
             }
         };
@@ -1138,7 +1137,7 @@ impl ProtocolGateway for CachedGateway {
 #[async_trait]
 impl EntryPointGateway for CachedGateway {
     #[instrument(skip_all)]
-    async fn upsert_entry_points(
+    async fn upsert_entry_points_with_data(
         &self,
         entry_points: &[EntryPointWithData],
         component_id: &str,

@@ -516,8 +516,8 @@ impl EntryPointFilter {
 // Trait for entry point gateway operations.
 #[async_trait]
 pub trait EntryPointGateway {
-    /// Upserts a list of entry points into the database.
-    async fn upsert_entry_points(
+    /// Upserts a list of entry points with their tracing data into the database.
+    async fn upsert_entry_points_with_data(
         &self,
         entry_points: &[EntryPointWithData],
         component_id: &str,
