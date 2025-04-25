@@ -24,7 +24,7 @@ pub fn map_balance_changes(
         {
             // Skip if the log is not from a known uniswapV3 pool.
             if let Some(pool) =
-                pools_store.get_last(format!("{}:{}", "Pool", &log.address.to_hex()))
+                pools_store.get_last(format!("Pool:{address}", address = &log.address.to_hex()))
             {
                 tx_deltas.extend(get_log_changed_balances(log, &pool))
             } else {

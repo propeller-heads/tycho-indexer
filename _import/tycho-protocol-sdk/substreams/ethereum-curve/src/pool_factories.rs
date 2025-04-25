@@ -39,7 +39,7 @@ fn address_to_bytes_with_0x(address: &[u8; 20]) -> Vec<u8> {
 
 /// Converts address bytes into a string containing a leading `0x`.
 fn address_to_string_with_0x(address: &[u8]) -> String {
-    format!("0x{}", hex::encode(address))
+    format!("0x{encoded}", encoded = hex::encode(address))
 }
 
 /// Function that swaps `WETH` addresses for `ETH` address for specific factory types that decide
@@ -499,8 +499,8 @@ pub fn address_map(
                             name: "stateless_contract_addr_0".into(),
                             // Call views_implementation() on CRYPTO_SWAP_NG_FACTORY
                             value: format!(
-                                "call:0x{}:views_implementation()",
-                                hex::encode(CRYPTO_SWAP_NG_FACTORY)
+                                "call:0x{factory}:views_implementation()",
+                                factory = hex::encode(CRYPTO_SWAP_NG_FACTORY)
                             )
                             .into(),
                             change: ChangeType::Creation.into(),
@@ -579,8 +579,8 @@ pub fn address_map(
                                 name: "stateless_contract_addr_0".into(),
                                 // Call views_implementation() on CRYPTO_SWAP_NG_FACTORY
                                 value: format!(
-                                    "call:0x{}:views_implementation()",
-                                    hex::encode(CRYPTO_SWAP_NG_FACTORY)
+                                    "call:0x{factory}:views_implementation()",
+                                    factory = hex::encode(CRYPTO_SWAP_NG_FACTORY)
                                 )
                                 .into(),
                                 change: ChangeType::Creation.into(),
@@ -589,8 +589,8 @@ pub fn address_map(
                                 name: "stateless_contract_addr_1".into(),
                                 // Call math_implementation() on CRYPTO_SWAP_NG_FACTORY
                                 value: format!(
-                                    "call:0x{}:math_implementation()",
-                                    hex::encode(CRYPTO_SWAP_NG_FACTORY)
+                                    "call:0x{factory}:math_implementation()",
+                                    factory = hex::encode(CRYPTO_SWAP_NG_FACTORY)
                                 )
                                 .into(),
                                 change: ChangeType::Creation.into(),
@@ -651,14 +651,14 @@ pub fn address_map(
                         }),
                     },
                     vec![EntityChanges {
-                        component_id: format!("0x{}", id),
+                        component_id: format!("0x{id}"),
                         attributes: vec![
                             Attribute {
                                 name: "stateless_contract_addr_0".into(),
                                 // Call views_implementation() on TRICRYPTO_FACTORY
                                 value: format!(
-                                    "call:0x{}:views_implementation()",
-                                    hex::encode(TRICRYPTO_FACTORY)
+                                    "call:0x{factory}:views_implementation()",
+                                    factory = hex::encode(TRICRYPTO_FACTORY)
                                 )
                                 .into(),
                                 change: ChangeType::Creation.into(),
@@ -667,8 +667,8 @@ pub fn address_map(
                                 name: "stateless_contract_addr_1".into(),
                                 // Call math_implementation() on TRICRYPTO_FACTORY
                                 value: format!(
-                                    "call:0x{}:math_implementation()",
-                                    hex::encode(TRICRYPTO_FACTORY)
+                                    "call:0x{factory}:math_implementation()",
+                                    factory = hex::encode(TRICRYPTO_FACTORY)
                                 )
                                 .into(),
                                 change: ChangeType::Creation.into(),
@@ -907,14 +907,14 @@ pub fn address_map(
                         }),
                     },
                     vec![EntityChanges {
-                        component_id: format!("0x{}", id),
+                        component_id: format!("0x{id}"),
                         attributes: vec![
                             Attribute {
                                 name: "stateless_contract_addr_0".into(),
                                 // Call views_implementation() on TWOCRYPTO_FACTORY
                                 value: format!(
-                                    "call:0x{}:views_implementation()",
-                                    hex::encode(TWOCRYPTO_FACTORY)
+                                    "call:0x{factory}:views_implementation()",
+                                    factory = hex::encode(TWOCRYPTO_FACTORY)
                                 )
                                 .into(),
                                 change: ChangeType::Creation.into(),

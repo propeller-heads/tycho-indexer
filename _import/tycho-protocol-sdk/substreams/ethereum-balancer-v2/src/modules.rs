@@ -53,7 +53,7 @@ pub fn store_components(map: BlockTransactionProtocolComponents, store: StoreSet
             tx_pc
                 .components
                 .into_iter()
-                .for_each(|pc| store.set(0, format!("pool:{0}", &pc.id[..42]), &pc.id))
+                .for_each(|pc| store.set(0, format!("pool:{id}", id = &pc.id[..42]), &pc.id))
         });
 }
 
@@ -73,10 +73,10 @@ pub fn map_relative_balances(
             if let Some(ev) =
                 abi::vault::events::PoolBalanceChanged::match_and_decode(vault_log.log)
             {
-                let component_id = format!("0x{}", hex::encode(ev.pool_id));
+                let component_id = format!("0x{id}", id = hex::encode(ev.pool_id));
 
                 if store
-                    .get_last(format!("pool:{}", &component_id[..42]))
+                    .get_last(format!("pool:{id}", id = &component_id[..42]))
                     .is_some()
                 {
                     for (token, delta) in ev
@@ -95,10 +95,10 @@ pub fn map_relative_balances(
                     }
                 }
             } else if let Some(ev) = abi::vault::events::Swap::match_and_decode(vault_log.log) {
-                let component_id = format!("0x{}", hex::encode(ev.pool_id));
+                let component_id = format!("0x{id}", id = hex::encode(ev.pool_id));
 
                 if store
-                    .get_last(format!("pool:{}", &component_id[..42]))
+                    .get_last(format!("pool:{id}", id = &component_id[..42]))
                     .is_some()
                 {
                     deltas.extend_from_slice(&[
@@ -121,9 +121,9 @@ pub fn map_relative_balances(
             } else if let Some(ev) =
                 abi::vault::events::PoolBalanceManaged::match_and_decode(vault_log.log)
             {
-                let component_id = format!("0x{}", hex::encode(ev.pool_id));
+                let component_id = format!("0x{id}", id = hex::encode(ev.pool_id));
                 if store
-                    .get_last(format!("pool:{}", &component_id[..42]))
+                    .get_last(format!("pool:{id}", id = &component_id[..42]))
                     .is_some()
                 {
                     deltas.extend_from_slice(&[BalanceDelta {
@@ -230,7 +230,7 @@ pub fn map_protocol_changes(
         &block,
         |addr| {
             components_store
-                .get_last(format!("pool:0x{0}", hex::encode(addr)))
+                .get_last(format!("pool:0x{id}", id = hex::encode(addr)))
                 .is_some() ||
                 addr.eq(VAULT_ADDRESS)
         },
@@ -251,7 +251,7 @@ pub fn map_protocol_changes(
                     if address != VAULT_ADDRESS {
                         // We reconstruct the component_id from the address here
                         let id = components_store
-                            .get_last(format!("pool:0x{}", hex::encode(address)))
+                            .get_last(format!("pool:0x{id}", id = hex::encode(address)))
                             .unwrap(); // Shouldn't happen because we filter by known components in
                                        // `extract_contract_changes_builder`
                         change.mark_component_as_updated(&id);

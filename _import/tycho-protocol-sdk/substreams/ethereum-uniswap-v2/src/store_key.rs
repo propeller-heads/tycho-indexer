@@ -5,7 +5,7 @@ pub enum StoreKey {
 
 impl StoreKey {
     pub fn get_unique_pool_key(&self, key: &str) -> String {
-        format!("{}:{}", self.unique_id(), key)
+        format!("{prefix}:{key}", prefix = self.unique_id())
     }
 
     pub fn unique_id(&self) -> String {

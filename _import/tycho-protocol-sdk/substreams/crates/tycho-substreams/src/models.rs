@@ -238,7 +238,7 @@ impl ProtocolComponent {
     /// - `tx`: Reference to the associated transaction.
     pub fn at_contract(id: &[u8]) -> Self {
         Self {
-            id: format!("0x{}", hex::encode(id)),
+            id: format!("0x{encoded}", encoded = hex::encode(id)),
             tokens: Vec::new(),
             contracts: vec![id.to_vec()],
             static_att: Vec::new(),

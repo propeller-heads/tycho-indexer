@@ -41,7 +41,7 @@ pub fn map_events(
                 .logs
                 .iter()
                 .filter_map(|log| {
-                    let key = format!("{}:{}", "Pool", log.address.to_hex());
+                    let key = format!("Pool:{address}", address = log.address.to_hex());
                     // Skip if the log is not from a known pool.
                     if let Some(pool) = pools_store.get_last(key) {
                         log_to_event(log, pool, &tx)

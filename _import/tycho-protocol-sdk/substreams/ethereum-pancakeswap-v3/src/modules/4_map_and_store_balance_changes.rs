@@ -29,7 +29,7 @@ pub fn store_pools_balances(balances_deltas: BlockBalanceDeltas, store: StoreAdd
 }
 
 fn event_to_balance_deltas(event: PoolEvent) -> Vec<BalanceDelta> {
-    let address = format!("0x{}", event.pool_address)
+    let address = format!("0x{addr}", addr = event.pool_address)
         .as_bytes()
         .to_vec();
     match event.r#type.unwrap() {
