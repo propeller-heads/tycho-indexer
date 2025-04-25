@@ -2030,7 +2030,6 @@ pub struct NewEntryPointTracingResult {
     pub entry_point_tracing_data_id: i64,
     pub detection_block: i64,
     pub detection_data: serde_json::Value,
-    pub modified_ts: Option<NaiveDateTime>,
 }
 
 #[derive(Identifiable, Queryable, Associations, Selectable)]
