@@ -69,7 +69,7 @@ pub async fn print_traces(
     }
     println!("Traces:");
     for t in traces_strings {
-        println!("{}", t);
+        println!("{t}");
     }
     println!();
 
@@ -79,6 +79,6 @@ pub async fn print_traces(
         println!("Transaction failed.");
     }
 
-    println!("Gas used: {}", result.gas_used);
+    println!("Gas used: {gas}", gas = result.gas_used);
     Ok(())
 }

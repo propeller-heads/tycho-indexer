@@ -375,8 +375,7 @@ impl ProtocolSim for UniswapV3State {
                     Bytes::from([0; 16])
                 } else {
                     return Err(TransitionError::DecodeError(format!(
-                        "Liquidity bytes too long for {}, expected 16",
-                        liquidity
+                        "Liquidity bytes too long for {liquidity}, expected 16",
                     )));
                 }
             } else {
@@ -401,8 +400,7 @@ impl ProtocolSim for UniswapV3State {
                     Bytes::from([0; 4])
                 } else {
                     return Err(TransitionError::DecodeError(format!(
-                        "Tick bytes too long for {}, expected 4",
-                        tick
+                        "Tick bytes too long for {tick}, expected 4"
                     )));
                 }
             } else {

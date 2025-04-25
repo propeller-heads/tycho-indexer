@@ -32,7 +32,7 @@ pub fn hexstring_to_vec(hexstring: &str) -> Result<Vec<u8>, SimulationError> {
     let hexstring_no_prefix =
         if let Some(stripped) = hexstring.strip_prefix("0x") { stripped } else { hexstring };
     let bytes = hex::decode(hexstring_no_prefix)
-        .map_err(|_| SimulationError::FatalError(format!("Invalid hex string: {}", hexstring)))?;
+        .map_err(|_| SimulationError::FatalError(format!("Invalid hex string: {hexstring}")))?;
     Ok(bytes)
 }
 
@@ -82,7 +82,7 @@ pub async fn load_all_tokens(
             (
                 token.address.clone(),
                 token.try_into().unwrap_or_else(|_| {
-                    panic!("Couldn't convert {:?} into ERC20 token.", token_clone)
+                    panic!("Couldn't convert {token_clone:?} into ERC20 token.")
                 }),
             )
         })

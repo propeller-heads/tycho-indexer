@@ -8,7 +8,7 @@ pub mod hex_bytes {
         S: Serializer,
         T: AsRef<[u8]>,
     {
-        s.serialize_str(&format!("0x{}", hex::encode(x.as_ref())))
+        s.serialize_str(&format!("0x{encoded}", encoded = hex::encode(x.as_ref())))
     }
 
     /// Deserialize a hex string into a byte vec
@@ -40,7 +40,7 @@ pub mod hex_bytes_option {
         T: AsRef<[u8]>,
     {
         if let Some(x) = x {
-            s.serialize_str(&format!("0x{}", hex::encode(x.as_ref())))
+            s.serialize_str(&format!("0x{encoded}", encoded = hex::encode(x.as_ref())))
         } else {
             s.serialize_none()
         }

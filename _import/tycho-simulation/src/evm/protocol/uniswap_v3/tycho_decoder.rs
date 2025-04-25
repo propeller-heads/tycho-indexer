@@ -38,8 +38,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
                 Bytes::from([0; 16])
             } else {
                 return Err(InvalidSnapshotError::ValueError(format!(
-                    "Liquidity bytes too long for {}, expected 16",
-                    liq
+                    "Liquidity bytes too long for {liq}, expected 16"
                 )));
             }
         } else {
@@ -83,8 +82,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
                 Bytes::from([0; 4])
             } else {
                 return Err(InvalidSnapshotError::ValueError(format!(
-                    "Tick bytes too long for {}, expected 4",
-                    tick
+                    "Tick bytes too long for {tick}, expected 4"
                 )));
             }
         } else {

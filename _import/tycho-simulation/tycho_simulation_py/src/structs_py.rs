@@ -79,7 +79,7 @@ impl SimulationParameters {
     }
 
     fn __repr__(&self) -> String {
-        format!("{:#?}", self)
+        format!("{self:#?}")
     }
 }
 
@@ -310,7 +310,7 @@ pub struct SimulationResult {
 #[pymethods]
 impl SimulationResult {
     fn __repr__(&self) -> String {
-        format!("{:#?}", self)
+        format!("{self:#?}")
     }
 }
 
@@ -318,7 +318,7 @@ impl From<simulation::SimulationResult> for SimulationResult {
     fn from(rust_result: simulation::SimulationResult) -> Self {
         let mut py_state_updates = HashMap::new();
         for (key, val) in rust_result.state_updates {
-            py_state_updates.insert(format!("{:#x}", key), StateUpdate::from(val));
+            py_state_updates.insert(format!("{key:#x}"), StateUpdate::from(val));
         }
         SimulationResult {
             result: rust_result.result.into(),
@@ -429,9 +429,9 @@ impl SimulationErrorDetails {
     fn __repr__(&self) -> String {
         match self.gas_used {
             Some(gas_usage) => {
-                format!("SimulationError(data={}, gas_used={})", self.data, gas_usage)
+                format!("SimulationError(data={data}, gas_used={gas_usage})", data = self.data)
             }
-            None => format!("SimulationError(data={})", self.data),
+            None => format!("SimulationError(data={data})", data = self.data),
         }
     }
 }
@@ -527,7 +527,7 @@ impl TychoDB {
     pub fn new(tycho_http_url: &str) -> PyResult<Self> {
         info!(?tycho_http_url, "Creating python TychoDB wrapper instance");
         let db = tycho_db::PreCachedDB::new()
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to create TychoDB: {}", e)))?;
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to create TychoDB: {e}")))?;
         Ok(Self { inner: db })
     }
 

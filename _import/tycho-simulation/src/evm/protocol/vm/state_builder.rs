@@ -301,8 +301,7 @@ where
                 };
                 let account_address: Address = addr_str.parse().map_err(|_| {
                     SimulationError::FatalError(format!(
-                        "Failed to get default engine: Couldn't parse address string {}",
-                        address
+                        "Failed to get default engine: Couldn't parse address string {address}"
                     ))
                 })?;
                 engine.state.init_account(
@@ -435,8 +434,7 @@ where
 
         let parsed_address: Address = to_address.parse().map_err(|_| {
             SimulationError::FatalError(format!(
-                "Failed to get address from call: Invalid address format: {}",
-                to_address
+                "Failed to get address from call: Invalid address format: {to_address}"
             ))
         })?;
 
@@ -456,7 +454,7 @@ where
             .map_err(|err| SimulationError::FatalError(err.to_string()))?;
 
         let address: Address = Address::abi_decode(&sim_result.result, true).map_err(|e| {
-            SimulationError::FatalError(format!("Failed to get address from call: Failed to decode address list from simulation result {:?}", e))
+            SimulationError::FatalError(format!("Failed to get address from call: Failed to decode address list from simulation result {e:?}"))
         })?;
 
         Ok(address)

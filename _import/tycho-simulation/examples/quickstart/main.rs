@@ -87,7 +87,7 @@ impl Cli {
                 "ethereum" => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(),
                 "base" => "0x4200000000000000000000000000000000000006".to_string(),
                 "unichain" => "0x4200000000000000000000000000000000000006".to_string(),
-                _ => panic!("Execution does not yet support chain {}", self.chain),
+                _ => panic!("Execution does not yet support chain {chain}", chain = self.chain),
             });
         }
 
@@ -96,7 +96,7 @@ impl Cli {
                 "ethereum" => "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
                 "base" => "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913".to_string(),
                 "unichain" => "0x078d782b760474a361dda0af3839290b0ef57ad6".to_string(),
-                _ => panic!("Execution does not yet support chain {}", self.chain),
+                _ => panic!("Execution does not yet support chain {chain}", chain = self.chain),
             });
         }
 
@@ -113,11 +113,12 @@ async fn main() {
 
     let cli = Cli::parse().with_defaults();
 
-    let chain =
-        Chain::from_str(&cli.chain).unwrap_or_else(|_| panic!("Unknown chain {}", cli.chain));
+    let chain = Chain::from_str(&cli.chain)
+        .unwrap_or_else(|_| panic!("Unknown chain {chain}", chain = cli.chain));
 
     let tycho_url = env::var("TYCHO_URL").unwrap_or_else(|_| {
-        get_default_url(&chain).unwrap_or_else(|| panic!("Unknown URL for chain {}", cli.chain))
+        get_default_url(&chain)
+            .unwrap_or_else(|| panic!("Unknown URL for chain {chain}", chain = cli.chain))
     });
 
     let tycho_api_key: String =
@@ -125,11 +126,11 @@ async fn main() {
 
     let tvl_filter = ComponentFilter::with_tvl_range(cli.tvl_threshold, cli.tvl_threshold);
 
-    println!("Loading tokens from Tycho... {}", tycho_url.as_str());
+    println!("Loading tokens from Tycho... {url}", url = tycho_url.as_str());
     let all_tokens =
         load_all_tokens(tycho_url.as_str(), false, Some(tycho_api_key.as_str()), chain, None, None)
             .await;
-    println!("Tokens loaded: {}", all_tokens.len());
+    println!("Tokens loaded: {num}", num = all_tokens.len());
 
     let sell_token_address = Bytes::from_str(
         &cli.sell_token
@@ -153,8 +154,10 @@ async fn main() {
         BigUint::from((cli.sell_amount * 10f64.powi(sell_token.decimals as i32)) as u128);
 
     println!(
-        "Looking for pool with best price for {} {} -> {}",
-        cli.sell_amount, sell_token.symbol, buy_token.symbol
+        "Looking for pool with best price for {amount} {sell_symbol} -> {buy_symbol}",
+        amount = cli.sell_amount,
+        sell_symbol = sell_token.symbol,
+        buy_symbol = buy_token.symbol
     );
     let mut pairs: HashMap<String, ProtocolComponent> = HashMap::new();
     let mut amounts_out: HashMap<String, BigUint> = HashMap::new();
@@ -247,7 +250,7 @@ async fn main() {
         let message = match message_result {
             Ok(msg) => msg,
             Err(e) => {
-                eprintln!("Error receiving message: {:?}. Continuing to next message...", e);
+                eprintln!("Error receiving message: {e:?}. Continuing to next message...");
                 continue;
             }
         };
@@ -291,16 +294,20 @@ async fn main() {
                 {
                     Ok(balance) => {
                         let formatted_balance = format_token_amount(&balance, &sell_token);
-                        println!("\nYour balance: {} {}", formatted_balance, sell_token.symbol);
+                        println!(
+                            "\nYour balance: {formatted_balance} {sell_symbol}",
+                            sell_symbol = sell_token.symbol
+                        );
 
                         if balance < amount_in {
                             let required = format_token_amount(&amount_in, &sell_token);
-                            println!("⚠️ Warning: Insufficient balance for swap. You have {} {} but need {} {}",
-                                formatted_balance, sell_token.symbol,
-                                required, sell_token.symbol);
+                            println!("⚠️ Warning: Insufficient balance for swap. You have {formatted_balance} {sell_symbol} but need {required} {sell_symbol}",
+                                formatted_balance = formatted_balance,
+                                sell_symbol = sell_token.symbol,
+                            );
                         }
                     }
-                    Err(e) => eprintln!("Failed to get token balance: {}", e),
+                    Err(e) => eprintln!("Failed to get token balance: {e}"),
                 }
 
                 // Also show buy token balance
@@ -314,11 +321,14 @@ async fn main() {
                     Ok(balance) => {
                         let formatted_balance = format_token_amount(&balance, &buy_token);
                         println!(
-                            "Your {} balance: {} {}\n",
-                            buy_token.symbol, formatted_balance, buy_token.symbol
+                            "Your {buy_symbol} balance: {formatted_balance} {buy_symbol}",
+                            buy_symbol = buy_token.symbol
                         );
                     }
-                    Err(e) => eprintln!("Failed to get {} balance: {}", buy_token.symbol, e),
+                    Err(e) => eprintln!(
+                        "Failed to get {buy_symbol} balance: {e}",
+                        buy_symbol = buy_token.symbol
+                    ),
                 }
             }
 
@@ -373,13 +383,16 @@ async fn main() {
                     match provider.simulate(&payload).await {
                         Ok(output) => {
                             for block in output.iter() {
-                                println!("\nSimulated Block {}:", block.inner.header.number);
+                                println!(
+                                    "\nSimulated Block {block_num}:",
+                                    block_num = block.inner.header.number
+                                );
                                 for (j, transaction) in block.calls.iter().enumerate() {
                                     println!(
-                                        "  Transaction {}: Status: {:?}, Gas Used: {}",
-                                        j + 1,
-                                        transaction.status,
-                                        transaction.gas_used
+                                        "  Transaction {transaction_num}: Status: {status:?}, Gas Used: {gas_used}",
+                                        transaction_num = j + 1,
+                                        status = transaction.status,
+                                        gas_used = transaction.gas_used
                                     );
                                 }
                             }
@@ -387,7 +400,7 @@ async fn main() {
                             continue;
                         }
                         Err(e) => {
-                            eprintln!("\nSimulation failed: {:?}", e);
+                            eprintln!("\nSimulation failed: {e:?}");
                             println!("Your RPC provider does not support transaction simulation.");
                             println!("Do you want to proceed with execution instead?\n");
                             let yes_no_options = vec!["Yes", "No"];
@@ -421,19 +434,17 @@ async fn main() {
                                         );
 
                                         println!(
-                                            "Summary: Swapped {} {} → {} {} at a price of {:.6} {} per {}",
-                                            format_token_amount(&amount_in, &sell_token),
-                                            sell_token.symbol,
-                                            format_token_amount(&expected_amount_copy, &buy_token),
-                                            buy_token.symbol,
-                                            forward_price,
-                                            buy_token.symbol,
-                                            sell_token.symbol
+                                            "Summary: Swapped {formatted_in} {sell_symbol} → {formatted_out} {buy_symbol} at 
+                                            a price of {forward_price:.6} {buy_symbol} per {sell_symbol}",
+                                            formatted_in = format_token_amount(&amount_in, &sell_token),
+                                            sell_symbol = sell_token.symbol,
+                                            formatted_out = format_token_amount(&expected_amount_copy, &buy_token),
+                                            buy_symbol = buy_token.symbol,
                                         );
                                         return; // Exit the program after successful execution
                                     }
                                     Err(e) => {
-                                        eprintln!("\nFailed to execute transaction: {:?}\n", e);
+                                        eprintln!("\nFailed to execute transaction: {e:?}\n");
                                         continue;
                                     }
                                 }
@@ -467,19 +478,17 @@ async fn main() {
                             );
 
                             println!(
-                                "Summary: Swapped {} {} → {} {} at a price of {:.6} {} per {}",
-                                format_token_amount(&amount_in, &sell_token),
-                                sell_token.symbol,
-                                format_token_amount(&expected_amount_copy, &buy_token),
-                                buy_token.symbol,
-                                forward_price,
-                                buy_token.symbol,
-                                sell_token.symbol
+                                "Summary: Swapped {formatted_in} {sell_symbol} → {formatted_out} {buy_symbol} at 
+                                a price of {forward_price:.6} {buy_symbol} per {sell_symbol}",
+                                formatted_in = format_token_amount(&amount_in, &sell_token),
+                                sell_symbol = sell_token.symbol,
+                                formatted_out = format_token_amount(&expected_amount_copy, &buy_token),
+                                buy_symbol = buy_token.symbol,
                             );
                             return; // Exit the program after successful execution
                         }
                         Err(e) => {
-                            eprintln!("\nFailed to execute transaction: {:?}\n", e);
+                            eprintln!("\nFailed to execute transaction: {e:?}\n");
                             continue;
                         }
                     }
@@ -506,8 +515,8 @@ fn get_best_swap(
     amounts_out: &mut HashMap<String, BigUint>,
 ) -> Option<(String, BigUint)> {
     println!(
-        "\n==================== Received block {:?} ====================",
-        message.block_number
+        "\n==================== Received block {block:?} ====================",
+        block = message.block_number
     );
     for (id, comp) in message.new_pairs.iter() {
         pairs
@@ -526,9 +535,7 @@ fn get_best_swap(
             {
                 let amount_out = state
                     .get_amount_out(amount_in.clone(), &sell_token, &buy_token)
-                    .map_err(|e| {
-                        eprintln!("Error calculating amount out for Pool {:?}: {:?}", id, e)
-                    })
+                    .map_err(|e| eprintln!("Error calculating amount out for Pool {id:?}: {e:?}"))
                     .ok();
                 if let Some(amount_out) = amount_out {
                     amounts_out.insert(id.clone(), amount_out.amount);
@@ -544,32 +551,29 @@ fn get_best_swap(
         .iter()
         .max_by_key(|(_, value)| value.to_owned())
     {
-        println!("\nThe best swap (out of {} possible pools) is:", amounts_out.len());
         println!(
-            "Protocol: {:?}",
-            pairs
+            "\nThe best swap (out of {amounts} possible pools) is:",
+            amounts = amounts_out.len()
+        );
+        println!(
+            "Protocol: {protocol}",
+            protocol = pairs
                 .get(key)
                 .expect("Failed to get best pool")
                 .protocol_system
         );
-        println!("Pool address: {:?}", key);
+        println!("Pool address: {key:?}");
         let formatted_in = format_token_amount(&amount_in, &sell_token);
         let formatted_out = format_token_amount(amount_out, &buy_token);
         let (forward_price, reverse_price) =
             format_price_ratios(&amount_in, amount_out, &sell_token, &buy_token);
 
         println!(
-            "Swap: {} {} -> {} {} \nPrice: {:.6} {} per {}, {:.6} {} per {}",
-            formatted_in,
-            sell_token.symbol,
-            formatted_out,
-            buy_token.symbol,
-            forward_price,
-            buy_token.symbol,
-            sell_token.symbol,
-            reverse_price,
-            sell_token.symbol,
-            buy_token.symbol
+            "Swap: {formatted_in} {sell_symbol} -> {formatted_out} {buy_symbol} \n
+            Price: {forward_price:.6} {buy_symbol} per {sell_symbol}, 
+            {reverse_price:.6} {sell_symbol} per {buy_symbol}",
+            sell_symbol = sell_token.symbol,
+            buy_symbol = buy_token.symbol,
         );
         Some((key.to_string(), amount_out.clone()))
     } else {
@@ -689,7 +693,7 @@ async fn get_tx_requests(
 // Format token amounts to human-readable values
 fn format_token_amount(amount: &BigUint, token: &Token) -> String {
     let decimal_amount = amount.to_f64().unwrap_or(0.0) / 10f64.powi(token.decimals as i32);
-    format!("{:.6}", decimal_amount)
+    format!("{decimal_amount:.6}")
 }
 
 // Calculate price ratios in both directions
@@ -766,8 +770,8 @@ async fn execute_swap_transaction(
 
     if token_balance < *amount_in {
         return Err(format!(
-            "\nInsufficient token balance. You have {} tokens but need {} tokens (raw values: have {}, need {})\n",
-            decimal_balance, decimal_required, token_balance, amount_in
+            "\nInsufficient token balance. You have {decimal_balance} tokens but need {decimal_required} tokens 
+            (raw values: have {token_balance}, need {amount_in})\n",
         ).into());
     }
 
@@ -788,9 +792,9 @@ async fn execute_swap_transaction(
 
     let approval_result = approval_receipt.get_receipt().await?;
     println!(
-        "\nApproval transaction sent with hash: {:?} and status: {:?}",
-        approval_result.transaction_hash,
-        approval_result.status()
+        "\nApproval transaction sent with hash: {hash:?} and status: {status:?}",
+        hash = approval_result.transaction_hash,
+        status = approval_result.status()
     );
 
     let swap_receipt = provider
@@ -799,15 +803,15 @@ async fn execute_swap_transaction(
 
     let swap_result = swap_receipt.get_receipt().await?;
     println!(
-        "\nSwap transaction sent with hash: {:?} and status: {:?}\n",
-        swap_result.transaction_hash,
-        swap_result.status()
+        "\nSwap transaction sent with hash: {hash:?} and status: {status:?}\n",
+        hash = swap_result.transaction_hash,
+        status = swap_result.status()
     );
 
     if !swap_result.status() {
         return Err(format!(
-            "Swap transaction with hash {:?} failed.",
-            swap_result.transaction_hash
+            "Swap transaction with hash {hash:?} failed.",
+            hash = swap_result.transaction_hash
         )
         .into());
     }

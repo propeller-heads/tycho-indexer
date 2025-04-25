@@ -143,7 +143,7 @@ impl App {
 
     pub fn update_data(&mut self, update: BlockUpdate) {
         for (id, comp) in update.new_pairs.iter() {
-            let name = format!("{:#042x}", comp.id);
+            let name = format!("{comp_id:#042x}", comp_id = comp.id);
             let tokens = comp
                 .tokens
                 .iter()
@@ -153,7 +153,8 @@ impl App {
                 .states
                 .get(id)
                 .map(|el| el.spot_price(&comp.tokens[0], &comp.tokens[1]))
-                .unwrap_or(Ok(0.0));
+                .unwrap_or(Ok(0.0))
+                .expect("Expected spot price as f64");
 
             match update.states.get(id) {
                 Some(state) => {
@@ -162,11 +163,11 @@ impl App {
                         state: state.clone(),
                         name,
                         tokens,
-                        price: format!("{}", price.expect("Expected f64 as spot price")),
+                        price: price.to_string(),
                     });
                 }
                 None => {
-                    warn!("Received update for unknown pool {}", comp.id)
+                    warn!("Received update for unknown pool {comp_id}", comp_id = comp.id)
                 }
             };
         }
@@ -179,8 +180,10 @@ impl App {
                 .find_position(|e| e.component.id == eth_address);
             if let Some((index, _)) = entry {
                 let row = self.items.get_mut(index).unwrap();
-                let price = state.spot_price(&row.component.tokens[0], &row.component.tokens[1]);
-                row.price = format!("{}", price.expect("Expected f64 as spot price"));
+                let price = state
+                    .spot_price(&row.component.tokens[0], &row.component.tokens[1])
+                    .expect("Expected spot price as f64");
+                row.price = price.to_string();
                 row.state = state.clone();
             }
         }
@@ -393,11 +396,11 @@ impl App {
                 let text = res
                     .map(|data| {
                         format!(
-                            "Quote amount: {}\nReceived amount: {}\nGas: {}\nDuration: {:?}",
-                            self.quote_amount, data.amount, data.gas, duration
+                            "Quote amount: {quote_amount}\nReceived amount: {amount}\nGas: {gas}\nDuration: {duration:?}",
+                            quote_amount = self.quote_amount, amount = data.amount, gas = data.gas
                         )
                     })
-                    .unwrap_or_else(|err| format!("{:?}", err));
+                    .unwrap_or_else(|err| format!("{err:?}"));
 
                 let block = Block::bordered().title("Quote:");
                 let popup = Paragraph::new(Text::from(text))
