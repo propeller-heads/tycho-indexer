@@ -1880,8 +1880,7 @@ impl EntryPointTracingData {
             EntryPointTracingDataCommon::RPCTracer(rpc_tracer) => serde_json::to_value(rpc_tracer)
                 .map_err(|e| {
                     StorageError::Unexpected(format!(
-                        "Failed to serialize RPCTracerEntryPoint: {}",
-                        e
+                        "Failed to serialize RPCTracerEntryPoint: {e}"
                     ))
                 })?,
         };
@@ -1921,8 +1920,7 @@ impl EntryPointTracingData {
                     EntryPointTracingDataCommon::RPCTracer(rpc_tracer) => {
                         serde_json::to_value(rpc_tracer).map_err(|e| {
                             StorageError::Unexpected(format!(
-                                "Failed to serialize RPCTracerEntryPoint: {}",
-                                e
+                                "Failed to serialize RPCTracerEntryPoint: {e}"
                             ))
                         })?
                     }
@@ -1990,8 +1988,7 @@ impl EntryPointTracingData {
                             Ok(d) => EntryPointTracingDataCommon::RPCTracer(d),
                             Err(e) => {
                                 return Some(Err(StorageError::Unexpected(format!(
-                                    "Failed to deserialize RPCTracerEntryPoint: {}",
-                                    e
+                                    "Failed to deserialize RPCTracerEntryPoint: {e}"
                                 ))))
                             }
                         }
