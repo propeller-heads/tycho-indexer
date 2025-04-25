@@ -3846,7 +3846,7 @@ mod test {
                 assert_eq!(entity, "Chain");
                 assert_eq!(value, Chain::Arbitrum.to_string());
             }
-            _ => panic!("Expected StorageError::NotFound, but got {:?}", res),
+            _ => panic!("Expected StorageError::NotFound, but got {res:?}"),
         }
     }
 

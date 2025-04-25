@@ -68,7 +68,7 @@ impl Account {
         let self_id = (self.chain, &self.address);
         let other_id = (delta.chain, &delta.address);
         if self_id != other_id {
-            return Err(DeltaError::IdMismatch(format!("{:?}", self_id), format!("{:?}", other_id)));
+            return Err(DeltaError::IdMismatch(format!("{self_id:?}"), format!("{other_id:?}")));
         }
         if let Some(balance) = delta.balance.as_ref() {
             self.native_balance.clone_from(balance);

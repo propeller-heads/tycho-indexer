@@ -124,7 +124,7 @@ impl PostgresGateway {
                         StorageError::NoRelatedEntity(
                             "Block".to_string(),
                             "Transaction".to_string(),
-                            format!("{}", block_h),
+                            block_h.to_string(),
                         )
                     })?;
                 Ok(orm::NewTransaction {

@@ -46,16 +46,16 @@ impl Serialize for WebsocketError {
     {
         match self {
             WebsocketError::ExtractorNotFound(extractor_id) => {
-                serializer.serialize_str(&format!("Extractor not found: {:?}", extractor_id))
+                serializer.serialize_str(&format!("Extractor not found: {extractor_id:?}"))
             }
             WebsocketError::SubscriptionNotFound(subscription_id) => {
-                serializer.serialize_str(&format!("Subscription not found: {:?}", subscription_id))
+                serializer.serialize_str(&format!("Subscription not found: {subscription_id:?}"))
             }
             WebsocketError::ParseError(e) => {
-                serializer.serialize_str(&format!("Failed to parse JSON: {:?}", e))
+                serializer.serialize_str(&format!("Failed to parse JSON: {e:?}"))
             }
             WebsocketError::SubscribeError(extractor_id) => serializer
-                .serialize_str(&format!("Failed to subscribe to extractor: {:?}", extractor_id)),
+                .serialize_str(&format!("Failed to subscribe to extractor: {extractor_id:?}")),
         }
     }
 }
@@ -543,7 +543,7 @@ mod tests {
             // Pong received as expected
             debug!("Received pong message");
         } else {
-            panic!("Unexpected message {:?}", msg);
+            panic!("Unexpected message {msg:?}");
         }
 
         // Close the connection
@@ -715,7 +715,7 @@ mod tests {
             debug!(first_subscription_id = ?first_subscription_id, "Received first subscription ID");
             first_subscription_id
         } else {
-            panic!("Unexpected response: {:?}", response);
+            panic!("Unexpected response: {response:?}");
         };
 
         // Receive the DummyMessage from the server
@@ -744,7 +744,7 @@ mod tests {
         {
             debug!(second_subscription_id = ?second_subscription_id, "Received second subscription ID");
         } else {
-            panic!("Unexpected response: {:?}", response);
+            panic!("Unexpected response: {response:?}");
         }
 
         // Receive the DummyMessage from the second exractor
@@ -768,7 +768,7 @@ mod tests {
         if let Response::SubscriptionEnded { subscription_id } = response {
             debug!(subscription_id = ?subscription_id,"Received unsubscription ID");
         } else {
-            panic!("Unexpected response: {:?}", response);
+            panic!("Unexpected response: {response:?}");
         }
 
         // Try to receive a DummyMessage from the first extractor (expecting timeout to occur)
@@ -800,6 +800,6 @@ mod tests {
             ExtractorIdentity { chain: Chain::Ethereum, name: "vm:ambient".to_owned() };
         let action = Command::Subscribe { extractor_id, include_state: true };
         let res = serde_json::to_string(&action).unwrap();
-        println!("{}", res);
+        println!("{res}");
     }
 }
