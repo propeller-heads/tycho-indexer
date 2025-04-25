@@ -257,7 +257,7 @@ impl FromConnection<ChainEnumCache> for ChainEnumCache {
         let mut conn = pool
             .get()
             .await
-            .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
+            .map_err(|err| StorageError::Unexpected(err.to_string()))?;
 
         Self::from_connection(&mut conn).await
     }
@@ -285,7 +285,7 @@ impl FromConnection<ProtocolSystemEnumCache> for ProtocolSystemEnumCache {
         let mut conn = pool
             .get()
             .await
-            .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
+            .map_err(|err| StorageError::Unexpected(err.to_string()))?;
 
         Self::from_connection(&mut conn).await
     }
@@ -338,7 +338,7 @@ struct PostgresError(StorageError);
 
 impl From<diesel::result::Error> for PostgresError {
     fn from(value: diesel::result::Error) -> Self {
-        PostgresError(StorageError::Unexpected(format!("DieselError: {}", value)))
+        PostgresError(StorageError::Unexpected(format!("DieselError: {value}")))
     }
 }
 
@@ -418,7 +418,7 @@ async fn maybe_lookup_block_ts(
         BlockOrTimestamp::Block(BlockIdentifier::Number((chain, no))) => {
             Ok(orm::Block::by_number(*chain, *no, conn)
                 .await
-                .map_err(|err| storage_error_from_diesel(err, "Block", &format!("{}", no), None))?
+                .map_err(|err| storage_error_from_diesel(err, "Block", &format!("{no}"), None))?
                 .ts)
         }
         BlockOrTimestamp::Block(BlockIdentifier::Latest(chain)) => {
@@ -571,7 +571,7 @@ impl PostgresGateway {
         let mut conn = pool
             .get()
             .await
-            .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
+            .map_err(|err| StorageError::Unexpected(err.to_string()))?;
 
         Self::native_token_cache_from_connection(&mut conn, chain_cache).await
     }
@@ -599,7 +599,7 @@ async fn connect(db_url: &str) -> Result<Pool<AsyncPgConnection>, StorageError> 
     let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(db_url);
     let pool = Pool::builder(config)
         .build()
-        .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
+        .map_err(|err| StorageError::Unexpected(err.to_string()))?;
     run_migrations(db_url);
     Ok(pool)
 }
@@ -672,7 +672,7 @@ async fn ensure_chains(chains: &[Chain], pool: Pool<AsyncPgConnection>) {
                 continue;
             }
             Err(err) => {
-                panic!("Could not ensure chain enum in database: {}", err);
+                panic!("Could not ensure chain enum in database: {err}");
             }
         }
     }
@@ -745,10 +745,10 @@ pub mod testing {
             "chain",
         ];
         for t in tables.iter() {
-            sql_query(format!("DELETE FROM {};", t))
+            sql_query(format!("DELETE FROM {t};"))
                 .execute(conn)
                 .await
-                .unwrap_or_else(|e| panic!("Error truncating {} table: {}", t, e));
+                .unwrap_or_else(|e| panic!("Error truncating {t} table: {e}"));
         }
         dbg!("Teardown completed");
     }
@@ -1010,11 +1010,10 @@ pub mod db_fixtures {
             .iter()
             .enumerate()
             .map(|(idx, (k, v, pv))| {
-                let previous_value = pv.map(|pv| hex::decode(format!("{:064x}", pv)).unwrap());
+                let previous_value = pv.map(|pv| hex::decode(format!("{pv:064x}")).unwrap());
                 (
-                    schema::contract_storage::slot.eq(hex::decode(format!("{:064x}", *k)).unwrap()),
-                    schema::contract_storage::value
-                        .eq(hex::decode(format!("{:064x}", *v)).unwrap()),
+                    schema::contract_storage::slot.eq(hex::decode(format!("{k:064x}")).unwrap()),
+                    schema::contract_storage::value.eq(hex::decode(format!("{v:064x}")).unwrap()),
                     schema::contract_storage::previous_value.eq(previous_value),
                     schema::contract_storage::account_id.eq(contract_id),
                     schema::contract_storage::modify_tx.eq(modify_tx),
@@ -1177,8 +1176,7 @@ pub mod db_fixtures {
             .await
             .unwrap_or_else(|_| {
                 panic!(
-                    "component balance insert failed {} {} {}",
-                    token_id, protocol_component_id, balance_float
+                    "component balance insert failed {token_id} {protocol_component_id} {balance_float}"
                 )
             });
     }
@@ -1349,8 +1347,8 @@ pub mod db_fixtures {
         decimals: i32,
         quality: Option<i32>,
     ) -> (i64, i64) {
-        let title = &format!("token_{}", symbol);
-        let account_id = insert_account(conn, address, title, chain_id, None).await;
+        let title = format!("token_{symbol}");
+        let account_id = insert_account(conn, address, &title, chain_id, None).await;
 
         let quality = quality.unwrap_or(0);
 

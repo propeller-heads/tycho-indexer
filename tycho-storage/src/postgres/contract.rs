@@ -405,8 +405,7 @@ impl PostgresGateway {
             }
         }) {
             return Err(StorageError::Unexpected(format!(
-                "Found account that was deleted and created within range {} - {}!",
-                start_version_ts, target_version_ts
+                "Found account that was deleted and created within range {start_version_ts} - {target_version_ts}!"
             )));
         }
 
@@ -530,7 +529,7 @@ impl PostgresGateway {
                 StorageError::NoRelatedEntity(
                     "Transaction".into(),
                     "ContractStorage".into(),
-                    format!("{}", modify_tx),
+                    format!("{modify_tx}"),
                 )
             })?;
             for (address, storage) in contract_storage.iter() {
@@ -683,7 +682,7 @@ impl PostgresGateway {
             // for account ids, but won't error or give any inidication of a
             // missing contract id.
             let account_address = addresses.get(&cid).ok_or_else(|| {
-                StorageError::DecodeError(format!("Failed to find contract address for id {}", cid))
+                StorageError::DecodeError(format!("Failed to find contract address for id {cid}"))
             })?;
 
             match result.entry(account_address.clone()) {
@@ -2905,8 +2904,7 @@ mod test {
         let start_version = BlockOrTimestamp::Timestamp(start_ts);
         let end_version = BlockOrTimestamp::Timestamp(end_ts);
         let exp = Err(StorageError::Unexpected(format!(
-            "Found account that was deleted and created within range {} - {}!",
-            start_ts, end_ts
+            "Found account that was deleted and created within range {start_ts} - {end_ts}!"
         )));
 
         let res = gw

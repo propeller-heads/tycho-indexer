@@ -169,7 +169,7 @@ impl ExtractorRunner {
                             None => {
                                 error!("stream ended");
                                 tracing::Span::current().record("otel.status_code", "error");
-                                return Err(ExtractionError::SubstreamsError(format!("{}: stream ended", id)));
+                                return Err(ExtractionError::SubstreamsError(format!("{id}: stream ended")));
                             }
                             Some(Ok(BlockResponse::New(data))) => {
                                 let block_number = data.clock.as_ref().map(|v| v.number).unwrap_or(0);
@@ -476,8 +476,7 @@ impl ExtractorBuilder {
                     .cloned()
                     .ok_or_else(|| {
                         ExtractionError::Setup(format!(
-                            "Post processor '{}' not found in registry",
-                            name
+                            "Post processor '{name}' not found in registry"
                         ))
                     })
             })
@@ -579,7 +578,7 @@ async fn download_file_from_s3(
     // Ensure the directory exists
     if let Some(parent) = download_path.parent() {
         std::fs::create_dir_all(parent)
-            .context(format!("Failed to create directories for {:?}", parent))?;
+            .context(format!("Failed to create directories for {parent:?}"))?;
     }
 
     std::fs::write(download_path, data.into_bytes()).unwrap();

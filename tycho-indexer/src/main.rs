@@ -190,7 +190,7 @@ fn run_indexer(global_args: GlobalArgs, index_args: IndexArgs) -> Result<(), Ext
             debug!("{} CPUs detected", num_cpus::get());
             let extractors_config = ExtractorConfigs::from_yaml(&index_args.extractors_config)
                 .map_err(|e| {
-                    ExtractionError::Setup(format!("Failed to load extractors.yaml. {}", e))
+                    ExtractionError::Setup(format!("Failed to load extractors.yaml. {e}"))
                 })?;
 
             let retention_horizon: NaiveDateTime = index_args
@@ -206,7 +206,7 @@ fn run_indexer(global_args: GlobalArgs, index_args: IndexArgs) -> Result<(), Ext
                     .iter()
                     .map(|chain_str| {
                         Chain::from_str(chain_str)
-                            .unwrap_or_else(|_| panic!("Unknown chain {}", chain_str))
+                            .unwrap_or_else(|_| panic!("Unknown chain {chain_str}"))
                     })
                     .collect::<Vec<_>>(),
                 retention_horizon,
@@ -356,7 +356,7 @@ async fn create_indexing_tasks(
         // TODO: accept substreams configuration from cli.
         build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url,global_args.s3_bucket.as_deref(), &cached_gw, &token_processor, rpc_url, extraction_runtime)
             .await
-            .map_err(|e| ExtractionError::Setup(format!("Failed to create extractors: {}", e)))?
+            .map_err(|e| ExtractionError::Setup(format!("Failed to create extractors: {e}")))?
             .into_iter()
             .unzip();
 

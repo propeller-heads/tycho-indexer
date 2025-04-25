@@ -48,6 +48,6 @@ async fn main() -> Result<(), ()> {
         .await
         .unwrap();
 
-    println!("{:?}", quality);
+    println!("{quality:?}");
     Ok(())
 }

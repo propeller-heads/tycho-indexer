@@ -191,8 +191,7 @@ impl TryFromMessage for ChangeType {
             substreams::ChangeType::Update => Ok(ChangeType::Update),
             substreams::ChangeType::Deletion => Ok(ChangeType::Deletion),
             substreams::ChangeType::Unspecified => Err(ExtractionError::DecodeError(format!(
-                "Unknown ChangeType enum member encountered: {:?}",
-                args
+                "Unknown ChangeType enum member encountered: {args:?}"
             ))),
         }
     }

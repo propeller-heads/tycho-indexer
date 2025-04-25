@@ -92,7 +92,7 @@ impl EVMAccountExtractor {
     ) -> Result<HashMap<U256, U256>, RPCError> {
         let mut all_slots = HashMap::new();
         let mut start_key = H256::zero();
-        let block = format!("0x{:x}", block);
+        let block = format!("0x{block:x}");
         loop {
             let params = serde_json::json!([
                 block, 0, // transaction index, 0 for the state at the end of the block
@@ -169,7 +169,7 @@ mod tests {
             vec![Address::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8")
                 .expect("valid address")];
         let node = std::env::var("RPC_URL").expect("RPC URL must be set for testing");
-        println!("Using node: {}", node);
+        println!("Using node: {node}");
 
         let block = Block::new(
             block_number,
