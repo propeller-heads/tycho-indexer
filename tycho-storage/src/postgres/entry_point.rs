@@ -263,7 +263,7 @@ impl PostgresGateway {
                 })?;
 
             let tracing_data = serde_json::to_value(&tep.tracing_result).map_err(|e| {
-                StorageError::Unexpected(format!("Failed to serialize TracingResult: {}", e))
+                StorageError::Unexpected(format!("Failed to serialize TracingResult: {e}"))
             })?;
 
             values.push(NewEntryPointTracingResult {
@@ -363,7 +363,7 @@ impl PostgresGateway {
             .into_iter()
             .map(|(data)| {
                 serde_json::from_value(data).map_err(|e| {
-                    StorageError::Unexpected(format!("Failed to deserialize TracingResult: {}", e))
+                    StorageError::Unexpected(format!("Failed to deserialize TracingResult: {e}"))
                 })
             })
             .collect()
