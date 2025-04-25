@@ -8,19 +8,32 @@ use actix_web::web::trace;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::debug;
 use tycho_common::{
-    dto::Block,
+    dto::{Block, Transaction},
     models::{
-        blockchain::{EntryPointWithData, TracedEntryPoint},
+        blockchain::{EntryPoint, EntryPointWithData, TracedEntryPoint},
         contract::AccountDelta,
-        Address, StoreKey,
+        Address, Chain, ChangeType, ComponentId, StoreKey, StoreVal,
     },
     storage::{EntryPointFilter, EntryPointGateway},
     traits::{AccountExtractor, EntryPointTracer, StorageSnapshotRequest},
     Bytes,
 };
 
-use crate::extractor::models::fixtures::slots;
+struct TransactionAccountUpdates {
+    tx: Transaction,
+    changes: Vec<ContractChanges>,
+}
 
+struct DCIBlockUpdate {
+    // A Hashmap mapping Transactions to the relevant AccountDeltas (either Create or Update)
+    // detected on the block.
+    result_deltas: HashMap<Transaction, Vec<AccountDelta>>,
+    // A Hashmap mapping component IDs to the new Accounts that were detected by the DCI on the
+    // block
+    result_components: HashMap<ComponentId, Vec<Address>>,
+}
+
+// TODO: Remove this once it's defined and implemented by the extractor
 struct ContractChanges {
     address: Bytes,
     key: Bytes,
@@ -40,12 +53,10 @@ enum DCIMessage<E> {
 struct DynamicContractIndexer<E> {
     protocol: String,
     entrypoint_gw: Arc<dyn EntryPointGateway>,
-    storage_source: Arc<dyn AccountExtractor<Error=()>>,
-    tracer: Arc<dyn EntryPointTracer<Error=()>>,
-    // TOOO: Is this necessary?
-    protocol_entrypoints: HashSet<EntryPointWithData>,
+    storage_source: Arc<dyn AccountExtractor<Error = ()>>,
+    tracer: Arc<dyn EntryPointTracer<Error = ()>>,
+    protocol_entrypoints: HashMap<ComponentId, Vec<EntryPointWithData>>,
     entrypoint_results: HashMap<EntryPointWithData, TracedEntryPoint>,
-    message_rx: Receiver<DCIMessage<E>>,
 }
 
 // TODO: Things to check:
@@ -55,18 +66,16 @@ impl DynamicContractIndexer<()> {
     pub fn new(
         protocol: String,
         entrypoint_gw: Arc<dyn EntryPointGateway>,
-        storage_source: Arc<dyn AccountExtractor<Error=()>>,
-        tracer: Arc<dyn EntryPointTracer<Error=()>>,
-        message_rx: Receiver<DCIMessage<()>>,
+        storage_source: Arc<dyn AccountExtractor<Error = ()>>,
+        tracer: Arc<dyn EntryPointTracer<Error = ()>>,
     ) -> Self {
         Self {
             protocol,
             entrypoint_gw,
             storage_source,
             tracer,
-            protocol_entrypoints: HashSet::new(),
+            protocol_entrypoints: HashMap::new(),
             entrypoint_results: HashMap::new(),
-            message_rx,
         }
     }
 
@@ -100,77 +109,86 @@ impl DynamicContractIndexer<()> {
 
     pub async fn process_block_update(
         &mut self,
-        entrypoints: Vec<EntryPointWithData>,
-        changes: Vec<ContractChanges>,
-        block: Block,
-    ) {
-        let result: HashMap<EntryPointWithData, Vec<AccountDelta>> = HashMap::new();
-        // Process the changes
+        new_entrypoints: &HashMap<ComponentId, Vec<EntryPointWithData>>,
+        changes: &Vec<TransactionAccountUpdates>,
+        block: &Block,
+    ) -> DCIBlockUpdate {
+        let mut result_deltas: HashMap<Transaction, Vec<AccountDelta>> = HashMap::new();
+        let mut result_components: HashMap<ComponentId, Vec<Address>> = HashMap::new();
 
-        for entrypoint in entrypoints {
-            self.register_entrypoint(entrypoint);
-        }
-
-        // Get entrypoints that are on hashset but not on the hashmap
-        let mut entrypoints_to_analyze = HashSet::new();
-
-        for entrypoint in self.protocol_entrypoints.iter() {
-            if !self
-                .entrypoint_results
-                .contains_key(entrypoint)
-            {
-                entrypoints_to_analyze.insert(entrypoint.clone());
+        // Registers new Entrypoints sent by the extractor to the map of Component -> Entrypoints
+        for (component_id, entrypoints) in new_entrypoints {
+            for entrypoint in entrypoints {
+                self.protocol_entrypoints
+                    .get(&component_id)
+                    .get_or_insert_default()
+                    .push(entrypoint.clone());
             }
         }
 
-        // Find the retriggers
-        let retriggered_entrypoints = self.analyze_retriggers(&changes);
+        // Select for analysis the newly detected EntryPointsWithData that haven't been analyzed
+        // yet. This filter prevents us from re-analyzing entrypoints that have already been
+        // analyzed, which can be a case if all the components have the same entrypoint.
+        let mut entrypoints_to_analyze = self
+            .protocol_entrypoints
+            .values()
+            .flatten()
+            .filter(|entrypoint| {
+                !self
+                    .entrypoint_results
+                    .contains_key(entrypoint)
+            })
+            .cloned()
+            .collect::<HashSet<_>>();
+
+        // Use block storage changes to detect retriggered entrypoints
+        let retriggered_entrypoints = self.detect_retriggers(&changes);
+
         // Update the entrypoint results with the retriggered entrypoints
         entrypoints_to_analyze.extend(retriggered_entrypoints);
-
         debug!("Will analyze {:?} entrypoints", entrypoints_to_analyze.len());
 
+        // Trace analyze all the entrypoints
         let entrypoints_to_analyze: Vec<EntryPointWithData> = entrypoints_to_analyze.into();
 
-        // Trace analyze all the entrypoints
         let traced_entry_points = self
             .tracer
-            .trace(block.hash, entrypoints_to_analyze)
+            .trace(block.hash.clone(), entrypoints_to_analyze)
             .await
             .expect("Failed to trace entrypoints");
 
-        // TODO: Add TracedEntryPoints to DB
+        // Save the traced entrypoints to the DB
+        self.entrypoint_gw
+            .upsert_traced_entry_points(&traced_entry_points)
+            .await
+            .expect("Failed to upsert traced entrypoints");
 
+        // Update our in-memory cache of traced entry points with the latest tracing results
+        // This ensures we always have the most recent analysis results after entrypoints are
+        // discovered or retriggered
         for (trace, entry_point) in zip(traced_entry_points.iter(), entrypoints_to_analyze.iter()) {
             self.entrypoint_results
                 .insert(entry_point.clone(), trace.clone());
         }
 
-        // Fetch the storage slots of all the new entrypoints
-        // let storage_request: Vec<StorageSnapshotRequest> =
-        //     // TODO: Add storage slots
-        //     traced_entry_points
-        //         .iter()
-        //         .map(|traced_entry_point: TracedEntryPoint| {
-        //             StorageSnapshotRequest {
-        //                 address: traced_entry_point.tracing_result.called_addresses,
-        //                 slots,
-        //             }
-        //         }
-        //         )
-        //         .collect();
-
-        let mut storage_request: Vec<StorageSnapshotRequest> = Vec::new();
-
-        for traced_entry_point in traced_entry_points.iter() {
-            for address in traced_entry_point
-                .tracing_result
-                .called_addresses
-            {
-                storage_request
-                    .push(StorageSnapshotRequest { address: address.clone(), slots: None })
-            }
-        }
+        // Get from the storage source (Node) the code, balance and storage changes for the new
+        // results
+        let storage_request: Vec<StorageSnapshotRequest> = traced_entry_points
+            .iter()
+            .flat_map(|traced_entry_point| {
+                traced_entry_point
+                    .tracing_result
+                    .called_addresses
+                    .iter()
+                    .map(|address| {
+                        StorageSnapshotRequest {
+                            address: address.clone(),
+                            // TODO: Set the slots once it's available from the Tracer
+                            slots: None,
+                        }
+                    })
+            })
+            .collect();
 
         let new_accounts = self
             .storage_source
@@ -178,55 +196,134 @@ impl DynamicContractIndexer<()> {
             .await
             .expect("Failed to get accounts");
 
-        // Update with all the storage changes that match any ContractChanges
-        // TODO: By hashing EntryPointWithData we can reduce considerably memory usage
-        let mut account_to_entrypoint: HashMap<(Address, Option<StoreKey>), EntryPointWithData> = HashMap::new();
-        for (entrypoint, trace) in self.entrypoint_results.iter() {
-            for address in trace.tracing_result.called_addresses {
-                account_to_entrypoint.insert((address.clone(), None), entrypoint.clone());
-                // TODO, make it slot specific once we have this available on the TracingResult
-                // for slot in trace.tracing_result.retriggers {
-                //     account_to_entrypoint.insert((address.clone(), slot), entrypoint.clone());
-                // }
+        // Create auxiliary map to prevent looping repeatedely through the data.
+        let mut entrypoint_to_component: HashMap<EntryPointWithData, Vec<ComponentId>> =
+            HashMap::new();
+        for (component_id, entrypoints) in self.protocol_entrypoints.iter() {
+            for entrypoint in entrypoints {
+                entrypoint_to_component
+                    .entry(entrypoint.clone())
+                    .or_insert_with(Vec::new)
+                    .push(component_id.clone());
             }
         }
-
-        for change in changes {
-            let entrypoint = account_to_entrypoint.get(&(change.address, Some(change.key.clone())));
-            if entrypoint.is_some() {
-                // TODO: Brain fog, finish this
-            }
-
-        }
-    }
-
-    /// Register the entrypoint in the protocol_entrypoints map
-    fn register_entrypoint(&mut self, entrypoint: EntryPointWithData) {
-        self.protocol_entrypoints
-            .insert(entrypoint);
-    }
-
-    fn analyze_retriggers(
-        &mut self,
-        changes: &Vec<ContractChanges>,
-    ) -> HashSet<EntryPointWithData> {
-        // Analyze the changes and return a list of entrypoints that need to be retriggered
-        let mut retriggered_entrypoints = HashSet::new();
-
-        let possible_retriggers: HashSet<(Address, StoreKey)> = changes
-            .iter()
-            .map(|change| (change.address.clone(), change.key.clone()))
-            .collect();
-
-        for (entrypoint, trace) in self.entrypoint_results.iter() {
-            for retrigger in trace.tracing_result.retriggers {
-                if possible_retriggers.contains(&retrigger) {
-                    retriggered_entrypoints.insert(entrypoint.clone());
-                    break;
+        for trace in traced_entry_points.iter() {
+            let component_ids = entrypoint_to_component
+                .get(&trace.entry_point)
+                .expect("Failed to get component ID");
+            for account in trace
+                .tracing_result
+                .called_addresses
+                .iter()
+            {
+                if new_accounts.contains(account) {
+                    for component in component_ids {
+                        result_components
+                            .entry(component.clone())
+                            .or_insert_with(Vec::new)
+                            .push(account.clone());
+                    }
                 }
             }
         }
-        retriggered_entrypoints
+
+        // TODO: Update this to match the specific storage slots. Set (Address, StoreKey) as the key
+        let mut aux_struct: HashMap<Address, Vec<EntryPoint>> = HashMap::new();
+        for (entrypoint_with_data, trace) in self.entrypoint_results {
+            for address in trace.tracing_result.called_addresses {
+                let entrypoint = entrypoint_with_data.entry_point.clone();
+                aux_struct
+                    .entry(address.clone())
+                    .or_insert_with(Vec::new)
+                    .push(entrypoint);
+            }
+        }
+
+        for tx in changes {
+            let mut account_deltas: HashMap<Address, HashMap<StoreKey, Option<StoreVal>>> =
+                HashMap::new();
+            for change in tx.changes {
+                // Address matches a entrypoint
+                if aux_struct.contains_key(&change.address) {
+                    let account_delta = account_deltas
+                        .entry(&change.address)
+                        .or_default()
+                        .insert(change.key, Some(change.new_value));
+                }
+            }
+            if !account_deltas.is_empty() {
+                let deltas = account_deltas
+                    .iter()
+                    .flat_map(|(address, changes)| {
+                        changes
+                            .iter()
+                            .map(|(key, value)| AccountDelta {
+                                // TODO: Ofc get this from constructor
+                                chain: Chain::Ethereum,
+                                address: address.clone(),
+                                slots: changes,
+                                // TODO: We need to track balance?
+                                balance: None,
+                                code: None,
+                                change: ChangeType::Update,
+                            })
+                    })
+                    .collect::<Vec<_>>();
+                result_deltas.insert(tx.clone(), deltas);
+            }
+        }
+
+        DCIBlockUpdate { result_deltas, result_components }
+
+        // // Update with all the storage changes that match any ContractChanges
+        // // TODO: By hashing EntryPointWithData we can reduce considerably memory usage
+        // let mut account_to_entrypoint: HashMap<(Address, Option<StoreKey>), EntryPointWithData> =
+        //     HashMap::new();
+        // for (entrypoint, trace) in self.entrypoint_results.iter() {
+        //     for address in trace.tracing_result.called_addresses {
+        //         account_to_entrypoint.insert((address.clone(), None), entrypoint.clone());
+        //         // TODO, make it slot specific once we have this available on the TracingResult
+        //         // for slot in trace.tracing_result.retriggers {
+        //         //     account_to_entrypoint.insert((address.clone(), slot), entrypoint.clone());
+        //         // }
+        //     }
+        // }
+        //
+        // for change in changes {
+        //     let entrypoint = account_to_entrypoint.get(&(change.address,
+        // Some(change.key.clone())));     if entrypoint.is_some() {
+        //         // TODO: Brain fog, finish this
+        //     }
+        // }
+    }
+
+    /// Detects entrypoints that need to be reanalyzed due to detected storage changes.
+    /// Entrypoints can specify "retrigger" conditions - specific (address, storage slot)
+    /// combinations that, when modified in a block, require the entrypoint to be traced again.
+    fn detect_retriggers(
+        &mut self,
+        tx_with_changes: &Vec<TransactionAccountUpdates>,
+    ) -> HashSet<EntryPointWithData> {
+        let possible_retriggers: HashSet<(Address, StoreKey)> = tx_with_changes
+            .iter()
+            .flat_map(|tx| {
+                tx.changes
+                    .iter()
+                    .map(|change| (change.address.clone(), change.key.clone()))
+            })
+            .collect();
+
+        self.entrypoint_results
+            .iter()
+            .filter_map(|(entrypoint, trace)| {
+                trace
+                    .tracing_result
+                    .retriggers
+                    .iter()
+                    .any(|retrigger| possible_retriggers.contains(retrigger))
+                    .then(|| entrypoint.clone())
+            })
+            .collect()
     }
 
     // pub async fn run(&mut self) -> Result<(), Self::Error> {
