@@ -4,12 +4,13 @@ use std::collections::{HashMap, HashSet};
 use async_trait::async_trait;
 use diesel::{prelude::*, upsert::excluded};
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use itertools::Itertools;
 use tycho_common::{
     models::{
         blockchain::{
             EntryPoint, EntryPointTracingData, EntryPointWithData, TracedEntryPoint, TracingResult,
         },
-        Chain, ProtocolSystem as ProtocolSystemType,
+        Chain,
     },
     storage::{EntryPointFilter, StorageError},
     Bytes,
@@ -17,22 +18,16 @@ use tycho_common::{
 
 use super::{
     orm::{
-        EntryPoint as ORMEntryPoint, EntryPointTracingData as ORMEntryPointTracingData,
-        EntryPointTracingResult, NewEntryPoint, ProtocolComponent, ProtocolSystem,
+        self, EntryPointTracingType, NewEntryPoint, NewEntryPointTracingData,
+        NewEntryPointTracingDataCallsAccount, NewEntryPointTracingResult,
+        NewProtocolComponentHoldsEntryPointTracingData,
     },
     schema::{self},
-    storage_error_from_diesel, PostgresGateway,
-};
-use crate::postgres::{
-    orm::{
-        EntryPointTracingType, NewEntryPointTracingData, NewEntryPointTracingDataCallsAccount,
-        NewEntryPointTracingResult, NewProtocolComponentHoldsEntryPointTracingData,
-    },
-    PostgresError,
+    storage_error_from_diesel, PostgresError, PostgresGateway,
 };
 
 impl PostgresGateway {
-    pub(crate) async fn upsert_entry_points(
+    pub(crate) async fn insert_entry_points(
         &self,
         entry_points: &[EntryPointWithData],
         component_id: &str,
@@ -45,18 +40,9 @@ impl PostgresGateway {
         };
 
         let chain_id = self.get_chain_id(chain);
-        let pc_ids = ProtocolComponent::ids_by_external_ids(&[component_id], chain_id, conn)
+        let pc_id = orm::ProtocolComponent::id_by_external_id(component_id, chain_id, conn)
             .await
-            .map_err(PostgresError::from)?
-            .into_iter()
-            .map(|(pc_id, ext_id)| (ext_id, pc_id))
-            .collect::<HashMap<_, _>>();
-
-        let pc_id = pc_ids
-            .get(component_id)
-            .ok_or_else(|| {
-                StorageError::NotFound("ProtocolComponent".to_string(), component_id.to_string())
-            })?;
+            .map_err(PostgresError::from)?;
 
         let new_entry_points = entry_points
             .iter()
@@ -65,6 +51,8 @@ impl PostgresGateway {
                 target: ep.entry_point.target.clone(),
                 signature: ep.entry_point.signature.clone(),
             })
+            .collect::<HashSet<_>>()
+            .into_iter()
             .collect::<Vec<_>>();
 
         diesel::insert_into(entry_point)
@@ -81,7 +69,8 @@ impl PostgresGateway {
             .map(|ep| ep.entry_point.external_id())
             .collect();
 
-        let entry_point_ids = ORMEntryPoint::ids_by_external_ids(&input_external_ids, conn).await?;
+        let entry_point_ids =
+            orm::EntryPoint::ids_by_external_ids(&input_external_ids, conn).await?;
 
         let new_tracing_data = entry_points
             .iter()
@@ -117,19 +106,20 @@ impl PostgresGateway {
             .map_err(|e| storage_error_from_diesel(e, "EntryPointData", "Batch upsert", None))?;
 
         let data_ids =
-            ORMEntryPointTracingData::ids_by_entry_point_with_data(entry_points, conn).await?;
+            orm::EntryPointTracingData::ids_by_entry_point_with_data(entry_points, conn).await?;
 
         let pc_links = data_ids
             .into_values()
             .map(|data_id| NewProtocolComponentHoldsEntryPointTracingData {
-                protocol_component_id: *pc_id,
+                protocol_component_id: pc_id,
                 entry_point_tracing_data_id: data_id,
             })
             .collect::<Vec<_>>();
 
         diesel::insert_into(protocol_component_holds_entry_point_tracing_data)
             .values(&pc_links)
-            .on_conflict_do_nothing() //TODO: Do we need to delete every previously inserted links?
+            .on_conflict_do_nothing() //Design choice: we don't want to delete previously inserted links here, they are
+            // cumulative
             .execute(conn)
             .await
             .map_err(|e| {
@@ -154,55 +144,28 @@ impl PostgresGateway {
             protocol_component_holds_entry_point_tracing_data as pchep,
         };
 
-        let orm_ep = if let Some(ref protocol) = filter.protocol_system {
-            let ps_id = ProtocolSystem::id_by_name(protocol, conn).await?;
-            schema::entry_point::table
-                .inner_join(eptd::table.on(schema::entry_point::id.eq(eptd::entry_point_id)))
-                .inner_join(pchep::table.on(eptd::id.eq(pchep::entry_point_tracing_data_id)))
-                .inner_join(pc::table.on(pchep::protocol_component_id.eq(pc::id)))
-                .filter(pc::protocol_system_id.eq(ps_id))
-                .select(ORMEntryPoint::as_select())
-                .load::<ORMEntryPoint>(conn)
-                .await
-                .map_err(|err| {
-                    storage_error_from_diesel(
-                        err,
-                        "EntryPoint",
-                        "None",
-                        Some(format!("protocol: {:?}", protocol)),
-                    )
-                })?
-        } else {
-            entry_point
-                .load::<ORMEntryPoint>(conn)
-                .await
-                .map_err(|err| storage_error_from_diesel(err, "EntryPoint", "None", None))?
-        };
-
-        let ep_ids = orm_ep
-            .iter()
-            .map(|ep| ep.id)
-            .collect::<Vec<_>>();
-
-        let orm_ep_data = schema::entry_point_tracing_data::table
-            .filter(schema::entry_point_tracing_data::entry_point_id.eq_any(ep_ids))
-            .select(ORMEntryPointTracingData::as_select())
-            .load::<ORMEntryPointTracingData>(conn)
+        let ps_id = self.get_protocol_system_id(&filter.protocol_system);
+        let results = schema::entry_point::table
+            .inner_join(eptd::table.on(id.eq(eptd::entry_point_id)))
+            .inner_join(pchep::table.on(eptd::id.eq(pchep::entry_point_tracing_data_id)))
+            .inner_join(pc::table.on(pchep::protocol_component_id.eq(pc::id)))
+            .filter(pc::protocol_system_id.eq(ps_id))
+            .select((orm::EntryPoint::as_select(), orm::EntryPointTracingData::as_select()))
+            .load::<(orm::EntryPoint, orm::EntryPointTracingData)>(conn)
             .await
-            .map_err(|err| storage_error_from_diesel(err, "EntryPointData", "None", None))?;
+            .map_err(|err| {
+                storage_error_from_diesel(
+                    err,
+                    "EntryPointWithData",
+                    "None",
+                    Some(format!("protocol: {:?}", filter.protocol_system)),
+                )
+            })?;
 
-        let results = orm_ep
+        Ok(results
             .into_iter()
-            .map(|ep| {
-                let data = orm_ep_data
-                    .iter()
-                    .find(|data| data.entry_point_id == ep.id)
-                    .unwrap();
-                EntryPointWithData { entry_point: ep.into(), data: data.into() }
-            })
-            .collect::<Vec<_>>();
-
-        Ok(results)
+            .map(|(ep, data)| EntryPointWithData { entry_point: ep.into(), data: (&data).into() })
+            .collect())
     }
 
     pub(crate) async fn upsert_traced_entry_points(
@@ -226,13 +189,27 @@ impl PostgresGateway {
             .map_err(PostgresError::from)?;
         let block_id_map: HashMap<_, _> = blocks.into_iter().collect();
 
+        let data_ids = orm::EntryPointTracingData::ids_by_entry_point_with_data(
+            &traced_entry_points
+                .iter()
+                .map(|tep| tep.entry_point_with_data.clone())
+                .collect::<Vec<_>>(),
+            conn,
+        )
+        .await?;
+
         let mut values = Vec::with_capacity(traced_entry_points.len());
-        let mut data_ids = Vec::with_capacity(traced_entry_points.len());
         for tep in traced_entry_points {
-            let data_id =
-                ORMEntryPointTracingData::id_from_entry_point_with_data(&tep.entry_point, conn)
-                    .await?;
-            data_ids.push(data_id);
+            let data_id = data_ids
+                .get(&tep.entry_point_with_data)
+                .ok_or_else(|| {
+                    StorageError::NotFound(
+                        "EntryPointTracingData".to_string(),
+                        tep.entry_point_with_data
+                            .entry_point
+                            .external_id(),
+                    )
+                })?;
 
             let block_id = block_id_map
                 .get(&tep.detection_block_hash)
@@ -249,10 +226,9 @@ impl PostgresGateway {
             })?;
 
             values.push(NewEntryPointTracingResult {
-                entry_point_tracing_data_id: data_id,
+                entry_point_tracing_data_id: *data_id,
                 detection_block: block_id,
                 detection_data: tracing_data,
-                modified_ts: Some(chrono::Utc::now().naive_utc()),
             });
         }
 
@@ -293,7 +269,7 @@ impl PostgresGateway {
         let mut new_entry_point_calls_account = Vec::new();
         for (tep, &data_id) in traced_entry_points
             .iter()
-            .zip(&data_ids)
+            .zip(data_ids.values())
         {
             for address in &tep.tracing_result.called_addresses {
                 let acc_id = account_id_map
@@ -311,7 +287,8 @@ impl PostgresGateway {
 
         diesel::insert_into(entry_point_tracing_data_calls_account)
             .values(&new_entry_point_calls_account)
-            .on_conflict_do_nothing() // TODO: Do we need to delete every previously inserted links?
+            .on_conflict_do_nothing() // Design choice: we don't want to delete previously inserted links here, they are
+            // cumulative
             .execute(conn)
             .await
             .map_err(|err| {
@@ -327,7 +304,7 @@ impl PostgresGateway {
         conn: &mut AsyncPgConnection,
     ) -> Result<Vec<TracingResult>, StorageError> {
         use schema::entry_point_tracing_result::dsl::*;
-        let entry_point_id = ORMEntryPoint::id_by_target_and_signature(
+        let entry_point_id = orm::EntryPoint::id_by_target_and_signature(
             &entry_point.target,
             &entry_point.signature,
             conn,
@@ -450,7 +427,7 @@ mod test {
 
     fn traced_entry_point() -> TracedEntryPoint {
         TracedEntryPoint {
-            entry_point: rpc_tracer_entry_point(),
+            entry_point_with_data: rpc_tracer_entry_point(),
             detection_block_hash: Bytes::from_str(
                 "88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6",
             )
@@ -479,11 +456,11 @@ mod test {
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
         let entry_point = rpc_tracer_entry_point();
-        gw.upsert_entry_points(&[entry_point.clone()], "pc_0", &Chain::Ethereum, &mut conn)
+        gw.insert_entry_points(&[entry_point.clone()], "pc_0", &Chain::Ethereum, &mut conn)
             .await
             .unwrap();
 
-        let filter = EntryPointFilter::new(None);
+        let filter = EntryPointFilter::new("test_protocol".to_string());
         let retrieved_entry_points = gw
             .get_entry_points_with_data(filter, &mut conn)
             .await
@@ -499,19 +476,19 @@ mod test {
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
         let entry_point = rpc_tracer_entry_point();
-        gw.upsert_entry_points(&[entry_point.clone()], "pc_0", &Chain::Ethereum, &mut conn)
+        gw.insert_entry_points(&[entry_point.clone()], "pc_0", &Chain::Ethereum, &mut conn)
             .await
             .unwrap();
 
         // Filter by protocol name
-        let filter = EntryPointFilter::new(Some("test_protocol".to_string()));
+        let filter = EntryPointFilter::new("test_protocol".to_string());
         let retrieved_entry_points = gw
             .get_entry_points_with_data(filter, &mut conn)
             .await
             .unwrap();
         assert_eq!(retrieved_entry_points, vec![entry_point]);
 
-        let filter = EntryPointFilter::new(Some("unknown".to_string()));
+        let filter = EntryPointFilter::new("unknown".to_string());
         let retrieved_entry_points = gw
             .get_entry_points_with_data(filter, &mut conn)
             .await
@@ -528,7 +505,7 @@ mod test {
         let entry_point = rpc_tracer_entry_point();
         let traced_entry_point = traced_entry_point();
 
-        gw.upsert_entry_points(&[entry_point.clone()], "pc_0", &Chain::Ethereum, &mut conn)
+        gw.insert_entry_points(&[entry_point.clone()], "pc_0", &Chain::Ethereum, &mut conn)
             .await
             .unwrap();
 

@@ -481,12 +481,15 @@ pub trait ProtocolGateway {
         pagination_params: Option<&PaginationParams>,
     ) -> Result<WithTotal<Vec<String>>, StorageError>;
 }
+
+/// Filters for entry points queries in the database.
+// Shalow but can be used to add more filters without breaking backwards compatibility in the future
 pub struct EntryPointFilter {
-    pub protocol_system: Option<ProtocolSystem>,
+    pub protocol_system: ProtocolSystem,
 }
 
 impl EntryPointFilter {
-    pub fn new(protocol: Option<String>) -> Self {
+    pub fn new(protocol: ProtocolSystem) -> Self {
         Self { protocol_system: protocol }
     }
 }
