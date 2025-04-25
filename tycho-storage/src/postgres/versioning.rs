@@ -242,13 +242,13 @@ where
         .map(|row| (row.get_entity_id(), row.get_valid_from()))
         .collect::<HashMap<N::EntityId, N::Version>>();
 
-    // Filter out entries that are older than the latest version in the db
+    // Filter out entries that are older than/equal to the latest version in the db
     new_data.retain(|entry| {
         let entity_id = entry.get_entity_id();
         match latest_db_versions.get(&entity_id) {
             Some(latest_version) if entry.get_valid_from() <= *latest_version => {
                 trace!(
-                    "Skipping update for {:?} since it's older than the latest version",
+                    "Skipping update for {:?} since it's older than/equal to the latest version",
                     entity_id
                 );
                 false
@@ -324,14 +324,16 @@ type RowsChanges<N> = (LatestRows<N>, ArchivedRows<N>, DeletedIds<N>);
 /// 1. Setting up archive versions for entities that are being updated
 /// 2. Marking rows as deleted when deletion entries are encountered
 /// 3. Maintaining the latest version of each entity
-/// 4. Skipping updates or deletions that are older than versions already in the database
+/// 4. Skipping updates or deletions that are older than/equal to the latest version already in the
+///    database
 ///
 /// The function maintains a collection of latest rows, archived rows, and deleted entity IDs.
 /// For each entity:
 /// - If a newer version arrives, the current version is archived and the new one becomes the latest
-/// - If a deletion arrives, the current version is archived, marked as deleted, and added to the
-///   deleted IDs
-/// - If an update or deletion is older than the current version in the database, it's skipped
+/// - If a new deletion arrives, the current version is archived, marked as deleted, and added to
+///   the deleted IDs
+/// - If an update or deletion is older than/equal to the current version in the database, it's
+///   skipped
 ///
 /// ## Parameters
 /// * `current_latest_data` - The current latest versions from the database
@@ -386,9 +388,6 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
                 }
                 // If it's updated after being deleted, it doesn't need to be marked as deleted
                 deleted.remove(&id);
-                // If it is updated after being skipped, it doesn't need to be skipped
-                to_skip.remove(&id);
-
                 latest.insert(id, row);
             }
             VersioningEntry::Deletion((id, delete_version)) => {

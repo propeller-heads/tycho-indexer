@@ -1414,7 +1414,6 @@ impl ExtractorGateway for ExtractorPgGateway {
         }
 
         // Insert component balance changes
-        dbg!(&component_balance_changes);
         if !component_balance_changes.is_empty() {
             self.state_gateway
                 .add_component_balances(component_balance_changes.as_slice())
