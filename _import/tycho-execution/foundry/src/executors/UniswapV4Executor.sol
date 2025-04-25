@@ -203,8 +203,6 @@ contract UniswapV4Executor is
 
     /**
      * @dev Internal function to handle the unlock callback.
-     * The executor address is needed to perform the call. If the router is being used, the executor address is in
-     * transient storage. If it is not, then address(this) should be used.
      */
     function _unlockCallback(bytes calldata data)
         internal
