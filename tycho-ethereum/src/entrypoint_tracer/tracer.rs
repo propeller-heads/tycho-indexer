@@ -30,10 +30,11 @@ struct EVMEntrypointService {
 }
 
 impl EVMEntrypointService {
-    pub fn new_from_url(rpc_url: &str) -> Self {
-        Self {
-            provider: Provider::<Http>::try_from(rpc_url).expect("Error creating HTTP provider"),
-        }
+    pub fn try_from_url(rpc_url: &str) -> Result<Self, RPCError> {
+        Ok(Self {
+            provider: Provider::<Http>::try_from(rpc_url)
+                .map_err(|e| RPCError::SetupError(e.to_string()))?,
+        })
     }
 
     async fn trace_call(
@@ -195,7 +196,7 @@ mod tests {
     #[ignore = "requires a RPC connection"]
     async fn test_trace_balancer_v3_stable_pool() {
         let url = env::var("RPC_URL").expect("RPC_URL is not set");
-        let tracer = EVMEntrypointService::new_from_url(&url);
+        let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
         let entry_points = vec![
             EntryPointWithData::new(
                 EntryPoint::new(
