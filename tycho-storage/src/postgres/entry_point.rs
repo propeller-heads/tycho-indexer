@@ -29,8 +29,7 @@ use super::{
 impl PostgresGateway {
     pub(crate) async fn insert_entry_points(
         &self,
-        entry_points: &[EntryPointWithData],
-        component_id: &str,
+        new: &[(&str, &Vec<EntryPointWithData>)],
         chain: &Chain,
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
@@ -40,21 +39,34 @@ impl PostgresGateway {
         };
 
         let chain_id = self.get_chain_id(chain);
-        let pc_id = orm::ProtocolComponent::id_by_external_id(component_id, chain_id, conn)
-            .await
-            .map_err(PostgresError::from)?;
 
-        let new_entry_points = entry_points
+        let pc_ids = orm::ProtocolComponent::ids_by_external_ids(
+            &new.iter()
+                .map(|(id_, _)| *id_)
+                .collect::<Vec<&str>>(),
+            chain_id,
+            conn,
+        )
+        .await
+        .map_err(PostgresError::from)?
+        .into_iter()
+        .map(|(id_, ext_id)| (ext_id, id_))
+        .collect::<HashMap<_, _>>();
+
+        let new_entry_points = new
             .iter()
-            .map(|ep| NewEntryPoint {
-                external_id: ep.entry_point.external_id(),
-                target: ep.entry_point.target.clone(),
-                signature: ep.entry_point.signature.clone(),
+            .flat_map(|(_, ep)| {
+                ep.iter()
+                    .map(|ep| NewEntryPoint {
+                        external_id: ep.entry_point.external_id(),
+                        target: ep.entry_point.target.clone(),
+                        signature: ep.entry_point.signature.clone(),
+                    })
+                    .collect::<Vec<_>>()
             })
             .collect::<HashSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-
         diesel::insert_into(entry_point)
             .values(&new_entry_points)
             .on_conflict_do_nothing()
@@ -64,34 +76,41 @@ impl PostgresGateway {
 
         // Fetch entry points by their external_ids, we can't use .returning() on the insert above
         // because it doesn't return the ids on conflicts.
-        let input_external_ids: Vec<String> = entry_points
+        let input_external_ids: Vec<String> = new
             .iter()
-            .map(|ep| ep.entry_point.external_id())
+            .flat_map(|(_, ep)| {
+                ep.iter()
+                    .map(|ep| ep.entry_point.external_id())
+            })
             .collect();
 
         let entry_point_ids =
             orm::EntryPoint::ids_by_external_ids(&input_external_ids, conn).await?;
 
-        let new_tracing_data = entry_points
+        let new_tracing_data = new
             .iter()
-            .map(|ep| {
-                let ext_id = ep.entry_point.external_id();
-                let ep_id = entry_point_ids
-                    .get(&ext_id)
-                    .ok_or_else(|| StorageError::NotFound("EntryPoint".to_string(), ext_id))?;
+            .flat_map(|(_, ep)| {
+                ep.iter().map(|ep| {
+                    let ext_id = ep.entry_point.external_id();
+                    let ep_id = entry_point_ids
+                        .get(&ext_id)
+                        .ok_or_else(|| StorageError::NotFound("EntryPoint".to_string(), ext_id))?;
 
-                let ep_data = match &ep.data {
-                    EntryPointTracingData::RPCTracer(rpc_tracer) => {
-                        Some(serde_json::to_value(rpc_tracer).map_err(|e| {
-                            StorageError::Unexpected(format!("Failed to serialize RPCTracer: {e}"))
-                        })?)
-                    }
-                };
+                    let ep_data = match &ep.data {
+                        EntryPointTracingData::RPCTracer(rpc_tracer) => {
+                            Some(serde_json::to_value(rpc_tracer).map_err(|e| {
+                                StorageError::Unexpected(format!(
+                                    "Failed to serialize RPCTracer: {e}"
+                                ))
+                            })?)
+                        }
+                    };
 
-                Ok(NewEntryPointTracingData {
-                    entry_point_id: *ep_id,
-                    tracing_type: (&ep.data).into(),
-                    data: ep_data,
+                    Ok(NewEntryPointTracingData {
+                        entry_point_id: *ep_id,
+                        tracing_type: (&ep.data).into(),
+                        data: ep_data,
+                    })
                 })
             })
             .collect::<Result<Vec<_>, StorageError>>()?;
@@ -105,16 +124,37 @@ impl PostgresGateway {
             .await
             .map_err(|e| storage_error_from_diesel(e, "EntryPointData", "Batch upsert", None))?;
 
-        let data_ids =
-            orm::EntryPointTracingData::ids_by_entry_point_with_data(entry_points, conn).await?;
+        let data_ids = orm::EntryPointTracingData::ids_by_entry_point_with_data(
+            &new.iter()
+                .flat_map(|(_, ep)| ep.iter())
+                .cloned()
+                .collect::<Vec<_>>(),
+            conn,
+        )
+        .await?;
 
-        let pc_links = data_ids
-            .into_values()
-            .map(|data_id| NewProtocolComponentHoldsEntryPointTracingData {
-                protocol_component_id: pc_id,
-                entry_point_tracing_data_id: data_id,
+        let pc_links = new
+            .iter()
+            .flat_map(|(pc_ext_id, ep)| {
+                ep.iter().map(|ep| {
+                    let pc_id = pc_ids.get(*pc_ext_id).ok_or_else(|| {
+                        StorageError::NotFound(
+                            "ProtocolComponent".to_string(),
+                            pc_ext_id.to_string(),
+                        )
+                    })?;
+                    Ok(NewProtocolComponentHoldsEntryPointTracingData {
+                        protocol_component_id: *pc_id,
+                        entry_point_tracing_data_id: *data_ids.get(ep).ok_or_else(|| {
+                            StorageError::NotFound(
+                                "EntryPointTracingData".to_string(),
+                                ep.entry_point.external_id(),
+                            )
+                        })?,
+                    })
+                })
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, StorageError>>()?;
 
         diesel::insert_into(protocol_component_holds_entry_point_tracing_data)
             .values(&pc_links)
@@ -456,9 +496,13 @@ mod test {
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
         let entry_point = rpc_tracer_entry_point();
-        gw.insert_entry_points(&[entry_point.clone()], "pc_0", &Chain::Ethereum, &mut conn)
-            .await
-            .unwrap();
+        gw.insert_entry_points(
+            &[("pc_0", &vec![entry_point.clone()])],
+            &Chain::Ethereum,
+            &mut conn,
+        )
+        .await
+        .unwrap();
 
         let filter = EntryPointFilter::new("test_protocol".to_string());
         let retrieved_entry_points = gw
@@ -476,9 +520,13 @@ mod test {
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
         let entry_point = rpc_tracer_entry_point();
-        gw.insert_entry_points(&[entry_point.clone()], "pc_0", &Chain::Ethereum, &mut conn)
-            .await
-            .unwrap();
+        gw.insert_entry_points(
+            &[("pc_0", &vec![entry_point.clone()])],
+            &Chain::Ethereum,
+            &mut conn,
+        )
+        .await
+        .unwrap();
 
         // Filter by protocol name
         let filter = EntryPointFilter::new("test_protocol".to_string());
@@ -505,9 +553,13 @@ mod test {
         let entry_point = rpc_tracer_entry_point();
         let traced_entry_point = traced_entry_point();
 
-        gw.insert_entry_points(&[entry_point.clone()], "pc_0", &Chain::Ethereum, &mut conn)
-            .await
-            .unwrap();
+        gw.insert_entry_points(
+            &[("pc_0", &vec![entry_point.clone()])],
+            &Chain::Ethereum,
+            &mut conn,
+        )
+        .await
+        .unwrap();
 
         gw.upsert_traced_entry_points(&[traced_entry_point.clone()], &mut conn)
             .await

@@ -52,7 +52,7 @@ impl Display for BlockIdentifier {
     }
 }
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug, PartialEq, Clone)]
 pub enum StorageError {
     #[error("Could not find {0} with id `{1}`!")]
     NotFound(String, String),
@@ -500,8 +500,7 @@ pub trait EntryPointGateway {
     /// Upserts a list of entry points with their tracing data into the database.
     async fn upsert_entry_points_with_data(
         &self,
-        entry_points: &[EntryPointWithData],
-        component_id: &str,
+        entry_points: &[(ComponentId, Vec<EntryPointWithData>)],
     ) -> Result<(), StorageError>;
 
     /// Retrieves a list of entry points with their tracing data from the database.
