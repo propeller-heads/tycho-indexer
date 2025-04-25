@@ -43,3 +43,18 @@ CREATE TABLE IF NOT EXISTS "entry_point_tracing_data_calls_account"(
     "account_id" bigint NOT NULL REFERENCES "account"(id) ON DELETE CASCADE,
     PRIMARY KEY("entry_point_tracing_data_id","account_id")
 )
+
+CREATE TRIGGER update_modtime_entry_point
+    BEFORE UPDATE ON "entry_point"
+    FOR EACH ROW
+    EXECUTE PROCEDURE update_modified_column();
+
+CREATE TRIGGER update_modtime_entry_point_tracing_data
+    BEFORE UPDATE ON "entry_point_tracing_data"
+    FOR EACH ROW
+    EXECUTE PROCEDURE update_modified_column();
+
+CREATE TRIGGER update_modtime_entry_point_tracing_result
+    BEFORE UPDATE ON "entry_point_tracing_result"
+    FOR EACH ROW
+    EXECUTE PROCEDURE update_modified_column();
