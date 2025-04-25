@@ -117,11 +117,10 @@ pub fn store_reward_cycles(block_reward_cycles: BlockRewardCycles, store: StoreS
         .reward_cycles
         .into_iter()
         .for_each(|reward_cycle| {
-            let address_hex =
-                format!("0x{encoded}", encoded = hex::encode(&reward_cycle.vault_address));
+            let address_hex = format!("0x{}", hex::encode(&reward_cycle.vault_address));
             store.set(
                 reward_cycle.ord,
-                format!("reward_cycle:{address_hex}"),
+                format!("reward_cycle:{}", address_hex),
                 &reward_cycle.next_reward_amount,
             );
         });
@@ -142,10 +141,10 @@ pub fn map_relative_balances(
                 abi::sfraxeth_contract::events::Withdraw::match_and_decode(vault_log.log)
             {
                 let address_bytes_be = vault_log.address();
-                let address_hex = format!("0x{encoded}", encoded = hex::encode(address_bytes_be));
+                let address_hex = format!("0x{}", hex::encode(address_bytes_be));
 
                 if store
-                    .get_last(format!("pool:{address_hex}"))
+                    .get_last(format!("pool:{}", address_hex))
                     .is_some()
                 {
                     substreams::log::info!(
@@ -176,9 +175,9 @@ pub fn map_relative_balances(
                 abi::sfraxeth_contract::events::Deposit::match_and_decode(vault_log.log)
             {
                 let address_bytes_be = vault_log.address();
-                let address_hex = format!("0x{encoded}", encoded = hex::encode(address_bytes_be));
+                let address_hex = format!("0x{}", hex::encode(address_bytes_be));
                 if store
-                    .get_last(format!("pool:{address_hex}"))
+                    .get_last(format!("pool:{}", address_hex))
                     .is_some()
                 {
                     deltas.extend_from_slice(&[
@@ -205,9 +204,9 @@ pub fn map_relative_balances(
                 .is_some()
             {
                 let address_bytes_be = vault_log.address();
-                let address_hex = format!("0x{encoded}", encoded = hex::encode(address_bytes_be));
+                let address_hex = format!("0x{}", hex::encode(address_bytes_be));
                 if store
-                    .get_last(format!("pool:{address_hex}"))
+                    .get_last(format!("pool:{}", address_hex))
                     .is_some()
                 {
                     // When the NextRewardsCycle event is emitted:
@@ -222,12 +221,13 @@ pub fn map_relative_balances(
                     if let Some(last_reward_amount) = reward_store
                         .deltas
                         .iter()
-                        .find(|el| el.key == format!("reward_cycle:{address_hex}"))
+                        .find(|el| el.key == format!("reward_cycle:{}", address_hex))
                         .map(|el| el.old_value.clone())
                     {
                         substreams::log::info!(
-                            "Reward cycle balance change: address {address_hex}, sfraxEth amount {amount}",
-                            amount = BigInt::from_signed_bytes_be(&last_reward_amount)
+                            "Reward cycle balance change: address {}, sfraxEth amount {}",
+                            address_hex,
+                            BigInt::from_signed_bytes_be(&last_reward_amount)
                         );
                         deltas.push(BalanceDelta {
                             ord: vault_log.ordinal(),
@@ -319,7 +319,7 @@ pub fn map_protocol_changes(
         &block,
         |addr| {
             components_store
-                .get_last(format!("pool:0x{encoded}", encoded = hex::encode(addr)))
+                .get_last(format!("pool:0x{0}", hex::encode(addr)))
                 .is_some()
         },
         &mut transaction_changes,

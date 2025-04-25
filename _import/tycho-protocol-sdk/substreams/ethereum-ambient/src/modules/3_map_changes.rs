@@ -315,7 +315,7 @@ fn map_changes(
             let pool_hash_hex = hex::encode(balance_delta.pool_hash);
             let pool = match pool_store.get_last(pool_hash_hex.clone()) {
                 Some(pool) => pool,
-                None => panic!("Pool not found in store for given hash: {pool_hash_hex}"),
+                None => panic!("Pool not found in store for given hash: {}", pool_hash_hex),
             };
             let token_type = substreams::key::segment_at(&store_delta.key, 1);
             let token_index = if token_type == "quote" { 1 } else { 0 };

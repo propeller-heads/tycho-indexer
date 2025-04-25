@@ -24,7 +24,7 @@ pub fn json_serialize_address_list(addresses: &[Vec<u8>]) -> Vec<u8> {
     json_serialize_value(
         addresses
             .iter()
-            .map(|a| format!("0x{encoded}", encoded = hex::encode(a)))
+            .map(|a| format!("0x{}", hex::encode(a)))
             .collect::<Vec<_>>(),
     )
 }
@@ -40,7 +40,7 @@ pub fn json_serialize_bigint_list(values: &[BigInt]) -> Vec<u8> {
     json_serialize_value(
         values
             .iter()
-            .map(|v| format!("0x{encoded}", encoded = hex::encode(v.to_signed_bytes_be())))
+            .map(|v| format!("0x{}", hex::encode(v.to_signed_bytes_be())))
             .collect::<Vec<_>>(),
     )
 }

@@ -85,9 +85,9 @@ pub fn map_relative_balances(
                 abi::stakedfrax_contract::events::Withdraw::match_and_decode(vault_log.log)
             {
                 let address_bytes_be = vault_log.address();
-                let address_hex = format!("0x{encoded}", encoded = hex::encode(address_bytes_be));
+                let address_hex = format!("0x{}", hex::encode(address_bytes_be));
                 if store
-                    .get_last(format!("pool:{address_hex}"))
+                    .get_last(format!("pool:{}", address_hex))
                     .is_some()
                 {
                     deltas.extend_from_slice(&[
@@ -119,10 +119,10 @@ pub fn map_relative_balances(
                 abi::stakedfrax_contract::events::Deposit::match_and_decode(vault_log.log)
             {
                 let address_bytes_be = vault_log.address();
-                let address_hex = format!("0x{encoded}", encoded = hex::encode(address_bytes_be));
+                let address_hex = format!("0x{}", hex::encode(address_bytes_be));
 
                 if store
-                    .get_last(format!("pool:{address_hex}"))
+                    .get_last(format!("pool:{}", address_hex))
                     .is_some()
                 {
                     deltas.extend_from_slice(&[
@@ -154,10 +154,10 @@ pub fn map_relative_balances(
                 abi::stakedfrax_contract::events::DistributeRewards::match_and_decode(vault_log.log)
             {
                 let address_bytes_be = vault_log.address();
-                let address_hex = format!("0x{encoded}", encoded = hex::encode(address_bytes_be));
+                let address_hex = format!("0x{}", hex::encode(address_bytes_be));
 
                 if store
-                    .get_last(format!("pool:{address_hex}"))
+                    .get_last(format!("pool:{}", address_hex))
                     .is_some()
                 {
                     deltas.extend_from_slice(&[BalanceDelta {
@@ -231,7 +231,7 @@ pub fn map_protocol_changes(
         &block,
         |addr| {
             components_store
-                .get_last(format!("pool:0x{encoded}", encoded = hex::encode(addr)))
+                .get_last(format!("pool:0x{0}", hex::encode(addr)))
                 .is_some()
         },
         &mut transaction_contract,

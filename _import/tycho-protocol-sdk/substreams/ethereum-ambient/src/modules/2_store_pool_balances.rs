@@ -11,7 +11,7 @@ pub fn store_pool_balances(changes: BlockPoolChanges, balance_store: StoreAddBig
         let pool_hash_hex = hex::encode(&balance_delta.pool_hash);
         balance_store.add(
             balance_delta.ordinal,
-            format!("{pool_hash_hex}:{type}", type = balance_delta.token_type),
+            format!("{}:{}", pool_hash_hex, balance_delta.token_type),
             BigInt::from_signed_bytes_be(&balance_delta.token_delta),
         );
     }

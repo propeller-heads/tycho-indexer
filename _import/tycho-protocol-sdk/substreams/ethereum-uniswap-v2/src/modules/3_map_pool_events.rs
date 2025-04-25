@@ -95,7 +95,7 @@ fn handle_sync(
             });
 
         for (i, reserve_bytes) in reserves_bytes.iter().enumerate() {
-            let attribute_name = format!("reserve{i}");
+            let attribute_name = format!("reserve{}", i);
             // By using a HashMap, we can overwrite the previous value of the reserve attribute if
             // it is for the same pool and the same attribute name (reserves).
             tx_change.entity_changes.insert(

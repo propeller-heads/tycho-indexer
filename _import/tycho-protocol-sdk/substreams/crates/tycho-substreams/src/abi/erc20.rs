@@ -19,7 +19,7 @@ pub mod functions {
                 &[ethabi::ParamType::Address, ethabi::ParamType::Address],
                 maybe_data.unwrap(),
             )
-            .map_err(|e| format!("unable to decode call.input: {e:?}"))?;
+            .map_err(|e| format!("unable to decode call.input: {:?}", e))?;
             values.reverse();
             Ok(Self {
                 owner: values
@@ -55,7 +55,7 @@ pub mod functions {
         }
         pub fn output(data: &[u8]) -> Result<substreams::scalar::BigInt, String> {
             let mut values = ethabi::decode(&[ethabi::ParamType::Uint(256usize)], data.as_ref())
-                .map_err(|e| format!("unable to decode output data: {e:?}"))?;
+                .map_err(|e| format!("unable to decode output data: {:?}", e))?;
             Ok({
                 let mut v = [0 as u8; 32];
                 values
@@ -132,7 +132,7 @@ pub mod functions {
                 &[ethabi::ParamType::Address, ethabi::ParamType::Uint(256usize)],
                 maybe_data.unwrap(),
             )
-            .map_err(|e| format!("unable to decode call.input: {e:?}"))?;
+            .map_err(|e| format!("unable to decode call.input: {:?}", e))?;
             values.reverse();
             Ok(Self {
                 spender: values
@@ -178,7 +178,7 @@ pub mod functions {
         }
         pub fn output(data: &[u8]) -> Result<bool, String> {
             let mut values = ethabi::decode(&[ethabi::ParamType::Bool], data.as_ref())
-                .map_err(|e| format!("unable to decode output data: {e:?}"))?;
+                .map_err(|e| format!("unable to decode output data: {:?}", e))?;
             Ok(values
                 .pop()
                 .expect("one output data should have existed")
@@ -246,7 +246,7 @@ pub mod functions {
                 return Err("no data to decode".to_string());
             }
             let mut values = ethabi::decode(&[ethabi::ParamType::Address], maybe_data.unwrap())
-                .map_err(|e| format!("unable to decode call.input: {e:?}"))?;
+                .map_err(|e| format!("unable to decode call.input: {:?}", e))?;
             values.reverse();
             Ok(Self {
                 owner: values
@@ -273,7 +273,7 @@ pub mod functions {
         }
         pub fn output(data: &[u8]) -> Result<substreams::scalar::BigInt, String> {
             let mut values = ethabi::decode(&[ethabi::ParamType::Uint(256usize)], data.as_ref())
-                .map_err(|e| format!("unable to decode output data: {e:?}"))?;
+                .map_err(|e| format!("unable to decode output data: {:?}", e))?;
             Ok({
                 let mut v = [0 as u8; 32];
                 values
@@ -355,7 +355,7 @@ pub mod functions {
         }
         pub fn output(data: &[u8]) -> Result<substreams::scalar::BigInt, String> {
             let mut values = ethabi::decode(&[ethabi::ParamType::Uint(8usize)], data.as_ref())
-                .map_err(|e| format!("unable to decode output data: {e:?}"))?;
+                .map_err(|e| format!("unable to decode output data: {:?}", e))?;
             Ok({
                 let mut v = [0 as u8; 32];
                 values
@@ -437,7 +437,7 @@ pub mod functions {
         }
         pub fn output(data: &[u8]) -> Result<String, String> {
             let mut values = ethabi::decode(&[ethabi::ParamType::String], data.as_ref())
-                .map_err(|e| format!("unable to decode output data: {e:?}"))?;
+                .map_err(|e| format!("unable to decode output data: {:?}", e))?;
             Ok(values
                 .pop()
                 .expect("one output data should have existed")
@@ -514,7 +514,7 @@ pub mod functions {
         }
         pub fn output(data: &[u8]) -> Result<String, String> {
             let mut values = ethabi::decode(&[ethabi::ParamType::String], data.as_ref())
-                .map_err(|e| format!("unable to decode output data: {e:?}"))?;
+                .map_err(|e| format!("unable to decode output data: {:?}", e))?;
             Ok(values
                 .pop()
                 .expect("one output data should have existed")
@@ -591,7 +591,7 @@ pub mod functions {
         }
         pub fn output(data: &[u8]) -> Result<substreams::scalar::BigInt, String> {
             let mut values = ethabi::decode(&[ethabi::ParamType::Uint(256usize)], data.as_ref())
-                .map_err(|e| format!("unable to decode output data: {e:?}"))?;
+                .map_err(|e| format!("unable to decode output data: {:?}", e))?;
             Ok({
                 let mut v = [0 as u8; 32];
                 values
@@ -668,7 +668,7 @@ pub mod functions {
                 &[ethabi::ParamType::Address, ethabi::ParamType::Uint(256usize)],
                 maybe_data.unwrap(),
             )
-            .map_err(|e| format!("unable to decode call.input: {e:?}"))?;
+            .map_err(|e| format!("unable to decode call.input: {:?}", e))?;
             values.reverse();
             Ok(Self {
                 to: values
@@ -714,7 +714,7 @@ pub mod functions {
         }
         pub fn output(data: &[u8]) -> Result<bool, String> {
             let mut values = ethabi::decode(&[ethabi::ParamType::Bool], data.as_ref())
-                .map_err(|e| format!("unable to decode output data: {e:?}"))?;
+                .map_err(|e| format!("unable to decode output data: {:?}", e))?;
             Ok(values
                 .pop()
                 .expect("one output data should have existed")
@@ -791,7 +791,7 @@ pub mod functions {
                 ],
                 maybe_data.unwrap(),
             )
-            .map_err(|e| format!("unable to decode call.input: {e:?}"))?;
+            .map_err(|e| format!("unable to decode call.input: {:?}", e))?;
             values.reverse();
             Ok(Self {
                 from: values
@@ -845,7 +845,7 @@ pub mod functions {
         }
         pub fn output(data: &[u8]) -> Result<bool, String> {
             let mut values = ethabi::decode(&[ethabi::ParamType::Bool], data.as_ref())
-                .map_err(|e| format!("unable to decode output data: {e:?}"))?;
+                .map_err(|e| format!("unable to decode output data: {:?}", e))?;
             Ok(values
                 .pop()
                 .expect("one output data should have existed")
@@ -929,19 +929,20 @@ pub mod events {
                 .topics
                 .get(0)
                 .expect("bounds already checked")
-                .as_ref()
-                == Self::TOPIC_ID;
+                .as_ref() ==
+                Self::TOPIC_ID;
         }
         pub fn decode(log: &substreams_ethereum::pb::eth::v2::Log) -> Result<Self, String> {
             let mut values =
                 ethabi::decode(&[ethabi::ParamType::Uint(256usize)], log.data.as_ref())
-                    .map_err(|e| format!("unable to decode log.data: {e:?}"))?;
+                    .map_err(|e| format!("unable to decode log.data: {:?}", e))?;
             values.reverse();
             Ok(Self {
                 owner: ethabi::decode(&[ethabi::ParamType::Address], log.topics[1usize].as_ref())
                     .map_err(|e| {
                         format!(
-                            "unable to decode param 'owner' from topic of type 'address': {e:?}"
+                            "unable to decode param 'owner' from topic of type 'address': {:?}",
+                            e
                         )
                     })?
                     .pop()
@@ -953,7 +954,8 @@ pub mod events {
                 spender: ethabi::decode(&[ethabi::ParamType::Address], log.topics[2usize].as_ref())
                     .map_err(|e| {
                         format!(
-                            "unable to decode param 'spender' from topic of type 'address': {e:?}"
+                            "unable to decode param 'spender' from topic of type 'address': {:?}",
+                            e
                         )
                     })?
                     .pop()
@@ -1007,18 +1009,21 @@ pub mod events {
                 .topics
                 .get(0)
                 .expect("bounds already checked")
-                .as_ref()
-                == Self::TOPIC_ID;
+                .as_ref() ==
+                Self::TOPIC_ID;
         }
         pub fn decode(log: &substreams_ethereum::pb::eth::v2::Log) -> Result<Self, String> {
             let mut values =
                 ethabi::decode(&[ethabi::ParamType::Uint(256usize)], log.data.as_ref())
-                    .map_err(|e| format!("unable to decode log.data: {e:?}"))?;
+                    .map_err(|e| format!("unable to decode log.data: {:?}", e))?;
             values.reverse();
             Ok(Self {
                 from: ethabi::decode(&[ethabi::ParamType::Address], log.topics[1usize].as_ref())
                     .map_err(|e| {
-                        format!("unable to decode param 'from' from topic of type 'address': {e:?}")
+                        format!(
+                            "unable to decode param 'from' from topic of type 'address': {:?}",
+                            e
+                        )
                     })?
                     .pop()
                     .expect(INTERNAL_ERR)
@@ -1028,7 +1033,7 @@ pub mod events {
                     .to_vec(),
                 to: ethabi::decode(&[ethabi::ParamType::Address], log.topics[2usize].as_ref())
                     .map_err(|e| {
-                        format!("unable to decode param 'to' from topic of type 'address': {e:?}")
+                        format!("unable to decode param 'to' from topic of type 'address': {:?}", e)
                     })?
                     .pop()
                     .expect(INTERNAL_ERR)

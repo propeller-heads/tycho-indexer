@@ -20,7 +20,7 @@ pub fn store_pool_current_tick(events: Events, store: StoreSetInt64) {
         .into_iter()
         .filter_map(event_to_current_tick)
         .for_each(|(pool, ordinal, new_tick_index)| {
-            store.set(ordinal, format!("pool:{pool}"), &new_tick_index.into())
+            store.set(ordinal, format!("pool:{0}", pool), &new_tick_index.into())
         });
 }
 
@@ -36,7 +36,7 @@ pub fn map_liquidity_changes(
         .map(|e| {
             (
                 pools_current_tick_store
-                    .get_at(e.log_ordinal, format!("pool:{pool_addr}", pool_addr = &e.pool_address))
+                    .get_at(e.log_ordinal, format!("pool:{0}", &e.pool_address))
                     .unwrap_or(0),
                 e,
             )
@@ -57,14 +57,14 @@ pub fn store_liquidity(ticks_deltas: LiquidityChanges, store: StoreSetSumBigInt)
             LiquidityChangeType::Delta => {
                 store.sum(
                     changes.ordinal,
-                    format!("pool:{addr}", addr = hex::encode(&changes.pool_address)),
+                    format!("pool:{0}", hex::encode(&changes.pool_address)),
                     BigInt::from_signed_bytes_be(&changes.value),
                 );
             }
             LiquidityChangeType::Absolute => {
                 store.set(
                     changes.ordinal,
-                    format!("pool:{addr}", addr = hex::encode(&changes.pool_address)),
+                    format!("pool:{0}", hex::encode(&changes.pool_address)),
                     BigInt::from_signed_bytes_be(&changes.value),
                 );
             }

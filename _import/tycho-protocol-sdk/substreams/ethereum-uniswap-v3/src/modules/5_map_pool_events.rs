@@ -38,7 +38,7 @@ pub fn map_pool_events(
         for (log, call_view) in trx.logs_with_calls() {
             // Skip if the log is not from a known uniswapV3 pool.
             if let Some(pool) =
-                pools_store.get_last(format!("Pool:{address}", address = &log.address.to_hex()))
+                pools_store.get_last(format!("{}:{}", "Pool", &log.address.to_hex()))
             {
                 let changed_attributes = get_log_changed_attributes(
                     log,

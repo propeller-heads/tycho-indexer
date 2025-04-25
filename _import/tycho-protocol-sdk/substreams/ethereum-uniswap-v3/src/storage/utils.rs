@@ -32,18 +32,30 @@ pub fn left_pad(input: &[u8], padding_value: u8) -> [u8; 32] {
 pub fn read_bytes(buf: &[u8], offset: usize, number_of_bytes: usize) -> &[u8] {
     let buf_length = buf.len();
     if buf_length < number_of_bytes {
-        panic!("attempting to read {number_of_bytes} bytes in buffer  size {buf_length}",)
+        panic!(
+            "attempting to read {number_of_bytes} bytes in buffer  size {buf_size}",
+            number_of_bytes = number_of_bytes,
+            buf_size = buf.len()
+        )
     }
 
     if offset > (buf_length - 1) {
-        panic!("offset {offset} exceeds buffer size {buf_length}")
+        panic!(
+            "offset {offset} exceeds buffer size {buf_size}",
+            offset = offset,
+            buf_size = buf.len()
+        )
     }
 
     let end = buf_length - 1 - offset;
     let start_opt = (end + 1).checked_sub(number_of_bytes);
     if start_opt.is_none() {
         panic!(
-            "number of bytes {number_of_bytes} with offset {offset} exceeds buffer size {buf_length}"
+            "number of bytes {number_of_bytes} with offset {offset} exceeds buffer size
+{buf_size}",
+            number_of_bytes = number_of_bytes,
+            offset = offset,
+            buf_size = buf.len()
         )
     }
     let start = start_opt.unwrap();
@@ -146,7 +158,7 @@ mod tests {
     fn encode_hex(bytes: &[u8]) -> String {
         let mut s = String::with_capacity(bytes.len() * 2);
         for &b in bytes {
-            write!(&mut s, "{b:02x}").unwrap();
+            write!(&mut s, "{:02x}", b).unwrap();
         }
         s
     }

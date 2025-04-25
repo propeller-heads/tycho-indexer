@@ -64,9 +64,12 @@ pub fn store_balance_changes(deltas: BlockBalanceDeltas, store: impl StoreAdd<Bi
         .balance_deltas
         .iter()
         .for_each(|delta| {
-            let component = String::from_utf8(delta.component_id.clone())
-                .expect("delta.component_id is not valid utf-8!");
-            let balance_key = format!("{component}:{token}", token = hex::encode(&delta.token));
+            let balance_key = format!(
+                "{0}:{1}",
+                String::from_utf8(delta.component_id.clone())
+                    .expect("delta.component_id is not valid utf-8!"),
+                hex::encode(&delta.token)
+            );
             let current_ord = delta.ord;
             previous_ordinal
                 .entry(balance_key.clone())
@@ -74,7 +77,8 @@ pub fn store_balance_changes(deltas: BlockBalanceDeltas, store: impl StoreAdd<Bi
                     // ordinals must arrive in increasing order
                     if *ord >= current_ord {
                         panic!(
-                            "Invalid ordinal sequence for {balance_key}: {ord} >= {current_ord}",
+                            "Invalid ordinal sequence for {}: {} >= {}",
+                            balance_key, *ord, current_ord
                         );
                     }
                     *ord = current_ord;
@@ -319,12 +323,17 @@ mod tests {
         }
     }
     fn store_deltas() -> StoreDeltas {
-        let comp_id = "0x42c0ffee".to_string();
+        let comp_id = "0x42c0ffee"
+            .to_string()
+            .as_bytes()
+            .to_vec();
         let token_0 = hex::decode("bad999").unwrap();
         let token_1 = hex::decode("babe00").unwrap();
 
-        let t0_key = format!("{comp_id}:{token}", token = hex::encode(token_0));
-        let t1_key = format!("{comp_id}:{token}", token = hex::encode(token_1));
+        let t0_key =
+            format!("{}:{}", String::from_utf8(comp_id.clone()).unwrap(), hex::encode(token_0));
+        let t1_key =
+            format!("{}:{}", String::from_utf8(comp_id.clone()).unwrap(), hex::encode(token_1));
         StoreDeltas {
             deltas: vec![
                 StoreDelta {
@@ -385,15 +394,26 @@ mod tests {
 
     #[test]
     fn test_store_balances() {
-        let comp_id = "0x42c0ffee".to_string();
+        let comp_id = "0x42c0ffee"
+            .to_string()
+            .as_bytes()
+            .to_vec();
         let token_0 = hex::decode("bad999").unwrap();
         let token_1 = hex::decode("babe00").unwrap();
         let deltas = block_balance_deltas();
         let store = <MockStore as StoreNew>::new();
 
         store_balance_changes(deltas, store.clone());
-        let res_0 = store.get_last(format!("{comp_id}:{token}", token = hex::encode(token_0)));
-        let res_1 = store.get_last(format!("{comp_id}:{token}", token = hex::encode(token_1)));
+        let res_0 = store.get_last(format!(
+            "{}:{}",
+            String::from_utf8(comp_id.clone()).unwrap(),
+            hex::encode(token_0)
+        ));
+        let res_1 = store.get_last(format!(
+            "{}:{}",
+            String::from_utf8(comp_id.clone()).unwrap(),
+            hex::encode(token_1)
+        ));
 
         assert_eq!(res_0, Some(BigInt::from_str("+999").unwrap()));
         assert_eq!(res_1, Some(BigInt::from_str("+150").unwrap()));

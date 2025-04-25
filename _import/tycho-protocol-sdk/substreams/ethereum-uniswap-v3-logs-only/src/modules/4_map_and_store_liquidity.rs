@@ -20,7 +20,7 @@ pub fn store_pool_current_tick(events: Events, store: StoreSetInt64) {
         .into_iter()
         .filter_map(event_to_current_tick)
         .for_each(|(pool, ordinal, new_tick_index)| {
-            store.set(ordinal, format!("pool:{pool}"), &new_tick_index.into())
+            store.set(ordinal, format!("pool:{0}", pool), &new_tick_index.into())
         });
 }
 

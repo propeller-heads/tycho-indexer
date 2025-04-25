@@ -30,7 +30,7 @@ pub fn store_pools(pools_created: BlockChanges, store: StoreSetIfNotExistsProto<
                 )
                 .to_u64(),
             };
-            store.set_if_not_exists(0, format!("Pool:{pool_address}"), &pool);
+            store.set_if_not_exists(0, format!("{}:{}", "Pool", pool_address), &pool);
         }
     }
 }
