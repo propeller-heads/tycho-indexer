@@ -1038,16 +1038,8 @@ impl PostgresGateway {
         };
         let hex_addr = hex::encode(&new.address);
 
-        use schema::account::dsl;
         diesel::insert_into(schema::account::table)
             .values(new_contract.new_account())
-            .on_conflict(on_constraint("account_chain_id_address_key"))
-            .do_update()
-            .set((
-                dsl::title.eq(excluded(dsl::title)),
-                dsl::creation_tx.eq(excluded(dsl::creation_tx)),
-                dsl::created_at.eq(excluded(dsl::created_at)),
-            ))
             .returning(schema::account::id)
             .get_result::<i64>(db)
             .await
