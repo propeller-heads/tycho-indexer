@@ -23,6 +23,10 @@ error Dispatcher__InvalidDataLength();
 contract Dispatcher {
     mapping(address => bool) public executors;
 
+    // keccak256("Dispatcher#CURRENTLY_SWAPPING_EXECUTOR_SLOT")
+    uint256 private constant _CURRENTLY_SWAPPING_EXECUTOR_SLOT =
+        0x098a7a3b47801589e8cdf9ec791b93ad44273246946c32ef1fc4dbe45390c80e;
+
     event ExecutorSet(address indexed executor);
     event ExecutorRemoved(address indexed executor);
 
@@ -63,13 +67,18 @@ contract Dispatcher {
         }
 
         assembly {
-            tstore(0, executor)
+            tstore(_CURRENTLY_SWAPPING_EXECUTOR_SLOT, executor)
         }
 
         // slither-disable-next-line controlled-delegatecall,low-level-calls,calls-loop
         (bool success, bytes memory result) = executor.delegatecall(
             abi.encodeWithSelector(IExecutor.swap.selector, amount, data)
         );
+
+        // Clear transient storage in case no callback was performed
+        assembly {
+            tstore(_CURRENTLY_SWAPPING_EXECUTOR_SLOT, 0)
+        }
 
         if (!success) {
             revert(
@@ -91,7 +100,7 @@ contract Dispatcher {
     {
         address executor;
         assembly {
-            executor := tload(0)
+            executor := tload(_CURRENTLY_SWAPPING_EXECUTOR_SLOT)
         }
 
         if (!executors[executor]) {
@@ -115,7 +124,7 @@ contract Dispatcher {
 
         // to prevent multiple callbacks
         assembly {
-            tstore(0, 0)
+            tstore(_CURRENTLY_SWAPPING_EXECUTOR_SLOT, 0)
         }
 
         // this is necessary because the delegatecall will prepend extra bytes we don't want like the length and prefix
