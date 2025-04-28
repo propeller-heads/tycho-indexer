@@ -26,6 +26,7 @@ import {TransientStateLibrary} from
 
 error UniswapV4Executor__InvalidDataLength();
 error UniswapV4Executor__NotPoolManager();
+error UniswapV4Executor__UnknownCallback(bytes4 selector);
 error UniswapV4Executor__DeltaNotPositive(Currency currency);
 error UniswapV4Executor__DeltaNotNegative(Currency currency);
 error UniswapV4Executor__V4TooMuchRequested(
@@ -44,6 +45,10 @@ contract UniswapV4Executor is
     using TransientStateLibrary for IPoolManager;
 
     IPoolManager public immutable poolManager;
+    address private immutable _self;
+
+    bytes4 constant SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0x8bc6d0d7;
+    bytes4 constant SWAP_EXACT_INPUT_SELECTOR = 0xaf90aeb1;
 
     struct UniswapV4Pool {
         address intermediaryToken;
@@ -55,6 +60,7 @@ contract UniswapV4Executor is
         TokenTransfer(_permit2)
     {
         poolManager = _poolManager;
+        _self = address(this);
     }
 
     /**
@@ -197,25 +203,22 @@ contract UniswapV4Executor is
 
     /**
      * @dev Internal function to handle the unlock callback.
-     * The executor address is needed to perform the call. If the router is being used, the executor address is in
-     * transient storage. If it is not, then address(this) should be used.
      */
     function _unlockCallback(bytes calldata data)
         internal
         returns (bytes memory)
     {
-        address executor;
-        // slither-disable-next-line assembly
-        assembly {
-            executor := tload(0)
+        bytes4 selector = bytes4(data[:4]);
+        if (
+            selector != SWAP_EXACT_INPUT_SELECTOR
+                && selector != SWAP_EXACT_INPUT_SINGLE_SELECTOR
+        ) {
+            revert UniswapV4Executor__UnknownCallback(selector);
         }
 
-        if (executor == address(0)) {
-            executor = address(this);
-        }
         // here we expect to call either `swapExactInputSingle` or `swapExactInput`. See `swap` to see how we encode the selector and the calldata
         // slither-disable-next-line low-level-calls
-        (bool success, bytes memory returnData) = executor.delegatecall(data);
+        (bool success, bytes memory returnData) = _self.delegatecall(data);
         if (!success) {
             revert(
                 string(
