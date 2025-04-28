@@ -10,7 +10,7 @@ contract DispatcherExposed is Dispatcher {
         uint256 amount,
         bytes calldata data
     ) external returns (uint256 calculatedAmount) {
-        return _callExecutor(executor, amount, data);
+        return _callSwapOnExecutor(executor, amount, data);
     }
 
     function exposedSetExecutor(address target) external {

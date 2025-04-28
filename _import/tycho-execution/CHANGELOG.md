@@ -1,3 +1,15 @@
+## [0.83.0](https://github.com/propeller-heads/tycho-execution/compare/0.82.1...0.83.0) (2025-04-28)
+
+
+### Features
+
+* Add security check for callback selector ([4de1d10](https://github.com/propeller-heads/tycho-execution/commit/4de1d104062d4aefbde22031d9f31884be5d49ad))
+
+
+### Bug Fixes
+
+* Remove tload from executor ([3fb17c7](https://github.com/propeller-heads/tycho-execution/commit/3fb17c71da192463b0c6b15dea9a2bae47832ef5))
+
 ## [0.82.1](https://github.com/propeller-heads/tycho-execution/compare/0.82.0...0.82.1) (2025-04-24)
 
 
