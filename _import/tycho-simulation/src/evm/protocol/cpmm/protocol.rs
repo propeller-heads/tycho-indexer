@@ -25,10 +25,12 @@ pub trait CPMMProtocol {
     /// Get the fee in basis points (e.g. 30 for 0.3%)
     fn get_fee_bps(&self) -> u32;
 
-    /// Get the reserves of both tokens
+    /// Get the reserves of both tokens, in the order of the tokens in the pair
+    /// i.e. (reserve0, reserve1)
     fn get_reserves(&self) -> (U256, U256);
 
-    /// Get mutable reference to reserves of both tokens
+    /// Get mutable reference to reserves of both tokens, in the order of the tokens in the pair
+    /// i.e. (reserve0, reserve1)
     fn get_reserves_mut(&mut self) -> (&mut U256, &mut U256);
 
     /// Create a new instance with the given reserves
