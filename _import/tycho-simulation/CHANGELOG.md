@@ -1,3 +1,10 @@
+## [0.99.0](https://github.com/propeller-heads/tycho-simulation/compare/0.98.2...0.99.0) (2025-04-28)
+
+
+### Features
+
+* implement CPMMProtocol trait for UniswapV2-like protocols ([ddda73d](https://github.com/propeller-heads/tycho-simulation/commit/ddda73df7443451ee4d435f668d2b51c53a77a54))
+
 ## [0.98.2](https://github.com/propeller-heads/tycho-simulation/compare/0.98.1...0.98.2) (2025-04-21)
 
 ## [0.98.1](https://github.com/propeller-heads/tycho-simulation/compare/0.98.0...0.98.1) (2025-04-18)
