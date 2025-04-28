@@ -27,20 +27,12 @@ impl CPMMProtocol for UniswapV2State {
         UNISWAP_V2_FEE_BPS
     }
 
-    fn get_reserve0(&self) -> U256 {
-        self.reserve0
+    fn get_reserves(&self) -> (U256, U256) {
+        (self.reserve0, self.reserve1)
     }
 
-    fn get_reserve1(&self) -> U256 {
-        self.reserve1
-    }
-
-    fn get_reserve0_mut(&mut self) -> &mut U256 {
-        &mut self.reserve0
-    }
-
-    fn get_reserve1_mut(&mut self) -> &mut U256 {
-        &mut self.reserve1
+    fn get_reserves_mut(&mut self) -> (&mut U256, &mut U256) {
+        (&mut self.reserve0, &mut self.reserve1)
     }
 
     fn new(reserve0: U256, reserve1: U256) -> Self {
