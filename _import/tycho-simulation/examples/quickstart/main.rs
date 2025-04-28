@@ -43,6 +43,7 @@ use tycho_simulation::{
         protocol::{
             ekubo::state::EkuboState,
             filters::{balancer_pool_filter, curve_pool_filter, uniswap_v4_pool_with_hook_filter},
+            pancakeswap_v2::state::PancakeswapV2State,
             u256_num::biguint_to_u256,
             uniswap_v2::state::UniswapV2State,
             uniswap_v3::state::UniswapV3State,
@@ -169,7 +170,7 @@ async fn main() {
             protocol_stream = protocol_stream
                 .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
                 .exchange::<UniswapV2State>("sushiswap_v2", tvl_filter.clone(), None)
-                .exchange::<UniswapV2State>("pancakeswap_v2", tvl_filter.clone(), None)
+                .exchange::<PancakeswapV2State>("pancakeswap_v2", tvl_filter.clone(), None)
                 .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
                 .exchange::<UniswapV3State>("pancakeswap_v3", tvl_filter.clone(), None)
                 .exchange::<EVMPoolState<PreCachedDB>>(

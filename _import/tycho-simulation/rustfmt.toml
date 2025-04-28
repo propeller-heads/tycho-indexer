@@ -1,4 +1,5 @@
 reorder_imports = true
+edition = "2021"
 imports_granularity = "Crate"
 use_small_heuristics = "Max"
 comment_width = 100
@@ -7,5 +8,5 @@ binop_separator = "Back"
 trailing_comma = "Vertical"
 trailing_semicolon = false
 use_field_init_shorthand = true
-chain_width=40
+chain_width = 40
 group_imports = "StdExternalCrate"
