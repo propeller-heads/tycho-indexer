@@ -482,7 +482,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             swap_.decodeSingleSwap();
 
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        amountOut = _callExecutor(executor, amountIn, protocolData);
+        amountOut = _callSwapOnExecutor(executor, amountIn, protocolData);
 
         if (amountOut < minAmountOut) {
             revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
@@ -616,7 +616,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
                 : remainingAmounts[tokenInIndex];
 
             currentAmountOut =
-                _callExecutor(executor, currentAmountIn, protocolData);
+                _callSwapOnExecutor(executor, currentAmountIn, protocolData);
             // Checks if the output token is the same as the input token
             if (tokenOutIndex == 0) {
                 cyclicSwapAmountOut += currentAmountOut;
@@ -650,7 +650,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
                 swap.decodeSingleSwap();
 
             calculatedAmount =
-                _callExecutor(executor, calculatedAmount, protocolData);
+                _callSwapOnExecutor(executor, calculatedAmount, protocolData);
         }
     }
 
@@ -658,7 +658,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @dev We use the fallback function to allow flexibility on callback.
      */
     fallback() external {
-        bytes memory result = _handleCallback(msg.data);
+        bytes memory result = _callHandleCallbackOnExecutor(msg.data);
         // slither-disable-next-line assembly
         assembly ("memory-safe") {
             // Propagate the calculatedAmount
@@ -786,7 +786,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         returns (bytes memory)
     {
         if (data.length < 24) revert TychoRouter__InvalidDataLength();
-        bytes memory result = _handleCallback(data);
+        bytes memory result = _callHandleCallbackOnExecutor(data);
         return result;
     }
 

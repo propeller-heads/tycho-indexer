@@ -53,7 +53,7 @@ contract Dispatcher {
      *  protocol-specific data required by the executor.
      */
     // slither-disable-next-line delegatecall-loop,assembly
-    function _callExecutor(
+    function _callSwapOnExecutor(
         address executor,
         uint256 amount,
         bytes calldata data
@@ -85,7 +85,7 @@ contract Dispatcher {
     }
 
     // slither-disable-next-line assembly
-    function _handleCallback(bytes calldata data)
+    function _callHandleCallbackOnExecutor(bytes calldata data)
         internal
         returns (bytes memory)
     {
