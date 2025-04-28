@@ -1,3 +1,10 @@
+## [0.84.0](https://github.com/propeller-heads/tycho-execution/compare/0.83.0...0.84.0) (2025-04-28)
+
+
+### Features
+
+* Clear transient storage after swap call ([1b003dc](https://github.com/propeller-heads/tycho-execution/commit/1b003dc483d0e6cc01c5fd6d46ea9f28fc1c0aa6))
+
 ## [0.83.0](https://github.com/propeller-heads/tycho-execution/compare/0.82.1...0.83.0) (2025-04-28)
 
 
