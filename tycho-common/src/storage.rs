@@ -8,7 +8,9 @@ use thiserror::Error;
 use crate::{
     dto,
     models::{
-        blockchain::{Block, Transaction},
+        blockchain::{
+            Block, EntryPoint, EntryPointWithData, TracedEntryPoint, TracingResult, Transaction,
+        },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
@@ -16,7 +18,7 @@ use crate::{
         },
         token::CurrencyToken,
         Address, BlockHash, Chain, ComponentId, ContractId, ExtractionState, PaginationParams,
-        ProtocolType, TxHash,
+        ProtocolSystem, ProtocolType, TxHash,
     },
     Bytes,
 };
@@ -50,7 +52,7 @@ impl Display for BlockIdentifier {
     }
 }
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug, PartialEq, Clone)]
 pub enum StorageError {
     #[error("Could not find {0} with id `{1}`!")]
     NotFound(String, String),
@@ -482,6 +484,46 @@ pub trait ProtocolGateway {
         chain: &Chain,
         pagination_params: Option<&PaginationParams>,
     ) -> Result<WithTotal<Vec<String>>, StorageError>;
+}
+
+/// Filters for entry points queries in the database.
+// Shalow but can be used to add more filters without breaking backwards compatibility in the future
+pub struct EntryPointFilter {
+    pub protocol_system: ProtocolSystem,
+}
+
+impl EntryPointFilter {
+    pub fn new(protocol: ProtocolSystem) -> Self {
+        Self { protocol_system: protocol }
+    }
+}
+
+// Trait for entry point gateway operations.
+#[async_trait]
+pub trait EntryPointGateway {
+    /// Upserts a list of entry points with their tracing data into the database.
+    async fn upsert_entry_points_with_data(
+        &self,
+        entry_points: &[(ComponentId, Vec<EntryPointWithData>)],
+    ) -> Result<(), StorageError>;
+
+    /// Retrieves a list of entry points with their tracing data from the database.
+    async fn get_entry_points_with_data(
+        &self,
+        filter: EntryPointFilter,
+    ) -> Result<Vec<EntryPointWithData>, StorageError>;
+
+    /// Upserts a list of traced entry points into the database.
+    async fn upsert_traced_entry_points(
+        &self,
+        traced_entry_points: &[TracedEntryPoint],
+    ) -> Result<(), StorageError>;
+
+    /// Retrieves the tracing results for an entry point from the database.
+    async fn get_traced_entry_point(
+        &self,
+        entry_point: EntryPoint,
+    ) -> Result<Vec<TracingResult>, StorageError>;
 }
 
 /// Manage contracts and their state in storage.

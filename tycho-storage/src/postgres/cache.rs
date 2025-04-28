@@ -15,7 +15,9 @@ use tracing::{debug, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
     models::{
         self,
-        blockchain::{Block, Transaction},
+        blockchain::{
+            Block, EntryPoint, EntryPointWithData, TracedEntryPoint, TracingResult, Transaction,
+        },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
@@ -26,8 +28,9 @@ use tycho_common::{
         TxHash,
     },
     storage::{
-        BlockIdentifier, BlockOrTimestamp, ChainGateway, ContractStateGateway,
-        ExtractionStateGateway, Gateway, ProtocolGateway, StorageError, Version, WithTotal,
+        BlockIdentifier, BlockOrTimestamp, ChainGateway, ContractStateGateway, EntryPointFilter,
+        EntryPointGateway, ExtractionStateGateway, Gateway, ProtocolGateway, StorageError, Version,
+        WithTotal,
     },
     Bytes,
 };
@@ -60,6 +63,10 @@ pub(crate) enum WriteOp {
     InsertComponentBalances(Vec<models::protocol::ComponentBalance>),
     // Simply merge
     UpsertProtocolState(Vec<(TxHash, models::protocol::ProtocolComponentStateDelta)>),
+    // Simply merge
+    UpsertEntryPoints(Vec<(models::ComponentId, Vec<models::blockchain::EntryPointWithData>)>),
+    // Simply merge
+    UpsertTracedEntryPoints(Vec<models::blockchain::TracedEntryPoint>),
 }
 
 impl WriteOp {
@@ -76,6 +83,8 @@ impl WriteOp {
             WriteOp::UpdateTokens(_) => "UpdateTokens",
             WriteOp::InsertComponentBalances(_) => "InsertComponentBalances",
             WriteOp::UpsertProtocolState(_) => "UpsertProtocolState",
+            WriteOp::UpsertEntryPoints(_) => "UpsertEntryPoints",
+            WriteOp::UpsertTracedEntryPoints(_) => "UpsertTracedEntryPoints",
         }
     }
 
@@ -91,7 +100,9 @@ impl WriteOp {
             WriteOp::InsertProtocolComponents(_) => 7,
             WriteOp::InsertComponentBalances(_) => 8,
             WriteOp::UpsertProtocolState(_) => 9,
-            WriteOp::SaveExtractionState(_) => 10,
+            WriteOp::UpsertEntryPoints(_) => 10,
+            WriteOp::UpsertTracedEntryPoints(_) => 11,
+            WriteOp::SaveExtractionState(_) => 12,
         }
     }
 }
@@ -189,6 +200,16 @@ impl DBTransaction {
                     return Ok(());
                 }
                 (WriteOp::UpsertProtocolState(l), WriteOp::UpsertProtocolState(r)) => {
+                    self.size += r.len();
+                    l.extend(r.iter().cloned());
+                    return Ok(());
+                }
+                (WriteOp::UpsertEntryPoints(l), WriteOp::UpsertEntryPoints(r)) => {
+                    self.size += r.len();
+                    l.extend(r.iter().cloned());
+                    return Ok(());
+                }
+                (WriteOp::UpsertTracedEntryPoints(l), WriteOp::UpsertTracedEntryPoints(r)) => {
                     self.size += r.len();
                     l.extend(r.iter().cloned());
                     return Ok(());
@@ -466,6 +487,26 @@ impl DBCacheWriteExecutor {
                 let changes_slice = collected_changes.as_slice();
                 self.state_gateway
                     .update_protocol_states(&self.chain, changes_slice, conn)
+                    .await?
+            }
+            WriteOp::UpsertTracedEntryPoints(traced_entry_points) => {
+                self.state_gateway
+                    .upsert_traced_entry_points(traced_entry_points.as_slice(), conn)
+                    .await?
+            }
+            WriteOp::UpsertEntryPoints(new_entry_points) => {
+                self.state_gateway
+                    .insert_entry_points(
+                        new_entry_points
+                            .iter()
+                            .map(|(component_id, entry_points)| {
+                                (component_id.as_str(), entry_points)
+                            })
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                        &self.chain,
+                        conn,
+                    )
                     .await?
             }
         };
@@ -1092,6 +1133,57 @@ impl ProtocolGateway for CachedGateway {
     ) -> Result<WithTotal<Vec<String>>, StorageError> {
         self.state_gateway
             .get_protocol_systems(chain, pagination_params)
+            .await
+    }
+}
+
+#[async_trait]
+impl EntryPointGateway for CachedGateway {
+    #[instrument(skip_all)]
+    async fn upsert_entry_points_with_data(
+        &self,
+        entry_points: &[(models::ComponentId, Vec<models::blockchain::EntryPointWithData>)],
+    ) -> Result<(), StorageError> {
+        self.add_op(WriteOp::UpsertEntryPoints(entry_points.to_vec()))
+            .await?;
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
+    async fn get_entry_points_with_data(
+        &self,
+        filter: EntryPointFilter,
+    ) -> Result<Vec<EntryPointWithData>, StorageError> {
+        let mut conn =
+            self.pool.get().await.map_err(|e| {
+                StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
+            })?;
+        self.state_gateway
+            .get_entry_points_with_data(filter, &mut conn)
+            .await
+    }
+
+    #[instrument(skip_all)]
+    async fn upsert_traced_entry_points(
+        &self,
+        traced_entry_points: &[TracedEntryPoint],
+    ) -> Result<(), StorageError> {
+        self.add_op(WriteOp::UpsertTracedEntryPoints(traced_entry_points.to_vec()))
+            .await?;
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
+    async fn get_traced_entry_point(
+        &self,
+        entry_point: EntryPoint,
+    ) -> Result<Vec<TracingResult>, StorageError> {
+        let mut conn =
+            self.pool.get().await.map_err(|e| {
+                StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
+            })?;
+        self.state_gateway
+            .get_traced_entry_point(entry_point, &mut conn)
             .await
     }
 }
