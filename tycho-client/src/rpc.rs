@@ -809,7 +809,7 @@ mod tests {
                         "0x0000000000000000000000000000000000000000"
                     ],
                     "static_attributes": {
-                        "attribute_1": "0xe803000000000000"
+                        "attribute_1": "0x00000000000003e8"
                     },
                     "change": "Creation",
                     "creation_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -864,7 +864,7 @@ mod tests {
                 {
                     "component_id": "State1",
                     "attributes": {
-                        "attribute_1": "0xe803000000000000"
+                        "attribute_1": "0x00000000000003e8"
                     },
                     "balances": {
                         "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": "0x01f4"

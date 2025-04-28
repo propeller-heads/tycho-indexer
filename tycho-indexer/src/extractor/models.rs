@@ -909,7 +909,7 @@ mod test {
                 tycho_common::models::protocol::ComponentBalance {
                     token: Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
                     balance: Bytes::from(1_i32.to_be_bytes()),
-                    balance_float: 16777216.0,
+                    balance_float: 1.0,
                     modify_tx: Bytes::from(
                         "0x0000000000000000000000000000000000000000000000000000000011121314"
                     ),
