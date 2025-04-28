@@ -32,7 +32,7 @@ use tycho_common::Bytes;
 pub mod utils;
 use tycho_execution::encoding::{
     evm::{
-        encoder_builder::EVMEncoderBuilder, tycho_encoder::EVMTychoEncoder, utils::encode_input,
+        encoder_builders::TychoRouterEncoderBuilder, tycho_encoders::TychoRouterEncoder, utils::encode_input,
     },
     models::{Solution, Swap, Transaction},
     tycho_encoder::TychoEncoder,
@@ -223,10 +223,9 @@ async fn main() {
         .expect("Failed building protocol stream");
 
     // Initialize the encoder
-    let encoder = EVMEncoderBuilder::new()
+    let encoder = TychoRouterEncoderBuilder::new()
         .chain(chain)
-        .initialize_tycho_router_with_permit2(cli.swapper_pk.clone())
-        .expect("Failed to create encoder builder")
+        .swapper_pk(cli.swapper_pk.clone())
         .build()
         .expect("Failed to build encoder");
 
@@ -274,8 +273,7 @@ async fn main() {
             // Clone expected_amount to avoid ownership issues
             let expected_amount_copy = expected_amount.clone();
 
-            let tx = encode(
-                encoder.clone(),
+            let solution = create_solution(
                 component,
                 sell_token.clone(),
                 buy_token.clone(),
@@ -283,6 +281,12 @@ async fn main() {
                 Bytes::from(wallet.address().to_vec()),
                 expected_amount,
             );
+
+            // Encode the solution
+            let tx = encoder
+                .encode_calldata(vec![solution.clone()])
+                .expect("Failed to encode router calldata")[0]
+                .clone();
 
             // Print token balances before showing the swap options
             if cli.swapper_pk != FAKE_PK {
@@ -584,15 +588,14 @@ fn get_best_swap(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn encode(
-    encoder: EVMTychoEncoder,
+fn create_solution(
     component: ProtocolComponent,
     sell_token: Token,
     buy_token: Token,
     sell_amount: BigUint,
     user_address: Bytes,
     expected_amount: BigUint,
-) -> Transaction {
+) -> Solution {
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = Swap::new(
         component,
@@ -604,7 +607,7 @@ fn encode(
     );
 
     // Then we create a solution object with the previous swap
-    let solution = Solution {
+    Solution {
         sender: user_address.clone(),
         receiver: user_address,
         given_token: sell_token.address,
@@ -616,13 +619,7 @@ fn encode(
         checked_amount: None, // the amount out will not be checked in execution
         swaps: vec![simple_swap],
         ..Default::default()
-    };
-
-    // Encode the solution
-    encoder
-        .encode_router_calldata(vec![solution.clone()])
-        .expect("Failed to encode router calldata")[0]
-        .clone()
+    }
 }
 
 async fn get_tx_requests(
