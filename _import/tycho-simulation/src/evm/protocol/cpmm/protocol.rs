@@ -155,9 +155,22 @@ impl<T: CPMMProtocol + Clone + 'static + std::fmt::Debug + Sync + Send> Protocol
             (self.get_reserve1(), self.get_reserve0())
         };
 
-        // Soft limit for amount in is the amount to get a 90% price impact
+        // Soft limit for amount in is the amount to get a 90% price impact.
+        // The two equations to resolve are:
+        // - 90% price impact: (reserve1 - y)/(reserve0 + x) = 0.1 × (reserve1/reserve0)
+        // - Maintain constant product: (reserve0 + x) × (reserve1 - y) = reserve0 * reserve1
+        //
+        // This resolves into x = (√10 - 1) × reserve0 = 2.16 × reserve0
         let amount_in =
             safe_div_u256(safe_mul_u256(reserve_in, U256::from(216))?, U256::from(100))?;
+
+        // Calculate amount_out using the constant product formula
+        // The constant product formula requires:
+        // (reserve_in + amount_in) × (reserve_out - amount_out) = reserve_in * reserve_out
+        // Solving for amount_out:
+        // amount_out = reserve_out - (reserve_in * reserve_out) (reserve_in + amount_in)
+        // which simplifies to:
+        // amount_out = (reserve_out * amount_in) / (reserve_in + amount_in)
         let amount_out = safe_div_u256(
             safe_mul_u256(reserve_out, amount_in)?,
             safe_add_u256(reserve_in, amount_in)?,
@@ -172,6 +185,8 @@ impl<T: CPMMProtocol + Clone + 'static + std::fmt::Debug + Sync + Send> Protocol
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
+        // reserve0 and reserve1 are considered required attributes and are expected in every delta
+        // we process
         *self.get_reserve0_mut() = U256::from_be_slice(
             delta
                 .updated_attributes
