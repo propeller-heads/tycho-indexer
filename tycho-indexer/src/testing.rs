@@ -81,7 +81,7 @@ mock! {
             'life4: 'async_trait,
             Self: 'async_trait;
 
-        fn upsert_contract<'life0, 'life1, 'async_trait>(
+        fn insert_contract<'life0, 'life1, 'async_trait>(
             &'life0 self,
             new: &'life1 Account,
         ) -> ::core::pin::Pin<

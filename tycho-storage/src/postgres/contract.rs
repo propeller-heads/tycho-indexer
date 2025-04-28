@@ -994,12 +994,11 @@ impl PostgresGateway {
         Ok(WithTotal { entity: res, total: Some(total_count) })
     }
 
-    /// Upsert contract
+    /// Insert contract
     ///
-    /// Inserts a contract or updates it if it already exists. It will not update
-    /// contract balance or contract code if they already exist though. Since a separate
+    /// Inserts a contract. It will not insert contract code, slots or balance since a separate
     /// method exists for updating these related components.
-    pub async fn upsert_contract(
+    pub async fn insert_contract(
         &self,
         new: &Account,
         db: &mut AsyncPgConnection,
@@ -1033,68 +1032,19 @@ impl PostgresGateway {
             creation_tx: creation_tx_id,
             created_at: Some(created_ts),
             deleted_at: None,
-            balance: new.native_balance.clone(),
-            code: new.code.clone(),
-            code_hash: new.code_hash.clone(),
         };
         let hex_addr = hex::encode(&new.address);
 
-        let account_id = {
-            use schema::account::dsl;
-            diesel::insert_into(schema::account::table)
-                .values(new_contract.new_account())
-                .on_conflict(on_constraint("account_chain_id_address_key"))
-                .do_update()
-                .set((
-                    dsl::title.eq(excluded(dsl::title)),
-                    dsl::creation_tx.eq(excluded(dsl::creation_tx)),
-                    dsl::created_at.eq(excluded(dsl::created_at)),
-                ))
-                .returning(schema::account::id)
-                .get_result::<i64>(db)
-                .await
-                .map_err(|err| {
-                    error!("Failed inserting account");
-                    storage_error_from_diesel(err, "Account", &hex_addr, None)
-                })?
-        };
+        diesel::insert_into(schema::account::table)
+            .values(new_contract.new_account())
+            .returning(schema::account::id)
+            .get_result::<i64>(db)
+            .await
+            .map_err(|err| {
+                error!("Failed inserting account");
+                storage_error_from_diesel(err, "Account", &hex_addr, None)
+            })?;
 
-        // we can only insert balance and contract_code if we have a creation transaction.
-        if let Some(tx_id) = creation_tx_id {
-            diesel::insert_into(schema::account_balance::table)
-                .values(new_contract.new_balance(
-                    account_id,
-                    self.get_native_token_id(&new.chain),
-                    tx_id,
-                    created_ts,
-                ))
-                .execute(db)
-                .await
-                .map_err(|err| storage_error_from_diesel(err, "AccountBalance", &hex_addr, None))?;
-            diesel::insert_into(schema::contract_code::table)
-                .values(new_contract.new_code(account_id, tx_id, created_ts))
-                .execute(db)
-                .await
-                .map_err(|err| storage_error_from_diesel(err, "ContractCode", &hex_addr, None))?;
-            self.upsert_slots(
-                [(
-                    tx_id,
-                    [(
-                        new.address.clone(),
-                        new.slots
-                            .iter()
-                            .map(|(k, v)| (k.clone(), Some(v.clone())))
-                            .collect(),
-                    )]
-                    .into_iter()
-                    .collect(),
-                )]
-                .into_iter()
-                .collect(),
-                db,
-            )
-            .await?;
-        }
         Ok(())
     }
 
@@ -1656,10 +1606,7 @@ mod test {
     };
 
     use super::*;
-    use crate::postgres::{
-        db_fixtures,
-        db_fixtures::{yesterday_midnight, yesterday_one_am},
-    };
+    use crate::postgres::db_fixtures;
 
     type EVMGateway = PostgresGateway;
     type MaybeTS = Option<NaiveDateTime>;
@@ -1685,8 +1632,30 @@ mod test {
     async fn setup_data(conn: &mut AsyncPgConnection) -> i64 {
         let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
         let blk = db_fixtures::insert_blocks(conn, chain_id).await;
+        // add block 3 with no linked data (to be used to test updates)
+        diesel::insert_into(schema::block::table)
+            .values((
+                schema::block::hash.eq(Vec::from(
+                    Bytes::from_str(
+                        "f2d7c8b6e3a1905f4c8d26b7e9513a0d7f8e2c9b1a6d5e4f3c2b1a0e9d8c7f61",
+                    )
+                    .unwrap(),
+                )),
+                schema::block::parent_hash.eq(Vec::from(
+                    Bytes::from_str(
+                        "b495a1d7e6663152ae92708da4843337b958146015a2802f4193a410044698c9",
+                    )
+                    .unwrap(),
+                )),
+                schema::block::number.eq(3),
+                schema::block::ts.eq(db_fixtures::yesterday_one_am()),
+                schema::block::chain_id.eq(chain_id),
+            ))
+            .execute(conn)
+            .await
+            .unwrap();
         let ts = db_fixtures::yesterday_midnight();
-        let ts_p1 = db_fixtures::yesterday_one_am();
+        let ts_p1 = db_fixtures::yesterday_half_past_midnight();
         let tx_hashes = [
             "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945".to_string(),
             "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54".to_string(),
@@ -2262,7 +2231,16 @@ mod test {
             ),
         );
         gateway
-            .upsert_contract(&expected, &mut conn)
+            .insert_contract(&expected, &mut conn)
+            .await
+            .unwrap();
+        let update: AccountDelta = expected.clone().into();
+        gateway
+            .update_contracts(
+                &expected.chain,
+                &[(expected.code_modify_tx.clone(), &update)],
+                &mut conn,
+            )
             .await
             .unwrap();
 
@@ -2284,7 +2262,7 @@ mod test {
         let gw = EVMGateway::from_connection(&mut conn).await;
         let modify_txhash = "62f4d4f29d10db8722cb66a2adb0049478b11988c8b43cd446b755afb8954678";
         let tx_hash_bytes = Bytes::from(modify_txhash);
-        let block = orm::Block::by_number(Chain::Ethereum, 2, &mut conn)
+        let block = orm::Block::by_number(Chain::Ethereum, 3, &mut conn)
             .await
             .expect("block found");
         db_fixtures::insert_txns(&mut conn, &[(block.id, 100, modify_txhash)]).await;
@@ -2734,8 +2712,8 @@ mod test {
             .await
             .unwrap();
         exp.insert(account_id, storage);
-        let end_ts = yesterday_one_am() + Duration::from_secs(3600);
-        let start_ts = yesterday_midnight();
+        let end_ts = db_fixtures::yesterday_one_am() + Duration::from_secs(3600);
+        let start_ts = db_fixtures::yesterday_midnight();
 
         let res = gw
             .get_slots_delta(chain_id, &start_ts, &end_ts, &mut conn)
@@ -2761,8 +2739,8 @@ mod test {
             .await
             .unwrap();
         exp.insert(account_id, storage);
-        let start_ts = yesterday_one_am() + Duration::from_secs(3600);
-        let end_ts = yesterday_midnight();
+        let start_ts = db_fixtures::yesterday_one_am() + Duration::from_secs(3600);
+        let end_ts = db_fixtures::yesterday_midnight();
 
         let res = gw
             .get_slots_delta(chain_id, &start_ts, &end_ts, &mut conn)
