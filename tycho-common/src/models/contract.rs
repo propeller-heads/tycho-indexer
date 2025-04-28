@@ -673,7 +673,7 @@ mod test {
                     token_address.clone(),
                     ComponentBalance {
                         token: token_address.clone(),
-                        balance: Bytes::from(0_i32.to_le_bytes()),
+                        balance: Bytes::from(0_i32.to_be_bytes()),
                         modify_tx: Default::default(),
                         component_id: protocol_component_first_tx.id.clone(),
                         balance_float: 0.0,
@@ -690,7 +690,7 @@ mod test {
                     token_address.clone(),
                     AccountBalance {
                         token: token_address.clone(),
-                        balance: Bytes::from(0_i32.to_le_bytes()),
+                        balance: Bytes::from(0_i32.to_be_bytes()),
                         modify_tx: Default::default(),
                         account: account_address.clone(),
                     },
@@ -728,7 +728,7 @@ mod test {
                     token_address.clone(),
                     ComponentBalance {
                         token: token_address.clone(),
-                        balance: Bytes::from(500000_i32.to_le_bytes()),
+                        balance: Bytes::from(500000_i32.to_be_bytes()),
                         modify_tx: Default::default(),
                         component_id: protocol_component_first_tx.id.clone(),
                         balance_float: 500000.0,
@@ -745,7 +745,7 @@ mod test {
                     token_address.clone(),
                     AccountBalance {
                         token: token_address,
-                        balance: Bytes::from(20000_i32.to_le_bytes()),
+                        balance: Bytes::from(20000_i32.to_be_bytes()),
                         modify_tx: Default::default(),
                         account: account_address,
                     },

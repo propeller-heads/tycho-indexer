@@ -142,7 +142,7 @@ mod tests {
                         ComponentBalance {
                             token: Bytes::from_str("0xeb91861f8a4e1c12333f42dce8fb0ecdc28da716")
                                 .unwrap(),
-                            balance: Bytes::from(0_i32.to_le_bytes()),
+                            balance: Bytes::from(0_i32.to_be_bytes()),
                             balance_float: 36522027799.0,
                             modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000011121314").unwrap(),
                             component_id: "0xd4e7c1f3da1144c9e2cfd1b015eda7652b4a4399".to_string(),
@@ -153,7 +153,7 @@ mod tests {
                         ComponentBalance {
                             token: Bytes::from_str("0xd4e7c1f3da1144c9e2cfd1b015eda7652b4a4399")
                                 .unwrap(),
-                            balance: Bytes::from(0_i32.to_le_bytes()),
+                            balance: Bytes::from(0_i32.to_be_bytes()),
                             balance_float: 36522027799.0,
                             modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000011121314").unwrap(),
                             component_id: "0xd4e7c1f3da1144c9e2cfd1b015eda7652b4a4399".to_string(),
@@ -169,7 +169,7 @@ mod tests {
                         AccountBalance {
                             token: Bytes::from_str("0xeb91861f8a4e1c12333f42dce8fb0ecdc28da716")
                                 .unwrap(),
-                            balance: Bytes::from(0_i32.to_le_bytes()),
+                            balance: Bytes::from(0_i32.to_be_bytes()),
                             modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000011121314").unwrap(),
                             account: Bytes::from_str("0xd4e7c1f3da1144c9e2cfd1b015eda7652b4a4399").unwrap(),
                         },
@@ -179,7 +179,7 @@ mod tests {
                         AccountBalance {
                             token: Bytes::from_str("0xd4e7c1f3da1144c9e2cfd1b015eda7652b4a4399")
                                 .unwrap(),
-                            balance: Bytes::from(0_i32.to_le_bytes()),
+                            balance: Bytes::from(0_i32.to_be_bytes()),
                             modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000011121314").unwrap(),
                             account: Bytes::from_str("0xd4e7c1f3da1144c9e2cfd1b015eda7652b4a4399").unwrap(),
                         },
@@ -222,7 +222,7 @@ mod tests {
                         ComponentBalance {
                             token: Bytes::from_str("0xeb91861f8a4e1c12333f42dce8fb0ecdc28da716")
                                 .unwrap(),
-                            balance: Bytes::from(0_i32.to_le_bytes()),
+                            balance: Bytes::from(0_i32.to_be_bytes()),
                             balance_float: 36522027799.0,
                             modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000011121314").unwrap(),
                             component_id: "0xd4e7c1f3da1144c9e2cfd1b015eda7652b4a4399".to_string(),
@@ -237,7 +237,7 @@ mod tests {
                         AccountBalance {
                             token: Bytes::from_str("0xeb91861f8a4e1c12333f42dce8fb0ecdc28da716")
                                 .unwrap(),
-                            balance: Bytes::from(0_i32.to_le_bytes()),
+                            balance: Bytes::from(0_i32.to_be_bytes()),
                             modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000011121314").unwrap(),
                             account: Bytes::from_str("0xd4e7c1f3da1144c9e2cfd1b015eda7652b4a4399").unwrap(),
                         },
@@ -247,7 +247,7 @@ mod tests {
                         AccountBalance {
                             token: Bytes::from_str("0xd4e7c1f3da1144c9e2cfd1b015eda7652b4a4399")
                                 .unwrap(),
-                            balance: Bytes::from(0_i32.to_le_bytes()),
+                            balance: Bytes::from(0_i32.to_be_bytes()),
                             modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000011121314").unwrap(),
                             account: Bytes::from_str("0xd4e7c1f3da1144c9e2cfd1b015eda7652b4a4399").unwrap(),
                         },

@@ -848,7 +848,7 @@ mod tests {
         assert_eq!(components[0].protocol_type_name, "Pool");
         assert_eq!(components[0].tokens.len(), 2);
         let expected_attributes =
-            [("attribute_1".to_string(), Bytes::from(1000_u64.to_le_bytes()))]
+            [("attribute_1".to_string(), Bytes::from(1000_u64.to_be_bytes()))]
                 .iter()
                 .cloned()
                 .collect::<HashMap<String, Bytes>>();
@@ -899,7 +899,7 @@ mod tests {
         assert_eq!(states.len(), 1);
         assert_eq!(states[0].component_id, "State1");
         let expected_attributes =
-            [("attribute_1".to_string(), Bytes::from(1000_u64.to_le_bytes()))]
+            [("attribute_1".to_string(), Bytes::from(1000_u64.to_be_bytes()))]
                 .iter()
                 .cloned()
                 .collect::<HashMap<String, Bytes>>();
