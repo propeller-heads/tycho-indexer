@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import "@interfaces/IExecutor.sol";
 import "@interfaces/ICallback.sol";
 
-error Dispatcher__UnapprovedExecutor();
+error Dispatcher__UnapprovedExecutor(address executor);
 error Dispatcher__NonContractExecutor();
 error Dispatcher__InvalidDataLength();
 
@@ -22,6 +22,10 @@ error Dispatcher__InvalidDataLength();
  */
 contract Dispatcher {
     mapping(address => bool) public executors;
+
+    // keccak256("Dispatcher#CURRENTLY_SWAPPING_EXECUTOR_SLOT")
+    uint256 private constant _CURRENTLY_SWAPPING_EXECUTOR_SLOT =
+        0x098a7a3b47801589e8cdf9ec791b93ad44273246946c32ef1fc4dbe45390c80e;
 
     event ExecutorSet(address indexed executor);
     event ExecutorRemoved(address indexed executor);
@@ -52,20 +56,29 @@ contract Dispatcher {
      * @dev Calls an executor, assumes swap.protocolData contains
      *  protocol-specific data required by the executor.
      */
-    // slither-disable-next-line delegatecall-loop
-    function _callExecutor(
+    // slither-disable-next-line delegatecall-loop,assembly
+    function _callSwapOnExecutor(
         address executor,
         uint256 amount,
         bytes calldata data
     ) internal returns (uint256 calculatedAmount) {
         if (!executors[executor]) {
-            revert Dispatcher__UnapprovedExecutor();
+            revert Dispatcher__UnapprovedExecutor(executor);
         }
 
-        // slither-disable-next-line controlled-delegatecall,low-level-calls
+        assembly {
+            tstore(_CURRENTLY_SWAPPING_EXECUTOR_SLOT, executor)
+        }
+
+        // slither-disable-next-line controlled-delegatecall,low-level-calls,calls-loop
         (bool success, bytes memory result) = executor.delegatecall(
             abi.encodeWithSelector(IExecutor.swap.selector, amount, data)
         );
+
+        // Clear transient storage in case no callback was performed
+        assembly {
+            tstore(_CURRENTLY_SWAPPING_EXECUTOR_SLOT, 0)
+        }
 
         if (!success) {
             revert(
@@ -80,11 +93,18 @@ contract Dispatcher {
         calculatedAmount = abi.decode(result, (uint256));
     }
 
-    function _handleCallback(bytes calldata data) internal {
-        address executor = address(uint160(bytes20(data[data.length - 20:])));
+    // slither-disable-next-line assembly
+    function _callHandleCallbackOnExecutor(bytes calldata data)
+        internal
+        returns (bytes memory)
+    {
+        address executor;
+        assembly {
+            executor := tload(_CURRENTLY_SWAPPING_EXECUTOR_SLOT)
+        }
 
         if (!executors[executor]) {
-            revert Dispatcher__UnapprovedExecutor();
+            revert Dispatcher__UnapprovedExecutor(executor);
         }
 
         // slither-disable-next-line controlled-delegatecall,low-level-calls
@@ -101,5 +121,14 @@ contract Dispatcher {
                 )
             );
         }
+
+        // to prevent multiple callbacks
+        assembly {
+            tstore(_CURRENTLY_SWAPPING_EXECUTOR_SLOT, 0)
+        }
+
+        // this is necessary because the delegatecall will prepend extra bytes we don't want like the length and prefix
+        bytes memory decodedResult = abi.decode(result, (bytes));
+        return decodedResult;
     }
 }

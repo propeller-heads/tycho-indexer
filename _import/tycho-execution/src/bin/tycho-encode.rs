@@ -3,7 +3,9 @@ use std::io::{self, Read};
 use clap::{Parser, Subcommand};
 use tycho_common::{hex_bytes::Bytes, models::Chain};
 use tycho_execution::encoding::{
-    evm::encoder_builder::EVMEncoderBuilder, models::Solution, tycho_encoder::TychoEncoder,
+    evm::encoder_builders::{TychoExecutorEncoderBuilder, TychoRouterEncoderBuilder},
+    models::Solution,
+    tycho_encoder::TychoEncoder,
 };
 
 #[derive(Parser)]
@@ -42,57 +44,62 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
     #[arg(short, long)]
+    chain: Chain,
+    #[arg(short, long)]
     executors_file_path: Option<String>,
     #[arg(short, long)]
     router_address: Option<Bytes>,
+    #[arg(short, long)]
+    swapper_pk: Option<String>,
+    #[arg(short, long)]
+    token_in_already_in_router: Option<bool>,
 }
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Use the Tycho router encoding strategy
+    /// Use Tycho router encoding
     TychoRouter,
-    /// Use the Tycho router encoding strategy with Permit2 approval and token in transfer
-    TychoRouterPermit2 {
-        #[arg(short, long)]
-        swapper_pk: String,
-    },
-    /// Use the direct execution encoding strategy
-    DirectExecution,
+    /// Use direct execution encoding
+    TychoExecutor,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    let chain = Chain::Ethereum;
-
     // Read from stdin until EOF
     let mut buffer = String::new();
     io::stdin()
         .read_to_string(&mut buffer)
-        .map_err(|e| format!("Failed to read from stdin: {}", e))?;
+        .map_err(|e| format!("Failed to read from stdin: {e}"))?;
 
     if buffer.trim().is_empty() {
         return Err("No input provided. Expected JSON input on stdin.".into());
     }
     let solution: Solution = serde_json::from_str(&buffer)?;
 
-    let mut builder = EVMEncoderBuilder::new().chain(chain);
-
-    if let Some(config_path) = cli.executors_file_path {
-        builder = builder.executors_file_path(config_path);
-    }
-    if let Some(router_address) = cli.router_address {
-        builder = builder.router_address(router_address);
-    }
-
-    builder = match cli.command {
-        Commands::TychoRouter => builder.initialize_tycho_router()?,
-        Commands::TychoRouterPermit2 { swapper_pk } => {
-            builder.initialize_tycho_router_with_permit2(swapper_pk)?
+    let chain = cli.chain;
+    let encoder: Box<dyn TychoEncoder> = match cli.command {
+        Commands::TychoRouter => {
+            let mut builder = TychoRouterEncoderBuilder::new().chain(chain);
+            if let Some(config_path) = cli.executors_file_path {
+                builder = builder.executors_file_path(config_path);
+            }
+            if let Some(router_address) = cli.router_address {
+                builder = builder.router_address(router_address);
+            }
+            if let Some(swapper_pk) = cli.swapper_pk {
+                builder = builder.swapper_pk(swapper_pk);
+            }
+            if let Some(token_in_already_in_router) = cli.token_in_already_in_router {
+                builder = builder.token_in_already_in_router(token_in_already_in_router);
+            }
+            builder.build()?
         }
-        Commands::DirectExecution => builder.initialize_direct_execution()?,
+        Commands::TychoExecutor => TychoExecutorEncoderBuilder::new()
+            .chain(chain)
+            .build()?,
     };
-    let encoder = builder.build()?;
-    let transactions = encoder.encode_router_calldata(vec![solution])?;
+
+    let transactions = encoder.encode_calldata(vec![solution])?;
     let encoded = serde_json::json!({
         "to": format!("0x{}", hex::encode(&transactions[0].to)),
         "value": format!("0x{}", hex::encode(transactions[0].value.to_bytes_be())),
@@ -101,8 +108,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Output the encoded result as JSON to stdout
     println!(
         "{}",
-        serde_json::to_string(&encoded)
-            .map_err(|e| format!("Failed to serialize output: {}", e))?
+        serde_json::to_string(&encoded).map_err(|e| format!("Failed to serialize output: {e}"))?
     );
 
     Ok(())

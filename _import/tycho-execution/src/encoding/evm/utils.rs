@@ -1,11 +1,19 @@
-use std::{cmp::max, env, sync::Arc};
+use std::{
+    cmp::max,
+    env,
+    fs::OpenOptions,
+    io::{BufRead, BufReader, Write},
+    sync::{Arc, Mutex},
+};
 
 use alloy::{
     providers::{ProviderBuilder, RootProvider},
     transports::BoxTransport,
 };
 use alloy_primitives::{aliases::U24, keccak256, Address, FixedBytes, Keccak256, U256, U8};
+use alloy_sol_types::SolValue;
 use num_bigint::BigUint;
+use once_cell::sync::Lazy;
 use tokio::runtime::{Handle, Runtime};
 use tycho_common::Bytes;
 
@@ -22,7 +30,7 @@ pub fn bytes_to_address(address: &Bytes) -> Result<Address, EncodingError> {
     if address.len() == 20 {
         Ok(Address::from_slice(address))
     } else {
-        Err(EncodingError::InvalidInput(format!("Invalid address: {:?}", address)))
+        Err(EncodingError::InvalidInput(format!("Invalid address: {address}",)))
     }
 }
 
@@ -94,7 +102,7 @@ pub fn get_token_position(tokens: Vec<Bytes>, token: Bytes) -> Result<U8, Encodi
             .iter()
             .position(|t| *t == token)
             .ok_or_else(|| {
-                EncodingError::InvalidInput(format!("Token {:?} not found in tokens array", token))
+                EncodingError::InvalidInput(format!("Token {token} not found in tokens array"))
             })?,
     );
     Ok(position)
@@ -120,9 +128,7 @@ pub fn get_static_attribute(swap: &Swap, attribute_name: &str) -> Result<Vec<u8>
         .component
         .static_attributes
         .get(attribute_name)
-        .ok_or_else(|| {
-            EncodingError::FatalError(format!("Attribute {} not found", attribute_name))
-        })?
+        .ok_or_else(|| EncodingError::FatalError(format!("Attribute {attribute_name} not found")))?
         .to_vec())
 }
 
@@ -148,6 +154,66 @@ pub async fn get_client() -> Result<Arc<RootProvider<BoxTransport>>, EncodingErr
         .await
         .map_err(|_| EncodingError::FatalError("Failed to build provider".to_string()))?;
     Ok(Arc::new(client))
+}
+
+/// Uses prefix-length encoding to efficient encode action data.
+///
+/// Prefix-length encoding is a data encoding method where the beginning of a data segment
+/// (the "prefix") contains information about the length of the following data.
+pub fn ple_encode(action_data_array: Vec<Vec<u8>>) -> Vec<u8> {
+    let mut encoded_action_data: Vec<u8> = Vec::new();
+
+    for action_data in action_data_array {
+        let args = (encoded_action_data, action_data.len() as u16, action_data);
+        encoded_action_data = args.abi_encode_packed();
+    }
+
+    encoded_action_data
+}
+
+static CALLDATA_WRITE_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+// Function used in tests to write calldata to a file that then is used by the corresponding
+// solidity tests.
+pub fn write_calldata_to_file(test_identifier: &str, hex_calldata: &str) {
+    let _lock = CALLDATA_WRITE_MUTEX
+        .lock()
+        .expect("Couldn't acquire lock");
+
+    let file_path = "foundry/test/assets/calldata.txt";
+    let file = OpenOptions::new()
+        .read(true)
+        .open(file_path)
+        .expect("Failed to open calldata file for reading");
+    let reader = BufReader::new(file);
+
+    let mut lines = Vec::new();
+    let mut found = false;
+    for line in reader.lines().map_while(Result::ok) {
+        let mut parts = line.splitn(2, ':'); // split at the :
+        let key = parts.next().unwrap_or("");
+        if key == test_identifier {
+            lines.push(format!("{test_identifier}:{hex_calldata}"));
+            found = true;
+        } else {
+            lines.push(line);
+        }
+    }
+
+    // If the test identifier wasn't found, append a new line
+    if !found {
+        lines.push(format!("{test_identifier}:{hex_calldata}"));
+    }
+
+    // Write the updated contents back to the file
+    let mut file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(file_path)
+        .expect("Failed to open calldata file for writing");
+
+    for line in lines {
+        writeln!(file, "{line}").expect("Failed to write calldata");
+    }
 }
 
 #[cfg(test)]

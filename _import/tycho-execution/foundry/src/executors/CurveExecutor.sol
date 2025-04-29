@@ -3,8 +3,11 @@ pragma solidity ^0.8.26;
 
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./TokenTransfer.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
 error CurveExecutor__AddressZero();
+error CurveExecutor__InvalidDataLength();
 
 interface CryptoPool {
     // slither-disable-next-line naming-convention
@@ -32,12 +35,14 @@ interface CryptoPoolETH {
     // slither-disable-end naming-convention
 }
 
-contract CurveExecutor is IExecutor {
+contract CurveExecutor is IExecutor, TokenTransfer {
     using SafeERC20 for IERC20;
 
     address public immutable nativeToken;
 
-    constructor(address _nativeToken) {
+    constructor(address _nativeToken, address _permit2)
+        TokenTransfer(_permit2)
+    {
         if (_nativeToken == address(0)) {
             revert CurveExecutor__AddressZero();
         }
@@ -50,6 +55,8 @@ contract CurveExecutor is IExecutor {
         payable
         returns (uint256)
     {
+        if (data.length != 85) revert CurveExecutor__InvalidDataLength();
+
         (
             address tokenIn,
             address tokenOut,
@@ -57,12 +64,24 @@ contract CurveExecutor is IExecutor {
             uint8 poolType,
             int128 i,
             int128 j,
-            bool tokenApprovalNeeded
+            bool tokenApprovalNeeded,
+            TransferType transferType,
+            address receiver
         ) = _decodeData(data);
+
+        _transfer(
+            tokenIn,
+            msg.sender,
+            // Receiver can never be the pool, since the pool expects funds in the router contract
+            // Thus, this call will only ever be used to transfer funds from the user into the router.
+            address(this),
+            amountIn,
+            transferType
+        );
 
         if (tokenApprovalNeeded && tokenIn != nativeToken) {
             // slither-disable-next-line unused-return
-            IERC20(tokenIn).approve(address(pool), type(uint256).max);
+            IERC20(tokenIn).forceApprove(address(pool), type(uint256).max);
         }
 
         /// Inspired by Curve's router contract: https://github.com/curvefi/curve-router-ng/blob/9ab006ca848fc7f1995b6fbbecfecc1e0eb29e2a/contracts/Router.vy#L44
@@ -92,7 +111,16 @@ contract CurveExecutor is IExecutor {
         }
 
         uint256 balanceAfter = _balanceOf(tokenOut);
-        return balanceAfter - balanceBefore;
+        uint256 amountOut = balanceAfter - balanceBefore;
+
+        if (receiver != address(this)) {
+            if (tokenOut == nativeToken) {
+                Address.sendValue(payable(receiver), amountOut);
+            } else {
+                IERC20(tokenOut).safeTransfer(receiver, amountOut);
+            }
+        }
+        return amountOut;
     }
 
     function _decodeData(bytes calldata data)
@@ -105,7 +133,9 @@ contract CurveExecutor is IExecutor {
             uint8 poolType,
             int128 i,
             int128 j,
-            bool tokenApprovalNeeded
+            bool tokenApprovalNeeded,
+            TransferType transferType,
+            address receiver
         )
     {
         tokenIn = address(bytes20(data[0:20]));
@@ -115,6 +145,8 @@ contract CurveExecutor is IExecutor {
         i = int128(uint128(uint8(data[61])));
         j = int128(uint128(uint8(data[62])));
         tokenApprovalNeeded = data[63] != 0;
+        transferType = TransferType(uint8(data[64]));
+        receiver = address(bytes20(data[65:85]));
     }
 
     receive() external payable {

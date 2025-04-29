@@ -116,8 +116,7 @@ impl Permit2 {
                 Ok(allowance)
             }
             Err(err) => Err(EncodingError::RecoverableError(format!(
-                "Call to permit2 allowance method failed with error: {:?}",
-                err
+                "Call to permit2 allowance method failed with error: {err}"
             ))),
         }
     }
@@ -158,8 +157,7 @@ impl Permit2 {
             .sign_hash_sync(&hash)
             .map_err(|e| {
                 EncodingError::FatalError(format!(
-                    "Failed to sign permit2 approval with error: {}",
-                    e
+                    "Failed to sign permit2 approval with error: {e}"
                 ))
             })?;
         Ok((permit_single, signature))
@@ -172,7 +170,7 @@ mod tests {
 
     use alloy_primitives::Uint;
     use num_bigint::BigUint;
-    use tycho_common::models::Chain as TychoCoreChain;
+    use tycho_common::models::Chain as TychoCommonChain;
 
     use super::*;
 
@@ -208,7 +206,7 @@ mod tests {
     }
 
     fn eth_chain() -> Chain {
-        TychoCoreChain::Ethereum.into()
+        TychoCommonChain::Ethereum.into()
     }
 
     #[test]

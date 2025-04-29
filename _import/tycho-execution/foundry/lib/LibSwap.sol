@@ -2,36 +2,42 @@
 pragma solidity ^0.8.26;
 
 library LibSwap {
-    /// Returns the InToken index into an array of tokens
-    function tokenInIndex(
-        bytes calldata swap
-    ) internal pure returns (uint8 res) {
-        res = uint8(swap[0]);
+    /**
+     * @dev Returns arguments required to perform a single swap
+     */
+    function decodeSingleSwap(bytes calldata swap)
+        internal
+        pure
+        returns (address executor, bytes calldata protocolData)
+    {
+        executor = address(uint160(bytes20(swap[0:20])));
+        protocolData = swap[20:];
     }
 
-    /// The OutToken index into an array of tokens
-    function tokenOutIndex(
-        bytes calldata swap
-    ) internal pure returns (uint8 res) {
-        res = uint8(swap[1]);
+    /**
+     * @dev Returns arguments required to perform a sequential swap
+     */
+    function decodeSequentialSwap(bytes calldata swap)
+        internal
+        pure
+        returns (address executor, bytes calldata protocolData)
+    {
+        executor = address(uint160(bytes20(swap[0:20])));
+        protocolData = swap[20:];
     }
 
-    /// The relative amount of token quantity routed into this swap
-    function splitPercentage(
-        bytes calldata swap
-    ) internal pure returns (uint24 res) {
-        res = uint24(bytes3(swap[2:5]));
-    }
-
-    /// The address of the executor contract
-    function executor(bytes calldata swap) internal pure returns (address res) {
-        res = address(uint160(bytes20(swap[5:25])));
-    }
-
-    /// Remaining bytes are interpreted as protocol data
-    function protocolData(
-        bytes calldata swap
-    ) internal pure returns (bytes calldata res) {
-        res = swap[25:];
+    /**
+     * @dev Returns arguments required to perform a split swap
+     */
+    function decodeSplitSwap(bytes calldata swap)
+        internal
+        pure
+        returns (uint8 tokenInIndex, uint8 tokenOutIndex, uint24 split, address executor, bytes calldata protocolData)
+    {
+        tokenInIndex = uint8(swap[0]);
+        tokenOutIndex = uint8(swap[1]);
+        split = uint24(bytes3(swap[2:5]));
+        executor = address(uint160(bytes20(swap[5:25])));
+        protocolData = swap[25:];
     }
 }

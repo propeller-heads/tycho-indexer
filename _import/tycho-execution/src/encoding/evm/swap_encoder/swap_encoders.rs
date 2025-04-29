@@ -66,6 +66,7 @@ impl SwapEncoder for UniswapV2SwapEncoder {
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
             zero_to_one,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
         );
 
         Ok(args.abi_encode_packed())
@@ -128,6 +129,7 @@ impl SwapEncoder for UniswapV3SwapEncoder {
             bytes_to_address(&encoding_context.receiver)?,
             component_id,
             zero_to_one,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
         );
 
         Ok(args.abi_encode_packed())
@@ -196,10 +198,6 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let group_token_out_address = bytes_to_address(&encoding_context.group_token_out)?;
 
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
-        let callback_executor =
-            bytes_to_address(&Bytes::from_str(&self.executor_address).map_err(|_| {
-                EncodingError::FatalError("Invalid UniswapV4 executor address".into())
-            })?)?;
 
         let pool_params =
             (token_out_address, pool_fee_u24, pool_tick_spacing_u24).abi_encode_packed();
@@ -208,7 +206,8 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             group_token_in_address,
             group_token_out_address,
             zero_to_one,
-            callback_executor,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
+            bytes_to_address(&encoding_context.receiver)?,
             pool_params,
         );
 
@@ -283,6 +282,7 @@ impl SwapEncoder for BalancerV2SwapEncoder {
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
             approval_needed,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
         );
         Ok(args.abi_encode_packed())
     }
@@ -344,6 +344,7 @@ impl SwapEncoder for EkuboSwapEncoder {
         let mut encoded = vec![];
 
         if encoding_context.group_token_in == swap.token_in {
+            encoded.extend((encoding_context.transfer_type as u8).to_be_bytes());
             encoded.extend(bytes_to_address(&encoding_context.receiver)?);
             encoded.extend(bytes_to_address(&swap.token_in)?);
         }
@@ -377,6 +378,7 @@ pub struct CurveSwapEncoder {
     meta_registry_address: String,
     native_token_curve_address: String,
     native_token_address: Bytes,
+    wrapped_native_token_address: Bytes,
 }
 
 impl CurveSwapEncoder {
@@ -406,8 +408,7 @@ impl CurveSwapEncoder {
                 // StableSwap factory
                 "0x4F8846Ae9380B90d2E71D5e3D042dff3E7ebb40d" => Ok(U8::from(1)),
                 _ => Err(EncodingError::FatalError(format!(
-                    "Unsupported curve factory address: {}",
-                    factory_address
+                    "Unsupported curve factory address: {factory_address}"
                 ))),
             },
         }
@@ -449,10 +450,33 @@ impl CurveSwapEncoder {
                 let j = U8::from(j_256);
                 Ok((i, j))
             }
-            Err(err) => Err(EncodingError::RecoverableError(format!(
-                "Curve meta registry call failed with error: {:?}",
-                err
-            ))),
+            Err(err) => {
+                // Temporary until we get the coin indexes from the indexer
+                // This is because some curve pools hold ETH but the coin is defined as WETH
+                // Our indexer reports this pool as holding ETH but then here we need to use WETH
+                // This is valid only for some pools, that's why we are doing the trial and error
+                // approach
+                let native_token_curve_address =
+                    Address::from_str(&self.native_token_curve_address).map_err(|_| {
+                        EncodingError::FatalError(
+                            "Invalid Curve native token curve address".to_string(),
+                        )
+                    })?;
+                if token_in != native_token_curve_address && token_out != native_token_curve_address
+                {
+                    Err(EncodingError::RecoverableError(format!(
+                        "Curve meta registry call failed with error: {err}"
+                    )))
+                } else {
+                    let wrapped_token = bytes_to_address(&self.wrapped_native_token_address)?;
+                    let (i, j) = if token_in == native_token_curve_address {
+                        self.get_coin_indexes(pool_id, wrapped_token, token_out)?
+                    } else {
+                        self.get_coin_indexes(pool_id, token_in, wrapped_token)?
+                    };
+                    Ok((i, j))
+                }
+            }
         }
     }
 }
@@ -482,6 +506,7 @@ impl SwapEncoder for CurveSwapEncoder {
             executor_address,
             meta_registry_address,
             native_token_address: chain.native_token()?,
+            wrapped_native_token_address: chain.wrapped_token()?,
             native_token_curve_address,
         })
     }
@@ -535,7 +560,10 @@ impl SwapEncoder for CurveSwapEncoder {
             })?)
             .map_err(|_| EncodingError::FatalError("Invalid curve factory address".to_string()))?;
 
-        let pool_type = self.get_pool_type(&swap.component.id, &factory_address.to_string())?;
+        let pool_address = Address::from_str(&swap.component.id)
+            .map_err(|_| EncodingError::FatalError("Invalid curve pool address".to_string()))?;
+        let pool_type =
+            self.get_pool_type(&pool_address.to_string(), &factory_address.to_string())?;
 
         let (i, j) = self.get_coin_indexes(component_address, token_in, token_out)?;
 
@@ -547,6 +575,8 @@ impl SwapEncoder for CurveSwapEncoder {
             i.to_be_bytes::<1>(),
             j.to_be_bytes::<1>(),
             approval_needed,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
+            bytes_to_address(&encoding_context.receiver)?,
         );
 
         Ok(args.abi_encode_packed())
@@ -614,405 +644,442 @@ mod tests {
     };
 
     use super::*;
+    use crate::encoding::models::TransferType;
 
-    #[test]
-    fn test_encode_uniswap_v2() {
-        let usv2_pool = ProtocolComponent {
-            id: String::from("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"),
-            ..Default::default()
-        };
+    mod uniswap_v2 {
+        use super::*;
+        #[test]
+        fn test_encode_uniswap_v2() {
+            let usv2_pool = ProtocolComponent {
+                id: String::from("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"),
+                ..Default::default()
+            };
 
-        let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
-        let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
-        let swap = Swap {
-            component: usv2_pool,
-            token_in: token_in.clone(),
-            token_out: token_out.clone(),
-            split: 0f64,
-        };
-        let encoding_context = EncodingContext {
-            receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
-            exact_out: false,
-            router_address: Some(Bytes::zero(20)),
-            group_token_in: token_in.clone(),
-            group_token_out: token_out.clone(),
-        };
-        let encoder = UniswapV2SwapEncoder::new(
-            String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
-            TychoCoreChain::Ethereum.into(),
-            None,
-        )
-        .unwrap();
-        let encoded_swap = encoder
-            .encode_swap(swap, encoding_context)
+            let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
+            let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
+            let swap = Swap {
+                component: usv2_pool,
+                token_in: token_in.clone(),
+                token_out: token_out.clone(),
+                split: 0f64,
+            };
+            let encoding_context = EncodingContext {
+                receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::TransferToProtocol,
+            };
+            let encoder = UniswapV2SwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                TychoCoreChain::Ethereum.into(),
+                None,
+            )
             .unwrap();
-        let hex_swap = encode(&encoded_swap);
-        assert_eq!(
-            hex_swap,
-            String::from(concat!(
-                // in token
-                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-                // component id
-                "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
-                // receiver
-                "0000000000000000000000000000000000000001",
-                // zero for one
-                "00",
-            ))
-        );
-    }
-    #[test]
-    fn test_encode_uniswap_v3() {
-        let fee = BigInt::from(500);
-        let encoded_pool_fee = Bytes::from(fee.to_signed_bytes_be());
-        let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert("fee".into(), Bytes::from(encoded_pool_fee.to_vec()));
-
-        let usv3_pool = ProtocolComponent {
-            id: String::from("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"),
-            static_attributes,
-            ..Default::default()
-        };
-        let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
-        let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
-        let swap = Swap {
-            component: usv3_pool,
-            token_in: token_in.clone(),
-            token_out: token_out.clone(),
-            split: 0f64,
-        };
-        let encoding_context = EncodingContext {
-            receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
-            exact_out: false,
-            router_address: Some(Bytes::zero(20)),
-            group_token_in: token_in.clone(),
-            group_token_out: token_out.clone(),
-        };
-        let encoder = UniswapV3SwapEncoder::new(
-            String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
-            TychoCoreChain::Ethereum.into(),
-            None,
-        )
-        .unwrap();
-        let encoded_swap = encoder
-            .encode_swap(swap, encoding_context)
-            .unwrap();
-        let hex_swap = encode(&encoded_swap);
-        assert_eq!(
-            hex_swap,
-            String::from(concat!(
-                // in token
-                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-                // out token
-                "6b175474e89094c44da98b954eedeac495271d0f",
-                // fee
-                "0001f4",
-                // receiver
-                "0000000000000000000000000000000000000001",
-                // pool id
-                "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
-                // zero for one
-                "00",
-            ))
-        );
+            let encoded_swap = encoder
+                .encode_swap(swap, encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
+            assert_eq!(
+                hex_swap,
+                String::from(concat!(
+                    // in token
+                    "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                    // component id
+                    "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+                    // receiver
+                    "0000000000000000000000000000000000000001",
+                    // zero for one
+                    "00",
+                    // transfer type (transfer)
+                    "00",
+                ))
+            );
+        }
     }
 
-    #[test]
-    fn test_encode_balancer_v2() {
-        let balancer_pool = ProtocolComponent {
-            id: String::from("0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014"),
-            protocol_system: String::from("vm:balancer_v2"),
-            ..Default::default()
-        };
-        let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
-        let token_out = Bytes::from("0xba100000625a3754423978a60c9317c58a424e3D");
-        let swap = Swap {
-            component: balancer_pool,
-            token_in: token_in.clone(),
-            token_out: token_out.clone(),
-            split: 0f64,
-        };
-        let encoding_context = EncodingContext {
-            // The receiver was generated with `makeAddr("bob") using forge`
-            receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
-            exact_out: false,
-            router_address: Some(Bytes::zero(20)),
-            group_token_in: token_in.clone(),
-            group_token_out: token_out.clone(),
-        };
-        let encoder = BalancerV2SwapEncoder::new(
-            String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
-            TychoCoreChain::Ethereum.into(),
-            Some(HashMap::from([(
-                "vault_address".to_string(),
-                "0xba12222222228d8ba445958a75a0704d566bf2c8".to_string(),
-            )])),
-        )
-        .unwrap();
-        let encoded_swap = encoder
-            .encode_swap(swap, encoding_context)
-            .unwrap();
-        let hex_swap = encode(&encoded_swap);
+    mod uniswap_v3 {
+        use super::*;
+        #[test]
+        fn test_encode_uniswap_v3() {
+            let fee = BigInt::from(500);
+            let encoded_pool_fee = Bytes::from(fee.to_signed_bytes_be());
+            let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+            static_attributes.insert("fee".into(), Bytes::from(encoded_pool_fee.to_vec()));
 
-        assert_eq!(
-            hex_swap,
-            String::from(concat!(
-                // token in
-                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-                // token out
-                "ba100000625a3754423978a60c9317c58a424e3d",
-                // pool id
-                "5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014",
-                // receiver
-                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
-                // approval needed
-                "01"
-            ))
-        );
+            let usv3_pool = ProtocolComponent {
+                id: String::from("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"),
+                static_attributes,
+                ..Default::default()
+            };
+            let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
+            let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
+            let swap = Swap {
+                component: usv3_pool,
+                token_in: token_in.clone(),
+                token_out: token_out.clone(),
+                split: 0f64,
+            };
+            let encoding_context = EncodingContext {
+                receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::TransferToProtocol,
+            };
+            let encoder = UniswapV3SwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                TychoCoreChain::Ethereum.into(),
+                None,
+            )
+            .unwrap();
+            let encoded_swap = encoder
+                .encode_swap(swap, encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
+            assert_eq!(
+                hex_swap,
+                String::from(concat!(
+                    // in token
+                    "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                    // out token
+                    "6b175474e89094c44da98b954eedeac495271d0f",
+                    // fee
+                    "0001f4",
+                    // receiver
+                    "0000000000000000000000000000000000000001",
+                    // pool id
+                    "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+                    // zero for one
+                    "00",
+                    // transfer type (transfer)
+                    "00",
+                ))
+            );
+        }
     }
 
-    #[test]
-    fn test_encode_uniswap_v4_simple_swap() {
-        let fee = BigInt::from(100);
-        let tick_spacing = BigInt::from(1);
-        let token_in = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"); // USDE
-        let token_out = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
+    mod balancer_v2 {
+        use super::*;
+        use crate::encoding::evm::utils::write_calldata_to_file;
 
-        let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert("key_lp_fee".into(), Bytes::from(fee.to_signed_bytes_be()));
-        static_attributes
-            .insert("tick_spacing".into(), Bytes::from(tick_spacing.to_signed_bytes_be()));
-
-        let usv4_pool = ProtocolComponent {
-            // Pool manager
-            id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
-            static_attributes,
-            ..Default::default()
-        };
-        let swap = Swap {
-            component: usv4_pool,
-            token_in: token_in.clone(),
-            token_out: token_out.clone(),
-            split: 0f64,
-        };
-        let encoding_context = EncodingContext {
-            // The receiver address was taken from `address(uniswapV4Exposed)` in the
-            // UniswapV4Executor.t.sol
-            receiver: Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f"),
-            exact_out: false,
-            // Same as the executor address
-            router_address: Some(Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f")),
-
-            group_token_in: token_in.clone(),
-            group_token_out: token_out.clone(),
-        };
-        let encoder = UniswapV4SwapEncoder::new(
-            String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
-            TychoCoreChain::Ethereum.into(),
-            None,
-        )
-        .unwrap();
-        let encoded_swap = encoder
-            .encode_swap(swap, encoding_context)
+        #[test]
+        fn test_encode_balancer_v2() {
+            let balancer_pool = ProtocolComponent {
+                id: String::from(
+                    "0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014",
+                ),
+                protocol_system: String::from("vm:balancer_v2"),
+                ..Default::default()
+            };
+            let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
+            let token_out = Bytes::from("0xba100000625a3754423978a60c9317c58a424e3D");
+            let swap = Swap {
+                component: balancer_pool,
+                token_in: token_in.clone(),
+                token_out: token_out.clone(),
+                split: 0f64,
+            };
+            let encoding_context = EncodingContext {
+                // The receiver was generated with `makeAddr("bob") using forge`
+                receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::None,
+            };
+            let encoder = BalancerV2SwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                TychoCoreChain::Ethereum.into(),
+                Some(HashMap::from([(
+                    "vault_address".to_string(),
+                    "0xba12222222228d8ba445958a75a0704d566bf2c8".to_string(),
+                )])),
+            )
             .unwrap();
-        let hex_swap = encode(&encoded_swap);
-        println!("{}", hex_swap);
+            let encoded_swap = encoder
+                .encode_swap(swap, encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
 
-        assert_eq!(
-            hex_swap,
-            String::from(concat!(
-                // group token in
-                "4c9edd5852cd905f086c759e8383e09bff1e68b3",
-                // group token out
-                "dac17f958d2ee523a2206206994597c13d831ec7",
-                // zero for one
-                "01",
-                // executor address
-                "f62849f9a0b5bf2913b396098f7c7019b51a820a",
-                // pool params:
-                // - intermediary token
-                "dac17f958d2ee523a2206206994597c13d831ec7",
-                // - fee
-                "000064",
-                // - tick spacing
-                "000001"
-            ))
-        );
+            assert_eq!(
+                hex_swap,
+                String::from(concat!(
+                    // token in
+                    "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                    // token out
+                    "ba100000625a3754423978a60c9317c58a424e3d",
+                    // pool id
+                    "5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014",
+                    // receiver
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                    // approval needed
+                    "01",
+                    // transfer type
+                    "05"
+                ))
+            );
+            write_calldata_to_file("test_encode_balancer_v2", hex_swap.as_str());
+        }
     }
 
-    #[test]
-    fn test_encode_uniswap_v4_second_swap() {
-        let fee = BigInt::from(3000);
-        let tick_spacing = BigInt::from(60);
-        let group_token_in = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"); // USDE
-        let token_in = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
-        let token_out = Bytes::from("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"); // WBTC
+    mod uniswap_v4 {
+        use super::*;
+        use crate::encoding::evm::utils::write_calldata_to_file;
 
-        let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-        static_attributes.insert("key_lp_fee".into(), Bytes::from(fee.to_signed_bytes_be()));
-        static_attributes
-            .insert("tick_spacing".into(), Bytes::from(tick_spacing.to_signed_bytes_be()));
+        #[test]
+        fn test_encode_uniswap_v4_simple_swap() {
+            let fee = BigInt::from(100);
+            let tick_spacing = BigInt::from(1);
+            let token_in = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"); // USDE
+            let token_out = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
 
-        let usv4_pool = ProtocolComponent {
-            id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
-            static_attributes,
-            ..Default::default()
-        };
+            let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+            static_attributes.insert("key_lp_fee".into(), Bytes::from(fee.to_signed_bytes_be()));
+            static_attributes
+                .insert("tick_spacing".into(), Bytes::from(tick_spacing.to_signed_bytes_be()));
 
-        let swap = Swap {
-            component: usv4_pool,
-            token_in: token_in.clone(),
-            token_out: token_out.clone(),
-            split: 0f64,
-        };
+            let usv4_pool = ProtocolComponent {
+                // Pool manager
+                id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
+                static_attributes,
+                ..Default::default()
+            };
+            let swap = Swap {
+                component: usv4_pool,
+                token_in: token_in.clone(),
+                token_out: token_out.clone(),
+                split: 0f64,
+            };
+            let encoding_context = EncodingContext {
+                // The receiver is ALICE to match the solidity tests
+                receiver: Bytes::from("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2"),
+                exact_out: false,
+                // Same as the executor address
+                router_address: Some(Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f")),
 
-        let encoding_context = EncodingContext {
-            receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
-            exact_out: false,
-            router_address: Some(Bytes::zero(20)),
-            group_token_in: group_token_in.clone(),
-            // Token out is the same as the group token out
-            group_token_out: token_out.clone(),
-        };
-
-        let encoder = UniswapV4SwapEncoder::new(
-            String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
-            TychoCoreChain::Ethereum.into(),
-            None,
-        )
-        .unwrap();
-        let encoded_swap = encoder
-            .encode_swap(swap, encoding_context)
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::TransferToProtocol,
+            };
+            let encoder = UniswapV4SwapEncoder::new(
+                String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
+                TychoCoreChain::Ethereum.into(),
+                None,
+            )
             .unwrap();
-        let hex_swap = encode(&encoded_swap);
+            let encoded_swap = encoder
+                .encode_swap(swap, encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
 
-        assert_eq!(
-            hex_swap,
-            String::from(concat!(
-                // pool params:
-                // - intermediary token (20 bytes)
-                "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-                // - fee (3 bytes)
-                "000bb8",
-                // - tick spacing (3 bytes)
-                "00003c"
-            ))
-        );
+            assert_eq!(
+                hex_swap,
+                String::from(concat!(
+                    // group token in
+                    "4c9edd5852cd905f086c759e8383e09bff1e68b3",
+                    // group token out
+                    "dac17f958d2ee523a2206206994597c13d831ec7",
+                    // zero for one
+                    "01",
+                    // transfer type
+                    "00",
+                    // receiver
+                    "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
+                    // pool params:
+                    // - intermediary token
+                    "dac17f958d2ee523a2206206994597c13d831ec7",
+                    // - fee
+                    "000064",
+                    // - tick spacing
+                    "000001"
+                ))
+            );
+            write_calldata_to_file("test_encode_uniswap_v4_simple_swap", hex_swap.as_str());
+        }
+
+        #[test]
+        fn test_encode_uniswap_v4_second_swap() {
+            let fee = BigInt::from(3000);
+            let tick_spacing = BigInt::from(60);
+            let group_token_in = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"); // USDE
+            let token_in = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
+            let token_out = Bytes::from("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"); // WBTC
+
+            let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+            static_attributes.insert("key_lp_fee".into(), Bytes::from(fee.to_signed_bytes_be()));
+            static_attributes
+                .insert("tick_spacing".into(), Bytes::from(tick_spacing.to_signed_bytes_be()));
+
+            let usv4_pool = ProtocolComponent {
+                id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
+                static_attributes,
+                ..Default::default()
+            };
+
+            let swap = Swap {
+                component: usv4_pool,
+                token_in: token_in.clone(),
+                token_out: token_out.clone(),
+                split: 0f64,
+            };
+
+            let encoding_context = EncodingContext {
+                receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: group_token_in.clone(),
+                // Token out is the same as the group token out
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::TransferToProtocol,
+            };
+
+            let encoder = UniswapV4SwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                TychoCoreChain::Ethereum.into(),
+                None,
+            )
+            .unwrap();
+            let encoded_swap = encoder
+                .encode_swap(swap, encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
+
+            assert_eq!(
+                hex_swap,
+                String::from(concat!(
+                    // pool params:
+                    // - intermediary token (20 bytes)
+                    "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+                    // - fee (3 bytes)
+                    "000bb8",
+                    // - tick spacing (3 bytes)
+                    "00003c"
+                ))
+            );
+        }
+
+        #[test]
+        fn test_encode_uniswap_v4_sequential_swap() {
+            let usde_address = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3");
+            let usdt_address = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7");
+            let wbtc_address = Bytes::from("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599");
+            let router_address = Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f");
+
+            // The context is the same for both swaps, since the group token in and out are the same
+            let context = EncodingContext {
+                // The receiver is ALICE to match the solidity tests
+                receiver: Bytes::from("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2"),
+                exact_out: false,
+                router_address: Some(router_address.clone()),
+                group_token_in: usde_address.clone(),
+                group_token_out: wbtc_address.clone(),
+                transfer_type: TransferType::TransferToProtocol,
+            };
+
+            // Setup - First sequence: USDE -> USDT
+            let usde_usdt_fee = BigInt::from(100);
+            let usde_usdt_tick_spacing = BigInt::from(1);
+
+            let mut usde_usdt_static_attributes: HashMap<String, Bytes> = HashMap::new();
+            usde_usdt_static_attributes
+                .insert("key_lp_fee".into(), Bytes::from(usde_usdt_fee.to_signed_bytes_be()));
+            usde_usdt_static_attributes.insert(
+                "tick_spacing".into(),
+                Bytes::from(usde_usdt_tick_spacing.to_signed_bytes_be()),
+            );
+
+            let usde_usdt_component = ProtocolComponent {
+                id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
+                static_attributes: usde_usdt_static_attributes,
+                ..Default::default()
+            };
+
+            // Setup - Second sequence: USDT -> WBTC
+            let usdt_wbtc_fee = BigInt::from(3000);
+            let usdt_wbtc_tick_spacing = BigInt::from(60);
+
+            let mut usdt_wbtc_static_attributes: HashMap<String, Bytes> = HashMap::new();
+            usdt_wbtc_static_attributes
+                .insert("key_lp_fee".into(), Bytes::from(usdt_wbtc_fee.to_signed_bytes_be()));
+            usdt_wbtc_static_attributes.insert(
+                "tick_spacing".into(),
+                Bytes::from(usdt_wbtc_tick_spacing.to_signed_bytes_be()),
+            );
+
+            let usdt_wbtc_component = ProtocolComponent {
+                id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
+                static_attributes: usdt_wbtc_static_attributes,
+                ..Default::default()
+            };
+
+            let initial_swap = Swap {
+                component: usde_usdt_component,
+                token_in: usde_address.clone(),
+                token_out: usdt_address.clone(),
+                split: 0f64,
+            };
+
+            let second_swap = Swap {
+                component: usdt_wbtc_component,
+                token_in: usdt_address,
+                token_out: wbtc_address.clone(),
+                split: 0f64,
+            };
+
+            let encoder = UniswapV4SwapEncoder::new(
+                String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
+                TychoCoreChain::Ethereum.into(),
+                None,
+            )
+            .unwrap();
+            let initial_encoded_swap = encoder
+                .encode_swap(initial_swap, context.clone())
+                .unwrap();
+            let second_encoded_swap = encoder
+                .encode_swap(second_swap, context)
+                .unwrap();
+
+            let combined_hex =
+                format!("{}{}", encode(&initial_encoded_swap), encode(&second_encoded_swap));
+
+            assert_eq!(
+                combined_hex,
+                String::from(concat!(
+                    // group_token in
+                    "4c9edd5852cd905f086c759e8383e09bff1e68b3",
+                    // group_token out
+                    "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+                    // zero for one
+                    "01",
+                    // transfer type
+                    "00",
+                    // receiver
+                    "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
+                    // pool params:
+                    // - intermediary token USDT
+                    "dac17f958d2ee523a2206206994597c13d831ec7",
+                    // - fee
+                    "000064",
+                    // - tick spacing
+                    "000001",
+                    // - intermediary token WBTC
+                    "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+                    // - fee
+                    "000bb8",
+                    // - tick spacing
+                    "00003c"
+                ))
+            );
+            write_calldata_to_file("test_encode_uniswap_v4_sequential_swap", combined_hex.as_str());
+        }
     }
-
-    #[test]
-    fn test_encode_uniswap_v4_sequential_swap() {
-        let usde_address = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3");
-        let usdt_address = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7");
-        let wbtc_address = Bytes::from("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599");
-        let router_address = Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f");
-        let receiver_address = router_address.clone();
-
-        // The context is the same for both swaps, since the group token in and out are the same
-        let context = EncodingContext {
-            receiver: receiver_address.clone(),
-            exact_out: false,
-            router_address: Some(router_address.clone()),
-            group_token_in: usde_address.clone(),
-            group_token_out: wbtc_address.clone(),
-        };
-
-        // Setup - First sequence: USDE -> USDT
-        let usde_usdt_fee = BigInt::from(100);
-        let usde_usdt_tick_spacing = BigInt::from(1);
-
-        let mut usde_usdt_static_attributes: HashMap<String, Bytes> = HashMap::new();
-        usde_usdt_static_attributes
-            .insert("key_lp_fee".into(), Bytes::from(usde_usdt_fee.to_signed_bytes_be()));
-        usde_usdt_static_attributes.insert(
-            "tick_spacing".into(),
-            Bytes::from(usde_usdt_tick_spacing.to_signed_bytes_be()),
-        );
-
-        let usde_usdt_component = ProtocolComponent {
-            id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
-            static_attributes: usde_usdt_static_attributes,
-            ..Default::default()
-        };
-
-        // Setup - Second sequence: USDT -> WBTC
-        let usdt_wbtc_fee = BigInt::from(3000);
-        let usdt_wbtc_tick_spacing = BigInt::from(60);
-
-        let mut usdt_wbtc_static_attributes: HashMap<String, Bytes> = HashMap::new();
-        usdt_wbtc_static_attributes
-            .insert("key_lp_fee".into(), Bytes::from(usdt_wbtc_fee.to_signed_bytes_be()));
-        usdt_wbtc_static_attributes.insert(
-            "tick_spacing".into(),
-            Bytes::from(usdt_wbtc_tick_spacing.to_signed_bytes_be()),
-        );
-
-        let usdt_wbtc_component = ProtocolComponent {
-            id: String::from("0x000000000004444c5dc75cB358380D2e3dE08A90"),
-            static_attributes: usdt_wbtc_static_attributes,
-            ..Default::default()
-        };
-
-        let initial_swap = Swap {
-            component: usde_usdt_component,
-            token_in: usde_address.clone(),
-            token_out: usdt_address.clone(),
-            split: 0f64,
-        };
-
-        let second_swap = Swap {
-            component: usdt_wbtc_component,
-            token_in: usdt_address,
-            token_out: wbtc_address.clone(),
-            split: 0f64,
-        };
-
-        let encoder = UniswapV4SwapEncoder::new(
-            String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
-            TychoCoreChain::Ethereum.into(),
-            None,
-        )
-        .unwrap();
-        let initial_encoded_swap = encoder
-            .encode_swap(initial_swap, context.clone())
-            .unwrap();
-        let second_encoded_swap = encoder
-            .encode_swap(second_swap, context)
-            .unwrap();
-
-        let combined_hex =
-            format!("{}{}", encode(&initial_encoded_swap), encode(&second_encoded_swap));
-
-        assert_eq!(
-            combined_hex,
-            String::from(concat!(
-                // group_token in
-                "4c9edd5852cd905f086c759e8383e09bff1e68b3",
-                // group_token out
-                "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-                // zero for one
-                "01",
-                // executor address
-                "f62849f9a0b5bf2913b396098f7c7019b51a820a",
-                // pool params:
-                // - intermediary token USDT
-                "dac17f958d2ee523a2206206994597c13d831ec7",
-                // - fee
-                "000064",
-                // - tick spacing
-                "000001",
-                // - intermediary token WBTC
-                "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-                // - fee
-                "000bb8",
-                // - tick spacing
-                "00003c"
-            ))
-        );
-    }
-
     mod ekubo {
         use super::*;
+        use crate::encoding::evm::utils::write_calldata_to_file;
 
         const RECEIVER: &str = "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6"; // Random address
 
@@ -1045,6 +1112,7 @@ mod tests {
                 group_token_out: token_out.clone(),
                 exact_out: false,
                 router_address: Some(Bytes::default()),
+                transfer_type: TransferType::TransferToProtocol,
             };
 
             let encoder =
@@ -1059,15 +1127,18 @@ mod tests {
 
             assert_eq!(
                 hex_swap,
-                RECEIVER.to_string() +
-                    concat!(
-                        // group token in
-                        "0000000000000000000000000000000000000000",
-                        // token out 1st swap
-                        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-                        // pool config 1st swap
-                        "51d02a5948496a67827242eabc5725531342527c000000000000000000000000",
-                    ),
+                concat!(
+                    // transfer type
+                    "00",
+                    // receiver
+                    "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6",
+                    // group token in
+                    "0000000000000000000000000000000000000000",
+                    // token out 1st swap
+                    "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                    // pool config 1st swap
+                    "51d02a5948496a67827242eabc5725531342527c000000000000000000000000",
+                ),
             );
         }
 
@@ -1087,6 +1158,7 @@ mod tests {
                 group_token_out: group_token_out.clone(),
                 exact_out: false,
                 router_address: Some(Bytes::default()),
+                transfer_type: TransferType::TransferToProtocol,
             };
 
             let first_swap = Swap {
@@ -1132,24 +1204,27 @@ mod tests {
             let combined_hex =
                 format!("{}{}", encode(first_encoded_swap), encode(second_encoded_swap));
 
-            println!("{}", combined_hex);
-
             assert_eq!(
                 combined_hex,
-                RECEIVER.to_string() +
-                    concat!(
-                        // group token in
-                        "0000000000000000000000000000000000000000",
-                        // token out 1st swap
-                        "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-                        // pool config 1st swap
-                        "51d02a5948496a67827242eabc5725531342527c000000000000000000000000",
-                        // token out 2nd swap
-                        "dac17f958d2ee523a2206206994597c13d831ec7",
-                        // pool config 2nd swap
-                        "00000000000000000000000000000000000000000001a36e2eb1c43200000032",
-                    ),
+                // transfer type
+                concat!(
+                    // transfer type
+                    "00",
+                    // receiver
+                    "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6",
+                    // group token in
+                    "0000000000000000000000000000000000000000",
+                    // token out 1st swap
+                    "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                    // pool config 1st swap
+                    "51d02a5948496a67827242eabc5725531342527c000000000000000000000000",
+                    // token out 2nd swap
+                    "dac17f958d2ee523a2206206994597c13d831ec7",
+                    // pool config 2nd swap
+                    "00000000000000000000000000000000000000000001a36e2eb1c43200000032",
+                ),
             );
+            write_calldata_to_file("test_ekubo_encode_swap_multi", combined_hex.as_str());
         }
     }
 
@@ -1207,6 +1282,22 @@ mod tests {
             2,
             0
         )]
+        // Pool that holds ETH but coin is WETH
+        #[case(
+            "0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B",
+            "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            2,
+            0
+        )]
+        // Pool that holds ETH but coin is WETH
+        #[case(
+            "0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+            0,
+            2
+        )]
         fn test_curve_get_coin_indexes(
             #[case] pool: &str,
             #[case] token_in: &str,
@@ -1263,6 +1354,7 @@ mod tests {
                 router_address: None,
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
+                transfer_type: TransferType::None,
             };
             let encoder = CurveSwapEncoder::new(
                 String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
@@ -1292,6 +1384,10 @@ mod tests {
                     "01",
                     // approval needed
                     "01",
+                    // transfer type
+                    "05",
+                    // receiver,
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"
                 ))
             );
         }
@@ -1328,6 +1424,7 @@ mod tests {
                 router_address: None,
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
+                transfer_type: TransferType::None,
             };
             let encoder = CurveSwapEncoder::new(
                 String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
@@ -1357,6 +1454,10 @@ mod tests {
                     "00",
                     // approval needed
                     "01",
+                    // transfer type
+                    "05",
+                    // receiver
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"
                 ))
             );
         }
@@ -1394,6 +1495,7 @@ mod tests {
                 router_address: None,
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
+                transfer_type: TransferType::None,
             };
             let encoder = CurveSwapEncoder::new(
                 String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
@@ -1432,6 +1534,10 @@ mod tests {
                     "01",
                     // approval needed
                     "01",
+                    // transfer type
+                    "05",
+                    // receiver
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"
                 ))
             );
         }
