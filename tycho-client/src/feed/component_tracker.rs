@@ -192,18 +192,30 @@ where
         res
     }
 
+    /// Get related contracts for the given component ids. Assumes that the components are already
+    /// tracked, either by calling `start_tracking` or `initialise_components`.
+    ///
+    /// # Arguments
+    ///
+    /// * `ids` - A vector of component IDs to get the contracts for.
+    ///
+    /// # Returns
+    ///
+    /// A HashSet of contract IDs. Components that are not tracked will be logged and skipped.
     pub fn get_contracts_by_component<'a, I: IntoIterator<Item = &'a String>>(
         &self,
         ids: I,
     ) -> HashSet<Bytes> {
         ids.into_iter()
-            .flat_map(|cid| {
-                let comp = self
-                    .components
-                    .get(cid)
-                    .unwrap_or_else(|| panic!("requested component that is not present: {cid}"));
-                comp.contract_ids.iter().cloned()
+            .filter_map(|cid| {
+                if let Some(comp) = self.components.get(cid) {
+                    Some(comp.contract_ids.clone())
+                } else {
+                    warn!("Requested component is not tracked: {cid}.");
+                    None
+                }
             })
+            .flatten()
             .collect()
     }
 

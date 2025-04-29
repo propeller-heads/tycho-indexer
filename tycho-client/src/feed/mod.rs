@@ -596,7 +596,7 @@ mod tests {
     use tokio::sync::{oneshot, Mutex};
     use tycho_common::dto::Chain;
 
-    use super::*;
+    use super::{synchronizer::SynchronizerError, *};
     use crate::feed::synchronizer::SyncResult;
 
     #[derive(Clone)]
@@ -661,7 +661,7 @@ mod tests {
                     .expect("end channel closed!");
                 Ok(())
             } else {
-                Err(anyhow::format_err!("Not connected"))
+                Err(SynchronizerError::CloseError("Not Started".to_string()))
             }
         }
     }

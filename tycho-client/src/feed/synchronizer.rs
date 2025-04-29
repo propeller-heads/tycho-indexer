@@ -6,10 +6,11 @@ use std::{
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tokio::{
     select,
     sync::{
-        mpsc::{channel, Receiver, Sender},
+        mpsc::{channel, error::SendError, Receiver, Sender},
         oneshot, Mutex,
     },
     task::JoinHandle,
@@ -30,10 +31,33 @@ use crate::{
         component_tracker::{ComponentFilter, ComponentTracker},
         Header,
     },
-    rpc::RPCClient,
+    rpc::{RPCClient, RPCError},
 };
 
-pub type SyncResult<T> = anyhow::Result<T>;
+#[derive(Error, Debug)]
+pub enum SynchronizerError {
+    /// RPC client failures.
+    #[error("RPC error: {0}")]
+    RPCError(#[from] RPCError),
+
+    /// Failed to send channel message to the consumer.
+    #[error("Failed to send channel message: {0}")]
+    ChannelError(#[from] SendError<StateSyncMessage>),
+
+    /// Timeout elapsed errors.
+    #[error("Timeout error: {0}")]
+    Timeout(String),
+
+    /// Failed to close the synchronizer.
+    #[error("Failed to close synchronizer: {0}")]
+    CloseError(String),
+
+    /// Server connection failures or interruptions.
+    #[error("Connection error: {0}")]
+    ConnectionError(String),
+}
+
+pub type SyncResult<T> = Result<T, SynchronizerError>;
 
 #[derive(Clone)]
 pub struct ProtocolStateSynchronizer<R: RPCClient, D: DeltasClient> {
@@ -342,13 +366,22 @@ where
         let (_, mut msg_rx) = self
             .deltas_client
             .subscribe(self.extractor_id.clone(), subscription_options)
-            .await?;
+            .await
+            .map_err(|e| SynchronizerError::ConnectionError(e.to_string()))?;
 
         info!("Waiting for deltas...");
         // wait for first deltas message
         let mut first_msg = timeout(Duration::from_secs(self.timeout), msg_rx.recv())
-            .await?
-            .ok_or_else(|| anyhow::format_err!("Subscription ended too soon"))?;
+            .await
+            .map_err(|_| {
+                SynchronizerError::Timeout(format!(
+                    "First deltas took longer than {t}s to arrive",
+                    t = self.timeout
+                ))
+            })?
+            .ok_or_else(|| {
+                SynchronizerError::ConnectionError("Deltas channel closed".to_string())
+            })?;
         self.filter_deltas(&mut first_msg, &tracker);
 
         // initial snapshot
@@ -357,8 +390,7 @@ where
         let header = Header::from_block(first_msg.get_block(), first_msg.is_revert());
         let snapshot = self
             .get_snapshots::<Vec<&String>>(Header::from_block(&block, false), &tracker, None)
-            .await
-            .map_err(|rpc_err| anyhow::format_err!("failed to get initial snapshot: {}", rpc_err))?
+            .await?
             .merge(StateSyncMessage {
                 header: Header::from_block(first_msg.get_block(), first_msg.is_revert()),
                 snapshots: Default::default(),
@@ -433,7 +465,7 @@ where
                 warn!(shared = ?&shared, "Deltas channel closed, resetting shared state.");
                 shared.last_synced_block = None;
 
-                return Err(anyhow::format_err!("Deltas channel closed!"));
+                return Err(SynchronizerError::ConnectionError("Deltas channel closed".to_string()));
             }
         }
     }
@@ -462,6 +494,7 @@ where
 
         Ok(())
     }
+
     async fn start(&self) -> SyncResult<(JoinHandle<SyncResult<()>>, Receiver<StateSyncMessage>)> {
         let (mut tx, rx) = channel(15);
 
@@ -492,7 +525,7 @@ where
                                 warn!(
                                     extractor_id=%&this.extractor_id,
                                     retry_count,
-                                    "State sync exited with Ok(())"
+                                    "State synchronisation exited with Ok(())"
                                 );
                             }
                         }
@@ -508,7 +541,7 @@ where
                 }
                 retry_count += 1;
             }
-            Err(anyhow::format_err!("Max retries exceeded giving up"))
+            Err(SynchronizerError::ConnectionError("Max connection retries exceeded".to_string()))
         });
 
         Ok((jh, rx))
@@ -520,7 +553,7 @@ where
             let _ = tx.send(());
             Ok(())
         } else {
-            Err(anyhow::format_err!("Not started"))
+            Err(SynchronizerError::CloseError("Synchronizer not started".to_string()))
         }
     }
 }
