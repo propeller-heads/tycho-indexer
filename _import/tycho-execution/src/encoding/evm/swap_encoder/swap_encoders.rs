@@ -721,6 +721,7 @@ mod tests {
 
     mod balancer_v2 {
         use super::*;
+        use crate::encoding::evm::utils::write_calldata_to_file;
 
         #[test]
         fn test_encode_balancer_v2() {
@@ -779,11 +780,13 @@ mod tests {
                     "05"
                 ))
             );
+            write_calldata_to_file("test_encode_balancer_v2", hex_swap.as_str());
         }
     }
 
     mod uniswap_v4 {
         use super::*;
+        use crate::encoding::evm::utils::write_calldata_to_file;
 
         #[test]
         fn test_encode_uniswap_v4_simple_swap() {
@@ -830,7 +833,6 @@ mod tests {
                 .encode_swap(swap, encoding_context)
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
-            println!("test_encode_uniswap_v4_simple_swap: {hex_swap}");
 
             assert_eq!(
                 hex_swap,
@@ -854,6 +856,7 @@ mod tests {
                     "000001"
                 ))
             );
+            write_calldata_to_file("test_encode_uniswap_v4_simple_swap", hex_swap.as_str());
         }
 
         #[test]
@@ -1001,7 +1004,6 @@ mod tests {
             let combined_hex =
                 format!("{}{}", encode(&initial_encoded_swap), encode(&second_encoded_swap));
 
-            println!("test_encode_uniswap_v4_sequential_swap: {combined_hex}");
             assert_eq!(
                 combined_hex,
                 String::from(concat!(
@@ -1030,11 +1032,12 @@ mod tests {
                     "00003c"
                 ))
             );
-            println!("{combined_hex}")
+            write_calldata_to_file("test_encode_uniswap_v4_sequential_swap", combined_hex.as_str());
         }
     }
     mod ekubo {
         use super::*;
+        use crate::encoding::evm::utils::write_calldata_to_file;
 
         const RECEIVER: &str = "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6"; // Random address
 
@@ -1159,7 +1162,6 @@ mod tests {
             let combined_hex =
                 format!("{}{}", encode(first_encoded_swap), encode(second_encoded_swap));
 
-            println!("{combined_hex}");
             assert_eq!(
                 combined_hex,
                 // transfer type
@@ -1180,6 +1182,7 @@ mod tests {
                     "00000000000000000000000000000000000000000001a36e2eb1c43200000032",
                 ),
             );
+            write_calldata_to_file("test_ekubo_encode_swap_multi", combined_hex.as_str());
         }
     }
 

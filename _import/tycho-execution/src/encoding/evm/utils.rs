@@ -1,4 +1,10 @@
-use std::{cmp::max, env, sync::Arc};
+use std::{
+    cmp::max,
+    env,
+    fs::OpenOptions,
+    io::{BufRead, BufReader, Write},
+    sync::{Arc, Mutex},
+};
 
 use alloy::{
     providers::{ProviderBuilder, RootProvider},
@@ -7,6 +13,7 @@ use alloy::{
 use alloy_primitives::{aliases::U24, keccak256, Address, FixedBytes, Keccak256, U256, U8};
 use alloy_sol_types::SolValue;
 use num_bigint::BigUint;
+use once_cell::sync::Lazy;
 use tokio::runtime::{Handle, Runtime};
 use tycho_common::Bytes;
 
@@ -162,6 +169,51 @@ pub fn ple_encode(action_data_array: Vec<Vec<u8>>) -> Vec<u8> {
     }
 
     encoded_action_data
+}
+
+static CALLDATA_WRITE_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+// Function used in tests to write calldata to a file that then is used by the corresponding
+// solidity tests.
+pub fn write_calldata_to_file(test_identifier: &str, hex_calldata: &str) {
+    let _lock = CALLDATA_WRITE_MUTEX
+        .lock()
+        .expect("Couldn't acquire lock");
+
+    let file_path = "foundry/test/assets/calldata.txt";
+    let file = OpenOptions::new()
+        .read(true)
+        .open(file_path)
+        .expect("Failed to open calldata file for reading");
+    let reader = BufReader::new(file);
+
+    let mut lines = Vec::new();
+    let mut found = false;
+    for line in reader.lines().map_while(Result::ok) {
+        let mut parts = line.splitn(2, ':'); // split at the :
+        let key = parts.next().unwrap_or("");
+        if key == test_identifier {
+            lines.push(format!("{test_identifier}:{hex_calldata}"));
+            found = true;
+        } else {
+            lines.push(line);
+        }
+    }
+
+    // If the test identifier wasn't found, append a new line
+    if !found {
+        lines.push(format!("{test_identifier}:{hex_calldata}"));
+    }
+
+    // Write the updated contents back to the file
+    let mut file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(file_path)
+        .expect("Failed to open calldata file for writing");
+
+    for line in lines {
+        writeln!(file, "{line}").expect("Failed to write calldata");
+    }
 }
 
 #[cfg(test)]
