@@ -1,13 +1,14 @@
 #!/bin/bash
 # To run: ./setup_env.sh
+set -e
 
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
 # Check each dependency is installed
-local deps=("git" "rustc" "gcc" "openssl" "conda" "pip" "pg_config")
-local names=("git" "rust" "gcc" "openssl" "conda" "pip" "libpq")
+deps=("git" "rustc" "gcc" "openssl" "conda" "pip" "pg_config")
+names=("git" "rust" "gcc" "openssl" "conda" "pip" "libpq")
 for i in "${!deps[@]}"; do
     if ! command_exists "${deps[$i]}"; then
         echo "Error: '${names[$i]}' is not installed."
@@ -31,7 +32,8 @@ conda create --name $ENV_NAME python=$PYTHON_VERSION -y
 
 # Activate the environment
 echo "Activating the environment..."
-source activate $ENV_NAME
+eval "$(conda shell.bash hook)"
+conda activate $ENV_NAME
 
 # Install the requirements
 echo "Installing the requirements from ${REQUIREMENTS_FILE}..."
