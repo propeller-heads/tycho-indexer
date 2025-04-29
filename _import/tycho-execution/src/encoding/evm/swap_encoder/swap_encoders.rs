@@ -620,6 +620,7 @@ impl SwapEncoder for MaverickV2SwapEncoder {
             bytes_to_address(&swap.token_in)?,
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
         );
         Ok(args.abi_encode_packed())
     }
@@ -1545,6 +1546,7 @@ mod tests {
 
     #[test]
     fn test_encode_maverick_v2() {
+        // GHO -> (maverick) -> USDC
         let maverick_pool = ProtocolComponent {
             id: String::from("0x14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67"),
             protocol_system: String::from("vm:maverick_v2"),
@@ -1565,6 +1567,7 @@ mod tests {
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
+            transfer_type: TransferType::TransferToProtocol,
         };
         let encoder = MaverickV2SwapEncoder::new(
             String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -1587,6 +1590,8 @@ mod tests {
                 "14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67",
                 // receiver
                 "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                // transfer from router to protocol
+                "00",
             ))
             .to_lowercase()
         );

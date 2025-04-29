@@ -76,7 +76,7 @@ impl SwapEncoderBuilder {
             "vm:curve" => {
                 Ok(Box::new(CurveSwapEncoder::new(self.executor_address, self.chain, self.config)?))
             }
-            "vm::maverick_v2" => Ok(Box::new(MaverickV2SwapEncoder::new(
+            "vm:maverick_v2" => Ok(Box::new(MaverickV2SwapEncoder::new(
                 self.executor_address,
                 self.chain,
                 self.config,

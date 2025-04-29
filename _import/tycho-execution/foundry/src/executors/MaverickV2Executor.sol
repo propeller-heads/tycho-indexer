@@ -3,18 +3,19 @@ pragma solidity ^0.8.26;
 
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./TokenTransfer.sol";
 
 error MaverickV2Executor__InvalidDataLength();
 error MaverickV2Executor__InvalidTarget();
 error MaverickV2Executor__InvalidFactory();
 
-contract MaverickV2Executor is IExecutor {
+contract MaverickV2Executor is IExecutor, TokenTransfer {
     using SafeERC20 for IERC20;
 
     address public immutable factory;
     address private immutable self;
 
-    constructor(address _factory) {
+    constructor(address _factory, address _permit2) TokenTransfer(_permit2) {
         if (_factory == address(0)) {
             revert MaverickV2Executor__InvalidFactory();
         }
@@ -31,8 +32,9 @@ contract MaverickV2Executor is IExecutor {
         address target;
         address receiver;
         IERC20 tokenIn;
+        TransferType transferType;
 
-        (tokenIn, target, receiver) = _decodeData(data);
+        (tokenIn, target, receiver, transferType) = _decodeData(data);
 
         _verifyPairAddress(target);
         IMaverickV2Pool pool = IMaverickV2Pool(target);
@@ -46,21 +48,31 @@ contract MaverickV2Executor is IExecutor {
             exactOutput: false,
             tickLimit: tickLimit
         });
-        IERC20(tokenIn).safeTransfer(target, givenAmount);
+
+        _transfer(
+            address(tokenIn), msg.sender, target, givenAmount, transferType
+        );
+        // slither-disable-next-line unused-return
         (, calculatedAmount) = pool.swap(receiver, swapParams, "");
     }
 
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (IERC20 inToken, address target, address receiver)
+        returns (
+            IERC20 inToken,
+            address target,
+            address receiver,
+            TransferType transferType
+        )
     {
-        if (data.length != 60) {
+        if (data.length != 61) {
             revert MaverickV2Executor__InvalidDataLength();
         }
         inToken = IERC20(address(bytes20(data[0:20])));
         target = address(bytes20(data[20:40]));
         receiver = address(bytes20(data[40:60]));
+        transferType = TransferType(uint8(data[60]));
     }
 
     function _verifyPairAddress(address target) internal view {

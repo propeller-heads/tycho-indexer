@@ -186,6 +186,27 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
         assertEq(balanceAfter - balanceBefore, 1474406268748155809);
     }
 
+    function testSingleMaverickIntegration() public {
+        vm.stopPrank();
+
+        deal(GHO_ADDR, ALICE, 1 ether);
+        uint256 balanceBefore = IERC20(USDC_ADDR).balanceOf(ALICE);
+
+        // Approve permit2
+        vm.startPrank(ALICE);
+        IERC20(GHO_ADDR).approve(tychoRouterAddr, type(uint256).max);
+
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_maverick");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        uint256 balanceAfter = IERC20(USDC_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertGe(balanceAfter - balanceBefore, 999725);
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+    }
+
     function testSingleEkuboIntegration() public {
         vm.stopPrank();
 
