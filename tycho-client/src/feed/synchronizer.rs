@@ -42,7 +42,7 @@ pub enum SynchronizerError {
 
     /// Failed to send channel message to the consumer.
     #[error("Failed to send channel message: {0}")]
-    ChannelError(#[from] SendError<StateSyncMessage>),
+    ChannelError(String),
 
     /// Timeout elapsed errors.
     #[error("Timeout error: {0}")]
@@ -58,6 +58,12 @@ pub enum SynchronizerError {
 }
 
 pub type SyncResult<T> = Result<T, SynchronizerError>;
+
+impl From<SendError<StateSyncMessage>> for SynchronizerError {
+    fn from(err: SendError<StateSyncMessage>) -> Self {
+        SynchronizerError::ChannelError(err.to_string())
+    }
+}
 
 #[derive(Clone)]
 pub struct ProtocolStateSynchronizer<R: RPCClient, D: DeltasClient> {
