@@ -960,7 +960,7 @@ pub mod fixtures {
                                     "0000000000000000000000000000000000000001",
                                 ),
                                 balance: 1_i32.to_be_bytes().to_vec(),
-                                code: 123_i32.to_le_bytes().to_vec(),
+                                code: 123_i32.to_be_bytes().to_vec(),
                                 slots: vec![ContractSlot {
                                     slot: Bytes::from("0x01").into(),
                                     value: Bytes::from("0x01").into(),
@@ -973,7 +973,7 @@ pub mod fixtures {
                                     "0000000000000000000000000000000000000002",
                                 ),
                                 balance: 20_i32.to_be_bytes().to_vec(),
-                                code: 123_i32.to_le_bytes().to_vec(),
+                                code: 123_i32.to_be_bytes().to_vec(),
                                 slots: vec![ContractSlot {
                                     slot: Bytes::from("0x02").into(),
                                     value: Bytes::from(200u8).lpad(32, 0).into(),
@@ -997,7 +997,7 @@ pub mod fixtures {
                         contract_changes: vec![ContractChange {
                             address: address_from_str("0000000000000000000000000000000000000001"),
                             balance: 1_i32.to_be_bytes().to_vec(),
-                            code: 123_i32.to_le_bytes().to_vec(),
+                            code: 123_i32.to_be_bytes().to_vec(),
                             slots: vec![ContractSlot {
                                 slot: Bytes::from("0x01").into(),
                                 value: Bytes::from("0x01").into(),
@@ -1031,7 +1031,7 @@ pub mod fixtures {
                     contract_changes: vec![ContractChange {
                         address: address_from_str("0000000000000000000000000000000000000001"),
                         balance: 1_i32.to_be_bytes().to_vec(),
-                        code: 123_i32.to_le_bytes().to_vec(),
+                        code: 123_i32.to_be_bytes().to_vec(),
                         slots: vec![ContractSlot {
                             slot: Bytes::from(3u8).lpad(32, 0).into(),
                             value: Bytes::from(10u8).lpad(32, 0).into(),
@@ -1065,7 +1065,7 @@ pub mod fixtures {
                         ContractChange {
                             address: address_from_str("0000000000000000000000000000000000000001"),
                             balance: 1_i32.to_be_bytes().to_vec(),
-                            code: 123_i32.to_le_bytes().to_vec(),
+                            code: 123_i32.to_be_bytes().to_vec(),
                             slots: vec![ContractSlot {
                                 slot: Bytes::from("0x01").into(),
                                 value: Bytes::from(10u8).lpad(32, 0).into(),
@@ -1079,7 +1079,7 @@ pub mod fixtures {
                         ContractChange {
                             address: address_from_str("0000000000000000000000000000000000000002"),
                             balance: 1_i32.to_be_bytes().to_vec(),
-                            code: 123_i32.to_le_bytes().to_vec(),
+                            code: 123_i32.to_be_bytes().to_vec(),
                             slots: vec![ContractSlot {
                                 slot: Bytes::from("0x01").into(),
                                 value: Bytes::from(10u8).lpad(32, 0).into(),
@@ -1233,7 +1233,7 @@ pub mod fixtures {
                         }],
                         balance_changes: vec![BalanceChange {
                             token: address_from_str(DAI_ADDRESS),
-                            balance: 1_i32.to_le_bytes().to_vec(),
+                            balance: 1_i32.to_be_bytes().to_vec(),
                             component_id: "Balance1".into(),
                         }],
                     },
@@ -1809,7 +1809,7 @@ pub mod fixtures {
                                     "0000000000000000000000000000000000000001",
                                 ),
                                 balance: 1_i32.to_be_bytes().to_vec(),
-                                code: 123_i32.to_le_bytes().to_vec(),
+                                code: 123_i32.to_be_bytes().to_vec(),
                                 slots: vec![ContractSlot {
                                     slot: Bytes::from("0x01").into(),
                                     value: Bytes::from("0x01").into(),
@@ -1822,7 +1822,7 @@ pub mod fixtures {
                                     "0000000000000000000000000000000000000002",
                                 ),
                                 balance: 20_i32.to_be_bytes().to_vec(),
-                                code: 123_i32.to_le_bytes().to_vec(),
+                                code: 123_i32.to_be_bytes().to_vec(),
                                 slots: vec![ContractSlot {
                                     slot: Bytes::from("0x02").into(),
                                     value: Bytes::from("0xc8").into(),
@@ -1847,7 +1847,7 @@ pub mod fixtures {
                         contract_changes: vec![ContractChange {
                             address: address_from_str("0000000000000000000000000000000000000001"),
                             balance: 1_i32.to_be_bytes().to_vec(),
-                            code: 123_i32.to_le_bytes().to_vec(),
+                            code: 123_i32.to_be_bytes().to_vec(),
                             slots: vec![ContractSlot {
                                 slot: Bytes::from("0x01").into(),
                                 value: Bytes::from("0x01").into(),
@@ -1882,7 +1882,7 @@ pub mod fixtures {
                     contract_changes: vec![ContractChange {
                         address: address_from_str("0000000000000000000000000000000000000001"),
                         balance: 1_i32.to_be_bytes().to_vec(),
-                        code: 123_i32.to_le_bytes().to_vec(),
+                        code: 123_i32.to_be_bytes().to_vec(),
                         slots: vec![ContractSlot {
                             slot: Bytes::from("0x03").into(),
                             value: Bytes::from("0x10").into(),
@@ -1917,7 +1917,7 @@ pub mod fixtures {
                         ContractChange {
                             address: address_from_str("0000000000000000000000000000000000000001"),
                             balance: 1_i32.to_be_bytes().to_vec(),
-                            code: 123_i32.to_le_bytes().to_vec(),
+                            code: 123_i32.to_be_bytes().to_vec(),
                             slots: vec![ContractSlot {
                                 slot: Bytes::from("0x01").into(),
                                 value: Bytes::from("0x10").into(),
@@ -1937,7 +1937,7 @@ pub mod fixtures {
                         ContractChange {
                             address: address_from_str("0000000000000000000000000000000000000002"),
                             balance: 1_i32.to_be_bytes().to_vec(),
-                            code: 123_i32.to_le_bytes().to_vec(),
+                            code: 123_i32.to_be_bytes().to_vec(),
                             slots: vec![ContractSlot {
                                 slot: Bytes::from("0x01").into(),
                                 value: Bytes::from("0x10").into(),
@@ -2076,7 +2076,7 @@ pub mod fixtures {
                         }],
                         balance_changes: vec![BalanceChange {
                             token: address_from_str(DAI_ADDRESS),
-                            balance: 1_i32.to_le_bytes().to_vec(),
+                            balance: 1_i32.to_be_bytes().to_vec(),
                             component_id: "Balance1".into(),
                         }],
                     },

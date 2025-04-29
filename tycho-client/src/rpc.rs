@@ -796,7 +796,7 @@ mod tests {
                         "0x0000000000000000000000000000000000000000"
                     ],
                     "static_attributes": {
-                        "attribute_1": "0xe803000000000000"
+                        "attribute_1": "0x00000000000003e8"
                     },
                     "change": "Creation",
                     "creation_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -835,7 +835,7 @@ mod tests {
         assert_eq!(components[0].protocol_type_name, "Pool");
         assert_eq!(components[0].tokens.len(), 2);
         let expected_attributes =
-            [("attribute_1".to_string(), Bytes::from(1000_u64.to_le_bytes()))]
+            [("attribute_1".to_string(), Bytes::from(1000_u64.to_be_bytes()))]
                 .iter()
                 .cloned()
                 .collect::<HashMap<String, Bytes>>();
@@ -851,7 +851,7 @@ mod tests {
                 {
                     "component_id": "State1",
                     "attributes": {
-                        "attribute_1": "0xe803000000000000"
+                        "attribute_1": "0x00000000000003e8"
                     },
                     "balances": {
                         "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": "0x01f4"
@@ -886,7 +886,7 @@ mod tests {
         assert_eq!(states.len(), 1);
         assert_eq!(states[0].component_id, "State1");
         let expected_attributes =
-            [("attribute_1".to_string(), Bytes::from(1000_u64.to_le_bytes()))]
+            [("attribute_1".to_string(), Bytes::from(1000_u64.to_be_bytes()))]
                 .iter()
                 .cloned()
                 .collect::<HashMap<String, Bytes>>();

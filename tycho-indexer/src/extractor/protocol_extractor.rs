@@ -1879,7 +1879,7 @@ mod test {
                             ComponentBalance {
                                 token: Bytes::from_str("0x0000000000000000000000000000000000000001")
                                     .unwrap(),
-                                balance: Bytes::from(1000_i32.to_le_bytes()),
+                                balance: Bytes::from(1000_i32.to_be_bytes()),
                                 balance_float: 36522027799.0,
                                 modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000011121314").unwrap(),
                                 component_id: "TestComponent".to_string(),
@@ -1890,7 +1890,7 @@ mod test {
                             ComponentBalance {
                                 token: Bytes::from_str("0x0000000000000000000000000000000000000003")
                                     .unwrap(),
-                                balance: Bytes::from(10000_i32.to_le_bytes()),
+                                balance: Bytes::from(10000_i32.to_be_bytes()),
                                 balance_float: 36522027799.0,
                                 modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000011121314").unwrap(),
                                 component_id: "TestComponent".to_string(),
@@ -1944,7 +1944,7 @@ mod test {
                                 .find_owner(
                                     Bytes::from_str("0000000000000000000000000000000000000003")
                                         .unwrap(),
-                                    Bytes::from(1000_i32.to_le_bytes()),
+                                    Bytes::from(1000_i32.to_be_bytes()),
                                 )
                                 .await
                                 .unwrap()
@@ -1952,7 +1952,7 @@ mod test {
                             (
                                 Bytes::from_str("0000000000000000000000000000000000000b0b")
                                     .unwrap(),
-                                Bytes::from(10000_i32.to_le_bytes())
+                                Bytes::from(10000_i32.to_be_bytes())
                             )
                         );
                         assert_eq!(
@@ -1960,7 +1960,7 @@ mod test {
                                 .find_owner(
                                     Bytes::from_str("0000000000000000000000000000000000000001")
                                         .unwrap(),
-                                    Bytes::from(1000_i32.to_le_bytes()),
+                                    Bytes::from(1000_i32.to_be_bytes()),
                                 )
                                 .await
                                 .unwrap()
@@ -1968,7 +1968,7 @@ mod test {
                             (
                                 Bytes::from_str("0000000000000000000000000000000000000b0b")
                                     .unwrap(),
-                                Bytes::from(1000_i32.to_le_bytes())
+                                Bytes::from(1000_i32.to_be_bytes())
                             )
                         );
                     });
