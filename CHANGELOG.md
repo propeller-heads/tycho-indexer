@@ -1,3 +1,11 @@
+## [0.66.5](https://github.com/propeller-heads/tycho-indexer/compare/0.66.4...0.66.5) (2025-04-29)
+
+
+### Bug Fixes
+
+* remove error logging on RPCClient ([9934abd](https://github.com/propeller-heads/tycho-indexer/commit/9934abd76eecc93f0bdb84509121a5722e4c7ef5))
+* remove error logging on RPCClient ([#560](https://github.com/propeller-heads/tycho-indexer/issues/560)) ([41f0704](https://github.com/propeller-heads/tycho-indexer/commit/41f0704af3002ed7df5ccee2fa818bf83ec1b7fc))
+
 ## [0.66.4](https://github.com/propeller-heads/tycho-indexer/compare/0.66.3...0.66.4) (2025-04-18)
 
 
