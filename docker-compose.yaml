@@ -35,6 +35,6 @@ services:
       - ./extractors.yaml:/opt/tycho-indexer/extractors.yaml
       - ./substreams/:/opt/tycho-indexer/substreams/
     entrypoint: [ "/usr/wait-for-postgres.sh", "db" ]
-    command: [ "/opt/tycho-indexer/tycho-indexer", "--endpoint", "https://mainnet.eth.streamingfast.io:443", "index"]
+    command: [ "/opt/tycho-indexer/tycho-indexer", "--endpoint", "https://mainnet.eth.streamingfast.io:443", "index", "--retention-horizon", "2025-04-21T00:00:00"]
 volumes:
   postgres_data:
