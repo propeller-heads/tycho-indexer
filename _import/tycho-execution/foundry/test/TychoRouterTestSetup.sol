@@ -14,6 +14,7 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
 import {WETH} from "../lib/permit2/lib/solmate/src/tokens/WETH.sol";
 import {Permit2TestHelper} from "./Permit2TestHelper.sol";
+import "./TestUtils.sol";
 
 contract TychoRouterExposed is TychoRouter {
     constructor(address _permit2, address weth) TychoRouter(_permit2, weth) {}
@@ -42,7 +43,7 @@ contract TychoRouterExposed is TychoRouter {
     }
 }
 
-contract TychoRouterTestSetup is Constants, Permit2TestHelper {
+contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     TychoRouterExposed tychoRouter;
     address tychoRouterAddr;
     UniswapV2Executor public usv2Executor;
