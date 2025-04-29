@@ -1,4 +1,7 @@
 #[tokio::main]
 async fn main() {
-    tycho_client::cli::run_cli().await;
+    if let Err(e) = tycho_client::cli::run_cli().await {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    }
 }

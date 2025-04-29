@@ -1,7 +1,7 @@
 use std::{collections::HashSet, str::FromStr, time::Duration};
 
 use clap::Parser;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use tracing_appender::rolling;
 use tycho_common::dto::{Chain, ExtractorIdentity, PaginationParams, ProtocolSystemsRequestBody};
 
@@ -95,22 +95,18 @@ struct CliArgs {
 
 impl CliArgs {
     fn validate(&self) -> Result<(), String> {
-        if self.remove_tvl_threshold.is_some() && self.add_tvl_threshold.is_none() {
-            return Err("Both remove_tvl_threshold and add_tvl_threshold must be set.".to_string());
-        }
-        if self.remove_tvl_threshold.is_none() && self.add_tvl_threshold.is_some() {
+        // TVL thresholds must be set together - either both or neither
+        if self.remove_tvl_threshold.is_some() != self.add_tvl_threshold.is_some() {
             return Err("Both remove_tvl_threshold and add_tvl_threshold must be set.".to_string());
         }
         Ok(())
     }
 }
 
-pub async fn run_cli() {
+pub async fn run_cli() -> Result<(), String> {
     // Parse CLI Args
     let args: CliArgs = CliArgs::parse();
-    if let Err(e) = args.validate() {
-        panic!("{}", e);
-    }
+    args.validate()?;
 
     // Setup Logging
     let (non_blocking, _guard) =
@@ -124,7 +120,7 @@ pub async fn run_cli() {
         .finish();
 
     tracing::subscriber::set_global_default(subscriber)
-        .expect("Failed to set up logging subscriber");
+        .map_err(|e| format!("Failed to set up logging subscriber: {e}"))?;
 
     // Runs example if flag is set.
     if args.example {
@@ -145,8 +141,8 @@ pub async fn run_cli() {
                 Some("0xa478c2975ab1ea89e8196811f51a7b7ade33eb11".to_string()),
             ),
         ];
-        run(exchanges, args).await;
-        return;
+        run(exchanges, args).await?;
+        return Ok(());
     }
 
     // Parse exchange name and addresses from name:address format.
@@ -159,7 +155,7 @@ pub async fn run_cli() {
                 if parts.len() == 2 {
                     Some((parts[0].to_string(), Some(parts[1].to_string())))
                 } else {
-                    tracing::warn!("Ignoring invalid exchange format: {}", e);
+                    warn!("Ignoring invalid exchange format: {}", e);
                     None
                 }
             } else {
@@ -170,31 +166,34 @@ pub async fn run_cli() {
 
     tracing::info!("Running with exchanges: {:?}", exchanges);
 
-    run(exchanges, args).await;
+    run(exchanges, args).await?;
+    Ok(())
 }
 
-async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) {
+async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<(), String> {
     //TODO: remove "or args.auth_key.is_none()" when our internal client use the no_tls flag
     let (tycho_ws_url, tycho_rpc_url) = if args.no_tls || args.auth_key.is_none() {
         info!("Using non-secure connection: ws:// and http://");
-        let tycho_ws_url = format!("ws://{}", &args.tycho_url);
-        let tycho_rpc_url = format!("http://{}", &args.tycho_url);
+        let tycho_ws_url = format!("ws://{url}", url = &args.tycho_url);
+        let tycho_rpc_url = format!("http://{url}", url = &args.tycho_url);
         (tycho_ws_url, tycho_rpc_url)
     } else {
         info!("Using secure connection: wss:// and https://");
-        let tycho_ws_url = format!("wss://{}", &args.tycho_url);
-        let tycho_rpc_url = format!("https://{}", &args.tycho_url);
+        let tycho_ws_url = format!("wss://{url}", url = &args.tycho_url);
+        let tycho_rpc_url = format!("https://{url}", url = &args.tycho_url);
         (tycho_ws_url, tycho_rpc_url)
     };
 
-    let ws_client = WsDeltasClient::new(&tycho_ws_url, args.auth_key.as_deref()).unwrap();
-    let rpc_client = HttpRPCClient::new(&tycho_rpc_url, args.auth_key.as_deref()).unwrap();
-    let chain =
-        Chain::from_str(&args.chain).unwrap_or_else(|_| panic!("Unknown chain {}", &args.chain));
+    let ws_client = WsDeltasClient::new(&tycho_ws_url, args.auth_key.as_deref())
+        .map_err(|e| format!("Failed to create WebSocket client: {e}"))?;
+    let rpc_client = HttpRPCClient::new(&tycho_rpc_url, args.auth_key.as_deref())
+        .map_err(|e| format!("Failed to create RPC client: {e}"))?;
+    let chain = Chain::from_str(&args.chain)
+        .map_err(|_| format!("Unknown chain: {chain}", chain = &args.chain))?;
     let ws_jh = ws_client
         .connect()
         .await
-        .expect("ws client connection error");
+        .map_err(|e| format!("WebSocket client connection error: {e}"))?;
 
     let mut block_sync = BlockSynchronizer::new(
         Duration::from_secs(args.block_time),
@@ -212,7 +211,7 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) {
             pagination: PaginationParams { page: 0, page_size: 100 },
         })
         .await
-        .unwrap()
+        .map_err(|e| format!("Failed to get protocol systems: {e}"))?
         .protocol_systems
         .into_iter()
         .collect::<HashSet<_>>();
@@ -259,7 +258,7 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) {
     let (sync_jh, mut rx) = block_sync
         .run()
         .await
-        .expect("block sync start error");
+        .map_err(|e| format!("Failed to start block synchronizer: {e}"))?;
 
     let msg_printer = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
@@ -274,17 +273,24 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) {
     // Monitor the WebSocket, BlockSynchronizer and message printer futures.
     tokio::select! {
         res = ws_jh => {
-            let _ = res.expect("WebSocket connection dropped unexpectedly");
+            if let Err(e) = res {
+                tracing::error!("WebSocket connection dropped unexpectedly: {}", e);
+            }
         }
         res = sync_jh => {
-            res.expect("BlockSynchronizer stopped unexpectedly");
+            if let Err(e) = res {
+                tracing::error!("BlockSynchronizer stopped unexpectedly: {}", e);
+            }
         }
         res = msg_printer => {
-            res.expect("Message printer stopped unexpectedly");
+            if let Err(e) = res {
+                tracing::error!("Message printer stopped unexpectedly: {}", e);
+            }
         }
     }
 
     tracing::debug!("RX closed");
+    Ok(())
 }
 
 #[cfg(test)]
