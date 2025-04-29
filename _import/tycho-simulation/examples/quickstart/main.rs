@@ -31,11 +31,8 @@ use tracing_subscriber::EnvFilter;
 use tycho_common::Bytes;
 pub mod utils;
 use tycho_execution::encoding::{
-    evm::{
-        encoder_builders::TychoRouterEncoderBuilder, tycho_encoders::TychoRouterEncoder, utils::encode_input,
-    },
+    evm::{encoder_builders::TychoRouterEncoderBuilder, utils::encode_input},
     models::{Solution, Swap, Transaction},
-    tycho_encoder::TychoEncoder,
 };
 use tycho_simulation::{
     evm::{
