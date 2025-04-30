@@ -175,11 +175,18 @@ fn stream_blocks(
                     return;
                 },
                 Err(e) => {
-                    // We failed to connect and will try again; this is another
-                    // case where we actually _want_ to back off in case we keep
-                    // having connection errors.
                     counter!("substreams_failure", "module" => output_module_name.clone(), "cause" => "connection_error").increment(1);
                     error!("Unable to connect to endpoint: {:#}", e);
+
+                    // If we reach this point, we must wait a bit before retrying
+                    if let Some(duration) = backoff.next() {
+                        info!("Will try to reconnect after {:?}", duration);
+                        sleep(duration).await;
+                        retry_count += 1;
+                    } else {
+                        counter!("substreams_failure", "extractor" => extractor_id.clone(), "cause" => "max_retries_exceeded").increment(1);
+                        return Err(anyhow!("Backoff requested to stop retrying, quitting"))?;
+                    }
                 }
             }
         }
