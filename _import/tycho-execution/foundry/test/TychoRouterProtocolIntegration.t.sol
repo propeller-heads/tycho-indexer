@@ -192,7 +192,6 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
         deal(GHO_ADDR, ALICE, 1 ether);
         uint256 balanceBefore = IERC20(USDC_ADDR).balanceOf(ALICE);
 
-        // Approve permit2
         vm.startPrank(ALICE);
         IERC20(GHO_ADDR).approve(tychoRouterAddr, type(uint256).max);
 

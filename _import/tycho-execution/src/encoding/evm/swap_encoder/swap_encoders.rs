@@ -643,6 +643,7 @@ mod tests {
         models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
         Bytes,
     };
+    use crate::encoding::evm::utils::write_calldata_to_file;
 
     use super::*;
     use crate::encoding::models::TransferType;
@@ -1595,5 +1596,7 @@ mod tests {
             ))
             .to_lowercase()
         );
+
+        write_calldata_to_file("test_encode_maverick_v2", hex_swap.as_str());
     }
 }
