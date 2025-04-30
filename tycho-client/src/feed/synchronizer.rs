@@ -549,7 +549,7 @@ where
                                 warn!(
                                     extractor_id=%&this.extractor_id,
                                     retry_count,
-                                    "State synchronisation exited with Ok(())"
+                                    "State synchronization exited with Ok(())"
                                 );
                             }
                         }

@@ -213,7 +213,7 @@ struct Inner {
 
 /// Shared state betweeen all client instances.
 ///
-/// This state is behind a mutex and requires synchronisation to be read of modified.
+/// This state is behind a mutex and requires synchronization to be read of modified.
 impl Inner {
     fn new(cmd_tx: Sender<()>, sink: WebSocketSink, buffer_size: usize) -> Self {
         Self {
