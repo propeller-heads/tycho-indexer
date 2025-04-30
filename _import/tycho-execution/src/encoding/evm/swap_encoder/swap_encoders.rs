@@ -643,10 +643,9 @@ mod tests {
         models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
         Bytes,
     };
-    use crate::encoding::evm::utils::write_calldata_to_file;
 
     use super::*;
-    use crate::encoding::models::TransferType;
+    use crate::encoding::{evm::utils::write_calldata_to_file, models::TransferType};
 
     mod uniswap_v2 {
         use super::*;
