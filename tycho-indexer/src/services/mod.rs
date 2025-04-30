@@ -215,7 +215,12 @@ where
         let server = HttpServer::new(move || {
             let cors = Cors::default()
                 .allowed_origin("https://open.gitbook.com")
-                .allowed_origin("https://docs.propellerheads.xyz")
+                .allowed_origin_fn(|origin, _req_head| {
+                    // Allow all propellerheads.xyz subdomains
+                    origin
+                        .as_bytes()
+                        .ends_with(b".propellerheads.xyz")
+                })
                 .allow_any_method()
                 .allowed_headers(vec![
                     http::header::AUTHORIZATION,
