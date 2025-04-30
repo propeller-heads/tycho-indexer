@@ -320,7 +320,7 @@ impl Inner {
     /// inconsistencies: e.g. if the subscription exists but there is no sender for it.
     /// Will remove a subscription even it was in active or pending state before, this is to support
     /// any server side failure of the subscription.
-    fn remove_subscription(&mut self, subscription_id: Uuid) {
+    fn remove_subscription(&mut self, subscription_id: Uuid) -> Result<(), DeltasError> {
         if let Entry::Occupied(e) = self
             .subscriptions
             .entry(subscription_id)
@@ -332,15 +332,12 @@ impl Inner {
                 });
                 self.sender
                     .remove(&subscription_id)
-                    .expect(
-                        "Inconsistent internal client state: `sender` state 
-                        drifted from `info` while removing a subscription.",
-                    );
+                    .ok_or_else(|| DeltasError::Fatal("Inconsistent internal client state: `sender` state drifted from `info` while removing a subscription.".to_string()))?;
             } else {
                 warn!(?subscription_id, "Subscription ended unexpectedly!");
                 self.sender
                     .remove(&subscription_id)
-                    .expect("sender channel missing");
+                    .ok_or_else(|| DeltasError::Fatal("sender channel missing".to_string()))?;
             }
         } else {
             error!(
@@ -349,6 +346,8 @@ impl Inner {
                 to it. This is likely a bug!"
             );
         }
+
+        Ok(())
     }
 
     /// Sends a message through the websocket.
@@ -482,7 +481,7 @@ impl WsDeltasClient {
                             let inner = guard
                                 .as_mut()
                                 .ok_or_else(|| DeltasError::NotConnected)?;
-                            inner.remove_subscription(subscription_id);
+                            inner.remove_subscription(subscription_id)?;
                         }
                     },
                     Err(e) => {
@@ -544,9 +543,13 @@ impl WsDeltasClient {
         inner.end_subscription(&subscription_id, ready_tx);
         let cmd = Command::Unsubscribe { subscription_id };
         inner
-            .ws_send(tungstenite::protocol::Message::Text(
-                serde_json::to_string(&cmd).expect("serialize cmd encode error"),
-            ))
+            .ws_send(tungstenite::protocol::Message::Text(serde_json::to_string(&cmd).map_err(
+                |e| {
+                    DeltasError::TransportError(format!(
+                        "Failed to serialize unsubscribe command: {e}"
+                    ))
+                },
+            )?))
             .await?;
         Ok(())
     }
