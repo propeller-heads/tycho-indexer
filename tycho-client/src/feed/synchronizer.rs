@@ -32,6 +32,7 @@ use crate::{
         Header,
     },
     rpc::{RPCClient, RPCError},
+    DeltasError,
 };
 
 #[derive(Error, Debug)]
@@ -55,6 +56,10 @@ pub enum SynchronizerError {
     /// Server connection failures or interruptions.
     #[error("Connection error: {0}")]
     ConnectionError(String),
+
+    /// Connection closed
+    #[error("Connection closed")]
+    ConnectionClosed,
 }
 
 pub type SyncResult<T> = Result<T, SynchronizerError>;
@@ -62,6 +67,15 @@ pub type SyncResult<T> = Result<T, SynchronizerError>;
 impl From<SendError<StateSyncMessage>> for SynchronizerError {
     fn from(err: SendError<StateSyncMessage>) -> Self {
         SynchronizerError::ChannelError(err.to_string())
+    }
+}
+
+impl From<DeltasError> for SynchronizerError {
+    fn from(err: DeltasError) -> Self {
+        match err {
+            DeltasError::NotConnected => SynchronizerError::ConnectionClosed,
+            _ => SynchronizerError::ConnectionError(err.to_string()),
+        }
     }
 }
 
@@ -372,8 +386,7 @@ where
         let (_, mut msg_rx) = self
             .deltas_client
             .subscribe(self.extractor_id.clone(), subscription_options)
-            .await
-            .map_err(|e| SynchronizerError::ConnectionError(e.to_string()))?;
+            .await?;
 
         info!("Waiting for deltas...");
         // wait for first deltas message
@@ -386,7 +399,9 @@ where
                 ))
             })?
             .ok_or_else(|| {
-                SynchronizerError::ConnectionError("Deltas channel closed".to_string())
+                SynchronizerError::ConnectionError(
+                    "Deltas channel closed before first message".to_string(),
+                )
             })?;
         self.filter_deltas(&mut first_msg, &tracker);
 
@@ -517,8 +532,7 @@ where
 
                 select! {
                     res = this.clone().state_sync(&mut tx) => {
-                        match  res
-                        {
+                        match res {
                             Err(e) => {
                                 error!(
                                     extractor_id=%&this.extractor_id,
@@ -526,6 +540,10 @@ where
                                     error=%e,
                                     "State synchronization errored!"
                                 );
+                                if let SynchronizerError::ConnectionClosed = e {
+                                    // break synchronization loop if connection is closed
+                                    return Err(e);
+                                }
                             }
                             _ => {
                                 warn!(

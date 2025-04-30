@@ -710,7 +710,7 @@ impl DeltasClient for WsDeltasClient {
                             warn!(
                                 ?error,
                                 ?retry_count,
-                                "Connection dropped unexpectedly; Reconnecting"
+                                "Connection dropped unexpectedly; Reconnecting..."
                             );
                             break;
                         } else {
