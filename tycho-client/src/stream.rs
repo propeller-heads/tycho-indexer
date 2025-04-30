@@ -29,6 +29,9 @@ pub enum StreamError {
 
     #[error("BlockSynchronizer error: {0}")]
     BlockSynchronizerError(String),
+
+    #[error("Initialization error: {0}")]
+    InitializationError(String),
 }
 
 pub struct TychoStreamBuilder {
@@ -148,8 +151,10 @@ impl TychoStreamBuilder {
         };
 
         // Initialize the WebSocket client
-        let ws_client = WsDeltasClient::new(&tycho_ws_url, auth_key.as_deref()).unwrap();
-        let rpc_client = HttpRPCClient::new(&tycho_rpc_url, auth_key.as_deref()).unwrap();
+        let ws_client = WsDeltasClient::new(&tycho_ws_url, auth_key.as_deref())
+            .map_err(|e| StreamError::InitializationError(e.to_string()))?;
+        let rpc_client = HttpRPCClient::new(&tycho_rpc_url, auth_key.as_deref())
+            .map_err(|e| StreamError::InitializationError(e.to_string()))?;
         let ws_jh = ws_client
             .connect()
             .await
@@ -168,7 +173,9 @@ impl TychoStreamBuilder {
                 pagination: PaginationParams { page: 0, page_size: 100 },
             })
             .await
-            .unwrap()
+            .map_err(|e| {
+                StreamError::InitializationError(format!("Failed to fetch protocol systems: {e}"))
+            })?
             .protocol_systems
             .into_iter()
             .collect::<HashSet<_>>();
