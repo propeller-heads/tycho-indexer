@@ -150,23 +150,19 @@ impl SynchronizerStream {
         block_history: &BlockHistory,
         max_wait: std::time::Duration,
         stale_threshold: std::time::Duration,
-    ) -> Option<StateSyncMessage> {
+    ) -> BlockSyncResult<Option<StateSyncMessage>> {
         let extractor_id = self.extractor_id.clone();
         let latest_block = block_history.latest();
         match &self.state {
             SynchronizerState::Started | SynchronizerState::Ended => {
                 warn!(state=?&self.state, "Advancing Synchronizer in this state not supported!");
-                None
+                Ok(None)
             }
             SynchronizerState::Advanced(b) => {
                 let future_block = b.clone();
                 // Transition to ready once we arrived at the expected height
-                if let Err(e) = self.transition(future_block, block_history, stale_threshold) {
-                    error!(%extractor_id, error=?e, "Failed to transition from advanced state");
-                    self.state = SynchronizerState::Ended;
-                    self.modify_ts = Local::now().naive_utc();
-                }
-                None
+                self.transition(future_block, block_history, stale_threshold)?;
+                Ok(None)
             }
             SynchronizerState::Ready(previous_block) => {
                 // Try to recv the next expected block, update state accordingly.
@@ -213,19 +209,12 @@ impl SynchronizerStream {
         block_history: &BlockHistory,
         previous_block: Header,
         stale_threshold: std::time::Duration,
-    ) -> Option<StateSyncMessage> {
+    ) -> BlockSyncResult<Option<StateSyncMessage>> {
         let extractor_id = self.extractor_id.clone();
         match timeout(max_wait, self.rx.recv()).await {
             Ok(Some(msg)) => {
-                if let Err(e) = self.transition(msg.header.clone(), block_history, stale_threshold)
-                {
-                    error!(%extractor_id, error=?e, "Failed to transition after receiving message");
-                    self.state = SynchronizerState::Ended;
-                    self.modify_ts = Local::now().naive_utc();
-                    None
-                } else {
-                    Some(msg)
-                }
+                self.transition(msg.header.clone(), block_history, stale_threshold)?;
+                Ok(Some(msg))
             }
             Ok(None) => {
                 error!(
@@ -235,13 +224,13 @@ impl SynchronizerStream {
                 );
                 self.state = SynchronizerState::Ended;
                 self.modify_ts = Local::now().naive_utc();
-                None
+                Ok(None)
             }
             Err(_) => {
                 // trying to advance a block timed out
                 debug!(%extractor_id, ?previous_block, "Extractor did not check in within time.");
                 self.state = SynchronizerState::Delayed(previous_block.clone());
-                None
+                Ok(None)
             }
         }
     }
@@ -256,7 +245,7 @@ impl SynchronizerStream {
         block_history: &BlockHistory,
         max_wait: std::time::Duration,
         stale_threshold: std::time::Duration,
-    ) -> Option<StateSyncMessage> {
+    ) -> BlockSyncResult<Option<StateSyncMessage>> {
         let mut results = Vec::new();
         let extractor_id = self.extractor_id.clone();
 
@@ -272,15 +261,7 @@ impl SynchronizerStream {
             {
                 Ok(Some(msg)) => {
                     debug!(%extractor_id, block_num=?msg.header.number, "Received new message during catch-up");
-                    let block_pos = match block_history.determine_block_position(&msg.header) {
-                        Ok(pos) => pos,
-                        Err(e) => {
-                            error!(%extractor_id, error=?e, "Failed to determine block position");
-                            self.state = SynchronizerState::Ended;
-                            self.modify_ts = Local::now().naive_utc();
-                            return None;
-                        }
-                    };
+                    let block_pos = block_history.determine_block_position(&msg.header)?;
                     results.push(msg);
                     if matches!(block_pos, BlockPosition::NextExpected) {
                         break;
@@ -289,7 +270,7 @@ impl SynchronizerStream {
                 Ok(None) => {
                     warn!(%extractor_id, "Channel closed during catch-up");
                     self.state = SynchronizerState::Ended;
-                    return None;
+                    return Ok(None);
                 }
                 Err(_) => {
                     debug!(%extractor_id, "Timed out waiting for catch-up");
@@ -305,16 +286,10 @@ impl SynchronizerStream {
         if let Some(msg) = merged {
             // we were able to get at least one block out
             debug!(?extractor_id, "Delayed extractor made progress!");
-            if let Err(e) = self.transition(msg.header.clone(), block_history, stale_threshold) {
-                error!(%extractor_id, error=?e, "Failed to transition after catch-up");
-                self.state = SynchronizerState::Ended;
-                self.modify_ts = Local::now().naive_utc();
-                None
-            } else {
-                Some(msg)
-            }
+            self.transition(msg.header.clone(), block_history, stale_threshold)?;
+            Ok(Some(msg))
         } else {
-            None
+            Ok(None)
         }
     }
 
@@ -570,13 +545,17 @@ where
                                 self.block_time
                                     .mul_f64(self.max_missed_blocks as f64),
                             )
-                            .await;
-                        res.map(|msg| (extractor_id.name.clone(), msg))
+                            .await?;
+                        Ok::<_, BlockSynchronizerError>(
+                            res.map(|msg| (extractor_id.name.clone(), msg)),
+                        )
                     });
                 }
                 ready_sync_msgs.extend(
                     join_all(recv_futures)
                         .await
+                        .into_iter()
+                        .collect::<Result<Vec<_>, _>>()?
                         .into_iter()
                         .flatten(),
                 );
