@@ -1,3 +1,11 @@
+## [0.67.0](https://github.com/propeller-heads/tycho-indexer/compare/0.66.5...0.67.0) (2025-04-30)
+
+
+### Features
+
+* update CORS to allow all subdomains of `propellerheads.xyz` ([d709443](https://github.com/propeller-heads/tycho-indexer/commit/d70944343d9b9ca3a6f7f9491493bf953807262e))
+* update CORS to allow all subdomains of `propellerheads.xyz` ([#563](https://github.com/propeller-heads/tycho-indexer/issues/563)) ([a451301](https://github.com/propeller-heads/tycho-indexer/commit/a4513010bf3c95ef4f346f84805473f95cdc8bf0))
+
 ## [0.66.5](https://github.com/propeller-heads/tycho-indexer/compare/0.66.4...0.66.5) (2025-04-29)
 
 
