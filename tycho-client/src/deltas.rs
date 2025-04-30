@@ -96,11 +96,8 @@ pub enum DeltasError {
     ConnectionClosed,
 
     /// The connection was closed unexpectedly by the server or encountered a network error.
-    #[error("ConnectionError {source}")]
-    ConnectionError {
-        #[from]
-        source: tungstenite::Error,
-    },
+    #[error("Connection error: {0}")]
+    ConnectionError(#[from] Box<tungstenite::Error>),
 
     /// A fatal error occurred that cannot be recovered from.
     #[error("Tycho FatalError: {0}")]
@@ -515,14 +512,15 @@ impl WsDeltasClient {
             }
             Err(error) => {
                 error!(?error, "Websocket error");
-                return Err(match &error {
-                    tungstenite::Error::ConnectionClosed => DeltasError::from(error),
+                return Err(match error {
+                    tungstenite::Error::ConnectionClosed => DeltasError::ConnectionClosed,
                     tungstenite::Error::AlreadyClosed => {
                         warn!("Received AlreadyClosed error which is indicative of a bug!");
-                        DeltasError::from(error)
+                        DeltasError::ConnectionError(Box::new(error))
                     }
-                    tungstenite::Error::Io(_) => DeltasError::from(error),
-                    tungstenite::Error::Protocol(_) => DeltasError::from(error),
+                    tungstenite::Error::Io(_) | tungstenite::Error::Protocol(_) => {
+                        DeltasError::ConnectionError(Box::new(error))
+                    }
                     _ => DeltasError::Fatal(error.to_string()),
                 });
             }
