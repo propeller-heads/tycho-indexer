@@ -870,6 +870,7 @@ pub struct PaginationParams {
     pub page: i64,
     /// How many results to return per page
     #[serde(default)]
+    #[schema(default = 10)]
     pub page_size: i64,
 }
 
