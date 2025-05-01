@@ -97,10 +97,6 @@ where
         #[derive(OpenApi)]
         #[openapi(
             info(title = "Tycho-Indexer RPC",),
-            servers(
-                (url = "https://tycho-beta.propellerheads.xyz/", description = "PropellerHeads hosted service"),
-                (url = "/", description = "Local"),
-            ),
             paths(
                 rpc::health,
                 rpc::protocol_systems,
