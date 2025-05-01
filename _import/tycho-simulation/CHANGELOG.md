@@ -1,3 +1,10 @@
+## [0.99.1](https://github.com/propeller-heads/tycho-simulation/compare/0.99.0...0.99.1) (2025-05-01)
+
+
+### Bug Fixes
+
+* enhance curve_pool_filter to exclude additional stETH bugged pool ([ad9bc21](https://github.com/propeller-heads/tycho-simulation/commit/ad9bc212aa3b9be5da64fea5594518f977c2d6a9))
+
 ## [0.99.0](https://github.com/propeller-heads/tycho-simulation/compare/0.98.2...0.99.0) (2025-04-28)
 
 
