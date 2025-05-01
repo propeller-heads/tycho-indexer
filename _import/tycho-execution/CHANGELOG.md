@@ -1,3 +1,10 @@
+## [0.85.1](https://github.com/propeller-heads/tycho-execution/compare/0.85.0...0.85.1) (2025-05-01)
+
+
+### Bug Fixes
+
+* Derive Clone in TychoEncoders ([f99bd29](https://github.com/propeller-heads/tycho-execution/commit/f99bd296a1b74900adc24ea9db7b75367612e0f9))
+
 ## [0.85.0](https://github.com/propeller-heads/tycho-execution/compare/0.84.0...0.85.0) (2025-05-01)
 
 
