@@ -11,7 +11,7 @@ impl PostgresGateway {
         chain: &Chain,
         conn: &mut AsyncPgConnection,
     ) -> Result<ExtractionState, StorageError> {
-        let block_chain_id = self.get_chain_id(chain);
+        let block_chain_id = self.get_chain_id(chain)?;
 
         match orm::ExtractionState::by_name(name, block_chain_id, conn).await {
             Ok(Some((orm_state, block_hash))) => {
@@ -34,7 +34,7 @@ impl PostgresGateway {
         state: &ExtractionState,
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
-        let block_chain_id = self.get_chain_id(&state.chain);
+        let block_chain_id = self.get_chain_id(&state.chain)?;
         let block_id = schema::block::table
             .filter(schema::block::hash.eq(&state.block_hash))
             .select(schema::block::id)
