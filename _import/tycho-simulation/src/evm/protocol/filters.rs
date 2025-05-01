@@ -132,7 +132,14 @@ pub fn curve_pool_filter(component: &ComponentWithState) -> bool {
         }
     };
 
-    if component.component.id.to_lowercase() == "0xdc24316b9ae028f1497c275eb9192a3ea0f67022" {
+    if matches!(
+        component
+            .component
+            .id
+            .to_lowercase()
+            .as_str(),
+        "0xdc24316b9ae028f1497c275eb9192a3ea0f67022" | "0x828b154032950c8ff7cf8085d841723db2696056"
+    ) {
         debug!(
             "Filtering out Curve pool {} because it has a rebasing token that is not supported",
             component.component.id
