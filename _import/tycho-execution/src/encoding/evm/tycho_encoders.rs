@@ -25,6 +25,7 @@ use crate::encoding::{
 /// * `split_swap_strategy`: Encoder for split swaps
 /// * `native_address`: Address of the chain's native token
 /// * `wrapped_address`: Address of the chain's wrapped native token
+#[derive(Clone)]
 pub struct TychoRouterEncoder {
     single_swap_strategy: SingleSwapStrategyEncoder,
     sequential_swap_strategy: SequentialSwapStrategyEncoder,
@@ -213,6 +214,7 @@ impl TychoEncoder for TychoRouterEncoder {
 /// # Fields
 /// * `swap_encoder_registry`: Registry of swap encoders
 /// * `native_address`: Address of the chain's native token
+#[derive(Clone)]
 pub struct TychoExecutorEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
     native_address: Bytes,
