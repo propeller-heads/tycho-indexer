@@ -52,7 +52,7 @@ impl PostgresGateway {
         conn: &mut AsyncPgConnection,
     ) -> Result<HashMap<i64, Balance>, StorageError> {
         use schema::account_balance::dsl::*;
-        let chain_id = self.get_chain_id(chain);
+        let chain_id = self.get_chain_id(chain)?;
 
         let res = if start_version_ts <= target_version_ts {
             // Going forward
@@ -640,7 +640,7 @@ impl PostgresGateway {
         let slots = {
             use schema::{account, contract_storage::dsl::*};
 
-            let chain_id = self.get_chain_id(chain);
+            let chain_id = self.get_chain_id(chain)?;
             let mut q = contract_storage
                 .inner_join(account::table)
                 .filter(account::chain_id.eq(chain_id))
@@ -806,7 +806,7 @@ impl PostgresGateway {
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
     ) -> Result<WithTotal<Vec<Account>>, StorageError> {
-        let chain_db_id = self.get_chain_id(chain);
+        let chain_db_id = self.get_chain_id(chain)?;
         let version_ts = match &version {
             Some(version) => maybe_lookup_version_ts(version, conn).await?,
             None => Utc::now().naive_utc(),
@@ -1025,7 +1025,7 @@ impl PostgresGateway {
             (None, chrono::Utc::now().naive_utc())
         };
 
-        let chain_id = self.get_chain_id(&new.chain);
+        let chain_id = self.get_chain_id(&new.chain)?;
         let new_contract = orm::NewContract {
             title: new.title.clone(),
             address: new.address.clone(),
@@ -1064,7 +1064,7 @@ impl PostgresGateway {
             diesel::insert_into(schema::account_balance::table)
                 .values(new_contract.new_balance(
                     account_id,
-                    self.get_native_token_id(&new.chain),
+                    self.get_native_token_id(&new.chain)?,
                     tx_id,
                     created_ts,
                 ))
@@ -1104,7 +1104,7 @@ impl PostgresGateway {
         new: &[(Address, &AccountDelta)],
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
-        let chain_id = self.get_chain_id(chain);
+        let chain_id = self.get_chain_id(chain)?;
         let new = new
             .iter()
             .map(|(tx, delta)| WithTxHash { entity: delta, tx: Some(tx.to_owned()) })
@@ -1174,7 +1174,7 @@ impl PostgresGateway {
                 let new = orm::NewAccountBalance {
                     balance: new_balance,
                     account_id,
-                    token_id: self.get_native_token_id(chain),
+                    token_id: self.get_native_token_id(chain)?,
                     modify_tx: tx_id,
                     valid_from: ts,
                     valid_to: None,
@@ -1327,7 +1327,7 @@ impl PostgresGateway {
         target_version: &BlockOrTimestamp,
         conn: &mut AsyncPgConnection,
     ) -> Result<Vec<AccountDelta>, StorageError> {
-        let chain_id = self.get_chain_id(chain);
+        let chain_id = self.get_chain_id(chain)?;
         // To support blocks as versions, we need to ingest all blocks, else the
         // below method can error for any blocks that are not present.
         let start_version_ts = match start_version {
@@ -1414,7 +1414,7 @@ impl PostgresGateway {
         chain: &Chain,
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
-        let chain_id = self.get_chain_id(chain);
+        let chain_id = self.get_chain_id(chain)?;
 
         // fetch linked tokens
         let token_addresses = account_balances
@@ -1529,7 +1529,7 @@ impl PostgresGateway {
             Some(version) => Some(maybe_lookup_version_ts(version, conn).await?),
             None => None,
         };
-        let chain_id = self.get_chain_id(chain);
+        let chain_id = self.get_chain_id(chain)?;
 
         // NOTE: the balances query is split into 3 separate queries to avoid excessive table joins
         // and improve performance. The queries are as follows:
@@ -2723,7 +2723,9 @@ mod test {
         let mut conn = setup_db().await;
         setup_slots_delta(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
-        let chain_id = gw.get_chain_id(&Chain::Ethereum);
+        let chain_id = gw
+            .get_chain_id(&Chain::Ethereum)
+            .unwrap();
         let storage: ContractStore = vec![(0u8, 2u8), (1u8, 3u8), (5u8, 25u8), (6u8, 30u8)]
             .into_iter()
             .map(|(k, v)| if v > 0 { (bytes32(k), Some(bytes32(v))) } else { (bytes32(k), None) })
@@ -2750,7 +2752,9 @@ mod test {
         let mut conn = setup_db().await;
         setup_slots_delta(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
-        let chain_id = gw.get_chain_id(&Chain::Ethereum);
+        let chain_id = gw
+            .get_chain_id(&Chain::Ethereum)
+            .unwrap();
         let storage: ContractStore = vec![(0u8, 1u8), (1u8, 5u8), (5u8, 0u8), (6u8, 0u8)]
             .into_iter()
             .map(|(k, v)| if v > 0 { (bytes32(k), Some(bytes32(v))) } else { (bytes32(k), None) })
