@@ -63,6 +63,22 @@ impl SubstreamsStream {
 static DEFAULT_BACKOFF: Lazy<ExponentialBackoff> =
     Lazy::new(|| ExponentialBackoff::from_millis(500).max_delay(Duration::from_secs(45)));
 
+async fn wait_for_next_retry(
+    backoff: &mut ExponentialBackoff,
+    retry_count: &mut u32,
+    extractor_id: &str,
+) -> Result<(), Error> {
+    if let Some(duration) = backoff.next() {
+        info!("Will try to reconnect after {:?}", duration);
+        sleep(duration).await;
+        *retry_count += 1;
+        Ok(())
+    } else {
+        counter!("substreams_failure", "extractor" => extractor_id.to_string(), "cause" => "max_retries_exceeded").increment(1);
+        Err(anyhow!("Backoff requested to stop retrying, quitting"))
+    }
+}
+
 // Create the Stream implementation that streams blocks with auto-reconnection.
 #[allow(clippy::too_many_arguments)]
 fn stream_blocks(
@@ -157,15 +173,7 @@ fn stream_blocks(
                                 counter!("substreams_failure", "extractor" => extractor_id.clone(), "cause" => "tonic_error").increment(1);
 
                                 // If we reach this point, we must wait a bit before retrying
-                                if let Some(duration) = backoff.next() {
-                                    info!("Will try to reconnect after {:?}", duration);
-                                    sleep(duration).await;
-                                    retry_count += 1;
-                                } else {
-                                    counter!("substreams_failure", "extractor" => extractor_id.clone(), "cause" => "max_retries_exceeded").increment(1);
-                                    return Err(anyhow!("Backoff requested to stop retrying, quitting"))?;
-                                }
-
+                                wait_for_next_retry(&mut backoff, &mut retry_count, &extractor_id).await?;
                                 continue 'retry_loop;
                             },
                         }
@@ -179,14 +187,7 @@ fn stream_blocks(
                     error!("Unable to connect to endpoint: {:#}", e);
 
                     // If we reach this point, we must wait a bit before retrying
-                    if let Some(duration) = backoff.next() {
-                        info!("Will try to reconnect after {:?}", duration);
-                        sleep(duration).await;
-                        retry_count += 1;
-                    } else {
-                        counter!("substreams_failure", "extractor" => extractor_id.clone(), "cause" => "max_retries_exceeded").increment(1);
-                        return Err(anyhow!("Backoff requested to stop retrying, quitting"))?;
-                    }
+                    wait_for_next_retry(&mut backoff, &mut retry_count, &extractor_id).await?;
                 }
             }
         }
