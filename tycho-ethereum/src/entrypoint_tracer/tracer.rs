@@ -133,6 +133,11 @@ impl EntryPointTracer for EVMEntrypointService {
 
                     let called_addresses =
                         if let GethTrace::Known(GethTraceFrame::CallTracer(frame)) = call_trace {
+                            if let Some(reason) = frame.error.as_ref() {
+                                return Err(RPCError::UnknownError(format!(
+                                    "Call failed: {reason}"
+                                )));
+                            }
                             flatten_calls(&frame)
                         } else {
                             return Err(RPCError::UnknownError("CallTracer failed".to_string()));
