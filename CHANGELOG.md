@@ -1,3 +1,11 @@
+## [0.68.2](https://github.com/propeller-heads/tycho-indexer/compare/0.68.1...0.68.2) (2025-05-02)
+
+
+### Bug Fixes
+
+* correctly exit extraction loop on stop signal ([1ad56d8](https://github.com/propeller-heads/tycho-indexer/commit/1ad56d8705a7da53e77c9b7678b1d617c0ea8df1))
+* correctly exit extraction loop on stop signal ([#569](https://github.com/propeller-heads/tycho-indexer/issues/569)) ([d0fd91c](https://github.com/propeller-heads/tycho-indexer/commit/d0fd91c151df45cb395492a61034fa57b928fcc8))
+
 ## [0.68.1](https://github.com/propeller-heads/tycho-indexer/compare/0.68.0...0.68.1) (2025-05-02)
 
 
