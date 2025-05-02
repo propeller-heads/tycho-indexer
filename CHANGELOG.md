@@ -1,3 +1,11 @@
+## [0.68.1](https://github.com/propeller-heads/tycho-indexer/compare/0.68.0...0.68.1) (2025-05-02)
+
+
+### Bug Fixes
+
+* add backoff for retries on connections error with Substreams ([e9379b2](https://github.com/propeller-heads/tycho-indexer/commit/e9379b229c6866895709bd1b6ee32a50624e5f03))
+* add backoff for retries on connections error with Substreams ([#562](https://github.com/propeller-heads/tycho-indexer/issues/562)) ([177857c](https://github.com/propeller-heads/tycho-indexer/commit/177857c017512356e032eb20b9fe28752cb5aaba))
+
 ## [0.68.0](https://github.com/propeller-heads/tycho-indexer/compare/0.67.3...0.68.0) (2025-05-02)
 
 
