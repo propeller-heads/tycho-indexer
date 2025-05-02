@@ -1,3 +1,11 @@
+## [0.68.0](https://github.com/propeller-heads/tycho-indexer/compare/0.67.3...0.68.0) (2025-05-02)
+
+
+### Features
+
+* enhance shutdown handling with SIGTERM support ([c7c5b0d](https://github.com/propeller-heads/tycho-indexer/commit/c7c5b0dd7e57bd6c12269cf24a7b8f2760ca54ff))
+* enhance shutdown handling with SIGTERM support ([#568](https://github.com/propeller-heads/tycho-indexer/issues/568)) ([05cbea3](https://github.com/propeller-heads/tycho-indexer/commit/05cbea3fb0cbae507d0a36926794cd8cb7bcb4ab))
+
 ## [0.67.3](https://github.com/propeller-heads/tycho-indexer/compare/0.67.2...0.67.3) (2025-05-01)
 
 ## [0.67.2](https://github.com/propeller-heads/tycho-indexer/compare/0.67.1...0.67.2) (2025-05-01)
