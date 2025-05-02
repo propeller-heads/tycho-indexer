@@ -14,7 +14,12 @@ use clap::Parser;
 use futures03::future::select_all;
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use serde::Deserialize;
-use tokio::{runtime::Handle, select, task::JoinHandle};
+use tokio::{
+    runtime::Handle,
+    select,
+    signal::unix::{signal, SignalKind},
+    task::JoinHandle,
+};
 use tracing::{debug, error, info, instrument, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_common::{
@@ -523,8 +528,19 @@ async fn shutdown_handler(
     extractors: Vec<ExtractorHandle>,
     db_write_executor_handle: Option<JoinHandle<()>>,
 ) -> Result<(), ExtractionError> {
-    // listen for ctrl-c
-    tokio::signal::ctrl_c().await.unwrap();
+    let ctrl_c = tokio::signal::ctrl_c();
+    let mut sigterm =
+        signal(SignalKind::terminate()).map_err(|e| ExtractionError::Unknown(e.to_string()))?;
+
+    tokio::select! {
+        _ = ctrl_c => {
+            info!("SIGINT (Ctrl+C) received. Cleaning up...");
+        },
+        _ = sigterm.recv() => {
+            info!("SIGTERM received. Cleaning up...");
+        },
+    }
+
     for e in extractors.iter() {
         e.stop().await.unwrap();
     }
