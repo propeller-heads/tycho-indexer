@@ -1,3 +1,11 @@
+## [0.86.0](https://github.com/propeller-heads/tycho-execution/compare/0.85.1...0.86.0) (2025-05-02)
+
+
+### Features
+
+* Change revert condition in _wrapETH ([0400005](https://github.com/propeller-heads/tycho-execution/commit/04000059e5e7940f209639c900557b437a766913))
+* Propagate the entire result of the callback ([8a7c390](https://github.com/propeller-heads/tycho-execution/commit/8a7c39052d45ee75e81cbb267748a1fc635a8c34))
+
 ## [0.85.1](https://github.com/propeller-heads/tycho-execution/compare/0.85.0...0.85.1) (2025-05-01)
 
 
