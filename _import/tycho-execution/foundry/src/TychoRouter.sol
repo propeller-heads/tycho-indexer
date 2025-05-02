@@ -661,8 +661,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         bytes memory result = _callHandleCallbackOnExecutor(msg.data);
         // slither-disable-next-line assembly
         assembly ("memory-safe") {
-            // Propagate the calculatedAmount
-            return(add(result, 32), 16)
+            // Propagate the result
+            return(add(result, 32), mload(result))
         }
     }
 
