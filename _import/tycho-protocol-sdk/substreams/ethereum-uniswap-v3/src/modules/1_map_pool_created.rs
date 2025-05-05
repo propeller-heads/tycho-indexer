@@ -40,17 +40,17 @@ fn get_new_pools(
                 attributes: vec![
                     Attribute {
                         name: "liquidity".to_string(),
-                        value: BigInt::from(0).to_signed_bytes_le(),
+                        value: BigInt::from(0).to_signed_bytes_be(),
                         change: ChangeType::Creation.into(),
                     },
                     Attribute {
                         name: "tick".to_string(),
-                        value: BigInt::from(0).to_signed_bytes_le(),
+                        value: BigInt::from(0).to_signed_bytes_be(),
                         change: ChangeType::Creation.into(),
                     },
                     Attribute {
                         name: "sqrt_price_x96".to_string(),
-                        value: BigInt::from(0).to_signed_bytes_le(),
+                        value: BigInt::from(0).to_signed_bytes_be(),
                         change: ChangeType::Creation.into(),
                     },
                 ],
@@ -62,12 +62,12 @@ fn get_new_pools(
                 static_att: vec![
                     Attribute {
                         name: "fee".to_string(),
-                        value: event.fee.to_signed_bytes_le(),
+                        value: event.fee.to_signed_bytes_be(),
                         change: ChangeType::Creation.into(),
                     },
                     Attribute {
                         name: "tick_spacing".to_string(),
-                        value: event.tick_spacing.to_signed_bytes_le(),
+                        value: event.tick_spacing.to_signed_bytes_be(),
                         change: ChangeType::Creation.into(),
                     },
                     Attribute {

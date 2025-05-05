@@ -1,7 +1,8 @@
 specVersion: v0.1.0
 package:
-  name: "substreams_ethereum_uniswap_v3"
-  version: v0.2.1
+  name: "ethereum_uniswap_v3"
+  version: v0.3.0
+  url: "https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/substreams/ethereum-uniswap-v3"
 
 protobuf:
   files:
@@ -15,7 +16,7 @@ protobuf:
 binaries:
   default:
     type: wasm/rust-v1
-    file: ../../target/wasm32-unknown-unknown/substreams/substreams_ethereum_uniswap_v3.wasm
+    file: ../target/wasm32-unknown-unknown/release/ethereum_uniswap_v3.wasm
 
 modules:
   - name: map_pools_created

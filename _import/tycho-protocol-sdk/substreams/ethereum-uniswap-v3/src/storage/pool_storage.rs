@@ -77,7 +77,7 @@ impl<'a> UniswapPoolStorage<'a> {
                         };
                         attributes.push(Attribute {
                             name: storage_location.name.to_string(),
-                            value: value.to_signed_bytes_le(),
+                            value: value.to_signed_bytes_be(),
                             change: ChangeType::Update.into(),
                         });
                     }
@@ -108,7 +108,7 @@ impl<'a> UniswapPoolStorage<'a> {
         // We need this to keep the references to the names alive until we call
         // `get_changed_attributes()`
         for tick_idx in ticks_idx.iter() {
-            tick_names.push(format!("ticks/{}/net-liquidity", tick_idx));
+            tick_names.push(format!("ticks/{tick_idx}/net-liquidity"));
         }
 
         // Then, iterate over ticks_idx and tick_names simultaneously
