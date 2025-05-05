@@ -192,7 +192,7 @@ impl UniswapV4State {
                         .net_liquidity;
                     let liquidity_net = if zero_for_one { -liquidity_raw } else { liquidity_raw };
                     state.liquidity =
-                        liquidity_math::add_liquidity_delta(state.liquidity, liquidity_net);
+                        liquidity_math::add_liquidity_delta(state.liquidity, liquidity_net)?;
                 }
                 state.tick = if zero_for_one { step.tick_next - 1 } else { step.tick_next };
             } else if state.sqrt_price != step.sqrt_price_start {
@@ -360,7 +360,7 @@ impl ProtocolSim for UniswapV4State {
                     .net_liquidity;
                 let liquidity_delta = if zero_for_one { -liquidity_raw } else { liquidity_raw };
                 current_liquidity =
-                    liquidity_math::add_liquidity_delta(current_liquidity, liquidity_delta);
+                    liquidity_math::add_liquidity_delta(current_liquidity, liquidity_delta)?;
             }
 
             // Move to the next tick position
