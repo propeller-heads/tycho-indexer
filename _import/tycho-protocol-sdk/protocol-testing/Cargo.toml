@@ -7,8 +7,8 @@ edition = "2021"
 # Logging & Tracing
 tracing = "0.1.37"
 # Tycho dependencies
-tycho-core = { path = "../../tycho-indexer/tycho-core", package = "tycho-core" }
-tycho-client = { path = "../../tycho-indexer/tycho-client", package = "tycho-client" }
+tycho-common = "0.66.4"
+tycho-client = "0.66.4"
 tycho-simulation = { path = "../../tycho-simulation", features = ["evm"] }
 # EVM dependencies
 alloy = { version = "0.5.4", features = ["arbitrary", "json", "dyn-abi", "sol-types", "contract", "provider-http"] }

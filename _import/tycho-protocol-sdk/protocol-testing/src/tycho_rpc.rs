@@ -1,13 +1,17 @@
-use std::{error::Error as StdError, fmt};
+use std::{collections::HashMap, error::Error as StdError, fmt};
 
+use tracing::info;
 use tycho_client::{rpc::RPCClient, HttpRPCClient};
-use tycho_core::{
+use tycho_common::{
     dto::{
-        Chain, ProtocolComponent, ProtocolComponentsRequestBody, ResponseAccount,
-        ResponseProtocolState, VersionParam,
+        Chain, PaginationParams, ProtocolComponent, ProtocolComponentsRequestBody, ResponseAccount,
+        ResponseProtocolState, StateRequestBody, VersionParam,
     },
     models::Address,
+    Bytes,
 };
+use tycho_common::dto::ResponseToken;
+use tycho_simulation::models::Token;
 
 /// Custom error type for RPC operations
 #[derive(Debug)]
@@ -74,18 +78,18 @@ impl TychoClient {
     pub async fn get_protocol_state(
         &self,
         protocol_system: &str,
+        component_ids: Vec<String>,
         chain: Chain,
     ) -> Result<Vec<ResponseProtocolState>, RpcError> {
         let chunk_size = 100;
         let concurrency = 1;
-        let ids: &[String] = &[];
-        let version: tycho_core::dto::VersionParam = VersionParam::default();
+        let version: tycho_common::dto::VersionParam = VersionParam::default();
 
         let protocol_states = self
             .http_client
             .get_protocol_states_paginated(
                 chain,
-                ids,
+                &component_ids,
                 protocol_system,
                 true,
                 &version,
@@ -100,27 +104,53 @@ impl TychoClient {
     /// Gets contract state from the RPC server
     pub async fn get_contract_state(
         &self,
-        contract_ids: Vec<Address>,
         protocol_system: &str,
         chain: Chain,
     ) -> Result<Vec<ResponseAccount>, RpcError> {
-        // Pagination parameters
-        let chunk_size = 100;
-        let concurrency = 1;
-        let version: tycho_core::dto::VersionParam = VersionParam::default();
+        let request_body = StateRequestBody {
+            contract_ids: None,
+            protocol_system: protocol_system.to_string(),
+            version: Default::default(),
+            chain,
+            pagination: PaginationParams { page: 0, page_size: 100 },
+        };
 
         let contract_states = self
             .http_client
-            .get_contract_state_paginated(
-                chain,
-                &contract_ids,
-                protocol_system,
-                &version,
-                chunk_size,
-                concurrency,
-            )
+            .get_contract_state(&request_body)
             .await?;
 
         Ok(contract_states.accounts)
+    }
+
+    pub async fn get_tokens(
+        &self,
+        chain: Chain,
+        min_quality: Option<i32>,
+        max_days_since_last_trade: Option<u64>,
+    ) -> Result<HashMap<Bytes, Token>, RpcError> {
+        info!("Loading tokens from Tycho...");
+
+        #[allow(clippy::mutable_key_type)]
+        let res = self
+            .http_client
+            .get_all_tokens(chain, min_quality, max_days_since_last_trade, 3_000)
+            .await?
+            .into_iter()
+            .map(|token| {
+                let mut token_clone: ResponseToken = token.clone();
+                // Set default gas if empty
+                // TODO: Check if this interferes with simulation logic
+                if token_clone.gas.is_empty() {
+                    token_clone.gas = vec![Some(44000_u64)];
+                }
+                (
+                    token_clone.address.clone(),
+                    token_clone.try_into().expect("Failed to convert token"),
+                )
+            })
+            .collect::<HashMap<_, Token>>();
+
+        Ok(res)
     }
 }

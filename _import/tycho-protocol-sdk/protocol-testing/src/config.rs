@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
-use tycho_core::{dto::ProtocolComponent, Bytes};
+use tycho_common::{dto::ProtocolComponent, Bytes};
 
 /// Represents a ProtocolComponent with its main attributes
 #[derive(Debug, Clone, Deserialize, Serialize)]

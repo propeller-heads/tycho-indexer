@@ -82,6 +82,8 @@ dependencies = [
  "alloy-rpc-client",
  "alloy-rpc-types",
  "alloy-serde",
+ "alloy-signer",
+ "alloy-signer-local",
  "alloy-transport",
  "alloy-transport-http",
 ]
@@ -2080,6 +2082,18 @@ dependencies = [
 
 [[package]]
 name = "dialoguer"
+version = "0.10.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59c6f2989294b9a498d3ad5491a79c6deb604617378e1cdc4bfc1c1361fe2f87"
+dependencies = [
+ "console",
+ "shell-words",
+ "tempfile",
+ "zeroize",
+]
+
+[[package]]
+name = "dialoguer"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "658bce805d770f407bc62102fca7c2c64ceef2fbcb2b8bd19d2765ce093980de"
@@ -2293,6 +2307,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "enum_delegate"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8ea75f31022cba043afe037940d73684327e915f88f62478e778c3de914cd0a"
+dependencies = [
+ "enum_delegate_lib",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "enum_delegate_lib"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e1f6c3800b304a6be0012039e2a45a322a093539c45ab818d9e6895a39c90fe"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "rand 0.8.5",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "enumn"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2374,7 +2412,7 @@ dependencies = [
  "serde_json",
  "sha3",
  "thiserror 1.0.69",
- "uint",
+ "uint 0.9.5",
 ]
 
 [[package]]
@@ -2405,7 +2443,7 @@ dependencies = [
  "impl-serde",
  "primitive-types",
  "scale-info",
- "uint",
+ "uint 0.9.5",
 ]
 
 [[package]]
@@ -2471,6 +2509,17 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "ws_stream_wasm",
+]
+
+[[package]]
+name = "evm_ekubo_sdk"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea508be2fca38161c011c360afd34e9a6df2579273cd77b8e51aba11f35f59db"
+dependencies = [
+ "insta",
+ "num-traits",
+ "uint 0.10.0",
 ]
 
 [[package]]
@@ -2660,7 +2709,7 @@ dependencies = [
  "alloy-sol-types",
  "base64 0.22.1",
  "chrono",
- "dialoguer",
+ "dialoguer 0.11.0",
  "ecdsa",
  "eyre",
  "forge-script-sequence",
@@ -3913,6 +3962,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "insta"
+version = "1.43.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "154934ea70c58054b556dd430b99a98c2a7ff5309ac9891597e339b5c28f4371"
+dependencies = [
+ "console",
+ "once_cell",
+ "similar",
+]
+
+[[package]]
 name = "instant"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4938,7 +4998,7 @@ dependencies = [
  "impl-rlp",
  "impl-serde",
  "scale-info",
- "uint",
+ "uint 0.9.5",
 ]
 
 [[package]]
@@ -5089,7 +5149,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tycho-client",
- "tycho-core",
+ "tycho-common",
  "tycho-simulation",
 ]
 
@@ -7154,7 +7214,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.61.1"
+version = "0.66.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84f6fa393d638764970a7f6ae5e0890cdb7af8a5e7acf7a6182e33c72a4aa673"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7173,13 +7235,15 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "tycho-core",
+ "tycho-common",
  "uuid 1.15.1",
 ]
 
 [[package]]
-name = "tycho-core"
-version = "0.61.1"
+name = "tycho-common"
+version = "0.66.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03d4c3669a1169a4a86139553efa537bbf35378689beefdd8be706a1fe924d5d"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7201,13 +7265,16 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.77.1"
+version = "0.99.1"
 dependencies = [
  "alloy",
  "alloy-primitives",
  "alloy-sol-types",
  "chrono",
+ "dialoguer 0.10.4",
  "dotenv",
+ "enum_delegate",
+ "evm_ekubo_sdk",
  "foundry-config",
  "foundry-evm",
  "futures 0.3.31",
@@ -7228,7 +7295,7 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "tycho-client",
- "tycho-core",
+ "tycho-common",
  "uuid 1.15.1",
 ]
 
@@ -7279,6 +7346,18 @@ name = "uint"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76f64bba2c53b04fcab63c01a7d7427eadc821e3bc48c34dc9ba29c501164b52"
+dependencies = [
+ "byteorder",
+ "crunchy",
+ "hex",
+ "static_assertions",
+]
+
+[[package]]
+name = "uint"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "909988d098b2f738727b161a106cfc7cab00c539c2687a8836f8e565976fb53e"
 dependencies = [
  "byteorder",
  "crunchy",

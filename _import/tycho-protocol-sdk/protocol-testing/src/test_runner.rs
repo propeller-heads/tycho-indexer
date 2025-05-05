@@ -8,7 +8,7 @@ use figment::{
 use postgres::{Client, Error, NoTls};
 use tokio::runtime::Runtime;
 use tracing::{debug, info};
-use tycho_core::{
+use tycho_common::{
     dto::{Chain, ProtocolComponent, ResponseAccount, ResponseProtocolState},
     Bytes,
 };
@@ -162,12 +162,17 @@ fn validate_state(
         .block_on(tycho_client.get_protocol_components(protocol_system, chain))
         .expect("Failed to get protocol components");
 
+    let expected_ids = expected_components
+        .iter()
+        .map(|c| c.base.id.clone())
+        .collect::<Vec<String>>();
+
     let protocol_states = rt
-        .block_on(tycho_client.get_protocol_state(protocol_system, chain))
+        .block_on(tycho_client.get_protocol_state(protocol_system, expected_ids, chain))
         .expect("Failed to get protocol state");
 
     let vm_storages = rt
-        .block_on(tycho_client.get_contract_state(Vec::new(), protocol_system, chain))
+        .block_on(tycho_client.get_contract_state(protocol_system, chain))
         .expect("Failed to get contract state");
 
     // Create a map of component IDs to components for easy lookup
@@ -200,7 +205,7 @@ fn validate_state(
 
         let component = components_by_id
             .get(&component_id)
-            .unwrap();
+            .expect("Failed to get component from Tycho");
 
         let diff = expected_component
             .base
@@ -269,7 +274,7 @@ fn validate_state(
 
     // Step 3: Run Tycho Simulation
     let mut decoder = TychoStreamDecoder::new();
-    decoder.register_decoder::<EVMPoolState<PreCachedDB>>("test_protocol", None);
+    decoder.register_decoder::<EVMPoolState<PreCachedDB>>("test_protocol");
 
     // Mock a stream message, with only a Snapshot and no deltas
     let mut states: HashMap<String, ComponentWithState> = HashMap::new();
@@ -286,16 +291,17 @@ fn validate_state(
         .into_iter()
         .map(|x| (x.address.clone(), x))
         .collect();
-
     let snapshot = Snapshot { states, vm_storage };
+
+    let bytes = [0u8; 32];
 
     let state_msgs: HashMap<String, StateSyncMessage> = HashMap::from([(
         String::from("test_protocol"),
         StateSyncMessage {
             header: Header {
-                hash: Default::default(),
+                hash: Bytes::from(bytes),
                 number: stop_block,
-                parent_hash: Default::default(),
+                parent_hash: Bytes::from(bytes),
                 revert: false,
             },
             snapshots: snapshot,
@@ -304,14 +310,12 @@ fn validate_state(
         },
     )]);
 
-    let all_tokens = rt.block_on(load_all_tokens(
-        "localhost:4242",
-        true,
-        None,
-        Chain::Ethereum.into(),
-        None,
-        None,
-    ));
+    let all_tokens = rt
+        .block_on(tycho_client.get_tokens(Chain::Ethereum, None, None))
+        .expect("Failed to get tokens");
+    info!("Loaded {} tokens", all_tokens.len());
+
+    rt.block_on(decoder.set_tokens(all_tokens));
 
     let mut pairs: HashMap<String, Vec<Token>> = HashMap::new();
 
@@ -329,6 +333,9 @@ fn validate_state(
 
     // This is where we get blocked. Currently, Tycho Simulation expects the runtime to be
     // prebuild and accessible from TychoSim - we should allow passing it when parsing the block
+
+    // TODO: Since we don't have balances on the VM State, we could try to use Limits, otherwise ask the user
+    // to specify a set of values on the YAML file.
     for (id, state) in block_msg.states.iter() {
         if let Some(tokens) = pairs.get(id) {
             let formatted_token_str = format!("{:}/{:}", &tokens[0].symbol, &tokens[1].symbol);
@@ -338,18 +345,18 @@ fn validate_state(
                 .map(|price| println!("Spot price {:?}: {:?}", formatted_token_str, price))
                 .map_err(|e| eprintln!("Error calculating spot price for Pool {:?}: {:?}", id, e))
                 .ok();
-            let amount_in =
-                BigUint::from(1u32) * BigUint::from(10u32).pow(tokens[0].decimals as u32);
-            state
-                .get_amount_out(amount_in, &tokens[0], &tokens[1])
-                .map(|result| {
-                    println!(
-                        "Amount out for trading 1 {:?} -> {:?}: {:?} (takes {:?} gas)",
-                        &tokens[0].symbol, &tokens[1].symbol, result.amount, result.gas
-                    )
-                })
-                .map_err(|e| eprintln!("Error calculating amount out for Pool {:?}: {:?}", id, e))
-                .ok();
+            // let amount_in =
+            //     BigUint::from(1u32) * BigUint::from(10u32).pow(tokens[0].decimals as u32);
+            // state
+            //     .get_amount_out(amount_in, &tokens[0], &tokens[1])
+            //     .map(|result| {
+            //         println!(
+            //             "Amount out for trading 1 {:?} -> {:?}: {:?} (takes {:?} gas)",
+            //             &tokens[0].symbol, &tokens[1].symbol, result.amount, result.gas
+            //         )
+            //     })
+            //     .map_err(|e| eprintln!("Error calculating amount out for Pool {:?}: {:?}", id,
+            // e))     .ok();
         }
     }
 }
