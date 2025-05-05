@@ -89,11 +89,11 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
         assertEq(IERC20(WBTC_ADDR).balanceOf(ALICE), 118281);
     }
 
-    function testSequentialUSV4Integration() public {
+    function testSingleUSV4IntegrationGroupedSwap() public {
         // Test created with calldata from our router encoder.
 
-        // Performs a sequential swap from USDC to PEPE though ETH using two
-        // consecutive USV4 pools
+        // Performs a single swap from USDC to PEPE though ETH using two
+        // consecutive USV4 pools. It's a single swap because it is a consecutive grouped swaps
         //
         //   USDC ──(USV4)──> ETH ───(USV4)──> PEPE
         //
@@ -103,8 +103,9 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
         // Approve permit2
         vm.startPrank(ALICE);
         IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
-        bytes memory callData =
-            loadCallDataFromFile("test_sequential_encoding_strategy_usv4");
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_usv4_grouped_swap"
+        );
         (bool success,) = tychoRouterAddr.call(callData);
 
         vm.stopPrank();

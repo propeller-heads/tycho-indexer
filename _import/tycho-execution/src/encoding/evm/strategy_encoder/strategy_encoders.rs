@@ -2509,7 +2509,7 @@ mod tests {
         }
 
         #[test]
-        fn test_sequential_encoding_strategy_usv4() {
+        fn test_single_encoding_strategy_usv4_grouped_swap() {
             // Performs a sequential swap from USDC to PEPE though ETH using two consecutive USV4
             // pools
             //
@@ -2565,7 +2565,7 @@ mod tests {
                 split: 0f64,
             };
             let swap_encoder_registry = get_swap_encoder_registry();
-            let encoder = SequentialSwapStrategyEncoder::new(
+            let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
                 Some(private_key),
@@ -2592,7 +2592,7 @@ mod tests {
                 .unwrap();
 
             let expected_input = [
-                "51bcc7b6",                                                              // Function selector
+                "30ace1b1",                                                              // Function selector (single swap)
                 "000000000000000000000000000000000000000000000000000000003b9aca00",      // amount in
                 "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",      // token in
                 "0000000000000000000000006982508145454ce325ddbe47a25d4ec3d2311933",      // token out
@@ -2608,9 +2608,7 @@ mod tests {
 
             let expected_swaps = String::from(concat!(
                 // length of ple encoded swaps without padding
-                "0000000000000000000000000000000000000000000000000000000000000088",
-                // ple encoded swaps
-                "0086", // Swap length
+                "0000000000000000000000000000000000000000000000000000000000000086",
                 // Swap data header
                 "f62849f9a0b5bf2913b396098f7c7019b51a820a", // executor address
                 // Protocol data
@@ -2627,14 +2625,17 @@ mod tests {
                 "6982508145454ce325ddbe47a25d4ec3d2311933", // intermediary token (PEPE)
                 "0061a8",                                   // fee
                 "0001f4",                                   // tick spacing
-                "000000000000000000000000000000000000000000000000"  // padding
+                "0000000000000000000000000000000000000000000000000000"  // padding
             ));
 
             let hex_calldata = encode(&calldata);
 
             assert_eq!(hex_calldata[..456], expected_input);
             assert_eq!(hex_calldata[1224..], expected_swaps);
-            write_calldata_to_file("test_sequential_encoding_strategy_usv4", hex_calldata.as_str());
+            write_calldata_to_file(
+                "test_single_encoding_strategy_usv4_grouped_swap",
+                hex_calldata.as_str(),
+            );
         }
 
         #[test]
