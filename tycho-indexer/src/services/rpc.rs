@@ -263,7 +263,7 @@ where
                 .ok_or_else(|| {
                     RpcError::Storage(StorageError::NotFound(
                         "Version".to_string(),
-                        format!("{:?}", request_version),
+                        format!("{request_version:?}",),
                     ))
                 })?;
 
@@ -326,7 +326,7 @@ where
                         // If the request is based on a block and it's unseen, return an error
                         Err(RpcError::Storage(StorageError::NotFound(
                             "Version".to_string(),
-                            format!("{:?}", request_version),
+                            format!("{request_version:?}",),
                         )))
                     }
                 }
@@ -1335,10 +1335,7 @@ mod tests {
         let json_data = serde_json::to_string(&request_body).expect("Failed to serialize to JSON");
 
         // Print the curl command
-        println!(
-            "curl -X POST -H \"Content-Type: application/json\" -d '{}' {}",
-            json_data, endpoint
-        );
+        println!("curl -X POST -H \"Content-Type: application/json\" -d '{json_data}' {endpoint}");
     }
 
     #[tokio::test]

@@ -151,89 +151,97 @@ impl ExtractorRunner {
                     block_number = tracing::field::Empty,
                     otel.status_code = tracing::field::Empty,
                 );
-                async {
+
+                let should_continue = async {
                     tokio::select! {
-                    Some(ctrl) = self.control_rx.recv() =>  {
-                        match ctrl {
-                            ControlMessage::Stop => {
-                                warn!("Stop signal received; exiting!");
-                                return Ok(())
-                            },
-                            ControlMessage::Subscribe(sender) => {
-                                self.subscribe(sender).await;
-                            },
+                        Some(ctrl) = self.control_rx.recv() => {
+                            match ctrl {
+                                ControlMessage::Stop => {
+                                    warn!("Stop signal received; exiting!");
+                                    return Ok(false);
+                                },
+                                ControlMessage::Subscribe(sender) => {
+                                    self.subscribe(sender).await;
+                                },
+                            }
+                        }
+                        val = self.substreams.next() => {
+                            match val {
+                                None => {
+                                    error!("stream ended");
+                                    tracing::Span::current().record("otel.status_code", "error");
+                                    return Err(ExtractionError::SubstreamsError(format!("{id}: stream ended")));
+                                }
+                                Some(Ok(BlockResponse::New(data))) => {
+                                    let block_number = data.clock.as_ref().map(|v| v.number).unwrap_or(0);
+                                    tracing::Span::current().record("block_number", block_number);
+                                    gauge!(
+                                        "extractor_current_block_number",
+                                        "chain" => id.chain.to_string(),
+                                        "extractor" => id.name.to_string()
+                                    ).set(block_number as f64);
+
+                                    // Start measuring block processing time
+                                    let start_time = std::time::Instant::now();
+
+                                    // TODO: change interface to take a reference to avoid this clone
+                                    match self.extractor.handle_tick_scoped_data(data.clone()).await {
+                                        Ok(Some(msg)) => {
+                                            trace!("Propagating new block data message.");
+                                            Self::propagate_msg(&self.subscriptions, msg).await
+                                        }
+                                        Ok(None) => {
+                                            trace!("No message to propagate.");
+                                        }
+                                        Err(err) => {
+                                            error!(error = %err, "Error while processing tick!");
+                                            tracing::Span::current().record("otel.status_code", "error");
+                                            return Err(err);
+                                        }
+                                    }
+
+                                    let duration = start_time.elapsed();
+                                    gauge!(
+                                        "block_processing_time_ms",
+                                        "chain" => id.chain.to_string(),
+                                        "extractor" => id.name.to_string()
+                                    ).set(duration.as_millis() as f64);
+                                }
+                                Some(Ok(BlockResponse::Undo(undo_signal))) => {
+                                    info!(block=?&undo_signal.last_valid_block,  "Revert requested!");
+                                    match self.extractor.handle_revert(undo_signal.clone()).await {
+                                        Ok(Some(msg)) => {
+                                            trace!("Propagating block undo message.");
+                                            Self::propagate_msg(&self.subscriptions, msg).await
+                                        }
+                                        Ok(None) => {
+                                            trace!("No message to propagate.");
+                                        }
+                                        Err(err) => {
+                                            error!(error = %err, "Error while processing revert!");
+                                            tracing::Span::current().record("otel.status_code", "error");
+                                            return Err(err);
+                                        }
+                                    }
+                                }
+                                Some(Err(err)) => {
+                                    error!(error = %err, "Stream terminated with error.");
+                                    tracing::Span::current().record("otel.status_code", "error");
+                                    return Err(ExtractionError::SubstreamsError(err.to_string()));
+                                }
+                            };
                         }
                     }
-                    val = self.substreams.next() => {
-                        match val {
-                            None => {
-                                error!("stream ended");
-                                tracing::Span::current().record("otel.status_code", "error");
-                                return Err(ExtractionError::SubstreamsError(format!("{}: stream ended", id)));
-                            }
-                            Some(Ok(BlockResponse::New(data))) => {
-                                let block_number = data.clock.as_ref().map(|v| v.number).unwrap_or(0);
-                                tracing::Span::current().record("block_number", block_number);
-                                gauge!(
-                                    "extractor_current_block_number", 
-                                    "chain" => id.chain.to_string(), 
-                                    "extractor" => id.name.to_string()
-                                ).set(block_number as f64);
 
-                                // Start measuring block processing time
-                                let start_time = std::time::Instant::now();
-
-                                // TODO: change interface to take a reference to avoid this clone
-                                match self.extractor.handle_tick_scoped_data(data.clone()).await {
-                                    Ok(Some(msg)) => {
-                                        trace!("Propagating new block data message.");
-                                        Self::propagate_msg(&self.subscriptions, msg).await
-                                    }
-                                    Ok(None) => {
-                                        trace!("No message to propagate.");
-                                    }
-                                    Err(err) => {
-                                        error!(error = %err, "Error while processing tick!");
-                                        tracing::Span::current().record("otel.status_code", "error");
-                                        return Err(err);
-                                    }
-                                }
-
-                                let duration = start_time.elapsed();
-                                gauge!(
-                                    "block_processing_time_ms", 
-                                    "chain" => id.chain.to_string(), 
-                                    "extractor" => id.name.to_string()
-                                ).set(duration.as_millis() as f64);
-                            }
-                            Some(Ok(BlockResponse::Undo(undo_signal))) => {
-                                info!(block=?&undo_signal.last_valid_block,  "Revert requested!");
-                                match self.extractor.handle_revert(undo_signal.clone()).await {
-                                    Ok(Some(msg)) => {
-                                        trace!("Propagating block undo message.");
-                                        Self::propagate_msg(&self.subscriptions, msg).await
-                                    }
-                                    Ok(None) => {
-                                        trace!("No message to propagate.");
-                                    }
-                                    Err(err) => {
-                                        error!(error = %err, "Error while processing revert!");
-                                        tracing::Span::current().record("otel.status_code", "error");
-                                        return Err(err);
-                                    }
-                                }
-                            }
-                            Some(Err(err)) => {
-                                error!(error = %err, "Stream terminated with error.");
-                                tracing::Span::current().record("otel.status_code", "error");
-                                return Err(ExtractionError::SubstreamsError(err.to_string()));
-                            }
-                        };
-                    }
-                };
                     tracing::Span::current().record("otel.status_code", "ok");
-                    Ok(())
-                }.instrument(loop_span).await?
+                    Ok(true) // Continue the loop
+                }
+                .instrument(loop_span)
+                .await?;
+
+                if !should_continue {
+                    break Ok(());
+                }
             }
         })
     }
@@ -476,8 +484,7 @@ impl ExtractorBuilder {
                     .cloned()
                     .ok_or_else(|| {
                         ExtractionError::Setup(format!(
-                            "Post processor '{}' not found in registry",
-                            name
+                            "Post processor '{name}' not found in registry"
                         ))
                     })
             })
@@ -579,7 +586,7 @@ async fn download_file_from_s3(
     // Ensure the directory exists
     if let Some(parent) = download_path.parent() {
         std::fs::create_dir_all(parent)
-            .context(format!("Failed to create directories for {:?}", parent))?;
+            .context(format!("Failed to create directories for {parent:?}"))?;
     }
 
     std::fs::write(download_path, data.into_bytes()).unwrap();

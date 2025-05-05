@@ -911,7 +911,7 @@ mod tests {
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
 
-        let client = WsDeltasClient::new(&format!("ws://{}", addr), None).unwrap();
+        let client = WsDeltasClient::new(&format!("ws://{addr}"), None).unwrap();
         let jh = client
             .connect()
             .await
@@ -998,7 +998,7 @@ mod tests {
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
 
-        let client = WsDeltasClient::new(&format!("ws://{}", addr), None).unwrap();
+        let client = WsDeltasClient::new(&format!("ws://{addr}"), None).unwrap();
         let jh = client
             .connect()
             .await
@@ -1079,7 +1079,7 @@ mod tests {
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
 
-        let client = WsDeltasClient::new(&format!("ws://{}", addr), None).unwrap();
+        let client = WsDeltasClient::new(&format!("ws://{addr}"), None).unwrap();
         let jh = client
             .connect()
             .await
@@ -1213,7 +1213,7 @@ mod tests {
             ))
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 1).await;
-        let client = WsDeltasClient::new(&format!("ws://{}", addr), None).unwrap();
+        let client = WsDeltasClient::new(&format!("ws://{addr}"), None).unwrap();
         let jh: JoinHandle<Result<(), DeltasError>> = client
             .connect()
             .await
@@ -1267,8 +1267,7 @@ mod tests {
     #[tokio::test]
     async fn test_connect_max_attempts() {
         let (addr, _) = mock_bad_connection_tycho_ws().await;
-        let client =
-            WsDeltasClient::new_with_reconnects(&format!("ws://{}", addr), 3, None).unwrap();
+        let client = WsDeltasClient::new_with_reconnects(&format!("ws://{addr}"), 3, None).unwrap();
 
         let join_handle = client.connect().await;
 

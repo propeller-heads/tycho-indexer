@@ -11,7 +11,7 @@ use tokio::{
     sync::{mpsc, oneshot, Mutex},
     task::JoinHandle,
 };
-use tracing::{debug, info, info_span, instrument, trace, Instrument};
+use tracing::{debug, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
     models::{
         self,
@@ -310,30 +310,61 @@ impl DBCacheWriteExecutor {
             .await
             .expect("pool should be connected");
 
-        let res = conn
-            .build_transaction()
-            .repeatable_read()
-            .run(|conn| {
-                async {
-                    for op in new_db_tx.operations {
-                        match self.execute_write_op(&op, conn).await {
-                            Err(PostgresError(StorageError::DuplicateEntry(entity, id))) => {
-                                // As this db transaction is old. It can contain
-                                // already stored txs, we log the duplicate entry
-                                // error and continue
-                                debug!("Ignoring duplicate entry for {} with id {}", entity, id);
+        let mut retry_count = 0;
+        let max_retries = 3;
+        let mut res =
+            Err(PostgresError(StorageError::Unexpected("default response error".to_string())));
+
+        while retry_count < max_retries {
+            res = conn
+                .build_transaction()
+                .repeatable_read()
+                .run(|conn| {
+                    async {
+                        for op in new_db_tx.operations.iter() {
+                            match self.execute_write_op(op, conn).await {
+                                Err(PostgresError(StorageError::DuplicateEntry(entity, id))) => {
+                                    // As this db transaction is old. It can contain
+                                    // already stored txs, we log the duplicate entry
+                                    // error and continue
+                                    debug!(
+                                        "Ignoring duplicate entry for {} with id {}",
+                                        entity, id
+                                    );
+                                }
+                                Err(e) => {
+                                    return Err(e);
+                                }
+                                _ => {}
                             }
-                            Err(e) => {
-                                return Err(e);
-                            }
-                            _ => {}
                         }
+                        Result::<(), PostgresError>::Ok(())
                     }
-                    Result::<(), PostgresError>::Ok(())
+                    .scope_boxed()
+                })
+                .await;
+
+            match res {
+                Ok(_) => break,
+                Err(PostgresError(StorageError::Unexpected(ref e)))
+                    if e.contains("deadlock detected") =>
+                {
+                    retry_count += 1;
+                    if retry_count < max_retries {
+                        let delay = std::time::Duration::from_secs(retry_count);
+                        warn!(
+                            "Deadlock detected, retrying in {:?} (attempt {}/{})",
+                            delay,
+                            retry_count + 1,
+                            max_retries
+                        );
+                        tokio::time::sleep(delay).await;
+                        continue;
+                    }
                 }
-                .scope_boxed()
-            })
-            .await;
+                _ => break,
+            }
+        }
 
         if res.is_ok() {
             debug!("DBTransactionCommitted");

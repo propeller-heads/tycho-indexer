@@ -97,10 +97,6 @@ where
         #[derive(OpenApi)]
         #[openapi(
             info(title = "Tycho-Indexer RPC",),
-            servers(
-                (url = "https://tycho-beta.propellerheads.xyz/", description = "PropellerHeads hosted service"),
-                (url = "/", description = "Local"),
-            ),
             paths(
                 rpc::health,
                 rpc::protocol_systems,
@@ -215,7 +211,12 @@ where
         let server = HttpServer::new(move || {
             let cors = Cors::default()
                 .allowed_origin("https://open.gitbook.com")
-                .allowed_origin("https://docs.propellerheads.xyz")
+                .allowed_origin_fn(|origin, _req_head| {
+                    // Allow all propellerheads.xyz subdomains
+                    origin
+                        .as_bytes()
+                        .ends_with(b".propellerheads.xyz")
+                })
                 .allow_any_method()
                 .allowed_headers(vec![
                     http::header::AUTHORIZATION,

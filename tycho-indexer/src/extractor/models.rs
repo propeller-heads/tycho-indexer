@@ -708,10 +708,10 @@ pub mod fixtures {
                 Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
                 ComponentBalance {
                     token: Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
-                    balance: Bytes::from(1_i32.to_le_bytes()),
+                    balance: Bytes::from(1_i32.to_be_bytes()),
                     modify_tx: tx.hash.clone(),
                     component_id: "Balance1".to_string(),
-                    balance_float: 16777216.0,
+                    balance_float: 1.0,
                 },
             )]
             .into_iter()
@@ -908,8 +908,8 @@ mod test {
                 (c_id_key.clone(), token_key.clone()),
                 tycho_common::models::protocol::ComponentBalance {
                     token: Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
-                    balance: Bytes::from(1_i32.to_le_bytes()),
-                    balance_float: 16777216.0,
+                    balance: Bytes::from(1_i32.to_be_bytes()),
+                    balance_float: 1.0,
                     modify_tx: Bytes::from(
                         "0x0000000000000000000000000000000000000000000000000000000011121314"
                     ),

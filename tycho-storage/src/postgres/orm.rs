@@ -919,9 +919,9 @@ impl ProtocolState {
                                 SELECT 1 FROM protocol_state ps2
                                 WHERE ps2.protocol_component_id = protocol_state.protocol_component_id
                                 AND ps2.attribute_name = protocol_state.attribute_name
-                                AND ps2.valid_from <= '{}'
-                                AND ps2.valid_to > '{}'
-                            )", end_ts, end_ts);
+                                AND ps2.valid_from <= '{end_ts}'
+                                AND ps2.valid_to > '{end_ts}'
+                            )");
 
         // query for all state updates that have a valid_to between start_ts and end_ts (potentially
         // have been deleted) and filter it by the subquery for attributes that exist at end_ts
@@ -988,9 +988,9 @@ impl ProtocolState {
                                 SELECT 1 FROM protocol_state ps2
                                 WHERE ps2.protocol_component_id = protocol_state.protocol_component_id
                                 AND ps2.attribute_name = protocol_state.attribute_name
-                                AND ps2.valid_from <= '{}'
-                                AND ps2.valid_to > '{}'
-                            )", start_ts, start_ts);
+                                AND ps2.valid_from <= '{start_ts}'
+                                AND ps2.valid_to > '{start_ts}'
+                            )");
 
         // We query all states that were deleted between the start and target timestamps. Deleted
         // states need to be reinstated so we return the component id, attribute name and latest
@@ -1717,7 +1717,7 @@ impl ComponentTVL {
         // Generate bind parameter 2-tuples the result will look like '($1, $2), ($3, $4), ...'
         // These are later subsituted with the primary key and valid to values.
         let bind_params = (1..=new_tvl_values.len() * 2)
-            .map(|i| if i % 2 == 0 { format!("${}", i) } else { format!("(${}", i) })
+            .map(|i| if i % 2 == 0 { format!("${i}") } else { format!("(${i}") })
             .collect::<Vec<String>>()
             .chunks(2)
             .map(|chunk| chunk.join(", ") + ")")
@@ -1726,11 +1726,10 @@ impl ComponentTVL {
         let query_tmpl = format!(
             r#"
             INSERT INTO component_tvl (protocol_component_id, tvl)
-            VALUES {}
+            VALUES {bind_params}
             ON CONFLICT (protocol_component_id) 
             DO UPDATE SET tvl = EXCLUDED.tvl;
-            "#,
-            bind_params
+            "#
         );
         let mut q = sql_query(query_tmpl).into_boxed();
         for (k, v) in new_tvl_values.iter() {

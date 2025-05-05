@@ -145,7 +145,7 @@ impl PostgresGateway {
         conn: &mut AsyncPgConnection,
     ) -> Result<WithTotal<Vec<ProtocolComponent>>, StorageError> {
         use super::schema::{protocol_component::dsl::*, transaction::dsl::*};
-        let chain_id_value = self.get_chain_id(chain);
+        let chain_id_value = self.get_chain_id(chain)?;
 
         let mut count_query = protocol_component
             .left_join(schema::component_tvl::table)
@@ -159,7 +159,7 @@ impl PostgresGateway {
 
         match (system, ids) {
             (Some(ps), None) => {
-                let protocol_system = self.get_protocol_system_id(&ps);
+                let protocol_system = self.get_protocol_system_id(&ps)?;
                 query = query.filter(
                     chain_id
                         .eq(chain_id_value)
@@ -184,7 +184,7 @@ impl PostgresGateway {
                 );
             }
             (Some(ps), Some(external_ids)) => {
-                let protocol_system = self.get_protocol_system_id(&ps);
+                let protocol_system = self.get_protocol_system_id(&ps)?;
                 query = query.filter(
                     chain_id.eq(chain_id_value).and(
                         external_id
@@ -317,7 +317,7 @@ impl PostgresGateway {
         orm_protocol_components
             .into_iter()
             .map(|(pc, tx_hash)| {
-                let ps = self.get_protocol_system(&pc.protocol_system_id);
+                let ps = self.get_protocol_system(&pc.protocol_system_id)?;
                 let tokens_by_pc: Vec<Address> = protocol_component_tokens
                     .get(&pc.id)
                     // We expect all protocol components to have tokens.
@@ -366,7 +366,7 @@ impl PostgresGateway {
         min_balance: Option<f64>,
         conn: &mut AsyncPgConnection,
     ) -> Result<HashMap<Address, (ComponentId, Bytes)>, StorageError> {
-        let chain_id = self.get_chain_id(chain);
+        let chain_id = self.get_chain_id(chain)?;
         let token_ids: HashMap<i64, Address> = schema::token::table
             .inner_join(schema::account::table)
             .select((schema::token::id, schema::account::address))
@@ -441,9 +441,9 @@ impl PostgresGateway {
 
             let new_pc = orm::NewProtocolComponent::new(
                 &pc.id,
-                self.get_chain_id(&pc.chain),
+                self.get_chain_id(&pc.chain)?,
                 pt_id,
-                self.get_protocol_system_id(&pc.protocol_system.to_string()),
+                self.get_protocol_system_id(&pc.protocol_system.to_string())?,
                 *txh,
                 pc.created_at,
                 &pc.static_attributes,
@@ -471,7 +471,7 @@ impl PostgresGateway {
         let mut protocol_db_id_map = HashMap::new();
         for (pc_id, ex_id, ps_id, chain_id_db) in inserted_protocol_components {
             protocol_db_id_map.insert(
-                (ex_id, self.get_protocol_system(&ps_id), self.get_chain(&chain_id_db)),
+                (ex_id, self.get_protocol_system(&ps_id)?, self.get_chain(&chain_id_db)?),
                 pc_id,
             );
         }
@@ -691,7 +691,7 @@ impl PostgresGateway {
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
     ) -> Result<WithTotal<Vec<ProtocolComponentState>>, StorageError> {
-        let chain_db_id = self.get_chain_id(chain);
+        let chain_db_id = self.get_chain_id(chain)?;
         let version_ts = match &at {
             Some(version) => Some(maybe_lookup_version_ts(version, conn).await?),
             None => None,
@@ -758,7 +758,7 @@ impl PostgresGateway {
         new: &[(TxHash, &ProtocolComponentStateDelta)],
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
-        let chain_db_id = self.get_chain_id(chain);
+        let chain_db_id = self.get_chain_id(chain)?;
         let new = new
             .iter()
             .map(|(tx, delta)| WithTxHash { entity: delta, tx: Some(tx.to_owned()) })
@@ -911,7 +911,7 @@ impl PostgresGateway {
         conn: &mut AsyncPgConnection,
     ) -> Result<WithTotal<Vec<CurrencyToken>>, StorageError> {
         use super::schema::{account::dsl::*, token::dsl::*};
-        let chain_db_id = self.get_chain_id(&chain);
+        let chain_db_id = self.get_chain_id(&chain)?;
 
         let mut count_query = token
             .inner_join(account)
@@ -1017,17 +1017,17 @@ impl PostgresGateway {
             .zip(titles.iter())
             .zip(addresses.iter())
             .map(|((token, title), address)| {
-                let chain_id = self.get_chain_id(&token.chain);
-                orm::NewAccount {
+                let chain_id = self.get_chain_id(&token.chain)?;
+                Ok(orm::NewAccount {
                     title,
                     address,
                     chain_id,
                     creation_tx: None,
                     created_at: None,
                     deleted_at: None,
-                }
+                })
             })
-            .collect();
+            .collect::<Result<Vec<_>, StorageError>>()?;
 
         diesel::insert_into(schema::account::table)
             .values(&new_accounts)
@@ -1052,7 +1052,7 @@ impl PostgresGateway {
         let new_tokens: Vec<orm::NewToken> = tokens
             .iter()
             .map(|token| {
-                let token_chain_id = self.get_chain_id(&token.chain);
+                let token_chain_id = self.get_chain_id(&token.chain)?;
                 let account_key = (token.address.to_vec(), token_chain_id);
 
                 let account_id = *account_map
@@ -1061,9 +1061,9 @@ impl PostgresGateway {
 
                 let mut new_token = orm::NewToken::from_token(account_id, token);
                 new_token.symbol = truncate_to_byte_limit(&token.symbol, 255);
-                new_token
+                Ok(new_token)
             })
-            .collect();
+            .collect::<Result<Vec<_>, StorageError>>()?;
 
         diesel::insert_into(schema::token::table)
             .values(&new_tokens)
@@ -1134,7 +1134,7 @@ impl PostgresGateway {
     ) -> Result<(), StorageError> {
         use super::schema::{account::dsl::*, token::dsl::*};
 
-        let chain_db_id = self.get_chain_id(chain);
+        let chain_db_id = self.get_chain_id(chain)?;
         let token_addresses: Vec<Address> = component_balances
             .iter()
             .map(|component_balance| component_balance.token.clone())
@@ -1258,7 +1258,7 @@ impl PostgresGateway {
         conn: &mut AsyncPgConnection,
     ) -> Result<Vec<ComponentBalance>, StorageError> {
         use schema::component_balance::dsl::*;
-        let chain_id = self.get_chain_id(chain);
+        let chain_id = self.get_chain_id(chain)?;
 
         let start_ts = match start_version {
             Some(version) => maybe_lookup_block_ts(version, conn).await?,
@@ -1372,7 +1372,7 @@ impl PostgresGateway {
             Some(version) => Some(maybe_lookup_version_ts(version, conn).await?),
             None => None,
         };
-        let chain_id = self.get_chain_id(chain);
+        let chain_id = self.get_chain_id(chain)?;
 
         // NOTE: the balances query was split into 3 separate queries to avoid excessive table joins
         // and improve performance. The queries are as follows:
@@ -1502,7 +1502,7 @@ impl PostgresGateway {
             // deleted states between start and target version. We then merge the two
             // sets of results.
 
-            let chain_db_id = self.get_chain_id(chain);
+            let chain_db_id = self.get_chain_id(chain)?;
 
             // fetch updated component attributes
             let state_updates =
@@ -1600,7 +1600,7 @@ impl PostgresGateway {
             // We query for the previous values of all component attributes updated between
             // start and target version.
 
-            let chain_db_id = self.get_chain_id(chain);
+            let chain_db_id = self.get_chain_id(chain)?;
 
             // fetch reverse attribute changes
             let result =
@@ -1663,7 +1663,7 @@ impl PostgresGateway {
         conn: &mut AsyncPgConnection,
     ) -> Result<HashMap<Address, f64>, StorageError> {
         use schema::token_price::dsl::*;
-        let chain_id = self.get_chain_id(chain);
+        let chain_id = self.get_chain_id(chain)?;
         Ok(token_price
             .inner_join(schema::token::table.inner_join(schema::account::table))
             .select((schema::account::address, price))
@@ -1681,7 +1681,7 @@ impl PostgresGateway {
         tvl_values: &HashMap<String, f64>,
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
-        let chain_id = self.get_chain_id(chain);
+        let chain_id = self.get_chain_id(chain)?;
         let external_ids = tvl_values
             .keys()
             .map(|s| s.as_str())
@@ -3327,10 +3327,15 @@ mod test {
                 &original_component
                     .protocol_system
                     .to_string()
-            ),
+            )
+            .unwrap(),
             inserted_data.protocol_system_id
         );
-        assert_eq!(gw.get_chain_id(&original_component.chain), inserted_data.chain_id);
+        assert_eq!(
+            gw.get_chain_id(&original_component.chain)
+                .unwrap(),
+            inserted_data.chain_id
+        );
         assert_eq!(original_component.id, inserted_data.external_id);
 
         // assert junction table
@@ -3829,7 +3834,9 @@ mod test {
         let mut conn = setup_db().await;
         setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
-        let chain_id = gw.get_chain_id(&Chain::Ethereum);
+        let chain_id = gw
+            .get_chain_id(&Chain::Ethereum)
+            .unwrap();
         let exp = [("state1", 100.0), ("no_tvl", 1.0), ("state3", 1.0)]
             .into_iter()
             .map(|(id, tvl)| (id.to_owned(), tvl))
@@ -3914,7 +3921,7 @@ mod test {
                 assert_eq!(entity, "Chain");
                 assert_eq!(value, Chain::Arbitrum.to_string());
             }
-            _ => panic!("Expected StorageError::NotFound, but got {:?}", res),
+            _ => panic!("Expected StorageError::NotFound, but got {res:?}"),
         }
     }
 

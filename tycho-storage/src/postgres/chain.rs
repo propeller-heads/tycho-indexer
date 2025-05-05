@@ -24,7 +24,7 @@ impl PostgresGateway {
             warn!("Upsert blocks called with empty blocks!");
             return Ok(());
         }
-        let block_chain_id = self.get_chain_id(&blocks[0].chain);
+        let block_chain_id = self.get_chain_id(&blocks[0].chain)?;
         let new_blocks = blocks
             .iter()
             .map(|new| orm::NewBlock {
@@ -72,7 +72,7 @@ impl PostgresGateway {
             BlockIdentifier::Latest(chain) => orm::Block::most_recent(*chain, conn).await,
         }
         .map_err(|err| storage_error_from_diesel(err, "Block", &block_id.to_string(), None))?;
-        let chain = self.get_chain(&orm_block.chain_id);
+        let chain = self.get_chain(&orm_block.chain_id)?;
         Ok(Block::new(
             orm_block.number as u64,
             chain,
@@ -124,7 +124,7 @@ impl PostgresGateway {
                         StorageError::NoRelatedEntity(
                             "Block".to_string(),
                             "Transaction".to_string(),
-                            format!("{}", block_h),
+                            block_h.to_string(),
                         )
                     })?;
                 Ok(orm::NewTransaction {

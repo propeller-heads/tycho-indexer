@@ -183,7 +183,7 @@ pub(crate) struct ValueIdTableCache<E> {
 /// Uses a double sided hash map to provide quick lookups in both directions.
 impl<E> ValueIdTableCache<E>
 where
-    E: Eq + Hash + Clone + FromStr + std::fmt::Debug,
+    E: Eq + Hash + Clone + FromStr + std::fmt::Debug + std::fmt::Display,
     <E as FromStr>::Err: std::fmt::Debug,
 {
     /// Creates a new cache from a slice of tuples.
@@ -201,31 +201,30 @@ where
         cache
     }
 
-    /// Fetches the associated database ID for an enum variant. Panics on cache
-    /// miss.
+    /// Fetches the associated database ID for an enum variant. Returns a StorageError
+    /// if the enum variant is not found in the cache.
     ///
     /// # Arguments
     ///
     /// * `val` - The enum variant to lookup.
-    fn get_id(&self, val: &E) -> i64 {
-        *self.map_id.get(val).unwrap_or_else(|| {
-            panic!("Unexpected cache miss for enum {:?}, entries: {:?}", val, self.map_id)
-        })
+    fn try_get_id(&self, val: &E) -> Result<i64, StorageError> {
+        self.map_id
+            .get(val)
+            .copied()
+            .ok_or(StorageError::NotFound(val.to_string(), "id".to_string()))
     }
 
-    /// Retrieves the corresponding enum variant for a database ID. Panics on
-    /// cache miss.
+    /// Retrieves the corresponding enum variant for a database ID. Returns a StorageError
+    /// if the database ID is not found in the cache.
     ///
     /// # Arguments
     ///
     /// * `id` - The database ID to lookup.
-    fn get_value(&self, id: &i64) -> E {
+    fn try_get_value(&self, id: &i64) -> Result<E, StorageError> {
         self.map_enum
             .get(id)
-            .unwrap_or_else(|| {
-                panic!("Unexpected cache miss for id {}, entries: {:?}", id, self.map_enum)
-            })
-            .to_owned()
+            .cloned()
+            .ok_or(StorageError::NotFound(id.to_string(), "enum".to_string()))
     }
 
     /// Checks if an enum variant exists in the cache. Returns `true` if the variant is found,
@@ -257,7 +256,7 @@ impl FromConnection<ChainEnumCache> for ChainEnumCache {
         let mut conn = pool
             .get()
             .await
-            .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
+            .map_err(|err| StorageError::Unexpected(err.to_string()))?;
 
         Self::from_connection(&mut conn).await
     }
@@ -285,7 +284,7 @@ impl FromConnection<ProtocolSystemEnumCache> for ProtocolSystemEnumCache {
         let mut conn = pool
             .get()
             .await
-            .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
+            .map_err(|err| StorageError::Unexpected(err.to_string()))?;
 
         Self::from_connection(&mut conn).await
     }
@@ -338,7 +337,7 @@ struct PostgresError(StorageError);
 
 impl From<diesel::result::Error> for PostgresError {
     fn from(value: diesel::result::Error) -> Self {
-        PostgresError(StorageError::Unexpected(format!("DieselError: {}", value)))
+        PostgresError(StorageError::Unexpected(format!("DieselError: {value}")))
     }
 }
 
@@ -418,7 +417,7 @@ async fn maybe_lookup_block_ts(
         BlockOrTimestamp::Block(BlockIdentifier::Number((chain, no))) => {
             Ok(orm::Block::by_number(*chain, *no, conn)
                 .await
-                .map_err(|err| storage_error_from_diesel(err, "Block", &format!("{}", no), None))?
+                .map_err(|err| storage_error_from_diesel(err, "Block", &format!("{no}"), None))?
                 .ts)
         }
         BlockOrTimestamp::Block(BlockIdentifier::Latest(chain)) => {
@@ -489,26 +488,27 @@ impl PostgresGateway {
         )
     }
 
-    fn get_chain_id(&self, chain: &Chain) -> i64 {
-        self.chain_id_cache.get_id(chain)
+    fn get_chain_id(&self, chain: &Chain) -> Result<i64, StorageError> {
+        self.chain_id_cache.try_get_id(chain)
     }
 
-    fn get_chain(&self, id: &i64) -> Chain {
-        self.chain_id_cache.get_value(id)
+    fn get_chain(&self, id: &i64) -> Result<Chain, StorageError> {
+        self.chain_id_cache.try_get_value(id)
     }
 
-    fn get_native_token_id(&self, chain: &Chain) -> i64 {
-        self.native_token_id_cache.get_id(chain)
+    fn get_native_token_id(&self, chain: &Chain) -> Result<i64, StorageError> {
+        self.native_token_id_cache
+            .try_get_id(chain)
     }
 
-    fn get_protocol_system_id(&self, protocol_system: &String) -> i64 {
+    fn get_protocol_system_id(&self, protocol_system: &String) -> Result<i64, StorageError> {
         self.protocol_system_id_cache
-            .get_id(protocol_system)
+            .try_get_id(protocol_system)
     }
 
-    fn get_protocol_system(&self, id: &i64) -> String {
+    fn get_protocol_system(&self, id: &i64) -> Result<String, StorageError> {
         self.protocol_system_id_cache
-            .get_value(id)
+            .try_get_value(id)
     }
 
     pub async fn new(
@@ -540,7 +540,7 @@ impl PostgresGateway {
 
         // loop through cached chains and fetch their native token ids
         for chain in chain_cache.map_enum.values() {
-            let chain_id = chain_cache.get_id(chain);
+            let chain_id = chain_cache.try_get_id(chain)?;
             let native_token = chain.native_token();
             let token_id = async {
                 schema::token::table
@@ -571,7 +571,7 @@ impl PostgresGateway {
         let mut conn = pool
             .get()
             .await
-            .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
+            .map_err(|err| StorageError::Unexpected(err.to_string()))?;
 
         Self::native_token_cache_from_connection(&mut conn, chain_cache).await
     }
@@ -599,7 +599,7 @@ async fn connect(db_url: &str) -> Result<Pool<AsyncPgConnection>, StorageError> 
     let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(db_url);
     let pool = Pool::builder(config)
         .build()
-        .map_err(|err| StorageError::Unexpected(format!("{}", err)))?;
+        .map_err(|err| StorageError::Unexpected(err.to_string()))?;
     run_migrations(db_url);
     Ok(pool)
 }
@@ -672,7 +672,7 @@ async fn ensure_chains(chains: &[Chain], pool: Pool<AsyncPgConnection>) {
                 continue;
             }
             Err(err) => {
-                panic!("Could not ensure chain enum in database: {}", err);
+                panic!("Could not ensure chain enum in database: {err}");
             }
         }
     }
@@ -745,10 +745,10 @@ pub mod testing {
             "chain",
         ];
         for t in tables.iter() {
-            sql_query(format!("DELETE FROM {};", t))
+            sql_query(format!("DELETE FROM {t};"))
                 .execute(conn)
                 .await
-                .unwrap_or_else(|e| panic!("Error truncating {} table: {}", t, e));
+                .unwrap_or_else(|e| panic!("Error truncating {t} table: {e}"));
         }
         dbg!("Teardown completed");
     }
@@ -1010,11 +1010,10 @@ pub mod db_fixtures {
             .iter()
             .enumerate()
             .map(|(idx, (k, v, pv))| {
-                let previous_value = pv.map(|pv| hex::decode(format!("{:064x}", pv)).unwrap());
+                let previous_value = pv.map(|pv| hex::decode(format!("{pv:064x}")).unwrap());
                 (
-                    schema::contract_storage::slot.eq(hex::decode(format!("{:064x}", *k)).unwrap()),
-                    schema::contract_storage::value
-                        .eq(hex::decode(format!("{:064x}", *v)).unwrap()),
+                    schema::contract_storage::slot.eq(hex::decode(format!("{k:064x}")).unwrap()),
+                    schema::contract_storage::value.eq(hex::decode(format!("{v:064x}")).unwrap()),
                     schema::contract_storage::previous_value.eq(previous_value),
                     schema::contract_storage::account_id.eq(contract_id),
                     schema::contract_storage::modify_tx.eq(modify_tx),
@@ -1177,8 +1176,7 @@ pub mod db_fixtures {
             .await
             .unwrap_or_else(|_| {
                 panic!(
-                    "component balance insert failed {} {} {}",
-                    token_id, protocol_component_id, balance_float
+                    "component balance insert failed {token_id} {protocol_component_id} {balance_float}"
                 )
             });
     }
@@ -1349,8 +1347,8 @@ pub mod db_fixtures {
         decimals: i32,
         quality: Option<i32>,
     ) -> (i64, i64) {
-        let title = &format!("token_{}", symbol);
-        let account_id = insert_account(conn, address, title, chain_id, None).await;
+        let title = format!("token_{symbol}");
+        let account_id = insert_account(conn, address, &title, chain_id, None).await;
 
         let quality = quality.unwrap_or(0);
 

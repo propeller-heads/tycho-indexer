@@ -598,10 +598,8 @@ impl RPCClient for HttpRPCClient {
             });
         }
 
-        let accounts = serde_json::from_str::<StateRequestResponse>(&body).map_err(|err| {
-            error!("Failed to parse contract state response: {:?}", &body);
-            RPCError::ParseResponse(format!("Error: {}, Body: {}", err, body))
-        })?;
+        let accounts = serde_json::from_str::<StateRequestResponse>(&body)
+            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
         trace!(?accounts, "Received contract_state response from Tycho server");
 
         Ok(accounts)
@@ -636,11 +634,8 @@ impl RPCClient for HttpRPCClient {
             .text()
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
-        let components =
-            serde_json::from_str::<ProtocolComponentRequestResponse>(&body).map_err(|err| {
-                error!("Failed to parse protocol component response: {:?}", &body);
-                RPCError::ParseResponse(format!("Error: {}, Body: {}", err, body))
-            })?;
+        let components = serde_json::from_str::<ProtocolComponentRequestResponse>(&body)
+            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
         trace!(?components, "Received protocol_components response from Tycho server");
 
         Ok(components)
@@ -697,11 +692,8 @@ impl RPCClient for HttpRPCClient {
             });
         }
 
-        let states =
-            serde_json::from_str::<ProtocolStateRequestResponse>(&body).map_err(|err| {
-                error!("Failed to parse protocol state response: {:?}", &body);
-                RPCError::ParseResponse(format!("Error: {}, Body: {}", err, body))
-            })?;
+        let states = serde_json::from_str::<ProtocolStateRequestResponse>(&body)
+            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
         trace!(?states, "Received protocol_states response from Tycho server");
 
         Ok(states)
@@ -732,10 +724,8 @@ impl RPCClient for HttpRPCClient {
             .text()
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
-        let tokens = serde_json::from_str::<TokensRequestResponse>(&body).map_err(|err| {
-            error!("Failed to parse tokens response: {:?}", &body);
-            RPCError::ParseResponse(format!("Error: {}, Body: {}", err, body))
-        })?;
+        let tokens = serde_json::from_str::<TokensRequestResponse>(&body)
+            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
 
         Ok(tokens)
     }
@@ -766,10 +756,7 @@ impl RPCClient for HttpRPCClient {
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
         let protocol_systems = serde_json::from_str::<ProtocolSystemsRequestResponse>(&body)
-            .map_err(|err| {
-                error!("Failed to parse protocol systems response: {:?}", &body);
-                RPCError::ParseResponse(format!("Error: {}, Body: {}", err, body))
-            })?;
+            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
         trace!(?protocol_systems, "Received protocol_systems response from Tycho server");
         Ok(protocol_systems)
     }
@@ -974,7 +961,7 @@ mod tests {
                         "0x0000000000000000000000000000000000000000"
                     ],
                     "static_attributes": {
-                        "attribute_1": "0xe803000000000000"
+                        "attribute_1": "0x00000000000003e8"
                     },
                     "change": "Creation",
                     "creation_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -1013,7 +1000,7 @@ mod tests {
         assert_eq!(components[0].protocol_type_name, "Pool");
         assert_eq!(components[0].tokens.len(), 2);
         let expected_attributes =
-            [("attribute_1".to_string(), Bytes::from(1000_u64.to_le_bytes()))]
+            [("attribute_1".to_string(), Bytes::from(1000_u64.to_be_bytes()))]
                 .iter()
                 .cloned()
                 .collect::<HashMap<String, Bytes>>();
@@ -1029,7 +1016,7 @@ mod tests {
                 {
                     "component_id": "State1",
                     "attributes": {
-                        "attribute_1": "0xe803000000000000"
+                        "attribute_1": "0x00000000000003e8"
                     },
                     "balances": {
                         "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2": "0x01f4"
@@ -1064,7 +1051,7 @@ mod tests {
         assert_eq!(states.len(), 1);
         assert_eq!(states[0].component_id, "State1");
         let expected_attributes =
-            [("attribute_1".to_string(), Bytes::from(1000_u64.to_le_bytes()))]
+            [("attribute_1".to_string(), Bytes::from(1000_u64.to_be_bytes()))]
                 .iter()
                 .cloned()
                 .collect::<HashMap<String, Bytes>>();

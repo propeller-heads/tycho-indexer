@@ -166,7 +166,7 @@ fn build_batch_update_query<'a, O: StoredVersionedRow>(
     // Generate bind parameter 2-tuples the result will look like '($1, $2), ($3, $4), ...'
     // These are later subsituted with the primary key and valid to values.
     let bind_params = (1..=objects.len() * 2)
-        .map(|i| if i % 2 == 0 { format!("${}", i) } else { format!("(${}", i) })
+        .map(|i| if i % 2 == 0 { format!("${i}") } else { format!("(${i}") })
         .collect::<Vec<String>>()
         .chunks(2)
         .map(|chunk| chunk.join(", ") + ")")
@@ -174,14 +174,13 @@ fn build_batch_update_query<'a, O: StoredVersionedRow>(
         .join(", ");
     let query_str = format!(
         r#"
-        UPDATE {} as t set
+        UPDATE {table_name} as t set
             valid_to = m.valid_to
         FROM (
-            VALUES {}
+            VALUES {bind_params}
         ) as m(id, valid_to) 
         WHERE t.id = m.id;
-        "#,
-        table_name, bind_params
+        "#
     );
     let mut query = sql_query(query_str).into_boxed();
     for o in objects.iter() {
@@ -295,8 +294,7 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
                 let mut delete_row = latest
                     .remove(id)
                     .ok_or(StorageError::Unexpected(format!(
-                        "Missing deleted row with id {:?}",
-                        id
+                        "Missing deleted row with id {id:?}"
                     )))?;
 
                 delete_row.delete(*delete_version);

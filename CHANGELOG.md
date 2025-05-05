@@ -1,3 +1,82 @@
+## [0.68.2](https://github.com/propeller-heads/tycho-indexer/compare/0.68.1...0.68.2) (2025-05-02)
+
+
+### Bug Fixes
+
+* correctly exit extraction loop on stop signal ([1ad56d8](https://github.com/propeller-heads/tycho-indexer/commit/1ad56d8705a7da53e77c9b7678b1d617c0ea8df1))
+* correctly exit extraction loop on stop signal ([#569](https://github.com/propeller-heads/tycho-indexer/issues/569)) ([d0fd91c](https://github.com/propeller-heads/tycho-indexer/commit/d0fd91c151df45cb395492a61034fa57b928fcc8))
+
+## [0.68.1](https://github.com/propeller-heads/tycho-indexer/compare/0.68.0...0.68.1) (2025-05-02)
+
+
+### Bug Fixes
+
+* add backoff for retries on connections error with Substreams ([e9379b2](https://github.com/propeller-heads/tycho-indexer/commit/e9379b229c6866895709bd1b6ee32a50624e5f03))
+* add backoff for retries on connections error with Substreams ([#562](https://github.com/propeller-heads/tycho-indexer/issues/562)) ([177857c](https://github.com/propeller-heads/tycho-indexer/commit/177857c017512356e032eb20b9fe28752cb5aaba))
+
+## [0.68.0](https://github.com/propeller-heads/tycho-indexer/compare/0.67.3...0.68.0) (2025-05-02)
+
+
+### Features
+
+* enhance shutdown handling with SIGTERM support ([c7c5b0d](https://github.com/propeller-heads/tycho-indexer/commit/c7c5b0dd7e57bd6c12269cf24a7b8f2760ca54ff))
+* enhance shutdown handling with SIGTERM support ([#568](https://github.com/propeller-heads/tycho-indexer/issues/568)) ([05cbea3](https://github.com/propeller-heads/tycho-indexer/commit/05cbea3fb0cbae507d0a36926794cd8cb7bcb4ab))
+
+## [0.67.3](https://github.com/propeller-heads/tycho-indexer/compare/0.67.2...0.67.3) (2025-05-01)
+
+## [0.67.2](https://github.com/propeller-heads/tycho-indexer/compare/0.67.1...0.67.2) (2025-05-01)
+
+## [0.67.1](https://github.com/propeller-heads/tycho-indexer/compare/0.67.0...0.67.1) (2025-05-01)
+
+## [0.67.0](https://github.com/propeller-heads/tycho-indexer/compare/0.66.5...0.67.0) (2025-04-30)
+
+
+### Features
+
+* update CORS to allow all subdomains of `propellerheads.xyz` ([d709443](https://github.com/propeller-heads/tycho-indexer/commit/d70944343d9b9ca3a6f7f9491493bf953807262e))
+* update CORS to allow all subdomains of `propellerheads.xyz` ([#563](https://github.com/propeller-heads/tycho-indexer/issues/563)) ([a451301](https://github.com/propeller-heads/tycho-indexer/commit/a4513010bf3c95ef4f346f84805473f95cdc8bf0))
+
+## [0.66.5](https://github.com/propeller-heads/tycho-indexer/compare/0.66.4...0.66.5) (2025-04-29)
+
+
+### Bug Fixes
+
+* remove error logging on RPCClient ([9934abd](https://github.com/propeller-heads/tycho-indexer/commit/9934abd76eecc93f0bdb84509121a5722e4c7ef5))
+* remove error logging on RPCClient ([#560](https://github.com/propeller-heads/tycho-indexer/issues/560)) ([41f0704](https://github.com/propeller-heads/tycho-indexer/commit/41f0704af3002ed7df5ccee2fa818bf83ec1b7fc))
+
+## [0.66.4](https://github.com/propeller-heads/tycho-indexer/compare/0.66.3...0.66.4) (2025-04-18)
+
+
+### Bug Fixes
+
+* **tycho-client:** relax default timeout values ([eba302f](https://github.com/propeller-heads/tycho-indexer/commit/eba302f11606798acc589f0ae3a57407a7b16da3))
+* **tycho-client:** relax default timeout values ([#555](https://github.com/propeller-heads/tycho-indexer/issues/555)) ([3852e6a](https://github.com/propeller-heads/tycho-indexer/commit/3852e6a5db5932083feb37d9a0817e54ad8d3c49))
+
+## [0.66.3](https://github.com/propeller-heads/tycho-indexer/compare/0.66.2...0.66.3) (2025-04-18)
+
+
+### Bug Fixes
+
+* cleanly close ws connections on timeouts ([319d988](https://github.com/propeller-heads/tycho-indexer/commit/319d988d3d095326f191907ab5e2a28e7fe7ca77))
+* cleanly close ws connections on timeouts ([#556](https://github.com/propeller-heads/tycho-indexer/issues/556)) ([262d070](https://github.com/propeller-heads/tycho-indexer/commit/262d070b827730a594fef833484667d8825bdd78))
+
+## [0.66.2](https://github.com/propeller-heads/tycho-indexer/compare/0.66.1...0.66.2) (2025-04-11)
+
+
+### Bug Fixes
+
+* Make Snapshot attributes pub ([#552](https://github.com/propeller-heads/tycho-indexer/issues/552)) ([55c668e](https://github.com/propeller-heads/tycho-indexer/commit/55c668e29a453809d820e362435093485d77d019))
+
+## [0.66.1](https://github.com/propeller-heads/tycho-indexer/compare/0.66.0...0.66.1) (2025-04-10)
+
+## [0.66.0](https://github.com/propeller-heads/tycho-indexer/compare/0.65.0...0.66.0) (2025-04-10)
+
+
+### Features
+
+* Implement retry logic for deadlock detection in database transactions ([5d63e49](https://github.com/propeller-heads/tycho-indexer/commit/5d63e497a0b8279a57f3809c84a1df91dd9cc261))
+* Implement retry logic for deadlock detection in database transactions ([#549](https://github.com/propeller-heads/tycho-indexer/issues/549)) ([5a4b28e](https://github.com/propeller-heads/tycho-indexer/commit/5a4b28e49533ad3a99b2e7a08e905c18f9990a75))
+
 ## [0.65.0](https://github.com/propeller-heads/tycho-indexer/compare/0.64.2...0.65.0) (2025-04-02)
 
 

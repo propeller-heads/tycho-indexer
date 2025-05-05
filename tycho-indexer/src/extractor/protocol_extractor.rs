@@ -116,7 +116,7 @@ where
                     .get_block(block_hash)
                     .await
                     .unwrap_or_else(|err| {
-                        panic!("Unexpected error when fetching latest block {}", err);
+                        panic!("Unexpected error when fetching latest block {err}");
                     });
 
                 let cursor_hex = hex::encode(&cursor);
@@ -785,7 +785,7 @@ where
             ))
         })?;
 
-        tracing::Span::current().record("target_hash", format!("{:x}", block_hash));
+        tracing::Span::current().record("target_hash", format!("{block_hash:x}"));
         tracing::Span::current().record("target_number", block_ref.number);
 
         let last_processed_block_number = self
@@ -1100,8 +1100,8 @@ where
                             .filter(|(c_id, _)| !reverted_components_creations.contains_key(*c_id))
                             .flat_map(|(id, balance_change)| {
                                 balance_change
-                                    .iter()
-                                    .map(move |(token, _)| (id, token.clone()))
+                                    .keys()
+                                    .map(move |token| (id, token.clone()))
                             })
                     })
             })
@@ -1133,8 +1133,8 @@ where
                             .filter(|(account, _)| account_deltas.contains_key(*account))
                             .flat_map(|(account, balance_change)| {
                                 balance_change
-                                    .iter()
-                                    .map(move |(token, _)| (account.clone(), token.clone()))
+                                    .keys()
+                                    .map(|token| (account.clone(), token.clone()))
                             })
                     })
             })
@@ -1879,7 +1879,7 @@ mod test {
                             ComponentBalance {
                                 token: Bytes::from_str("0x0000000000000000000000000000000000000001")
                                     .unwrap(),
-                                balance: Bytes::from(1000_i32.to_le_bytes()),
+                                balance: Bytes::from(1000_i32.to_be_bytes()),
                                 balance_float: 36522027799.0,
                                 modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000011121314").unwrap(),
                                 component_id: "TestComponent".to_string(),
@@ -1890,7 +1890,7 @@ mod test {
                             ComponentBalance {
                                 token: Bytes::from_str("0x0000000000000000000000000000000000000003")
                                     .unwrap(),
-                                balance: Bytes::from(10000_i32.to_le_bytes()),
+                                balance: Bytes::from(10000_i32.to_be_bytes()),
                                 balance_float: 36522027799.0,
                                 modify_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000011121314").unwrap(),
                                 component_id: "TestComponent".to_string(),
@@ -1944,7 +1944,7 @@ mod test {
                                 .find_owner(
                                     Bytes::from_str("0000000000000000000000000000000000000003")
                                         .unwrap(),
-                                    Bytes::from(1000_i32.to_le_bytes()),
+                                    Bytes::from(1000_i32.to_be_bytes()),
                                 )
                                 .await
                                 .unwrap()
@@ -1952,7 +1952,7 @@ mod test {
                             (
                                 Bytes::from_str("0000000000000000000000000000000000000b0b")
                                     .unwrap(),
-                                Bytes::from(10000_i32.to_le_bytes())
+                                Bytes::from(10000_i32.to_be_bytes())
                             )
                         );
                         assert_eq!(
@@ -1960,7 +1960,7 @@ mod test {
                                 .find_owner(
                                     Bytes::from_str("0000000000000000000000000000000000000001")
                                         .unwrap(),
-                                    Bytes::from(1000_i32.to_le_bytes()),
+                                    Bytes::from(1000_i32.to_be_bytes()),
                                 )
                                 .await
                                 .unwrap()
@@ -1968,7 +1968,7 @@ mod test {
                             (
                                 Bytes::from_str("0000000000000000000000000000000000000b0b")
                                     .unwrap(),
-                                Bytes::from(1000_i32.to_le_bytes())
+                                Bytes::from(1000_i32.to_be_bytes())
                             )
                         );
                     });
@@ -2625,7 +2625,7 @@ mod test_serial_db {
                 .await
                 .expect("test successfully inserted native contract")
                 .entity;
-            println!("{:?}", res);
+            println!("{res:?}");
 
             // TODO: This is failing because protocol_type_name is wrong in the gateway - waiting
             // assert_eq!(res, exp);
@@ -3163,7 +3163,7 @@ mod test_serial_db {
                             }),
                             changes: vec![],
                         },
-                        Some(format!("cursor@{}", version).as_str()),
+                        Some(format!("cursor@{version}").as_str()),
                         Some(5), // Buffered
                     )
                 })

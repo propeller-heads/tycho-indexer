@@ -309,10 +309,7 @@ impl TraceCallDetector {
             Ok(f) => f,
             Err(e) => {
                 return Ok((
-                    TokenQuality::bad(format!(
-                        "Failed to calculate fees for token transfer: {}",
-                        e
-                    )),
+                    TokenQuality::bad(format!("Failed to calculate fees for token transfer: {e}")),
                     None,
                     None,
                 ))

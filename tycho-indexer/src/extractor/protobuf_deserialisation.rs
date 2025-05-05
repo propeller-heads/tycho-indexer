@@ -191,8 +191,7 @@ impl TryFromMessage for ChangeType {
             substreams::ChangeType::Update => Ok(ChangeType::Update),
             substreams::ChangeType::Deletion => Ok(ChangeType::Deletion),
             substreams::ChangeType::Unspecified => Err(ExtractionError::DecodeError(format!(
-                "Unknown ChangeType enum member encountered: {:?}",
-                args
+                "Unknown ChangeType enum member encountered: {args:?}"
             ))),
         }
     }
@@ -702,7 +701,7 @@ mod test {
     fn test_parse_component_balance() {
         let tx = transaction();
         let expected_balance: f64 = 3000.0;
-        let msg_balance = expected_balance.to_le_bytes().to_vec();
+        let msg_balance = expected_balance.to_be_bytes().to_vec();
 
         let expected_token = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
         let msg_token = expected_token.0.to_vec();

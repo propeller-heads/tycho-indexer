@@ -197,7 +197,7 @@ where
         let start_index = if let Some(version) = start_version {
             self.find_index(|b| !version.greater_than(&b.block()))
                 .ok_or_else(|| {
-                    StorageError::NotFound("Block".to_string(), format!("{:?}", version))
+                    StorageError::NotFound("Block".to_string(), format!("{version:?}"))
                 })?
         } else {
             0
@@ -218,7 +218,7 @@ where
                 let end_idx = self
                     .find_index(|b| !version.greater_than(&b.block()))
                     .ok_or_else(|| {
-                        StorageError::NotFound("Block".to_string(), format!("{:?}", version))
+                        StorageError::NotFound("Block".to_string(), format!("{version:?}"))
                     })?;
 
                 if end_idx < start_index {

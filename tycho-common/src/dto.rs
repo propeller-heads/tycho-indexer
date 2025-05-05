@@ -806,11 +806,11 @@ impl StateRequestParameters {
         let mut parts = vec![format!("include_balances={}", self.include_balances)];
 
         if let Some(tvl_gt) = self.tvl_gt {
-            parts.push(format!("tvl_gt={}", tvl_gt));
+            parts.push(format!("tvl_gt={tvl_gt}"));
         }
 
         if let Some(inertia) = self.inertia_min_gt {
-            parts.push(format!("inertia_min_gt={}", inertia));
+            parts.push(format!("inertia_min_gt={inertia}"));
         }
 
         let mut res = parts.join("&");
@@ -870,6 +870,7 @@ pub struct PaginationParams {
     pub page: i64,
     /// How many results to return per page
     #[serde(default)]
+    #[schema(default = 10)]
     pub page_size: i64,
 }
 
@@ -1058,7 +1059,7 @@ impl ProtocolComponentRequestParameters {
 impl ProtocolComponentRequestParameters {
     pub fn to_query_string(&self) -> String {
         if let Some(tvl_gt) = self.tvl_gt {
-            return format!("?tvl_gt={}", tvl_gt);
+            return format!("?tvl_gt={tvl_gt}");
         }
         String::new()
     }

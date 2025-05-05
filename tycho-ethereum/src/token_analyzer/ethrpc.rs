@@ -34,9 +34,9 @@ impl fmt::Display for Arguments {
         let Self { ethrpc_max_batch_size, ethrpc_max_concurrent_requests, ethrpc_batch_delay } =
             self;
 
-        writeln!(f, "ethrpc_max_batch_size: {}", ethrpc_max_batch_size)?;
-        writeln!(f, "ethrpc_max_concurrent_requests: {}", ethrpc_max_concurrent_requests)?;
-        writeln!(f, "ethrpc_batch_delay: {:?}", ethrpc_batch_delay)?;
+        writeln!(f, "ethrpc_max_batch_size: {ethrpc_max_batch_size}")?;
+        writeln!(f, "ethrpc_max_concurrent_requests: {ethrpc_max_concurrent_requests}")?;
+        writeln!(f, "ethrpc_batch_delay: {ethrpc_batch_delay:?}")?;
 
         Ok(())
     }

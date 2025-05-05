@@ -271,7 +271,7 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) {
     let msg_printer = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             if let Ok(msg_json) = serde_json::to_string(&msg) {
-                println!("{}", msg_json);
+                println!("{msg_json}");
             } else {
                 tracing::error!("Failed to serialize FeedMessage");
             }
