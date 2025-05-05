@@ -789,7 +789,7 @@ impl RPCClient for HttpRPCClient {
         let component_tvl = serde_json::from_str::<ProtocolComponentTvlRequestResponse>(&body)
             .map_err(|err| {
                 error!("Failed to parse component_tvl response: {:?}", &body);
-                RPCError::ParseResponse(format!("Error: {}, Body: {}", err, body))
+                RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
             })?;
         trace!(?component_tvl, "Received component_tvl response from Tycho server");
         Ok(component_tvl)
