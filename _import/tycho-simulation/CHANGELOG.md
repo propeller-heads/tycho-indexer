@@ -1,3 +1,10 @@
+## [0.99.2](https://github.com/propeller-heads/tycho-simulation/compare/0.99.1...0.99.2) (2025-05-05)
+
+
+### Bug Fixes
+
+* **uniswap:** do not panic in add_liquidity_delta util function ([694873b](https://github.com/propeller-heads/tycho-simulation/commit/694873b1e67be5fafd1a4dae0b7c154dd9a2c83d))
+
 ## [0.99.1](https://github.com/propeller-heads/tycho-simulation/compare/0.99.0...0.99.1) (2025-05-01)
 
 
