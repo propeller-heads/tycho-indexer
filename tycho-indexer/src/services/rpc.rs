@@ -492,8 +492,8 @@ where
     #[instrument(skip(self, request))]
     async fn get_component_tvls(
         &self,
-        request: &dto::ProtocolComponentTvlRequestBody,
-    ) -> Result<dto::ProtocolComponentTvlRequestResponse, RpcError> {
+        request: &dto::ComponentTvlRequestBody,
+    ) -> Result<dto::ComponentTvlRequestResponse, RpcError> {
         info!(?request, "Getting protocol component tvl.");
         let chain = request.chain.into();
         let pagination_params: PaginationParams = (&request.pagination).into();
@@ -515,7 +515,7 @@ where
             .await;
 
         match tvl_result {
-            Ok(tvl) => Ok(dto::ProtocolComponentTvlRequestResponse::new(
+            Ok(tvl) => Ok(dto::ComponentTvlRequestResponse::new(
                 tvl.entity,
                 PaginationResponse::new(
                     pagination_params.page,
@@ -1023,7 +1023,7 @@ pub async fn protocol_systems<G: Gateway>(
     ),
 )]
 pub async fn component_tvl<G: Gateway>(
-    body: web::Json<dto::ProtocolComponentTvlRequestBody>,
+    body: web::Json<dto::ComponentTvlRequestBody>,
     handler: web::Data<RpcHandler<G>>,
 ) -> HttpResponse {
     // Tracing and metrics

@@ -18,8 +18,8 @@ use tokio::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        BlockChanges, BlockParam, ExtractorIdentity, ProtocolComponent,
-        ProtocolComponentTvlRequestBody, ResponseAccount, ResponseProtocolState, VersionParam,
+        BlockChanges, BlockParam, ComponentTvlRequestBody, ExtractorIdentity, ProtocolComponent,
+        ResponseAccount, ResponseProtocolState, VersionParam,
     },
     Bytes,
 };
@@ -225,10 +225,8 @@ where
         }
 
         let component_tvl = if self.include_tvl {
-            let body = ProtocolComponentTvlRequestBody::id_filtered(
-                request_ids.clone(),
-                self.extractor_id.chain,
-            );
+            let body =
+                ComponentTvlRequestBody::id_filtered(request_ids.clone(), self.extractor_id.chain);
             self.rpc_client
                 .get_component_tvl_paginated(&body, 100, 4)
                 .await?
@@ -552,11 +550,10 @@ where
 mod test {
     use test_log::test;
     use tycho_common::dto::{
-        Block, Chain, PaginationResponse, ProtocolComponentRequestResponse,
-        ProtocolComponentTvlRequestBody, ProtocolComponentTvlRequestResponse,
-        ProtocolComponentsRequestBody, ProtocolStateRequestBody, ProtocolStateRequestResponse,
-        ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, StateRequestBody,
-        StateRequestResponse, TokensRequestBody, TokensRequestResponse,
+        Block, Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse, PaginationResponse,
+        ProtocolComponentRequestResponse, ProtocolComponentsRequestBody, ProtocolStateRequestBody,
+        ProtocolStateRequestResponse, ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse,
+        StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse,
     };
     use uuid::Uuid;
 
@@ -621,8 +618,8 @@ mod test {
 
         async fn get_component_tvl(
             &self,
-            request: &ProtocolComponentTvlRequestBody,
-        ) -> Result<ProtocolComponentTvlRequestResponse, RPCError> {
+            request: &ComponentTvlRequestBody,
+        ) -> Result<ComponentTvlRequestResponse, RPCError> {
             self.0.get_component_tvl(request).await
         }
     }
@@ -700,10 +697,10 @@ mod test {
         }
     }
 
-    fn component_tvl_snapshot() -> ProtocolComponentTvlRequestResponse {
+    fn component_tvl_snapshot() -> ComponentTvlRequestResponse {
         let tvl = HashMap::from([("Component1".to_string(), 100.0)]);
 
-        ProtocolComponentTvlRequestResponse {
+        ComponentTvlRequestResponse {
             tvl,
             pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
         }
@@ -1020,7 +1017,7 @@ mod test {
         rpc_client
             .expect_get_component_tvl()
             .returning(|_| {
-                Ok(ProtocolComponentTvlRequestResponse {
+                Ok(ComponentTvlRequestResponse {
                     tvl: [
                         ("Component1".to_string(), 100.0),
                         ("Component2".to_string(), 0.0),
@@ -1312,7 +1309,7 @@ mod test {
         rpc_client
             .expect_get_component_tvl()
             .returning(|_| {
-                Ok(ProtocolComponentTvlRequestResponse {
+                Ok(ComponentTvlRequestResponse {
                     tvl: [
                         ("Component1".to_string(), 6.0),
                         ("Component2".to_string(), 2.0),

@@ -15,12 +15,11 @@ use tokio::sync::Semaphore;
 use tracing::{debug, error, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        Chain, PaginationParams, PaginationResponse, ProtocolComponentRequestResponse,
-        ProtocolComponentTvlRequestBody, ProtocolComponentTvlRequestResponse,
-        ProtocolComponentsRequestBody, ProtocolStateRequestBody, ProtocolStateRequestResponse,
-        ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, ResponseToken,
-        StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse,
-        VersionParam,
+        Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse, PaginationParams,
+        PaginationResponse, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
+        ProtocolStateRequestBody, ProtocolStateRequestResponse, ProtocolSystemsRequestBody,
+        ProtocolSystemsRequestResponse, ResponseToken, StateRequestBody, StateRequestResponse,
+        TokensRequestBody, TokensRequestResponse, VersionParam,
     },
     Bytes,
 };
@@ -379,15 +378,15 @@ pub trait RPCClient: Send + Sync {
 
     async fn get_component_tvl(
         &self,
-        request: &ProtocolComponentTvlRequestBody,
-    ) -> Result<ProtocolComponentTvlRequestResponse, RPCError>;
+        request: &ComponentTvlRequestBody,
+    ) -> Result<ComponentTvlRequestResponse, RPCError>;
 
     async fn get_component_tvl_paginated(
         &self,
-        request: &ProtocolComponentTvlRequestBody,
+        request: &ComponentTvlRequestBody,
         chunk_size: usize,
         concurrency: usize,
-    ) -> Result<ProtocolComponentTvlRequestResponse, RPCError> {
+    ) -> Result<ComponentTvlRequestResponse, RPCError> {
         let semaphore = Arc::new(Semaphore::new(concurrency));
 
         match request.component_ids {
@@ -395,7 +394,7 @@ pub trait RPCClient: Send + Sync {
                 let chunked_requests = ids
                     .chunks(chunk_size)
                     .enumerate()
-                    .map(|(index, _)| ProtocolComponentTvlRequestBody {
+                    .map(|(index, _)| ComponentTvlRequestBody {
                         chain: request.chain,
                         protocol_system: request.protocol_system.clone(),
                         component_ids: Some(ids.clone()),
@@ -429,7 +428,7 @@ pub trait RPCClient: Send + Sync {
                     }
                 }
 
-                Ok(ProtocolComponentTvlRequestResponse {
+                Ok(ComponentTvlRequestResponse {
                     tvl: merged_tvl,
                     pagination: PaginationResponse {
                         page: 0,
@@ -439,7 +438,7 @@ pub trait RPCClient: Send + Sync {
                 })
             }
             _ => {
-                let first_request = ProtocolComponentTvlRequestBody {
+                let first_request = ComponentTvlRequestBody {
                     chain: request.chain,
                     protocol_system: request.protocol_system.clone(),
                     component_ids: request.component_ids.clone(),
@@ -459,7 +458,7 @@ pub trait RPCClient: Send + Sync {
                     let requests_in_this_iteration = (total_pages - page).min(concurrency as i64);
 
                     let chunked_requests: Vec<_> = (0..requests_in_this_iteration)
-                        .map(|i| ProtocolComponentTvlRequestBody {
+                        .map(|i| ComponentTvlRequestBody {
                             chain: request.chain,
                             protocol_system: request.protocol_system.clone(),
                             component_ids: request.component_ids.clone(),
@@ -495,7 +494,7 @@ pub trait RPCClient: Send + Sync {
                     page += concurrency as i64;
                 }
 
-                Ok(ProtocolComponentTvlRequestResponse {
+                Ok(ComponentTvlRequestResponse {
                     tvl: merged_tvl,
                     pagination: PaginationResponse {
                         page: 0,
@@ -763,8 +762,8 @@ impl RPCClient for HttpRPCClient {
 
     async fn get_component_tvl(
         &self,
-        request: &ProtocolComponentTvlRequestBody,
-    ) -> Result<ProtocolComponentTvlRequestResponse, RPCError> {
+        request: &ComponentTvlRequestBody,
+    ) -> Result<ComponentTvlRequestResponse, RPCError> {
         let uri = format!(
             "{}/{}/component_tvl",
             self.url
@@ -786,8 +785,8 @@ impl RPCClient for HttpRPCClient {
             .text()
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
-        let component_tvl = serde_json::from_str::<ProtocolComponentTvlRequestResponse>(&body)
-            .map_err(|err| {
+        let component_tvl =
+            serde_json::from_str::<ComponentTvlRequestResponse>(&body).map_err(|err| {
                 error!("Failed to parse component_tvl response: {:?}", &body);
                 RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
             })?;
@@ -1198,8 +1197,7 @@ mod tests {
         }
         "#;
         // test that the response is deserialized correctly
-        serde_json::from_str::<ProtocolComponentTvlRequestResponse>(server_resp)
-            .expect("deserialize");
+        serde_json::from_str::<ComponentTvlRequestResponse>(server_resp).expect("deserialize");
 
         let mocked_server = server
             .mock("POST", "/v1/component_tvl")

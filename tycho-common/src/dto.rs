@@ -1325,7 +1325,7 @@ impl ProtocolSystemsRequestResponse {
 
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct ProtocolComponentTvlRequestBody {
+pub struct ComponentTvlRequestBody {
     #[serde(default)]
     pub chain: Chain,
     /// Filters protocol components by protocol system
@@ -1338,7 +1338,7 @@ pub struct ProtocolComponentTvlRequestBody {
     pub pagination: PaginationParams,
 }
 
-impl ProtocolComponentTvlRequestBody {
+impl ComponentTvlRequestBody {
     pub fn system_filtered(system: &str, chain: Chain) -> Self {
         Self {
             chain,
@@ -1359,12 +1359,12 @@ impl ProtocolComponentTvlRequestBody {
 }
 // #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
-pub struct ProtocolComponentTvlRequestResponse {
+pub struct ComponentTvlRequestResponse {
     pub tvl: HashMap<String, f64>,
     pub pagination: PaginationResponse,
 }
 
-impl ProtocolComponentTvlRequestResponse {
+impl ComponentTvlRequestResponse {
     pub fn new(tvl: HashMap<String, f64>, pagination: PaginationResponse) -> Self {
         Self { tvl, pagination }
     }
