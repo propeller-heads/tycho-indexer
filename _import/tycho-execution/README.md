@@ -12,3 +12,12 @@ For complete documentation, see Tycho docs [here](https://docs.propellerheads.xy
 
 To get started on encoding, have a look at our [Encoding example](examples/encoding-example/README.md).
 For a complete example please refer to the [Tycho Quickstart guide](https://docs.propellerheads.xyz/tycho).
+
+## Security
+
+All audits of the Tycho Router and Executor contracts can be found [here](docs/audits).
+The vulnerabilities discovered during the audits have been acknowledged and addressed or accepted.
+
+### Report a Vulnerability
+
+Contact [security@propellerheads.xyz](mailto:security@propellerheads.xyz)

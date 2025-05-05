@@ -14,6 +14,8 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
 import {WETH} from "../lib/permit2/lib/solmate/src/tokens/WETH.sol";
 import {Permit2TestHelper} from "./Permit2TestHelper.sol";
+import "./TestUtils.sol";
+import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
 
 contract TychoRouterExposed is TychoRouter {
     constructor(address _permit2, address weth) TychoRouter(_permit2, weth) {}
@@ -42,7 +44,7 @@ contract TychoRouterExposed is TychoRouter {
     }
 }
 
-contract TychoRouterTestSetup is Constants, Permit2TestHelper {
+contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     TychoRouterExposed tychoRouter;
     address tychoRouterAddr;
     UniswapV2Executor public usv2Executor;
@@ -52,6 +54,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper {
     BalancerV2Executor public balancerv2Executor;
     EkuboExecutor public ekuboExecutor;
     CurveExecutor public curveExecutor;
+    MaverickV2Executor public maverickv2Executor;
     MockERC20[] tokens;
 
     function setUp() public {
@@ -109,8 +112,10 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper {
         balancerv2Executor = new BalancerV2Executor(PERMIT2_ADDRESS);
         ekuboExecutor = new EkuboExecutor(ekuboCore, PERMIT2_ADDRESS);
         curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, PERMIT2_ADDRESS);
+        maverickv2Executor =
+            new MaverickV2Executor(MAVERICK_V2_FACTORY, PERMIT2_ADDRESS);
 
-        address[] memory executors = new address[](7);
+        address[] memory executors = new address[](8);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
         executors[2] = address(pancakev3Executor);
@@ -118,6 +123,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper {
         executors[4] = address(balancerv2Executor);
         executors[5] = address(ekuboExecutor);
         executors[6] = address(curveExecutor);
+        executors[7] = address(maverickv2Executor);
         return executors;
     }
 

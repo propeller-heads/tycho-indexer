@@ -20,7 +20,7 @@ pub static GROUPABLE_PROTOCOLS: LazyLock<HashSet<&'static str>> = LazyLock::new(
 
 /// These protocols need an external in transfer to the pool. This transfer can be from the router,
 /// from the user or from the previous pool. Any protocols that are not defined here expect funds to
-/// be in the router at the time of swap and do the transfer themselves from msg.sender
+/// be in the router at the time of swap and do the transfer themselves from `msg.sender`
 pub static IN_TRANSFER_REQUIRED_PROTOCOLS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     let mut set = HashSet::new();
     set.insert("uniswap_v2");
@@ -30,6 +30,7 @@ pub static IN_TRANSFER_REQUIRED_PROTOCOLS: LazyLock<HashSet<&'static str>> = Laz
     set.insert("pancakeswap_v3");
     set.insert("uniswap_v4");
     set.insert("ekubo_v2");
+    set.insert("vm:maverick_v2");
     set
 });
 

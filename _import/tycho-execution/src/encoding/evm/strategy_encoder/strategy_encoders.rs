@@ -654,7 +654,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::encoding::models::Swap;
+    use crate::encoding::{evm::utils::write_calldata_to_file, models::Swap};
 
     fn eth_chain() -> Chain {
         TychoCommonChain::Ethereum.into()
@@ -735,9 +735,9 @@ mod tests {
                 given_token: weth,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: dai,
-                expected_amount,
+                expected_amount: expected_amount.clone(),
                 slippage,
-                checked_amount,
+                checked_amount: checked_amount.clone(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap],
@@ -776,10 +776,16 @@ mod tests {
                 "0000000000000000000000000000",             // padding
             ));
             let hex_calldata = encode(&calldata);
-            println!("test_single_swap_strategy_encoder: {hex_calldata}");
 
             assert_eq!(hex_calldata[..456], expected_input);
             assert_eq!(hex_calldata[1224..], expected_swap);
+            if expected_amount.is_some() & slippage.is_some() & checked_amount.is_none() {
+                // only write to file for 1 test case
+                write_calldata_to_file(
+                    "test_single_swap_strategy_encoder",
+                    &hex_calldata.to_string(),
+                );
+            }
         }
 
         #[test]
@@ -858,7 +864,10 @@ mod tests {
             let hex_calldata = encode(&calldata);
 
             assert_eq!(hex_calldata, expected_input);
-            println!("test_single_swap_strategy_encoder_no_permit2: {hex_calldata}");
+            write_calldata_to_file(
+                "test_single_swap_strategy_encoder_no_permit2",
+                hex_calldata.as_str(),
+            );
         }
 
         #[test]
@@ -937,7 +946,10 @@ mod tests {
             let hex_calldata = encode(&calldata);
 
             assert_eq!(hex_calldata, expected_input);
-            println!("test_single_swap_strategy_encoder_no_transfer_in: {hex_calldata}");
+            write_calldata_to_file(
+                "test_single_swap_strategy_encoder_no_transfer_in",
+                hex_calldata.as_str(),
+            );
         }
 
         #[test]
@@ -990,7 +1002,7 @@ mod tests {
                 .unwrap();
 
             let hex_calldata = encode(&calldata);
-            println!("test_single_swap_strategy_encoder_wrap: {hex_calldata}");
+            write_calldata_to_file("test_single_swap_strategy_encoder_wrap", hex_calldata.as_str());
         }
 
         #[test]
@@ -1043,7 +1055,10 @@ mod tests {
                 .unwrap();
 
             let hex_calldata = encode(&calldata);
-            println!("test_split_swap_strategy_encoder_unwrap: {hex_calldata}");
+            write_calldata_to_file(
+                "test_single_swap_strategy_encoder_unwrap",
+                hex_calldata.as_str(),
+            );
         }
     }
 
@@ -1114,7 +1129,7 @@ mod tests {
                 .unwrap();
 
             let hex_calldata = encode(&calldata);
-            println!("test_sequential_swap_strategy_encoder: {hex_calldata}");
+            write_calldata_to_file("test_sequential_swap_strategy_encoder", hex_calldata.as_str());
         }
 
         #[test]
@@ -1174,7 +1189,6 @@ mod tests {
                 .unwrap();
 
             let hex_calldata = encode(&calldata);
-            println!("test_sequential_swap_strategy_encoder_no_permit2: {hex_calldata}");
 
             let expected = String::from(concat!(
                 "e8a980d7",                                                         /* function selector */
@@ -1208,6 +1222,10 @@ mod tests {
             ));
 
             assert_eq!(hex_calldata, expected);
+            write_calldata_to_file(
+                "test_sequential_swap_strategy_encoder_no_permit2",
+                hex_calldata.as_str(),
+            );
         }
 
         #[test]
@@ -1334,7 +1352,7 @@ mod tests {
 
             assert_eq!(hex_calldata[..456], expected_input);
             assert_eq!(hex_calldata[1224..], expected_swaps);
-            println!("test_cyclic_sequential_swap_split_strategy: {hex_calldata}");
+            write_calldata_to_file("test_sequential_strategy_cyclic_swap", hex_calldata.as_str());
         }
 
         mod optimized_transfers {
@@ -1412,7 +1430,7 @@ mod tests {
                     .unwrap();
 
                 let hex_calldata = encode(&calldata);
-                println!("test_uniswap_v3_uniswap_v2: {hex_calldata}");
+                write_calldata_to_file("test_uniswap_v3_uniswap_v2", hex_calldata.as_str());
             }
 
             #[test]
@@ -1494,7 +1512,7 @@ mod tests {
                     .unwrap();
 
                 let hex_calldata = encode(&calldata);
-                println!("test_uniswap_v3_uniswap_v3: {hex_calldata}");
+                write_calldata_to_file("test_uniswap_v3_uniswap_v3", hex_calldata.as_str());
             }
 
             #[test]
@@ -1580,7 +1598,7 @@ mod tests {
                     .unwrap();
 
                 let hex_calldata = encode(&calldata);
-                println!("test_uniswap_v3_curve: {hex_calldata}");
+                write_calldata_to_file("test_uniswap_v3_curve", hex_calldata.as_str());
             }
 
             #[test]
@@ -1647,7 +1665,7 @@ mod tests {
                     .unwrap();
 
                 let hex_calldata = encode(&calldata);
-                println!("test_balancer_v2_uniswap_v2: {hex_calldata}");
+                write_calldata_to_file("test_balancer_v2_uniswap_v2", hex_calldata.as_str());
             }
 
             #[test]
@@ -1796,7 +1814,7 @@ mod tests {
                     .unwrap();
 
                 let hex_calldata = encode(&calldata);
-                println!("multi_protocol: {hex_calldata}");
+                write_calldata_to_file("test_multi_protocol", hex_calldata.as_str());
             }
         }
     }
@@ -1895,7 +1913,7 @@ mod tests {
                 .unwrap();
 
             let hex_calldata = encode(&calldata);
-            println!("test_split_swap_strategy_encoder: {hex_calldata}");
+            write_calldata_to_file("test_split_swap_strategy_encoder", hex_calldata.as_str());
         }
 
         #[test]
@@ -2062,7 +2080,7 @@ mod tests {
                 .join("");
             assert_eq!(hex_calldata[..520], expected_input);
             assert_eq!(hex_calldata[1288..], expected_swaps);
-            println!("test_split_input_cyclic_swap: {hex_calldata}");
+            write_calldata_to_file("test_split_input_cyclic_swap", hex_calldata.as_str());
         }
 
         #[test]
@@ -2227,13 +2245,13 @@ mod tests {
 
             assert_eq!(hex_calldata[..520], expected_input);
             assert_eq!(hex_calldata[1288..], expected_swaps);
-            println!("test_split_output_cyclic_swap: {hex_calldata}");
+            write_calldata_to_file("test_split_output_cyclic_swap", hex_calldata.as_str());
         }
     }
 
     mod protocol_integration {
-        // in this module we test protocol specific logic by creating the calldata that then is used
-        // in the solidity tests
+        // in this module we test protocol specific logic by creating the calldata that then is
+        // used in the solidity tests
         use super::*;
 
         #[test]
@@ -2297,7 +2315,57 @@ mod tests {
                 .unwrap();
 
             let hex_calldata = encode(&calldata);
-            println!("test_single_encoding_strategy_ekubo: {hex_calldata}");
+            write_calldata_to_file("test_single_encoding_strategy_ekubo", hex_calldata.as_str());
+        }
+
+        #[test]
+        fn test_single_encoding_strategy_maverick() {
+            // GHO -> (maverick) -> USDC
+            let maverick_pool = ProtocolComponent {
+                id: String::from("0x14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67"),
+                protocol_system: String::from("vm:maverick_v2"),
+                ..Default::default()
+            };
+            let token_in = Bytes::from("0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f");
+            let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+            let swap = Swap {
+                component: maverick_pool,
+                token_in: token_in.clone(),
+                token_out: token_out.clone(),
+                split: 0f64,
+            };
+
+            let swap_encoder_registry = get_swap_encoder_registry();
+            let encoder = SingleSwapStrategyEncoder::new(
+                eth_chain(),
+                swap_encoder_registry,
+                None,
+                Bytes::from_str("0xA4AD4f68d0b91CFD19687c881e50f3A00242828c").unwrap(),
+                false,
+            )
+            .unwrap();
+
+            let solution = Solution {
+                exact_out: false,
+                given_token: token_in,
+                given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+                checked_token: token_out,
+                expected_amount: None,
+                checked_amount: Some(BigUint::from_str("1000").unwrap()),
+                slippage: None,
+                // Alice
+                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                swaps: vec![swap],
+                ..Default::default()
+            };
+
+            let (calldata, _) = encoder
+                .encode_strategy(solution)
+                .unwrap();
+
+            let hex_calldata = encode(&calldata);
+            write_calldata_to_file("test_single_encoding_strategy_maverick", hex_calldata.as_str());
         }
 
         #[test]
@@ -2362,7 +2430,10 @@ mod tests {
                 .unwrap();
             let hex_calldata = encode(&calldata);
 
-            println!("test_single_encoding_strategy_usv4_eth_in: {hex_calldata}");
+            write_calldata_to_file(
+                "test_single_encoding_strategy_usv4_eth_in",
+                hex_calldata.as_str(),
+            );
         }
 
         #[test]
@@ -2431,7 +2502,10 @@ mod tests {
                 .unwrap();
 
             let hex_calldata = encode(&calldata);
-            println!("test_single_encoding_strategy_usv4_eth_out: {hex_calldata}");
+            write_calldata_to_file(
+                "test_single_encoding_strategy_usv4_eth_out",
+                hex_calldata.as_str(),
+            );
         }
 
         #[test]
@@ -2560,7 +2634,7 @@ mod tests {
 
             assert_eq!(hex_calldata[..456], expected_input);
             assert_eq!(hex_calldata[1224..], expected_swaps);
-            println!("test_sequential_encoding_strategy_usv4: {hex_calldata}");
+            write_calldata_to_file("test_sequential_encoding_strategy_usv4", hex_calldata.as_str());
         }
 
         #[test]
@@ -2568,7 +2642,7 @@ mod tests {
             //   UWU ──(curve 2 crypto pool)──> WETH
 
             let token_in = Bytes::from("0x55C08ca52497e2f1534B59E2917BF524D4765257"); // UWU
-            let token_out = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"); // USDC
+            let token_out = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"); // WETH
 
             let static_attributes = HashMap::from([(
                 "factory".to_string(),
@@ -2623,7 +2697,7 @@ mod tests {
                 .unwrap();
 
             let hex_calldata = encode(&calldata);
-            println!("test_split_encoding_strategy_curve: {hex_calldata}");
+            write_calldata_to_file("test_single_encoding_strategy_curve", hex_calldata.as_str());
         }
 
         #[test]
@@ -2686,7 +2760,10 @@ mod tests {
                 .unwrap();
 
             let hex_calldata = encode(&calldata);
-            println!("test_single_encoding_strategy_curve_st_eth: {hex_calldata}");
+            write_calldata_to_file(
+                "test_single_encoding_strategy_curve_st_eth",
+                hex_calldata.as_str(),
+            );
         }
     }
 }

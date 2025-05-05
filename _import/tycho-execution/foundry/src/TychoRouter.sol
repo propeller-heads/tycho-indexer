@@ -661,8 +661,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
         bytes memory result = _callHandleCallbackOnExecutor(msg.data);
         // slither-disable-next-line assembly
         assembly ("memory-safe") {
-            // Propagate the calculatedAmount
-            return(add(result, 32), 16)
+            // Propagate the result
+            return(add(result, 32), mload(result))
         }
     }
 
@@ -757,7 +757,7 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      * @param amount of native ETH to wrap.
      */
     function _wrapETH(uint256 amount) internal {
-        if (msg.value > 0 && msg.value != amount) {
+        if (msg.value != amount) {
             revert TychoRouter__MessageValueMismatch(msg.value, amount);
         }
         _weth.deposit{value: amount}();

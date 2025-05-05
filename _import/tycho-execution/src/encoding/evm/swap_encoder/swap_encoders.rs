@@ -590,6 +590,49 @@ impl SwapEncoder for CurveSwapEncoder {
     }
 }
 
+/// Encodes a swap on a Maverick V2 pool through the given executor address.
+///
+/// # Fields
+/// * `executor_address` - The address of the executor contract that will perform the swap.
+#[derive(Clone)]
+pub struct MaverickV2SwapEncoder {
+    executor_address: String,
+}
+
+impl SwapEncoder for MaverickV2SwapEncoder {
+    fn new(
+        executor_address: String,
+        _chain: Chain,
+        _config: Option<HashMap<String, String>>,
+    ) -> Result<Self, EncodingError> {
+        Ok(Self { executor_address })
+    }
+
+    fn encode_swap(
+        &self,
+        swap: Swap,
+        encoding_context: EncodingContext,
+    ) -> Result<Vec<u8>, EncodingError> {
+        let component_id = AlloyBytes::from_str(&swap.component.id)
+            .map_err(|_| EncodingError::FatalError("Invalid component ID".to_string()))?;
+
+        let args = (
+            bytes_to_address(&swap.token_in)?,
+            component_id,
+            bytes_to_address(&encoding_context.receiver)?,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
+        );
+        Ok(args.abi_encode_packed())
+    }
+
+    fn executor_address(&self) -> &str {
+        &self.executor_address
+    }
+    fn clone_box(&self) -> Box<dyn SwapEncoder> {
+        Box::new(self.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -602,7 +645,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::encoding::models::TransferType;
+    use crate::encoding::{evm::utils::write_calldata_to_file, models::TransferType};
 
     mod uniswap_v2 {
         use super::*;
@@ -721,6 +764,7 @@ mod tests {
 
     mod balancer_v2 {
         use super::*;
+        use crate::encoding::evm::utils::write_calldata_to_file;
 
         #[test]
         fn test_encode_balancer_v2() {
@@ -779,11 +823,13 @@ mod tests {
                     "05"
                 ))
             );
+            write_calldata_to_file("test_encode_balancer_v2", hex_swap.as_str());
         }
     }
 
     mod uniswap_v4 {
         use super::*;
+        use crate::encoding::evm::utils::write_calldata_to_file;
 
         #[test]
         fn test_encode_uniswap_v4_simple_swap() {
@@ -830,7 +876,6 @@ mod tests {
                 .encode_swap(swap, encoding_context)
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
-            println!("test_encode_uniswap_v4_simple_swap: {hex_swap}");
 
             assert_eq!(
                 hex_swap,
@@ -854,6 +899,7 @@ mod tests {
                     "000001"
                 ))
             );
+            write_calldata_to_file("test_encode_uniswap_v4_simple_swap", hex_swap.as_str());
         }
 
         #[test]
@@ -1001,7 +1047,6 @@ mod tests {
             let combined_hex =
                 format!("{}{}", encode(&initial_encoded_swap), encode(&second_encoded_swap));
 
-            println!("test_encode_uniswap_v4_sequential_swap: {combined_hex}");
             assert_eq!(
                 combined_hex,
                 String::from(concat!(
@@ -1030,11 +1075,12 @@ mod tests {
                     "00003c"
                 ))
             );
-            println!("{combined_hex}")
+            write_calldata_to_file("test_encode_uniswap_v4_sequential_swap", combined_hex.as_str());
         }
     }
     mod ekubo {
         use super::*;
+        use crate::encoding::evm::utils::write_calldata_to_file;
 
         const RECEIVER: &str = "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6"; // Random address
 
@@ -1159,7 +1205,6 @@ mod tests {
             let combined_hex =
                 format!("{}{}", encode(first_encoded_swap), encode(second_encoded_swap));
 
-            println!("{combined_hex}");
             assert_eq!(
                 combined_hex,
                 // transfer type
@@ -1180,6 +1225,7 @@ mod tests {
                     "00000000000000000000000000000000000000000001a36e2eb1c43200000032",
                 ),
             );
+            write_calldata_to_file("test_ekubo_encode_swap_multi", combined_hex.as_str());
         }
     }
 
@@ -1496,5 +1542,60 @@ mod tests {
                 ))
             );
         }
+    }
+
+    #[test]
+    fn test_encode_maverick_v2() {
+        // GHO -> (maverick) -> USDC
+        let maverick_pool = ProtocolComponent {
+            id: String::from("0x14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67"),
+            protocol_system: String::from("vm:maverick_v2"),
+            ..Default::default()
+        };
+        let token_in = Bytes::from("0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f");
+        let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+        let swap = Swap {
+            component: maverick_pool,
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
+            split: 0f64,
+        };
+        let encoding_context = EncodingContext {
+            // The receiver was generated with `makeAddr("bob") using forge`
+            receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+            exact_out: false,
+            router_address: Some(Bytes::default()),
+            group_token_in: token_in.clone(),
+            group_token_out: token_out.clone(),
+            transfer_type: TransferType::TransferToProtocol,
+        };
+        let encoder = MaverickV2SwapEncoder::new(
+            String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+            TychoCoreChain::Ethereum.into(),
+            None,
+        )
+        .unwrap();
+
+        let encoded_swap = encoder
+            .encode_swap(swap, encoding_context)
+            .unwrap();
+        let hex_swap = encode(&encoded_swap);
+
+        assert_eq!(
+            hex_swap,
+            String::from(concat!(
+                // token in
+                "40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f",
+                // pool
+                "14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67",
+                // receiver
+                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                // transfer from router to protocol
+                "00",
+            ))
+            .to_lowercase()
+        );
+
+        write_calldata_to_file("test_encode_maverick_v2", hex_swap.as_str());
     }
 }

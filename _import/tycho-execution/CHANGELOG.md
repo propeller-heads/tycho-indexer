@@ -1,3 +1,34 @@
+## [0.86.0](https://github.com/propeller-heads/tycho-execution/compare/0.85.1...0.86.0) (2025-05-02)
+
+
+### Features
+
+* Change revert condition in _wrapETH ([0400005](https://github.com/propeller-heads/tycho-execution/commit/04000059e5e7940f209639c900557b437a766913))
+* Propagate the entire result of the callback ([8a7c390](https://github.com/propeller-heads/tycho-execution/commit/8a7c39052d45ee75e81cbb267748a1fc635a8c34))
+
+## [0.85.1](https://github.com/propeller-heads/tycho-execution/compare/0.85.0...0.85.1) (2025-05-01)
+
+
+### Bug Fixes
+
+* Derive Clone in TychoEncoders ([f99bd29](https://github.com/propeller-heads/tycho-execution/commit/f99bd296a1b74900adc24ea9db7b75367612e0f9))
+
+## [0.85.0](https://github.com/propeller-heads/tycho-execution/compare/0.84.0...0.85.0) (2025-05-01)
+
+
+### Features
+
+* add mav executor ([0ac722d](https://github.com/propeller-heads/tycho-execution/commit/0ac722d91f6c2f7c09531f5f56f057d1fe014c6f))
+* add swap encode ([72a651d](https://github.com/propeller-heads/tycho-execution/commit/72a651d453943d554722d0fa4818255fbec01ce5))
+* Transfer Optimizations in MaverickV2 ([bcef8f6](https://github.com/propeller-heads/tycho-execution/commit/bcef8f69f628c3a37a7cb5462e26200ad5aab1ee))
+
+
+### Bug Fixes
+
+* add maverick for build ([bab30e3](https://github.com/propeller-heads/tycho-execution/commit/bab30e3958ee62091b322ac0bc540939c050ee9e))
+* maverick test fork block ([4c93830](https://github.com/propeller-heads/tycho-execution/commit/4c938306bda62d37b8932697f98d0d667a96532b))
+* swap test ([d103ca9](https://github.com/propeller-heads/tycho-execution/commit/d103ca9e33f931f18c8af79efa5d77d801bab2e9))
+
 ## [0.84.0](https://github.com/propeller-heads/tycho-execution/compare/0.83.0...0.84.0) (2025-04-28)
 
 

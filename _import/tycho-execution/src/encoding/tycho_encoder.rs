@@ -10,7 +10,7 @@ pub trait TychoEncoder {
     ///
     /// # Arguments
     /// * `solutions` - Vector of solutions to encode, each potentially using different setups (swap
-    ///   paths, protocols, etc.)
+    ///   paths, protocols, wrapping, etc.)
     ///
     /// # Returns
     /// * `Result<Vec<Transaction>, EncodingError>` - Vector of executable transactions
