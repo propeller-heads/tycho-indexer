@@ -1756,9 +1756,12 @@ impl PostgresGateway {
             return Err(StorageError::NotFound("Chain".to_string(), chain.to_string()));
         }
 
-        let system_id = system.map(|system| self.get_protocol_system_id(&system));
+        let system_id = match system {
+            Some(ref s) => Some(self.get_protocol_system_id(s)?),
+            None => None,
+        };
 
-        let chain_id_val = self.get_chain_id(chain);
+        let chain_id_val = self.get_chain_id(chain)?;
 
         let mut query = ct::component_tvl
             .inner_join(pc::protocol_component)
