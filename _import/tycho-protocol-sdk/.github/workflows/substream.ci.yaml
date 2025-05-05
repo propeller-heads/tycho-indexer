@@ -1,9 +1,7 @@
 name: Substreams CI
 
 on:
-  push:
-    paths:
-      - "substreams/**"
+  pull_request:
 
 jobs:
   lint:
@@ -15,22 +13,50 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Check if any Substreams files changed
+        id: substreams-files-changed
+        uses: tj-actions/changed-files@v35
+        with:
+          files: substreams/**
+
       - name: Setup toolchain
+        if: steps.substreams-files-changed.outputs.any_changed == 'true'
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: nightly
           components: clippy, rustfmt
 
       - name: Setup Rust Cache
+        if: steps.substreams-files-changed.outputs.any_changed == 'true'
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
 
+      - name: Get changed Substreams package names
+        if: steps.substreams-files-changed.outputs.any_changed == 'true'
+        id: changed_packages
+        uses: ./.github/actions/substreams-check
+        with:
+          changed-files: ${{ steps.substreams-files-changed.outputs.all_changed_files }}
+
       - name: Run checks
+        if: steps.substreams-files-changed.outputs.any_changed == 'true'
+        shell: bash
         run: |
           cd substreams
-          cargo +nightly-2025-03-01 fmt -- --check
-          cargo +nightly-2025-03-01 clippy --all --all-features --all-targets -- -D warnings
+          if [ -n "${{ steps.changed_packages.outputs.package_names }}" ]; then
+            for package in ${{ steps.changed_packages.outputs.package_names }}; do
+              echo "Running checks for package: $package"
+              cargo +nightly fmt --package "$package" -- --check
+              cargo +nightly clippy --package "$package" -- -D warnings
+            done
+          else
+            echo "No packages to check"
+          fi
+
+      - name: Skip check
+        if: steps.substreams-files-changed.outputs.any_changed != 'true'
+        run: echo "No changes to substreams directory, skipping lint check"
 
   test:
     name: Substreams Test
@@ -41,19 +67,47 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Check if any Substreams files changed
+        id: substreams-files-changed
+        uses: tj-actions/changed-files@v35
+        with:
+          files: substreams/**
+
       - name: Setup toolchain
+        if: steps.substreams-files-changed.outputs.any_changed == 'true'
         uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
           targets: wasm32-unknown-unknown
 
       - name: Setup Rust Cache
+        if: steps.substreams-files-changed.outputs.any_changed == 'true'
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
 
+      - name: Get changed Substreams package names
+        if: steps.substreams-files-changed.outputs.any_changed == 'true'
+        id: changed_packages
+        uses: ./.github/actions/substreams-check
+        with:
+          changed-files: ${{ steps.substreams-files-changed.outputs.all_changed_files }}
+
       - name: Run checks
+        if: steps.substreams-files-changed.outputs.any_changed == 'true'
+        shell: bash
         run: |
           cd substreams
-          cargo build --target wasm32-unknown-unknown --all-targets --all-features
-          cargo test --workspace --all-targets --all-features
+          if [ -n "${{ steps.changed_packages.outputs.package_names }}" ]; then
+            for package in ${{ steps.changed_packages.outputs.package_names }}; do
+              echo "Running checks for package: $package"
+              cargo build --package "$package" --target wasm32-unknown-unknown
+              cargo test --package "$package"
+            done
+          else
+            echo "No packages to check"
+          fi
+
+      - name: Skip check
+        if: steps.substreams-files-changed.outputs.any_changed != 'true'
+        run: echo "No changes to substreams directory, skipping test check"

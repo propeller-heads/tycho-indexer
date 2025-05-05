@@ -1,0 +1,47 @@
+name: 'Substreams Package Names'
+description: 'Compute package names from changed files'
+
+inputs:
+  changed-files:
+    description: 'List of changed files from tj-actions/changed-files'
+    required: true
+
+outputs:
+  package_names:
+    description: 'Space-separated list of package names that were found'
+    value: ${{ steps.extract_package_names.outputs.package_names }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Get changed directories and package names
+      id: extract_package_names
+      shell: bash
+      run: |
+        # Convert space-separated list to newline-separated list and process
+        echo '${{ inputs.changed-files }}' | tr ' ' '\n' | grep '^substreams/' | grep -v 'Cargo.lock$' > changed_files.txt
+        
+        # Extract unique directory paths
+        CHANGED_DIRS=$(cat changed_files.txt | cut -d'/' -f1-2 | sort -u)
+        
+        # Initialize empty array for package names
+        PACKAGE_NAMES=()
+        
+        # Loop through directories and find package names
+        while IFS= read -r dir; do
+          if [ -f "$dir/Cargo.toml" ]; then
+            PACKAGE_NAME=$(grep -m1 '^name = ' "$dir/Cargo.toml" | cut -d'"' -f2)
+            if [ -n "$PACKAGE_NAME" ]; then
+              PACKAGE_NAMES+=("$PACKAGE_NAME")
+            fi
+          fi
+        done <<< "$CHANGED_DIRS"
+        
+        # Join package names with spaces and store
+        if [ ${#PACKAGE_NAMES[@]} -gt 0 ]; then
+          echo "package_names=${PACKAGE_NAMES[*]}" >> $GITHUB_OUTPUT
+          echo "Found packages: ${PACKAGE_NAMES[*]}"
+        else
+          echo "No valid packages found"
+          echo "package_names=" >> $GITHUB_OUTPUT
+        fi 
