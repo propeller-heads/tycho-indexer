@@ -496,6 +496,7 @@ where
     ) -> Result<dto::ProtocolComponentTvlRequestResponse, RpcError> {
         info!(?request, "Getting protocol component tvl.");
         let chain = request.chain.into();
+        let pagination_params: PaginationParams = (&request.pagination).into();
         let ids_strs: Option<Vec<&str>> = request
             .component_ids
             .as_ref()
@@ -503,14 +504,27 @@ where
 
         let ids_slice = ids_strs.as_deref();
 
-        match self
+        let tvl_result = self
             .db_gateway
-            .get_component_tvls(&chain, ids_slice)
-            .await
-        {
-            Ok(tvl) => Ok(dto::ProtocolComponentTvlRequestResponse::new(tvl)),
+            .get_component_tvls(
+                &chain,
+                request.protocol_system.clone(),
+                ids_slice,
+                Some(&pagination_params),
+            )
+            .await;
+
+        match tvl_result {
+            Ok(tvl) => Ok(dto::ProtocolComponentTvlRequestResponse::new(
+                tvl.entity,
+                PaginationResponse::new(
+                    pagination_params.page,
+                    pagination_params.page_size,
+                    tvl.total.unwrap_or_default(),
+                ),
+            )),
             Err(err) => {
-                error!(error = %err, "Error while getting protocol systems.");
+                error!(error = %err, "Error while getting component tvls.");
                 Err(err.into())
             }
         }
@@ -1013,6 +1027,8 @@ pub async fn component_tvl<G: Gateway>(
     handler: web::Data<RpcHandler<G>>,
 ) -> HttpResponse {
     // Tracing and metrics
+    tracing::Span::current().record("page", body.pagination.page);
+    tracing::Span::current().record("page.size", body.pagination.page_size);
     counter!("rpc_requests", "endpoint" => "component_tvl").increment(1);
 
     // Call the handler to get component tvl

@@ -41,6 +41,7 @@ pub struct TychoStreamBuilder {
     no_state: bool,
     auth_key: Option<String>,
     no_tls: bool,
+    include_tvl: bool,
 }
 
 impl TychoStreamBuilder {
@@ -58,6 +59,7 @@ impl TychoStreamBuilder {
             no_state: false,
             auth_key: None,
             no_tls: true,
+            include_tvl: false,
         }
     }
 
@@ -117,6 +119,14 @@ impl TychoStreamBuilder {
     /// Disables TLS/SSL for the connection, using `http` and `ws` protocols.
     pub fn no_tls(mut self, no_tls: bool) -> Self {
         self.no_tls = no_tls;
+        self
+    }
+
+    /// Configures the client to include TVL in the stream.
+    ///
+    /// If set to true, this will increase start-up time due to additional requests.
+    pub fn include_tvl(mut self, include_tvl: bool) -> Self {
+        self.include_tvl = include_tvl;
         self
     }
 
@@ -198,10 +208,10 @@ impl TychoStreamBuilder {
                 filter,
                 3,
                 !self.no_state,
+                self.include_tvl,
                 rpc_client.clone(),
                 ws_client.clone(),
                 self.block_time + self.timeout,
-                false,
             );
             block_sync = block_sync.register_synchronizer(id, sync);
         }

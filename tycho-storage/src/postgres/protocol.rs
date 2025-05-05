@@ -1745,14 +1745,18 @@ impl PostgresGateway {
     pub async fn get_component_tvls(
         &self,
         chain: &Chain,
+        system: Option<String>,
         component_ids: Option<&[&str]>,
+        pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<HashMap<String, f64>, StorageError> {
+    ) -> Result<WithTotal<HashMap<String, f64>>, StorageError> {
         use schema::{component_tvl::dsl as ct, protocol_component::dsl as pc};
 
         if !self.chain_id_cache.value_exists(chain) {
             return Err(StorageError::NotFound("Chain".to_string(), chain.to_string()));
         }
+
+        let system_id = system.map(|system| self.get_protocol_system_id(&system));
 
         let chain_id_val = self.get_chain_id(chain);
 
@@ -1761,9 +1765,32 @@ impl PostgresGateway {
             .filter(pc::chain_id.eq(chain_id_val))
             .into_boxed();
 
+        let mut count_query = ct::component_tvl
+            .inner_join(pc::protocol_component)
+            .filter(pc::chain_id.eq(chain_id_val))
+            .into_boxed();
+
         if let Some(ids) = component_ids {
             query = query.filter(pc::external_id.eq_any(ids));
+            count_query = count_query.filter(pc::external_id.eq_any(ids));
         }
+
+        if let Some(system_id) = system_id {
+            query = query.filter(pc::protocol_system_id.eq(system_id));
+            count_query = count_query.filter(pc::protocol_system_id.eq(system_id));
+        }
+
+        if let Some(pagination) = pagination_params {
+            query = query
+                .limit(pagination.page_size)
+                .offset(pagination.offset());
+        }
+
+        let count = count_query
+            .count()
+            .get_result::<i64>(conn)
+            .await
+            .map_err(PostgresError::from)?;
 
         let rows: Vec<(String, f64)> = query
             .select((pc::external_id, ct::tvl))
@@ -1780,7 +1807,7 @@ impl PostgresGateway {
             .into_iter()
             .collect::<HashMap<_, _>>();
 
-        Ok(result)
+        Ok(WithTotal { entity: result, total: Some(count) })
     }
 }
 
@@ -3929,6 +3956,7 @@ mod test {
         setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
 
+        let protocol_system = "ambient".to_string();
         let new_tvl = [("state1".to_owned(), 100.0), ("no_tvl".to_owned(), 1.0)]
             .into_iter()
             .collect::<HashMap<_, _>>();
@@ -3937,16 +3965,83 @@ mod test {
             .expect("upsert failed!");
 
         let tvls = gw
-            .get_component_tvls(&Chain::Ethereum, Some(&["state1", "no_tvl"]), &mut conn)
+            .get_component_tvls(
+                &Chain::Ethereum,
+                Some(protocol_system),
+                Some(&["state1", "no_tvl"]),
+                Some(&PaginationParams { page: 0, page_size: 10 }),
+                &mut conn,
+            )
             .await
             .expect("failed retrieving component tvl");
 
-        assert_eq!(tvls.get("state1"), Some(&100.0));
-        assert_eq!(tvls.get("no_tvl"), Some(&1.0));
+        assert_eq!(tvls.total.unwrap(), 2);
+        assert_eq!(tvls.entity.get("state1"), Some(&100.0));
+        assert_eq!(tvls.entity.get("no_tvl"), Some(&1.0));
     }
 
     #[tokio::test]
     async fn test_get_component_tvls_not_exist() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+
+        let protocol_system = "ambient".to_string();
+        let new_tvl = [("state1".to_owned(), 100.0), ("no_tvl".to_owned(), 1.0)]
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+        gw.upsert_component_tvl(&Chain::Ethereum, &new_tvl, &mut conn)
+            .await
+            .expect("upsert failed!");
+
+        let res = gw
+            .get_component_tvls(
+                &Chain::Ethereum,
+                Some(protocol_system),
+                Some(&["state1", "no_tvl", "not_exist"]),
+                Some(&PaginationParams { page: 0, page_size: 10 }),
+                &mut conn,
+            )
+            .await
+            .expect("failed retrieving component tvl");
+
+        assert_eq!(res.total.unwrap(), 2);
+        assert_eq!(res.entity.get("state1"), Some(&100.0));
+        assert_eq!(res.entity.get("no_tvl"), Some(&1.0));
+        assert!(!res.entity.contains_key("not_exist"));
+    }
+
+    #[tokio::test]
+    async fn test_get_component_tvls_with_system_only() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+
+        let protocol_system = "ambient".to_string();
+        let new_tvl = [("state1".to_owned(), 100.0), ("no_tvl".to_owned(), 1.0)]
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+        gw.upsert_component_tvl(&Chain::Ethereum, &new_tvl, &mut conn)
+            .await
+            .expect("upsert failed!");
+
+        let tvls = gw
+            .get_component_tvls(
+                &Chain::Ethereum,
+                Some(protocol_system),
+                None,
+                Some(&PaginationParams { page: 0, page_size: 10 }),
+                &mut conn,
+            )
+            .await
+            .expect("failed retrieving component tvl");
+
+        assert_eq!(tvls.entity.get("state1"), Some(&100.0));
+        assert_eq!(tvls.entity.get("no_tvl"), Some(&1.0));
+    }
+
+    #[tokio::test]
+    async fn test_get_component_tvls_with_component_only() {
         let mut conn = setup_db().await;
         setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
@@ -3958,18 +4053,48 @@ mod test {
             .await
             .expect("upsert failed!");
 
-        let res = gw
+        let tvls = gw
             .get_component_tvls(
                 &Chain::Ethereum,
-                Some(&["state1", "no_tvl", "not_exist"]),
+                None,
+                Some(&["state1", "no_tvl"]),
+                Some(&PaginationParams { page: 0, page_size: 10 }),
                 &mut conn,
             )
             .await
             .expect("failed retrieving component tvl");
 
-        assert_eq!(res.len(), 2);
-        assert_eq!(res.get("state1"), Some(&100.0));
-        assert_eq!(res.get("no_tvl"), Some(&1.0));
-        assert!(!res.contains_key("not_exist"));
+        assert_eq!(tvls.entity.get("state1"), Some(&100.0));
+        assert_eq!(tvls.entity.get("no_tvl"), Some(&1.0));
+    }
+
+    #[tokio::test]
+    async fn test_get_component_tvls_with_pagination() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+
+        let protocol_system = "ambient".to_string();
+        let new_tvl = [("state1".to_owned(), 100.0), ("no_tvl".to_owned(), 1.0)]
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+        gw.upsert_component_tvl(&Chain::Ethereum, &new_tvl, &mut conn)
+            .await
+            .expect("upsert failed!");
+
+        let tvls = gw
+            .get_component_tvls(
+                &Chain::Ethereum,
+                Some(protocol_system),
+                Some(&["state1", "no_tvl"]),
+                Some(&PaginationParams { page: 0, page_size: 1 }),
+                &mut conn,
+            )
+            .await
+            .expect("failed retrieving component tvl");
+
+        assert_eq!(tvls.total.unwrap(), 2);
+        assert_eq!(tvls.entity.get("state1"), Some(&100.0));
+        assert!(!tvls.entity.contains_key("no_tvl"));
     }
 }

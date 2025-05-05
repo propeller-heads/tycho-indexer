@@ -1327,19 +1327,45 @@ impl ProtocolSystemsRequestResponse {
 pub struct ProtocolComponentTvlRequestBody {
     #[serde(default)]
     pub chain: Chain,
+    /// Filters protocol components by protocol system
+    /// Useful when `component_ids` is omitted to fetch all components under a specific system.
+    #[serde(alias = "protocolSystem")]
+    pub protocol_system: Option<String>,
     #[serde(default)]
     pub component_ids: Option<Vec<String>>,
+    #[serde(default)]
+    pub pagination: PaginationParams,
 }
 
+impl ProtocolComponentTvlRequestBody {
+    pub fn system_filtered(system: &str, chain: Chain) -> Self {
+        Self {
+            chain,
+            protocol_system: Some(system.to_string()),
+            component_ids: None,
+            pagination: Default::default(),
+        }
+    }
+
+    pub fn id_filtered(ids: Vec<String>, chain: Chain) -> Self {
+        Self {
+            chain,
+            protocol_system: None,
+            component_ids: Some(ids),
+            pagination: Default::default(),
+        }
+    }
+}
 // #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Eq, Hash)]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ProtocolComponentTvlRequestResponse {
     pub tvl: HashMap<String, f64>,
+    pub pagination: PaginationResponse,
 }
 
 impl ProtocolComponentTvlRequestResponse {
-    pub fn new(tvl: HashMap<String, f64>) -> Self {
-        Self { tvl }
+    pub fn new(tvl: HashMap<String, f64>, pagination: PaginationResponse) -> Self {
+        Self { tvl, pagination }
     }
 }
 

@@ -156,10 +156,10 @@ where
         component_filter: ComponentFilter,
         max_retries: u64,
         include_snapshots: bool,
+        include_tvl: bool,
         rpc_client: R,
         deltas_client: D,
         timeout: u64,
-        include_tvl: bool,
     ) -> Self {
         Self {
             extractor_id: extractor_id.clone(),
@@ -225,11 +225,12 @@ where
         }
 
         let component_tvl = if self.include_tvl {
+            let body = ProtocolComponentTvlRequestBody::id_filtered(
+                request_ids.clone(),
+                self.extractor_id.chain,
+            );
             self.rpc_client
-                .get_component_tvl(&ProtocolComponentTvlRequestBody {
-                    chain: self.extractor_id.chain,
-                    component_ids: Some(request_ids.clone()),
-                })
+                .get_component_tvl_paginated(&body, 100, 4)
                 .await?
                 .tvl
         } else {
@@ -668,6 +669,7 @@ mod test {
 
     fn with_mocked_clients(
         native: bool,
+        include_tvl: bool,
         rpc_client: Option<MockRPCClient>,
         deltas_client: Option<MockDeltasClient>,
     ) -> ProtocolStateSynchronizer<ArcRPCClient<MockRPCClient>, ArcDeltasClient<MockDeltasClient>>
@@ -681,10 +683,10 @@ mod test {
             ComponentFilter::with_tvl_range(50.0, 50.0),
             1,
             true,
+            include_tvl,
             rpc_client,
             deltas_client,
             10_u64,
-            false,
         )
     }
 
@@ -698,13 +700,22 @@ mod test {
         }
     }
 
+    fn component_tvl_snapshot() -> ProtocolComponentTvlRequestResponse {
+        let tvl = HashMap::from([("Component1".to_string(), 100.0)]);
+
+        ProtocolComponentTvlRequestResponse {
+            tvl,
+            pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+        }
+    }
+
     #[test(tokio::test)]
     async fn test_get_snapshots_native() {
         let header = Header::default();
         let mut rpc = MockRPCClient::new();
         rpc.expect_get_protocol_states()
             .returning(|_| Ok(state_snapshot_native()));
-        let state_sync = with_mocked_clients(true, Some(rpc), None);
+        let state_sync = with_mocked_clients(true, false, Some(rpc), None);
         let mut tracker = ComponentTracker::new(
             Chain::Ethereum,
             "uniswap-v2",
@@ -747,6 +758,57 @@ mod test {
         assert_eq!(snap, exp);
     }
 
+    #[test(tokio::test)]
+    async fn test_get_snapshots_native_with_tvl() {
+        let header = Header::default();
+        let mut rpc = MockRPCClient::new();
+        rpc.expect_get_protocol_states()
+            .returning(|_| Ok(state_snapshot_native()));
+        rpc.expect_get_component_tvl()
+            .returning(|_| Ok(component_tvl_snapshot()));
+        let state_sync = with_mocked_clients(true, true, Some(rpc), None);
+        let mut tracker = ComponentTracker::new(
+            Chain::Ethereum,
+            "uniswap-v2",
+            ComponentFilter::with_tvl_range(0.0, 0.0),
+            state_sync.rpc_client.clone(),
+        );
+        let component = ProtocolComponent { id: "Component1".to_string(), ..Default::default() };
+        tracker
+            .components
+            .insert("Component1".to_string(), component.clone());
+        let components_arg = ["Component1".to_string()];
+        let exp = StateSyncMessage {
+            header: header.clone(),
+            snapshots: Snapshot {
+                states: state_snapshot_native()
+                    .states
+                    .into_iter()
+                    .map(|state| {
+                        (
+                            state.component_id.clone(),
+                            ComponentWithState {
+                                state,
+                                component: component.clone(),
+                                component_tvl: Some(100.0),
+                            },
+                        )
+                    })
+                    .collect(),
+                vm_storage: HashMap::new(),
+            },
+            deltas: None,
+            removed_components: Default::default(),
+        };
+
+        let snap = state_sync
+            .get_snapshots(header, &tracker, Some(&components_arg))
+            .await
+            .expect("Retrieving snapshot failed");
+
+        assert_eq!(snap, exp);
+    }
+
     fn state_snapshot_vm() -> StateRequestResponse {
         StateRequestResponse {
             accounts: vec![
@@ -765,7 +827,7 @@ mod test {
             .returning(|_| Ok(state_snapshot_native()));
         rpc.expect_get_contract_state()
             .returning(|_| Ok(state_snapshot_vm()));
-        let state_sync = with_mocked_clients(false, Some(rpc), None);
+        let state_sync = with_mocked_clients(false, false, Some(rpc), None);
         let mut tracker = ComponentTracker::new(
             Chain::Ethereum,
             "uniswap-v2",
@@ -793,6 +855,66 @@ mod test {
                         },
                         component: component.clone(),
                         component_tvl: None,
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                vm_storage: state_snapshot_vm()
+                    .accounts
+                    .into_iter()
+                    .map(|state| (state.address.clone(), state))
+                    .collect(),
+            },
+            deltas: None,
+            removed_components: Default::default(),
+        };
+
+        let snap = state_sync
+            .get_snapshots(header, &tracker, Some(&components_arg))
+            .await
+            .expect("Retrieving snapshot failed");
+
+        assert_eq!(snap, exp);
+    }
+
+    #[test(tokio::test)]
+    async fn test_get_snapshots_vm_with_tvl() {
+        let header = Header::default();
+        let mut rpc = MockRPCClient::new();
+        rpc.expect_get_protocol_states()
+            .returning(|_| Ok(state_snapshot_native()));
+        rpc.expect_get_contract_state()
+            .returning(|_| Ok(state_snapshot_vm()));
+        rpc.expect_get_component_tvl()
+            .returning(|_| Ok(component_tvl_snapshot()));
+        let state_sync = with_mocked_clients(false, true, Some(rpc), None);
+        let mut tracker = ComponentTracker::new(
+            Chain::Ethereum,
+            "uniswap-v2",
+            ComponentFilter::with_tvl_range(0.0, 0.0),
+            state_sync.rpc_client.clone(),
+        );
+        let component = ProtocolComponent {
+            id: "Component1".to_string(),
+            contract_ids: vec![Bytes::from("0x0badc0ffee"), Bytes::from("0xbabe42")],
+            ..Default::default()
+        };
+        tracker
+            .components
+            .insert("Component1".to_string(), component.clone());
+        let components_arg = ["Component1".to_string()];
+        let exp = StateSyncMessage {
+            header: header.clone(),
+            snapshots: Snapshot {
+                states: [(
+                    component.id.clone(),
+                    ComponentWithState {
+                        state: ResponseProtocolState {
+                            component_id: "Component1".to_string(),
+                            ..Default::default()
+                        },
+                        component: component.clone(),
+                        component_tvl: Some(100.0),
                     },
                 )]
                 .into_iter()
@@ -895,6 +1017,20 @@ mod test {
                     pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
+        rpc_client
+            .expect_get_component_tvl()
+            .returning(|_| {
+                Ok(ProtocolComponentTvlRequestResponse {
+                    tvl: [
+                        ("Component1".to_string(), 100.0),
+                        ("Component2".to_string(), 0.0),
+                        ("Component3".to_string(), 1000.0),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 3 },
+                })
+            });
         // Mock deltas client and messages
         let mut deltas_client = MockDeltasClient::new();
         let (tx, rx) = channel(1);
@@ -951,7 +1087,7 @@ mod test {
                 ..Default::default()
             },
         ];
-        let mut state_sync = with_mocked_clients(true, Some(rpc_client), Some(deltas_client));
+        let mut state_sync = with_mocked_clients(true, true, Some(rpc_client), Some(deltas_client));
         state_sync
             .initialize()
             .await
@@ -1002,7 +1138,7 @@ mod test {
                                 id: "Component1".to_string(),
                                 ..Default::default()
                             },
-                            component_tvl: None,
+                            component_tvl: Some(100.0),
                         },
                     ),
                     (
@@ -1016,7 +1152,7 @@ mod test {
                                 id: "Component2".to_string(),
                                 ..Default::default()
                             },
-                            component_tvl: None,
+                            component_tvl: Some(0.0),
                         },
                     ),
                 ]
@@ -1049,7 +1185,7 @@ mod test {
                                 id: "Component3".to_string(),
                                 ..Default::default()
                             },
-                            component_tvl: None,
+                            component_tvl: Some(1000.0),
                         },
                     ),
                 ]
@@ -1173,6 +1309,21 @@ mod test {
                 })
             });
 
+        rpc_client
+            .expect_get_component_tvl()
+            .returning(|_| {
+                Ok(ProtocolComponentTvlRequestResponse {
+                    tvl: [
+                        ("Component1".to_string(), 6.0),
+                        ("Component2".to_string(), 2.0),
+                        ("Component3".to_string(), 10.0),
+                    ]
+                    .into_iter()
+                    .collect(),
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 3 },
+                })
+            });
+
         let (tx, rx) = channel(1);
         deltas_client
             .expect_subscribe()
@@ -1184,10 +1335,10 @@ mod test {
             ComponentFilter::with_tvl_range(remove_tvl_threshold, add_tvl_threshold),
             1,
             true,
+            true,
             ArcRPCClient(Arc::new(rpc_client)),
             ArcDeltasClient(Arc::new(deltas_client)),
             10_u64,
-            false,
         );
         state_sync
             .initialize()
@@ -1280,7 +1431,7 @@ mod test {
                             id: "Component3".to_string(),
                             ..Default::default()
                         },
-                        component_tvl: None,
+                        component_tvl: Some(10.0),
                     },
                 )]
                 .into_iter()

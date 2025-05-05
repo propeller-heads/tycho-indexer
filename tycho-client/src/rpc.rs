@@ -3,7 +3,7 @@
 //! The objective of this module is to provide swift and simplified access to the Remote Procedure
 //! Call (RPC) endpoints of Tycho. These endpoints are chiefly responsible for facilitating data
 //! queries, especially querying snapshots of data.
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use futures03::future::try_join_all;
@@ -381,6 +381,131 @@ pub trait RPCClient: Send + Sync {
         &self,
         request: &ProtocolComponentTvlRequestBody,
     ) -> Result<ProtocolComponentTvlRequestResponse, RPCError>;
+
+    async fn get_component_tvl_paginated(
+        &self,
+        request: &ProtocolComponentTvlRequestBody,
+        chunk_size: usize,
+        concurrency: usize,
+    ) -> Result<ProtocolComponentTvlRequestResponse, RPCError> {
+        let semaphore = Arc::new(Semaphore::new(concurrency));
+
+        match request.component_ids {
+            Some(ref ids) => {
+                let chunked_requests = ids
+                    .chunks(chunk_size)
+                    .enumerate()
+                    .map(|(index, _)| ProtocolComponentTvlRequestBody {
+                        chain: request.chain,
+                        protocol_system: request.protocol_system.clone(),
+                        component_ids: Some(ids.clone()),
+                        pagination: PaginationParams {
+                            page: index as i64,
+                            page_size: chunk_size as i64,
+                        },
+                    })
+                    .collect::<Vec<_>>();
+
+                let tasks: Vec<_> = chunked_requests
+                    .into_iter()
+                    .map(|req| {
+                        let sem = semaphore.clone();
+                        async move {
+                            let _permit = sem
+                                .acquire()
+                                .await
+                                .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
+                            self.get_component_tvl(&req).await
+                        }
+                    })
+                    .collect();
+
+                let responses = try_join_all(tasks).await?;
+
+                let mut merged_tvl = HashMap::new();
+                for resp in responses {
+                    for (key, value) in resp.tvl {
+                        *merged_tvl.entry(key).or_insert(0.0) = value;
+                    }
+                }
+
+                Ok(ProtocolComponentTvlRequestResponse {
+                    tvl: merged_tvl,
+                    pagination: PaginationResponse {
+                        page: 0,
+                        page_size: chunk_size as i64,
+                        total: ids.len() as i64,
+                    },
+                })
+            }
+            _ => {
+                let first_request = ProtocolComponentTvlRequestBody {
+                    chain: request.chain,
+                    protocol_system: request.protocol_system.clone(),
+                    component_ids: request.component_ids.clone(),
+                    pagination: PaginationParams { page: 0, page_size: chunk_size as i64 },
+                };
+
+                let first_response = self
+                    .get_component_tvl(&first_request)
+                    .await?;
+                let total_items = first_response.pagination.total;
+                let total_pages = (total_items as f64 / chunk_size as f64).ceil() as i64;
+
+                let mut merged_tvl = first_response.tvl;
+
+                let mut page = 1;
+                while page < total_pages {
+                    let requests_in_this_iteration = (total_pages - page).min(concurrency as i64);
+
+                    let chunked_requests: Vec<_> = (0..requests_in_this_iteration)
+                        .map(|i| ProtocolComponentTvlRequestBody {
+                            chain: request.chain,
+                            protocol_system: request.protocol_system.clone(),
+                            component_ids: request.component_ids.clone(),
+                            pagination: PaginationParams {
+                                page: page + i,
+                                page_size: chunk_size as i64,
+                            },
+                        })
+                        .collect();
+
+                    let tasks: Vec<_> = chunked_requests
+                        .into_iter()
+                        .map(|req| {
+                            let sem = semaphore.clone();
+                            async move {
+                                let _permit = sem.acquire().await.map_err(|_| {
+                                    RPCError::Fatal("Semaphore dropped".to_string())
+                                })?;
+                                self.get_component_tvl(&req).await
+                            }
+                        })
+                        .collect();
+
+                    let responses = try_join_all(tasks).await?;
+
+                    // merge hashmap
+                    for resp in responses {
+                        for (key, value) in resp.tvl {
+                            *merged_tvl.entry(key).or_insert(0.0) += value;
+                        }
+                    }
+
+                    page += concurrency as i64;
+                }
+
+                Ok(ProtocolComponentTvlRequestResponse {
+                    tvl: merged_tvl,
+                    pagination: PaginationResponse {
+                        page: 0,
+                        page_size: chunk_size as i64,
+                        total: total_items,
+                    },
+                })
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1077,6 +1202,11 @@ mod tests {
         {
             "tvl": {
                 "component1": 100.0
+            },
+            "pagination": {
+                "page": 0,
+                "page_size": 20,
+                "total": 10
             }
         }
         "#;

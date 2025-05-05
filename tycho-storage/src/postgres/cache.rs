@@ -1068,14 +1068,16 @@ impl ProtocolGateway for CachedGateway {
     async fn get_component_tvls(
         &self,
         chain: &Chain,
+        system: Option<String>,
         ids: Option<&[&str]>,
-    ) -> Result<HashMap<String, f64>, StorageError> {
+        pagination_params: Option<&PaginationParams>,
+    ) -> Result<WithTotal<HashMap<String, f64>>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_component_tvls(chain, ids, &mut conn)
+            .get_component_tvls(chain, system, ids, pagination_params, &mut conn)
             .await
     }
 }
