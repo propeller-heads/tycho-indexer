@@ -29,9 +29,6 @@ pub enum StreamError {
 
     #[error("BlockSynchronizer error: {0}")]
     BlockSynchronizerError(String),
-
-    #[error("Initialization error: {0}")]
-    InitializationError(String),
 }
 
 pub struct TychoStreamBuilder {
@@ -135,6 +132,7 @@ impl TychoStreamBuilder {
         // Attempt to read the authentication key from the environment variable if not provided
         let auth_key = self
             .auth_key
+            .clone()
             .or_else(|| env::var("TYCHO_AUTH_TOKEN").ok());
 
         // Determine the URLs based on the TLS setting
@@ -152,9 +150,9 @@ impl TychoStreamBuilder {
 
         // Initialize the WebSocket client
         let ws_client = WsDeltasClient::new(&tycho_ws_url, auth_key.as_deref())
-            .map_err(|e| StreamError::InitializationError(e.to_string()))?;
+            .map_err(|e| StreamError::SetUpError(e.to_string()))?;
         let rpc_client = HttpRPCClient::new(&tycho_rpc_url, auth_key.as_deref())
-            .map_err(|e| StreamError::InitializationError(e.to_string()))?;
+            .map_err(|e| StreamError::SetUpError(e.to_string()))?;
         let ws_jh = ws_client
             .connect()
             .await
@@ -167,33 +165,8 @@ impl TychoStreamBuilder {
             self.max_missed_blocks,
         );
 
-        let available_protocols_set = rpc_client
-            .get_protocol_systems(&ProtocolSystemsRequestBody {
-                chain: self.chain,
-                pagination: PaginationParams { page: 0, page_size: 100 },
-            })
-            .await
-            .map_err(|e| {
-                StreamError::InitializationError(format!("Failed to fetch protocol systems: {e}"))
-            })?
-            .protocol_systems
-            .into_iter()
-            .collect::<HashSet<_>>();
-
-        let requested_protocol_set = self
-            .exchanges
-            .keys()
-            .cloned()
-            .collect::<HashSet<_>>();
-
-        let not_requested_protocols = available_protocols_set
-            .difference(&requested_protocol_set)
-            .cloned()
-            .collect::<Vec<_>>();
-
-        if !not_requested_protocols.is_empty() {
-            tracing::info!("Other available protocols: {}", not_requested_protocols.join(", "));
-        }
+        self.display_available_protocols(&rpc_client)
+            .await;
 
         // Register each exchange with the BlockSynchronizer
         for (name, filter) in self.exchanges {
@@ -231,6 +204,47 @@ impl TychoStreamBuilder {
         });
 
         Ok((handle, rx))
+    }
+
+    /// Displays the other available protocols not registered to within this stream builder, for the
+    /// given chain.
+    async fn display_available_protocols(&self, rpc_client: &HttpRPCClient) {
+        let available_protocols_set = rpc_client
+            .get_protocol_systems(&ProtocolSystemsRequestBody {
+                chain: self.chain,
+                pagination: PaginationParams { page: 0, page_size: 100 },
+            })
+            .await
+            .map(|resp| {
+                resp.protocol_systems
+                    .into_iter()
+                    .collect::<HashSet<_>>()
+            })
+            .map_err(|e| {
+                tracing::warn!(
+                    "Failed to fetch protocol systems: {e}. Skipping protocol availability check."
+                );
+                e
+            })
+            .ok();
+
+        if let Some(not_requested_protocols) = available_protocols_set
+            .map(|available_protocols_set| {
+                let requested_protocol_set = self
+                    .exchanges
+                    .keys()
+                    .cloned()
+                    .collect::<HashSet<_>>();
+
+                available_protocols_set
+                    .difference(&requested_protocol_set)
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .filter(|not_requested_protocols| !not_requested_protocols.is_empty())
+        {
+            tracing::info!("Other available protocols: {}", not_requested_protocols.join(", "))
+        }
     }
 }
 
