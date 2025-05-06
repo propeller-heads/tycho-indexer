@@ -211,7 +211,9 @@ where
                 if let Some(comp) = self.components.get(cid) {
                     Some(comp.contract_ids.clone())
                 } else {
-                    warn!("Requested component is not tracked: {cid}.");
+                    warn!(
+                        "Requested component is not tracked: {cid}. Skipping fetching contracts..."
+                    );
                     None
                 }
             })
