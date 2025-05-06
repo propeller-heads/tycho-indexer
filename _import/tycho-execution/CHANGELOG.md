@@ -1,3 +1,15 @@
+## [0.87.0](https://github.com/propeller-heads/tycho-execution/compare/0.86.0...0.87.0) (2025-05-05)
+
+
+### Features
+
+* Update PancakeV2 executor addresses ([872aa57](https://github.com/propeller-heads/tycho-execution/commit/872aa576e6799a3d4b73f3ed244a7b2a0eac06ec))
+
+
+### Bug Fixes
+
+* pass permit2 in deployment scripts ([ba19b00](https://github.com/propeller-heads/tycho-execution/commit/ba19b000dcdbcd0bb27c35faccb18f84bc3f8bcf))
+
 ## [0.86.0](https://github.com/propeller-heads/tycho-execution/compare/0.85.1...0.86.0) (2025-05-02)
 
 

@@ -34,7 +34,7 @@ from being stored in the shell history.
 ## Deploy Tycho Router
 
 For each of the following, you must select one of `tenderly_ethereum`, `tenderly_base`,
-`ethereum`, or `base` as the network.
+`ethereum`, `base`, or `unichain` as the network.
 
 1. Deploy router: `npx hardhat run scripts/deploy-router.js --network NETWORK`
 2. Define the accounts to grant roles to in `scripts/roles.json`

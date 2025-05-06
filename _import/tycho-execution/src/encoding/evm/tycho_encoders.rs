@@ -6,6 +6,7 @@ use tycho_common::Bytes;
 use crate::encoding::{
     errors::EncodingError,
     evm::{
+        constants::GROUPABLE_PROTOCOLS,
         group_swaps::group_swaps,
         strategy_encoder::strategy_encoders::{
             SequentialSwapStrategyEncoder, SingleSwapStrategyEncoder, SplitSwapStrategyEncoder,
@@ -77,7 +78,20 @@ impl TychoEncoder for TychoRouterEncoder {
         let mut transactions: Vec<Transaction> = Vec::new();
         for solution in solutions.iter() {
             self.validate_solution(solution)?;
-            let (contract_interaction, target_address) = if solution.swaps.len() == 1 {
+
+            let protocols: HashSet<String> = solution
+                .clone()
+                .swaps
+                .into_iter()
+                .map(|swap| swap.component.protocol_system)
+                .collect();
+
+            let (contract_interaction, target_address) = if (solution.swaps.len() == 1) ||
+                (protocols.len() == 1 &&
+                    protocols
+                        .iter()
+                        .any(|p| GROUPABLE_PROTOCOLS.contains(&p.as_str())))
+            {
                 self.single_swap_strategy
                     .encode_strategy(solution.clone())?
             } else if solution
@@ -315,8 +329,9 @@ impl TychoEncoder for TychoExecutorEncoder {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{collections::HashMap, str::FromStr};
 
+    use num_bigint::BigInt;
     use tycho_common::models::{protocol::ProtocolComponent, Chain as TychoCommonChain};
 
     use super::*;
@@ -342,6 +357,53 @@ mod tests {
         Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap()
     }
 
+    fn pepe() -> Bytes {
+        Bytes::from_str("0x6982508145454Ce325dDbE47a25d4ec3d2311933").unwrap()
+    }
+
+    // Fee and tick spacing information for this test is obtained by querying the
+    // USV4 Position Manager contract: 0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e
+    // Using the poolKeys function with the first 25 bytes of the pool id
+    fn swap_usdc_eth_univ4() -> Swap {
+        let pool_fee_usdc_eth = Bytes::from(BigInt::from(3000).to_signed_bytes_be());
+        let tick_spacing_usdc_eth = Bytes::from(BigInt::from(60).to_signed_bytes_be());
+        let mut static_attributes_usdc_eth: HashMap<String, Bytes> = HashMap::new();
+        static_attributes_usdc_eth.insert("key_lp_fee".into(), pool_fee_usdc_eth);
+        static_attributes_usdc_eth.insert("tick_spacing".into(), tick_spacing_usdc_eth);
+        Swap {
+            component: ProtocolComponent {
+                id: "0xdce6394339af00981949f5f3baf27e3610c76326a700af57e4b3e3ae4977f78d"
+                    .to_string(),
+                protocol_system: "uniswap_v4".to_string(),
+                static_attributes: static_attributes_usdc_eth,
+                ..Default::default()
+            },
+            token_in: usdc().clone(),
+            token_out: eth().clone(),
+            split: 0f64,
+        }
+    }
+
+    fn swap_eth_pepe_univ4() -> Swap {
+        let pool_fee_eth_pepe = Bytes::from(BigInt::from(25000).to_signed_bytes_be());
+        let tick_spacing_eth_pepe = Bytes::from(BigInt::from(500).to_signed_bytes_be());
+        let mut static_attributes_eth_pepe: HashMap<String, Bytes> = HashMap::new();
+        static_attributes_eth_pepe.insert("key_lp_fee".into(), pool_fee_eth_pepe);
+        static_attributes_eth_pepe.insert("tick_spacing".into(), tick_spacing_eth_pepe);
+        Swap {
+            component: ProtocolComponent {
+                id: "0xecd73ecbf77219f21f129c8836d5d686bbc27d264742ddad620500e3e548e2c9"
+                    .to_string(),
+                protocol_system: "uniswap_v4".to_string(),
+                static_attributes: static_attributes_eth_pepe,
+                ..Default::default()
+            },
+            token_in: eth().clone(),
+            token_out: pepe().clone(),
+            split: 0f64,
+        }
+    }
+
     fn get_swap_encoder_registry() -> SwapEncoderRegistry {
         SwapEncoderRegistry::new(
             Some("config/test_executor_addresses.json".to_string()),
@@ -353,7 +415,7 @@ mod tests {
     mod router_encoder {
         use super::*;
 
-        fn get_mocked_tycho_router_encoder() -> TychoRouterEncoder {
+        fn get_tycho_router_encoder() -> TychoRouterEncoder {
             TychoRouterEncoder::new(
                 TychoCommonChain::Ethereum.into(),
                 get_swap_encoder_registry(),
@@ -364,8 +426,8 @@ mod tests {
             .unwrap()
         }
         #[test]
-        fn test_encode_router_calldata() {
-            let encoder = get_mocked_tycho_router_encoder();
+        fn test_encode_router_calldata_single_swap() {
+            let encoder = get_tycho_router_encoder();
             let eth_amount_in = BigUint::from(1000u32);
             let swap = Swap {
                 component: ProtocolComponent {
@@ -390,7 +452,6 @@ mod tests {
             };
 
             let transactions = encoder.encode_calldata(vec![solution]);
-
             assert!(transactions.is_ok());
             let transactions = transactions.unwrap();
             assert_eq!(transactions.len(), 1);
@@ -399,11 +460,85 @@ mod tests {
                 transactions[0].to,
                 Bytes::from_str("0x3ede3eca2a72b3aecc820e955b36f38437d01395").unwrap()
             );
+            // single swap selector
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "20144a07");
+        }
+
+        #[test]
+        fn test_encode_router_calldata_single_swap_group() {
+            let encoder = get_tycho_router_encoder();
+            let solution = Solution {
+                exact_out: false,
+                given_token: usdc(),
+                given_amount: BigUint::from_str("1000_000000").unwrap(),
+                checked_token: pepe(),
+                expected_amount: Some(BigUint::from_str("105_152_000000000000000000").unwrap()),
+                checked_amount: None,
+                slippage: None,
+                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                swaps: vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
+                ..Default::default()
+            };
+
+            let transactions = encoder.encode_calldata(vec![solution]);
+            assert!(transactions.is_ok());
+            let transactions = transactions.unwrap();
+            assert_eq!(transactions.len(), 1);
+            // single swap selector
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "20144a07");
+        }
+
+        #[test]
+        fn test_encode_router_calldata_sequential_swap() {
+            let encoder = get_tycho_router_encoder();
+            let eth_amount_in = BigUint::from(1000u32);
+            let swap_weth_dai = Swap {
+                component: ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: weth(),
+                token_out: dai(),
+                split: 0f64,
+            };
+
+            let swap_dai_usdc = Swap {
+                component: ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
+                    protocol_system: "uniswap_v2".to_string(),
+                    ..Default::default()
+                },
+                token_in: dai(),
+                token_out: usdc(),
+                split: 0f64,
+            };
+
+            let solution = Solution {
+                exact_out: false,
+                given_amount: eth_amount_in.clone(),
+                given_token: eth(),
+                checked_token: usdc(),
+                swaps: vec![swap_weth_dai, swap_dai_usdc],
+                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                native_action: Some(NativeAction::Wrap),
+                checked_amount: Some(BigUint::from(1000u32)),
+                ..Default::default()
+            };
+
+            let transactions = encoder.encode_calldata(vec![solution]);
+            assert!(transactions.is_ok());
+            let transactions = transactions.unwrap();
+            assert_eq!(transactions.len(), 1);
+            assert_eq!(transactions[0].value, eth_amount_in);
+            // sequential swap selector
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "e8a980d7");
         }
 
         #[test]
         fn test_validate_fails_for_exact_out() {
-            let encoder = get_mocked_tycho_router_encoder();
+            let encoder = get_tycho_router_encoder();
             let solution = Solution {
                 exact_out: true, // This should cause an error
                 ..Default::default()
@@ -421,7 +556,7 @@ mod tests {
 
         #[test]
         fn test_validate_passes_for_wrap() {
-            let encoder = get_mocked_tycho_router_encoder();
+            let encoder = get_tycho_router_encoder();
             let swap = Swap {
                 component: ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
@@ -450,7 +585,7 @@ mod tests {
 
         #[test]
         fn test_validate_fails_for_wrap_wrong_input() {
-            let encoder = get_mocked_tycho_router_encoder();
+            let encoder = get_tycho_router_encoder();
             let swap = Swap {
                 component: ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
@@ -483,7 +618,7 @@ mod tests {
 
         #[test]
         fn test_validate_fails_for_wrap_wrong_first_swap() {
-            let encoder = get_mocked_tycho_router_encoder();
+            let encoder = get_tycho_router_encoder();
             let swap = Swap {
                 component: ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
@@ -516,7 +651,7 @@ mod tests {
 
         #[test]
         fn test_validate_fails_no_swaps() {
-            let encoder = get_mocked_tycho_router_encoder();
+            let encoder = get_tycho_router_encoder();
             let solution = Solution {
                 exact_out: false,
                 given_token: eth(),
@@ -536,7 +671,7 @@ mod tests {
 
         #[test]
         fn test_validate_passes_for_unwrap() {
-            let encoder = get_mocked_tycho_router_encoder();
+            let encoder = get_tycho_router_encoder();
             let swap = Swap {
                 component: ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
@@ -564,7 +699,7 @@ mod tests {
 
         #[test]
         fn test_validate_fails_for_unwrap_wrong_output() {
-            let encoder = get_mocked_tycho_router_encoder();
+            let encoder = get_tycho_router_encoder();
             let swap = Swap {
                 component: ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
@@ -598,7 +733,7 @@ mod tests {
 
         #[test]
         fn test_validate_fails_for_unwrap_wrong_last_swap() {
-            let encoder = get_mocked_tycho_router_encoder();
+            let encoder = get_tycho_router_encoder();
             let swap = Swap {
                 component: ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
@@ -636,7 +771,7 @@ mod tests {
             // DAI -              -> DAI
             //      50% -> WETH
             // (some of the pool addresses in this test are fake)
-            let encoder = get_mocked_tycho_router_encoder();
+            let encoder = get_tycho_router_encoder();
             let swaps = vec![
                 Swap {
                     component: ProtocolComponent {
@@ -688,7 +823,7 @@ mod tests {
             // This test should fail because the cyclical swap is not the first and last token
             // DAI -> WETH -> USDC -> DAI -> WBTC
             // (some of the pool addresses in this test are fake)
-            let encoder = get_mocked_tycho_router_encoder();
+            let encoder = get_tycho_router_encoder();
             let swaps = vec![
                 Swap {
                     component: ProtocolComponent {
@@ -757,7 +892,7 @@ mod tests {
             // WETH -> DAI
             //             -> WETH
             // (some of the pool addresses in this test are fake)
-            let encoder = get_mocked_tycho_router_encoder();
+            let encoder = get_tycho_router_encoder();
             let swaps = vec![
                 Swap {
                     component: ProtocolComponent {
@@ -809,7 +944,7 @@ mod tests {
             // This validation fails because there is a native action with a valid cyclical swap
             // ETH -> WETH -> DAI -> WETH
             // (some of the pool addresses in this test are fake)
-            let encoder = get_mocked_tycho_router_encoder();
+            let encoder = get_tycho_router_encoder();
             let swaps = vec![
                 Swap {
                     component: ProtocolComponent {
@@ -857,10 +992,10 @@ mod tests {
     }
 
     mod executor_encoder {
-        use std::{collections::HashMap, str::FromStr};
+        use std::str::FromStr;
 
         use alloy::hex::encode;
-        use num_bigint::{BigInt, BigUint};
+        use num_bigint::BigUint;
         use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
         use super::*;
@@ -975,50 +1110,8 @@ mod tests {
                 TychoExecutorEncoder::new(TychoCommonChain::Ethereum.into(), swap_encoder_registry)
                     .unwrap();
 
-            let eth = eth();
             let usdc = usdc();
-            let pepe = Bytes::from_str("0x6982508145454Ce325dDbE47a25d4ec3d2311933").unwrap();
-
-            // Fee and tick spacing information for this test is obtained by querying the
-            // USV4 Position Manager contract: 0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e
-            // Using the poolKeys function with the first 25 bytes of the pool id
-            let pool_fee_usdc_eth = Bytes::from(BigInt::from(3000).to_signed_bytes_be());
-            let tick_spacing_usdc_eth = Bytes::from(BigInt::from(60).to_signed_bytes_be());
-            let mut static_attributes_usdc_eth: HashMap<String, Bytes> = HashMap::new();
-            static_attributes_usdc_eth.insert("key_lp_fee".into(), pool_fee_usdc_eth);
-            static_attributes_usdc_eth.insert("tick_spacing".into(), tick_spacing_usdc_eth);
-
-            let pool_fee_eth_pepe = Bytes::from(BigInt::from(25000).to_signed_bytes_be());
-            let tick_spacing_eth_pepe = Bytes::from(BigInt::from(500).to_signed_bytes_be());
-            let mut static_attributes_eth_pepe: HashMap<String, Bytes> = HashMap::new();
-            static_attributes_eth_pepe.insert("key_lp_fee".into(), pool_fee_eth_pepe);
-            static_attributes_eth_pepe.insert("tick_spacing".into(), tick_spacing_eth_pepe);
-
-            let swap_usdc_eth = Swap {
-                component: ProtocolComponent {
-                    id: "0xdce6394339af00981949f5f3baf27e3610c76326a700af57e4b3e3ae4977f78d"
-                        .to_string(),
-                    protocol_system: "uniswap_v4".to_string(),
-                    static_attributes: static_attributes_usdc_eth,
-                    ..Default::default()
-                },
-                token_in: usdc.clone(),
-                token_out: eth.clone(),
-                split: 0f64,
-            };
-
-            let swap_eth_pepe = Swap {
-                component: ProtocolComponent {
-                    id: "0xecd73ecbf77219f21f129c8836d5d686bbc27d264742ddad620500e3e548e2c9"
-                        .to_string(),
-                    protocol_system: "uniswap_v4".to_string(),
-                    static_attributes: static_attributes_eth_pepe,
-                    ..Default::default()
-                },
-                token_in: eth.clone(),
-                token_out: pepe.clone(),
-                split: 0f64,
-            };
+            let pepe = pepe();
 
             let solution = Solution {
                 exact_out: false,
@@ -1030,7 +1123,7 @@ mod tests {
                 slippage: None,
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                swaps: vec![swap_usdc_eth, swap_eth_pepe],
+                swaps: vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
                 ..Default::default()
             };
 
