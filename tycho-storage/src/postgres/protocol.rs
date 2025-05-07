@@ -3975,9 +3975,9 @@ mod test {
 
         assert_eq!(tvls.total.unwrap(), 1);
         assert_eq!(tvls.entity.get("state1"), Some(&2.0));
-        assert!(!tvls.entity.contains_key("no_tvl")); // component tvl is 0
+        assert!(!tvls.entity.contains_key("no_tvl")); // component not requested
         assert!(!tvls.entity.contains_key("not_exist")); // component does not exist
-        assert!(!tvls.entity.contains_key("state2")); // component is not in the system
+        assert!(!tvls.entity.contains_key("state2")); // component not in the requested
     }
 
     #[tokio::test]
