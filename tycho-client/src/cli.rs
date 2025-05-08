@@ -91,6 +91,12 @@ struct CliArgs {
     /// in conjunction with block_time to calculate a timeout: block_time * max_missed_blocks.
     #[clap(long, default_value = "10")]
     max_missed_blocks: u64,
+
+    /// If set, the synchronizer will include TVL in the messages.
+    /// Enabling this option will increase the number of network requests made during start-up,
+    //  which may result in increased start-up latency.
+    #[clap(long)]
+    include_tvl: bool,
 }
 
 impl CliArgs {
@@ -249,6 +255,7 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) {
             filter,
             3,
             !args.no_state,
+            args.include_tvl,
             rpc_client.clone(),
             ws_client.clone(),
             args.block_time + args.timeout,

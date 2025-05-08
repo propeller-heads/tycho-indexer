@@ -12,12 +12,13 @@ use tokio::task::JoinHandle;
 use tracing::info;
 use tycho_common::{
     dto::{
-        AccountUpdate, BlockParam, Chain, ChangeType, ContractId, Health, PaginationParams,
-        PaginationResponse, ProtocolComponent, ProtocolComponentRequestResponse,
-        ProtocolComponentsRequestBody, ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody,
-        ProtocolStateRequestResponse, ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse,
-        ResponseAccount, ResponseProtocolState, ResponseToken, StateRequestBody,
-        StateRequestResponse, TokensRequestBody, TokensRequestResponse, VersionParam,
+        AccountUpdate, BlockParam, Chain, ChangeType, ComponentTvlRequestBody,
+        ComponentTvlRequestResponse, ContractId, Health, PaginationParams, PaginationResponse,
+        ProtocolComponent, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
+        ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody, ProtocolStateRequestResponse,
+        ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, ResponseAccount,
+        ResponseProtocolState, ResponseToken, StateRequestBody, StateRequestResponse,
+        TokensRequestBody, TokensRequestResponse, VersionParam,
     },
     storage::Gateway,
 };
@@ -104,6 +105,7 @@ where
                 rpc::protocol_components,
                 rpc::protocol_state,
                 rpc::contract_state,
+                rpc::component_tvl,
             ),
             components(
                 schemas(VersionParam),
@@ -131,6 +133,8 @@ where
                 schemas(Health),
                 schemas(ProtocolSystemsRequestBody),
                 schemas(ProtocolSystemsRequestResponse),
+                schemas(ComponentTvlRequestBody),
+                schemas(ComponentTvlRequestResponse),
             ),
             modifiers(&SecurityAddon),
         )]
@@ -251,6 +255,10 @@ where
                 .service(
                     web::resource(format!("/{}/protocol_systems", self.prefix))
                         .route(web::post().to(rpc::protocol_systems::<G>)),
+                )
+                .service(
+                    web::resource(format!("/{}/component_tvl", self.prefix))
+                        .route(web::post().to(rpc::component_tvl::<G>)),
                 )
                 .wrap(RequestTracing::new())
                 .service(

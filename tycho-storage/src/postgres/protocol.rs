@@ -1741,6 +1741,73 @@ impl PostgresGateway {
 
         Ok(WithTotal { total: Some(total), entity: paginated_protocol_systems })
     }
+
+    pub async fn get_component_tvls(
+        &self,
+        chain: &Chain,
+        system: Option<String>,
+        component_ids: Option<&[&str]>,
+        pagination_params: Option<&PaginationParams>,
+        conn: &mut AsyncPgConnection,
+    ) -> Result<WithTotal<HashMap<String, f64>>, StorageError> {
+        use schema::{component_tvl::dsl as ct, protocol_component::dsl as pc};
+
+        if !self.chain_id_cache.value_exists(chain) {
+            return Err(StorageError::NotFound("Chain".to_string(), chain.to_string()));
+        }
+
+        let chain_id_val = self.get_chain_id(chain)?;
+
+        let mut query = ct::component_tvl
+            .inner_join(pc::protocol_component)
+            .filter(pc::chain_id.eq(chain_id_val))
+            .into_boxed();
+
+        let mut count_query = ct::component_tvl
+            .inner_join(pc::protocol_component)
+            .filter(pc::chain_id.eq(chain_id_val))
+            .into_boxed();
+
+        if let Some(ids) = component_ids {
+            query = query.filter(pc::external_id.eq_any(ids));
+            count_query = count_query.filter(pc::external_id.eq_any(ids));
+        }
+
+        if let Some(system) = system {
+            let system_id = self.get_protocol_system_id(&system)?;
+            query = query.filter(pc::protocol_system_id.eq(system_id));
+            count_query = count_query.filter(pc::protocol_system_id.eq(system_id));
+        }
+
+        if let Some(pagination) = pagination_params {
+            query = query
+                .limit(pagination.page_size)
+                .offset(pagination.offset());
+        }
+
+        let count = count_query
+            .count()
+            .get_result::<i64>(conn)
+            .await
+            .map_err(PostgresError::from)?;
+
+        let rows: Vec<(String, f64)> = query
+            .select((pc::external_id, ct::tvl))
+            .load(conn)
+            .await
+            .map_err(|err| {
+                let id_hint = component_ids
+                    .and_then(|ids| ids.first().copied())
+                    .unwrap_or_default();
+                storage_error_from_diesel(err, "ComponentTVL", id_hint, None)
+            })?;
+
+        let result = rows
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+
+        Ok(WithTotal { entity: result, total: Some(count) })
+    }
 }
 
 #[cfg(test)]
@@ -3887,5 +3954,95 @@ mod test {
         .await
         .unwrap()[0];
         assert_eq!(inserted_account.title, "Ethereum_🐶🐱🐰🦊🐻🐼🐨🐯🦁🐮🐷🐽🐸🐵🐔🐧🐦🐤🦅🦉🦇🐺🐗🐴🦄🐝🐛🪱🦋🐌🐞🐜🪰🪲🕷🦂🐢🐍🦎🦖🦕🐙🦑🦐🦞🦀🐡🐠🐟🐬🐳🐋🐊🐅🐆🦓🦍🦧🦣🐘🦛".to_string());
+    }
+
+    #[tokio::test]
+    async fn test_get_component_tvls() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+        let protocol_system = "ambient".to_string();
+        let tvls = gw
+            .get_component_tvls(
+                &Chain::Ethereum,
+                Some(protocol_system),
+                Some(&["state1", "no_tvl", "not_exist", "state2"]),
+                Some(&PaginationParams { page: 0, page_size: 10 }),
+                &mut conn,
+            )
+            .await
+            .expect("failed retrieving component tvl");
+
+        assert_eq!(tvls.total.unwrap(), 1);
+        assert_eq!(tvls.entity.get("state1"), Some(&2.0));
+        assert!(!tvls.entity.contains_key("no_tvl")); // component not requested
+        assert!(!tvls.entity.contains_key("not_exist")); // component does not exist
+        assert!(!tvls.entity.contains_key("state2")); // component not in the requested
+    }
+
+    #[tokio::test]
+    async fn test_get_component_tvls_with_system_only() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+        let protocol_system = "ambient".to_string();
+        let tvls = gw
+            .get_component_tvls(
+                &Chain::Ethereum,
+                Some(protocol_system),
+                None,
+                Some(&PaginationParams { page: 0, page_size: 10 }),
+                &mut conn,
+            )
+            .await
+            .expect("failed retrieving component tvl");
+
+        assert_eq!(tvls.total.unwrap(), 2);
+        assert_eq!(tvls.entity.get("state1"), Some(&2.0));
+        assert_eq!(tvls.entity.get("state3"), Some(&1.0));
+        assert!(!tvls.entity.contains_key("no_tvl"));
+    }
+
+    #[tokio::test]
+    async fn test_get_component_tvls_with_component_only() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+        let tvls = gw
+            .get_component_tvls(
+                &Chain::Ethereum,
+                None,
+                Some(&["state1", "state3"]),
+                Some(&PaginationParams { page: 0, page_size: 10 }),
+                &mut conn,
+            )
+            .await
+            .expect("failed retrieving component tvl");
+
+        assert_eq!(tvls.total.unwrap(), 2);
+        assert_eq!(tvls.entity.get("state1"), Some(&2.0));
+        assert_eq!(tvls.entity.get("state3"), Some(&1.0));
+    }
+
+    #[tokio::test]
+    async fn test_get_component_tvls_with_pagination() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+        let protocol_system = "ambient".to_string();
+        let tvls = gw
+            .get_component_tvls(
+                &Chain::Ethereum,
+                Some(protocol_system),
+                Some(&["state1", "state3"]),
+                Some(&PaginationParams { page: 0, page_size: 1 }),
+                &mut conn,
+            )
+            .await
+            .expect("failed retrieving component tvl");
+
+        assert_eq!(tvls.total.unwrap(), 2);
+        assert_eq!(tvls.entity.get("state1"), Some(&2.0));
+        assert!(!tvls.entity.contains_key("state3"));
     }
 }

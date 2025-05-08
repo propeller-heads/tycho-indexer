@@ -502,6 +502,28 @@ mock! {
             'life1: 'async_trait,
             'life2: 'async_trait,
             Self: 'async_trait;
+
+        #[allow(clippy::type_complexity)]
+        fn get_component_tvls<'life0, 'life1, 'life2, 'life3, 'life4, 'async_trait>(
+            &'life0 self,
+            chain: &'life1 Chain,
+            system: Option<String>,
+            ids: Option<&'life2 [&'life3 str]>,
+            pagination_params: Option<&'life4 PaginationParams>,
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<
+                    Output = Result<WithTotal<HashMap<String, f64>>, StorageError>,
+                > + ::core::marker::Send + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            'life2: 'async_trait,
+            'life3: 'async_trait,
+            'life4: 'async_trait,
+            Self: 'async_trait;
     }
 
     impl Gateway for Gateway {}

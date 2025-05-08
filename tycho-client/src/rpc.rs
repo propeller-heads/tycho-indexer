@@ -3,7 +3,7 @@
 //! The objective of this module is to provide swift and simplified access to the Remote Procedure
 //! Call (RPC) endpoints of Tycho. These endpoints are chiefly responsible for facilitating data
 //! queries, especially querying snapshots of data.
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use futures03::future::try_join_all;
@@ -15,11 +15,11 @@ use tokio::sync::Semaphore;
 use tracing::{debug, error, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        Chain, PaginationParams, PaginationResponse, ProtocolComponentRequestResponse,
-        ProtocolComponentsRequestBody, ProtocolStateRequestBody, ProtocolStateRequestResponse,
-        ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, ResponseToken,
-        StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse,
-        VersionParam,
+        Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse, PaginationParams,
+        PaginationResponse, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
+        ProtocolStateRequestBody, ProtocolStateRequestResponse, ProtocolSystemsRequestBody,
+        ProtocolSystemsRequestResponse, ResponseToken, StateRequestBody, StateRequestResponse,
+        TokensRequestBody, TokensRequestResponse, VersionParam,
     },
     Bytes,
 };
@@ -375,6 +375,136 @@ pub trait RPCClient: Send + Sync {
         &self,
         request: &ProtocolSystemsRequestBody,
     ) -> Result<ProtocolSystemsRequestResponse, RPCError>;
+
+    async fn get_component_tvl(
+        &self,
+        request: &ComponentTvlRequestBody,
+    ) -> Result<ComponentTvlRequestResponse, RPCError>;
+
+    async fn get_component_tvl_paginated(
+        &self,
+        request: &ComponentTvlRequestBody,
+        chunk_size: usize,
+        concurrency: usize,
+    ) -> Result<ComponentTvlRequestResponse, RPCError> {
+        let semaphore = Arc::new(Semaphore::new(concurrency));
+
+        match request.component_ids {
+            Some(ref ids) => {
+                let chunked_requests = ids
+                    .chunks(chunk_size)
+                    .enumerate()
+                    .map(|(index, _)| ComponentTvlRequestBody {
+                        chain: request.chain,
+                        protocol_system: request.protocol_system.clone(),
+                        component_ids: Some(ids.clone()),
+                        pagination: PaginationParams {
+                            page: index as i64,
+                            page_size: chunk_size as i64,
+                        },
+                    })
+                    .collect::<Vec<_>>();
+
+                let tasks: Vec<_> = chunked_requests
+                    .into_iter()
+                    .map(|req| {
+                        let sem = semaphore.clone();
+                        async move {
+                            let _permit = sem
+                                .acquire()
+                                .await
+                                .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
+                            self.get_component_tvl(&req).await
+                        }
+                    })
+                    .collect();
+
+                let responses = try_join_all(tasks).await?;
+
+                let mut merged_tvl = HashMap::new();
+                for resp in responses {
+                    for (key, value) in resp.tvl {
+                        *merged_tvl.entry(key).or_insert(0.0) = value;
+                    }
+                }
+
+                Ok(ComponentTvlRequestResponse {
+                    tvl: merged_tvl,
+                    pagination: PaginationResponse {
+                        page: 0,
+                        page_size: chunk_size as i64,
+                        total: ids.len() as i64,
+                    },
+                })
+            }
+            _ => {
+                let first_request = ComponentTvlRequestBody {
+                    chain: request.chain,
+                    protocol_system: request.protocol_system.clone(),
+                    component_ids: request.component_ids.clone(),
+                    pagination: PaginationParams { page: 0, page_size: chunk_size as i64 },
+                };
+
+                let first_response = self
+                    .get_component_tvl(&first_request)
+                    .await?;
+                let total_items = first_response.pagination.total;
+                let total_pages = (total_items as f64 / chunk_size as f64).ceil() as i64;
+
+                let mut merged_tvl = first_response.tvl;
+
+                let mut page = 1;
+                while page < total_pages {
+                    let requests_in_this_iteration = (total_pages - page).min(concurrency as i64);
+
+                    let chunked_requests: Vec<_> = (0..requests_in_this_iteration)
+                        .map(|i| ComponentTvlRequestBody {
+                            chain: request.chain,
+                            protocol_system: request.protocol_system.clone(),
+                            component_ids: request.component_ids.clone(),
+                            pagination: PaginationParams {
+                                page: page + i,
+                                page_size: chunk_size as i64,
+                            },
+                        })
+                        .collect();
+
+                    let tasks: Vec<_> = chunked_requests
+                        .into_iter()
+                        .map(|req| {
+                            let sem = semaphore.clone();
+                            async move {
+                                let _permit = sem.acquire().await.map_err(|_| {
+                                    RPCError::Fatal("Semaphore dropped".to_string())
+                                })?;
+                                self.get_component_tvl(&req).await
+                            }
+                        })
+                        .collect();
+
+                    let responses = try_join_all(tasks).await?;
+
+                    // merge hashmap
+                    for resp in responses {
+                        for (key, value) in resp.tvl {
+                            *merged_tvl.entry(key).or_insert(0.0) += value;
+                        }
+                    }
+
+                    page += concurrency as i64;
+                }
+
+                Ok(ComponentTvlRequestResponse {
+                    tvl: merged_tvl,
+                    pagination: PaginationResponse {
+                        page: 0,
+                        page_size: chunk_size as i64,
+                        total: total_items,
+                    },
+                })
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -628,6 +758,40 @@ impl RPCClient for HttpRPCClient {
             .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
         trace!(?protocol_systems, "Received protocol_systems response from Tycho server");
         Ok(protocol_systems)
+    }
+
+    async fn get_component_tvl(
+        &self,
+        request: &ComponentTvlRequestBody,
+    ) -> Result<ComponentTvlRequestResponse, RPCError> {
+        let uri = format!(
+            "{}/{}/component_tvl",
+            self.url
+                .to_string()
+                .trim_end_matches('/'),
+            TYCHO_SERVER_VERSION
+        );
+        debug!(%uri, "Sending get_component_tvl request to Tycho server");
+        trace!(?request, "Sending request to Tycho server");
+        let response = self
+            .http_client
+            .post(&uri)
+            .json(request)
+            .send()
+            .await
+            .map_err(|e| RPCError::HttpClient(e.to_string()))?;
+        trace!(?response, "Received response from Tycho server");
+        let body = response
+            .text()
+            .await
+            .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
+        let component_tvl =
+            serde_json::from_str::<ComponentTvlRequestResponse>(&body).map_err(|err| {
+                error!("Failed to parse component_tvl response: {:?}", &body);
+                RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
+            })?;
+        trace!(?component_tvl, "Received component_tvl response from Tycho server");
+        Ok(component_tvl)
     }
 }
 
@@ -1015,5 +1179,41 @@ mod tests {
 
         mocked_server.assert();
         assert_eq!(protocol_systems, vec!["system1", "system2"]);
+    }
+
+    #[tokio::test]
+    async fn test_get_component_tvl() {
+        let mut server = Server::new_async().await;
+        let server_resp = r#"
+        {
+            "tvl": {
+                "component1": 100.0
+            },
+            "pagination": {
+                "page": 0,
+                "page_size": 20,
+                "total": 10
+            }
+        }
+        "#;
+        // test that the response is deserialized correctly
+        serde_json::from_str::<ComponentTvlRequestResponse>(server_resp).expect("deserialize");
+
+        let mocked_server = server
+            .mock("POST", "/v1/component_tvl")
+            .expect(1)
+            .with_body(server_resp)
+            .create_async()
+            .await;
+        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+
+        let response = client
+            .get_component_tvl(&Default::default())
+            .await
+            .expect("get protocol systems");
+        let component_tvl = response.tvl;
+
+        mocked_server.assert();
+        assert_eq!(component_tvl.get("component1"), Some(&100.0));
     }
 }
