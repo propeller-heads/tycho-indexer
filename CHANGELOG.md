@@ -1,3 +1,17 @@
+## [0.69.0](https://github.com/propeller-heads/tycho-indexer/compare/0.68.2...0.69.0) (2025-05-08)
+
+
+### Features
+
+* add component tvl ([#547](https://github.com/propeller-heads/tycho-indexer/issues/547)) ([86663e6](https://github.com/propeller-heads/tycho-indexer/commit/86663e6a9386cb38ecb56c419bde29171b9cb3f3))
+* add system and pagination params ([356ab1a](https://github.com/propeller-heads/tycho-indexer/commit/356ab1ad9eac285a08d5652e5ecd8b9cbf05824d))
+* component tvl rpc ([49b146c](https://github.com/propeller-heads/tycho-indexer/commit/49b146c492f9ea72243a33da62f9fa79c52adcf0))
+
+
+### Bug Fixes
+
+* lint ([2c74dfb](https://github.com/propeller-heads/tycho-indexer/commit/2c74dfb24d2bbeae4799e43bcd71219bcc7ee895))
+
 ## [0.68.2](https://github.com/propeller-heads/tycho-indexer/compare/0.68.1...0.68.2) (2025-05-02)
 
 
