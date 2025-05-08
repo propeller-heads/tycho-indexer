@@ -1,3 +1,27 @@
+## [0.70.0](https://github.com/propeller-heads/tycho-indexer/compare/0.69.0...0.70.0) (2025-05-08)
+
+
+### Features
+
+* **tycho-client:** propogate block history errors on synchronizer ([de9c792](https://github.com/propeller-heads/tycho-indexer/commit/de9c79205b35312faf736165c9b8e4d56b3b0cd6))
+* **tycho-client:** remove panics from block history handler ([81bf5af](https://github.com/propeller-heads/tycho-indexer/commit/81bf5af524eddbe16503b29026ee41aa55d42b4e))
+* **tycho-client:** remove panics from BlockSynchronizer ([d6b4ae5](https://github.com/propeller-heads/tycho-indexer/commit/d6b4ae559d72cf56e3d3f9cb7034e144fdebbad9))
+* **tycho-client:** remove panics from CLI ([d7a2aae](https://github.com/propeller-heads/tycho-indexer/commit/d7a2aae23f2b2943bb5d83e6d1f05d975c206a64))
+* **tycho-client:** Remove panics from client ([#561](https://github.com/propeller-heads/tycho-indexer/issues/561)) ([d03c4a6](https://github.com/propeller-heads/tycho-indexer/commit/d03c4a6e2f2e9dbc8b6b69094e20e5c3ebe6888f))
+* **tycho-client:** remove panics from detlas websocket client ([cc38d6c](https://github.com/propeller-heads/tycho-indexer/commit/cc38d6c6008f86edbf8938d920c9042a958b6d12))
+* **tycho-client:** remove panics from detlas websocket client ([727429e](https://github.com/propeller-heads/tycho-indexer/commit/727429e36ce5fb373206c96b89a9b5b3f4cedef9))
+* **tycho-client:** remove panics from RPCClient ([3df8ce7](https://github.com/propeller-heads/tycho-indexer/commit/3df8ce72723782a288efc841221021ff6981e00c))
+* **tycho-client:** remove panics from state synchroniser ([5ae277b](https://github.com/propeller-heads/tycho-indexer/commit/5ae277b110ff795471dd49f49490b3eee71dd8e2))
+* **tycho-client:** remove panics from TychoStreamBuilder ([ca5c82b](https://github.com/propeller-heads/tycho-indexer/commit/ca5c82bdced7bb87c293fa9d8e282f0f29d8b672))
+
+
+### Bug Fixes
+
+* box large errors ([771a36a](https://github.com/propeller-heads/tycho-indexer/commit/771a36a2111542dea7dbb72ee88dfde6ff5c3f2e))
+* break synchronisation retry loop if ws client disconnected ([22b77b3](https://github.com/propeller-heads/tycho-indexer/commit/22b77b3eec28de7403fe98919addf3204c181d6c))
+* combine SetUpError and InitializationError on the stream builder ([4edf71b](https://github.com/propeller-heads/tycho-indexer/commit/4edf71b66a6786ac1926dd93ba04a00fe9fc46c8))
+* **tycho-client:** convert large SendError to an error string ([4c1f3e7](https://github.com/propeller-heads/tycho-indexer/commit/4c1f3e7125f953f4730c658c1434910b31a04065))
+
 ## [0.69.0](https://github.com/propeller-heads/tycho-indexer/compare/0.68.2...0.69.0) (2025-05-08)
 
 
