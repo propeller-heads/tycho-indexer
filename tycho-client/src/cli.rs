@@ -1,7 +1,7 @@
 use std::{collections::HashSet, str::FromStr, time::Duration};
 
 use clap::Parser;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use tracing_appender::rolling;
 use tycho_common::dto::{Chain, ExtractorIdentity, PaginationParams, ProtocolSystemsRequestBody};
 
@@ -164,7 +164,7 @@ pub async fn run_cli() -> Result<(), String> {
         })
         .collect();
 
-    tracing::info!("Running with exchanges: {:?}", exchanges);
+    info!("Running with exchanges: {:?}", exchanges);
 
     run(exchanges, args).await?;
     Ok(())
@@ -227,7 +227,7 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
         .collect::<Vec<_>>();
 
     if !not_requested_protocols.is_empty() {
-        tracing::info!("Other available protocols: {}", not_requested_protocols.join(", "));
+        info!("Other available protocols: {}", not_requested_protocols.join(", "));
     }
 
     for (name, address) in exchanges {
@@ -265,7 +265,7 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
             if let Ok(msg_json) = serde_json::to_string(&msg) {
                 println!("{msg_json}");
             } else {
-                tracing::error!("Failed to serialize FeedMessage");
+                error!("Failed to serialize FeedMessage");
             }
         }
     });
@@ -274,22 +274,22 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
     tokio::select! {
         res = ws_jh => {
             if let Err(e) = res {
-                tracing::error!("WebSocket connection dropped unexpectedly: {}", e);
+                error!("WebSocket connection dropped unexpectedly: {}", e);
             }
         }
         res = sync_jh => {
             if let Err(e) = res {
-                tracing::error!("BlockSynchronizer stopped unexpectedly: {}", e);
+                error!("BlockSynchronizer stopped unexpectedly: {}", e);
             }
         }
         res = msg_printer => {
             if let Err(e) = res {
-                tracing::error!("Message printer stopped unexpectedly: {}", e);
+                error!("Message printer stopped unexpectedly: {}", e);
             }
         }
     }
 
-    tracing::debug!("RX closed");
+    debug!("RX closed");
     Ok(())
 }
 

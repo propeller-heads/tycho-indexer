@@ -6,7 +6,7 @@ use std::{
 
 use thiserror::Error;
 use tokio::{sync::mpsc::Receiver, task::JoinHandle};
-use tracing::info;
+use tracing::{info, warn};
 use tycho_common::dto::{Chain, ExtractorIdentity, PaginationParams, ProtocolSystemsRequestBody};
 
 use crate::{
@@ -221,7 +221,7 @@ impl TychoStreamBuilder {
                     .collect::<HashSet<_>>()
             })
             .map_err(|e| {
-                tracing::warn!(
+                warn!(
                     "Failed to fetch protocol systems: {e}. Skipping protocol availability check."
                 );
                 e
@@ -243,7 +243,7 @@ impl TychoStreamBuilder {
             })
             .filter(|not_requested_protocols| !not_requested_protocols.is_empty())
         {
-            tracing::info!("Other available protocols: {}", not_requested_protocols.join(", "))
+            info!("Other available protocols: {}", not_requested_protocols.join(", "))
         }
     }
 }
