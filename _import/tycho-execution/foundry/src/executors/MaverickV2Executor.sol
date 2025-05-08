@@ -13,14 +13,12 @@ contract MaverickV2Executor is IExecutor, TokenTransfer {
     using SafeERC20 for IERC20;
 
     address public immutable factory;
-    address private immutable self;
 
     constructor(address _factory, address _permit2) TokenTransfer(_permit2) {
         if (_factory == address(0)) {
             revert MaverickV2Executor__InvalidFactory();
         }
         factory = _factory;
-        self = address(this);
     }
 
     // slither-disable-next-line locked-ether
