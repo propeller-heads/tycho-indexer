@@ -1,3 +1,10 @@
+## [0.88.0](https://github.com/propeller-heads/tycho-execution/compare/0.87.0...0.88.0) (2025-05-06)
+
+
+### Features
+
+* Choose single strategy if it's a grouped swap of the same protocol ([079759a](https://github.com/propeller-heads/tycho-execution/commit/079759a75b57198357c407fdaccaa366c241917f))
+
 ## [0.87.0](https://github.com/propeller-heads/tycho-execution/compare/0.86.0...0.87.0) (2025-05-05)
 
 
