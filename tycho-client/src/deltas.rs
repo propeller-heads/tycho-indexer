@@ -62,39 +62,44 @@ use crate::TYCHO_SERVER_VERSION;
 
 #[derive(Error, Debug)]
 pub enum DeltasError {
-    /// The passed tycho url failed to parse.
+    /// Failed to parse the provided URI.
     #[error("Failed to parse URI: {0}. Error: {1}")]
     UriParsing(String, String),
-    /// Informs you about a subscription being already pending and is awaiting conformation from
-    /// the server.
+
+    /// The requested subscription is already pending and is awaiting confirmation from the server.
     #[error("The requested subscription is already pending")]
     SubscriptionAlreadyPending,
-    /// Informs that an message failed to send via an internal channel or throuh the websocket
-    /// channel. This is most likely fatal and might mean that the implementation is buggy under
-    /// certain conditions.
+
+    /// A message failed to send via an internal channel or through the websocket channel.
+    /// This is typically a fatal error and might indicate a bug in the implementation.
     #[error("{0}")]
     TransportError(String),
-    /// An internal buffer is full. This likely means that messages are not being consumed fast
-    /// enough. If the incoming load emits messages in bursts, consider increasing the buffer size.
+
+    /// The internal message buffer is full. This likely means that messages are not being consumed
+    /// fast enough. If the incoming load emits messages in bursts, consider increasing the buffer
+    /// size.
     #[error("The buffer is full!")]
     BufferFull,
-    /// The client has currently no active connection but it was accessed e.g. by calling
-    /// subscribe.
+
+    /// The client has no active connections but was accessed (e.g., by calling subscribe).
+    /// This typically occurs when trying to use the client before calling connect() or
+    /// after the connection has been closed.
     #[error("The client is not connected!")]
     NotConnected,
+
     /// The connect method was called while the client already had an active connection.
     #[error("The client is already connected!")]
     AlreadyConnected,
+
     /// The connection was closed orderly by the server, e.g. because it restarted.
     #[error("The server closed the connection!")]
     ConnectionClosed,
-    /// The connection was closed unexpectedly by the server.
-    #[error("ConnectionError {source}")]
-    ConnectionError {
-        #[from]
-        source: tungstenite::Error,
-    },
-    /// Other fatal errors: e.g. if the underlying websockets buffer is full.
+
+    /// The connection was closed unexpectedly by the server or encountered a network error.
+    #[error("Connection error: {0}")]
+    ConnectionError(#[from] Box<tungstenite::Error>),
+
+    /// A fatal error occurred that cannot be recovered from.
     #[error("Tycho FatalError: {0}")]
     Fatal(String),
 }
@@ -208,7 +213,7 @@ struct Inner {
 
 /// Shared state betweeen all client instances.
 ///
-/// This state is behind a mutex and requires synchronisation to be read of modified.
+/// This state is behind a mutex and requires synchronization to be read of modified.
 impl Inner {
     fn new(cmd_tx: Sender<()>, sink: WebSocketSink, buffer_size: usize) -> Self {
         Self {
@@ -312,7 +317,7 @@ impl Inner {
     /// inconsistencies: e.g. if the subscription exists but there is no sender for it.
     /// Will remove a subscription even it was in active or pending state before, this is to support
     /// any server side failure of the subscription.
-    fn remove_subscription(&mut self, subscription_id: Uuid) {
+    fn remove_subscription(&mut self, subscription_id: Uuid) -> Result<(), DeltasError> {
         if let Entry::Occupied(e) = self
             .subscriptions
             .entry(subscription_id)
@@ -324,15 +329,12 @@ impl Inner {
                 });
                 self.sender
                     .remove(&subscription_id)
-                    .expect(
-                        "Inconsistent internal client state: `sender` state 
-                        drifted from `info` while removing a subscription.",
-                    );
+                    .ok_or_else(|| DeltasError::Fatal("Inconsistent internal client state: `sender` state drifted from `info` while removing a subscription.".to_string()))?;
             } else {
                 warn!(?subscription_id, "Subscription ended unexpectedly!");
                 self.sender
                     .remove(&subscription_id)
-                    .expect("sender channel missing");
+                    .ok_or_else(|| DeltasError::Fatal("sender channel missing".to_string()))?;
             }
         } else {
             error!(
@@ -341,6 +343,8 @@ impl Inner {
                 to it. This is likely a bug!"
             );
         }
+
+        Ok(())
     }
 
     /// Sends a message through the websocket.
@@ -474,7 +478,7 @@ impl WsDeltasClient {
                             let inner = guard
                                 .as_mut()
                                 .ok_or_else(|| DeltasError::NotConnected)?;
-                            inner.remove_subscription(subscription_id);
+                            inner.remove_subscription(subscription_id)?;
                         }
                     },
                     Err(e) => {
@@ -508,14 +512,15 @@ impl WsDeltasClient {
             }
             Err(error) => {
                 error!(?error, "Websocket error");
-                return Err(match &error {
-                    tungstenite::Error::ConnectionClosed => DeltasError::from(error),
+                return Err(match error {
+                    tungstenite::Error::ConnectionClosed => DeltasError::ConnectionClosed,
                     tungstenite::Error::AlreadyClosed => {
                         warn!("Received AlreadyClosed error which is indicative of a bug!");
-                        DeltasError::from(error)
+                        DeltasError::ConnectionError(Box::new(error))
                     }
-                    tungstenite::Error::Io(_) => DeltasError::from(error),
-                    tungstenite::Error::Protocol(_) => DeltasError::from(error),
+                    tungstenite::Error::Io(_) | tungstenite::Error::Protocol(_) => {
+                        DeltasError::ConnectionError(Box::new(error))
+                    }
                     _ => DeltasError::Fatal(error.to_string()),
                 });
             }
@@ -536,9 +541,13 @@ impl WsDeltasClient {
         inner.end_subscription(&subscription_id, ready_tx);
         let cmd = Command::Unsubscribe { subscription_id };
         inner
-            .ws_send(tungstenite::protocol::Message::Text(
-                serde_json::to_string(&cmd).expect("serialize cmd encode error"),
-            ))
+            .ws_send(tungstenite::protocol::Message::Text(serde_json::to_string(&cmd).map_err(
+                |e| {
+                    DeltasError::TransportError(format!(
+                        "Failed to serialize unsubscribe command: {e}"
+                    ))
+                },
+            )?))
             .await?;
         Ok(())
     }
@@ -559,21 +568,25 @@ impl DeltasClient for WsDeltasClient {
             let mut guard = self.inner.lock().await;
             let inner = guard
                 .as_mut()
-                .expect("ws not connected");
+                .ok_or_else(|| DeltasError::NotConnected)?;
             trace!("Sending subscribe command");
             inner.new_subscription(&extractor_id, ready_tx)?;
             let cmd = Command::Subscribe { extractor_id, include_state: options.include_state };
             inner
                 .ws_send(tungstenite::protocol::Message::Text(
-                    serde_json::to_string(&cmd).expect("serialize cmd encode error"),
+                    serde_json::to_string(&cmd).map_err(|e| {
+                        DeltasError::TransportError(format!(
+                            "Failed to serialize subscribe command: {e}"
+                        ))
+                    })?,
                 ))
                 .await?;
         }
         trace!("Waiting for subscription response");
-        let rx = ready_rx
-            .await
-            .expect("ready channel closed");
-        trace!("Subscription successfull");
+        let rx = ready_rx.await.map_err(|_| {
+            DeltasError::TransportError("Subscription channel closed unexpectedly".to_string())
+        })?;
+        trace!("Subscription successful");
         Ok(rx)
     }
 
@@ -585,13 +598,13 @@ impl DeltasClient for WsDeltasClient {
             let mut guard = self.inner.lock().await;
             let inner = guard
                 .as_mut()
-                .expect("ws not connected");
+                .ok_or_else(|| DeltasError::NotConnected)?;
 
             WsDeltasClient::unsubscribe_inner(inner, subscription_id, ready_tx).await?;
         }
-        ready_rx
-            .await
-            .expect("ready channel closed");
+        ready_rx.await.map_err(|_| {
+            DeltasError::TransportError("Unsubscribe channel closed unexpectedly".to_string())
+        })?;
 
         Ok(())
     }
@@ -601,7 +614,7 @@ impl DeltasClient for WsDeltasClient {
         if self.is_connected().await {
             return Err(DeltasError::AlreadyConnected);
         }
-        let ws_uri = format!("{}{}/ws", self.uri, TYCHO_SERVER_VERSION);
+        let ws_uri = format!("{uri}{TYCHO_SERVER_VERSION}/ws", uri = self.uri);
         info!(?ws_uri, "Starting TychoWebsocketClient");
 
         let (cmd_tx, mut cmd_rx) = mpsc::channel(self.ws_buffer_size);
@@ -626,18 +639,26 @@ impl DeltasClient for WsDeltasClient {
                     .header(UPGRADE, "websocket")
                     .header(
                         HOST,
-                        this.uri
-                            .host()
-                            .expect("no host found in tycho url"),
+                        this.uri.host().ok_or_else(|| {
+                            DeltasError::UriParsing(
+                                ws_uri.clone(),
+                                "No host found in tycho url".to_string(),
+                            )
+                        })?,
                     )
-                    .header(USER_AGENT, format!("tycho-client-{}", env!("CARGO_PKG_VERSION")));
+                    .header(
+                        USER_AGENT,
+                        format!("tycho-client-{version}", version = env!("CARGO_PKG_VERSION")),
+                    );
 
                 // Add Authorization if one is given
                 if let Some(ref key) = this.auth_key {
                     request_builder = request_builder.header(AUTHORIZATION, key);
                 }
 
-                let request = request_builder.body(()).unwrap();
+                let request = request_builder.body(()).map_err(|e| {
+                    DeltasError::TransportError(format!("Failed to build connection request: {e}"))
+                })?;
                 let (conn, _) = match connect_async(request).await {
                     Ok(conn) => conn,
                     Err(e) => {
@@ -689,7 +710,7 @@ impl DeltasClient for WsDeltasClient {
                             warn!(
                                 ?error,
                                 ?retry_count,
-                                "Connection dropped unexpectedly; Reconnecting"
+                                "Connection dropped unexpectedly; Reconnecting..."
                             );
                             break;
                         } else {

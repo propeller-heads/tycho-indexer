@@ -7,6 +7,7 @@ use futures03::{
     StreamExt,
 };
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tokio::{
     select,
     sync::mpsc::{self, Receiver},
@@ -20,8 +21,8 @@ use tycho_common::{
 };
 
 use crate::feed::{
-    block_history::{BlockHistory, BlockPosition},
-    synchronizer::{StateSyncMessage, StateSynchronizer},
+    block_history::{BlockHistory, BlockHistoryError, BlockPosition},
+    synchronizer::{StateSyncMessage, StateSynchronizer, SynchronizerError},
 };
 
 mod block_history;
@@ -47,7 +48,25 @@ impl Header {
     }
 }
 
-type BlockSyncResult<T> = anyhow::Result<T>;
+#[derive(Error, Debug)]
+pub enum BlockSynchronizerError {
+    #[error("Failed to initialize synchronizer: {0}")]
+    InitializationError(#[from] SynchronizerError),
+
+    #[error("Failed to process new block: {0}")]
+    BlockHistoryError(#[from] BlockHistoryError),
+
+    #[error("Not a single synchronizer was ready")]
+    NoReadySynchronizers,
+
+    #[error("No synchronizers were set")]
+    NoSynchronizers,
+
+    #[error("Failed to convert duration: {0}")]
+    DurationConversionError(String),
+}
+
+type BlockSyncResult<T> = Result<T, BlockSynchronizerError>;
 
 /// Aligns multiple StateSynchronizers on the block dimension.
 ///
@@ -131,19 +150,19 @@ impl SynchronizerStream {
         block_history: &BlockHistory,
         max_wait: std::time::Duration,
         stale_threshold: std::time::Duration,
-    ) -> Option<StateSyncMessage> {
-        let extractor_id = &self.extractor_id;
+    ) -> BlockSyncResult<Option<StateSyncMessage>> {
+        let extractor_id = self.extractor_id.clone();
         let latest_block = block_history.latest();
         match &self.state {
             SynchronizerState::Started | SynchronizerState::Ended => {
                 warn!(state=?&self.state, "Advancing Synchronizer in this state not supported!");
-                None
+                Ok(None)
             }
             SynchronizerState::Advanced(b) => {
                 let future_block = b.clone();
                 // Transition to ready once we arrived at the expected height
-                self.transition(future_block, block_history, stale_threshold);
-                None
+                self.transition(future_block, block_history, stale_threshold)?;
+                Ok(None)
             }
             SynchronizerState::Ready(previous_block) => {
                 // Try to recv the next expected block, update state accordingly.
@@ -190,12 +209,12 @@ impl SynchronizerStream {
         block_history: &BlockHistory,
         previous_block: Header,
         stale_threshold: std::time::Duration,
-    ) -> Option<StateSyncMessage> {
-        let extractor_id = &self.extractor_id;
+    ) -> BlockSyncResult<Option<StateSyncMessage>> {
+        let extractor_id = self.extractor_id.clone();
         match timeout(max_wait, self.rx.recv()).await {
             Ok(Some(msg)) => {
-                self.transition(msg.header.clone(), block_history, stale_threshold);
-                Some(msg)
+                self.transition(msg.header.clone(), block_history, stale_threshold)?;
+                Ok(Some(msg))
             }
             Ok(None) => {
                 error!(
@@ -205,13 +224,13 @@ impl SynchronizerStream {
                 );
                 self.state = SynchronizerState::Ended;
                 self.modify_ts = Local::now().naive_utc();
-                None
+                Ok(None)
             }
             Err(_) => {
                 // trying to advance a block timed out
                 debug!(%extractor_id, ?previous_block, "Extractor did not check in within time.");
                 self.state = SynchronizerState::Delayed(previous_block.clone());
-                None
+                Ok(None)
             }
         }
     }
@@ -226,9 +245,9 @@ impl SynchronizerStream {
         block_history: &BlockHistory,
         max_wait: std::time::Duration,
         stale_threshold: std::time::Duration,
-    ) -> Option<StateSyncMessage> {
+    ) -> BlockSyncResult<Option<StateSyncMessage>> {
         let mut results = Vec::new();
-        let extractor_id = &self.extractor_id;
+        let extractor_id = self.extractor_id.clone();
 
         // Set a deadline for the overall catch-up operation
         let deadline = std::time::Instant::now() + max_wait;
@@ -242,9 +261,7 @@ impl SynchronizerStream {
             {
                 Ok(Some(msg)) => {
                     debug!(%extractor_id, block_num=?msg.header.number, "Received new message during catch-up");
-                    let block_pos = block_history
-                        .determine_block_position(&msg.header)
-                        .unwrap();
+                    let block_pos = block_history.determine_block_position(&msg.header)?;
                     results.push(msg);
                     if matches!(block_pos, BlockPosition::NextExpected) {
                         break;
@@ -253,7 +270,7 @@ impl SynchronizerStream {
                 Ok(None) => {
                     warn!(%extractor_id, "Channel closed during catch-up");
                     self.state = SynchronizerState::Ended;
-                    return None;
+                    return Ok(None);
                 }
                 Err(_) => {
                     debug!(%extractor_id, "Timed out waiting for catch-up");
@@ -269,10 +286,10 @@ impl SynchronizerStream {
         if let Some(msg) = merged {
             // we were able to get at least one block out
             debug!(?extractor_id, "Delayed extractor made progress!");
-            self.transition(msg.header.clone(), block_history, stale_threshold);
-            Some(msg)
+            self.transition(msg.header.clone(), block_history, stale_threshold)?;
+            Ok(Some(msg))
         } else {
-            None
+            Ok(None)
         }
     }
 
@@ -287,15 +304,12 @@ impl SynchronizerStream {
         latest_retrieved: Header,
         block_history: &BlockHistory,
         stale_threshold: std::time::Duration,
-    ) {
-        let extractor_id = &self.extractor_id;
+    ) -> Result<(), BlockSynchronizerError> {
+        let extractor_id = self.extractor_id.clone();
         let last_message_at = self.modify_ts;
         let block = &latest_retrieved;
 
-        match block_history
-            .determine_block_position(&latest_retrieved)
-            .expect("Block positiion could not be determined.")
-        {
+        match block_history.determine_block_position(&latest_retrieved)? {
             BlockPosition::NextExpected => {
                 self.state = SynchronizerState::Ready(latest_retrieved.clone());
             }
@@ -305,7 +319,7 @@ impl SynchronizerStream {
                     .modify_ts
                     .signed_duration_since(now);
                 let stale_threshold_chrono = ChronoDuration::from_std(stale_threshold)
-                    .expect("Staleness threshold could not convert to chrono Duration");
+                    .map_err(|e| BlockSynchronizerError::DurationConversionError(e.to_string()))?;
                 if wait_duration > stale_threshold_chrono {
                     warn!(
                         ?extractor_id,
@@ -335,6 +349,7 @@ impl SynchronizerStream {
             }
         }
         self.modify_ts = Local::now().naive_utc();
+        Ok(())
     }
 }
 
@@ -381,7 +396,7 @@ where
         let mut synchronizers = self
             .synchronizers
             .take()
-            .expect("No synchronizers set!");
+            .ok_or(BlockSynchronizerError::NoSynchronizers)?;
         // init synchronizers
         let init_tasks = synchronizers
             .values()
@@ -453,12 +468,12 @@ where
         .into_iter()
         .collect::<Vec<_>>();
 
-        let mut block_history = BlockHistory::new(initial_headers, 15);
+        let mut block_history = BlockHistory::new(initial_headers, 15)?;
 
         // Determine the starting header for synchronization
         let start_header = block_history
             .latest()
-            .ok_or_else(|| anyhow::anyhow!("No synchronizers were ready for the operation"))?;
+            .ok_or(BlockSynchronizerError::NoReadySynchronizers)?;
         info!(
             start_block=?start_header,
             n_healthy=?ready_sync_msgs.len(),
@@ -530,13 +545,17 @@ where
                                 self.block_time
                                     .mul_f64(self.max_missed_blocks as f64),
                             )
-                            .await;
-                        res.map(|msg| (extractor_id.name.clone(), msg))
+                            .await?;
+                        Ok::<_, BlockSynchronizerError>(
+                            res.map(|msg| (extractor_id.name.clone(), msg)),
+                        )
                     });
                 }
                 ready_sync_msgs.extend(
                     join_all(recv_futures)
                         .await
+                        .into_iter()
+                        .collect::<Result<Vec<_>, _>>()?
                         .into_iter()
                         .flatten(),
                 );
@@ -551,22 +570,18 @@ where
                     SynchronizerState::Advanced(_) => true,
                 });
 
-                block_history
-                    .push(
-                        sync_streams
-                            .values()
-                            .filter_map(|v| match &v.state {
-                                SynchronizerState::Ready(b) => Some(b),
-                                _ => None,
-                            })
-                            .next()
-                            // no synchronizers is ready
-                            .ok_or_else(|| {
-                                anyhow::format_err!("Not a single synchronizer was ready.")
-                            })?
-                            .clone(),
-                    )
-                    .map_err(|err| anyhow::format_err!("Failed processing new block: {}", err))?;
+                block_history.push(
+                    sync_streams
+                        .values()
+                        .filter_map(|v| match &v.state {
+                            SynchronizerState::Ready(b) => Some(b),
+                            _ => None,
+                        })
+                        .next()
+                        // no synchronizers are ready
+                        .ok_or(BlockSynchronizerError::NoReadySynchronizers)?
+                        .clone(),
+                )?;
             }
         });
 
@@ -574,12 +589,14 @@ where
             select! {
                 error = state_sync_tasks.select_next_some() => {
                     for s in sync_handles.iter_mut() {
-                        s.close().await.expect("StateSynchronizer was not started!");
+                        if let Err(e) = s.close().await {
+                            error!(error=?e, "Failed to close synchronizer: was not started!");
+                        }
                     }
-                    error!(?error, "state synchronizer exited");
+                    error!(?error, "State synchronizer exited");
                 },
                 error = main_loop_jh => {
-                    error!(?error, "feed main loop exited");
+                    error!(?error, "Feed main loop exited");
                 }
             }
         });
@@ -596,7 +613,7 @@ mod tests {
     use tokio::sync::{oneshot, Mutex};
     use tycho_common::dto::Chain;
 
-    use super::*;
+    use super::{synchronizer::SynchronizerError, *};
     use crate::feed::synchronizer::SyncResult;
 
     #[derive(Clone)]
@@ -661,7 +678,7 @@ mod tests {
                     .expect("end channel closed!");
                 Ok(())
             } else {
-                Err(anyhow::format_err!("Not connected"))
+                Err(SynchronizerError::CloseError("Not Started".to_string()))
             }
         }
     }

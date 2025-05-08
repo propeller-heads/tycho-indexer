@@ -1,10 +1,25 @@
 use std::{collections::VecDeque, num::NonZeroUsize};
 
 use lru::LruCache;
+use thiserror::Error;
 use tracing::error;
 use tycho_common::Bytes;
 
 use crate::feed::Header;
+
+#[derive(Debug, Error)]
+pub enum BlockHistoryError {
+    #[error("Cache size cannot be 0")]
+    InvalidCacheSize,
+    #[error("History is empty")]
+    EmptyHistory,
+    #[error("Could not determine the block's position")]
+    UndeterminedBlockPosition,
+    #[error("Reverting block's insert position not found! History exceeded")]
+    RevertPositionNotFound,
+    #[error("Pushing a detached block is unsafe")]
+    DetachedBlock,
+}
 
 pub struct BlockHistory {
     history: VecDeque<Header>,
@@ -29,44 +44,40 @@ pub enum BlockPosition {
 /// Provides lightweight validation and relative positioning of received block headers
 /// emitted by StateSynchronizer structs.
 impl BlockHistory {
-    pub fn new(mut history: Vec<Header>, size: usize) -> Self {
+    pub fn new(mut history: Vec<Header>, size: usize) -> Result<Self, BlockHistoryError> {
         // sort history by block number
         history.sort_by_key(|h| h.number);
-        Self {
-            history: VecDeque::from(history),
-            size,
-            reverts: LruCache::new(NonZeroUsize::new(size * 10).expect("cache size is 0")),
-        }
+        let cache_size = NonZeroUsize::new(size * 10).ok_or(BlockHistoryError::InvalidCacheSize)?;
+
+        Ok(Self { history: VecDeque::from(history), size, reverts: LruCache::new(cache_size) })
     }
 
     /// Add the block as next block.
     ///
     /// May error if the block does not fit the tip of the chain, or if history is empty and the
     /// block is a revert.
-    pub fn push(&mut self, block: Header) -> anyhow::Result<()> {
-        let pos = self.determine_block_position(&block);
+    pub fn push(&mut self, block: Header) -> Result<(), BlockHistoryError> {
+        let pos = self.determine_block_position(&block)?;
         match pos {
-            Ok(BlockPosition::NextExpected) => {
+            BlockPosition::NextExpected => {
                 // if the block is NextExpected, but does not fit on top of the latest
                 // block (via parent hash) -> we are dealing with a
                 // revert.
                 if block.revert {
                     // keep removing the head until the new block fits
                     loop {
-                        let head = self.history.back().ok_or_else(|| {
-                            anyhow::format_err!(
-                                "Reverting block's insert position not found! History exceeded."
-                            )
-                        })?;
+                        let head = self
+                            .history
+                            .back()
+                            .ok_or(BlockHistoryError::RevertPositionNotFound)?;
 
                         if head.hash == block.parent_hash {
                             break;
                         } else {
-                            let reverted_block = self.history.pop_back().ok_or_else(|| {
-                                anyhow::format_err!(
-                                    "Reverting block's insert position not found! History exceeded."
-                                )
-                            })?;
+                            let reverted_block = self
+                                .history
+                                .pop_back()
+                                .ok_or(BlockHistoryError::RevertPositionNotFound)?;
                             // record reverted blocks in cache
                             self.reverts
                                 .push(reverted_block.hash.clone(), reverted_block);
@@ -78,7 +89,7 @@ impl BlockHistory {
                     .latest()
                     .map(|b| b.hash != block.parent_hash)
                 {
-                    anyhow::bail!("Pushing a detached block is unsafe.");
+                    return Err(BlockHistoryError::DetachedBlock);
                 }
                 // Push new block to history, marking it as latest.
                 self.history.push_back(block);
@@ -87,7 +98,6 @@ impl BlockHistory {
                 }
                 Ok(())
             }
-            Err(e) => Err(e),
             _ => Ok(()),
         }
     }
@@ -97,10 +107,13 @@ impl BlockHistory {
     /// If there is no history we'll return an error here. This will also error if we
     /// have a single block and we encounter a revert as it will be impossible to
     /// find the fork block.
-    pub fn determine_block_position(&self, block: &Header) -> anyhow::Result<BlockPosition> {
+    pub fn determine_block_position(
+        &self,
+        block: &Header,
+    ) -> Result<BlockPosition, BlockHistoryError> {
         let latest = self
             .latest()
-            .ok_or_else(|| anyhow::format_err!("history empty"))?;
+            .ok_or(BlockHistoryError::EmptyHistory)?;
         Ok(if block.parent_hash == latest.hash {
             BlockPosition::NextExpected
         } else if (block.hash == latest.hash) & !block.revert {
@@ -121,7 +134,7 @@ impl BlockHistory {
                 let history = &self.history;
                 let is_revert = block.revert;
                 error!(?history, ?block, ?is_revert, "Could not determine history");
-                anyhow::bail!("Could not determine the blocks position!")
+                Err(BlockHistoryError::UndeterminedBlockPosition)?
             }
         } else {
             BlockPosition::Advanced
@@ -180,7 +193,8 @@ mod test {
         let start_blocks = generate_blocks(1, None);
         let new_block =
             Header { number: 1, hash: random_hash(), parent_hash: int_hash(0), revert: false };
-        let mut history = BlockHistory::new(start_blocks.clone(), 2);
+        let mut history =
+            BlockHistory::new(start_blocks.clone(), 2).expect("block history creation failed");
 
         history
             .push(new_block.clone())
@@ -197,7 +211,8 @@ mod test {
     #[test]
     fn test_size_limit() {
         let blocks = generate_blocks(3, None);
-        let mut history = BlockHistory::new(blocks[0..2].to_vec(), 2);
+        let mut history =
+            BlockHistory::new(blocks[0..2].to_vec(), 2).expect("failed to create history");
 
         history
             .push(blocks[2].clone())
@@ -209,7 +224,7 @@ mod test {
     #[test]
     fn test_push_revert_push() {
         let blocks = generate_blocks(5, None);
-        let mut history = BlockHistory::new(blocks.clone(), 5);
+        let mut history = BlockHistory::new(blocks.clone(), 5).expect("failed to create history");
         let revert_block =
             Header { number: 2, hash: int_hash(2), parent_hash: int_hash(1), revert: true };
         let new_block =
@@ -236,7 +251,7 @@ mod test {
     #[test]
     fn test_push_detached_block() {
         let blocks = generate_blocks(3, None);
-        let mut history = BlockHistory::new(blocks.clone(), 5);
+        let mut history = BlockHistory::new(blocks.clone(), 5).expect("failed to create history");
         let new_block =
             Header { number: 2, hash: int_hash(2), parent_hash: random_hash(), revert: true };
 
@@ -253,7 +268,7 @@ mod test {
     #[case(Header { number: 9, hash: int_hash(9), parent_hash: int_hash(8), revert: true }, BlockPosition::NextExpected)]
     fn test_determine_position(#[case] add_block: Header, #[case] exp_pos: BlockPosition) {
         let start_blocks = generate_blocks(10, None);
-        let history = BlockHistory::new(start_blocks, 15);
+        let history = BlockHistory::new(start_blocks, 15).expect("failed to create history");
 
         let res = history
             .determine_block_position(&add_block)
@@ -266,7 +281,7 @@ mod test {
     #[case(Header { number: 9, hash: int_hash(9), parent_hash: int_hash(8), revert: false })]
     fn test_determine_position_reverted_branch(#[case] add_block: Header) {
         let start_blocks = generate_blocks(10, None);
-        let mut history = BlockHistory::new(start_blocks, 15);
+        let mut history = BlockHistory::new(start_blocks, 15).expect("failed to create history");
         // revert by 2 blocks, add a new one
         history
             .push(Header { number: 7, hash: int_hash(7), parent_hash: int_hash(6), revert: true })

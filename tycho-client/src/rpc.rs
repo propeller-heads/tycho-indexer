@@ -31,15 +31,20 @@ pub enum RPCError {
     /// The passed tycho url failed to parse.
     #[error("Failed to parse URL: {0}. Error: {1}")]
     UrlParsing(String, String),
+
     /// The request data is not correctly formed.
     #[error("Failed to format request: {0}")]
     FormatRequest(String),
+
     /// Errors forwarded from the HTTP protocol.
     #[error("Unexpected HTTP client error: {0}")]
     HttpClient(String),
+
     /// The response from the server could not be parsed correctly.
     #[error("Failed to parse response: {0}")]
     ParseResponse(String),
+
+    /// Other fatal errors.
     #[error("Fatal error: {0}")]
     Fatal(String),
 }
@@ -522,15 +527,18 @@ impl HttpRPCClient {
         // Add default headers
         let mut headers = header::HeaderMap::new();
         headers.insert(header::CONTENT_TYPE, header::HeaderValue::from_static("application/json"));
-        let user_agent = format!("tycho-client-{}", env!("CARGO_PKG_VERSION"));
+        let user_agent = format!("tycho-client-{version}", version = env!("CARGO_PKG_VERSION"));
         headers.insert(
             header::USER_AGENT,
-            header::HeaderValue::from_str(&user_agent).expect("invalid user agent format"),
+            header::HeaderValue::from_str(&user_agent)
+                .map_err(|e| RPCError::FormatRequest(format!("Invalid user agent format: {e}")))?,
         );
 
         // Add Authorization if one is given
         if let Some(key) = auth_key {
-            let mut auth_value = header::HeaderValue::from_str(key).expect("invalid key format");
+            let mut auth_value = header::HeaderValue::from_str(key).map_err(|e| {
+                RPCError::FormatRequest(format!("Invalid authorization key format: {e}"))
+            })?;
             auth_value.set_sensitive(true);
             headers.insert(header::AUTHORIZATION, auth_value);
         }
@@ -552,12 +560,10 @@ impl RPCClient for HttpRPCClient {
         request: &StateRequestBody,
     ) -> Result<StateRequestResponse, RPCError> {
         // Check if contract ids are specified
-        if request.contract_ids.is_none() ||
-            request
-                .contract_ids
-                .as_ref()
-                .unwrap()
-                .is_empty()
+        if request
+            .contract_ids
+            .as_ref()
+            .is_none_or(|ids| ids.is_empty())
         {
             warn!("No contract ids specified in request.");
         }
@@ -644,13 +650,11 @@ impl RPCClient for HttpRPCClient {
         &self,
         request: &ProtocolStateRequestBody,
     ) -> Result<ProtocolStateRequestResponse, RPCError> {
-        // Check if contract ids are specified
-        if request.protocol_ids.is_none() ||
-            request
-                .protocol_ids
-                .as_ref()
-                .unwrap()
-                .is_empty()
+        // Check if protocol ids are specified
+        if request
+            .protocol_ids
+            .as_ref()
+            .is_none_or(|ids| ids.is_empty())
         {
             warn!("No protocol ids specified in request.");
         }
