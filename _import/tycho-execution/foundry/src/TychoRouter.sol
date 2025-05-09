@@ -657,13 +657,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     /**
      * @dev We use the fallback function to allow flexibility on callback.
      */
-    fallback() external {
-        bytes memory result = _callHandleCallbackOnExecutor(msg.data);
-        // slither-disable-next-line assembly
-        assembly ("memory-safe") {
-            // Propagate the result
-            return(add(result, 32), mload(result))
-        }
+    fallback(bytes calldata data) external returns (bytes memory) {
+        return _callHandleCallbackOnExecutor(data);
     }
 
     /**
@@ -776,18 +771,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
      */
     receive() external payable {
         require(msg.sender.code.length != 0);
-    }
-
-    /**
-     * @dev Called by UniswapV4 pool manager after achieving unlock state.
-     */
-    function unlockCallback(bytes calldata data)
-        external
-        returns (bytes memory)
-    {
-        if (data.length < 24) revert TychoRouter__InvalidDataLength();
-        bytes memory result = _callHandleCallbackOnExecutor(data);
-        return result;
     }
 
     /**

@@ -127,7 +127,9 @@ contract Dispatcher {
             tstore(_CURRENTLY_SWAPPING_EXECUTOR_SLOT, 0)
         }
 
-        // this is necessary because the delegatecall will prepend extra bytes we don't want like the length and prefix
+        // The final callback result should not be ABI encoded. That is why we are decoding here.
+        // ABI encoding is very gas expensive and we want to avoid it if possible.
+        // The result from `handleCallback` is always ABI encoded.
         bytes memory decodedResult = abi.decode(result, (bytes));
         return decodedResult;
     }
