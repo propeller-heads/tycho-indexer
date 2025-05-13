@@ -111,7 +111,7 @@ jobs:
         with:
           cache-on-failure: true
 
-      - run: cargo clippy --workspace --lib --all-targets --all-features -- -D clippy::dbg-macro
+      - run: cargo +nightly clippy --workspace --lib --all-targets --all-features -- -D clippy::dbg-macro
         env:
           RUSTFLAGS: -Dwarnings
 
