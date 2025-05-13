@@ -149,21 +149,36 @@ impl BlockHistory {
         let latest = self
             .latest()
             .ok_or(BlockHistoryError::EmptyHistory)?;
+
         Ok(if block.parent_hash == latest.hash {
+            // if the block is the next expected block.
             BlockPosition::NextExpected
         } else if (block.hash == latest.hash) & !block.revert {
+            // if the block is the latest block and it is not a revert.
             BlockPosition::Latest
         } else if self.reverts.contains(&block.hash) {
-            // in this case the block is still on an already reverted branch.
+            // if the block is still on an already reverted branch.
             BlockPosition::Delayed
         } else if block.number <= latest.number {
-            // if this block is potentially delayed we have seen it's hash before.
-            if block.revert & self.hash_in_history(&block.hash) {
-                // if it is a revert, that is a expected forward update.
-                BlockPosition::NextExpected
-            } else if self.hash_in_history(&block.hash) {
-                // if this is not a revert it means this block is delayed.
+            // block is potentially delayed or reverted.
+
+            let oldest = self
+                .oldest()
+                .ok_or(BlockHistoryError::EmptyHistory)?;
+
+            if block.number < oldest.number {
+                // if this block is older than the oldest block in our history it means it is
+                // delayed.
                 BlockPosition::Delayed
+            } else if self.hash_in_history(&block.hash) {
+                // if this block is in our history
+                if block.revert {
+                    // if it is a revert, that is a expected forward update.
+                    BlockPosition::NextExpected
+                } else {
+                    // if this is not a revert it means this block is delayed.
+                    BlockPosition::Delayed
+                }
             } else {
                 // anything else raises e.g. a completely detached, revert=false block
                 let history = &self.history;
@@ -172,6 +187,7 @@ impl BlockHistory {
                 Err(BlockHistoryError::UndeterminedBlockPosition)?
             }
         } else {
+            // otherwise the block is advanced.
             BlockPosition::Advanced
         })
     }
@@ -184,6 +200,10 @@ impl BlockHistory {
 
     pub fn latest(&self) -> Option<&Header> {
         self.history.back()
+    }
+
+    pub fn oldest(&self) -> Option<&Header> {
+        self.history.front()
     }
 }
 
@@ -328,6 +348,7 @@ mod test {
     #[case(Header { number: 16, hash: int_hash(16), parent_hash: int_hash(15), revert: false }, BlockPosition::Advanced)]
     #[case(Header { number: 12, hash: int_hash(12), parent_hash: int_hash(11), revert: false }, BlockPosition::Delayed)]
     #[case(Header { number: 14, hash: int_hash(14), parent_hash: int_hash(13), revert: true }, BlockPosition::NextExpected)]
+    #[case(Header { number: 1, hash: int_hash(1), parent_hash: int_hash(0), revert: false }, BlockPosition::Delayed)]
     fn test_determine_position(#[case] add_block: Header, #[case] exp_pos: BlockPosition) {
         let start_blocks = generate_blocks(10, 5, None);
         let history = BlockHistory::new(start_blocks, 20).expect("failed to create history");
