@@ -45,7 +45,9 @@ contract TokenTransfer {
         uint256 amount,
         TransferType transferType
     ) internal {
-        if (transferType == TransferType.TRANSFER_TO_PROTOCOL) {
+        if (transferType == TransferType.NONE) {
+            return;
+        } else if (transferType == TransferType.TRANSFER_TO_PROTOCOL) {
             if (tokenIn == address(0)) {
                 payable(receiver).transfer(amount);
             } else {
