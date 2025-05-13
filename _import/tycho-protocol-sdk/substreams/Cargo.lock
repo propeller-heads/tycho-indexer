@@ -300,7 +300,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-sfrax"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "ethabi 17.2.0",
@@ -1377,7 +1377,7 @@ dependencies = [
 
 [[package]]
 name = "substreams-ethereum-ambient"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1615,21 +1615,6 @@ dependencies = [
 [[package]]
 name = "tycho-substreams"
 version = "0.2.0"
-dependencies = [
- "ethabi 18.0.0",
- "hex",
- "itertools 0.12.1",
- "num-bigint",
- "prost 0.11.9",
- "serde",
- "serde_json",
- "substreams",
- "substreams-ethereum",
-]
-
-[[package]]
-name = "tycho-substreams"
-version = "0.2.0"
 source = "git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=3c08359#3c08359cf112e15c137dd5256b8dc8e9cd6c1626"
 dependencies = [
  "ethabi 18.0.0",
@@ -1663,6 +1648,21 @@ dependencies = [
 name = "tycho-substreams"
 version = "0.2.0"
 source = "git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=f90c33b#f90c33bcc229a1bca1fe86ee6fc4024cbdc25aeb"
+dependencies = [
+ "ethabi 18.0.0",
+ "hex",
+ "itertools 0.12.1",
+ "num-bigint",
+ "prost 0.11.9",
+ "serde",
+ "serde_json",
+ "substreams",
+ "substreams-ethereum",
+]
+
+[[package]]
+name = "tycho-substreams"
+version = "0.2.1"
 dependencies = [
  "ethabi 18.0.0",
  "hex",

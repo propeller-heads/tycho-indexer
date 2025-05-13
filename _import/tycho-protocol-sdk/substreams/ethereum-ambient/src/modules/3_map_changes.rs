@@ -1,13 +1,13 @@
 use num_bigint::BigInt;
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{hash_map::Entry, HashMap, HashSet},
     str::FromStr,
 };
 use substreams::{
     pb::substreams::StoreDeltas,
     store::{StoreGet, StoreGetProto},
 };
-use substreams_ethereum::pb::eth::{self};
+use substreams_ethereum::pb::eth::{self, v2::CallType};
 
 use tycho_substreams::prelude::*;
 
@@ -77,20 +77,22 @@ fn map_changes(
     balance_store: StoreDeltas,
     pool_store: StoreGetProto<ProtocolComponent>,
 ) -> Result<BlockChanges, substreams::errors::Error> {
+    // TODO: this needs to be refactored to use the tycho-substreams helper functions.
+    // The current implementation probably suffers from the bug fixed in https://github.com/propeller-heads/tycho-protocol-sdk/pull/117
     let mut block_changes = BlockChanges::default();
 
     let mut transaction_changes = TransactionChanges::default();
 
     let mut changed_contracts: HashMap<Vec<u8>, InterimContractChange> = HashMap::new();
 
-    let created_accounts: HashMap<_, _> = block
+    // collect all account creations in the block
+    let created_accounts: HashSet<_> = block
         .transactions()
         .flat_map(|tx| {
-            tx.calls.iter().flat_map(|call| {
-                call.account_creations
-                    .iter()
-                    .map(|ac| (&ac.account, ac.ordinal))
-            })
+            tx.calls
+                .iter()
+                .filter(|call| call.call_type() == CallType::Create)
+                .map(|call| call.address.clone())
         })
         .collect();
 
@@ -161,7 +163,7 @@ fn map_changes(
                         balance: Vec::new(),
                         code: Vec::new(),
                         slots,
-                        change: if created_accounts.contains_key(&storage_change.address) {
+                        change: if created_accounts.contains(&storage_change.address) {
                             ChangeType::Creation
                         } else {
                             ChangeType::Update
@@ -202,7 +204,7 @@ fn map_changes(
                             balance: new_balance.bytes.clone(),
                             code: Vec::new(),
                             slots: HashMap::new(),
-                            change: if created_accounts.contains_key(&balance_change.address) {
+                            change: if created_accounts.contains(&balance_change.address) {
                                 ChangeType::Creation
                             } else {
                                 ChangeType::Update
@@ -241,7 +243,7 @@ fn map_changes(
                         balance: Vec::new(),
                         code: code_change.new_code.clone(),
                         slots: HashMap::new(),
-                        change: if created_accounts.contains_key(&code_change.address) {
+                        change: if created_accounts.contains(&code_change.address) {
                             ChangeType::Creation
                         } else {
                             ChangeType::Update
@@ -315,7 +317,7 @@ fn map_changes(
             let pool_hash_hex = hex::encode(balance_delta.pool_hash);
             let pool = match pool_store.get_last(pool_hash_hex.clone()) {
                 Some(pool) => pool,
-                None => panic!("Pool not found in store for given hash: {}", pool_hash_hex),
+                None => panic!("Pool not found in store for given hash: {pool_hash_hex}"),
             };
             let token_type = substreams::key::segment_at(&store_delta.key, 1);
             let token_index = if token_type == "quote" { 1 } else { 0 };

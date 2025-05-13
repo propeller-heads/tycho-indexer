@@ -8,7 +8,7 @@
 /// ## Warning
 /// ⚠️ These helpers *only* work if the **extended block model** is available,
 /// more [here](https://streamingfastio.medium.com/new-block-model-to-accelerate-chain-integration-9f65126e5425)
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     models::{InterimContractChange, TransactionChanges},
@@ -97,14 +97,11 @@ fn extract_contract_changes_generic<
         .transactions()
         .for_each(|block_tx| {
             // Collect all accounts created in this tx
-            let created_accounts: HashMap<_, _> = block_tx
+            let created_accounts: HashSet<_> = block_tx
                 .calls
                 .iter()
-                .flat_map(|call| {
-                    call.account_creations
-                        .iter()
-                        .map(|ac| (&ac.account, ac.ordinal))
-                })
+                .filter(|call| call.call_type() == CallType::Create)
+                .map(|call| call.address.clone())
                 .collect();
 
             let mut storage_changes = Vec::new();
@@ -140,7 +137,7 @@ fn extract_contract_changes_generic<
                         .or_insert_with(|| {
                             InterimContractChange::new(
                                 &storage_change.address,
-                                created_accounts.contains_key(&storage_change.address),
+                                created_accounts.contains(&storage_change.address),
                             )
                         });
 
@@ -156,7 +153,7 @@ fn extract_contract_changes_generic<
                         .or_insert_with(|| {
                             InterimContractChange::new(
                                 &balance_change.address,
-                                created_accounts.contains_key(&balance_change.address),
+                                created_accounts.contains(&balance_change.address),
                             )
                         });
 
@@ -174,7 +171,7 @@ fn extract_contract_changes_generic<
                         .or_insert_with(|| {
                             InterimContractChange::new(
                                 &code_change.address,
-                                created_accounts.contains_key(&code_change.address),
+                                created_accounts.contains(&code_change.address),
                             )
                         });
 

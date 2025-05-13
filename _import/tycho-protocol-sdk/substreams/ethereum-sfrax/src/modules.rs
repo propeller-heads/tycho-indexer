@@ -1,7 +1,7 @@
 use crate::abi;
 use anyhow::Result;
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use substreams::{
     hex,
     pb::substreams::StoreDeltas,
@@ -87,7 +87,7 @@ pub fn map_relative_balances(
                 let address_bytes_be = vault_log.address();
                 let address_hex = format!("0x{}", hex::encode(address_bytes_be));
                 if store
-                    .get_last(format!("pool:{}", address_hex))
+                    .get_last(format!("pool:{address_hex}"))
                     .is_some()
                 {
                     deltas.extend_from_slice(&[
@@ -122,7 +122,7 @@ pub fn map_relative_balances(
                 let address_hex = format!("0x{}", hex::encode(address_bytes_be));
 
                 if store
-                    .get_last(format!("pool:{}", address_hex))
+                    .get_last(format!("pool:{address_hex}"))
                     .is_some()
                 {
                     deltas.extend_from_slice(&[
@@ -157,7 +157,7 @@ pub fn map_relative_balances(
                 let address_hex = format!("0x{}", hex::encode(address_bytes_be));
 
                 if store
-                    .get_last(format!("pool:{}", address_hex))
+                    .get_last(format!("pool:{address_hex}"))
                     .is_some()
                 {
                     deltas.extend_from_slice(&[BalanceDelta {
@@ -260,17 +260,11 @@ fn is_deployment_tx(tx: &eth::v2::TransactionTrace, vault_address: &[u8]) -> boo
     let created_accounts = tx
         .calls
         .iter()
-        .flat_map(|call| {
-            call.account_creations
-                .iter()
-                .map(|ac| ac.account.to_owned())
-        })
-        .collect::<Vec<_>>();
+        .filter(|call| call.call_type() == eth::v2::CallType::Create)
+        .map(|call| call.address.clone())
+        .collect::<HashSet<_>>();
 
-    if let Some(deployed_address) = created_accounts.first() {
-        return deployed_address.as_slice() == vault_address;
-    }
-    false
+    created_accounts.contains(vault_address)
 }
 
 fn find_deployed_underlying_address(vault_address: &[u8]) -> Option<[u8; 20]> {
