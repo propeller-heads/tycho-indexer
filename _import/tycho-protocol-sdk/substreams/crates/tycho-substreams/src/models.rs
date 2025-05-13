@@ -28,6 +28,7 @@ pub struct TransactionChangesBuilder {
     entity_changes: HashMap<String, InterimEntityChanges>,
     component_changes: HashMap<String, ProtocolComponent>,
     balance_changes: HashMap<(Vec<u8>, Vec<u8>), BalanceChange>,
+    entrypoints: HashSet<EntryPoint>,
 }
 
 impl TransactionChangesBuilder {
@@ -151,6 +152,13 @@ impl TransactionChangesBuilder {
             .insert((change.component_id.clone(), change.token.clone()), change.clone());
     }
 
+    /// Adds a new entrypoint to the transaction. It adds to the set of already existing
+    /// entrypoints.
+    pub fn add_entrypoint(&mut self, entrypoint: &EntryPoint) {
+        self.entrypoints
+            .insert(entrypoint.clone());
+    }
+
     pub fn build(self) -> Option<TransactionChanges> {
         let tx_changes = TransactionChanges {
             tx: self.tx,
@@ -171,6 +179,10 @@ impl TransactionChangesBuilder {
             balance_changes: self
                 .balance_changes
                 .into_values()
+                .collect::<Vec<_>>(),
+            entrypoints: self
+                .entrypoints
+                .into_iter()
                 .collect::<Vec<_>>(),
         };
         if tx_changes.is_empty() {
@@ -325,7 +337,7 @@ impl ProtocolComponent {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// let attributes_to_check = vec![
     ///     ("attribute1".to_string(), vec![1, 2, 3]),
     ///     ("attribute2".to_string(), vec![4, 5, 6]),
@@ -367,7 +379,7 @@ impl ProtocolComponent {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// let attribute_name = "attribute1";
     /// if let Some(value) = instance.get_attribute_value(attribute_name) {
     ///     // Use the attribute value

@@ -192,7 +192,7 @@ pub fn aggregate_balances_changes(
 ///
 /// # Example
 ///
-/// ```
+/// ```ignore
 /// let predicate = |log_address: &[u8], transfer_address: &[u8]| -> bool {
 ///     // Your predicate logic here, e.g., checking if the address matches a specific pattern.
 ///     true

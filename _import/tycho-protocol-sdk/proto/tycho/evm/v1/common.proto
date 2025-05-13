@@ -149,6 +149,26 @@ message ContractChange {
   repeated AccountBalanceChange token_balances = 6;
 }
 
+// DCI entities
+
+// An entrypoint to be used for DCI analysis
+message EntryPoint {
+  // The entrypoint id. Recommended to use 'target:signature'.
+  string id = 1;
+  // The target contract to analyse this entrypoint on.
+  bytes target = 2;
+  // The signature of the function to analyse.
+  bytes signature = 3;
+}
+
+// A contract and associated storage changes
+message StorageChanges {
+  // The contract's address
+  bytes address = 1;
+  // The contract's storage changes
+  repeated ContractSlot slots = 2;
+}
+
 // Aggregate entities
 
 // A set of changes aggregated by transaction.
@@ -165,6 +185,16 @@ message TransactionChanges {
   repeated ProtocolComponent component_changes = 4;
   // An array of balance changes to components.
   repeated BalanceChange balance_changes = 5;
+  // An array of newly added entrypoints. Used for DCI enabled protocols.
+  repeated EntryPoint entrypoints = 6;
+}
+
+// A set of storage changes aggregated by transaction.
+message TransactionStorageChanges {
+  // The transaction instance that results in the changes.
+  Transaction tx = 1;
+  // Contains the storage changes induced by the above transaction.
+  repeated StorageChanges storage_changes = 2;
 }
 
 // A set of transaction changes within a single block.
@@ -174,4 +204,7 @@ message BlockChanges {
   Block block = 1;
   // The set of transaction changes observed in the specified block.
   repeated TransactionChanges changes = 2;
+  // The set of all storage changes from the specified block. Intended as input for the Dynamic Contract Indexer.
+  // Should be left empty for protocols that do not use the DCI.
+  repeated TransactionStorageChanges storage_changes = 3;
 }

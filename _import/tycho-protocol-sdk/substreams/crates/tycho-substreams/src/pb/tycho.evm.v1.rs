@@ -173,6 +173,34 @@ pub struct ContractChange {
     #[prost(message, repeated, tag="6")]
     pub token_balances: ::prost::alloc::vec::Vec<AccountBalanceChange>,
 }
+// DCI entities
+
+/// An entrypoint to be used for DCI analysis
+#[derive(Eq, Hash)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EntryPoint {
+    /// The entrypoint id. Recommended to use 'target:signature'.
+    #[prost(string, tag="1")]
+    pub id: ::prost::alloc::string::String,
+    /// The target contract to analyse this entrypoint on.
+    #[prost(bytes="vec", tag="2")]
+    pub target: ::prost::alloc::vec::Vec<u8>,
+    /// The signature of the function to analyse.
+    #[prost(bytes="vec", tag="3")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+}
+/// A contract and associated storage changes
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StorageChanges {
+    /// The contract's address
+    #[prost(bytes="vec", tag="1")]
+    pub address: ::prost::alloc::vec::Vec<u8>,
+    /// The contract's storage changes
+    #[prost(message, repeated, tag="2")]
+    pub slots: ::prost::alloc::vec::Vec<ContractSlot>,
+}
 // Aggregate entities
 
 /// A set of changes aggregated by transaction.
@@ -196,6 +224,20 @@ pub struct TransactionChanges {
     /// An array of balance changes to components.
     #[prost(message, repeated, tag="5")]
     pub balance_changes: ::prost::alloc::vec::Vec<BalanceChange>,
+    /// An array of newly added entrypoints. Used for DCI enabled protocols.
+    #[prost(message, repeated, tag="6")]
+    pub entrypoints: ::prost::alloc::vec::Vec<EntryPoint>,
+}
+/// A set of storage changes aggregated by transaction.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TransactionStorageChanges {
+    /// The transaction instance that results in the changes.
+    #[prost(message, optional, tag="1")]
+    pub tx: ::core::option::Option<Transaction>,
+    /// Contains the storage changes induced by the above transaction.
+    #[prost(message, repeated, tag="2")]
+    pub storage_changes: ::prost::alloc::vec::Vec<StorageChanges>,
 }
 /// A set of transaction changes within a single block.
 /// This message must be the output of your substreams module.
@@ -208,6 +250,10 @@ pub struct BlockChanges {
     /// The set of transaction changes observed in the specified block.
     #[prost(message, repeated, tag="2")]
     pub changes: ::prost::alloc::vec::Vec<TransactionChanges>,
+    /// The set of all storage changes from the specified block. Intended as input for the Dynamic Contract Indexer.
+    /// Should be left empty for protocols that do not use the DCI.
+    #[prost(message, repeated, tag="3")]
+    pub storage_changes: ::prost::alloc::vec::Vec<TransactionStorageChanges>,
 }
 /// Enum to specify the type of a change.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
