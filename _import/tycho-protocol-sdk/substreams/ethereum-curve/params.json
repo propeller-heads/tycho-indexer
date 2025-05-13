@@ -7,7 +7,10 @@
       "6b175474e89094c44da98b954eedeac495271d0f",
       "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
       "dac17f958d2ee523a2206206994597c13d831ec7"
-    ]
+    ],
+    "static_attributes": {
+      "coins": "[\"0x6b175474e89094c44da98b954eedeac495271d0f\",\"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\",\"0xdac17f958d2ee523a2206206994597c13d831ec7\"]"
+    }
   },
   {
     "name": "steth",
@@ -16,7 +19,10 @@
     "tokens": [
       "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
       "ae7ab96520de3a18e5e111b5eaab095312d7fe84"
-    ]
+    ],
+    "static_attributes": {
+      "coins": "[\"0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"0xae7ab96520de3a18e5e111b5eaab095312d7fe84\"]"
+    }
   },
   {
     "name": "tricrypto2",
@@ -33,6 +39,9 @@
     ],
     "attributes": {
       "stateless_contract_addr_0": "0x8F68f4810CcE3194B6cB6F3d50fa58c2c9bDD1d5"
+    },
+    "static_attributes": {
+      "coins": "[\"0xdac17f958d2ee523a2206206994597c13d831ec7\",\"0x2260fac5e5542a773aa44fbcfedf7c193bc2c599\",\"0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\"]"
     }
   },
   {
@@ -44,7 +53,10 @@
       "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
       "dac17f958d2ee523a2206206994597c13d831ec7",
       "57ab1ec28d129707052df4df418d58a2d46d5f51"
-    ]
+    ],
+    "static_attributes": {
+      "coins": "[\"0x6b175474e89094c44da98b954eedeac495271d0f\",\"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\",\"0xdac17f958d2ee523a2206206994597c13d831ec7\",\"0x57ab1ec28d129707052df4df418d58a2d46d5f51\"]"
+    }
   },
   {
     "name": "fraxusdc",
@@ -53,6 +65,9 @@
     "tokens": [
       "853d955acef822db058eb8505911ed77f175b99e",
       "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
-    ]
+    ],
+    "static_attributes": {
+      "coins": "[\"0x853d955acef822db058eb8505911ed77f175b99e\",\"0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\"]"
+    }
   }
 ]

@@ -4,7 +4,7 @@ use std::{collections::HashMap, iter::zip};
 use substreams_ethereum::pb::eth::v2::TransactionTrace;
 use tycho_substreams::prelude::*;
 
-const PARAMS_SEPERATOR: &str = ",";
+const PARAMS_SEPERATOR: &str = "#";
 
 #[derive(Debug, Deserialize, PartialEq)]
 struct PoolQueryParams {
@@ -127,7 +127,7 @@ fn parse_params(params: &str) -> Result<HashMap<String, PoolQueryParams>, anyhow
         .split(PARAMS_SEPERATOR)
         .map(|param| {
             let pool: PoolQueryParams = serde_qs::from_str(param)
-                .with_context(|| format!("Failed to parse pool query params: {0}", param))?;
+                .with_context(|| format!("Failed to parse pool query params: {param}"))?;
             Ok((pool.tx_hash.clone(), pool))
         })
         .collect::<Result<HashMap<_, _>>>()

@@ -51,7 +51,7 @@ def encode_json_to_query_params(params: list[dict[str, Any]]):
             f"Index `{i}` object missing parameters.\n\n" + err.args[0]
         )
 
-    return ",".join(encoded_params)
+    return "#".join(encoded_params)
 
 
 def main():
