@@ -21,21 +21,29 @@ runs:
         # Convert space-separated list to newline-separated list and process
         echo '${{ inputs.changed-files }}' | tr ' ' '\n' | grep '^substreams/' | grep -v 'Cargo.lock$' > changed_files.txt
         
-        # Extract unique directory paths
-        CHANGED_DIRS=$(cat changed_files.txt | cut -d'/' -f1-2 | sort -u)
-        
         # Initialize empty array for package names
         PACKAGE_NAMES=()
         
-        # Loop through directories and find package names
-        while IFS= read -r dir; do
-          if [ -f "$dir/Cargo.toml" ]; then
-            PACKAGE_NAME=$(grep -m1 '^name = ' "$dir/Cargo.toml" | cut -d'"' -f2)
-            if [ -n "$PACKAGE_NAME" ]; then
-              PACKAGE_NAMES+=("$PACKAGE_NAME")
+        # Process each changed file
+        while IFS= read -r file; do
+          # Get the directory of the file
+          dir=$(dirname "$file")
+          
+          # Find the nearest parent directory containing Cargo.toml
+          while [ "$dir" != "substreams" ] && [ "$dir" != "." ]; do
+            if [ -f "$dir/Cargo.toml" ]; then
+              PACKAGE_NAME=$(grep -m1 '^name = ' "$dir/Cargo.toml" | cut -d'"' -f2)
+              if [ -n "$PACKAGE_NAME" ]; then
+                PACKAGE_NAMES+=("$PACKAGE_NAME")
+                break
+              fi
             fi
-          fi
-        done <<< "$CHANGED_DIRS"
+            dir=$(dirname "$dir")
+          done
+        done < changed_files.txt
+        
+        # Remove duplicates and sort
+        PACKAGE_NAMES=($(printf "%s\n" "${PACKAGE_NAMES[@]}" | sort -u))
         
         # Join package names with spaces and store
         if [ ${#PACKAGE_NAMES[@]} -gt 0 ]; then
