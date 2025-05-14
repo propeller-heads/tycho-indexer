@@ -34,11 +34,12 @@ pub static IN_TRANSFER_REQUIRED_PROTOCOLS: LazyLock<HashSet<&'static str>> = Laz
     set
 });
 
-// The protocols here are a subset of the ones defined in IN_TRANSFER_REQUIRED_PROTOCOLS. The tokens
-// can not be sent directly from the previous pool into a pool of this protocol. The tokens need to
-// be sent to the router and only then transferred into the pool. This is the case for uniswap v3
-// because of the callback logic. The only way for this to work it would be to call the second swap
-// during the callback of the first swap. This is currently not supported.
+// The protocols here are a subset of the ones defined in IN_TRANSFER_REQUIRED_PROTOCOLS. The in
+// transfer needs to be performed inside the callback logic. This means, the tokens can not be sent
+// directly from the previous pool into a pool of this protocol. The tokens need to be sent to the
+// router and only then transferred into the pool. This is the case for uniswap v3 because of the
+// callback logic. The only way for this to work it would be to call the second swap during the
+// callback of the first swap. This is currently not supported.
 pub static CALLBACK_CONSTRAINED_PROTOCOLS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     let mut set = HashSet::new();
     set.insert("uniswap_v3");

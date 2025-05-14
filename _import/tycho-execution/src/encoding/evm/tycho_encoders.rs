@@ -13,7 +13,7 @@ use crate::encoding::{
         },
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
     },
-    models::{Chain, EncodingContext, NativeAction, Solution, Transaction, TransferType},
+    models::{Chain, EncodingContext, NativeAction, Solution, Transaction},
     strategy_encoder::StrategyEncoder,
     tycho_encoder::TychoEncoder,
 };
@@ -279,7 +279,8 @@ impl TychoExecutorEncoder {
                 router_address: None,
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
-                transfer_type: TransferType::TransferToProtocol,
+                transfer: true,
+                transfer_from: false,
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
             grouped_protocol_data.extend(protocol_data);
@@ -1059,8 +1060,8 @@ mod tests {
                     "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                     // zero for one
                     "00",
-                    // transfer type
-                    "00",
+                    // transfer true
+                    "01",
                 ))
             );
         }
@@ -1147,8 +1148,10 @@ mod tests {
                     "6982508145454ce325ddbe47a25d4ec3d2311933",
                     // zero for one
                     "00",
-                    // transfer type
+                    // transfer from false
                     "00",
+                    // transfer true
+                    "01",
                     // receiver
                     "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                     // first pool intermediary token (ETH)
