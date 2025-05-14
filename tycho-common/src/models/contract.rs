@@ -8,7 +8,7 @@ use crate::{
     models::{
         blockchain::Transaction,
         protocol::{ComponentBalance, ProtocolComponent},
-        Address, Balance, Chain, ChangeType, Code, CodeHash, ComponentId, ContractId, DeltaError,
+        Address, Balance, Chain, ChangeType, Code, CodeHash, ComponentId, ContractId, MergeError,
         StoreKey, StoreVal, TxHash,
     },
     Bytes,
@@ -64,11 +64,15 @@ impl Account {
         self.balance_modify_tx = modified_at.clone();
     }
 
-    pub fn apply_delta(&mut self, delta: &AccountDelta) -> Result<(), DeltaError> {
+    pub fn apply_delta(&mut self, delta: &AccountDelta) -> Result<(), MergeError> {
         let self_id = (self.chain, &self.address);
         let other_id = (delta.chain, &delta.address);
         if self_id != other_id {
-            return Err(DeltaError::IdMismatch(format!("{self_id:?}"), format!("{other_id:?}")));
+            return Err(MergeError::IdMismatch(
+                "AccountDeltas".to_string(),
+                format!("{self_id:?}"),
+                format!("{other_id:?}"),
+            ));
         }
         if let Some(balance) = delta.balance.as_ref() {
             self.native_balance.clone_from(balance);
@@ -228,11 +232,12 @@ impl AccountDelta {
     ///
     /// * `other`: An instance of `AccountUpdate`. The attribute values and keys of `other` will
     ///   overwrite those of `self`.
-    pub fn merge(&mut self, other: AccountDelta) -> Result<(), String> {
+    pub fn merge(&mut self, other: AccountDelta) -> Result<(), MergeError> {
         if self.address != other.address {
-            return Err(format!(
-                "Can't merge AccountUpdates from differing identities; Expected {:#020x}, got {:#020x}",
-                self.address, other.address
+            return Err(MergeError::IdMismatch(
+                "AccountDelta".to_string(),
+                format!("{:#020x}", self.address),
+                format!("{:#020x}", other.address),
             ));
         }
 
@@ -328,25 +333,28 @@ impl AccountChangesWithTx {
     ///
     /// # Errors
     /// This method will return an error if any of the above conditions is violated.
-    pub fn merge(&mut self, other: &AccountChangesWithTx) -> Result<(), String> {
+    pub fn merge(&mut self, other: &AccountChangesWithTx) -> Result<(), MergeError> {
         if self.tx.block_hash != other.tx.block_hash {
-            return Err(format!(
-                "Can't merge AccountChangesWithTx from different blocks: {:x} != {:x}",
-                self.tx.block_hash, other.tx.block_hash,
+            return Err(MergeError::BlockMismatch(
+                "AccountChangesWithTx".to_string(),
+                self.tx.block_hash.clone(),
+                other.tx.block_hash.clone(),
             ));
         }
         if self.tx.hash == other.tx.hash {
-            return Err(format!(
-                "Can't merge AccountChangesWithTx from the same transaction: {:x}",
-                self.tx.hash
+            return Err(MergeError::SameTransaction(
+                "AccountChangesWithTx".to_string(),
+                self.tx.hash.clone(),
             ));
         }
         if self.tx.index > other.tx.index {
-            return Err(format!(
-                "Can't merge AccountChangesWithTx with lower transaction index: {} > {}",
-                self.tx.index, other.tx.index
+            return Err(MergeError::TransactionOrderError(
+                "AccountChangesWithTx".to_string(),
+                self.tx.index,
+                other.tx.index,
             ));
         }
+
         self.tx = other.tx.clone();
 
         for (address, update) in other.account_deltas.clone().into_iter() {
@@ -518,10 +526,11 @@ mod test {
         let mut update_left = update_balance_delta();
         let mut update_right = update_slots_delta();
         update_right.address = Bytes::zero(20);
-        let exp = Err("Can't merge AccountUpdates from differing identities; \
-            Expected 0xe688b84b23f322a994a53dbf8e15fa82cdb71127, \
-            got 0x0000000000000000000000000000000000000000"
-            .into());
+        let exp = Err(MergeError::IdMismatch(
+            "AccountDeltas".to_string(),
+            format!("{:#020x}", update_left.address),
+            format!("{:#020x}", update_right.address),
+        ));
 
         let res = update_left.merge(update_right);
 
@@ -593,17 +602,28 @@ mod test {
     #[rstest]
     #[case::diff_block(
     block_fixtures::create_transaction(HASH_256_1, HASH_256_1, 11),
-    Err(format ! ("Can't merge AccountChangesWithTx from different blocks: {:x} != {}", Bytes::zero(32), HASH_256_1))
+    Err(MergeError::BlockMismatch(
+        "AccountChangesWithTx".to_string(),
+        Bytes::zero(32),
+        HASH_256_1.into(),
+    ))
     )]
     #[case::same_tx(
     block_fixtures::create_transaction(HASH_256_0, HASH_256_0, 11),
-    Err(format ! ("Can't merge AccountChangesWithTx from the same transaction: {:x}", Bytes::zero(32)))
+    Err(MergeError::SameTransaction(
+        "AccountChangesWithTx".to_string(),
+        Bytes::zero(32),
+    ))
     )]
     #[case::lower_idx(
     block_fixtures::create_transaction(HASH_256_1, HASH_256_0, 1),
-    Err("Can't merge AccountChangesWithTx with lower transaction index: 10 > 1".to_owned())
+    Err(MergeError::TransactionOrderError(
+        "AccountChangesWithTx".to_string(),
+        10,
+        1,
+    ))
     )]
-    fn test_merge_vm_updates_w_tx(#[case] tx: Transaction, #[case] exp: Result<(), String>) {
+    fn test_merge_vm_updates_w_tx(#[case] tx: Transaction, #[case] exp: Result<(), MergeError>) {
         let mut left = tx_vm_update();
         let mut right = left.clone();
         right.tx = tx;
