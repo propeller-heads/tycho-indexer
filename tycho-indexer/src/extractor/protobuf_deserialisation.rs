@@ -5,7 +5,7 @@ use chrono::NaiveDateTime;
 use tracing::warn;
 use tycho_common::{
     models::{
-        blockchain::{Block, Transaction, TxWithChanges},
+        blockchain::{Block, EntryPoint, Transaction, TxWithChanges},
         contract::{AccountBalance, AccountChangesWithTx, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
@@ -224,6 +224,16 @@ impl TryFromMessage for ProtocolComponentStateDelta {
     }
 }
 
+impl TryFromMessage for EntryPoint {
+    type Args<'a> = substreams::EntryPoint;
+
+    fn try_from_message(args: Self::Args<'_>) -> Result<Self, ExtractionError> {
+        let msg = args;
+
+        Ok(Self { external_id: msg.id, target: msg.target.into(), signature: msg.signature })
+    }
+}
+
 impl TryFromMessage for ProtocolChangesWithTx {
     type Args<'a> = (
         substreams::TransactionEntityChanges,
@@ -323,8 +333,9 @@ impl TryFromMessage for TxWithChanges {
             HashMap::new();
         let mut account_balance_changes: HashMap<Address, HashMap<Address, AccountBalance>> =
             HashMap::new();
+        let mut entrypoints: Vec<EntryPoint> = Vec::new();
 
-        // First, parse the new protocol components
+        // Parse the new protocol components
         for change in msg.component_changes.into_iter() {
             let component = ProtocolComponent::try_from_message((
                 change,
@@ -337,13 +348,13 @@ impl TryFromMessage for TxWithChanges {
             new_protocol_components.insert(component.id.clone(), component);
         }
 
-        // Then, parse the account updates
+        // Parse the account updates
         for contract_change in msg.contract_changes.clone().into_iter() {
             let update = AccountDelta::try_from_message((contract_change, block.chain))?;
             account_updates.insert(update.address.clone(), update);
         }
 
-        // Then, parse the state updates
+        // Parse the state updates
         for state_msg in msg.entity_changes.into_iter() {
             let state = ProtocolComponentStateDelta::try_from_message(state_msg)?;
             // Check if a state update for the same component already exists
@@ -359,7 +370,7 @@ impl TryFromMessage for TxWithChanges {
             }
         }
 
-        // Finally, parse the component balance changes
+        // Parse the component balance changes
         for balance_change in msg.balance_changes.into_iter() {
             let component_id = String::from_utf8(balance_change.component_id.clone())
                 .map_err(|error| ExtractionError::DecodeError(error.to_string()))?;
@@ -372,7 +383,7 @@ impl TryFromMessage for TxWithChanges {
                 .insert(token_address, balance);
         }
 
-        // parse the account balance changes
+        // Parse the account balance changes
         for contract_change in msg.contract_changes.into_iter() {
             for balance_change in contract_change
                 .token_balances
@@ -390,13 +401,20 @@ impl TryFromMessage for TxWithChanges {
             }
         }
 
+        // Parse the entrypoints
+        for entrypoint in msg.entrypoints.into_iter() {
+            let entrypoint = EntryPoint::try_from_message(entrypoint)?;
+            entrypoints.push(entrypoint);
+        }
+
         Ok(Self {
+            tx,
             protocol_components: new_protocol_components,
             account_deltas: account_updates,
             state_updates,
             balance_changes,
             account_balance_changes,
-            tx,
+            entrypoints,
         })
     }
 }

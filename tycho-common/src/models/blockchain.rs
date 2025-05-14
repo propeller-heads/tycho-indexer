@@ -174,30 +174,33 @@ impl BlockScoped for BlockAggregatedChanges {
 /// Changes grouped by their respective transaction.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TxWithChanges {
+    pub tx: Transaction,
     pub protocol_components: HashMap<ComponentId, ProtocolComponent>,
     pub account_deltas: HashMap<Address, AccountDelta>,
     pub state_updates: HashMap<ComponentId, ProtocolComponentStateDelta>,
     pub balance_changes: HashMap<ComponentId, HashMap<Address, ComponentBalance>>,
     pub account_balance_changes: HashMap<Address, HashMap<Address, AccountBalance>>,
-    pub tx: Transaction,
+    pub entrypoints: Vec<EntryPoint>,
 }
 
 impl TxWithChanges {
     pub fn new(
+        tx: Transaction,
         protocol_components: HashMap<ComponentId, ProtocolComponent>,
         account_deltas: HashMap<Address, AccountDelta>,
         protocol_states: HashMap<ComponentId, ProtocolComponentStateDelta>,
         balance_changes: HashMap<ComponentId, HashMap<Address, ComponentBalance>>,
         account_balance_changes: HashMap<Address, HashMap<Address, AccountBalance>>,
-        tx: Transaction,
+        entrypoints: Vec<EntryPoint>,
     ) -> Self {
         Self {
+            tx,
             account_deltas,
             protocol_components,
             state_updates: protocol_states,
             balance_changes,
             account_balance_changes,
-            tx,
+            entrypoints,
         }
     }
 
@@ -296,6 +299,16 @@ impl TxWithChanges {
             }
         }
 
+        // Merge new entrypoints
+        self.entrypoints
+            .extend(other.entrypoints);
+        // Remove duplicates by converting to a HashSet and back
+        let entrypoints_set = self
+            .entrypoints
+            .drain(..)
+            .collect::<HashSet<_>>();
+        self.entrypoints = entrypoints_set.into_iter().collect();
+
         Ok(())
     }
 }
@@ -303,12 +316,13 @@ impl TxWithChanges {
 impl From<AccountChangesWithTx> for TxWithChanges {
     fn from(value: AccountChangesWithTx) -> Self {
         Self {
+            tx: value.tx,
             protocol_components: value.protocol_components,
             account_deltas: value.account_deltas,
             state_updates: HashMap::new(),
             balance_changes: value.component_balances,
             account_balance_changes: value.account_balances,
-            tx: value.tx,
+            entrypoints: Vec::new(),
         }
     }
 }
@@ -316,12 +330,13 @@ impl From<AccountChangesWithTx> for TxWithChanges {
 impl From<ProtocolChangesWithTx> for TxWithChanges {
     fn from(value: ProtocolChangesWithTx) -> Self {
         Self {
+            tx: value.tx,
             protocol_components: value.new_protocol_components,
             account_deltas: HashMap::new(),
             state_updates: value.protocol_states,
             balance_changes: value.balance_changes,
             account_balance_changes: HashMap::new(),
-            tx: value.tx,
+            entrypoints: Vec::new(),
         }
     }
 }
@@ -478,52 +493,47 @@ pub mod fixtures {
 
     #[test]
     fn test_merge_tx_with_changes() {
-        let component_id = "ambient_USDC_ETH".to_string();
         let base_token = Bytes::from_str("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
         let quote_token = Bytes::from_str("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
         let contract_addr = Bytes::from_str("aaaaaaaaa24eeeb8d57d431224f73832bc34f688").unwrap();
         let tx_hash0 = "0x2f6350a292c0fc918afe67cb893744a080dacb507b0cea4cc07437b8aff23cdb";
         let tx_hash1 = "0x0d9e0da36cf9f305a189965b248fc79c923619801e8ab5ef158d4fd528a291ad";
         let block = "0x0000000000000000000000000000000000000000000000000000000000000000";
+        let component = ProtocolComponent::new(
+            "ambient_USDC_ETH",
+            "test",
+            "vm:pool",
+            Chain::Ethereum,
+            vec![base_token.clone(), quote_token.clone()],
+            vec![contract_addr.clone()],
+            Default::default(),
+            Default::default(),
+            Bytes::from_str(tx_hash0).unwrap(),
+            Default::default(),
+        );
+        let account_delta = AccountDelta::new(
+            Chain::Ethereum,
+            contract_addr.clone(),
+            HashMap::new(),
+            None,
+            Some(vec![0, 0, 0, 0].into()),
+            ChangeType::Creation,
+        );
+
         let mut changes1 = TxWithChanges::new(
-            HashMap::from([(
-                component_id.clone(),
-                ProtocolComponent {
-                    id: component_id.clone(),
-                    protocol_system: "test".to_string(),
-                    protocol_type_name: "vm:pool".to_string(),
-                    chain: Chain::Ethereum,
-                    tokens: vec![base_token.clone(), quote_token.clone()],
-                    contract_addresses: vec![contract_addr.clone()],
-                    static_attributes: Default::default(),
-                    change: Default::default(),
-                    creation_tx: Bytes::from_str(tx_hash0).unwrap(),
-                    created_at: Default::default(),
-                },
-            )]),
-            [(
-                contract_addr.clone(),
-                AccountDelta::new(
-                    Chain::Ethereum,
-                    contract_addr.clone(),
-                    HashMap::new(),
-                    None,
-                    Some(vec![0, 0, 0, 0].into()),
-                    ChangeType::Creation,
-                ),
-            )]
-            .into_iter()
-            .collect(),
+            create_transaction(tx_hash0, block, 1),
+            HashMap::from([(component.id.clone(), component.clone())]),
+            HashMap::from([(contract_addr.clone(), account_delta.clone())]),
             HashMap::new(),
             HashMap::from([(
-                component_id.clone(),
+                component.id.clone(),
                 HashMap::from([(
                     base_token.clone(),
                     ComponentBalance {
                         token: base_token.clone(),
                         balance: Bytes::from(800_u64).lpad(32, 0),
                         balance_float: 800.0,
-                        component_id: component_id.clone(),
+                        component_id: component.id.clone(),
                         modify_tx: Bytes::from_str(tx_hash0).unwrap(),
                     },
                 )]),
@@ -540,47 +550,42 @@ pub mod fixtures {
                     },
                 )]),
             )]),
-            create_transaction(tx_hash0, block, 1),
+            vec![EntryPoint::new(
+                "test".to_string(),
+                contract_addr.clone(),
+                "function()".to_string(),
+            )],
         );
         let changes2 = TxWithChanges::new(
+            create_transaction(tx_hash1, block, 2),
             HashMap::from([(
-                component_id.clone(),
+                component.id.clone(),
                 ProtocolComponent {
-                    id: component_id.clone(),
-                    protocol_system: "test".to_string(),
-                    protocol_type_name: "vm:pool".to_string(),
-                    chain: Chain::Ethereum,
-                    tokens: vec![base_token.clone(), quote_token],
-                    contract_addresses: vec![contract_addr.clone()],
-                    static_attributes: Default::default(),
-                    change: Default::default(),
                     creation_tx: Bytes::from_str(tx_hash1).unwrap(),
-                    created_at: Default::default(),
+                    ..component.clone()
                 },
             )]),
-            [(
+            HashMap::from([(
                 contract_addr.clone(),
-                AccountDelta::new(
-                    Chain::Ethereum,
-                    contract_addr.clone(),
-                    HashMap::new(),
-                    None,
-                    Some(vec![0, 0, 0, 0].into()),
-                    ChangeType::Creation,
-                ),
-            )]
-            .into_iter()
-            .collect(),
+                AccountDelta {
+                    slots: HashMap::from([(
+                        vec![0, 0, 0, 0].into(),
+                        Some(vec![0, 0, 0, 0].into()),
+                    )]),
+                    change: ChangeType::Update,
+                    ..account_delta
+                },
+            )]),
             HashMap::new(),
             HashMap::from([(
-                component_id.clone(),
+                component.id.clone(),
                 HashMap::from([(
                     base_token.clone(),
                     ComponentBalance {
                         token: base_token.clone(),
                         balance: Bytes::from(1000_u64).lpad(32, 0),
                         balance_float: 1000.0,
-                        component_id: component_id.clone(),
+                        component_id: component.id.clone(),
                         modify_tx: Bytes::from_str(tx_hash1).unwrap(),
                     },
                 )]),
@@ -597,7 +602,18 @@ pub mod fixtures {
                     },
                 )]),
             )]),
-            create_transaction(tx_hash1, block, 2),
+            vec![
+                EntryPoint::new(
+                    "test".to_string(),
+                    contract_addr.clone(),
+                    "function()".to_string(),
+                ),
+                EntryPoint::new(
+                    "test2".to_string(),
+                    contract_addr.clone(),
+                    "function_2()".to_string(),
+                ),
+            ],
         );
 
         assert!(changes1.merge(changes2).is_ok());
@@ -614,7 +630,7 @@ pub mod fixtures {
         assert_eq!(
             changes1
                 .balance_changes
-                .get(&component_id)
+                .get(&component.id)
                 .unwrap()
                 .get(&base_token)
                 .unwrap()
@@ -622,6 +638,15 @@ pub mod fixtures {
             Bytes::from(1000_u64).lpad(32, 0),
         );
         assert_eq!(changes1.tx.hash, Bytes::from_str(tx_hash1).unwrap(),);
+        assert_eq!(changes1.entrypoints.len(), 2);
+        assert_eq!(
+            changes1
+                .entrypoints
+                .iter()
+                .map(|ep| ep.signature.clone())
+                .collect::<Vec<_>>(),
+            vec!["function()".to_string(), "function_2()".to_string()],
+        );
     }
 
     #[rstest]
