@@ -1,3 +1,10 @@
+## [0.70.3](https://github.com/propeller-heads/tycho-indexer/compare/0.70.2...0.70.3) (2025-05-14)
+
+
+### Bug Fixes
+
+* update dockerfile rust version to 1.82 ([#573](https://github.com/propeller-heads/tycho-indexer/issues/573)) ([5b4a015](https://github.com/propeller-heads/tycho-indexer/commit/5b4a01506835545ab082a3694b53a404f16be6b8))
+
 ## [0.70.2](https://github.com/propeller-heads/tycho-indexer/compare/0.70.1...0.70.2) (2025-05-14)
 
 
