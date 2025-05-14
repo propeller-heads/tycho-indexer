@@ -12,7 +12,7 @@ use tycho_common::{
         blockchain::BlockAggregatedChanges,
         contract::Account,
         protocol::{ProtocolComponent, ProtocolComponentState},
-        DeltaError, NormalisedMessage,
+        MergeError, NormalisedMessage,
     },
     storage::StorageError,
     Bytes,
@@ -48,7 +48,7 @@ pub enum PendingDeltasError {
     #[error("Unknown extractor: {0}")]
     UnknownExtractor(String),
     #[error("Failed applying deltas: {0}")]
-    DeltaApplicationFailure(#[from] DeltaError),
+    DeltaApplicationFailure(#[from] MergeError),
 }
 
 pub type Result<T> = std::result::Result<T, PendingDeltasError>;
