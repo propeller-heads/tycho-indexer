@@ -482,11 +482,14 @@ impl WsDeltasClient {
                         }
                     },
                     Err(e) => {
-                        error!(error = %e, message=text, "Failed to deserialize WebSocketMessage: message does not match expected structs");
+                        error!(
+                            "Failed to deserialize WebSocketMessage: {}. \nMessage: {}",
+                            e, text
+                        );
                     }
                 },
-                Err(e) => {
-                    error!(error = %e, message=text, "Failed to deserialize message: invalid json");
+                Err(_) => {
+                    error!("Failed to deserialize message: invalid JSON. \nMessage: {}", text);
                 }
             },
             Ok(tungstenite::protocol::Message::Ping(_)) => {
