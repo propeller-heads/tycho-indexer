@@ -1817,6 +1817,7 @@ impl EntryPoint {
     }
 
     /// Retrieves the database id of an entry point from a target address and function signature.
+    #[allow(dead_code)]
     pub(crate) async fn id_by_target_and_signature(
         target_: &Bytes,
         signature_: &String,

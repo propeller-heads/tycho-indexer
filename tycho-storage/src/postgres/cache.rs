@@ -1,4 +1,8 @@
-use std::{collections::HashMap, num::NonZeroUsize, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    num::NonZeroUsize,
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
@@ -15,17 +19,15 @@ use tracing::{debug, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
     models::{
         self,
-        blockchain::{
-            Block, EntryPoint, EntryPointWithData, TracedEntryPoint, TracingResult, Transaction,
-        },
+        blockchain::{Block, EntryPointWithData, TracedEntryPoint, TracingResult, Transaction},
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta, QualityRange,
         },
         token::CurrencyToken,
-        Address, Chain, ComponentId, ContractId, ExtractionState, PaginationParams, ProtocolType,
-        TxHash,
+        Address, Chain, ComponentId, ContractId, EntryPointId, ExtractionState, PaginationParams,
+        ProtocolType, TxHash,
     },
     storage::{
         BlockIdentifier, BlockOrTimestamp, ChainGateway, ContractStateGateway, EntryPointFilter,
@@ -497,13 +499,12 @@ impl DBCacheWriteExecutor {
             WriteOp::UpsertEntryPoints(new_entry_points) => {
                 self.state_gateway
                     .insert_entry_points(
-                        new_entry_points
+                        &new_entry_points
                             .iter()
                             .map(|(component_id, entry_points)| {
                                 (component_id.as_str(), entry_points)
                             })
-                            .collect::<Vec<_>>()
-                            .as_slice(),
+                            .collect::<HashMap<_, _>>(),
                         &self.chain,
                         conn,
                     )
@@ -1174,16 +1175,16 @@ impl EntryPointGateway for CachedGateway {
     }
 
     #[instrument(skip_all)]
-    async fn get_traced_entry_point(
+    async fn get_traced_entry_points(
         &self,
-        entry_point: EntryPoint,
-    ) -> Result<Vec<TracingResult>, StorageError> {
+        entry_points: &HashSet<EntryPointId>,
+    ) -> Result<HashMap<EntryPointId, Vec<TracingResult>>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_traced_entry_point(entry_point, &mut conn)
+            .get_traced_entry_points(entry_points, &mut conn)
             .await
     }
 }

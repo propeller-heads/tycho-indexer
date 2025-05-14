@@ -1,5 +1,8 @@
 //! Storage traits used by Tycho
-use std::{collections::HashMap, fmt::Display};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
@@ -8,17 +11,15 @@ use thiserror::Error;
 use crate::{
     dto,
     models::{
-        blockchain::{
-            Block, EntryPoint, EntryPointWithData, TracedEntryPoint, TracingResult, Transaction,
-        },
+        blockchain::{Block, EntryPointWithData, TracedEntryPoint, TracingResult, Transaction},
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta, QualityRange,
         },
         token::CurrencyToken,
-        Address, BlockHash, Chain, ComponentId, ContractId, ExtractionState, PaginationParams,
-        ProtocolSystem, ProtocolType, TxHash,
+        Address, BlockHash, Chain, ComponentId, ContractId, EntryPointId, ExtractionState,
+        PaginationParams, ProtocolSystem, ProtocolType, TxHash,
     },
     Bytes,
 };
@@ -515,11 +516,11 @@ pub trait EntryPointGateway {
         traced_entry_points: &[TracedEntryPoint],
     ) -> Result<(), StorageError>;
 
-    /// Retrieves the tracing results for an entry point from the database.
-    async fn get_traced_entry_point(
+    /// Retrieves all tracing results for a set of entry points from the database.
+    async fn get_traced_entry_points(
         &self,
-        entry_point: EntryPoint,
-    ) -> Result<Vec<TracingResult>, StorageError>;
+        entry_points: &HashSet<EntryPointId>,
+    ) -> Result<HashMap<EntryPointId, Vec<TracingResult>>, StorageError>;
 }
 
 /// Manage contracts and their state in storage.
