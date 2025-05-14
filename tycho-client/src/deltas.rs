@@ -488,8 +488,11 @@ impl WsDeltasClient {
                         );
                     }
                 },
-                Err(_) => {
-                    error!("Failed to deserialize message: invalid JSON. \nMessage: {}", text);
+                Err(e) => {
+                    error!(
+                        "Failed to deserialize message: invalid JSON. {} \nMessage: {}",
+                        e, text
+                    );
                 }
             },
             Ok(tungstenite::protocol::Message::Ping(_)) => {
