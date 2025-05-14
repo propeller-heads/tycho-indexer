@@ -4,7 +4,6 @@ pragma solidity ^0.8.26;
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
-import "./TokenTransfer.sol";
 
 error UniswapV2Executor__InvalidDataLength();
 error UniswapV2Executor__InvalidTarget();
@@ -12,7 +11,7 @@ error UniswapV2Executor__InvalidFactory();
 error UniswapV2Executor__InvalidInitCode();
 error UniswapV2Executor__InvalidFee();
 
-contract UniswapV2Executor is IExecutor, TokenTransfer {
+contract UniswapV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
     address public immutable factory;
@@ -25,7 +24,7 @@ contract UniswapV2Executor is IExecutor, TokenTransfer {
         bytes32 _initCode,
         address _permit2,
         uint256 _feeBps
-    ) TokenTransfer(_permit2) {
+    ) {
         if (_factory == address(0)) {
             revert UniswapV2Executor__InvalidFactory();
         }
@@ -51,17 +50,23 @@ contract UniswapV2Executor is IExecutor, TokenTransfer {
         address target;
         address receiver;
         bool zeroForOne;
-        TransferType transferType;
+        bool transferNeeded;
 
-        (tokenIn, target, receiver, zeroForOne, transferType) =
+        (tokenIn, target, receiver, zeroForOne, transferNeeded) =
             _decodeData(data);
 
         _verifyPairAddress(target);
 
         calculatedAmount = _getAmountOut(target, givenAmount, zeroForOne);
-        _transfer(
-            address(tokenIn), msg.sender, target, givenAmount, transferType
-        );
+
+        if (transferNeeded){
+            if (tokenIn == address(0)) {
+                payable(target).transfer(givenAmount);
+            } else {
+                // slither-disable-next-line arbitrary-send-erc20
+                tokenIn.safeTransferFrom(msg.sender, target, givenAmount);
+            }
+        }
 
         IUniswapV2Pair pool = IUniswapV2Pair(target);
         if (zeroForOne) {
@@ -79,7 +84,7 @@ contract UniswapV2Executor is IExecutor, TokenTransfer {
             address target,
             address receiver,
             bool zeroForOne,
-            TransferType transferType
+            bool transferNeeded
         )
     {
         if (data.length != 62) {
@@ -89,7 +94,7 @@ contract UniswapV2Executor is IExecutor, TokenTransfer {
         target = address(bytes20(data[20:40]));
         receiver = address(bytes20(data[40:60]));
         zeroForOne = uint8(data[60]) > 0;
-        transferType = TransferType(uint8(data[61]));
+        transferNeeded = bool(data[61]);
     }
 
     function _getAmountOut(address target, uint256 amountIn, bool zeroForOne)
