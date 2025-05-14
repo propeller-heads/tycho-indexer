@@ -187,8 +187,8 @@ pub struct EntryPoint {
     #[prost(bytes="vec", tag="2")]
     pub target: ::prost::alloc::vec::Vec<u8>,
     /// The signature of the function to analyse.
-    #[prost(bytes="vec", tag="3")]
-    pub signature: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, tag="3")]
+    pub signature: ::prost::alloc::string::String,
 }
 /// A contract and associated storage changes
 #[allow(clippy::derive_partial_eq_without_eq)]

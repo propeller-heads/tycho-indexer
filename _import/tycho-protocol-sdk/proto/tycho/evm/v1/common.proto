@@ -158,7 +158,7 @@ message EntryPoint {
   // The target contract to analyse this entrypoint on.
   bytes target = 2;
   // The signature of the function to analyse.
-  bytes signature = 3;
+  string signature = 3;
 }
 
 // A contract and associated storage changes
