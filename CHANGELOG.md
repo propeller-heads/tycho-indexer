@@ -1,3 +1,10 @@
+## [0.70.2](https://github.com/propeller-heads/tycho-indexer/compare/0.70.1...0.70.2) (2025-05-14)
+
+
+### Bug Fixes
+
+* log error code for substream error metrics ([b7d8f78](https://github.com/propeller-heads/tycho-indexer/commit/b7d8f78aaac3f597a4599fa845f31fa6bd07ef61))
+
 ## [0.70.1](https://github.com/propeller-heads/tycho-indexer/compare/0.70.0...0.70.1) (2025-05-14)
 
 
