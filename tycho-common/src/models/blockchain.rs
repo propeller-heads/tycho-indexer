@@ -8,7 +8,6 @@ use chrono::NaiveDateTime;
 use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use tracing::warn;
 
-use super::{BlockHash, StoreKey};
 use crate::{
     models::{
         contract::{AccountBalance, AccountChangesWithTx, AccountDelta},
@@ -16,7 +15,8 @@ use crate::{
             ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
         },
         token::CurrencyToken,
-        Address, Chain, ComponentId, ExtractorIdentity, NormalisedMessage,
+        Address, BlockHash, Chain, ComponentId, ExtractorIdentity, MergeError, NormalisedMessage,
+        StoreKey,
     },
     Bytes,
 };
@@ -203,31 +203,30 @@ impl TxWithChanges {
 
     /// Merges this update with another one.
     ///
-    /// The method combines two `ChangesWithTx` instances if they are for the same
-    /// transaction.
+    /// The method combines two [`TxWithChanges`] instances if they for different transactions on
+    /// the same block.
     ///
-    /// NB: It is assumed that `other` is a more recent update than `self` is and the two are
+    /// NB: It is expected that `other` is a more recent update than `self` is and the two are
     /// combined accordingly.
     ///
     /// # Errors
-    /// This method will return an error if any of the above conditions is violated.
-    pub fn merge(&mut self, other: TxWithChanges) -> Result<(), String> {
+    /// Returns a `MergeError` if any of the above conditions are violated.
+    pub fn merge(&mut self, other: TxWithChanges) -> Result<(), MergeError> {
         if self.tx.block_hash != other.tx.block_hash {
-            return Err(format!(
-                "Can't merge TxWithChanges from different blocks: 0x{:x} != 0x{:x}",
-                self.tx.block_hash, other.tx.block_hash,
+            return Err(MergeError::BlockMismatch(
+                "TxWithChanges".to_string(),
+                self.tx.block_hash.clone(),
+                other.tx.block_hash,
             ));
         }
         if self.tx.hash == other.tx.hash {
-            return Err(format!(
-                "Can't merge TxWithChanges from the same transaction: 0x{:x}",
-                self.tx.hash
-            ));
+            return Err(MergeError::SameTransaction("TxWithChanges".to_string(), other.tx.hash));
         }
         if self.tx.index > other.tx.index {
-            return Err(format!(
-                "Can't merge TxWithChanges with lower transaction index: {} > {}",
-                self.tx.index, other.tx.index
+            return Err(MergeError::TransactionOrderError(
+                "TxWithChanges".to_string(),
+                self.tx.index,
+                other.tx.index,
             ));
         }
 
@@ -251,7 +250,7 @@ impl TxWithChanges {
             }
         }
 
-        // Merge Account Updates
+        // Merge account deltas
         for (address, update) in other.account_deltas.clone().into_iter() {
             match self.account_deltas.entry(address) {
                 Entry::Occupied(mut e) => {
@@ -263,7 +262,7 @@ impl TxWithChanges {
             }
         }
 
-        // Merge Protocol States
+        // Merge protocol state updates
         for (key, value) in other.state_updates {
             match self.state_updates.entry(key) {
                 Entry::Occupied(mut entry) => {
@@ -452,6 +451,8 @@ impl TracedEntryPoint {
 pub mod fixtures {
     use std::str::FromStr;
 
+    use rstest::rstest;
+
     use super::*;
     use crate::models::ChangeType;
 
@@ -623,73 +624,25 @@ pub mod fixtures {
         assert_eq!(changes1.tx.hash, Bytes::from_str(tx_hash1).unwrap(),);
     }
 
-    #[test]
-    fn test_merge_different_blocks() {
-        let mut tx1 = TxWithChanges::new(
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            fixtures::create_transaction("0x01", "0x0abc", 1),
-        );
+    #[rstest]
+    #[case::mismatched_blocks(
+        fixtures::create_transaction("0x01", "0x0abc", 1),
+        fixtures::create_transaction("0x02", "0x0def", 2)
+    )]
+    #[case::same_transaction(
+        fixtures::create_transaction("0x01", "0x0abc", 1),
+        fixtures::create_transaction("0x01", "0x0abc", 1)
+    )]
+    #[case::older_transaction(
+        fixtures::create_transaction("0x02", "0x0abc", 2),
+        fixtures::create_transaction("0x01", "0x0abc", 1)
+    )]
+    fn test_merge_errors(#[case] tx1: Transaction, #[case] tx2: Transaction) {
+        let mut changes1 = TxWithChanges { tx: tx1, ..Default::default() };
 
-        let tx2 = TxWithChanges::new(
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            fixtures::create_transaction("0x02", "0x0def", 2),
-        );
+        let changes2 = TxWithChanges { tx: tx2, ..Default::default() };
 
-        assert!(tx1.merge(tx2).is_err());
-    }
-
-    #[test]
-    fn test_merge_same_transaction() {
-        let mut tx1 = TxWithChanges::new(
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            fixtures::create_transaction("0x01", "0x0abc", 1),
-        );
-
-        let tx2 = TxWithChanges::new(
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            fixtures::create_transaction("0x01", "0x0abc", 1),
-        );
-
-        assert!(tx1.merge(tx2).is_err());
-    }
-
-    #[test]
-    fn test_merge_lower_transaction_index() {
-        let mut tx1 = TxWithChanges::new(
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            fixtures::create_transaction("0x02", "0x0abc", 2),
-        );
-
-        let tx2 = TxWithChanges::new(
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            fixtures::create_transaction("0x01", "0x0abc", 1),
-        );
-
-        assert!(tx1.merge(tx2).is_err());
+        assert!(changes1.merge(changes2).is_err());
     }
 
     #[test]

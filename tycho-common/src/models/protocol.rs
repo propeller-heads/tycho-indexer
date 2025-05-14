@@ -7,7 +7,7 @@ use tracing::warn;
 use crate::{
     models::{
         blockchain::Transaction, Address, AttrStoreKey, Balance, Chain, ChangeType, ComponentId,
-        DeltaError, StoreVal, TxHash,
+        MergeError, StoreVal, TxHash,
     },
     Bytes,
 };
@@ -89,9 +89,10 @@ impl ProtocolComponentState {
     pub fn apply_state_delta(
         &mut self,
         delta: &ProtocolComponentStateDelta,
-    ) -> Result<(), DeltaError> {
+    ) -> Result<(), MergeError> {
         if self.component_id != delta.component_id {
-            return Err(DeltaError::IdMismatch(
+            return Err(MergeError::IdMismatch(
+                "ProtocolComponentStates".to_string(),
                 self.component_id.clone(),
                 delta.component_id.clone(),
             ));
@@ -111,7 +112,7 @@ impl ProtocolComponentState {
     pub fn apply_balance_delta(
         &mut self,
         delta: &HashMap<Bytes, ComponentBalance>,
-    ) -> Result<(), DeltaError> {
+    ) -> Result<(), MergeError> {
         self.balances.extend(
             delta
                 .iter()
@@ -149,11 +150,12 @@ impl ProtocolComponentStateDelta {
     /// # Errors
     /// This method will return `CoreError::MergeError` if any of the above
     /// conditions is violated.
-    pub fn merge(&mut self, other: ProtocolComponentStateDelta) -> Result<(), String> {
+    pub fn merge(&mut self, other: ProtocolComponentStateDelta) -> Result<(), MergeError> {
         if self.component_id != other.component_id {
-            return Err(format!(
-                "Can't merge ProtocolStates from differing identities; Expected {}, got {}",
-                self.component_id, other.component_id
+            return Err(MergeError::IdMismatch(
+                "ProtocolComponentStateDeltas".to_string(),
+                self.component_id.clone(),
+                other.component_id.clone(),
             ));
         }
         for attr in &other.deleted_attributes {
@@ -247,23 +249,25 @@ impl ProtocolChangesWithTx {
     ///
     /// # Errors
     /// This method will return an error if any of the above conditions is violated.
-    pub fn merge(&mut self, other: ProtocolChangesWithTx) -> Result<(), String> {
+    pub fn merge(&mut self, other: ProtocolChangesWithTx) -> Result<(), MergeError> {
         if self.tx.block_hash != other.tx.block_hash {
-            return Err(format!(
-                "Can't merge ProtocolStates from different blocks: {:x} != {:x}",
-                self.tx.block_hash, other.tx.block_hash,
+            return Err(MergeError::BlockMismatch(
+                "ProtocolChangesWithTx".to_string(),
+                self.tx.block_hash.clone(),
+                other.tx.block_hash,
             ));
         }
         if self.tx.hash == other.tx.hash {
-            return Err(format!(
-                "Can't merge ProtocolStates from the same transaction: {:x}",
-                self.tx.hash
+            return Err(MergeError::SameTransaction(
+                "ProtocolChangesWithTx".to_string(),
+                other.tx.hash,
             ));
         }
         if self.tx.index > other.tx.index {
-            return Err(format!(
-                "Can't merge ProtocolStates with lower transaction index: {} > {}",
-                self.tx.index, other.tx.index
+            return Err(MergeError::TransactionOrderError(
+                "ProtocolChangesWithTx".to_string(),
+                self.tx.index,
+                other.tx.index,
             ));
         }
         self.tx = other.tx;
@@ -445,19 +449,30 @@ mod test {
     #[rstest]
     #[case::diff_block(
     block_fixtures::create_transaction(HASH_256_1, HASH_256_1, 11),
-    Err(format ! ("Can't merge ProtocolStates from different blocks: {:x} != {}", Bytes::zero(32), HASH_256_1))
+    Err(MergeError::BlockMismatch(
+        "ProtocolChangesWithTx".to_string(),
+        Bytes::zero(32),
+        HASH_256_1.into(),
+    ))
     )]
     #[case::same_tx(
     block_fixtures::create_transaction(HASH_256_0, HASH_256_0, 11),
-    Err(format ! ("Can't merge ProtocolStates from the same transaction: {:x}", Bytes::zero(32)))
+    Err(MergeError::SameTransaction(
+        "ProtocolChangesWithTx".to_string(),
+        Bytes::zero(32),
+    ))
     )]
     #[case::lower_idx(
     block_fixtures::create_transaction(HASH_256_1, HASH_256_0, 1),
-    Err("Can't merge ProtocolStates with lower transaction index: 10 > 1".to_owned())
+    Err(MergeError::TransactionOrderError(
+        "ProtocolChangesWithTx".to_string(),
+        10,
+        1,
+    ))
     )]
     fn test_merge_pool_state_update_with_tx_errors(
         #[case] tx: Transaction,
-        #[case] exp: Result<(), String>,
+        #[case] exp: Result<(), MergeError>,
     ) {
         let mut base_state = protocol_state_with_tx();
 
@@ -478,10 +493,11 @@ mod test {
 
         assert_eq!(
             res,
-            Err(
-                "Can't merge ProtocolStates from differing identities; Expected State1, got State2"
-                    .to_owned()
-            )
+            Err(MergeError::IdMismatch(
+                "ProtocolComponentStateDeltas".to_string(),
+                "State1".to_string(),
+                "State2".to_string(),
+            ))
         );
     }
 }

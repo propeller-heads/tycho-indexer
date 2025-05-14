@@ -259,7 +259,13 @@ impl From<&dto::PaginationParams> for PaginationParams {
 }
 
 #[derive(Error, Debug, PartialEq)]
-pub enum DeltaError {
-    #[error("Id mismatch: {0} vs {1}")]
-    IdMismatch(String, String),
+pub enum MergeError {
+    #[error("Can't merge {0} from differring idendities: Expected {1}, got {2}")]
+    IdMismatch(String, String, String),
+    #[error("Can't merge {0} from different blocks: 0x{1:x} != 0x{2:x}")]
+    BlockMismatch(String, Bytes, Bytes),
+    #[error("Can't merge {0} from the same transaction: 0x{1:x}")]
+    SameTransaction(String, Bytes),
+    #[error("Can't merge {0} with lower transaction index: {1} > {2}")]
+    TransactionOrderError(String, u64, u64),
 }
