@@ -19,3 +19,9 @@ jobs:
       contents: read
     with:
       package_root: "propeller-swap-encoders"
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+      role_to_assume: ${{ secrets.ROLE_TO_ASSUME }}
+      aws_region: ${{ secrets.AWS_REGION }}
+      domain_owner: ${{ secrets.DOMAIN_OWNER }}
