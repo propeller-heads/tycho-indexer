@@ -1544,7 +1544,6 @@ pub mod fixtures {
                     number: 1,
                     ts: 1000,
                 }),
-
                 changes: vec![
                     TransactionChanges {
                         tx: Some(Transaction {
@@ -1573,7 +1572,6 @@ pub mod fixtures {
                                 balance: 50000000.encode_to_vec(),
                             }],
                         }],
-                        entity_changes: vec![],
                         component_changes: vec![ProtocolComponent {
                             id: "d417ff54652c09bd9f31f216b1a2e5d1e28c1dce1ba840c40d16f2b4d09b5902"
                                 .to_owned(),
@@ -1613,6 +1611,7 @@ pub mod fixtures {
                                     .as_bytes()
                                     .to_vec(),
                         }],
+                        ..Default::default()
                     },
                     TransactionChanges {
                         tx: Some(Transaction {
@@ -1645,8 +1644,6 @@ pub mod fixtures {
                                 balance: 10.encode_to_vec(),
                             }],
                         }],
-                        entity_changes: vec![],
-                        component_changes: vec![],
                         balance_changes: vec![BalanceChange {
                             token: address_from_str(WETH_ADDRESS),
                             balance: 10.encode_to_vec(),
@@ -1656,8 +1653,10 @@ pub mod fixtures {
                                     .as_bytes()
                                     .to_vec(),
                         }],
+                        ..Default::default()
                     },
                 ],
+                storage_changes: vec![],
             },
             1 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
@@ -1683,7 +1682,6 @@ pub mod fixtures {
                             },
                         ],
                     }],
-                    entity_changes: vec![],
                     component_changes: vec![ProtocolComponent {
                         id: "pc_1".to_owned(),
                         tokens: vec![
@@ -1712,7 +1710,9 @@ pub mod fixtures {
                             component_id: "pc_1".into(),
                         },
                     ],
+                    ..Default::default()
                 }],
+                storage_changes: vec![],
             },
             2 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
@@ -1760,7 +1760,6 @@ pub mod fixtures {
                             }],
                         },
                     ],
-                    entity_changes: vec![],
                     component_changes: vec![ProtocolComponent {
                         id: "pc_2".to_owned(),
                         tokens: vec![
@@ -1796,7 +1795,9 @@ pub mod fixtures {
                             component_id: "pc_1".into(),
                         },
                     ],
+                    ..Default::default()
                 }],
+                storage_changes: vec![],
             },
             3 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
@@ -1834,13 +1835,12 @@ pub mod fixtures {
                                 }],
                             },
                         ],
-                        entity_changes: vec![],
-                        component_changes: vec![],
                         balance_changes: vec![BalanceChange {
                             token: address_from_str(USDC_ADDRESS),
                             balance: 1_i32.to_be_bytes().to_vec(),
                             component_id: "pc_2".into(),
                         }],
+                        ..Default::default()
                     },
                     TransactionChanges {
                         tx: Some(pb_transactions(3, 2)),
@@ -1858,8 +1858,6 @@ pub mod fixtures {
                                 balance: 100_i32.to_be_bytes().to_vec(),
                             }],
                         }],
-                        entity_changes: vec![],
-                        component_changes: vec![],
                         balance_changes: vec![
                             BalanceChange {
                                 token: address_from_str(USDC_ADDRESS),
@@ -1872,8 +1870,10 @@ pub mod fixtures {
                                 component_id: "pc_2".into(),
                             },
                         ],
+                        ..Default::default()
                     },
                 ],
+                storage_changes: vec![],
             },
             4 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
@@ -1890,7 +1890,6 @@ pub mod fixtures {
                         change: ChangeType::Update.into(),
                         token_balances: vec![],
                     }],
-                    entity_changes: vec![],
                     component_changes: vec![ProtocolComponent {
                         id: "pc_3".to_owned(),
                         tokens: vec![address_from_str(DAI_ADDRESS), address_from_str(USDC_ADDRESS)],
@@ -1906,8 +1905,9 @@ pub mod fixtures {
                             implementation_type: 0,
                         }),
                     }],
-                    balance_changes: vec![],
+                    ..Default::default()
                 }],
+                storage_changes: vec![],
             },
             5 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
@@ -1949,8 +1949,6 @@ pub mod fixtures {
                             }],
                         },
                     ],
-                    entity_changes: vec![],
-                    component_changes: vec![],
                     balance_changes: vec![
                         BalanceChange {
                             token: address_from_str(USDC_ADDRESS),
@@ -1968,7 +1966,9 @@ pub mod fixtures {
                             component_id: "pc_1".into(),
                         },
                     ],
+                    ..Default::default()
                 }],
+                storage_changes: vec![],
             },
             _ => panic!("Requested BlockChanges version doesn't exist"),
         }
@@ -1991,7 +1991,6 @@ pub mod fixtures {
                             to: vec![0x0, 0x0, 0x0, 0x0],
                             index: 10,
                         }),
-                        contract_changes: vec![],
                         entity_changes: vec![
                             EntityChanges {
                                 component_id: "State1".to_owned(),
@@ -2028,8 +2027,7 @@ pub mod fixtures {
                                 ],
                             },
                         ],
-                        component_changes: vec![],
-                        balance_changes: vec![],
+                        ..Default::default()
                     },
                     TransactionChanges {
                         tx: Some(Transaction {
@@ -2038,7 +2036,6 @@ pub mod fixtures {
                             to: vec![0x51, 0x52, 0x53, 0x54],
                             index: 11,
                         }),
-                        contract_changes: vec![],
                         entity_changes: vec![EntityChanges {
                             component_id: "State1".to_owned(),
                             attributes: vec![
@@ -2079,14 +2076,15 @@ pub mod fixtures {
                             balance: 1_i32.to_le_bytes().to_vec(),
                             component_id: "Balance1".into(),
                         }],
+                        ..Default::default()
                     },
                 ],
+                storage_changes: vec![],
             },
             1 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
                 changes: vec![TransactionChanges {
                     tx: Some(pb_transactions(1, 1)),
-                    contract_changes: vec![],
                     entity_changes: vec![EntityChanges {
                         component_id: "pc_1".to_owned(),
                         attributes: vec![
@@ -2127,13 +2125,14 @@ pub mod fixtures {
                         balance: 1_i32.to_be_bytes().to_vec(),
                         component_id: "pc_1".into(),
                     }],
+                    ..Default::default()
                 }],
+                storage_changes: vec![],
             },
             2 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
                 changes: vec![TransactionChanges {
                     tx: Some(pb_transactions(2, 1)),
-                    contract_changes: vec![],
                     entity_changes: vec![EntityChanges {
                         component_id: "pc_1".to_owned(),
                         attributes: vec![Attribute {
@@ -2175,14 +2174,15 @@ pub mod fixtures {
                             component_id: "pc_1".into(),
                         },
                     ],
+                    ..Default::default()
                 }],
+                storage_changes: vec![],
             },
             3 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
                 changes: vec![
                     TransactionChanges {
                         tx: Some(pb_transactions(3, 2)),
-                        contract_changes: vec![],
                         entity_changes: vec![EntityChanges {
                             component_id: "pc_1".to_owned(),
                             attributes: vec![Attribute {
@@ -2193,16 +2193,15 @@ pub mod fixtures {
                                 change: ChangeType::Update.into(),
                             }],
                         }],
-                        component_changes: vec![],
                         balance_changes: vec![BalanceChange {
                             token: address_from_str(USDC_ADDRESS),
                             balance: 3_i32.to_be_bytes().to_vec(),
                             component_id: "pc_2".into(),
                         }],
+                        ..Default::default()
                     },
                     TransactionChanges {
                         tx: Some(pb_transactions(3, 1)),
-                        contract_changes: vec![],
                         entity_changes: vec![EntityChanges {
                             component_id: "pc_1".to_owned(),
                             attributes: vec![Attribute {
@@ -2213,7 +2212,6 @@ pub mod fixtures {
                                 change: ChangeType::Update.into(),
                             }],
                         }],
-                        component_changes: vec![],
                         balance_changes: vec![
                             BalanceChange {
                                 token: address_from_str(USDC_ADDRESS),
@@ -2226,15 +2224,16 @@ pub mod fixtures {
                                 component_id: "pc_1".into(),
                             },
                         ],
+                        ..Default::default()
                     },
                 ],
+                storage_changes: vec![],
             },
             4 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
                 changes: vec![
                     TransactionChanges {
                         tx: Some(pb_transactions(4, 1)),
-                        contract_changes: vec![],
                         entity_changes: vec![
                             EntityChanges {
                                 component_id: "pc_1".to_owned(),
@@ -2271,11 +2270,10 @@ pub mod fixtures {
                                 implementation_type: 0,
                             }),
                         }],
-                        balance_changes: vec![],
+                        ..Default::default()
                     },
                     TransactionChanges {
                         tx: Some(pb_transactions(4, 2)),
-                        contract_changes: vec![],
                         entity_changes: vec![
                             EntityChanges {
                                 component_id: "pc_3".to_owned(),
@@ -2296,7 +2294,6 @@ pub mod fixtures {
                                 }],
                             },
                         ],
-                        component_changes: vec![],
                         balance_changes: vec![
                             BalanceChange {
                                 token: address_from_str(USDC_ADDRESS),
@@ -2309,14 +2306,15 @@ pub mod fixtures {
                                 component_id: "pc_1".into(),
                             },
                         ],
+                        ..Default::default()
                     },
                 ],
+                storage_changes: vec![],
             },
             5 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
                 changes: vec![TransactionChanges {
                     tx: Some(pb_transactions(5, 1)),
-                    contract_changes: vec![],
                     entity_changes: vec![EntityChanges {
                         component_id: "pc_1".to_owned(),
                         attributes: vec![Attribute {
@@ -2348,7 +2346,9 @@ pub mod fixtures {
                         balance: 1000_i32.to_be_bytes().to_vec(),
                         component_id: "pc_1".into(),
                     }],
+                    ..Default::default()
                 }],
+                storage_changes: vec![],
             },
             _ => panic!("Requested unknown version of block entity changes"),
         }
