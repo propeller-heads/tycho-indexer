@@ -1477,10 +1477,7 @@ impl ExtractorGateway for ExtractorPgGateway {
 mod test {
     use float_eq::assert_float_eq;
     use mockall::mock;
-    use tycho_common::{
-        models::blockchain::{Transaction, TxWithChanges},
-        traits::TokenOwnerFinding,
-    };
+    use tycho_common::{models::blockchain::TxWithChanges, traits::TokenOwnerFinding};
 
     use super::*;
     use crate::testing::{fixtures as pb_fixtures, MockGateway};
@@ -1864,7 +1861,6 @@ mod test {
                         ..Default::default()
                     },
                 )]),
-                account_deltas: HashMap::new(),
                 state_updates: HashMap::from([(
                     "TestComponent".to_string(),
                     ProtocolComponentStateDelta::new(
@@ -1903,8 +1899,7 @@ mod test {
                         ),
                     ]),
                 )]),
-                account_balance_changes: HashMap::new(),
-                tx: Transaction::default(),
+                ..Default::default()
             }],
         );
 
@@ -2406,8 +2401,6 @@ mod test_serial_db {
             ]),
             vec![TxWithChanges {
                 tx: fixtures::create_transaction(fixtures::HASH_256_0, NATIVE_BLOCK_HASH_0, 10),
-                state_updates: HashMap::new(),
-                balance_changes: HashMap::new(),
                 protocol_components: HashMap::from([(
                     "pool".to_string(),
                     ProtocolComponent {
@@ -2426,8 +2419,7 @@ mod test_serial_db {
                         change: Default::default(),
                     },
                 )]),
-                account_deltas: HashMap::new(),
-                account_balance_changes: HashMap::new(),
+                ..Default::default()
             }],
         )
     }
@@ -2478,8 +2470,9 @@ mod test_serial_db {
             0,
             false,
             vec![
-                TxWithChanges::new(
-                    HashMap::from([(
+                TxWithChanges {
+                    tx: fixtures::create_transaction(VM_TX_HASH_0, fixtures::HASH_256_0, 1),
+                    protocol_components: HashMap::from([(
                         component_id.clone(),
                         ProtocolComponent {
                             id: component_id.clone(),
@@ -2494,7 +2487,7 @@ mod test_serial_db {
                             created_at: Default::default(),
                         },
                     )]),
-                    [(
+                    account_deltas: HashMap::from([(
                         VM_CONTRACT.into(),
                         AccountDelta::new(
                             Chain::Ethereum,
@@ -2504,11 +2497,8 @@ mod test_serial_db {
                             Some(vec![0, 0, 0, 0].into()),
                             ChangeType::Creation,
                         ),
-                    )]
-                    .into_iter()
-                    .collect(),
-                    HashMap::new(),
-                    HashMap::from([(
+                    )]),
+                    balance_changes: HashMap::from([(
                         component_id.clone(),
                         HashMap::from([(
                             base_token.clone(),
@@ -2521,7 +2511,7 @@ mod test_serial_db {
                             },
                         )]),
                     )]),
-                    HashMap::from([(
+                    account_balance_changes: HashMap::from([(
                         VM_CONTRACT.into(),
                         HashMap::from([(
                             base_token.clone(),
@@ -2533,11 +2523,11 @@ mod test_serial_db {
                             },
                         )]),
                     )]),
-                    fixtures::create_transaction(VM_TX_HASH_0, fixtures::HASH_256_0, 1),
-                ),
-                TxWithChanges::new(
-                    HashMap::new(),
-                    [(
+                    ..Default::default()
+                },
+                TxWithChanges {
+                    tx: fixtures::create_transaction(VM_TX_HASH_1, fixtures::HASH_256_0, 2),
+                    account_deltas: HashMap::from([(
                         VM_CONTRACT.into(),
                         AccountDelta::new(
                             Chain::Ethereum,
@@ -2547,11 +2537,8 @@ mod test_serial_db {
                             None,
                             ChangeType::Update,
                         ),
-                    )]
-                    .into_iter()
-                    .collect(),
-                    HashMap::new(),
-                    HashMap::from([(
+                    )]),
+                    balance_changes: HashMap::from([(
                         component_id.clone(),
                         HashMap::from([(
                             base_token.clone(),
@@ -2564,7 +2551,7 @@ mod test_serial_db {
                             },
                         )]),
                     )]),
-                    HashMap::from([(
+                    account_balance_changes: HashMap::from([(
                         VM_CONTRACT.into(),
                         HashMap::from([(
                             base_token.clone(),
@@ -2576,8 +2563,8 @@ mod test_serial_db {
                             },
                         )]),
                     )]),
-                    fixtures::create_transaction(VM_TX_HASH_1, fixtures::HASH_256_0, 2),
-                ),
+                    ..Default::default()
+                },
             ],
         )
     }
@@ -2599,14 +2586,11 @@ mod test_serial_db {
                     Bytes::from_str(USDC_ADDRESS).unwrap(),
                     Bytes::from_str(WETH_ADDRESS).unwrap(),
                 ],
-                contract_addresses: vec![],
                 creation_tx: Bytes::from_str(
                     "0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6",
                 )
                 .unwrap(),
-                static_attributes: Default::default(),
-                created_at: Default::default(),
-                change: Default::default(),
+                ..Default::default()
             }];
 
             gw.advance(&msg, "cursor@500", false)
@@ -2625,7 +2609,6 @@ mod test_serial_db {
                 .await
                 .expect("test successfully inserted native contract")
                 .entity;
-            println!("{res:?}");
 
             assert_eq!(res, exp);
         })
@@ -2803,7 +2786,6 @@ mod test_serial_db {
                         deleted_attributes: HashSet::new(),
                     }),
                 ]),
-                new_tokens: HashMap::new(),
                 new_protocol_components: HashMap::from([
                     ("pc_2".to_string(), ProtocolComponent {
                         id: "pc_2".to_string(),
@@ -2856,9 +2838,7 @@ mod test_serial_db {
                         }),
                     ])),
                 ]),
-                account_balances: HashMap::new(),
-                component_tvl: HashMap::new(),
-                account_deltas: Default::default(),
+                ..Default::default()
             };
 
             assert_eq!(
@@ -3000,8 +2980,6 @@ mod test_serial_db {
                         change: ChangeType::Update,
                     }),
                 ]),
-                new_tokens: HashMap::new(),
-                new_protocol_components: HashMap::new(),
                 deleted_protocol_components: HashMap::from([
                     ("pc_3".to_string(), ProtocolComponent {
                         id: "pc_3".to_string(),
@@ -3063,8 +3041,7 @@ mod test_serial_db {
                         }),
                     ]))
                 ]),
-                component_tvl: HashMap::new(),
-                state_deltas: Default::default(),
+                ..Default::default()
             };
 
             assert_eq!(
