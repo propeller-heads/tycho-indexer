@@ -92,7 +92,7 @@ ratatui = "0.29.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
-tycho-execution = "0.81.0"
+tycho-execution = "0.81.1"
 
 [features]
 default = ["evm"]
