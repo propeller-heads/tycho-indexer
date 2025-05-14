@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 
 error TokenTransfer__AddressZero();
+error TokenTransfer__InvalidTransferType();
 
 contract TokenTransfer {
     using SafeERC20 for IERC20;
@@ -45,7 +46,9 @@ contract TokenTransfer {
         uint256 amount,
         TransferType transferType
     ) internal {
-        if (transferType == TransferType.TRANSFER_TO_PROTOCOL) {
+        if (transferType == TransferType.NONE) {
+            return;
+        } else if (transferType == TransferType.TRANSFER_TO_PROTOCOL) {
             if (tokenIn == address(0)) {
                 payable(receiver).transfer(amount);
             } else {
@@ -65,6 +68,8 @@ contract TokenTransfer {
             permit2.transferFrom(
                 sender, address(this), uint160(amount), tokenIn
             );
+        } else {
+            revert TokenTransfer__InvalidTransferType();
         }
     }
 }
