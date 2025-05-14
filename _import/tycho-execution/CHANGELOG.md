@@ -1,3 +1,10 @@
+## [0.89.0](https://github.com/propeller-heads/tycho-execution/compare/0.88.0...0.89.0) (2025-05-14)
+
+
+### Features
+
+* Remove special handling of the Univ4 callback ([f14c8ee](https://github.com/propeller-heads/tycho-execution/commit/f14c8ee29ba67ca4cd8cfe8b00e8b907a0352f9a))
+
 ## [0.88.0](https://github.com/propeller-heads/tycho-execution/compare/0.87.0...0.88.0) (2025-05-06)
 
 
