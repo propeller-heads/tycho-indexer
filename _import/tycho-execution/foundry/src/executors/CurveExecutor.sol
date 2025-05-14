@@ -149,6 +149,11 @@ contract CurveExecutor is IExecutor, TokenTransfer {
         receiver = address(bytes20(data[65:85]));
     }
 
+    /**
+     * @dev Even though this contract is mostly called through delegatecall, we still want to be able to receive ETH.
+     * This is needed when using the executor directly and it makes testing easier.
+     * There are some curve pools that take ETH directly.
+     */
     receive() external payable {
         require(msg.sender.code.length != 0);
     }

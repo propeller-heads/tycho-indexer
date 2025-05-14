@@ -184,8 +184,11 @@ contract UniswapV4Executor is
         external
         returns (bytes memory)
     {
-        verifyCallback(data);
-        return _unlockCallback(data);
+        bytes calldata stripped = data[68:];
+        verifyCallback(stripped);
+        // Our general callback logic returns a not ABI encoded result.
+        // However, the pool manager expects the result to be ABI encoded. That is why we need to encode it here again.
+        return abi.encode(_unlockCallback(stripped));
     }
 
     function verifyCallback(bytes calldata) public view poolManagerOnly {}
