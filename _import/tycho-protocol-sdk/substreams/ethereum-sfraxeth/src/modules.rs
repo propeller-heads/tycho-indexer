@@ -38,7 +38,7 @@ pub fn map_components(
                         // a log.address = vault_address is the deployment tx
                         if is_deployment_tx(tx, &vault_address) {
                             Some(
-                                ProtocolComponent::at_contract(&vault_address, &tx.into())
+                                ProtocolComponent::at_contract(&vault_address)
                                     .with_tokens(&[
                                         locked_asset.as_slice(),
                                         vault_address.as_slice(),
@@ -120,7 +120,7 @@ pub fn store_reward_cycles(block_reward_cycles: BlockRewardCycles, store: StoreS
             let address_hex = format!("0x{}", hex::encode(&reward_cycle.vault_address));
             store.set(
                 reward_cycle.ord,
-                format!("reward_cycle:{}", address_hex),
+                format!("reward_cycle:{address_hex}"),
                 &reward_cycle.next_reward_amount,
             );
         });
@@ -144,7 +144,7 @@ pub fn map_relative_balances(
                 let address_hex = format!("0x{}", hex::encode(address_bytes_be));
 
                 if store
-                    .get_last(format!("pool:{}", address_hex))
+                    .get_last(format!("pool:{address_hex}"))
                     .is_some()
                 {
                     substreams::log::info!(
@@ -177,7 +177,7 @@ pub fn map_relative_balances(
                 let address_bytes_be = vault_log.address();
                 let address_hex = format!("0x{}", hex::encode(address_bytes_be));
                 if store
-                    .get_last(format!("pool:{}", address_hex))
+                    .get_last(format!("pool:{address_hex}"))
                     .is_some()
                 {
                     deltas.extend_from_slice(&[
@@ -206,7 +206,7 @@ pub fn map_relative_balances(
                 let address_bytes_be = vault_log.address();
                 let address_hex = format!("0x{}", hex::encode(address_bytes_be));
                 if store
-                    .get_last(format!("pool:{}", address_hex))
+                    .get_last(format!("pool:{address_hex}"))
                     .is_some()
                 {
                     // When the NextRewardsCycle event is emitted:
@@ -221,7 +221,7 @@ pub fn map_relative_balances(
                     if let Some(last_reward_amount) = reward_store
                         .deltas
                         .iter()
-                        .find(|el| el.key == format!("reward_cycle:{}", address_hex))
+                        .find(|el| el.key == format!("reward_cycle:{address_hex}"))
                         .map(|el| el.old_value.clone())
                     {
                         substreams::log::info!(

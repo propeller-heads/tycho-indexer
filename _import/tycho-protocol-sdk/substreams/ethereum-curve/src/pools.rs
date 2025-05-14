@@ -48,12 +48,6 @@ fn create_component(
         Ok(Some((
             ProtocolComponent {
                 id: pool.address.clone(),
-                tx: Some(Transaction {
-                    to: tx.to.clone(),
-                    from: tx.from.clone(),
-                    hash: tx.hash.clone(),
-                    index: tx.index.into(),
-                }),
                 tokens: pool
                     .tokens
                     .clone()

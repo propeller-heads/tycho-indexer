@@ -221,8 +221,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ethereum-ambient"
+version = "0.6.1"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "ethabi 18.0.0",
+ "hex",
+ "hex-literal 0.4.1",
+ "num-bigint",
+ "prost 0.11.9",
+ "quote",
+ "substreams",
+ "substreams-ethereum",
+ "tiny-keccak",
+ "tycho-substreams 0.2.1 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=52d5021)",
+]
+
+[[package]]
 name = "ethereum-balancer-v2"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "anyhow",
  "bytes",
@@ -236,12 +254,12 @@ dependencies = [
  "prost-types 0.12.6",
  "substreams",
  "substreams-ethereum",
- "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
+ "tycho-substreams 0.2.1 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=52d5021)",
 ]
 
 [[package]]
 name = "ethereum-curve"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "anyhow",
  "bytes",
@@ -257,7 +275,7 @@ dependencies = [
  "serde_qs",
  "substreams",
  "substreams-ethereum",
- "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
+ "tycho-substreams 0.2.1 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=52d5021)",
 ]
 
 [[package]]
@@ -300,6 +318,26 @@ dependencies = [
 
 [[package]]
 name = "ethereum-sfrax"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "ethabi 17.2.0",
+ "getrandom",
+ "hex",
+ "hex-literal 0.4.1",
+ "itertools 0.12.1",
+ "num-bigint",
+ "num-traits",
+ "prost 0.11.9",
+ "prost-types 0.11.9",
+ "regex",
+ "substreams",
+ "substreams-ethereum",
+ "tycho-substreams 0.2.1 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=52d5021)",
+]
+
+[[package]]
+name = "ethereum-sfraxeth"
 version = "0.1.1"
 dependencies = [
  "anyhow",
@@ -315,27 +353,7 @@ dependencies = [
  "regex",
  "substreams",
  "substreams-ethereum",
- "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
-]
-
-[[package]]
-name = "ethereum-sfraxeth"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ethabi 17.2.0",
- "getrandom",
- "hex",
- "hex-literal 0.4.1",
- "itertools 0.12.1",
- "num-bigint",
- "num-traits",
- "prost 0.11.9",
- "prost-types 0.11.9",
- "regex",
- "substreams",
- "substreams-ethereum",
- "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
+ "tycho-substreams 0.2.1 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=52d5021)",
 ]
 
 [[package]]
@@ -352,7 +370,7 @@ dependencies = [
  "serde-sibor",
  "substreams",
  "substreams-ethereum",
- "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=3c08359)",
+ "tycho-substreams 0.2.1 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=52d5021)",
 ]
 
 [[package]]
@@ -370,7 +388,7 @@ dependencies = [
  "serde_qs",
  "substreams",
  "substreams-ethereum",
- "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=3c08359)",
+ "tycho-substreams 0.2.1 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=52d5021)",
 ]
 
 [[package]]
@@ -1376,24 +1394,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "substreams-ethereum-ambient"
-version = "0.5.2"
-dependencies = [
- "anyhow",
- "bytes",
- "ethabi 18.0.0",
- "hex",
- "hex-literal 0.4.1",
- "num-bigint",
- "prost 0.11.9",
- "quote",
- "substreams",
- "substreams-ethereum",
- "tiny-keccak",
- "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=f90c33b)",
-]
-
-[[package]]
 name = "substreams-ethereum-core"
 version = "0.9.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1646,8 +1646,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-substreams"
-version = "0.2.0"
-source = "git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=f90c33b#f90c33bcc229a1bca1fe86ee6fc4024cbdc25aeb"
+version = "0.2.1"
 dependencies = [
  "ethabi 18.0.0",
  "hex",
@@ -1663,6 +1662,7 @@ dependencies = [
 [[package]]
 name = "tycho-substreams"
 version = "0.2.1"
+source = "git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=52d5021#52d502198e9aa964814ef5f139df0886c3eb7bb0"
 dependencies = [
  "ethabi 18.0.0",
  "hex",

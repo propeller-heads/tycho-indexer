@@ -1,14 +1,14 @@
 [package]
-name = "substreams-ethereum-ambient"
-version = "0.5.2"
+name = "ethereum-ambient"
+version = "0.6.1"
 edition = "2021"
 
 [lib]
-name = "substreams_ethereum_ambient"
+name = "ethereum_ambient"
 crate-type = ["cdylib"]
 
 [dependencies]
-tycho-substreams = { git = "https://github.com/propeller-heads/tycho-protocol-sdk.git", rev = "f90c33b" }
+tycho-substreams = { git = "https://github.com/propeller-heads/tycho-protocol-sdk.git", rev = "52d5021" }
 substreams = "0.5.22"
 substreams-ethereum = "0.9.9"
 prost = "0.11"

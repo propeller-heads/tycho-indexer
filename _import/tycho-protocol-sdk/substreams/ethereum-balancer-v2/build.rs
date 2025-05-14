@@ -26,10 +26,10 @@ fn main() -> Result<()> {
 
         let contract_name = file_name.split('.').next().unwrap();
 
-        let input_path = format!("{}/{}", abi_folder, file_name);
-        let output_path = format!("{}/{}.rs", output_folder, contract_name);
+        let input_path = format!("{abi_folder}/{file_name}");
+        let output_path = format!("{output_folder}/{contract_name}.rs");
 
-        mod_rs_content.push_str(&format!("pub mod {};\n", contract_name));
+        mod_rs_content.push_str(&format!("pub mod {contract_name};\n"));
 
         if std::path::Path::new(&output_path).exists() {
             continue;
@@ -40,7 +40,7 @@ fn main() -> Result<()> {
             .write_to_file(&output_path)?;
     }
 
-    let mod_rs_path = format!("{}/mod.rs", output_folder);
+    let mod_rs_path = format!("{output_folder}/mod.rs");
     let mut mod_rs_file = fs::File::create(mod_rs_path)?;
 
     mod_rs_file.write_all(mod_rs_content.as_bytes())?;

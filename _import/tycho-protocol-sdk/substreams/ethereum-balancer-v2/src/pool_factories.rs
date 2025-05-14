@@ -60,24 +60,21 @@ pub fn address_map(
             let pool_registered = get_pool_registered(tx, &pool_created.pool);
 
             Some(
-                ProtocolComponent::new(
-                    &format!("0x{}", hex::encode(pool_registered.pool_id)),
-                    &(tx.into()),
-                )
-                .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
-                .with_tokens(&create_call.tokens)
-                .with_attributes(&[
-                    ("pool_type", "WeightedPoolFactoryV1".as_bytes()),
-                    ("normalized_weights", &json_serialize_bigint_list(&create_call.weights)),
-                    (
-                        "fee",
-                        &create_call
-                            .swap_fee_percentage
-                            .to_signed_bytes_be(),
-                    ),
-                    ("manual_updates", &[1u8]),
-                ])
-                .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
+                ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
+                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
+                    .with_tokens(&create_call.tokens)
+                    .with_attributes(&[
+                        ("pool_type", "WeightedPoolFactoryV1".as_bytes()),
+                        ("normalized_weights", &json_serialize_bigint_list(&create_call.weights)),
+                        (
+                            "fee",
+                            &create_call
+                                .swap_fee_percentage
+                                .to_signed_bytes_be(),
+                        ),
+                        ("manual_updates", &[1u8]),
+                    ])
+                    .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
             )
         }
         hex!("cC508a455F5b0073973107Db6a878DdBDab957bC") => {
@@ -88,28 +85,28 @@ pub fn address_map(
             let pool_registered = get_pool_registered(tx, &pool_created.pool);
 
             Some(
-                ProtocolComponent::new(
-                    &format!("0x{}", hex::encode(pool_registered.pool_id)),
-                    &(tx.into()),
-                )
-                .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
-                .with_tokens(&create_call.tokens)
-                .with_attributes(&[
-                    ("pool_type", "WeightedPoolFactoryV2".as_bytes()),
-                    (
-                        "normalized_weights",
-                        &json_serialize_bigint_list(&create_call.normalized_weights),
-                    ),
-                    ("rate_providers", &json_serialize_address_list(&create_call.rate_providers)),
-                    (
-                        "fee",
-                        &create_call
-                            .swap_fee_percentage
-                            .to_signed_bytes_be(),
-                    ),
-                    ("manual_updates", &[1u8]),
-                ])
-                .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
+                ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
+                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
+                    .with_tokens(&create_call.tokens)
+                    .with_attributes(&[
+                        ("pool_type", "WeightedPoolFactoryV2".as_bytes()),
+                        (
+                            "normalized_weights",
+                            &json_serialize_bigint_list(&create_call.normalized_weights),
+                        ),
+                        (
+                            "rate_providers",
+                            &json_serialize_address_list(&create_call.rate_providers),
+                        ),
+                        (
+                            "fee",
+                            &create_call
+                                .swap_fee_percentage
+                                .to_signed_bytes_be(),
+                        ),
+                        ("manual_updates", &[1u8]),
+                    ])
+                    .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
             )
         }
         hex!("5Dd94Da3644DDD055fcf6B3E1aa310Bb7801EB8b") => {
@@ -120,28 +117,28 @@ pub fn address_map(
             let pool_registered = get_pool_registered(tx, &pool_created.pool);
 
             Some(
-                ProtocolComponent::new(
-                    &format!("0x{}", hex::encode(pool_registered.pool_id)),
-                    &(tx.into()),
-                )
-                .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
-                .with_tokens(&create_call.tokens)
-                .with_attributes(&[
-                    ("pool_type", "WeightedPoolFactoryV3".as_bytes()),
-                    (
-                        "normalized_weights",
-                        &json_serialize_bigint_list(&create_call.normalized_weights),
-                    ),
-                    ("rate_providers", &json_serialize_address_list(&create_call.rate_providers)),
-                    (
-                        "fee",
-                        &create_call
-                            .swap_fee_percentage
-                            .to_signed_bytes_be(),
-                    ),
-                    ("manual_updates", &[1u8]),
-                ])
-                .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
+                ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
+                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
+                    .with_tokens(&create_call.tokens)
+                    .with_attributes(&[
+                        ("pool_type", "WeightedPoolFactoryV3".as_bytes()),
+                        (
+                            "normalized_weights",
+                            &json_serialize_bigint_list(&create_call.normalized_weights),
+                        ),
+                        (
+                            "rate_providers",
+                            &json_serialize_address_list(&create_call.rate_providers),
+                        ),
+                        (
+                            "fee",
+                            &create_call
+                                .swap_fee_percentage
+                                .to_signed_bytes_be(),
+                        ),
+                        ("manual_updates", &[1u8]),
+                    ])
+                    .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
             )
         }
         hex!("897888115Ada5773E02aA29F775430BFB5F34c51") => {
@@ -152,28 +149,28 @@ pub fn address_map(
             let pool_registered = get_pool_registered(tx, &pool_created.pool);
 
             Some(
-                ProtocolComponent::new(
-                    &format!("0x{}", hex::encode(pool_registered.pool_id)),
-                    &(tx.into()),
-                )
-                .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
-                .with_tokens(&create_call.tokens)
-                .with_attributes(&[
-                    ("pool_type", "WeightedPoolFactoryV4".as_bytes()),
-                    (
-                        "normalized_weights",
-                        &json_serialize_bigint_list(&create_call.normalized_weights),
-                    ),
-                    ("rate_providers", &json_serialize_address_list(&create_call.rate_providers)),
-                    (
-                        "fee",
-                        &create_call
-                            .swap_fee_percentage
-                            .to_signed_bytes_be(),
-                    ),
-                    ("manual_updates", &[1u8]),
-                ])
-                .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
+                ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
+                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
+                    .with_tokens(&create_call.tokens)
+                    .with_attributes(&[
+                        ("pool_type", "WeightedPoolFactoryV4".as_bytes()),
+                        (
+                            "normalized_weights",
+                            &json_serialize_bigint_list(&create_call.normalized_weights),
+                        ),
+                        (
+                            "rate_providers",
+                            &json_serialize_address_list(&create_call.rate_providers),
+                        ),
+                        (
+                            "fee",
+                            &create_call
+                                .swap_fee_percentage
+                                .to_signed_bytes_be(),
+                        ),
+                        ("manual_updates", &[1u8]),
+                    ])
+                    .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
             )
         }
         hex!("DB8d758BCb971e482B2C45f7F8a7740283A1bd3A") => {
@@ -185,25 +182,25 @@ pub fn address_map(
             let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
 
             Some(
-                ProtocolComponent::new(
-                    &format!("0x{}", hex::encode(pool_registered.pool_id)),
-                    &(tx.into()),
-                )
-                .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
-                .with_tokens(&tokens_registered.tokens)
-                .with_attributes(&[
-                    ("pool_type", "ComposableStablePoolFactory".as_bytes()),
-                    ("bpt", &pool_created.pool),
-                    (
-                        "fee",
-                        &create_call
-                            .swap_fee_percentage
-                            .to_signed_bytes_be(),
-                    ),
-                    ("rate_providers", &json_serialize_address_list(&create_call.rate_providers)),
-                    ("manual_updates", &[1u8]),
-                ])
-                .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
+                ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
+                    .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
+                    .with_tokens(&tokens_registered.tokens)
+                    .with_attributes(&[
+                        ("pool_type", "ComposableStablePoolFactory".as_bytes()),
+                        ("bpt", &pool_created.pool),
+                        (
+                            "fee",
+                            &create_call
+                                .swap_fee_percentage
+                                .to_signed_bytes_be(),
+                        ),
+                        (
+                            "rate_providers",
+                            &json_serialize_address_list(&create_call.rate_providers),
+                        ),
+                        ("manual_updates", &[1u8]),
+                    ])
+                    .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
             )
         }
         hex!("813EE7a840CE909E7Fea2117A44a90b8063bd4fd") => {
@@ -215,32 +212,29 @@ pub fn address_map(
             let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
 
             Some(
-                ProtocolComponent::new(
-                    &format!("0x{}", hex::encode(pool_registered.pool_id)),
-                    &(tx.into()),
-                )
-                .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
-                .with_tokens(&tokens_registered.tokens)
-                .with_attributes(&[
-                    ("pool_type", "ERC4626LinearPoolFactory".as_bytes()),
-                    (
-                        "upper_target",
-                        &create_call
-                            .upper_target
-                            .to_signed_bytes_be(),
-                    ),
-                    ("manual_updates", &[1u8]),
-                    ("bpt", &pool_created.pool),
-                    ("main_token", &create_call.main_token),
-                    ("wrapped_token", &create_call.wrapped_token),
-                    (
-                        "fee",
-                        &create_call
-                            .swap_fee_percentage
-                            .to_signed_bytes_be(),
-                    ),
-                ])
-                .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
+                ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
+                    .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
+                    .with_tokens(&tokens_registered.tokens)
+                    .with_attributes(&[
+                        ("pool_type", "ERC4626LinearPoolFactory".as_bytes()),
+                        (
+                            "upper_target",
+                            &create_call
+                                .upper_target
+                                .to_signed_bytes_be(),
+                        ),
+                        ("manual_updates", &[1u8]),
+                        ("bpt", &pool_created.pool),
+                        ("main_token", &create_call.main_token),
+                        ("wrapped_token", &create_call.wrapped_token),
+                        (
+                            "fee",
+                            &create_call
+                                .swap_fee_percentage
+                                .to_signed_bytes_be(),
+                        ),
+                    ])
+                    .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
             )
         }
         hex!("5F43FBa61f63Fa6bFF101a0A0458cEA917f6B347") => {
@@ -252,32 +246,29 @@ pub fn address_map(
             let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
 
             Some(
-                ProtocolComponent::new(
-                    &format!("0x{}", hex::encode(pool_registered.pool_id)),
-                    &(tx.into()),
-                )
-                .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
-                .with_tokens(&tokens_registered.tokens)
-                .with_attributes(&[
-                    ("pool_type", "EulerLinearPoolFactory".as_bytes()),
-                    (
-                        "upper_target",
-                        &create_call
-                            .upper_target
-                            .to_signed_bytes_be(),
-                    ),
-                    ("manual_updates", &[1u8]),
-                    ("bpt", &pool_created.pool),
-                    ("main_token", &create_call.main_token),
-                    ("wrapped_token", &create_call.wrapped_token),
-                    (
-                        "fee",
-                        &create_call
-                            .swap_fee_percentage
-                            .to_signed_bytes_be(),
-                    ),
-                ])
-                .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
+                ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
+                    .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
+                    .with_tokens(&tokens_registered.tokens)
+                    .with_attributes(&[
+                        ("pool_type", "EulerLinearPoolFactory".as_bytes()),
+                        (
+                            "upper_target",
+                            &create_call
+                                .upper_target
+                                .to_signed_bytes_be(),
+                        ),
+                        ("manual_updates", &[1u8]),
+                        ("bpt", &pool_created.pool),
+                        ("main_token", &create_call.main_token),
+                        ("wrapped_token", &create_call.wrapped_token),
+                        (
+                            "fee",
+                            &create_call
+                                .swap_fee_percentage
+                                .to_signed_bytes_be(),
+                        ),
+                    ])
+                    .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
             )
         }
         // ❌ Reading the deployed factory for Gearbox showcases that it's currently disabled
@@ -337,32 +328,29 @@ pub fn address_map(
             let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
 
             Some(
-                ProtocolComponent::new(
-                    &format!("0x{}", hex::encode(pool_registered.pool_id)),
-                    &(tx.into()),
-                )
-                .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
-                .with_tokens(&tokens_registered.tokens)
-                .with_attributes(&[
-                    ("pool_type", "SiloLinearPoolFactory".as_bytes()),
-                    (
-                        "upper_target",
-                        &create_call
-                            .upper_target
-                            .to_signed_bytes_be(),
-                    ),
-                    ("manual_updates", &[1u8]),
-                    ("bpt", &pool_created.pool),
-                    ("main_token", &create_call.main_token),
-                    ("wrapped_token", &create_call.wrapped_token),
-                    (
-                        "fee",
-                        &create_call
-                            .swap_fee_percentage
-                            .to_signed_bytes_be(),
-                    ),
-                ])
-                .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
+                ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
+                    .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
+                    .with_tokens(&tokens_registered.tokens)
+                    .with_attributes(&[
+                        ("pool_type", "SiloLinearPoolFactory".as_bytes()),
+                        (
+                            "upper_target",
+                            &create_call
+                                .upper_target
+                                .to_signed_bytes_be(),
+                        ),
+                        ("manual_updates", &[1u8]),
+                        ("bpt", &pool_created.pool),
+                        ("main_token", &create_call.main_token),
+                        ("wrapped_token", &create_call.wrapped_token),
+                        (
+                            "fee",
+                            &create_call
+                                .swap_fee_percentage
+                                .to_signed_bytes_be(),
+                        ),
+                    ])
+                    .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
             )
         }
         hex!("5F5222Ffa40F2AEd6380D022184D6ea67C776eE0") => {
@@ -374,32 +362,29 @@ pub fn address_map(
             let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
 
             Some(
-                ProtocolComponent::new(
-                    &format!("0x{}", hex::encode(pool_registered.pool_id)),
-                    &(tx.into()),
-                )
-                .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
-                .with_tokens(&tokens_registered.tokens)
-                .with_attributes(&[
-                    ("pool_type", "YearnLinearPoolFactory".as_bytes()),
-                    (
-                        "upper_target",
-                        &create_call
-                            .upper_target
-                            .to_signed_bytes_be(),
-                    ),
-                    ("manual_updates", &[1u8]),
-                    ("bpt", &pool_created.pool),
-                    ("main_token", &create_call.main_token),
-                    ("wrapped_token", &create_call.wrapped_token),
-                    (
-                        "fee",
-                        &create_call
-                            .swap_fee_percentage
-                            .to_signed_bytes_be(),
-                    ),
-                ])
-                .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
+                ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
+                    .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
+                    .with_tokens(&tokens_registered.tokens)
+                    .with_attributes(&[
+                        ("pool_type", "YearnLinearPoolFactory".as_bytes()),
+                        (
+                            "upper_target",
+                            &create_call
+                                .upper_target
+                                .to_signed_bytes_be(),
+                        ),
+                        ("manual_updates", &[1u8]),
+                        ("bpt", &pool_created.pool),
+                        ("main_token", &create_call.main_token),
+                        ("wrapped_token", &create_call.wrapped_token),
+                        (
+                            "fee",
+                            &create_call
+                                .swap_fee_percentage
+                                .to_signed_bytes_be(),
+                        ),
+                    ])
+                    .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
             )
         }
         // The `WeightedPool2TokenFactory` is a deprecated contract, but we've included
@@ -412,24 +397,21 @@ pub fn address_map(
             let pool_registered = get_pool_registered(tx, &pool_created.pool);
 
             Some(
-                ProtocolComponent::new(
-                    &format!("0x{}", hex::encode(pool_registered.pool_id)),
-                    &(tx.into()),
-                )
-                .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
-                .with_tokens(&create_call.tokens)
-                .with_attributes(&[
-                    ("pool_type", "WeightedPool2TokensFactory".as_bytes()),
-                    ("weights", &json_serialize_bigint_list(&create_call.weights)),
-                    (
-                        "fee",
-                        &create_call
-                            .swap_fee_percentage
-                            .to_signed_bytes_be(),
-                    ),
-                    ("manual_updates", &[1u8]),
-                ])
-                .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
+                ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
+                    .with_contracts(&[pool_created.pool, VAULT_ADDRESS.to_vec()])
+                    .with_tokens(&create_call.tokens)
+                    .with_attributes(&[
+                        ("pool_type", "WeightedPool2TokensFactory".as_bytes()),
+                        ("weights", &json_serialize_bigint_list(&create_call.weights)),
+                        (
+                            "fee",
+                            &create_call
+                                .swap_fee_percentage
+                                .to_signed_bytes_be(),
+                        ),
+                        ("manual_updates", &[1u8]),
+                    ])
+                    .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
             )
         }
         _ => None,

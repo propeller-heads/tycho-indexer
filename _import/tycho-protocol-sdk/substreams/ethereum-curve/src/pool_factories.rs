@@ -100,12 +100,6 @@ pub fn address_map(
             Some((
                 ProtocolComponent {
                     id: hex::encode(component_id),
-                    tx: Some(Transaction {
-                        to: tx.to.clone(),
-                        from: tx.from.clone(),
-                        hash: tx.hash.clone(),
-                        index: tx.index.into(),
-                    }),
                     tokens: tokens.clone(),
                     contracts: vec![
                         component_id.into(),
@@ -218,12 +212,6 @@ pub fn address_map(
                 Some((
                     ProtocolComponent {
                         id: hex::encode(component_id),
-                        tx: Some(Transaction {
-                            to: tx.to.clone(),
-                            from: tx.from.clone(),
-                            hash: tx.hash.clone(),
-                            index: tx.index.into(),
-                        }),
                         tokens: tokens.clone(),
                         contracts: vec![component_id.into()],
                         static_att: vec![
@@ -465,12 +453,6 @@ pub fn address_map(
                 Some((
                     ProtocolComponent {
                         id: hex::encode(component_id),
-                        tx: Some(Transaction {
-                            to: tx.to.clone(),
-                            from: tx.from.clone(),
-                            hash: tx.hash.clone(),
-                            index: tx.index.into(),
-                        }),
                         tokens: pool_added.coins.clone(),
                         contracts: vec![component_id.into(), CRYPTO_SWAP_NG_FACTORY.into()],
                         static_att: vec![
@@ -538,12 +520,6 @@ pub fn address_map(
                 Some((
                     ProtocolComponent {
                         id: hex::encode(component_id),
-                        tx: Some(Transaction {
-                            to: tx.to.clone(),
-                            from: tx.from.clone(),
-                            hash: tx.hash.clone(),
-                            index: tx.index.into(),
-                        }),
                         tokens: vec![pool_added.coin.clone(), lp_token.clone()],
                         contracts: vec![
                             component_id.into(),
@@ -637,12 +613,6 @@ pub fn address_map(
                 Some((
                     ProtocolComponent {
                         id: id.clone(),
-                        tx: Some(Transaction {
-                            to: tx.to.clone(),
-                            from: tx.from.clone(),
-                            hash: tx.hash.clone(),
-                            index: tx.index.into(),
-                        }),
                         tokens: tokens.clone(),
                         contracts: vec![pool_added.pool, TRICRYPTO_FACTORY.into()],
                         static_att: vec![
@@ -758,12 +728,6 @@ pub fn address_map(
                 Some((
                     ProtocolComponent {
                         id: hex::encode(component_id),
-                        tx: Some(Transaction {
-                            to: tx.to.clone(),
-                            from: tx.from.clone(),
-                            hash: tx.hash.clone(),
-                            index: tx.index.into(),
-                        }),
                         tokens: tokens.clone(),
                         contracts: vec![component_id.into()],
                         static_att: vec![
@@ -903,12 +867,6 @@ pub fn address_map(
                 Some((
                     ProtocolComponent {
                         id: id.clone(),
-                        tx: Some(Transaction {
-                            to: tx.to.clone(),
-                            from: tx.from.clone(),
-                            hash: tx.hash.clone(),
-                            index: tx.index.into(),
-                        }),
                         tokens: pool_added.coins.clone().into(),
                         contracts: vec![pool_added.pool, TWOCRYPTO_FACTORY.into()],
                         static_att: vec![

@@ -1,7 +1,7 @@
 specVersion: v0.1.0
 package:
-  name: "substreams_ethereum_ambient"
-  version: v0.6.0
+  name: "ethereum_ambient"
+  version: v0.6.1
 
 protobuf:
   files:
@@ -14,7 +14,7 @@ protobuf:
 binaries:
   default:
     type: wasm/rust-v1
-    file: ../target/wasm32-unknown-unknown/release/substreams_ethereum_ambient.wasm
+    file: ../target/wasm32-unknown-unknown/release/ethereum_ambient.wasm
 
 modules:
   - name: map_pool_changes

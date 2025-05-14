@@ -35,7 +35,7 @@ pub fn map_components(
                         // a log.address = vault_address is the deployment tx
                         if is_deployment_tx(tx, &vault_address) {
                             Some(
-                                ProtocolComponent::at_contract(&vault_address, &tx.into())
+                                ProtocolComponent::at_contract(&vault_address)
                                     .with_tokens(&[
                                         locked_asset.as_slice(),
                                         vault_address.as_slice(),

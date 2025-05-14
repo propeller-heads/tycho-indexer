@@ -47,6 +47,7 @@ impl From<InterimContractChange> for ContractChange {
                 .map(|(slot, value)| ContractSlot { slot, value: value.new_value })
                 .collect(),
             change: value.change.into(),
+            token_balances: Vec::new(),
         }
     }
 }
