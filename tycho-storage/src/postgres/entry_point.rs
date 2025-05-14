@@ -10,7 +10,7 @@ use tycho_common::{
         blockchain::{
             EntryPoint, EntryPointTracingData, EntryPointWithData, TracedEntryPoint, TracingResult,
         },
-        Chain,
+        Chain, EntryPointId,
     },
     storage::{EntryPointFilter, StorageError},
     Bytes,
@@ -27,9 +27,16 @@ use super::{
 };
 
 impl PostgresGateway {
+    /// Insert entry points into the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `new_data` - A map of protocol component external ids to a list of entry points.
+    /// * `chain` - The chain to insert the entry points for.
+    /// * `conn` - The database connection to use.
     pub(crate) async fn insert_entry_points(
         &self,
-        new: &[(&str, &Vec<EntryPointWithData>)],
+        new_data: &HashMap<&str, &Vec<EntryPointWithData>>,
         chain: &Chain,
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
@@ -41,9 +48,10 @@ impl PostgresGateway {
         let chain_id = self.get_chain_id(chain);
 
         let pc_ids = orm::ProtocolComponent::ids_by_external_ids(
-            &new.iter()
-                .map(|(id_, _)| *id_)
-                .collect::<Vec<&str>>(),
+            &new_data
+                .keys()
+                .map(Clone::clone)
+                .collect::<Vec<_>>(),
             chain_id,
             conn,
         )
@@ -53,7 +61,7 @@ impl PostgresGateway {
         .map(|(id_, ext_id)| (ext_id, id_))
         .collect::<HashMap<_, _>>();
 
-        let new_entry_points = new
+        let new_entry_points = new_data
             .iter()
             .flat_map(|(_, ep)| {
                 ep.iter()
@@ -76,7 +84,7 @@ impl PostgresGateway {
 
         // Fetch entry points by their external_ids, we can't use .returning() on the insert above
         // because it doesn't return the ids on conflicts.
-        let input_external_ids: Vec<String> = new
+        let input_external_ids: Vec<String> = new_data
             .iter()
             .flat_map(|(_, ep)| {
                 ep.iter()
@@ -87,7 +95,7 @@ impl PostgresGateway {
         let entry_point_ids =
             orm::EntryPoint::ids_by_external_ids(&input_external_ids, conn).await?;
 
-        let new_tracing_data = new
+        let new_tracing_data = new_data
             .iter()
             .flat_map(|(_, ep)| {
                 ep.iter().map(|ep| {
@@ -125,7 +133,8 @@ impl PostgresGateway {
             .map_err(|e| storage_error_from_diesel(e, "EntryPointData", "Batch upsert", None))?;
 
         let data_ids = orm::EntryPointTracingData::ids_by_entry_point_with_data(
-            &new.iter()
+            &new_data
+                .iter()
                 .flat_map(|(_, ep)| ep.iter())
                 .cloned()
                 .collect::<Vec<_>>(),
@@ -133,7 +142,7 @@ impl PostgresGateway {
         )
         .await?;
 
-        let pc_links = new
+        let pc_links = new_data
             .iter()
             .flat_map(|(pc_ext_id, ep)| {
                 ep.iter().map(|ep| {
@@ -174,6 +183,12 @@ impl PostgresGateway {
         Ok(())
     }
 
+    /// Get entry points with data from the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `filter` - The filter to apply to the query.
+    /// * `conn` - The database connection to use.
     pub(crate) async fn get_entry_points_with_data(
         &self,
         filter: EntryPointFilter,
@@ -208,6 +223,12 @@ impl PostgresGateway {
             .collect())
     }
 
+    /// Upsert traced entry points into the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `traced_entry_points` - The traced entry points to upsert.
+    /// * `conn` - The database connection to use.
     pub(crate) async fn upsert_traced_entry_points(
         &self,
         traced_entry_points: &[TracedEntryPoint],
@@ -339,32 +360,66 @@ impl PostgresGateway {
         Ok(())
     }
 
-    pub(crate) async fn get_traced_entry_point(
+    /// Get all tracing results for a set of entry points from the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `entry_points` - The entry point ids to get tracing results for.
+    /// * `conn` - The database connection to use.
+    pub(crate) async fn get_traced_entry_points(
         &self,
-        entry_point: EntryPoint,
+        entry_points: &HashSet<EntryPointId>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<Vec<TracingResult>, StorageError> {
+    ) -> Result<HashMap<EntryPointId, Vec<TracingResult>>, StorageError> {
         use schema::entry_point_tracing_result::dsl::*;
-        let entry_point_id = orm::EntryPoint::id_by_target_and_signature(
-            &entry_point.target,
-            &entry_point.signature,
+        let entry_point_ids = orm::EntryPoint::ids_by_external_ids(
+            &entry_points
+                .iter()
+                .map(Clone::clone)
+                .collect::<Vec<_>>(),
             conn,
         )
         .await?;
 
+        // Reverse the map, this is safe because we know it's a 1:1 mapping.
+        // This makes retrieving the external id attached to a tracing result faster.
+        let reverse: HashMap<i64, String> = entry_point_ids
+            .iter()
+            .map(|(k, &v)| (v, k.clone()))
+            .collect();
+
         let results = entry_point_tracing_result
-            .filter(entry_point_tracing_data_id.eq(entry_point_id))
-            .select(detection_data)
-            .load::<serde_json::Value>(conn)
+            .filter(entry_point_tracing_data_id.eq_any(entry_point_ids.values().cloned()))
+            .select((entry_point_tracing_data_id, detection_data))
+            .load::<(i64, serde_json::Value)>(conn)
             .await
             .map_err(|e| storage_error_from_diesel(e, "TracingResult", "Query", None))?;
 
-        results
+        let mut results_by_entry_point = HashMap::new();
+        for (ep_id, tracing_result) in results {
+            let ep_ext_id = reverse.get(&ep_id).ok_or_else(|| {
+                StorageError::NotFound("EntryPoint".to_string(), ep_id.to_string())
+            })?;
+            results_by_entry_point
+                .entry(ep_ext_id.clone())
+                .or_insert_with(Vec::new)
+                .push(tracing_result);
+        }
+
+        results_by_entry_point
             .into_iter()
-            .map(|(data)| {
-                serde_json::from_value(data).map_err(|e| {
-                    StorageError::Unexpected(format!("Failed to deserialize TracingResult: {e}"))
-                })
+            .map(|(ep_ext_id, data)| {
+                let converted_data = data
+                    .into_iter()
+                    .map(|d| {
+                        serde_json::from_value(d).map_err(|e| {
+                            StorageError::Unexpected(format!(
+                                "Failed to deserialize TracingResult: {e}"
+                            ))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, StorageError>>()?;
+                Ok((ep_ext_id, converted_data))
             })
             .collect()
     }
@@ -499,7 +554,7 @@ mod test {
 
         let entry_point = rpc_tracer_entry_point();
         gw.insert_entry_points(
-            &[("pc_0", &vec![entry_point.clone()])],
+            &HashMap::from([("pc_0", &vec![entry_point.clone()])]),
             &Chain::Ethereum,
             &mut conn,
         )
@@ -523,7 +578,7 @@ mod test {
 
         let entry_point = rpc_tracer_entry_point();
         gw.insert_entry_points(
-            &[("pc_0", &vec![entry_point.clone()])],
+            &HashMap::from([("pc_0", &vec![entry_point.clone()])]),
             &Chain::Ethereum,
             &mut conn,
         )
@@ -556,7 +611,7 @@ mod test {
         let traced_entry_point = traced_entry_point();
 
         gw.insert_entry_points(
-            &[("pc_0", &vec![entry_point.clone()])],
+            &HashMap::from([("pc_0", &vec![entry_point.clone()])]),
             &Chain::Ethereum,
             &mut conn,
         )
@@ -568,10 +623,25 @@ mod test {
             .unwrap();
 
         let retrieved_traced_entry_points = gw
-            .get_traced_entry_point(entry_point.entry_point, &mut conn)
+            .get_traced_entry_points(
+                &HashSet::from([entry_point
+                    .entry_point
+                    .external_id
+                    .clone()]),
+                &mut conn,
+            )
             .await
             .unwrap();
 
-        assert_eq!(retrieved_traced_entry_points, vec![traced_entry_point.tracing_result]);
+        assert_eq!(
+            retrieved_traced_entry_points,
+            HashMap::from([(
+                entry_point
+                    .entry_point
+                    .external_id
+                    .clone(),
+                vec![traced_entry_point.tracing_result]
+            )])
+        );
     }
 }

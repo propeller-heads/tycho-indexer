@@ -54,6 +54,9 @@ pub type ComponentId = String;
 /// Protocol system literal type to uniquely identify a protocol system.
 pub type ProtocolSystem = String;
 
+/// Entry point id literal type to uniquely identify an entry point.
+pub type EntryPointId = String;
+
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, Display, Default,
 )]
