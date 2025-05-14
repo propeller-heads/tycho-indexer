@@ -170,7 +170,7 @@ fn stream_blocks(
                                 }
 
                                 error!("Received tonic error {:#}", status);
-                                counter!("substreams_failure", "extractor" => extractor_id.clone(), "cause" => "tonic_error").increment(1);
+                                counter!("substreams_failure", "extractor" => extractor_id.clone(), "cause" => status.code().to_string()).increment(1);
 
                                 // If we reach this point, we must wait a bit before retrying
                                 wait_for_next_retry(&mut backoff, &mut retry_count, &extractor_id).await?;
