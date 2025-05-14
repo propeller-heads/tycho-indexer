@@ -1,3 +1,12 @@
+## [0.70.1](https://github.com/propeller-heads/tycho-indexer/compare/0.70.0...0.70.1) (2025-05-14)
+
+
+### Bug Fixes
+
+* include message text in websocket error logging ([b2c78a9](https://github.com/propeller-heads/tycho-indexer/commit/b2c78a993390fa5bc5f2d6c511d48885e5f5e22b))
+* include message text in websocket error logging ([0d2e6e7](https://github.com/propeller-heads/tycho-indexer/commit/0d2e6e730634e90016716f6cfceee013093c6683))
+* **tycho-client:** include message text in websocket error logging ([#571](https://github.com/propeller-heads/tycho-indexer/issues/571)) ([cce6373](https://github.com/propeller-heads/tycho-indexer/commit/cce6373a3fe39376df0cfa4f166adc7d7f1c6bb7))
+
 ## [0.70.0](https://github.com/propeller-heads/tycho-indexer/compare/0.69.0...0.70.0) (2025-05-08)
 
 
