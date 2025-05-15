@@ -48,3 +48,9 @@ For each of the following, you must select one of `tenderly_ethereum`, `tenderly
 1. In `scripts/deploy-executors.js` define the executors to be deployed
 2. Deploy executors: `npx hardhat run scripts/deploy-executors.js --network NETWORK`
 3. Fill in the executor addresses in `config/executor_addresses.json`
+
+### Remove executors
+
+1. If you set a new executor for the same protocol, you need to remove the old one.
+2. Run: `npx hardhat run scripts/remove-executor.js --network NETWORK`
+3. There will be a prompt for you to insert the executor address you want to remove.
