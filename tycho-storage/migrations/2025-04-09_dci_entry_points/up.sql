@@ -23,10 +23,20 @@ CREATE TABLE IF NOT EXISTS "entry_point_tracing_data"(
     UNIQUE ("entry_point_id", "tracing_type", "data")
 );
 
+-- Keep tracks of the m2m relation between protocol components and entry point tracing data
+-- NOTE: Currently this is not mandatory, we should not rely on it for production code. It is only used for debugging purposes.
+-- Worst case scenario, we can delete the table
 CREATE TABLE IF NOT EXISTS "protocol_component_holds_entry_point_tracing_data"(
     "protocol_component_id" bigint REFERENCES "protocol_component"(id) ON DELETE CASCADE NOT NULL,
     "entry_point_tracing_data_id" bigint REFERENCES "entry_point_tracing_data"(id) ON DELETE CASCADE NOT NULL,
     PRIMARY KEY ("protocol_component_id", "entry_point_tracing_data_id")
+);
+
+-- Keep tracks of the m2m relation between protocol components and entry points
+CREATE TABLE IF NOT EXISTS "protocol_component_holds_entry_point"(
+    "protocol_component_id" bigint REFERENCES "protocol_component"(id) ON DELETE CASCADE NOT NULL,
+    "entry_point_id" bigint REFERENCES "entry_point"(id) ON DELETE CASCADE NOT NULL,
+    PRIMARY KEY ("protocol_component_id", "entry_point_id")
 );
 
 CREATE TABLE IF NOT EXISTS "entry_point_tracing_result"(

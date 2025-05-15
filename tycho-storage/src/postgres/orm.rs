@@ -32,9 +32,9 @@ use super::{
         component_tvl, contract_code, contract_storage, contract_storage_default, entry_point,
         entry_point_tracing_data, entry_point_tracing_data_calls_account,
         entry_point_tracing_result, extraction_state, protocol_component,
-        protocol_component_holds_contract, protocol_component_holds_entry_point_tracing_data,
-        protocol_component_holds_token, protocol_state, protocol_state_default, protocol_system,
-        protocol_type, token, transaction,
+        protocol_component_holds_contract, protocol_component_holds_entry_point,
+        protocol_component_holds_entry_point_tracing_data, protocol_component_holds_token,
+        protocol_state, protocol_state_default, protocol_system, protocol_type, token, transaction,
     },
     versioning::{StoredVersionedRow, VersionedRow},
     PostgresError, MAX_TS, MAX_VERSION_TS,
@@ -2040,23 +2040,31 @@ pub struct NewEntryPointTracingResult {
     pub detection_data: serde_json::Value,
 }
 
-#[derive(Identifiable, Queryable, Associations, Selectable)]
-#[diesel(belongs_to(ProtocolComponent))]
-#[diesel(belongs_to(EntryPointTracingData))]
-#[diesel(table_name = protocol_component_holds_entry_point_tracing_data)]
-#[diesel(primary_key(protocol_component_id, entry_point_tracing_data_id))]
-#[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct ProtocolComponentHoldsEntryPointTracingData {
-    pub protocol_component_id: i64,
-    pub entry_point_tracing_data_id: i64,
-}
-
 #[derive(Insertable)]
 #[diesel(table_name = protocol_component_holds_entry_point_tracing_data)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewProtocolComponentHoldsEntryPointTracingData {
     pub protocol_component_id: i64,
     pub entry_point_tracing_data_id: i64,
+}
+
+#[derive(Identifiable, Queryable, Associations, Selectable)]
+#[diesel(belongs_to(ProtocolComponent))]
+#[diesel(belongs_to(EntryPoint))]
+#[diesel(table_name = protocol_component_holds_entry_point)]
+#[diesel(primary_key(protocol_component_id, entry_point_id))]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct ProtocolComponentHoldsEntryPoint {
+    pub protocol_component_id: i64,
+    pub entry_point_id: i64,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = protocol_component_holds_entry_point)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewProtocolComponentHoldsEntryPoint {
+    pub protocol_component_id: i64,
+    pub entry_point_id: i64,
 }
 
 #[derive(Identifiable, Queryable, Associations, Selectable)]
