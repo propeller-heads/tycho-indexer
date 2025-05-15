@@ -10,7 +10,6 @@ error OneTransferFromOnly__MultipleTransferFrom();
 
 /**
  * @title OneTransferFromOnly - Restrict to one transferFrom on approved params per swap
- * @author PropellerHeads Devs
  * @dev Restricts to one `transferFrom` (using `permit2` or regular `transferFrom`)
  * per swap, while ensuring that the `transferFrom` is only performed on the input
  * token and the input amount, from the msg.sender's wallet that calls the main swap
