@@ -48,8 +48,8 @@ mini-moka = "0.10"
 lazy_static = "1.4.0"
 
 # Tycho dependencies
-tycho-common = "0.66.4"
-tycho-client = "0.66.4"
+tycho-common = "0.70.3"
+tycho-client = "0.70.3"
 
 # EVM dependencies
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e", optional = true }
@@ -92,7 +92,7 @@ ratatui = "0.29.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
-tycho-execution = "0.81.0"
+tycho-execution = "0.81.1"
 
 [features]
 default = ["evm"]

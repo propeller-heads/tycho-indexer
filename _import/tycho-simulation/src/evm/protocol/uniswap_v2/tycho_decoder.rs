@@ -31,6 +31,7 @@ mod tests {
                 balances: HashMap::new(),
             },
             component: Default::default(),
+            component_tvl: None,
         };
 
         let result = UniswapV2State::try_from_with_block(
@@ -63,6 +64,7 @@ mod tests {
                 balances: HashMap::new(),
             },
             component: Default::default(),
+            component_tvl: None,
         };
 
         let result = UniswapV2State::try_from_with_block(

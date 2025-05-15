@@ -192,6 +192,7 @@ mod tests {
         let snapshot = ComponentWithState {
             state: ResponseProtocolState { attributes: attributes(), ..Default::default() },
             component: component(),
+            component_tvl: None,
         };
 
         let result = EkuboState::try_from_with_block(
@@ -233,6 +234,7 @@ mod tests {
                 balances: HashMap::new(),
             },
             component,
+            component_tvl: None,
         };
 
         let result = EkuboState::try_from_with_block(
