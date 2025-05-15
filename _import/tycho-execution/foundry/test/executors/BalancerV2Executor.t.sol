@@ -17,7 +17,7 @@ contract BalancerV2ExecutorExposed is BalancerV2Executor {
             bytes32 poolId,
             address receiver,
             bool needsApproval,
-            TransferType transferType
+            bool transferNeeded
         )
     {
         return _decodeData(data);
@@ -41,12 +41,7 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
 
     function testDecodeParams() public view {
         bytes memory params = abi.encodePacked(
-            WETH_ADDR,
-            BAL_ADDR,
-            WETH_BAL_POOL_ID,
-            address(2),
-            true,
-            TokenTransfer.TransferType.NONE
+            WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID, address(2), true, false
         );
 
         (
@@ -55,7 +50,7 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
             bytes32 poolId,
             address receiver,
             bool needsApproval,
-            TokenTransfer.TransferType transferType
+            bool transferNeeded
         ) = balancerV2Exposed.decodeParams(params);
 
         assertEq(address(tokenIn), WETH_ADDR);
@@ -63,7 +58,6 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
         assertEq(poolId, WETH_BAL_POOL_ID);
         assertEq(receiver, address(2));
         assertEq(needsApproval, true);
-        assertEq(uint8(transferType), uint8(TokenTransfer.TransferType.NONE));
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -77,12 +71,7 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
     function testSwap() public {
         uint256 amountIn = 10 ** 18;
         bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR,
-            BAL_ADDR,
-            WETH_BAL_POOL_ID,
-            BOB,
-            true,
-            TokenTransfer.TransferType.NONE
+            WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID, BOB, true, false
         );
 
         deal(WETH_ADDR, address(balancerV2Exposed), amountIn);
@@ -104,7 +93,7 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
             bytes32 poolId,
             address receiver,
             bool needsApproval,
-            TokenTransfer.TransferType transferType
+            bool transferNeeded
         ) = balancerV2Exposed.decodeParams(protocolData);
 
         assertEq(address(tokenIn), WETH_ADDR);
@@ -112,7 +101,6 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
         assertEq(poolId, WETH_BAL_POOL_ID);
         assertEq(receiver, BOB);
         assertEq(needsApproval, true);
-        assertEq(uint8(transferType), uint8(TokenTransfer.TransferType.NONE));
     }
 
     function testSwapIntegration() public {

@@ -51,8 +51,8 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
             address receiver,
             address target,
             bool zeroForOne,
-            bool inTransferNeeded,
-            bool inBetweenSwapsTransferNeeded
+            bool transferFromNeeded,
+            bool transferNeeded
         ) = _decodeData(data);
 
         _verifyPairAddress(tokenIn, tokenOut, fee, target);
@@ -62,11 +62,7 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
         bytes memory callbackData = _makeV3CallbackData(
-            tokenIn,
-            tokenOut,
-            fee,
-            inTransferNeeded,
-            inBetweenSwapsTransferNeeded
+            tokenIn, tokenOut, fee, transferFromNeeded, transferNeeded
         );
 
         {
@@ -104,8 +100,8 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
 
         address tokenIn = address(bytes20(msgData[132:152]));
 
-        bool inTransferNeeded = bool(msgData[175]);
-        bool inBetweenSwapsTransferNeeded = bool(msgData[176]);
+        bool transferFromNeeded = msgData[175] != 0;
+        bool transferNeeded = msgData[176] != 0;
         address sender = address(bytes20(msgData[176:196]));
 
         verifyCallback(msgData[132:]);
@@ -113,9 +109,9 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
         uint256 amountOwed =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
 
-        if (inTransferNeeded) {
+        if (transferFromNeeded) {
             _transfer(msg.sender);
-        } else if (inBetweenSwapsTransferNeeded) {
+        } else if (transferNeeded) {
             if (tokenIn == address(0)) {
                 payable(msg.sender).transfer(amountOwed);
             } else {
@@ -152,8 +148,8 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
             address receiver,
             address target,
             bool zeroForOne,
-            bool inTransferNeeded,
-            bool inBetweenSwapsTransferNeeded
+            bool transferFromNeeded,
+            bool transferNeeded
         )
     {
         if (data.length != 85) {
@@ -165,23 +161,23 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
         receiver = address(bytes20(data[43:63]));
         target = address(bytes20(data[63:83]));
         zeroForOne = uint8(data[83]) > 0;
-        inTransferNeeded = bool(data[84]);
-        inBetweenSwapsTransferNeeded = bool(data[85]);
+        transferFromNeeded = uint8(data[84]) > 0;
+        transferNeeded = uint8(data[85]) > 0;
     }
 
     function _makeV3CallbackData(
         address tokenIn,
         address tokenOut,
         uint24 fee,
-        bool inTransferNeeded,
-        bool inBetweenSwapsTransferNeeded
+        bool transferFromNeeded,
+        bool transferNeeded
     ) internal view returns (bytes memory) {
         return abi.encodePacked(
             tokenIn,
             tokenOut,
             fee,
-            inTransferNeeded,
-            inBetweenSwapsTransferNeeded,
+            transferFromNeeded,
+            transferNeeded,
             msg.sender
         );
     }

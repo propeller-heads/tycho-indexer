@@ -26,7 +26,8 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
             USDE_ADDR,
             USDT_ADDR,
             true,
-            TokenTransfer.TransferType.TRANSFER_PERMIT2_TO_PROTOCOL,
+            true, // permit2 transferFrom to protocol
+            false, // transfer to protocol
             ALICE,
             pools
         );
@@ -44,6 +45,8 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
             ALICE,
             permitSingle,
             signature,
+            false,
+            address(0),
             swap
         );
 
@@ -74,7 +77,8 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
             USDE_ADDR,
             WBTC_ADDR,
             true,
-            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL,
+            true, // permit2 transferFrom to protocol
+            false, // transfer to protocol
             ALICE,
             pools
         );
@@ -83,7 +87,16 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
             encodeSingleSwap(address(usv4Executor), protocolData);
 
         tychoRouter.singleSwap(
-            amountIn, USDE_ADDR, WBTC_ADDR, 118280, false, false, ALICE, swap
+            amountIn,
+            USDE_ADDR,
+            WBTC_ADDR,
+            118280,
+            false,
+            false,
+            ALICE,
+            false,
+            address(0),
+            swap
         );
 
         assertEq(IERC20(WBTC_ADDR).balanceOf(ALICE), 118281);
@@ -262,7 +275,8 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
             ALICE,
             DAI_WETH_USV3,
             zeroForOne,
-            TokenTransfer.TransferType.TRANSFER_PERMIT2_TO_PROTOCOL
+            true, // permit2 transferFrom to protocol
+            false // transfer to protocol
         );
         bytes memory swap =
             encodeSingleSwap(address(usv3Executor), protocolData);
@@ -277,6 +291,8 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
             ALICE,
             permitSingle,
             signature,
+            false,
+            address(0),
             swap
         );
 

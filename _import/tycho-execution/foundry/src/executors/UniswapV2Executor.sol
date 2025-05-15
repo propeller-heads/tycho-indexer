@@ -59,8 +59,8 @@ contract UniswapV2Executor is IExecutor {
 
         calculatedAmount = _getAmountOut(target, givenAmount, zeroForOne);
 
-        if (transferNeeded){
-            if (tokenIn == address(0)) {
+        if (transferNeeded) {
+            if (address(tokenIn) == address(0)) {
                 payable(target).transfer(givenAmount);
             } else {
                 // slither-disable-next-line arbitrary-send-erc20
@@ -93,8 +93,8 @@ contract UniswapV2Executor is IExecutor {
         inToken = IERC20(address(bytes20(data[0:20])));
         target = address(bytes20(data[20:40]));
         receiver = address(bytes20(data[40:60]));
-        zeroForOne = uint8(data[60]) > 0;
-        transferNeeded = bool(data[61]);
+        zeroForOne = data[60] != 0;
+        transferNeeded = data[61] != 0;
     }
 
     function _getAmountOut(address target, uint256 amountIn, bool zeroForOne)

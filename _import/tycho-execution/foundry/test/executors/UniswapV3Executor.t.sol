@@ -22,7 +22,8 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
             address receiver,
             address target,
             bool zeroForOne,
-            TransferType transferType
+            bool transferFromNeeded,
+            bool transferNeeded
         )
     {
         return _decodeData(data);
@@ -71,7 +72,8 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             address(2),
             address(3),
             false,
-            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
+            false,
+            true
         );
 
         (
@@ -81,7 +83,8 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             address receiver,
             address target,
             bool zeroForOne,
-            TokenTransfer.TransferType transferType
+            bool transferFromNeeded,
+            bool transferNeeded
         ) = uniswapV3Exposed.decodeData(data);
 
         assertEq(tokenIn, WETH_ADDR);
@@ -90,10 +93,8 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
         assertEq(receiver, address(2));
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
-        assertEq(
-            uint8(transferType),
-            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL)
-        );
+        assertEq(transferFromNeeded, false);
+        assertEq(transferNeeded, true);
     }
 
     function testSwapIntegration() public {
@@ -109,7 +110,8 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             address(this),
             DAI_WETH_USV3,
             zeroForOne,
-            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
+            false,
+            true
         );
 
         uint256 amountOut = uniswapV3Exposed.swap(amountIn, data);
@@ -184,7 +186,8 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             address(this),
             fakePool,
             zeroForOne,
-            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
+            false,
+            true
         );
 
         vm.expectRevert(UniswapV3Executor__InvalidTarget.selector);
@@ -197,7 +200,8 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
         address receiver,
         address target,
         bool zero2one,
-        TokenTransfer.TransferType transferType
+        bool transferFromNeeded,
+        bool transferNeeded
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
         return abi.encodePacked(
@@ -207,7 +211,8 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             receiver,
             target,
             zero2one,
-            transferType
+            transferFromNeeded,
+            transferNeeded
         );
     }
 }

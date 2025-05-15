@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./TokenTransfer.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
 error CurveExecutor__AddressZero();
@@ -35,14 +34,12 @@ interface CryptoPoolETH {
     // slither-disable-end naming-convention
 }
 
-contract CurveExecutor is IExecutor, TokenTransfer {
+contract CurveExecutor is IExecutor {
     using SafeERC20 for IERC20;
 
     address public immutable nativeToken;
 
-    constructor(address _nativeToken, address _permit2)
-        TokenTransfer(_permit2)
-    {
+    constructor(address _nativeToken, address _permit2) {
         if (_nativeToken == address(0)) {
             revert CurveExecutor__AddressZero();
         }
@@ -65,19 +62,9 @@ contract CurveExecutor is IExecutor, TokenTransfer {
             int128 i,
             int128 j,
             bool tokenApprovalNeeded,
-            TransferType transferType,
+            bool transferNeeded, // TODO remove this with the encoding
             address receiver
         ) = _decodeData(data);
-
-        _transfer(
-            tokenIn,
-            msg.sender,
-            // Receiver can never be the pool, since the pool expects funds in the router contract
-            // Thus, this call will only ever be used to transfer funds from the user into the router.
-            address(this),
-            amountIn,
-            transferType
-        );
 
         if (tokenApprovalNeeded && tokenIn != nativeToken) {
             // slither-disable-next-line unused-return
@@ -134,7 +121,7 @@ contract CurveExecutor is IExecutor, TokenTransfer {
             int128 i,
             int128 j,
             bool tokenApprovalNeeded,
-            TransferType transferType,
+            bool transferNeeded,
             address receiver
         )
     {
@@ -145,7 +132,7 @@ contract CurveExecutor is IExecutor, TokenTransfer {
         i = int128(uint128(uint8(data[61])));
         j = int128(uint128(uint8(data[62])));
         tokenApprovalNeeded = data[63] != 0;
-        transferType = TransferType(uint8(data[64]));
+        transferNeeded = data[64] != 0;
         receiver = address(bytes20(data[65:85]));
     }
 

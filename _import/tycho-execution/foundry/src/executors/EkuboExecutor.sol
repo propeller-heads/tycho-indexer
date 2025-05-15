@@ -11,14 +11,14 @@ import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
 import {LibBytes} from "@solady/utils/LibBytes.sol";
 import {Config, EkuboPoolKey} from "@ekubo/types/poolKey.sol";
 import {MAX_SQRT_RATIO, MIN_SQRT_RATIO} from "@ekubo/types/sqrtRatio.sol";
-import {TokenTransfer} from "./TokenTransfer.sol";
+import "../OneTransferFromOnly.sol";
 
 contract EkuboExecutor is
     IExecutor,
     ILocker,
     IPayer,
     ICallback,
-    TokenTransfer
+    OneTransferFromOnly
 {
     error EkuboExecutor__InvalidDataLength();
     error EkuboExecutor__CoreOnly();
@@ -32,7 +32,9 @@ contract EkuboExecutor is
     bytes4 constant LOCKED_SELECTOR = 0xb45a3c0e; // locked(uint256)
     bytes4 constant PAY_CALLBACK_SELECTOR = 0x599d0714; // payCallback(uint256,address)
 
-    constructor(address _core, address _permit2) TokenTransfer(_permit2) {
+    constructor(address _core, address _permit2)
+        OneTransferFromOnly(_permit2)
+    {
         core = ICore(_core);
     }
 
@@ -44,13 +46,8 @@ contract EkuboExecutor is
         if (data.length < 93) revert EkuboExecutor__InvalidDataLength();
 
         // amountIn must be at most type(int128).MAX
-        calculatedAmount = uint256(
-            _lock(
-                bytes.concat(
-                    bytes16(uint128(amountIn)), bytes20(msg.sender), data
-                )
-            )
-        );
+        calculatedAmount =
+            uint256(_lock(bytes.concat(bytes16(uint128(amountIn)), data)));
     }
 
     function handleCallback(bytes calldata raw)
@@ -126,10 +123,11 @@ contract EkuboExecutor is
         int128 nextAmountIn = int128(uint128(bytes16(swapData[0:16])));
         uint128 tokenInDebtAmount = uint128(nextAmountIn);
         address sender = address(bytes20(swapData[16:36]));
-        uint8 transferType = uint8(swapData[36]);
+        bool transferFromNeeded = (swapData[36] != 0);
+        bool transferNeeded = (swapData[37] != 0);
 
-        address receiver = address(bytes20(swapData[37:57]));
-        address tokenIn = address(bytes20(swapData[57:77]));
+        address receiver = address(bytes20(swapData[38:58]));
+        address tokenIn = address(bytes20(swapData[58:78]));
 
         address nextTokenIn = tokenIn;
 
@@ -163,7 +161,7 @@ contract EkuboExecutor is
             offset += HOP_BYTE_LEN;
         }
 
-        _pay(tokenIn, tokenInDebtAmount, sender, transferType);
+        _pay(tokenIn, tokenInDebtAmount, transferFromNeeded, transferNeeded);
         core.withdraw(nextTokenIn, receiver, uint128(nextAmountIn));
         return nextAmountIn;
     }
@@ -171,8 +169,8 @@ contract EkuboExecutor is
     function _pay(
         address token,
         uint128 amount,
-        address sender,
-        uint8 transferType
+        bool transferFromNeeded,
+        bool transferNeeded
     ) internal {
         address target = address(core);
 
@@ -186,11 +184,11 @@ contract EkuboExecutor is
                 mstore(free, shl(224, 0x0c11dedd))
                 mstore(add(free, 4), token)
                 mstore(add(free, 36), shl(128, amount))
-                mstore(add(free, 52), shl(96, sender))
-                mstore(add(free, 72), shl(248, transferType))
+                mstore(add(free, 52), shl(248, transferFromNeeded))
+                mstore(add(free, 53), shl(248, transferNeeded))
 
-                // 4 (selector) + 32 (token) + 16 (amount) + 20 (sender) + 1 (transferType) = 73
-                if iszero(call(gas(), target, 0, free, 73, 0, 0)) {
+                // 4 (selector) + 32 (token) + 16 (amount) + 1 (transferFromNeeded) + 1 (transferNeeded) = 54
+                if iszero(call(gas(), target, 0, free, 54, 0, 0)) {
                     returndatacopy(0, 0, returndatasize())
                     revert(0, returndatasize())
                 }
@@ -201,9 +199,17 @@ contract EkuboExecutor is
     function _payCallback(bytes calldata payData) internal {
         address token = address(bytes20(payData[12:32])); // This arg is abi-encoded
         uint128 amount = uint128(bytes16(payData[32:48]));
-        address sender = address(bytes20(payData[48:68]));
-        TransferType transferType = TransferType(uint8(payData[68]));
-        _transfer(token, sender, address(core), amount, transferType);
+        bool transferFromNeeded = (payData[48] != 0);
+        bool transferNeeded = (payData[49] != 0);
+        if (transferFromNeeded) {
+            _transfer(msg.sender);
+        } else if (transferNeeded) {
+            if (token == address(0)) {
+                payable(msg.sender).transfer(amount);
+            } else {
+                IERC20(token).transfer(msg.sender, amount);
+            }
+        }
     }
 
     // To receive withdrawals from Core

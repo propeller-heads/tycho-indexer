@@ -27,7 +27,7 @@ contract OneTransferFromOnly {
 
     function tstoreTransferFromInfo(
         address tokenIn,
-        address amountIn,
+        uint256 amountIn,
         bool isPermit2,
         address sender
     ) internal {
@@ -40,10 +40,7 @@ contract OneTransferFromOnly {
         }
     }
 
-    function _transfer(address receiver)
-        // we could pass the amount and address too and compare to what is in the slots?
-        internal
-    {
+    function _transfer(address receiver) internal {
         address tokenIn;
         uint256 amount;
         bool isPermit2;

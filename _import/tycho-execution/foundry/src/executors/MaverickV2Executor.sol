@@ -9,12 +9,12 @@ error MaverickV2Executor__InvalidDataLength();
 error MaverickV2Executor__InvalidTarget();
 error MaverickV2Executor__InvalidFactory();
 
-contract MaverickV2Executor is IExecutor, TokenTransfer {
+contract MaverickV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
     address public immutable factory;
 
-    constructor(address _factory, address _permit2) TokenTransfer(_permit2) {
+    constructor(address _factory, address _permit2) {
         if (_factory == address(0)) {
             revert MaverickV2Executor__InvalidFactory();
         }
@@ -30,9 +30,9 @@ contract MaverickV2Executor is IExecutor, TokenTransfer {
         address target;
         address receiver;
         IERC20 tokenIn;
-        TransferType transferType;
+        bool transferNeeded;
 
-        (tokenIn, target, receiver, transferType) = _decodeData(data);
+        (tokenIn, target, receiver, transferNeeded) = _decodeData(data);
 
         _verifyPairAddress(target);
         IMaverickV2Pool pool = IMaverickV2Pool(target);
@@ -47,9 +47,15 @@ contract MaverickV2Executor is IExecutor, TokenTransfer {
             tickLimit: tickLimit
         });
 
-        _transfer(
-            address(tokenIn), msg.sender, target, givenAmount, transferType
-        );
+        if (transferNeeded) {
+            if (address(tokenIn) == address(0)) {
+                payable(target).transfer(givenAmount);
+            } else {
+                // slither-disable-next-line arbitrary-send-erc20
+                tokenIn.safeTransferFrom(msg.sender, target, givenAmount);
+            }
+        }
+
         // slither-disable-next-line unused-return
         (, calculatedAmount) = pool.swap(receiver, swapParams, "");
     }
@@ -61,7 +67,7 @@ contract MaverickV2Executor is IExecutor, TokenTransfer {
             IERC20 inToken,
             address target,
             address receiver,
-            TransferType transferType
+            bool transferNeeded
         )
     {
         if (data.length != 61) {
@@ -70,7 +76,7 @@ contract MaverickV2Executor is IExecutor, TokenTransfer {
         inToken = IERC20(address(bytes20(data[0:20])));
         target = address(bytes20(data[20:40]));
         receiver = address(bytes20(data[40:60]));
-        transferType = TransferType(uint8(data[60]));
+        transferNeeded = (data[60] != 0);
     }
 
     function _verifyPairAddress(address target) internal view {
