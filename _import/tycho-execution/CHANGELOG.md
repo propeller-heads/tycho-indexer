@@ -1,3 +1,23 @@
+## [0.90.0](https://github.com/propeller-heads/tycho-execution/compare/0.89.0...0.90.0) (2025-05-15)
+
+
+### Features
+
+* Explicitly handle the TransferType.NONE case ([65bd0d0](https://github.com/propeller-heads/tycho-execution/commit/65bd0d07499b79c261efdb00debb19487d6af543))
+* Verify the amount out was received correctly for arbitrage swaps ([70230bf](https://github.com/propeller-heads/tycho-execution/commit/70230bf05f4bdfdd54f62799b72bd998d351983e))
+
+
+### Bug Fixes
+
+* Revert if the TransferType is not valid ([b0c254a](https://github.com/propeller-heads/tycho-execution/commit/b0c254add44e56d10f203eae30301c861fd9d8ff))
+
+## [0.89.0](https://github.com/propeller-heads/tycho-execution/compare/0.88.0...0.89.0) (2025-05-14)
+
+
+### Features
+
+* Remove special handling of the Univ4 callback ([f14c8ee](https://github.com/propeller-heads/tycho-execution/commit/f14c8ee29ba67ca4cd8cfe8b00e8b907a0352f9a))
+
 ## [0.88.0](https://github.com/propeller-heads/tycho-execution/compare/0.87.0...0.88.0) (2025-05-06)
 
 

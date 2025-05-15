@@ -436,15 +436,14 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             Address.sendValue(payable(receiver), amountOut);
         }
 
-        if (tokenIn != tokenOut) {
-            uint256 currentBalanceTokenOut = _balanceOf(tokenOut, receiver);
-            uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
-            if (userAmount != amountOut) {
-                revert TychoRouter__AmountOutNotFullyReceived(
-                    userAmount, amountOut
-                );
-            }
-        }
+        _verifyAmountOutWasReceived(
+            tokenIn,
+            tokenOut,
+            initialBalanceTokenOut,
+            amountOut,
+            receiver,
+            amountIn
+        );
     }
 
     /**
@@ -493,15 +492,14 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             Address.sendValue(payable(receiver), amountOut);
         }
 
-        if (tokenIn != tokenOut) {
-            uint256 currentBalanceTokenOut = _balanceOf(tokenOut, receiver);
-            uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
-            if (userAmount != amountOut) {
-                revert TychoRouter__AmountOutNotFullyReceived(
-                    userAmount, amountOut
-                );
-            }
-        }
+        _verifyAmountOutWasReceived(
+            tokenIn,
+            tokenOut,
+            initialBalanceTokenOut,
+            amountOut,
+            receiver,
+            amountIn
+        );
     }
 
     /**
@@ -546,16 +544,14 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
             _unwrapETH(amountOut);
             Address.sendValue(payable(receiver), amountOut);
         }
-
-        if (tokenIn != tokenOut) {
-            uint256 currentBalanceTokenOut = _balanceOf(tokenOut, receiver);
-            uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
-            if (userAmount != amountOut) {
-                revert TychoRouter__AmountOutNotFullyReceived(
-                    userAmount, amountOut
-                );
-            }
-        }
+        _verifyAmountOutWasReceived(
+            tokenIn,
+            tokenOut,
+            initialBalanceTokenOut,
+            amountOut,
+            receiver,
+            amountIn
+        );
     }
 
     /**
@@ -657,13 +653,8 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     /**
      * @dev We use the fallback function to allow flexibility on callback.
      */
-    fallback() external {
-        bytes memory result = _callHandleCallbackOnExecutor(msg.data);
-        // slither-disable-next-line assembly
-        assembly ("memory-safe") {
-            // Propagate the result
-            return(add(result, 32), mload(result))
-        }
+    fallback(bytes calldata data) external returns (bytes memory) {
+        return _callHandleCallbackOnExecutor(data);
     }
 
     /**
@@ -779,18 +770,6 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     }
 
     /**
-     * @dev Called by UniswapV4 pool manager after achieving unlock state.
-     */
-    function unlockCallback(bytes calldata data)
-        external
-        returns (bytes memory)
-    {
-        if (data.length < 24) revert TychoRouter__InvalidDataLength();
-        bytes memory result = _callHandleCallbackOnExecutor(data);
-        return result;
-    }
-
-    /**
      * @dev Gets balance of a token for a given address. Supports both native ETH and ERC20 tokens.
      */
     function _balanceOf(address token, address owner)
@@ -800,5 +779,28 @@ contract TychoRouter is AccessControl, Dispatcher, Pausable, ReentrancyGuard {
     {
         return
             token == address(0) ? owner.balance : IERC20(token).balanceOf(owner);
+    }
+
+    /**
+     * @dev Verifies that the expected amount of output tokens was received by the receiver.
+     * It also handles the case of arbitrage swaps where the input and output tokens are the same.
+     */
+    function _verifyAmountOutWasReceived(
+        address tokenIn,
+        address tokenOut,
+        uint256 initialBalanceTokenOut,
+        uint256 amountOut,
+        address receiver,
+        uint256 amountIn
+    ) internal view {
+        uint256 currentBalanceTokenOut = _balanceOf(tokenOut, receiver);
+        if (tokenIn == tokenOut) {
+            // If it is an arbitrage, we need to remove the amountIn from the initial balance to get a correct userAmount
+            initialBalanceTokenOut -= amountIn;
+        }
+        uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
+        if (userAmount != amountOut) {
+            revert TychoRouter__AmountOutNotFullyReceived(userAmount, amountOut);
+        }
     }
 }
