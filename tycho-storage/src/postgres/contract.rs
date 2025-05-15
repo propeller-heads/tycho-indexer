@@ -1068,11 +1068,13 @@ impl PostgresGateway {
                     tx_id,
                     created_ts,
                 ))
+                .on_conflict_do_nothing()
                 .execute(db)
                 .await
                 .map_err(|err| storage_error_from_diesel(err, "AccountBalance", &hex_addr, None))?;
             diesel::insert_into(schema::contract_code::table)
                 .values(new_contract.new_code(account_id, tx_id, created_ts))
+                .on_conflict_do_nothing()
                 .execute(db)
                 .await
                 .map_err(|err| storage_error_from_diesel(err, "ContractCode", &hex_addr, None))?;
