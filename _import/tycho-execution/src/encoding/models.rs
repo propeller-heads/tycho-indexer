@@ -106,8 +106,9 @@ pub struct Transaction {
 ///   solution does not require router address.
 /// * `group_token_in`: Token to be used as the input for the group swap.
 /// * `group_token_out`: Token to be used as the output for the group swap.
-/// * `transfer_from`: true if the solution requires a transfer from the user to the router or pool.
-/// * `transfer`: true if the solution requires a transfer from the router to the pool.
+/// * `transfer_from_needed`: true if the solution requires a transfer from the user to the router
+///   or pool.
+/// * `transfer_needed`: true if the solution requires a transfer from the router to the pool.
 #[derive(Clone, Debug)]
 pub struct EncodingContext {
     pub receiver: Bytes,
@@ -115,8 +116,8 @@ pub struct EncodingContext {
     pub router_address: Option<Bytes>,
     pub group_token_in: Bytes,
     pub group_token_out: Bytes,
-    pub transfer_from: bool,
-    pub transfer: bool,
+    pub transfer_from_needed: bool,
+    pub transfer_needed: bool,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]

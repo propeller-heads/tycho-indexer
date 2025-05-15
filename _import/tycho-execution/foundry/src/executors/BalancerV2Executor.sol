@@ -29,10 +29,10 @@ contract BalancerV2Executor is IExecutor {
             IERC20 tokenOut,
             bytes32 poolId,
             address receiver,
-            bool needsApproval
+            bool approvalNeeded
         ) = _decodeData(data);
 
-        if (needsApproval) {
+        if (approvalNeeded) {
             // slither-disable-next-line unused-return
             tokenIn.forceApprove(VAULT, type(uint256).max);
         }
@@ -67,7 +67,7 @@ contract BalancerV2Executor is IExecutor {
             IERC20 tokenOut,
             bytes32 poolId,
             address receiver,
-            bool needsApproval
+            bool approvalNeeded
         )
     {
         if (data.length != 93) {
@@ -78,6 +78,6 @@ contract BalancerV2Executor is IExecutor {
         tokenOut = IERC20(address(bytes20(data[20:40])));
         poolId = bytes32(data[40:72]);
         receiver = address(bytes20(data[72:92]));
-        needsApproval = uint8(data[92]) > 0;
+        approvalNeeded = uint8(data[92]) > 0;
     }
 }

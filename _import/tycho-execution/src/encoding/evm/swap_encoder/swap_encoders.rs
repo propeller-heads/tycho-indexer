@@ -66,7 +66,7 @@ impl SwapEncoder for UniswapV2SwapEncoder {
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
             zero_to_one,
-            encoding_context.transfer,
+            encoding_context.transfer_needed,
         );
 
         Ok(args.abi_encode_packed())
@@ -129,8 +129,8 @@ impl SwapEncoder for UniswapV3SwapEncoder {
             bytes_to_address(&encoding_context.receiver)?,
             component_id,
             zero_to_one,
-            encoding_context.transfer_from,
-            encoding_context.transfer,
+            encoding_context.transfer_from_needed,
+            encoding_context.transfer_needed,
         );
 
         Ok(args.abi_encode_packed())
@@ -207,8 +207,8 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             group_token_in_address,
             group_token_out_address,
             zero_to_one,
-            encoding_context.transfer_from,
-            encoding_context.transfer,
+            encoding_context.transfer_from_needed,
+            encoding_context.transfer_needed,
             bytes_to_address(&encoding_context.receiver)?,
             pool_params,
         );
@@ -345,8 +345,8 @@ impl SwapEncoder for EkuboSwapEncoder {
         let mut encoded = vec![];
 
         if encoding_context.group_token_in == swap.token_in {
-            encoded.extend((encoding_context.transfer_from as u8).to_be_bytes());
-            encoded.extend((encoding_context.transfer as u8).to_be_bytes());
+            encoded.extend((encoding_context.transfer_from_needed as u8).to_be_bytes());
+            encoded.extend((encoding_context.transfer_needed as u8).to_be_bytes());
             encoded.extend(bytes_to_address(&encoding_context.receiver)?);
             encoded.extend(bytes_to_address(&swap.token_in)?);
         }
@@ -621,7 +621,7 @@ impl SwapEncoder for MaverickV2SwapEncoder {
             bytes_to_address(&swap.token_in)?,
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
-            encoding_context.transfer,
+            encoding_context.transfer_needed,
         );
         Ok(args.abi_encode_packed())
     }
@@ -671,8 +671,8 @@ mod tests {
                 router_address: Some(Bytes::zero(20)),
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
-                transfer: true,
-                transfer_from: false,
+                transfer_needed: true,
+                transfer_from_needed: false,
             };
             let encoder = UniswapV2SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -731,8 +731,8 @@ mod tests {
                 router_address: Some(Bytes::zero(20)),
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
-                transfer: true,
-                transfer_from: false,
+                transfer_needed: true,
+                transfer_from_needed: false,
             };
             let encoder = UniswapV3SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -796,8 +796,8 @@ mod tests {
                 router_address: Some(Bytes::zero(20)),
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
-                transfer: false,
-                transfer_from: false,
+                transfer_needed: false,
+                transfer_from_needed: false,
             };
             let encoder = BalancerV2SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -869,8 +869,8 @@ mod tests {
 
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
-                transfer: true,
-                transfer_from: false,
+                transfer_needed: true,
+                transfer_from_needed: false,
             };
             let encoder = UniswapV4SwapEncoder::new(
                 String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
@@ -943,8 +943,8 @@ mod tests {
                 group_token_in: group_token_in.clone(),
                 // Token out is the same as the group token out
                 group_token_out: token_out.clone(),
-                transfer: true,
-                transfer_from: false,
+                transfer_needed: true,
+                transfer_from_needed: false,
             };
 
             let encoder = UniswapV4SwapEncoder::new(
@@ -987,8 +987,8 @@ mod tests {
                 router_address: Some(router_address.clone()),
                 group_token_in: usde_address.clone(),
                 group_token_out: wbtc_address.clone(),
-                transfer: true,
-                transfer_from: false,
+                transfer_needed: true,
+                transfer_from_needed: false,
             };
 
             // Setup - First sequence: USDE -> USDT
@@ -1125,8 +1125,8 @@ mod tests {
                 group_token_out: token_out.clone(),
                 exact_out: false,
                 router_address: Some(Bytes::default()),
-                transfer: true,
-                transfer_from: false,
+                transfer_needed: true,
+                transfer_from_needed: false,
             };
 
             let encoder =
@@ -1174,8 +1174,8 @@ mod tests {
                 group_token_out: group_token_out.clone(),
                 exact_out: false,
                 router_address: Some(Bytes::default()),
-                transfer: true,
-                transfer_from: false,
+                transfer_needed: true,
+                transfer_from_needed: false,
             };
 
             let first_swap = Swap {
@@ -1373,8 +1373,8 @@ mod tests {
                 router_address: None,
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
-                transfer: false,
-                transfer_from: false,
+                transfer_needed: false,
+                transfer_from_needed: false,
             };
             let encoder = CurveSwapEncoder::new(
                 String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
@@ -1442,8 +1442,8 @@ mod tests {
                 router_address: None,
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
-                transfer: false,
-                transfer_from: false,
+                transfer_needed: false,
+                transfer_from_needed: false,
             };
             let encoder = CurveSwapEncoder::new(
                 String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
@@ -1512,8 +1512,8 @@ mod tests {
                 router_address: None,
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
-                transfer: false,
-                transfer_from: false,
+                transfer_needed: false,
+                transfer_from_needed: false,
             };
             let encoder = CurveSwapEncoder::new(
                 String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
@@ -1582,8 +1582,8 @@ mod tests {
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer: true,
-            transfer_from: false,
+            transfer_needed: true,
+            transfer_from_needed: false,
         };
         let encoder = MaverickV2SwapEncoder::new(
             String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),

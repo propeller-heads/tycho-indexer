@@ -61,11 +61,11 @@ contract CurveExecutor is IExecutor {
             uint8 poolType,
             int128 i,
             int128 j,
-            bool tokenApprovalNeeded,
+            bool approvalNeeded,
             address receiver
         ) = _decodeData(data);
 
-        if (tokenApprovalNeeded && tokenIn != nativeToken) {
+        if (approvalNeeded && tokenIn != nativeToken) {
             // slither-disable-next-line unused-return
             IERC20(tokenIn).forceApprove(address(pool), type(uint256).max);
         }
@@ -119,7 +119,7 @@ contract CurveExecutor is IExecutor {
             uint8 poolType,
             int128 i,
             int128 j,
-            bool tokenApprovalNeeded,
+            bool approvalNeeded,
             address receiver
         )
     {
@@ -129,7 +129,7 @@ contract CurveExecutor is IExecutor {
         poolType = uint8(data[60]);
         i = int128(uint128(uint8(data[61])));
         j = int128(uint128(uint8(data[62])));
-        tokenApprovalNeeded = data[63] != 0;
+        approvalNeeded = data[63] != 0;
         receiver = address(bytes20(data[64:84]));
     }
 

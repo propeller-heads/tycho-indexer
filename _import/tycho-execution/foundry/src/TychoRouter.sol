@@ -122,7 +122,7 @@ contract TychoRouter is
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
-     * @param transferFromRequired If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
+     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
      * @param swaps Encoded swap graph data containing details of each swap.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -136,11 +136,11 @@ contract TychoRouter is
         bool unwrapEth,
         uint256 nTokens,
         address receiver,
-        bool transferFromRequired,
+        bool transferFromNeeded,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         tstoreTransferFromInfo(tokenIn, amountIn, false, msg.sender);
-        if (transferFromRequired) {
+        if (transferFromNeeded) {
             _transfer(address(this));
         }
         return _splitSwapChecked(
@@ -176,7 +176,7 @@ contract TychoRouter is
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
-     * @param transferFromRequired If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
+     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
      * @param permitSingle A Permit2 structure containing token approval details for the input token. Ignored if `wrapEth` is true.
      * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
      * @param swaps Encoded swap graph data containing details of each swap.
@@ -192,7 +192,7 @@ contract TychoRouter is
         bool unwrapEth,
         uint256 nTokens,
         address receiver,
-        bool transferFromRequired,
+        bool transferFromNeeded,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swaps
@@ -202,7 +202,7 @@ contract TychoRouter is
             permit2.permit(msg.sender, permitSingle, signature);
         }
         tstoreTransferFromInfo(tokenIn, amountIn, true, msg.sender);
-        if (transferFromRequired) {
+        if (transferFromNeeded) {
             _transfer(address(this));
         }
 
@@ -237,8 +237,8 @@ contract TychoRouter is
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param transferFromRequired If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
-     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromRequired` is true.
+     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
+     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromNeeded` is true.
      * @param swaps Encoded swap graph data containing details of each swap.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -251,12 +251,12 @@ contract TychoRouter is
         bool wrapEth,
         bool unwrapEth,
         address receiver,
-        bool transferFromRequired,
+        bool transferFromNeeded,
         address tokenInReceiver,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         tstoreTransferFromInfo(tokenIn, amountIn, false, msg.sender);
-        if (transferFromRequired) {
+        if (transferFromNeeded) {
             _transfer(tokenInReceiver);
         }
         return _sequentialSwapChecked(
@@ -289,8 +289,8 @@ contract TychoRouter is
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param transferFromRequired If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
-     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromRequired` is true.
+     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
+     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromNeeded` is true.
      * @param permitSingle A Permit2 structure containing token approval details for the input token. Ignored if `wrapEth` is true.
      * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
      * @param swaps Encoded swap graph data containing details of each swap.
@@ -305,7 +305,7 @@ contract TychoRouter is
         bool wrapEth,
         bool unwrapEth,
         address receiver,
-        bool transferFromRequired,
+        bool transferFromNeeded,
         address tokenInReceiver,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
@@ -317,7 +317,7 @@ contract TychoRouter is
         }
 
         tstoreTransferFromInfo(tokenIn, amountIn, true, msg.sender);
-        if (transferFromRequired) {
+        if (transferFromNeeded) {
             _transfer(tokenInReceiver);
         }
         return _sequentialSwapChecked(
@@ -348,8 +348,8 @@ contract TychoRouter is
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param transferFromRequired If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
-     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromRequired` is true.
+     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
+     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromNeeded` is true.
      * @param swapData Encoded swap details.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -362,12 +362,12 @@ contract TychoRouter is
         bool wrapEth,
         bool unwrapEth,
         address receiver,
-        bool transferFromRequired,
+        bool transferFromNeeded,
         address tokenInReceiver,
         bytes calldata swapData
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         tstoreTransferFromInfo(tokenIn, amountIn, false, msg.sender);
-        if (transferFromRequired) {
+        if (transferFromNeeded) {
             _transfer(tokenInReceiver);
         }
         return _singleSwap(
@@ -400,8 +400,8 @@ contract TychoRouter is
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param transferFromRequired If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
-     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromRequired` is true.
+     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
+     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromNeeded` is true.
      * @param permitSingle A Permit2 structure containing token approval details for the input token. Ignored if `wrapEth` is true.
      * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
      * @param swapData Encoded swap details.
@@ -416,7 +416,7 @@ contract TychoRouter is
         bool wrapEth,
         bool unwrapEth,
         address receiver,
-        bool transferFromRequired,
+        bool transferFromNeeded,
         address tokenInReceiver,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
@@ -427,7 +427,7 @@ contract TychoRouter is
             permit2.permit(msg.sender, permitSingle, signature);
         }
         tstoreTransferFromInfo(tokenIn, amountIn, true, msg.sender);
-        if (transferFromRequired) {
+        if (transferFromNeeded) {
             _transfer(tokenInReceiver);
         }
         return _singleSwap(

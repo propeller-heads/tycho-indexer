@@ -60,10 +60,10 @@ impl TransferOptimization {
                 // Transfer from swapper to pool
                 (true, swap.swaps[0].component.id.clone(), false)
             }
-        // in transfer is not necessary for these protocols. Only make a transfer if the
-        // tokens are not already in the router
+        // in transfer is not necessary for these protocols. Only make a transfer from the swapper
+        // to the router if the tokens are not already in the router
         } else if !self.token_in_already_in_router {
-            // Transfer from swapper to router using permit2.
+            // Transfer from swapper to router using.
             (true, self.router_address.to_string(), false)
         } else {
             (false, zero_address, false)

@@ -125,7 +125,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
         let swap_receiver =
             if !unwrap { solution.receiver.clone() } else { self.router_address.clone() };
 
-        let (mut transfer_from, mut funds_receiver, transfer) = self
+        let (mut transfer_from_needed, mut token_in_receiver, transfer_needed) = self
             .transfer_optimization
             .get_transfers(grouped_swap.clone(), wrap);
         let encoding_context = EncodingContext {
@@ -134,8 +134,8 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
             router_address: Some(self.router_address.clone()),
             group_token_in: grouped_swap.token_in.clone(),
             group_token_out: grouped_swap.token_out.clone(),
-            transfer_from,
-            transfer,
+            transfer_from_needed,
+            transfer_needed,
         };
 
         let mut grouped_protocol_data: Vec<u8> = vec![];
@@ -156,11 +156,13 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
         ) {
             // The first swap is from a callback constrained protocol. This means that the in
             // transfer needs to happen at callback time and not before.
-            transfer_from = false;
-            funds_receiver = Address::ZERO.to_string();
+            transfer_from_needed = false;
+            token_in_receiver = Address::ZERO.to_string();
         }
-        let funds_receiver = Address::from_str(&funds_receiver).map_err(|_| {
-            EncodingError::FatalError(format!("Invalid funds receiver address: {funds_receiver}"))
+        let token_in_receiver = Address::from_str(&token_in_receiver).map_err(|_| {
+            EncodingError::FatalError(format!(
+                "Invalid funds receiver address: {token_in_receiver}"
+            ))
         })?;
         let method_calldata = if let Some(permit2) = self.permit2.clone() {
             let (permit, signature) = permit2.get_permit(
@@ -177,8 +179,8 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
                 wrap,
                 unwrap,
                 bytes_to_address(&solution.receiver)?,
-                transfer_from,
-                funds_receiver,
+                transfer_from_needed,
+                token_in_receiver,
                 permit,
                 signature.as_bytes().to_vec(),
                 swap_data,
@@ -193,8 +195,8 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
                 wrap,
                 unwrap,
                 bytes_to_address(&solution.receiver)?,
-                transfer_from,
-                funds_receiver,
+                transfer_from_needed,
+                token_in_receiver,
                 swap_data,
             )
                 .abi_encode()
@@ -307,7 +309,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 NativeAction::Unwrap => unwrap = true,
             }
         }
-        let (mut transfer_from, mut funds_receiver, transfer) = self
+        let (mut transfer_from_needed, mut token_in_receiver, transfer_needed) = self
             .transfer_optimization
             .get_transfers(grouped_swaps[0].clone(), wrap);
 
@@ -331,7 +333,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
             next_in_between_swap_optimization_allowed = next_swap_optimization;
 
             let in_between_transfer = if i == 0 {
-                transfer
+                transfer_needed
             } else {
                 self.transfer_optimization
                     .get_in_between_transfer(&protocol, in_between_swap_optimization_allowed)
@@ -342,8 +344,8 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
-                transfer_from: if i == 0 { transfer_from } else { false },
-                transfer: in_between_transfer,
+                transfer_from_needed: if i == 0 { transfer_from_needed } else { false },
+                transfer_needed: in_between_transfer,
             };
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
@@ -369,11 +371,13 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
         ) {
             // The first swap is from a callback constrained protocol. This means that the in
             // transfer needs to happen at callback time and not before.
-            transfer_from = false;
-            funds_receiver = Address::ZERO.to_string();
+            transfer_from_needed = false;
+            token_in_receiver = Address::ZERO.to_string();
         }
-        let funds_receiver = Address::from_str(&funds_receiver).map_err(|_| {
-            EncodingError::FatalError(format!("Invalid funds receiver address: {funds_receiver}"))
+        let token_in_receiver = Address::from_str(&token_in_receiver).map_err(|_| {
+            EncodingError::FatalError(format!(
+                "Invalid funds receiver address: {token_in_receiver}"
+            ))
         })?;
         let encoded_swaps = ple_encode(swaps);
         let method_calldata = if let Some(permit2) = self.permit2.clone() {
@@ -391,8 +395,8 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 wrap,
                 unwrap,
                 bytes_to_address(&solution.receiver)?,
-                transfer_from,
-                funds_receiver,
+                transfer_from_needed,
+                token_in_receiver,
                 permit,
                 signature.as_bytes().to_vec(),
                 encoded_swaps,
@@ -407,8 +411,8 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 wrap,
                 unwrap,
                 bytes_to_address(&solution.receiver)?,
-                transfer_from,
-                funds_receiver,
+                transfer_from_needed,
+                token_in_receiver,
                 encoded_swaps,
             )
                 .abi_encode()
@@ -570,7 +574,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             tokens.push(solution.checked_token.clone());
         }
 
-        let (transfer_from, _funds_receiver, _transfer) = self
+        let (transfer_from_needed, _token_in_receiver, _transfer_needed) = self
             .transfer_optimization
             .get_transfers(grouped_swaps[0].clone(), wrap);
         let mut swaps = vec![];
@@ -589,7 +593,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             } else {
                 self.router_address.clone()
             };
-            let transfer = self
+            let transfer_needed = self
                 .transfer_optimization
                 .get_in_between_transfer(&protocol, false);
             let encoding_context = EncodingContext {
@@ -598,8 +602,8 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
-                transfer_from: false,
-                transfer,
+                transfer_from_needed: false,
+                transfer_needed,
             };
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
@@ -643,7 +647,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 unwrap,
                 U256::from(tokens_len),
                 bytes_to_address(&solution.receiver)?,
-                transfer_from,
+                transfer_from_needed,
                 permit,
                 signature.as_bytes().to_vec(),
                 encoded_swaps,
@@ -659,7 +663,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 unwrap,
                 U256::from(tokens_len),
                 bytes_to_address(&solution.receiver)?,
-                transfer_from,
+                transfer_from_needed,
                 encoded_swaps,
             )
                 .abi_encode()
