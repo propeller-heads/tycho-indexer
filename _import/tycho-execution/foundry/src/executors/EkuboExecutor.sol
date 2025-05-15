@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.26;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IExecutor} from "@interfaces/IExecutor.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
 import {ICore} from "@ekubo/interfaces/ICore.sol";
@@ -26,11 +26,13 @@ contract EkuboExecutor is
 
     ICore immutable core;
 
-    uint256 constant POOL_DATA_OFFSET = 77;
+    uint256 constant POOL_DATA_OFFSET = 58;
     uint256 constant HOP_BYTE_LEN = 52;
 
     bytes4 constant LOCKED_SELECTOR = 0xb45a3c0e; // locked(uint256)
     bytes4 constant PAY_CALLBACK_SELECTOR = 0x599d0714; // payCallback(uint256,address)
+
+    using SafeERC20 for IERC20;
 
     constructor(address _core, address _permit2)
         OneTransferFromOnly(_permit2)
@@ -122,12 +124,10 @@ contract EkuboExecutor is
     function _locked(bytes calldata swapData) internal returns (int128) {
         int128 nextAmountIn = int128(uint128(bytes16(swapData[0:16])));
         uint128 tokenInDebtAmount = uint128(nextAmountIn);
-        address sender = address(bytes20(swapData[16:36]));
-        bool transferFromNeeded = (swapData[36] != 0);
-        bool transferNeeded = (swapData[37] != 0);
-
-        address receiver = address(bytes20(swapData[38:58]));
-        address tokenIn = address(bytes20(swapData[58:78]));
+        bool transferFromNeeded = (swapData[16] != 0);
+        bool transferNeeded = (swapData[17] != 0);
+        address receiver = address(bytes20(swapData[18:38]));
+        address tokenIn = address(bytes20(swapData[38:58]));
 
         address nextTokenIn = tokenIn;
 
@@ -207,7 +207,7 @@ contract EkuboExecutor is
             if (token == address(0)) {
                 payable(msg.sender).transfer(amount);
             } else {
-                IERC20(token).transfer(msg.sender, amount);
+                IERC20(token).safeTransfer(msg.sender, amount);
             }
         }
     }

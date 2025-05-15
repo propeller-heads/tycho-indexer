@@ -40,10 +40,10 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             false,
             false,
             ALICE,
-            permitSingle,
-            signature,
             true, // transferFrom to WETH_DAI_POOL
             WETH_DAI_POOL, // receiver of input tokens
+            permitSingle,
+            signature,
             swap
         );
 
@@ -239,10 +239,10 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             true,
             false,
             ALICE,
+            false,
+            tychoRouterAddr,
             emptyPermitSingle,
             "",
-            true,
-            tychoRouterAddr,
             swap
         );
         uint256 expectedAmount = 2018817438608734439722;
@@ -280,10 +280,10 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             false,
             true,
             ALICE,
-            permitSingle,
-            signature,
             true, // transferFrom to WETH_DAI_POOL
             WETH_DAI_POOL, // receiver of input tokens
+            permitSingle,
+            signature,
             swap
         );
 

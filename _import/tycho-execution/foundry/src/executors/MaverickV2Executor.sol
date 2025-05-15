@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./TokenTransfer.sol";
 
 error MaverickV2Executor__InvalidDataLength();
 error MaverickV2Executor__InvalidTarget();
@@ -49,10 +48,11 @@ contract MaverickV2Executor is IExecutor {
 
         if (transferNeeded) {
             if (address(tokenIn) == address(0)) {
+                // slither-disable-next-line arbitrary-send-eth
                 payable(target).transfer(givenAmount);
             } else {
                 // slither-disable-next-line arbitrary-send-erc20
-                tokenIn.safeTransferFrom(msg.sender, target, givenAmount);
+                tokenIn.safeTransfer(target, givenAmount);
             }
         }
 

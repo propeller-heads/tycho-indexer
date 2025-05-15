@@ -52,11 +52,12 @@ impl SingleSwapStrategyEncoder {
         token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
         let (permit2, selector) = if let Some(swapper_pk) = swapper_pk {
-            (Some(Permit2::new(swapper_pk, chain.clone())?), "singleSwapPermit2(uint256,address,address,uint256,bool,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
+            (Some(Permit2::new(swapper_pk, chain.clone())?), "singleSwapPermit2(uint256,address,address,uint256,bool,bool,address,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
         } else {
             (
                 None,
-                "singleSwap(uint256,address,address,uint256,bool,bool,address,bytes)".to_string(),
+                "singleSwap(uint256,address,address,uint256,bool,bool,address,bool,address,bytes)"
+                    .to_string(),
             )
         };
         Ok(Self {
@@ -247,11 +248,11 @@ impl SequentialSwapStrategyEncoder {
         token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
         let (permit2, selector) = if let Some(swapper_pk) = swapper_pk {
-            (Some(Permit2::new(swapper_pk, chain.clone())?), "sequentialSwapPermit2(uint256,address,address,uint256,bool,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
+            (Some(Permit2::new(swapper_pk, chain.clone())?), "sequentialSwapPermit2(uint256,address,address,uint256,bool,bool,address,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
         } else {
             (
                 None,
-                "sequentialSwap(uint256,address,address,uint256,bool,bool,address,bytes)"
+                "sequentialSwap(uint256,address,address,uint256,bool,bool,address,bool,address,bytes)"
                     .to_string(),
             )
         };
@@ -461,11 +462,11 @@ impl SplitSwapStrategyEncoder {
         token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
         let (permit2, selector) = if let Some(swapper_pk) = swapper_pk {
-            (Some(Permit2::new(swapper_pk, chain.clone())?), "splitSwapPermit2(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
+            (Some(Permit2::new(swapper_pk, chain.clone())?), "splitSwapPermit2(uint256,address,address,uint256,bool,bool,uint256,address,bool,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
         } else {
             (
                 None,
-                "splitSwap(uint256,address,address,uint256,bool,bool,uint256,address,bytes)"
+                "splitSwap(uint256,address,address,uint256,bool,bool,uint256,address,bool,bytes)"
                     .to_string(),
             )
         };
@@ -569,6 +570,9 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             tokens.push(solution.checked_token.clone());
         }
 
+        let (transfer_from, _funds_receiver, _transfer) = self
+            .transfer_optimization
+            .get_transfers(grouped_swaps[0].clone(), wrap);
         let mut swaps = vec![];
         for grouped_swap in grouped_swaps.iter() {
             let protocol = grouped_swap.protocol_system.clone();
@@ -639,6 +643,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 unwrap,
                 U256::from(tokens_len),
                 bytes_to_address(&solution.receiver)?,
+                transfer_from,
                 permit,
                 signature.as_bytes().to_vec(),
                 encoded_swaps,
@@ -654,6 +659,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 unwrap,
                 U256::from(tokens_len),
                 bytes_to_address(&solution.receiver)?,
+                transfer_from,
                 encoded_swaps,
             )
                 .abi_encode()
@@ -782,8 +788,8 @@ mod tests {
                 .unwrap();
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
-                "30ace1b1",                                                             // Function selector
-                "0000000000000000000000000000000000000000000000000de0b6b3a7640000",      // amount out
+                "a93aabdf",                                                             // Function selector
+                "0000000000000000000000000000000000000000000000000de0b6b3a7640000",      // amount in
                 "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",      // token in
                 "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",      // token out
                 &expected_min_amount_encoded,                                            // min amount out
@@ -874,7 +880,7 @@ mod tests {
                 .unwrap();
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
-                "20144a07",                                                           // Function selector
+                "cc60c623",                                                           // Function selector
                 "0000000000000000000000000000000000000000000000000de0b6b3a7640000",   // amount in
                 "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",   // token in
                 "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",   // token out
@@ -958,7 +964,7 @@ mod tests {
                 .unwrap();
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
-                "20144a07",                                                           // Function selector
+                "cc60c623",                                                           // Function selector
                 "0000000000000000000000000000000000000000000000000de0b6b3a7640000",   // amount in
                 "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",   // token in
                 "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",   // token out
@@ -1230,7 +1236,7 @@ mod tests {
             let hex_calldata = encode(&calldata);
 
             let expected = String::from(concat!(
-                "e8a980d7",                                                         /* function selector */
+                "59e3efbb",                                                         /* function selector */
                 "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
                 "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
                 "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token ou
@@ -1356,7 +1362,7 @@ mod tests {
                 .unwrap();
             let hex_calldata = hex::encode(&calldata);
             let expected_input = [
-                "51bcc7b6",                                                         // selector
+                "740bae0c",                                                         // selector
                 "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
                 "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
                 "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
@@ -2073,7 +2079,7 @@ mod tests {
 
             let hex_calldata = hex::encode(&calldata);
             let expected_input = [
-                "7c553846",                                                         // selector
+                "308f3ce0",                                                         // selector
                 "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
                 "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
                 "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
@@ -2082,6 +2088,7 @@ mod tests {
                 "0000000000000000000000000000000000000000000000000000000000000000", // unwrap action
                 "0000000000000000000000000000000000000000000000000000000000000002", // tokens length
                 "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+                "0000000000000000000000000000000000000000000000000000000000000001", // transfer from
             ]
                 .join("");
             let expected_swaps = [
@@ -2125,8 +2132,8 @@ mod tests {
                 "0000000000" // padding
             ]
                 .join("");
-            assert_eq!(hex_calldata[..520], expected_input);
-            assert_eq!(hex_calldata[1288..], expected_swaps);
+            assert_eq!(hex_calldata[..584], expected_input);
+            assert_eq!(hex_calldata[1352..], expected_swaps);
             write_calldata_to_file("test_split_input_cyclic_swap", hex_calldata.as_str());
         }
 
@@ -2238,7 +2245,7 @@ mod tests {
 
             let hex_calldata = hex::encode(&calldata);
             let expected_input = [
-                "7c553846",                                                         // selector
+                "308f3ce0",                                                         // selector
                 "0000000000000000000000000000000000000000000000000000000005f5e100", // given amount
                 "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // given token
                 "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // checked token
@@ -2247,6 +2254,7 @@ mod tests {
                 "0000000000000000000000000000000000000000000000000000000000000000", // unwrap action
                 "0000000000000000000000000000000000000000000000000000000000000002", // tokens length
                 "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
+                "0000000000000000000000000000000000000000000000000000000000000001", // transfer from
             ]
                 .join("");
 
@@ -2292,8 +2300,8 @@ mod tests {
             ]
                 .join("");
 
-            assert_eq!(hex_calldata[..520], expected_input);
-            assert_eq!(hex_calldata[1288..], expected_swaps);
+            assert_eq!(hex_calldata[..584], expected_input);
+            assert_eq!(hex_calldata[1352..], expected_swaps);
             write_calldata_to_file("test_split_output_cyclic_swap", hex_calldata.as_str());
         }
     }
@@ -2641,7 +2649,7 @@ mod tests {
                 .unwrap();
 
             let expected_input = [
-                "30ace1b1",                                                              // Function selector (single swap)
+                "a93aabdf",                                                              // Function selector (single swap)
                 "000000000000000000000000000000000000000000000000000000003b9aca00",      // amount in
                 "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",      // token in
                 "0000000000000000000000006982508145454ce325ddbe47a25d4ec3d2311933",      // token out

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
+import "../TestUtils.sol";
 import "@src/executors/UniswapV2Executor.sol";
-import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
 import {Permit2TestHelper} from "../Permit2TestHelper.sol";
+import {Test} from "../../lib/forge-std/src/Test.sol";
 
 contract UniswapV2ExecutorExposed is UniswapV2Executor {
     constructor(
@@ -51,7 +52,7 @@ contract FakeUniswapV2Pool {
     }
 }
 
-contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
+contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
     using SafeERC20 for IERC20;
 
     UniswapV2ExecutorExposed uniswapV2Exposed;
@@ -193,7 +194,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
 
     function testSwapIntegration() public {
         bytes memory protocolData =
-            hex"c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a478c2975ab1ea89e8196811f51a7b7ade33eb111d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e0001";
+            loadCallDataFromFile("test_encode_uniswap_v2");
         uint256 amountIn = 10 ** 18;
         uint256 amountOut = 1847751195973566072891;
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);

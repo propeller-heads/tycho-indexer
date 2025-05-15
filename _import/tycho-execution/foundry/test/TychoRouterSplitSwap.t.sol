@@ -95,10 +95,9 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             false,
             4,
             ALICE,
+            true,
             permitSingle,
             signature,
-            true,
-            tychoRouterAddr,
             pleEncode(swaps)
         );
 
@@ -127,7 +126,6 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             4,
             ALICE,
             true,
-            tychoRouterAddr,
             pleEncode(swaps)
         );
 
@@ -157,7 +155,6 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             4,
             ALICE,
             true,
-            tychoRouterAddr,
             pleEncode(swaps)
         );
         vm.stopPrank();
@@ -184,7 +181,6 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             2,
             ALICE,
             true,
-            tychoRouterAddr,
             pleEncode(swaps)
         );
 
@@ -222,10 +218,9 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             false,
             4,
             ALICE,
+            true,
             permitSingle,
             signature,
-            true,
-            tychoRouterAddr,
             pleEncode(swaps)
         );
         vm.stopPrank();
@@ -268,10 +263,9 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             false,
             2,
             ALICE,
+            false,
             emptyPermitSingle,
             "",
-            false,
-            tychoRouterAddr,
             pleEncode(swaps)
         );
         uint256 expectedAmount = 2018817438608734439722;
@@ -315,10 +309,9 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             true,
             2,
             ALICE,
+            true,
             permitSingle,
             signature,
-            true,
-            tychoRouterAddr,
             pleEncode(swaps)
         );
 

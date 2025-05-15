@@ -60,12 +60,8 @@ contract UniswapV2Executor is IExecutor {
         calculatedAmount = _getAmountOut(target, givenAmount, zeroForOne);
 
         if (transferNeeded) {
-            if (address(tokenIn) == address(0)) {
-                payable(target).transfer(givenAmount);
-            } else {
-                // slither-disable-next-line arbitrary-send-erc20
-                tokenIn.safeTransferFrom(msg.sender, target, givenAmount);
-            }
+            // slither-disable-next-line arbitrary-send-erc20
+            tokenIn.safeTransfer(target, givenAmount);
         }
 
         IUniswapV2Pair pool = IUniswapV2Pair(target);

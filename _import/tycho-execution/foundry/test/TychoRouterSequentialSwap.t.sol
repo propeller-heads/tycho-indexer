@@ -60,10 +60,10 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             false,
             false,
             ALICE,
-            permitSingle,
-            signature,
             true,
             WETH_DAI_POOL,
+            permitSingle,
+            signature,
             pleEncode(swaps)
         );
 
@@ -177,10 +177,10 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             false,
             false,
             ALICE,
-            permitSingle,
-            signature,
             true,
             WETH_DAI_POOL,
+            permitSingle,
+            signature,
             pleEncode(swaps)
         );
         vm.stopPrank();
@@ -208,14 +208,14 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         swaps[0] = encodeSequentialSwap(
             address(usv2Executor),
             encodeUniswapV2Swap(
-                WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false, true
+                WETH_ADDR, WETH_DAI_POOL, DAI_USDC_POOL, false, true
             )
         );
 
         // DAI -> USDC
         swaps[1] = encodeSequentialSwap(
             address(usv2Executor),
-            encodeUniswapV2Swap(DAI_ADDR, DAI_USDC_POOL, ALICE, true, true)
+            encodeUniswapV2Swap(DAI_ADDR, DAI_USDC_POOL, ALICE, true, false)
         );
 
         uint256 amountOut = tychoRouter.sequentialSwapPermit2{value: amountIn}(
@@ -226,10 +226,10 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             true,
             false,
             ALICE,
+            false,
+            address(0),
             emptyPermitSingle,
             "",
-            true,
-            tychoRouterAddr,
             pleEncode(swaps)
         );
         uint256 expectedAmount = 2005810530;
@@ -280,10 +280,10 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             false,
             true,
             ALICE,
-            permitSingle,
-            signature,
             true,
             DAI_USDC_POOL,
+            permitSingle,
+            signature,
             pleEncode(swaps)
         );
 

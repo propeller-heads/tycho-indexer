@@ -655,7 +655,7 @@ mod tests {
         #[test]
         fn test_encode_uniswap_v2() {
             let usv2_pool = ProtocolComponent {
-                id: String::from("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"),
+                id: String::from("0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11"),
                 ..Default::default()
             };
 
@@ -668,7 +668,7 @@ mod tests {
                 split: 0f64,
             };
             let encoding_context = EncodingContext {
-                receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
+                receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
                 exact_out: false,
                 router_address: Some(Bytes::zero(20)),
                 group_token_in: token_in.clone(),
@@ -692,15 +692,16 @@ mod tests {
                     // in token
                     "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                     // component id
-                    "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+                    "a478c2975ab1ea89e8196811f51a7b7ade33eb11",
                     // receiver
-                    "0000000000000000000000000000000000000001",
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                     // zero for one
                     "00",
                     // transfer true
                     "01",
                 ))
             );
+            write_calldata_to_file("test_encode_uniswap_v2", hex_swap.as_str());
         }
     }
 

@@ -47,8 +47,8 @@ contract UniswapV4Executor is
     IPoolManager public immutable poolManager;
     address private immutable _self;
 
-    bytes4 constant SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0x8bc6d0d7;
-    bytes4 constant SWAP_EXACT_INPUT_SELECTOR = 0xaf90aeb1;
+    bytes4 constant SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0xbaa46608;
+    bytes4 constant SWAP_EXACT_INPUT_SELECTOR = 0x653f1785;
 
     struct UniswapV4Pool {
         address intermediaryToken;

@@ -28,6 +28,7 @@ library UniswapV4Utils {
             tokenIn,
             tokenOut,
             zeroForOne,
+            transferFromNeeded,
             transferNeeded,
             receiver,
             encodedPools

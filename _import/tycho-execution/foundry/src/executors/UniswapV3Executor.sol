@@ -5,7 +5,6 @@ import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@interfaces/ICallback.sol";
-import {TokenTransfer} from "./TokenTransfer.sol";
 import {OneTransferFromOnly} from "../OneTransferFromOnly.sol";
 
 error UniswapV3Executor__InvalidDataLength();
@@ -152,7 +151,7 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
             bool transferNeeded
         )
     {
-        if (data.length != 85) {
+        if (data.length != 86) {
             revert UniswapV3Executor__InvalidDataLength();
         }
         tokenIn = address(bytes20(data[0:20]));

@@ -25,6 +25,7 @@ contract OneTransferFromOnly {
         permit2lal = IAllowanceTransfer(_permit2);
     }
 
+    // slither-disable-next-line assembly
     function tstoreTransferFromInfo(
         address tokenIn,
         uint256 amountIn,
@@ -40,6 +41,7 @@ contract OneTransferFromOnly {
         }
     }
 
+    // slither-disable-next-line assembly
     function _transfer(address receiver) internal {
         address tokenIn;
         uint256 amount;

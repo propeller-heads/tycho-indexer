@@ -149,11 +149,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
 
         vm.startPrank(DAI_WETH_USV3);
         bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR,
-            DAI_ADDR,
-            poolFee,
-            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL,
-            address(uniswapV3Exposed)
+            WETH_ADDR, DAI_ADDR, poolFee, false, true, address(uniswapV3Exposed)
         );
         uint256 dataOffset = 3; // some offset
         uint256 dataLength = protocolData.length;
