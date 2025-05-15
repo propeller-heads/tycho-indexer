@@ -155,9 +155,9 @@ contract UniswapV4Executor is
 
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
-        zeroForOne = (data[40] != 0);
-        transferFromNeeded = (data[41] != 0);
-        transferNeeded = (data[42] != 0);
+        zeroForOne = data[40] != 0;
+        transferFromNeeded = data[41] != 0;
+        transferNeeded = data[42] != 0;
         receiver = address(bytes20(data[43:63]));
 
         uint256 poolsLength = (data.length - 63) / 26; // 26 bytes per pool object

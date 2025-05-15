@@ -121,7 +121,8 @@ contract TychoRouter is
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
-     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
+     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the router.
+     *     Otherwise, assume funds are already in router or will be transferred later by the executors (This is the case for executors with callback).
      * @param swaps Encoded swap graph data containing details of each swap.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -177,7 +178,8 @@ contract TychoRouter is
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
-     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
+     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the router.
+     *     Otherwise, assume funds are already in router or will be transferred later by the executors (This is the case for executors with callback).
      * @param permitSingle A Permit2 structure containing token approval details for the input token. Ignored if `wrapEth` is true.
      * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
      * @param swaps Encoded swap graph data containing details of each swap.
@@ -240,7 +242,8 @@ contract TychoRouter is
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
+     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the tokenInReceiver.
+     *     Otherwise, assume funds are already in router or will be transferred later by the executors (This is the case for executors with callback).
      * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromNeeded` is true.
      * @param swaps Encoded swap graph data containing details of each swap.
      *
@@ -294,8 +297,8 @@ contract TychoRouter is
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
-     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromNeeded` is true.
+     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the tokenInReceiver.
+     *     Otherwise, assume funds are already in router or will be transferred later by the executors (This is the case for executors with callback).     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromNeeded` is true.
      * @param permitSingle A Permit2 structure containing token approval details for the input token. Ignored if `wrapEth` is true.
      * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
      * @param swaps Encoded swap graph data containing details of each swap.
@@ -355,8 +358,8 @@ contract TychoRouter is
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
-     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromNeeded` is true.
+     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the tokenInReceiver.
+     *     Otherwise, assume funds are already in router or will be transferred later by the executors (This is the case for executors with callback).     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromNeeded` is true.
      * @param swapData Encoded swap details.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -409,8 +412,8 @@ contract TychoRouter is
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the receiver. Otherwise, assume funds are already in router.
-     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromNeeded` is true.
+     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the tokenInReceiver.
+     *     Otherwise, assume funds are already in router or will be transferred later by the executors (This is the case for executors with callback).     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromNeeded` is true.
      * @param permitSingle A Permit2 structure containing token approval details for the input token. Ignored if `wrapEth` is true.
      * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
      * @param swapData Encoded swap details.

@@ -159,8 +159,8 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
         receiver = address(bytes20(data[43:63]));
         target = address(bytes20(data[63:83]));
         zeroForOne = uint8(data[83]) > 0;
-        transferFromNeeded = uint8(data[84]) > 0;
-        transferNeeded = uint8(data[85]) > 0;
+        transferFromNeeded = data[84] != 0;
+        transferNeeded = data[85] != 0;
     }
 
     function _makeV3CallbackData(

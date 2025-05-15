@@ -78,6 +78,6 @@ contract BalancerV2Executor is IExecutor {
         tokenOut = IERC20(address(bytes20(data[20:40])));
         poolId = bytes32(data[40:72]);
         receiver = address(bytes20(data[72:92]));
-        approvalNeeded = uint8(data[92]) > 0;
+        approvalNeeded = data[92] != 0;
     }
 }
