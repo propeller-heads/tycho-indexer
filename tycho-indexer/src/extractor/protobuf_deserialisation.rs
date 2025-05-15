@@ -17,7 +17,7 @@ use tycho_common::{
 use tycho_substreams::pb::tycho::evm::v1 as substreams;
 
 use crate::extractor::{
-    models::{BlockChanges, BlockContractChanges, BlockEntityChanges},
+    models::{BlockChanges, BlockContractChanges, BlockEntityChanges, TxWithStorageChanges},
     u256_num::bytes_to_f64,
     ExtractionError,
 };
@@ -578,6 +578,31 @@ impl TryFromMessage for BlockEntityChanges {
     }
 }
 
+impl TryFromMessage for TxWithStorageChanges {
+    type Args<'a> = (substreams::TransactionStorageChanges, &'a Block);
+
+    fn try_from_message(args: Self::Args<'_>) -> Result<Self, ExtractionError> {
+        let (msg, block) = args;
+        let tx = Transaction::try_from_message((
+            msg.tx
+                .expect("TransactionChanges should have a transaction"),
+            &block.hash.clone(),
+        ))?;
+        let mut all_storage_changes = HashMap::new();
+        msg.storage_changes
+            .into_iter()
+            .for_each(|contract_changes| {
+                let mut storage_changes = HashMap::new();
+                for change in contract_changes.slots.into_iter() {
+                    storage_changes.insert(change.slot.into(), change.value.into());
+                }
+                all_storage_changes.insert(contract_changes.address.into(), storage_changes);
+            });
+
+        Ok(Self { tx, storage_changes: all_storage_changes })
+    }
+}
+
 impl TryFromMessage for BlockChanges {
     type Args<'a> =
         (substreams::BlockChanges, &'a str, Chain, &'a str, &'a HashMap<String, ProtocolType>, u64);
@@ -611,6 +636,12 @@ impl TryFromMessage for BlockChanges {
             let mut txs_with_update = txs_with_update;
             txs_with_update.sort_unstable_by_key(|update| update.tx.index);
 
+            let block_storage_changes = msg
+                .storage_changes
+                .into_iter()
+                .map(|change| TxWithStorageChanges::try_from_message((change, &block)))
+                .collect::<Result<Vec<TxWithStorageChanges>, ExtractionError>>()?;
+
             Ok(Self::new(
                 extractor.to_string(),
                 chain,
@@ -618,6 +649,7 @@ impl TryFromMessage for BlockChanges {
                 finalized_block_height,
                 false,
                 txs_with_update,
+                block_storage_changes,
             ))
         } else {
             Err(ExtractionError::Empty)
@@ -646,6 +678,42 @@ mod test {
         let res = ProtocolComponentStateDelta::try_from_message(msg).unwrap();
 
         assert_eq!(res, fixtures::protocol_state_delta());
+    }
+
+    #[test]
+    fn test_parse_tx_with_storage_changes() {
+        let msg = fixtures::pb_transaction_storage_changes(0);
+        let tx = Transaction::new(
+            Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000001")
+                .unwrap(),
+            Bytes::default(),
+            Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            Some(Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap()),
+            1,
+        );
+        let exp = TxWithStorageChanges {
+            tx,
+            storage_changes: HashMap::from([
+                (
+                    Bytes::from_str("0000000000000000000000000000000000000001").unwrap(),
+                    HashMap::from([
+                        (Bytes::from_str("0x01").unwrap(), Bytes::from_str("0x01").unwrap()),
+                        (Bytes::from_str("0x02").unwrap(), Bytes::from_str("0x02").unwrap()),
+                    ]),
+                ),
+                (
+                    Bytes::from_str("0000000000000000000000000000000000000002").unwrap(),
+                    HashMap::from([(
+                        Bytes::from_str("0x03").unwrap(),
+                        Bytes::from_str("0x03").unwrap(),
+                    )]),
+                ),
+            ]),
+        };
+
+        let res = TxWithStorageChanges::try_from_message((msg, &Block::default())).unwrap();
+
+        assert_eq!(res, exp);
     }
 
     #[rstest]

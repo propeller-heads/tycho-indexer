@@ -201,6 +201,7 @@ mod tests {
             0,
             false,
             txs_with_update.clone(),
+            Vec::new(),
         );
 
         // expected to skip itself as a component balance, but still track it as an account balance
@@ -259,6 +260,7 @@ mod tests {
                 ),
                 ..Default::default()
             }],
+            Vec::new(),
         );
 
         let processed = ignore_self_balances(changes);
