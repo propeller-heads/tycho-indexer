@@ -2375,4 +2375,54 @@ pub mod fixtures {
             _ => panic!("Requested unknown version of block entity changes"),
         }
     }
+
+    pub fn pb_transaction_storage_changes(version: u8) -> TransactionStorageChanges {
+        match version {
+            0 => TransactionStorageChanges {
+                tx: Some(pb_transactions(0, 1)),
+                storage_changes: vec![
+                    StorageChanges {
+                        address: address_from_str("0000000000000000000000000000000000000001"),
+                        slots: vec![
+                            ContractSlot {
+                                slot: Bytes::from("0x01").into(),
+                                value: Bytes::from("0x01").into(),
+                            },
+                            ContractSlot {
+                                slot: Bytes::from("0x02").into(),
+                                value: Bytes::from("0x02").into(),
+                            },
+                        ],
+                    },
+                    StorageChanges {
+                        address: address_from_str("0000000000000000000000000000000000000002"),
+                        slots: vec![ContractSlot {
+                            slot: Bytes::from("0x03").into(),
+                            value: Bytes::from("0x03").into(),
+                        }],
+                    },
+                ],
+            },
+            1 => TransactionStorageChanges {
+                tx: Some(pb_transactions(1, 2)),
+                storage_changes: vec![
+                    StorageChanges {
+                        address: address_from_str("0000000000000000000000000000000000000001"),
+                        slots: vec![ContractSlot {
+                            slot: Bytes::from("0x01").into(),
+                            value: Bytes::from("0x04").into(),
+                        }],
+                    },
+                    StorageChanges {
+                        address: address_from_str("0000000000000000000000000000000000000002"),
+                        slots: vec![ContractSlot {
+                            slot: Bytes::from("0x05").into(),
+                            value: Bytes::from("0x05").into(),
+                        }],
+                    },
+                ],
+            },
+            _ => panic!("Requested TransactionStorageChanges version doesn't exist"),
+        }
+    }
 }

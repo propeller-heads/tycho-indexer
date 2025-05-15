@@ -1567,7 +1567,7 @@ mod test {
             .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
                 tycho_substreams::BlockChanges {
                     block: Some(pb_fixtures::pb_blocks(1)),
-                    changes: vec![],
+                    ..Default::default()
                 },
                 Some(format!("cursor@{}", 1).as_str()),
                 Some(1),
@@ -1581,7 +1581,7 @@ mod test {
             .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
                 tycho_substreams::BlockChanges {
                     block: Some(pb_fixtures::pb_blocks(2)),
-                    changes: vec![],
+                    ..Default::default()
                 },
                 Some(format!("cursor@{}", 2).as_str()),
                 Some(2),
@@ -1772,7 +1772,7 @@ mod test {
 
         extractor
             .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
-                tycho_substreams::BlockChanges { block: Some(block_1), changes: vec![] },
+                tycho_substreams::BlockChanges { block: Some(block_1), ..Default::default() },
                 Some(format!("cursor@{}", 1).as_str()),
                 Some(1),
             ))
@@ -1783,7 +1783,7 @@ mod test {
 
         extractor
             .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
-                tycho_substreams::BlockChanges { block: Some(block_2), changes: vec![] },
+                tycho_substreams::BlockChanges { block: Some(block_2), ..Default::default() },
                 Some(format!("cursor@{}", 2).as_str()),
                 Some(2),
             ))
@@ -1805,7 +1805,7 @@ mod test {
 
         extractor
             .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
-                tycho_substreams::BlockChanges { block: Some(block_3), changes: vec![] },
+                tycho_substreams::BlockChanges { block: Some(block_3), ..Default::default() },
                 Some(format!("cursor@{}", 3).as_str()),
                 Some(2),
             ))
@@ -1901,6 +1901,7 @@ mod test {
                 )]),
                 ..Default::default()
             }],
+            Vec::new(),
         );
 
         let protocol_gw = MockGateway::new();
@@ -2566,6 +2567,7 @@ mod test_serial_db {
                     ..Default::default()
                 },
             ],
+            Vec::new(),
         )
     }
 
@@ -3138,7 +3140,7 @@ mod test_serial_db {
                                     }
                                 },
                             }),
-                            changes: vec![],
+                            ..Default::default()
                         },
                         Some(format!("cursor@{version}").as_str()),
                         Some(5), // Buffered
@@ -3180,7 +3182,7 @@ mod test_serial_db {
                             parent_hash: Bytes::from(3_u64).lpad(32, 0).to_vec(),
                             ts: base_ts,
                         }),
-                        changes: vec![],
+                        ..Default::default()
                     },
                     Some(format!("cursor@{}", 4).as_str()),
                     Some(5), // Buffered
