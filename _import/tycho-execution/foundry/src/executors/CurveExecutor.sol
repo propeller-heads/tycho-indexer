@@ -39,7 +39,7 @@ contract CurveExecutor is IExecutor {
 
     address public immutable nativeToken;
 
-    constructor(address _nativeToken, address _permit2) {
+    constructor(address _nativeToken) {
         if (_nativeToken == address(0)) {
             revert CurveExecutor__AddressZero();
         }

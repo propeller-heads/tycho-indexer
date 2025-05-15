@@ -19,12 +19,7 @@ contract UniswapV2Executor is IExecutor {
     address private immutable self;
     uint256 public immutable feeBps;
 
-    constructor(
-        address _factory,
-        bytes32 _initCode,
-        address _permit2,
-        uint256 _feeBps
-    ) {
+    constructor(address _factory, bytes32 _initCode, uint256 _feeBps) {
         if (_factory == address(0)) {
             revert UniswapV2Executor__InvalidFactory();
         }

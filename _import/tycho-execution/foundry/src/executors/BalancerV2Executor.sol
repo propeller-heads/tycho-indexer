@@ -18,8 +18,6 @@ contract BalancerV2Executor is IExecutor {
 
     address private constant VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
-    constructor(address _permit2) {}
-
     // slither-disable-next-line locked-ether
     function swap(uint256 givenAmount, bytes calldata data)
         external

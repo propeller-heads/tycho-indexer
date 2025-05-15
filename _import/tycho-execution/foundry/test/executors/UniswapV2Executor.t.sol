@@ -8,12 +8,9 @@ import {Permit2TestHelper} from "../Permit2TestHelper.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 
 contract UniswapV2ExecutorExposed is UniswapV2Executor {
-    constructor(
-        address _factory,
-        bytes32 _initCode,
-        address _permit2,
-        uint256 _feeBps
-    ) UniswapV2Executor(_factory, _initCode, _permit2, _feeBps) {}
+    constructor(address _factory, bytes32 _initCode, uint256 _feeBps)
+        UniswapV2Executor(_factory, _initCode, _feeBps)
+    {}
 
     function decodeParams(bytes calldata data)
         external
@@ -65,19 +62,13 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 forkBlock = 17323404;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         uniswapV2Exposed = new UniswapV2ExecutorExposed(
-            USV2_FACTORY_ETHEREUM, USV2_POOL_CODE_INIT_HASH, PERMIT2_ADDRESS, 30
+            USV2_FACTORY_ETHEREUM, USV2_POOL_CODE_INIT_HASH, 30
         );
         sushiswapV2Exposed = new UniswapV2ExecutorExposed(
-            SUSHISWAPV2_FACTORY_ETHEREUM,
-            SUSHIV2_POOL_CODE_INIT_HASH,
-            PERMIT2_ADDRESS,
-            30
+            SUSHISWAPV2_FACTORY_ETHEREUM, SUSHIV2_POOL_CODE_INIT_HASH, 30
         );
         pancakeswapV2Exposed = new UniswapV2ExecutorExposed(
-            PANCAKESWAPV2_FACTORY_ETHEREUM,
-            PANCAKEV2_POOL_CODE_INIT_HASH,
-            PERMIT2_ADDRESS,
-            25
+            PANCAKESWAPV2_FACTORY_ETHEREUM, PANCAKEV2_POOL_CODE_INIT_HASH, 25
         );
     }
 
