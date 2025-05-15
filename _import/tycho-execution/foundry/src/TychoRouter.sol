@@ -73,7 +73,6 @@ contract TychoRouter is
     ReentrancyGuard,
     OneTransferFromOnly
 {
-    IAllowanceTransfer public immutable permit2;
     IWETH private immutable _weth;
 
     using SafeERC20 for IERC20;
