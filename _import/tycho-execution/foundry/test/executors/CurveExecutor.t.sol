@@ -35,7 +35,6 @@ contract CurveExecutorExposed is CurveExecutor {
             int128 i,
             int128 j,
             bool tokenApprovalNeeded,
-            bool transferNeeded,
             address receiver
         )
     {
@@ -65,7 +64,6 @@ contract CurveExecutorTest is Test, Constants {
             uint8(2),
             uint8(0),
             true,
-            false,
             ALICE
         );
 
@@ -77,7 +75,6 @@ contract CurveExecutorTest is Test, Constants {
             int128 i,
             int128 j,
             bool tokenApprovalNeeded,
-            bool transferNeeded,
             address receiver
         ) = curveExecutorExposed.decodeData(data);
 
@@ -291,7 +288,6 @@ contract CurveExecutorTest is Test, Constants {
             uint8(uint256(uint128(i))),
             uint8(uint256(uint128(j))),
             true,
-            false,
             receiver
         );
     }

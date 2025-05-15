@@ -284,7 +284,6 @@ impl SwapEncoder for BalancerV2SwapEncoder {
             component_id,
             bytes_to_address(&encoding_context.receiver)?,
             approval_needed,
-            encoding_context.transfer,
         );
         Ok(args.abi_encode_packed())
     }
@@ -578,7 +577,6 @@ impl SwapEncoder for CurveSwapEncoder {
             i.to_be_bytes::<1>(),
             j.to_be_bytes::<1>(),
             approval_needed,
-            encoding_context.transfer,
             bytes_to_address(&encoding_context.receiver)?,
         );
 
@@ -827,9 +825,7 @@ mod tests {
                     // receiver
                     "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                     // approval needed
-                    "01",
-                    // transfer false
-                    "00",
+                    "01"
                 ))
             );
             write_calldata_to_file("test_encode_balancer_v2", hex_swap.as_str());
@@ -1408,8 +1404,6 @@ mod tests {
                     "01",
                     // approval needed
                     "01",
-                    // transfer false
-                    "00",
                     // receiver,
                     "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"
                 ))
@@ -1479,8 +1473,6 @@ mod tests {
                     "00",
                     // approval needed
                     "01",
-                    // transfer false
-                    "00",
                     // receiver
                     "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"
                 ))
@@ -1560,8 +1552,6 @@ mod tests {
                     "01",
                     // approval needed
                     "01",
-                    // transfer false
-                    "00",
                     // receiver
                     "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"
                 ))

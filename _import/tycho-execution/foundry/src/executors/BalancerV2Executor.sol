@@ -29,8 +29,7 @@ contract BalancerV2Executor is IExecutor {
             IERC20 tokenOut,
             bytes32 poolId,
             address receiver,
-            bool needsApproval,
-            bool transferNeeded
+            bool needsApproval
         ) = _decodeData(data);
 
         if (needsApproval) {
@@ -68,11 +67,10 @@ contract BalancerV2Executor is IExecutor {
             IERC20 tokenOut,
             bytes32 poolId,
             address receiver,
-            bool needsApproval,
-            bool transferNeeded
+            bool needsApproval
         )
     {
-        if (data.length != 94) {
+        if (data.length != 93) {
             revert BalancerV2Executor__InvalidDataLength();
         }
 
@@ -81,6 +79,5 @@ contract BalancerV2Executor is IExecutor {
         poolId = bytes32(data[40:72]);
         receiver = address(bytes20(data[72:92]));
         needsApproval = uint8(data[92]) > 0;
-        transferNeeded = uint8(data[93]) > 0;
     }
 }

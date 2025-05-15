@@ -14,8 +14,7 @@ contract BalancerV2ExecutorExposed is BalancerV2Executor {
             IERC20 tokenOut,
             bytes32 poolId,
             address receiver,
-            bool needsApproval,
-            bool transferNeeded
+            bool needsApproval
         )
     {
         return _decodeData(data);
@@ -39,7 +38,7 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
 
     function testDecodeParams() public view {
         bytes memory params = abi.encodePacked(
-            WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID, address(2), true, false
+            WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID, address(2), true
         );
 
         (
@@ -47,8 +46,7 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
             IERC20 tokenOut,
             bytes32 poolId,
             address receiver,
-            bool needsApproval,
-            bool transferNeeded
+            bool needsApproval
         ) = balancerV2Exposed.decodeParams(params);
 
         assertEq(address(tokenIn), WETH_ADDR);
@@ -68,9 +66,8 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
 
     function testSwap() public {
         uint256 amountIn = 10 ** 18;
-        bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID, BOB, true, false
-        );
+        bytes memory protocolData =
+            abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID, BOB, true);
 
         deal(WETH_ADDR, address(balancerV2Exposed), amountIn);
         uint256 balanceBefore = BAL.balanceOf(BOB);
@@ -90,8 +87,7 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
             IERC20 tokenOut,
             bytes32 poolId,
             address receiver,
-            bool needsApproval,
-            bool transferNeeded
+            bool needsApproval
         ) = balancerV2Exposed.decodeParams(protocolData);
 
         assertEq(address(tokenIn), WETH_ADDR);

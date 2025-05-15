@@ -52,7 +52,7 @@ contract CurveExecutor is IExecutor {
         payable
         returns (uint256)
     {
-        if (data.length != 85) revert CurveExecutor__InvalidDataLength();
+        if (data.length != 84) revert CurveExecutor__InvalidDataLength();
 
         (
             address tokenIn,
@@ -62,7 +62,6 @@ contract CurveExecutor is IExecutor {
             int128 i,
             int128 j,
             bool tokenApprovalNeeded,
-            bool transferNeeded, // TODO remove this with the encoding
             address receiver
         ) = _decodeData(data);
 
@@ -121,7 +120,6 @@ contract CurveExecutor is IExecutor {
             int128 i,
             int128 j,
             bool tokenApprovalNeeded,
-            bool transferNeeded,
             address receiver
         )
     {
@@ -132,8 +130,7 @@ contract CurveExecutor is IExecutor {
         i = int128(uint128(uint8(data[61])));
         j = int128(uint128(uint8(data[62])));
         tokenApprovalNeeded = data[63] != 0;
-        transferNeeded = data[64] != 0;
-        receiver = address(bytes20(data[65:85]));
+        receiver = address(bytes20(data[64:84]));
     }
 
     /**
