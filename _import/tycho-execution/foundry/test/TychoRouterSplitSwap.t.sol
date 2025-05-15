@@ -401,6 +401,76 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 99654537);
     }
 
+    function testSplitInputIllegalTransfers() public {
+        // This test attempts to perform multiple `transferFrom`s - which is not
+        // permitted by the TychoRouter.
+        //
+        // The flow is:
+        //            ┌─ (USV3, 60% split) ───┐
+        //            │                       │
+        // USDC ──────┤                       ├────> WETH
+        //            │                       │
+        //            └─ (USV3, 40% split) ───┘
+        uint256 amountIn = 100 * 10 ** 6;
+
+        // Assume funds have already been transferred to tychoRouter
+        deal(USDC_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, amountIn);
+
+        bytes memory usdcWethV3Pool1ZeroOneData = encodeUniswapV3Swap(
+            USDC_ADDR,
+            WETH_ADDR,
+            tychoRouterAddr,
+            USDC_WETH_USV3,
+            true,
+            true, // transferFrom swapper required
+            false // transfer from tycho router to protocol
+        );
+
+        bytes memory usdcWethV3Pool2ZeroOneData = encodeUniswapV3Swap(
+            USDC_ADDR,
+            WETH_ADDR,
+            tychoRouterAddr,
+            USDC_WETH_USV3_2,
+            true,
+            true, // transferFrom swapper required
+            false // transfer from tycho router to protocol
+        );
+
+        bytes[] memory swaps = new bytes[](2);
+        // USDC -> WETH (60% split)
+        swaps[0] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            (0xffffff * 60) / 100, // 60%
+            address(usv3Executor),
+            usdcWethV3Pool1ZeroOneData
+        );
+        // USDC -> WETH (40% remainder)
+        swaps[1] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv3Executor),
+            usdcWethV3Pool2ZeroOneData
+        );
+        vm.expectRevert();
+        tychoRouter.splitSwap(
+            amountIn,
+            USDC_ADDR,
+            WETH_ADDR,
+            1,
+            false,
+            false,
+            2,
+            ALICE,
+            false,
+            pleEncode(swaps)
+        );
+        vm.stopPrank();
+    }
+
     function testSplitOutputCyclicSwapInternalMethod() public {
         // This test has start and end tokens that are the same
         // The flow is:
