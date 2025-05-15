@@ -149,6 +149,7 @@ mod test {
                 )]),
                 ..Default::default()
             }],
+            Vec::new(),
         );
 
         let expected = BlockChanges::new(
@@ -184,6 +185,7 @@ mod test {
                     .clone(),
                 ..Default::default()
             }],
+            Vec::new(),
         );
 
         let updated_changes = add_default_attributes(changes, &USV3_MANDATORY_ATTRIBUTES);
@@ -227,6 +229,7 @@ mod test {
                 )]),
                 ..Default::default()
             }],
+            Vec::new(),
         );
 
         let updated_changes = add_default_attributes(changes.clone(), &USV3_MANDATORY_ATTRIBUTES);
@@ -278,6 +281,7 @@ mod test {
                 ),
                 ..Default::default()
             }],
+            Vec::new(),
         );
 
         let expected = BlockChanges::new(
@@ -320,6 +324,7 @@ mod test {
                 ),
                 ..Default::default()
             }],
+            Vec::new(),
         );
 
         let updated_changes = trim_curve_component_token(changes);
