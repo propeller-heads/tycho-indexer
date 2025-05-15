@@ -1,3 +1,10 @@
+## [0.100.0](https://github.com/propeller-heads/tycho-simulation/compare/0.99.2...0.100.0) (2025-05-15)
+
+
+### Features
+
+* update tycho-indexer dependencies to version 0.70.3 ([980b0fd](https://github.com/propeller-heads/tycho-simulation/commit/980b0fdb7ed6acffbe80bbd870bfeb6bdee1445b))
+
 ## [0.99.2](https://github.com/propeller-heads/tycho-simulation/compare/0.99.1...0.99.2) (2025-05-05)
 
 
