@@ -5,10 +5,10 @@ use async_trait::async_trait;
 
 use crate::{
     models::{
-        blockchain::{Block, BlockTag},
+        blockchain::{Block, BlockTag, EntryPointWithData, TracedEntryPoint},
         contract::AccountDelta,
         token::{CurrencyToken, TokenQuality, TransferCost, TransferTax},
-        Address, Balance,
+        Address, Balance, BlockHash,
     },
     Bytes,
 };
@@ -92,4 +92,29 @@ pub trait TokenPreProcessor: Send + Sync {
         token_finder: Arc<dyn TokenOwnerFinding>,
         block: BlockTag,
     ) -> Vec<CurrencyToken>;
+}
+
+/// Trait for tracing blockchain transaction execution.
+#[async_trait]
+pub trait EntryPointTracer {
+    type Error;
+
+    /// Traces the execution of a list of entry points at a specific block.
+    ///
+    /// # Parameters
+    /// * `block_hash` - The hash of the block at which to perform the trace. The trace will use the
+    ///   state of the blockchain at this block.
+    /// * `entry_points` - A list of entry points to trace with their data.
+    ///
+    /// # Returns
+    /// Returns a vector of `TracedEntryPoint`, where each element contains:
+    /// * `retriggers` - A set of (address, storage slot) pairs representing storage locations that
+    ///   could alter tracing results. If any of these storage slots change, the set of called
+    ///   contract might be outdated.
+    /// * `called_addresses` - A set of all contract addresses that were called during the trace
+    async fn trace(
+        &self,
+        block_hash: BlockHash,
+        entry_points: Vec<EntryPointWithData>,
+    ) -> Result<Vec<TracedEntryPoint>, Self::Error>;
 }

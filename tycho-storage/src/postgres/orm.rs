@@ -15,6 +15,10 @@ use diesel_derive_enum::DbEnum;
 use tycho_common::{
     models,
     models::{
+        blockchain::{
+            EntryPointTracingData as EntryPointTracingDataCommon,
+            EntryPointWithData as EntryPointWithDataCommon,
+        },
         Address, AttrStoreKey, Balance, BlockHash, Code, CodeHash, ComponentId, ContractId,
         PaginationParams, StoreVal, TxHash,
     },
@@ -25,9 +29,12 @@ use tycho_common::{
 use super::{
     schema::{
         account, account_balance, block, chain, component_balance, component_balance_default,
-        component_tvl, contract_code, contract_storage, contract_storage_default, extraction_state,
-        protocol_component, protocol_component_holds_contract, protocol_component_holds_token,
-        protocol_state, protocol_state_default, protocol_system, protocol_type, token, transaction,
+        component_tvl, contract_code, contract_storage, contract_storage_default, entry_point,
+        entry_point_tracing_data, entry_point_tracing_data_calls_account,
+        entry_point_tracing_result, extraction_state, protocol_component,
+        protocol_component_holds_contract, protocol_component_holds_entry_point_tracing_data,
+        protocol_component_holds_token, protocol_state, protocol_state_default, protocol_system,
+        protocol_type, token, transaction,
     },
     versioning::{StoredVersionedRow, VersionedRow},
     PostgresError, MAX_TS, MAX_VERSION_TS,
@@ -245,14 +252,13 @@ impl Transaction {
     ) -> Result<HashMap<TxHash, i64>, StorageError> {
         use super::schema::transaction::dsl::*;
 
-        let results = transaction
+        transaction
             .filter(hash.eq_any(hashes))
             .select((hash, id))
             .load::<(TxHash, i64)>(conn)
             .await
-            .map_err(PostgresError::from)?;
-
-        Ok(results.into_iter().collect())
+            .map_err(|e| StorageError::from(PostgresError::from(e)))
+            .map(|results| results.into_iter().collect())
     }
 
     // fetches the transaction id, hash, index and block timestamp for a given set of hashes
@@ -600,6 +606,19 @@ impl ProtocolComponent {
             .filter(protocol_component::chain_id.eq(chain_db_id))
             .select((protocol_component::id, protocol_component::external_id))
             .get_results::<(i64, String)>(conn)
+            .await
+    }
+
+    pub async fn id_by_external_id(
+        external_id: &str,
+        chain_db_id: i64,
+        conn: &mut AsyncPgConnection,
+    ) -> QueryResult<i64> {
+        protocol_component::table
+            .filter(protocol_component::external_id.eq(external_id))
+            .filter(protocol_component::chain_id.eq(chain_db_id))
+            .select(protocol_component::id)
+            .first::<i64>(conn)
             .await
     }
 }
@@ -1748,4 +1767,323 @@ impl ComponentTVL {
         }
         q
     }
+}
+
+#[derive(Debug, DbEnum, Clone, PartialEq, Eq, Hash)]
+#[ExistingTypePath = "crate::postgres::schema::sql_types::EntryPointTracingType"]
+pub enum EntryPointTracingType {
+    RpcTracer,
+}
+
+impl From<&models::blockchain::EntryPointTracingData> for EntryPointTracingType {
+    fn from(value: &models::blockchain::EntryPointTracingData) -> Self {
+        match value {
+            models::blockchain::EntryPointTracingData::RPCTracer(_) => Self::RpcTracer,
+        }
+    }
+}
+
+#[derive(Identifiable, Queryable, Selectable)]
+#[diesel(table_name = entry_point)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct EntryPoint {
+    pub id: i64,
+    pub external_id: String,
+    pub target: Bytes,
+    pub signature: String,
+    pub inserted_ts: NaiveDateTime,
+    pub modified_ts: NaiveDateTime,
+}
+
+impl From<EntryPoint> for models::blockchain::EntryPoint {
+    fn from(value: EntryPoint) -> Self {
+        Self {
+            external_id: value.external_id.clone(),
+            target: value.target.clone(),
+            signature: value.signature.clone(),
+        }
+    }
+}
+
+impl EntryPoint {
+    /// Retrieves the database ids of entry points from a list of external ids.
+    pub(crate) async fn ids_by_external_ids(
+        external_ids: &[String],
+        conn: &mut AsyncPgConnection,
+    ) -> Result<HashMap<String, i64>, StorageError> {
+        use crate::postgres::schema::entry_point::dsl::*;
+
+        let existing_entries = entry_point
+            .filter(external_id.eq_any(external_ids))
+            .select((id, external_id))
+            .load::<(i64, String)>(conn)
+            .await
+            .map_err(PostgresError::from)?;
+
+        Ok(existing_entries
+            .into_iter()
+            .map(|(ep_id, ext_id)| (ext_id, ep_id))
+            .collect::<HashMap<_, _>>())
+    }
+
+    /// Retrieves the database id of an entry point from a target address and function signature.
+    #[allow(dead_code)]
+    pub(crate) async fn id_by_target_and_signature(
+        target_: &Bytes,
+        signature_: &String,
+        conn: &mut AsyncPgConnection,
+    ) -> Result<i64, StorageError> {
+        use crate::postgres::schema::entry_point::dsl::*;
+
+        Ok(entry_point
+            .select(id)
+            .filter(target.eq(target_))
+            .filter(signature.eq(signature_))
+            .first::<i64>(conn)
+            .await
+            .map_err(PostgresError::from)?)
+    }
+}
+
+#[derive(Insertable, AsChangeset, Eq, Hash, PartialEq)]
+#[diesel(table_name = entry_point)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewEntryPoint {
+    pub external_id: String,
+    pub target: Bytes,
+    pub signature: String,
+}
+
+#[derive(Identifiable, Queryable, Associations, Selectable)]
+#[diesel(belongs_to(EntryPoint))]
+#[diesel(table_name = entry_point_tracing_data)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct EntryPointTracingData {
+    pub id: i64,
+    pub entry_point_id: i64,
+    pub tracing_type: EntryPointTracingType,
+    pub data: Option<serde_json::Value>,
+    pub inserted_ts: NaiveDateTime,
+    pub modified_ts: NaiveDateTime,
+}
+
+impl From<&EntryPointTracingData> for models::blockchain::EntryPointTracingData {
+    fn from(value: &EntryPointTracingData) -> Self {
+        match value.tracing_type {
+            EntryPointTracingType::RpcTracer => {
+                let rpc_tracer: models::blockchain::RPCTracerEntryPoint =
+                    serde_json::from_value(value.data.clone().unwrap()).unwrap();
+                models::blockchain::EntryPointTracingData::RPCTracer(rpc_tracer)
+            }
+        }
+    }
+}
+
+impl EntryPointTracingData {
+    /// Retrieves the database id of an entry point tracing data from an `EntryPointWithData`.
+    #[allow(dead_code)]
+    pub(crate) async fn id_from_entry_point_with_data(
+        entry_point: &EntryPointWithDataCommon,
+        conn: &mut AsyncPgConnection,
+    ) -> Result<i64, StorageError> {
+        let tracing_type = EntryPointTracingType::from(&entry_point.data);
+        let data = match &entry_point.data {
+            EntryPointTracingDataCommon::RPCTracer(rpc_tracer) => serde_json::to_value(rpc_tracer)
+                .map_err(|e| {
+                    StorageError::Unexpected(format!(
+                        "Failed to serialize RPCTracerEntryPoint: {e}"
+                    ))
+                })?,
+        };
+
+        let id_ = super::schema::entry_point_tracing_data::table
+            .inner_join(super::schema::entry_point::table)
+            .filter(super::schema::entry_point::target.eq(entry_point.entry_point.target.clone()))
+            .filter(
+                super::schema::entry_point::signature.eq(entry_point
+                    .entry_point
+                    .signature
+                    .clone()),
+            )
+            .filter(super::schema::entry_point_tracing_data::tracing_type.eq(tracing_type))
+            .filter(super::schema::entry_point_tracing_data::data.eq(data))
+            .select(super::schema::entry_point_tracing_data::id)
+            .first::<i64>(conn)
+            .await
+            .map_err(PostgresError::from)?;
+
+        Ok(id_)
+    }
+
+    // Retrieves the database ids of entry point tracing data from a list of entry points with data.
+    pub(crate) async fn ids_by_entry_point_with_data(
+        entry_points_with_data: &[EntryPointWithDataCommon],
+        conn: &mut AsyncPgConnection,
+    ) -> Result<HashMap<EntryPointWithDataCommon, i64>, StorageError> {
+        if entry_points_with_data.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let (external_ids, data): (HashSet<_>, HashSet<_>) = entry_points_with_data
+            .iter()
+            .map(|ep| {
+                let data = match &ep.data {
+                    EntryPointTracingDataCommon::RPCTracer(rpc_tracer) => {
+                        serde_json::to_value(rpc_tracer).map_err(|e| {
+                            StorageError::Unexpected(format!(
+                                "Failed to serialize RPCTracerEntryPoint: {e}"
+                            ))
+                        })?
+                    }
+                };
+                Ok((ep.entry_point.external_id.clone(), data))
+            })
+            .collect::<Result<Vec<_>, StorageError>>()?
+            .into_iter()
+            .unzip();
+
+        let tuple_data: Vec<(String, EntryPointTracingType, EntryPointTracingDataCommon)> =
+            entry_points_with_data
+                .iter()
+                .map(|ep| {
+                    (
+                        ep.entry_point.external_id.clone(),
+                        EntryPointTracingType::from(&ep.data),
+                        ep.data.clone(),
+                    )
+                })
+                .collect::<Vec<_>>();
+
+        let tuple_ids_to_entry_point_with_data: HashMap<
+            (&String, &EntryPointTracingType, &EntryPointTracingDataCommon),
+            &EntryPointWithDataCommon,
+        > = tuple_data
+            .iter()
+            .zip(entry_points_with_data)
+            .map(|((ext_id, tracing_type, data), ep)| ((ext_id, tracing_type, data), ep))
+            .collect();
+
+        let res = entry_point_tracing_data::table
+            .inner_join(entry_point::table)
+            .filter(
+                // Not filtered by tracing type eq_any because of a diesel bug with OID, shouldn't
+                // affect results much because of data filtering and the application side filtering
+                // below.
+                entry_point::external_id
+                    .eq_any(external_ids)
+                    .and(entry_point_tracing_data::data.eq_any(data)),
+            )
+            .select((
+                entry_point::external_id,
+                entry_point_tracing_data::tracing_type,
+                entry_point_tracing_data::data,
+                entry_point_tracing_data::id,
+            ))
+            .load::<(String, EntryPointTracingType, Option<serde_json::Value>, i64)>(conn)
+            .await
+            .map_err(PostgresError::from)?
+            .into_iter()
+            .filter_map(|(ext_id, tracing_type, data, id)| {
+                let tracing_data = match tracing_type {
+                    EntryPointTracingType::RpcTracer => {
+                        let data_value = match data {
+                            Some(data) => data,
+                            None => {
+                                return Some(Err(StorageError::Unexpected(
+                                    "Data should be Some for RpcTracer".to_string(),
+                                )));
+                            }
+                        };
+
+                        match serde_json::from_value(data_value) {
+                            Ok(d) => EntryPointTracingDataCommon::RPCTracer(d),
+                            Err(e) => {
+                                return Some(Err(StorageError::Unexpected(format!(
+                                    "Failed to deserialize RPCTracerEntryPoint: {e}"
+                                ))))
+                            }
+                        }
+                    }
+                };
+
+                tuple_ids_to_entry_point_with_data
+                    .get(&(&ext_id, &tracing_type, &tracing_data))
+                    .map(|ep| Ok(((*ep).clone(), id)))
+            })
+            .collect::<Result<HashMap<_, _>, StorageError>>()?;
+
+        Ok(res)
+    }
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = entry_point_tracing_data)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewEntryPointTracingData {
+    pub entry_point_id: i64,
+    pub tracing_type: EntryPointTracingType,
+    pub data: Option<serde_json::Value>,
+}
+
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = entry_point_tracing_result)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct EntryPointTracingResult {
+    #[allow(dead_code)]
+    entry_point_tracing_data_id: i64,
+    #[allow(dead_code)]
+    detection_block: i64,
+    #[allow(dead_code)]
+    detection_data: serde_json::Value,
+    #[allow(dead_code)]
+    inserted_ts: NaiveDateTime,
+    #[allow(dead_code)]
+    modified_ts: NaiveDateTime,
+}
+
+#[derive(Insertable, AsChangeset)]
+#[diesel(table_name = entry_point_tracing_result)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewEntryPointTracingResult {
+    pub entry_point_tracing_data_id: i64,
+    pub detection_block: i64,
+    pub detection_data: serde_json::Value,
+}
+
+#[derive(Identifiable, Queryable, Associations, Selectable)]
+#[diesel(belongs_to(ProtocolComponent))]
+#[diesel(belongs_to(EntryPointTracingData))]
+#[diesel(table_name = protocol_component_holds_entry_point_tracing_data)]
+#[diesel(primary_key(protocol_component_id, entry_point_tracing_data_id))]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct ProtocolComponentHoldsEntryPointTracingData {
+    pub protocol_component_id: i64,
+    pub entry_point_tracing_data_id: i64,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = protocol_component_holds_entry_point_tracing_data)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewProtocolComponentHoldsEntryPointTracingData {
+    pub protocol_component_id: i64,
+    pub entry_point_tracing_data_id: i64,
+}
+
+#[derive(Identifiable, Queryable, Associations, Selectable)]
+#[diesel(belongs_to(EntryPointTracingData))]
+#[diesel(belongs_to(Account))]
+#[diesel(table_name = entry_point_tracing_data_calls_account)]
+#[diesel(primary_key(entry_point_tracing_data_id, account_id))]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct EntryPointTracingDataCallsAccount {
+    pub entry_point_tracing_data_id: i64,
+    pub account_id: i64,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = entry_point_tracing_data_calls_account)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewEntryPointTracingDataCallsAccount {
+    pub entry_point_tracing_data_id: i64,
+    pub account_id: i64,
 }

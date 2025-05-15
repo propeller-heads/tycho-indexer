@@ -111,7 +111,7 @@ diesel migration redo --migration-dir ./tycho-storage/migrations
 If the schema.rs file does not automatically update after you've run a migration with table changes, you can trigger the update manually by executing:
 
 ```bash
-diesel print-schema > ./tycho-storage/src/postgres/schema.rs
+diesel print-schema --config-file ./tycho-storage/diesel.toml > ./tycho-storage/src/postgres/schema.rs
 ```
 
 ## Tests

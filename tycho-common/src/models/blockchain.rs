@@ -1,13 +1,14 @@
 use std::{
     any::Any,
-    collections::{hash_map::Entry, HashMap},
+    collections::{hash_map::Entry, HashMap, HashSet},
     sync::Arc,
 };
 
 use chrono::NaiveDateTime;
-use serde::{Deserialize, Serialize};
+use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use tracing::warn;
 
+use super::{BlockHash, StoreKey};
 use crate::{
     models::{
         contract::{AccountBalance, AccountChangesWithTx, AccountDelta},
@@ -341,6 +342,111 @@ pub enum BlockTag {
     /// Block by number
     Number(u64),
 }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EntryPoint {
+    /// The id of the protocol component that the entry point belongs to.
+    pub external_id: String,
+    /// The address of the contract to trace.
+    pub target: Address,
+    /// The signature of the function to trace.
+    pub signature: String,
+}
+
+impl EntryPoint {
+    pub fn new(external_id: String, target: Address, signature: String) -> Self {
+        Self { external_id, target, signature }
+    }
+}
+
+/// A struct that combines an entry point with its associated tracing data.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EntryPointWithData {
+    /// The entry point to trace, containing the target contract address and function signature
+    pub entry_point: EntryPoint,
+    /// The tracing configuration and data for this entry point
+    pub data: EntryPointTracingData,
+}
+
+impl EntryPointWithData {
+    pub fn new(entry_point: EntryPoint, data: EntryPointTracingData) -> Self {
+        Self { entry_point, data }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
+/// An entry point to trace. Different types of entry points tracing will be supported in the
+/// future. Like RPC debug tracing, symbolic execution, etc.
+pub enum EntryPointTracingData {
+    /// Uses RPC calls to retrieve the called addresses and retriggers
+    RPCTracer(RPCTracerEntryPoint),
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Eq, Hash)]
+pub struct RPCTracerEntryPoint {
+    /// The caller address of the transaction, if not provided tracing will use the default value
+    /// for an address defined by the VM.
+    pub caller: Option<Address>,
+    /// The data used for the tracing call, this needs to include the function selector
+    pub data: Bytes,
+}
+
+impl RPCTracerEntryPoint {
+    pub fn new(caller: Option<Address>, data: Bytes) -> Self {
+        Self { caller, data }
+    }
+}
+
+// Ensure serialization order, required by the storage layer
+impl Serialize for RPCTracerEntryPoint {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("RPCTracerEntryPoint", 2)?;
+        state.serialize_field("caller", &self.caller)?;
+        state.serialize_field("data", &self.data)?;
+        state.end()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TracingResult {
+    /// A set of (address, storage slot) pairs representing state that contain a called address.
+    /// If any of these storage slots change, the execution path might change.
+    pub retriggers: HashSet<(Address, StoreKey)>,
+    /// A set of all addresses that were called during the trace.
+    pub called_addresses: HashSet<Address>,
+}
+
+impl TracingResult {
+    pub fn new(
+        retriggers: HashSet<(Address, StoreKey)>,
+        called_addresses: HashSet<Address>,
+    ) -> Self {
+        Self { retriggers, called_addresses }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+/// Represents a traced entry point and the results of the tracing operation.
+pub struct TracedEntryPoint {
+    /// The combined entry point and tracing data that was traced
+    pub entry_point_with_data: EntryPointWithData,
+    /// The block hash of the block that the entry point was traced on.
+    pub detection_block_hash: BlockHash,
+    /// The results of the tracing operation
+    pub tracing_result: TracingResult,
+}
+
+impl TracedEntryPoint {
+    pub fn new(
+        entry_point: EntryPointWithData,
+        detection_block_hash: BlockHash,
+        result: TracingResult,
+    ) -> Self {
+        Self { entry_point_with_data: entry_point, detection_block_hash, tracing_result: result }
+    }
+}
 
 #[cfg(test)]
 pub mod fixtures {
@@ -584,5 +690,26 @@ pub mod fixtures {
         );
 
         assert!(tx1.merge(tx2).is_err());
+    }
+
+    #[test]
+    fn test_rpc_tracer_entry_point_serialization_order() {
+        use std::str::FromStr;
+
+        use serde_json;
+
+        let entry_point = RPCTracerEntryPoint::new(
+            Some(Address::from_str("0x1234567890123456789012345678901234567890").unwrap()),
+            Bytes::from_str("0xabcdef").unwrap(),
+        );
+
+        let serialized = serde_json::to_string(&entry_point).unwrap();
+
+        // Verify that "caller" comes before "data" in the serialized output
+        assert!(serialized.find("\"caller\"").unwrap() < serialized.find("\"data\"").unwrap());
+
+        // Verify we can deserialize it back
+        let deserialized: RPCTracerEntryPoint = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(entry_point, deserialized);
     }
 }
