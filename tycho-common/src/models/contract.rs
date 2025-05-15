@@ -8,8 +8,8 @@ use crate::{
     models::{
         blockchain::Transaction,
         protocol::{ComponentBalance, ProtocolComponent},
-        Address, Balance, Chain, ChangeType, Code, CodeHash, ComponentId, ContractId, MergeError,
-        StoreKey, StoreVal, TxHash,
+        Address, Balance, Chain, ChangeType, Code, CodeHash, ComponentId, ContractId,
+        ContractStore, ContractStoreDeltas, MergeError, TxHash,
     },
     Bytes,
 };
@@ -19,7 +19,7 @@ pub struct Account {
     pub chain: Chain,
     pub address: Address,
     pub title: String,
-    pub slots: HashMap<StoreKey, StoreVal>,
+    pub slots: ContractStore,
     pub native_balance: Balance,
     pub token_balances: HashMap<Address, AccountBalance>,
     pub code: Code,
@@ -35,7 +35,7 @@ impl Account {
         chain: Chain,
         address: Address,
         title: String,
-        slots: HashMap<StoreKey, StoreVal>,
+        slots: ContractStore,
         native_balance: Balance,
         token_balances: HashMap<Address, AccountBalance>,
         code: Code,
@@ -96,7 +96,7 @@ impl Account {
 pub struct AccountDelta {
     pub chain: Chain,
     pub address: Address,
-    pub slots: HashMap<StoreKey, Option<StoreVal>>,
+    pub slots: ContractStoreDeltas,
     pub balance: Option<Balance>,
     pub code: Option<Code>,
     pub change: ChangeType,
@@ -115,7 +115,7 @@ impl AccountDelta {
     pub fn new(
         chain: Chain,
         address: Address,
-        slots: HashMap<StoreKey, Option<StoreVal>>,
+        slots: ContractStoreDeltas,
         balance: Option<Balance>,
         code: Option<Code>,
         change: ChangeType,
