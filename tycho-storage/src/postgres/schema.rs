@@ -282,6 +282,13 @@ diesel::table! {
 }
 
 diesel::table! {
+    protocol_component_holds_entry_point (protocol_component_id, entry_point_id) {
+        protocol_component_id -> Int8,
+        entry_point_id -> Int8,
+    }
+}
+
+diesel::table! {
     protocol_component_holds_entry_point_tracing_data (protocol_component_id, entry_point_tracing_data_id) {
         protocol_component_id -> Int8,
         entry_point_tracing_data_id -> Int8,
@@ -382,6 +389,8 @@ diesel::joinable!(protocol_component -> protocol_system (protocol_system_id));
 diesel::joinable!(protocol_component -> protocol_type (protocol_type_id));
 diesel::joinable!(protocol_component_holds_contract -> contract_code (contract_code_id));
 diesel::joinable!(protocol_component_holds_contract -> protocol_component (protocol_component_id));
+diesel::joinable!(protocol_component_holds_entry_point -> entry_point (entry_point_id));
+diesel::joinable!(protocol_component_holds_entry_point -> protocol_component (protocol_component_id));
 diesel::joinable!(protocol_component_holds_entry_point_tracing_data -> entry_point_tracing_data (entry_point_tracing_data_id));
 diesel::joinable!(protocol_component_holds_entry_point_tracing_data -> protocol_component (protocol_component_id));
 diesel::joinable!(protocol_component_holds_token -> protocol_component (protocol_component_id));
@@ -412,6 +421,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     extraction_state,
     protocol_component,
     protocol_component_holds_contract,
+    protocol_component_holds_entry_point,
     protocol_component_holds_entry_point_tracing_data,
     protocol_component_holds_token,
     protocol_system,
