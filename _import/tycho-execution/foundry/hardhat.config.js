@@ -52,14 +52,14 @@ module.exports = {
     etherscan: {
         apiKey: process.env.BLOCKCHAIN_EXPLORER_API_KEY,
         customChains: [
-          {
-            network: "unichain",
-            chainId: 130,
-            urls: {
-              apiURL: "https://api.uniscan.xyz/api",
-              browserURL: "https://www.uniscan.xyz/"
+            {
+                network: "unichain",
+                chainId: 130,
+                urls: {
+                    apiURL: "https://api.uniscan.xyz/api",
+                    browserURL: "https://www.uniscan.xyz/"
+                }
             }
-          }
         ]
     }
 };
