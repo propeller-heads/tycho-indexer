@@ -101,7 +101,6 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
 
         bool transferFromNeeded = msgData[175] != 0;
         bool transferNeeded = msgData[176] != 0;
-        address sender = address(bytes20(msgData[176:196]));
 
         verifyCallback(msgData[132:]);
 
@@ -172,12 +171,7 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
         bool transferNeeded
     ) internal view returns (bytes memory) {
         return abi.encodePacked(
-            tokenIn,
-            tokenOut,
-            fee,
-            transferFromNeeded,
-            transferNeeded,
-            msg.sender
+            tokenIn, tokenOut, fee, transferFromNeeded, transferNeeded
         );
     }
 
