@@ -42,11 +42,13 @@ pub type AttrStoreKey = String;
 /// Value literal type of the contract store.
 pub type StoreVal = Bytes;
 
-/// A binary key value store for an account.
-pub type ContractStore = HashMap<StoreKey, Option<StoreVal>>;
+/// A binary key-value store for an account.
+pub type ContractStore = HashMap<StoreKey, StoreVal>;
+pub type ContractStoreDeltas = HashMap<StoreKey, Option<StoreVal>>;
 
-/// Multiple key values stores grouped by account address.
+/// Multiple binary key-value stores grouped by account address.
 pub type AccountToContractStore = HashMap<Address, ContractStore>;
+pub type AccountToContractStoreDeltas = HashMap<Address, ContractStoreDeltas>;
 
 /// Component id literal type to uniquely identify a component.
 pub type ComponentId = String;
