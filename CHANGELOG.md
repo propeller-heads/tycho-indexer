@@ -1,3 +1,11 @@
+## [0.70.4](https://github.com/propeller-heads/tycho-indexer/compare/0.70.3...0.70.4) (2025-05-15)
+
+
+### Bug Fixes
+
+* **postgres:** add on_conflict_do_nothing to contract balance and code upserts ([2ef58a8](https://github.com/propeller-heads/tycho-indexer/commit/2ef58a8c866a2ff41bbabf0538cb50ed18e71680))
+* **postgres:** add on_conflict_do_nothing to contract balance and code upserts ([#574](https://github.com/propeller-heads/tycho-indexer/issues/574)) ([eb8956b](https://github.com/propeller-heads/tycho-indexer/commit/eb8956bcbbf3b9002fa86e3d74fe3bfae3e34718))
+
 ## [0.70.3](https://github.com/propeller-heads/tycho-indexer/compare/0.70.2...0.70.3) (2025-05-14)
 
 
