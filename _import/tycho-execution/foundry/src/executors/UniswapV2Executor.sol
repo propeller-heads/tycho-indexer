@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 
-    error UniswapV2Executor__InvalidDataLength();
+error UniswapV2Executor__InvalidDataLength();
 error UniswapV2Executor__InvalidTarget();
 error UniswapV2Executor__InvalidFactory();
 error UniswapV2Executor__InvalidInitCode();
@@ -78,7 +78,7 @@ contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
             address target,
             address receiver,
             bool zeroForOne,
-            TransferType transferType,
+            TransferType transferType
         )
     {
         if (data.length != 62) {

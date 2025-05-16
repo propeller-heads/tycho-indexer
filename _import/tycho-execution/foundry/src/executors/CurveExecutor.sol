@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 
-    error CurveExecutor__AddressZero();
+error CurveExecutor__AddressZero();
 error CurveExecutor__InvalidDataLength();
 
 interface CryptoPool {
@@ -40,7 +40,9 @@ contract CurveExecutor is IExecutor, RestrictTransferFrom {
 
     address public immutable nativeToken;
 
-    constructor(address _nativeToken, address _permit2) RestrictTransferFrom(_permit2) {
+    constructor(address _nativeToken, address _permit2)
+        RestrictTransferFrom(_permit2)
+    {
         if (_nativeToken == address(0)) {
             revert CurveExecutor__AddressZero();
         }

@@ -22,7 +22,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
                 WETH_DAI_POOL,
                 DAI_USDC_POOL, // receiver (direct to next pool)
                 false,
-                false // transfer to protocol from router
+                RestrictTransferFrom.TransferType.None // transfer to protocol from router
             )
         );
 
@@ -34,7 +34,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
                 DAI_USDC_POOL,
                 ALICE,
                 true,
-                false // transfer to protocol from router
+                RestrictTransferFrom.TransferType.None // transfer to protocol from router
             )
         );
         return swaps;
@@ -60,8 +60,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             false,
             false,
             ALICE,
-            true,
-            WETH_DAI_POOL,
             permitSingle,
             signature,
             pleEncode(swaps)
@@ -89,8 +87,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             false,
             false,
             ALICE,
-            true,
-            WETH_DAI_POOL,
             pleEncode(swaps)
         );
 
@@ -117,8 +113,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             false,
             false,
             ALICE,
-            true,
-            WETH_DAI_POOL,
             pleEncode(swaps)
         );
     }
@@ -141,8 +135,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             false,
             false,
             ALICE,
-            true,
-            WETH_DAI_POOL,
             pleEncode(swaps)
         );
     }
@@ -177,8 +169,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             false,
             false,
             ALICE,
-            true,
-            WETH_DAI_POOL,
             permitSingle,
             signature,
             pleEncode(swaps)
@@ -208,14 +198,24 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         swaps[0] = encodeSequentialSwap(
             address(usv2Executor),
             encodeUniswapV2Swap(
-                WETH_ADDR, WETH_DAI_POOL, DAI_USDC_POOL, false, true
+                WETH_ADDR,
+                WETH_DAI_POOL,
+                DAI_USDC_POOL,
+                false,
+                RestrictTransferFrom.TransferType.Transfer
             )
         );
 
         // DAI -> USDC
         swaps[1] = encodeSequentialSwap(
             address(usv2Executor),
-            encodeUniswapV2Swap(DAI_ADDR, DAI_USDC_POOL, ALICE, true, false)
+            encodeUniswapV2Swap(
+                DAI_ADDR,
+                DAI_USDC_POOL,
+                ALICE,
+                true,
+                RestrictTransferFrom.TransferType.None
+            )
         );
 
         uint256 amountOut = tychoRouter.sequentialSwapPermit2{value: amountIn}(
@@ -226,8 +226,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             true,
             false,
             ALICE,
-            false,
-            address(0),
             emptyPermitSingle,
             "",
             pleEncode(swaps)
@@ -260,7 +258,11 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         swaps[0] = encodeSequentialSwap(
             address(usv2Executor),
             encodeUniswapV2Swap(
-                USDC_ADDR, DAI_USDC_POOL, tychoRouterAddr, false, false
+                USDC_ADDR,
+                DAI_USDC_POOL,
+                tychoRouterAddr,
+                false,
+                RestrictTransferFrom.TransferType.TransferFrom
             )
         );
 
@@ -268,7 +270,11 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         swaps[1] = encodeSequentialSwap(
             address(usv2Executor),
             encodeUniswapV2Swap(
-                DAI_ADDR, WETH_DAI_POOL, tychoRouterAddr, true, true
+                DAI_ADDR,
+                WETH_DAI_POOL,
+                tychoRouterAddr,
+                true,
+                RestrictTransferFrom.TransferType.Transfer
             )
         );
 
@@ -280,8 +286,6 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             false,
             true,
             ALICE,
-            true,
-            DAI_USDC_POOL,
             permitSingle,
             signature,
             pleEncode(swaps)
@@ -307,8 +311,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             tychoRouterAddr,
             USDC_WETH_USV3,
             true,
-            false,
-            true
+            RestrictTransferFrom.TransferType.Transfer
         );
 
         bytes memory usdcWethV3Pool2OneZeroData = encodeUniswapV3Swap(
@@ -317,8 +320,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             tychoRouterAddr,
             USDC_WETH_USV3_2,
             false,
-            false, // permit2 transferFrom to protocol
-            true // transfer to protocol
+            RestrictTransferFrom.TransferType.Transfer
         );
 
         bytes[] memory swaps = new bytes[](2);

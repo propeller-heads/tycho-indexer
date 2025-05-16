@@ -26,8 +26,7 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
             USDE_ADDR,
             USDT_ADDR,
             true,
-            true, // permit2 transferFrom to protocol
-            false, // transfer to protocol
+            RestrictTransferFrom.TransferType.TransferFrom,
             ALICE,
             pools
         );
@@ -43,8 +42,6 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
             false,
             false,
             ALICE,
-            false,
-            address(0),
             permitSingle,
             signature,
             swap
@@ -77,8 +74,7 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
             USDE_ADDR,
             WBTC_ADDR,
             true,
-            true, // transferFrom to protocol
-            false, // transfer to protocol
+            RestrictTransferFrom.TransferType.TransferFrom,
             ALICE,
             pools
         );
@@ -89,16 +85,7 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(USDE_ADDR).approve(tychoRouterAddr, amountIn);
         tychoRouter.singleSwap(
-            amountIn,
-            USDE_ADDR,
-            WBTC_ADDR,
-            118280,
-            false,
-            false,
-            ALICE,
-            false,
-            address(0),
-            swap
+            amountIn, USDE_ADDR, WBTC_ADDR, 118280, false, false, ALICE, swap
         );
 
         assertEq(IERC20(WBTC_ADDR).balanceOf(ALICE), 118281);
@@ -277,8 +264,7 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
             ALICE,
             DAI_WETH_USV3,
             zeroForOne,
-            true, // permit2 transferFrom to protocol
-            false // transfer to protocol
+            RestrictTransferFrom.TransferType.TransferFrom
         );
         bytes memory swap =
             encodeSingleSwap(address(usv3Executor), protocolData);
@@ -291,8 +277,6 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
             false,
             false,
             ALICE,
-            false,
-            address(0),
             permitSingle,
             signature,
             swap

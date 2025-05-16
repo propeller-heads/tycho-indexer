@@ -399,7 +399,7 @@ RestrictTransferFrom
             _transfer(
                 address(poolManager),
                 transferType,
-                address(currency),
+                Currency.unwrap(currency),
                 amount
             );
             // slither-disable-next-line unused-return

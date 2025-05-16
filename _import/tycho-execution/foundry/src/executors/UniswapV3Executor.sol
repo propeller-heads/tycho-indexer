@@ -51,7 +51,7 @@ contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
             address receiver,
             address target,
             bool zeroForOne,
-            uint8 transferType
+            TransferType transferType
         ) = _decodeData(data);
 
         _verifyPairAddress(tokenIn, tokenOut, fee, target);
@@ -60,9 +60,8 @@ contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
         int256 amount1;
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
-        bytes memory callbackData = _makeV3CallbackData(
-            tokenIn, tokenOut, fee, transferType
-        );
+        bytes memory callbackData =
+            _makeV3CallbackData(tokenIn, tokenOut, fee, transferType);
 
         {
             (amount0, amount1) = pool.swap(
@@ -98,7 +97,7 @@ contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
             abi.decode(msgData[4:68], (int256, int256));
 
         address tokenIn = address(bytes20(msgData[132:152]));
-        bool transferType = TransferType(uint8(msgData[175]));
+        TransferType transferType = TransferType(uint8(msgData[175]));
 
         verifyCallback(msgData[132:]);
 
@@ -136,7 +135,7 @@ contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
             address receiver,
             address target,
             bool zeroForOne,
-            uint8 transferType
+            TransferType transferType
         )
     {
         if (data.length != 85) {
@@ -148,18 +147,16 @@ contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
         receiver = address(bytes20(data[43:63]));
         target = address(bytes20(data[63:83]));
         zeroForOne = uint8(data[83]) > 0;
-        transferType = uint8(data[84]);
+        transferType = TransferType(uint8(data[84]));
     }
 
     function _makeV3CallbackData(
         address tokenIn,
         address tokenOut,
         uint24 fee,
-        uint8 transferType
+        TransferType transferType
     ) internal pure returns (bytes memory) {
-        return abi.encodePacked(
-            tokenIn, tokenOut, fee, transferType
-        );
+        return abi.encodePacked(tokenIn, tokenOut, fee, uint8(transferType));
     }
 
     function _verifyPairAddress(

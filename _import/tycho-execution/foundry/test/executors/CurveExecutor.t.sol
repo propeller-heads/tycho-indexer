@@ -37,6 +37,7 @@ contract CurveExecutorExposed is CurveExecutor {
             int128 i,
             int128 j,
             bool tokenApprovalNeeded,
+            RestrictTransferFrom.TransferType transferType,
             address receiver
         )
     {
@@ -67,6 +68,7 @@ contract CurveExecutorTest is Test, Constants {
             uint8(2),
             uint8(0),
             true,
+            RestrictTransferFrom.TransferType.None,
             ALICE
         );
 
@@ -78,6 +80,7 @@ contract CurveExecutorTest is Test, Constants {
             int128 i,
             int128 j,
             bool tokenApprovalNeeded,
+            RestrictTransferFrom.TransferType transferType,
             address receiver
         ) = curveExecutorExposed.decodeData(data);
 
@@ -88,6 +91,9 @@ contract CurveExecutorTest is Test, Constants {
         assertEq(i, 2);
         assertEq(j, 0);
         assertEq(tokenApprovalNeeded, true);
+        assertEq(
+            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
+        );
         assertEq(receiver, ALICE);
     }
 
@@ -96,7 +102,14 @@ contract CurveExecutorTest is Test, Constants {
         uint256 amountIn = 1 ether;
         deal(DAI_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(DAI_ADDR, USDC_ADDR, TRIPOOL, 1, ALICE);
+        bytes memory data = _getData(
+            DAI_ADDR,
+            USDC_ADDR,
+            TRIPOOL,
+            1,
+            ALICE,
+            RestrictTransferFrom.TransferType.None
+        );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
@@ -109,8 +122,14 @@ contract CurveExecutorTest is Test, Constants {
         uint256 amountIn = 1 ether;
         deal(address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1, ALICE);
+        bytes memory data = _getData(
+            ETH_ADDR_FOR_CURVE,
+            STETH_ADDR,
+            STETH_POOL,
+            1,
+            ALICE,
+            RestrictTransferFrom.TransferType.None
+        );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
@@ -126,8 +145,14 @@ contract CurveExecutorTest is Test, Constants {
         uint256 amountIn = 1 ether;
         deal(WETH_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(WETH_ADDR, WBTC_ADDR, TRICRYPTO2_POOL, 3, ALICE);
+        bytes memory data = _getData(
+            WETH_ADDR,
+            WBTC_ADDR,
+            TRICRYPTO2_POOL,
+            3,
+            ALICE,
+            RestrictTransferFrom.TransferType.None
+        );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
@@ -140,7 +165,14 @@ contract CurveExecutorTest is Test, Constants {
         uint256 amountIn = 100 * 10 ** 6;
         deal(USDC_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data = _getData(USDC_ADDR, SUSD_ADDR, SUSD_POOL, 1, ALICE);
+        bytes memory data = _getData(
+            USDC_ADDR,
+            SUSD_ADDR,
+            SUSD_POOL,
+            1,
+            ALICE,
+            RestrictTransferFrom.TransferType.None
+        );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
@@ -153,8 +185,14 @@ contract CurveExecutorTest is Test, Constants {
         uint256 amountIn = 1 ether;
         deal(FRAX_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(FRAX_ADDR, USDC_ADDR, FRAX_USDC_POOL, 1, ALICE);
+        bytes memory data = _getData(
+            FRAX_ADDR,
+            USDC_ADDR,
+            FRAX_USDC_POOL,
+            1,
+            ALICE,
+            RestrictTransferFrom.TransferType.None
+        );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
@@ -167,8 +205,14 @@ contract CurveExecutorTest is Test, Constants {
         uint256 amountIn = 100 * 10 ** 6;
         deal(USDC_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(USDC_ADDR, USDE_ADDR, USDE_USDC_POOL, 1, ALICE);
+        bytes memory data = _getData(
+            USDC_ADDR,
+            USDE_ADDR,
+            USDE_USDC_POOL,
+            1,
+            ALICE,
+            RestrictTransferFrom.TransferType.None
+        );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
@@ -181,8 +225,14 @@ contract CurveExecutorTest is Test, Constants {
         uint256 amountIn = 100 * 10 ** 6;
         deal(DOLA_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(DOLA_ADDR, FRAXPYUSD_POOL, DOLA_FRAXPYUSD_POOL, 1, ALICE);
+        bytes memory data = _getData(
+            DOLA_ADDR,
+            FRAXPYUSD_POOL,
+            DOLA_FRAXPYUSD_POOL,
+            1,
+            ALICE,
+            RestrictTransferFrom.TransferType.None
+        );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
@@ -196,8 +246,14 @@ contract CurveExecutorTest is Test, Constants {
         uint256 initialBalance = address(ALICE).balance; // this address already has some ETH assigned to it
         deal(XYO_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(XYO_ADDR, ETH_ADDR_FOR_CURVE, ETH_XYO_POOL, 2, ALICE);
+        bytes memory data = _getData(
+            XYO_ADDR,
+            ETH_ADDR_FOR_CURVE,
+            ETH_XYO_POOL,
+            2,
+            ALICE,
+            RestrictTransferFrom.TransferType.None
+        );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
@@ -210,8 +266,14 @@ contract CurveExecutorTest is Test, Constants {
         uint256 amountIn = 1000 ether;
         deal(BSGG_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(BSGG_ADDR, USDT_ADDR, BSGG_USDT_POOL, 2, ALICE);
+        bytes memory data = _getData(
+            BSGG_ADDR,
+            USDT_ADDR,
+            BSGG_USDT_POOL,
+            2,
+            ALICE,
+            RestrictTransferFrom.TransferType.None
+        );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
@@ -224,8 +286,14 @@ contract CurveExecutorTest is Test, Constants {
         uint256 amountIn = 1 ether;
         deal(WETH_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(WETH_ADDR, USDC_ADDR, TRICRYPTO_POOL, 2, ALICE);
+        bytes memory data = _getData(
+            WETH_ADDR,
+            USDC_ADDR,
+            TRICRYPTO_POOL,
+            2,
+            ALICE,
+            RestrictTransferFrom.TransferType.None
+        );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
@@ -238,8 +306,14 @@ contract CurveExecutorTest is Test, Constants {
         uint256 amountIn = 1 ether;
         deal(UWU_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(UWU_ADDR, WETH_ADDR, UWU_WETH_POOL, 2, ALICE);
+        bytes memory data = _getData(
+            UWU_ADDR,
+            WETH_ADDR,
+            UWU_WETH_POOL,
+            2,
+            ALICE,
+            RestrictTransferFrom.TransferType.None
+        );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
@@ -252,8 +326,14 @@ contract CurveExecutorTest is Test, Constants {
         uint256 amountIn = 1 ether;
         deal(USDT_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(USDT_ADDR, CRVUSD_ADDR, CRVUSD_USDT_POOL, 1, ALICE);
+        bytes memory data = _getData(
+            USDT_ADDR,
+            CRVUSD_ADDR,
+            CRVUSD_USDT_POOL,
+            1,
+            ALICE,
+            RestrictTransferFrom.TransferType.None
+        );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
@@ -266,8 +346,14 @@ contract CurveExecutorTest is Test, Constants {
         uint256 amountIn = 100 * 10 ** 9; // 9 decimals
         deal(WTAO_ADDR, address(curveExecutorExposed), amountIn);
 
-        bytes memory data =
-            _getData(WTAO_ADDR, WSTTAO_ADDR, WSTTAO_WTAO_POOL, 1, ALICE);
+        bytes memory data = _getData(
+            WTAO_ADDR,
+            WSTTAO_ADDR,
+            WSTTAO_WTAO_POOL,
+            1,
+            ALICE,
+            RestrictTransferFrom.TransferType.None
+        );
 
         uint256 amountOut = curveExecutorExposed.swap(amountIn, data);
 
@@ -280,7 +366,8 @@ contract CurveExecutorTest is Test, Constants {
         address tokenOut,
         address pool,
         uint8 poolType,
-        address receiver
+        address receiver,
+        RestrictTransferFrom.TransferType transferType
     ) internal view returns (bytes memory data) {
         (int128 i, int128 j) = _getIndexes(tokenIn, tokenOut, pool);
         data = abi.encodePacked(
@@ -291,6 +378,7 @@ contract CurveExecutorTest is Test, Constants {
             uint8(uint256(uint128(i))),
             uint8(uint256(uint128(j))),
             true,
+            transferType,
             receiver
         );
     }

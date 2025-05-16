@@ -11,7 +11,7 @@ import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
 import {LibBytes} from "@solady/utils/LibBytes.sol";
 import {Config, EkuboPoolKey} from "@ekubo/types/poolKey.sol";
 import {MAX_SQRT_RATIO, MIN_SQRT_RATIO} from "@ekubo/types/sqrtRatio.sol";
-import "../RestrictTransferFrom.sol";
+import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
 contract EkuboExecutor is
@@ -19,7 +19,7 @@ contract EkuboExecutor is
     ILocker,
     IPayer,
     ICallback,
-RestrictTransferFrom
+    RestrictTransferFrom
 {
     error EkuboExecutor__InvalidDataLength();
     error EkuboExecutor__CoreOnly();
@@ -166,11 +166,9 @@ RestrictTransferFrom
         return nextAmountIn;
     }
 
-    function _pay(
-        address token,
-        uint128 amount,
-        TransferType transferType
-    ) internal {
+    function _pay(address token, uint128 amount, TransferType transferType)
+        internal
+    {
         address target = address(core);
 
         if (token == NATIVE_TOKEN_ADDRESS) {
@@ -198,7 +196,7 @@ RestrictTransferFrom
         address token = address(bytes20(payData[12:32])); // This arg is abi-encoded
         uint128 amount = uint128(bytes16(payData[32:48]));
         TransferType transferType = TransferType(uint8(payData[48]));
-        _transfer(core, transferType, token, amount);
+        _transfer(address(core), transferType, token, amount);
     }
 
     // To receive withdrawals from Core

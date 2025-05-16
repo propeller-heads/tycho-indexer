@@ -12,7 +12,7 @@ import {IAsset} from "@balancer-labs/v2-interfaces/contracts/vault/IAsset.sol";
 import {IVault} from "@balancer-labs/v2-interfaces/contracts/vault/IVault.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 
-    error BalancerV2Executor__InvalidDataLength();
+error BalancerV2Executor__InvalidDataLength();
 
 contract BalancerV2Executor is IExecutor, RestrictTransferFrom {
     using SafeERC20 for IERC20;
@@ -36,7 +36,7 @@ contract BalancerV2Executor is IExecutor, RestrictTransferFrom {
             TransferType transferType
         ) = _decodeData(data);
 
-        _transfer(address(this), transferType, tokenIn, givenAmount);
+        _transfer(address(this), transferType, address(tokenIn), givenAmount);
 
         if (approvalNeeded) {
             // slither-disable-next-line unused-return
@@ -73,7 +73,8 @@ contract BalancerV2Executor is IExecutor, RestrictTransferFrom {
             IERC20 tokenOut,
             bytes32 poolId,
             address receiver,
-            bool approvalNeeded
+            bool approvalNeeded,
+            TransferType transferType
         )
     {
         if (data.length != 93) {
@@ -85,5 +86,6 @@ contract BalancerV2Executor is IExecutor, RestrictTransferFrom {
         poolId = bytes32(data[40:72]);
         receiver = address(bytes20(data[72:92]));
         approvalNeeded = data[92] != 0;
+        transferType = TransferType(uint8(data[93]));
     }
 }

@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
 error RestrictTransferFrom__AddressZero();
 error RestrictTransferFrom__ExceededTransferFromAllowance();
@@ -57,10 +58,10 @@ contract RestrictTransferFrom {
     ) internal {
         assembly {
             tstore(_TOKEN_IN_SLOT, tokenIn)
-            tstore(_AMOUNT_IN_SLOT, amountIn)
+            tstore(_AMOUNT_ALLOWED_SLOT, amountIn)
             tstore(_IS_PERMIT2_SLOT, isPermit2)
             tstore(_SENDER_SLOT, caller())
-            tstore(_IS_TRANSFER_EXECUTED_SLOT, false)
+            tstore(_AMOUNT_SPENT_SLOT, 0)
         }
     }
 
@@ -71,18 +72,20 @@ contract RestrictTransferFrom {
         address tokenIn,
         uint256 amount
     ) internal {
-        if (transferType == TransferType.TransferFrom){
+        if (transferType == TransferType.TransferFrom) {
             bool isPermit2;
             address sender;
             bool isTransferExecuted;
+            uint256 amountSpent;
+            uint256 amountAllowed;
             assembly {
                 tokenIn := tload(_TOKEN_IN_SLOT)
-                amountPermitted := tload(_AMOUNT_IN_SLOT)
+                amountAllowed := tload(_AMOUNT_ALLOWED_SLOT)
                 isPermit2 := tload(_IS_PERMIT2_SLOT)
                 sender := tload(_SENDER_SLOT)
-                amountSpent := tload(_IS_TRANSFER_EXECUTED_SLOT)
+                amountSpent := tload(_AMOUNT_SPENT_SLOT)
             }
-            if (amount + amountSpent > amountPermitted) {
+            if (amount + amountSpent > amountAllowed) {
                 revert RestrictTransferFrom__ExceededTransferFromAllowance();
             }
             assembly {

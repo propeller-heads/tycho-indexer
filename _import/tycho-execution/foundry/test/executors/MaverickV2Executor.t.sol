@@ -17,7 +17,7 @@ contract MaverickV2ExecutorExposed is MaverickV2Executor {
             IERC20 tokenIn,
             address target,
             address receiver,
-            bool transferNeeded
+            RestrictTransferFrom.TransferType transferType
         )
     {
         return _decodeData(data);
@@ -39,16 +39,28 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
     }
 
     function testDecodeParams() public view {
-        bytes memory params =
-            abi.encodePacked(GHO_ADDR, GHO_USDC_POOL, address(2), true);
+        bytes memory params = abi.encodePacked(
+            GHO_ADDR,
+            GHO_USDC_POOL,
+            address(2),
+            true,
+            RestrictTransferFrom.TransferType.Transfer
+        );
 
-        (IERC20 tokenIn, address target, address receiver, bool transferNeeded)
-        = maverickV2Exposed.decodeParams(params);
+        (
+            IERC20 tokenIn,
+            address target,
+            address receiver,
+            RestrictTransferFrom.TransferType transferType
+        ) = maverickV2Exposed.decodeParams(params);
 
         assertEq(address(tokenIn), GHO_ADDR);
         assertEq(target, GHO_USDC_POOL);
         assertEq(receiver, address(2));
-        assertEq(transferNeeded, true);
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
+        );
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -61,8 +73,12 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
 
     function testSwap() public {
         uint256 amountIn = 10e18;
-        bytes memory protocolData =
-            abi.encodePacked(GHO_ADDR, GHO_USDC_POOL, BOB, true);
+        bytes memory protocolData = abi.encodePacked(
+            GHO_ADDR,
+            GHO_USDC_POOL,
+            BOB,
+            RestrictTransferFrom.TransferType.Transfer
+        );
 
         deal(GHO_ADDR, address(maverickV2Exposed), amountIn);
         uint256 balanceBefore = USDC.balanceOf(BOB);
@@ -79,13 +95,20 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_maverick_v2");
 
-        (IERC20 tokenIn, address pool, address receiver, bool transferNeeded) =
-            maverickV2Exposed.decodeParams(protocolData);
+        (
+            IERC20 tokenIn,
+            address pool,
+            address receiver,
+            RestrictTransferFrom.TransferType transferType
+        ) = maverickV2Exposed.decodeParams(protocolData);
 
         assertEq(address(tokenIn), GHO_ADDR);
         assertEq(pool, GHO_USDC_POOL);
         assertEq(receiver, BOB);
-        assertEq(transferNeeded, true);
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
+        );
     }
 
     function testSwapIntegration() public {

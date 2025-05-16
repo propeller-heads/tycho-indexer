@@ -71,7 +71,7 @@ contract TychoRouter is
     Dispatcher,
     Pausable,
     ReentrancyGuard,
-RestrictTransferFrom
+    RestrictTransferFrom
 {
     IWETH private immutable _weth;
 
@@ -93,7 +93,9 @@ RestrictTransferFrom
         address indexed token, uint256 amount, address indexed receiver
     );
 
-    constructor(address _permit2, address weth) RestrictTransferFrom(_permit2) {
+    constructor(address _permit2, address weth)
+        RestrictTransferFrom(_permit2)
+    {
         if (_permit2 == address(0) || weth == address(0)) {
             revert TychoRouter__AddressZero();
         }
@@ -121,8 +123,6 @@ RestrictTransferFrom
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
-     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the router.
-     *     Otherwise, assume funds are already in router or will be transferred later by the executors (This is the case for executors with callback).
      * @param swaps Encoded swap graph data containing details of each swap.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -136,14 +136,11 @@ RestrictTransferFrom
         bool unwrapEth,
         uint256 nTokens,
         address receiver,
-        bool transferFromNeeded,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         _tstoreTransferFromInfo(tokenIn, amountIn, false);
-        if (transferFromNeeded) {
-            _transfer(address(this));
-        }
+
         return _splitSwapChecked(
             amountIn,
             tokenIn,
@@ -178,8 +175,6 @@ RestrictTransferFrom
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
-     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the router.
-     *     Otherwise, assume funds are already in router or will be transferred later by the executors (This is the case for executors with callback).
      * @param permitSingle A Permit2 structure containing token approval details for the input token. Ignored if `wrapEth` is true.
      * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
      * @param swaps Encoded swap graph data containing details of each swap.
@@ -195,7 +190,6 @@ RestrictTransferFrom
         bool unwrapEth,
         uint256 nTokens,
         address receiver,
-        bool transferFromNeeded,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swaps
@@ -206,9 +200,6 @@ RestrictTransferFrom
             permit2.permit(msg.sender, permitSingle, signature);
         }
         _tstoreTransferFromInfo(tokenIn, amountIn, true);
-        if (transferFromNeeded) {
-            _transfer(address(this));
-        }
 
         return _splitSwapChecked(
             amountIn,
@@ -242,9 +233,6 @@ RestrictTransferFrom
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the tokenInReceiver.
-     *     Otherwise, assume funds are already in router or will be transferred later by the executors (This is the case for executors with callback).
-     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromNeeded` is true.
      * @param swaps Encoded swap graph data containing details of each swap.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -257,15 +245,11 @@ RestrictTransferFrom
         bool wrapEth,
         bool unwrapEth,
         address receiver,
-        bool transferFromNeeded,
-        address tokenInReceiver,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         _tstoreTransferFromInfo(tokenIn, amountIn, false);
-        if (transferFromNeeded) {
-            _transfer(tokenInReceiver);
-        }
+
         return _sequentialSwapChecked(
             amountIn,
             tokenIn,
@@ -297,8 +281,6 @@ RestrictTransferFrom
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the tokenInReceiver.
-     *     Otherwise, assume funds are already in router or will be transferred later by the executors (This is the case for executors with callback).     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromNeeded` is true.
      * @param permitSingle A Permit2 structure containing token approval details for the input token. Ignored if `wrapEth` is true.
      * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
      * @param swaps Encoded swap graph data containing details of each swap.
@@ -313,8 +295,6 @@ RestrictTransferFrom
         bool wrapEth,
         bool unwrapEth,
         address receiver,
-        bool transferFromNeeded,
-        address tokenInReceiver,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swaps
@@ -326,9 +306,7 @@ RestrictTransferFrom
         }
 
         _tstoreTransferFromInfo(tokenIn, amountIn, true);
-        if (transferFromNeeded) {
-            _transfer(tokenInReceiver);
-        }
+
         return _sequentialSwapChecked(
             amountIn,
             tokenIn,
@@ -358,8 +336,6 @@ RestrictTransferFrom
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the tokenInReceiver.
-     *     Otherwise, assume funds are already in router or will be transferred later by the executors (This is the case for executors with callback).     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromNeeded` is true.
      * @param swapData Encoded swap details.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -372,15 +348,11 @@ RestrictTransferFrom
         bool wrapEth,
         bool unwrapEth,
         address receiver,
-        bool transferFromNeeded,
-        address tokenInReceiver,
         bytes calldata swapData
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
         _tstoreTransferFromInfo(tokenIn, amountIn, false);
-        if (transferFromNeeded) {
-            _transfer(tokenInReceiver);
-        }
+
         return _singleSwap(
             amountIn,
             tokenIn,
@@ -412,8 +384,6 @@ RestrictTransferFrom
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param transferFromNeeded If true, the contract will transfer the input token from the caller to the tokenInReceiver.
-     *     Otherwise, assume funds are already in router or will be transferred later by the executors (This is the case for executors with callback).     * @param tokenInReceiver The address to receive the input tokens. This is used when `transferFromNeeded` is true.
      * @param permitSingle A Permit2 structure containing token approval details for the input token. Ignored if `wrapEth` is true.
      * @param signature A valid signature authorizing the Permit2 approval. Ignored if `wrapEth` is true.
      * @param swapData Encoded swap details.
@@ -428,8 +398,6 @@ RestrictTransferFrom
         bool wrapEth,
         bool unwrapEth,
         address receiver,
-        bool transferFromNeeded,
-        address tokenInReceiver,
         IAllowanceTransfer.PermitSingle calldata permitSingle,
         bytes calldata signature,
         bytes calldata swapData
@@ -440,9 +408,7 @@ RestrictTransferFrom
             permit2.permit(msg.sender, permitSingle, signature);
         }
         _tstoreTransferFromInfo(tokenIn, amountIn, true);
-        if (transferFromNeeded) {
-            _transfer(tokenInReceiver);
-        }
+
         return _singleSwap(
             amountIn,
             tokenIn,
