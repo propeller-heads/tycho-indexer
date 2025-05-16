@@ -490,11 +490,17 @@ pub trait ProtocolGateway {
 // Shalow but can be used to add more filters without breaking backwards compatibility in the future
 pub struct EntryPointFilter {
     pub protocol_system: ProtocolSystem,
+    pub component_ids: Option<Vec<ComponentId>>,
 }
 
 impl EntryPointFilter {
     pub fn new(protocol: ProtocolSystem) -> Self {
-        Self { protocol_system: protocol }
+        Self { protocol_system: protocol, component_ids: None }
+    }
+
+    pub fn with_component_ids(mut self, component_ids: Vec<ComponentId>) -> Self {
+        self.component_ids = Some(component_ids);
+        self
     }
 }
 
