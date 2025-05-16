@@ -307,12 +307,21 @@ impl PostgresGateway {
         };
 
         let ps_id = self.get_protocol_system_id(&filter.protocol_system);
-        let results = schema::entry_point::table
+
+        let mut query = schema::entry_point::table
             .inner_join(eptp::table.on(ep::id.eq(eptp::entry_point_id)))
             .inner_join(pcuep::table.on(ep::id.eq(pcuep::entry_point_id)))
             .inner_join(pc::table.on(pcuep::protocol_component_id.eq(pc::id)))
             .filter(pc::protocol_system_id.eq(ps_id))
+            .into_boxed();
+
+        if let Some(component_ids) = filter.component_ids {
+            query = query.filter(pc::external_id.eq_any(component_ids));
+        }
+
+        let results = query
             .select((orm::EntryPoint::as_select(), orm::EntryPointTracingParams::as_select()))
+            .distinct()
             .load::<(orm::EntryPoint, orm::EntryPointTracingParams)>(conn)
             .await
             .map_err(|err| {
@@ -350,11 +359,20 @@ impl PostgresGateway {
         };
 
         let ps_id = self.get_protocol_system_id(&filter.protocol_system);
-        let results = schema::entry_point::table
+
+        let mut query = schema::entry_point::table
             .inner_join(pcuep::table.on(ep::id.eq(pcuep::entry_point_id)))
             .inner_join(pc::table.on(pcuep::protocol_component_id.eq(pc::id)))
             .filter(pc::protocol_system_id.eq(ps_id))
+            .into_boxed();
+
+        if let Some(component_ids) = filter.component_ids {
+            query = query.filter(pc::external_id.eq_any(component_ids));
+        }
+
+        let results = query
             .select(orm::EntryPoint::as_select())
+            .distinct()
             .load::<orm::EntryPoint>(conn)
             .await
             .map_err(|err| {
@@ -639,7 +657,7 @@ mod test {
         .await;
 
         let ps_id = db_fixtures::insert_protocol_system(conn, "test_protocol".to_string()).await;
-        db_fixtures::insert_protocol_system(conn, "unknown".to_string()).await;
+        let unknown_ps_id = db_fixtures::insert_protocol_system(conn, "unknown".to_string()).await;
 
         let protocol_type_id = db_fixtures::insert_protocol_type(
             conn,
@@ -660,24 +678,73 @@ mod test {
             None,
         )
         .await;
+
+        db_fixtures::insert_protocol_component(
+            conn,
+            "pc_1",
+            chain_id,
+            ps_id,
+            protocol_type_id,
+            txn[0],
+            None,
+            None,
+        )
+        .await;
+        db_fixtures::insert_protocol_component(
+            conn,
+            "pc_2",
+            chain_id,
+            ps_id,
+            protocol_type_id,
+            txn[0],
+            None,
+            None,
+        )
+        .await;
+
+        db_fixtures::insert_protocol_component(
+            conn,
+            "unknown_pc",
+            chain_id,
+            unknown_ps_id,
+            protocol_type_id,
+            txn[0],
+            None,
+            None,
+        )
+        .await;
     }
 
-    fn rpc_tracer_entry_point() -> (EntryPoint, EntryPointTracingParams) {
-        (
-            EntryPoint::new(
-                "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()".to_string(),
-                Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
-                "getRate()".to_string(),
+    fn rpc_tracer_entry_point(version: u8) -> (EntryPoint, EntryPointTracingParams) {
+        match version {
+            0 => (
+                EntryPoint::new(
+                    "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()".to_string(),
+                    Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
+                    "getRate()".to_string(),
+                ),
+                EntryPointTracingParams::RPCTracer(RPCTracerEntryPoint::new(
+                    None,
+                    Bytes::from(&keccak256("getRate()")[0..4]),
+                )),
             ),
-            EntryPointTracingParams::RPCTracer(RPCTracerEntryPoint::new(
-                None,
-                Bytes::from(&keccak256("getRate()")[0..4]),
-            )),
-        )
+            1 => (
+                EntryPoint::new(
+                    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2:totalSupply()".to_string(),
+                    Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
+                    "totalSupply()".to_string(),
+                ),
+                EntryPointTracingParams::RPCTracer(RPCTracerEntryPoint::new(
+                    None,
+                    Bytes::from(&keccak256("totalSupply()")[0..4]),
+                )),
+            ),
+            _ => panic!("Invalid rpc_tracer_entry_point version"),
+        }
     }
 
     fn traced_entry_point() -> TracedEntryPoint {
-        let (entry_point, params) = rpc_tracer_entry_point();
+        let (entry_point, params) = rpc_tracer_entry_point(0);
         TracedEntryPoint::new(
             EntryPointWithTracingParams::new(entry_point, params),
             Bytes::from_str("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
@@ -705,9 +772,13 @@ mod test {
         setup_data(&mut conn).await;
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
-        let entry_point = rpc_tracer_entry_point().0;
         gw.insert_entry_points(
-            &HashMap::from([("pc_0", &vec![entry_point.clone()])]),
+            &HashMap::from([
+                ("pc_0", &vec![rpc_tracer_entry_point(0).0]),
+                ("pc_1", &vec![rpc_tracer_entry_point(1).0]),
+                ("pc_2", &vec![rpc_tracer_entry_point(1).0]),
+                ("unknown_pc", &vec![rpc_tracer_entry_point(0).0]),
+            ]),
             &Chain::Ethereum,
             &mut conn,
         )
@@ -715,12 +786,26 @@ mod test {
         .unwrap();
 
         let filter = EntryPointFilter::new("test_protocol".to_string());
+        let mut retrieved_entry_points = gw
+            .get_entry_points(filter, &mut conn)
+            .await
+            .unwrap();
+
+        retrieved_entry_points.sort_by_key(|ep| ep.external_id.clone());
+
+        assert_eq!(
+            retrieved_entry_points,
+            vec![rpc_tracer_entry_point(1).0, rpc_tracer_entry_point(0).0,]
+        );
+
+        let filter = EntryPointFilter::new("test_protocol".to_string())
+            .with_component_ids(vec!["pc_1".to_string(), "unknown_pc".to_string()]);
         let retrieved_entry_points = gw
             .get_entry_points(filter, &mut conn)
             .await
             .unwrap();
 
-        assert_eq!(retrieved_entry_points[0], entry_point);
+        assert_eq!(retrieved_entry_points, [rpc_tracer_entry_point(1).0]);
     }
 
     #[tokio::test]
@@ -729,10 +814,13 @@ mod test {
         setup_data(&mut conn).await;
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
-        let (entry_point, params) = rpc_tracer_entry_point();
-
         gw.insert_entry_points(
-            &HashMap::from([("pc_0", &vec![entry_point.clone()])]),
+            &HashMap::from([
+                ("pc_0", &vec![rpc_tracer_entry_point(0).0]),
+                ("pc_1", &vec![rpc_tracer_entry_point(1).0]),
+                ("pc_2", &vec![rpc_tracer_entry_point(1).0]),
+                ("unknown_pc", &vec![rpc_tracer_entry_point(0).0]),
+            ]),
             &Chain::Ethereum,
             &mut conn,
         )
@@ -740,10 +828,36 @@ mod test {
         .unwrap();
 
         gw.upsert_entry_point_tracing_params(
-            &HashMap::from([(
-                entry_point.external_id.clone(),
-                &vec![(params.clone(), Some("pc_0".to_string()))],
-            )]),
+            &HashMap::from([
+                (
+                    rpc_tracer_entry_point(0)
+                        .0
+                        .external_id
+                        .clone(),
+                    &vec![(rpc_tracer_entry_point(0).1, Some("pc_0".to_string()))],
+                ),
+                (
+                    rpc_tracer_entry_point(1)
+                        .0
+                        .external_id
+                        .clone(),
+                    &vec![(rpc_tracer_entry_point(1).1, None)],
+                ),
+                (
+                    rpc_tracer_entry_point(1)
+                        .0
+                        .external_id
+                        .clone(),
+                    &vec![(rpc_tracer_entry_point(1).1, Some("pc_2".to_string()))],
+                ),
+                (
+                    rpc_tracer_entry_point(0)
+                        .0
+                        .external_id
+                        .clone(),
+                    &vec![(rpc_tracer_entry_point(0).1, Some("unknown_pc".to_string()))],
+                ),
+            ]),
             &Chain::Ethereum,
             &mut conn,
         )
@@ -751,46 +865,42 @@ mod test {
         .unwrap();
 
         let filter = EntryPointFilter::new("test_protocol".to_string());
+        let mut retrieved_entry_points = gw
+            .get_entry_points_tracing_params(filter, &mut conn)
+            .await
+            .unwrap();
+
+        retrieved_entry_points.sort_by_key(|ep| ep.entry_point.external_id.clone());
+
+        assert_eq!(
+            retrieved_entry_points,
+            vec![
+                EntryPointWithTracingParams::new(
+                    rpc_tracer_entry_point(1).0,
+                    rpc_tracer_entry_point(1).1
+                ),
+                EntryPointWithTracingParams::new(
+                    rpc_tracer_entry_point(0).0,
+                    rpc_tracer_entry_point(0).1
+                )
+            ]
+        );
+
+        let filter = EntryPointFilter::new("test_protocol".to_string())
+            .with_component_ids(vec!["pc_1".to_string()]);
         let retrieved_entry_points = gw
             .get_entry_points_tracing_params(filter, &mut conn)
             .await
             .unwrap();
 
+        assert_eq!(retrieved_entry_points.len(), 1);
         assert_eq!(
             retrieved_entry_points[0],
-            EntryPointWithTracingParams::new(entry_point, params)
+            EntryPointWithTracingParams::new(
+                rpc_tracer_entry_point(1).0,
+                rpc_tracer_entry_point(1).1
+            )
         );
-    }
-
-    #[tokio::test]
-    async fn test_get_entry_points_with_filter() {
-        let mut conn = setup_db().await;
-        setup_data(&mut conn).await;
-        let gw = PostgresGateway::from_connection(&mut conn).await;
-
-        let entry_point = rpc_tracer_entry_point().0;
-        gw.insert_entry_points(
-            &HashMap::from([("pc_0", &vec![entry_point.clone()])]),
-            &Chain::Ethereum,
-            &mut conn,
-        )
-        .await
-        .unwrap();
-
-        // Filter by protocol name
-        let filter = EntryPointFilter::new("test_protocol".to_string());
-        let retrieved_entry_points = gw
-            .get_entry_points(filter, &mut conn)
-            .await
-            .unwrap();
-        assert_eq!(retrieved_entry_points, vec![entry_point]);
-
-        let filter = EntryPointFilter::new("unknown".to_string());
-        let retrieved_entry_points = gw
-            .get_entry_points(filter, &mut conn)
-            .await
-            .unwrap();
-        assert_eq!(retrieved_entry_points, vec![]);
     }
 
     #[tokio::test]
@@ -799,7 +909,7 @@ mod test {
         setup_data(&mut conn).await;
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
-        let (entry_point, params) = rpc_tracer_entry_point();
+        let (entry_point, params) = rpc_tracer_entry_point(0);
         let traced_entry_point = traced_entry_point();
 
         gw.insert_entry_points(
