@@ -13,14 +13,14 @@ use diesel::{
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use diesel_derive_enum::DbEnum;
 use tycho_common::{
-    models,
     models::{
+        self,
         blockchain::{
             EntryPointTracingData as EntryPointTracingDataCommon,
             EntryPointWithData as EntryPointWithDataCommon,
         },
         Address, AttrStoreKey, Balance, BlockHash, Code, CodeHash, ComponentId, ContractId,
-        PaginationParams, StoreVal, TxHash,
+        EntryPointId, PaginationParams, StoreVal, TxHash,
     },
     storage::{BlockIdentifier, StorageError, WithTotal},
     Bytes,
@@ -1907,17 +1907,17 @@ impl EntryPointTracingData {
 
     // Retrieves the database ids of entry point tracing data from a list of entry points with data.
     pub(crate) async fn ids_by_entry_point_with_data(
-        entry_points_with_data: &[EntryPointWithDataCommon],
+        entry_points_with_data: &[(EntryPointId, EntryPointTracingDataCommon)],
         conn: &mut AsyncPgConnection,
-    ) -> Result<HashMap<EntryPointWithDataCommon, i64>, StorageError> {
+    ) -> Result<HashMap<EntryPointTracingDataCommon, i64>, StorageError> {
         if entry_points_with_data.is_empty() {
             return Ok(HashMap::new());
         }
 
         let (external_ids, data): (HashSet<_>, HashSet<_>) = entry_points_with_data
             .iter()
-            .map(|ep| {
-                let data = match &ep.data {
+            .map(|(ep_id, data)| {
+                let data = match data {
                     EntryPointTracingDataCommon::RPCTracer(rpc_tracer) => {
                         serde_json::to_value(rpc_tracer).map_err(|e| {
                             StorageError::Unexpected(format!(
@@ -1926,31 +1926,24 @@ impl EntryPointTracingData {
                         })?
                     }
                 };
-                Ok((ep.entry_point.external_id.clone(), data))
+                Ok((ep_id, data))
             })
             .collect::<Result<Vec<_>, StorageError>>()?
             .into_iter()
             .unzip();
 
-        let tuple_data: Vec<(String, EntryPointTracingType, EntryPointTracingDataCommon)> =
-            entry_points_with_data
-                .iter()
-                .map(|ep| {
-                    (
-                        ep.entry_point.external_id.clone(),
-                        EntryPointTracingType::from(&ep.data),
-                        ep.data.clone(),
-                    )
-                })
-                .collect::<Vec<_>>();
+        let tuple_data = entry_points_with_data
+            .iter()
+            .map(|(ep_id, data)| (ep_id, EntryPointTracingType::from(data), data))
+            .collect::<Vec<_>>();
 
         let tuple_ids_to_entry_point_with_data: HashMap<
-            (&String, &EntryPointTracingType, &EntryPointTracingDataCommon),
-            &EntryPointWithDataCommon,
+            (&EntryPointId, &EntryPointTracingType, &EntryPointTracingDataCommon),
+            &EntryPointTracingDataCommon,
         > = tuple_data
             .iter()
             .zip(entry_points_with_data)
-            .map(|((ext_id, tracing_type, data), ep)| ((ext_id, tracing_type, data), ep))
+            .map(|((ep_id, tracing_type, data), ep)| ((*ep_id, tracing_type, *data), &ep.1))
             .collect();
 
         let res = entry_point_tracing_data::table
@@ -1969,7 +1962,7 @@ impl EntryPointTracingData {
                 entry_point_tracing_data::data,
                 entry_point_tracing_data::id,
             ))
-            .load::<(String, EntryPointTracingType, Option<serde_json::Value>, i64)>(conn)
+            .load::<(EntryPointId, EntryPointTracingType, Option<serde_json::Value>, i64)>(conn)
             .await
             .map_err(PostgresError::from)?
             .into_iter()
