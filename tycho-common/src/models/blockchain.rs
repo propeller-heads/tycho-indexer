@@ -15,8 +15,8 @@ use crate::{
             ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
         },
         token::CurrencyToken,
-        Address, BlockHash, Chain, ComponentId, ExtractorIdentity, MergeError, NormalisedMessage,
-        StoreKey,
+        Address, BlockHash, Chain, ComponentId, EntryPointId, ExtractorIdentity, MergeError,
+        NormalisedMessage, StoreKey,
     },
     Bytes,
 };
@@ -89,6 +89,7 @@ pub struct BlockAggregatedChanges {
     pub component_balances: HashMap<ComponentId, HashMap<Bytes, ComponentBalance>>,
     pub account_balances: HashMap<Address, HashMap<Address, AccountBalance>>,
     pub component_tvl: HashMap<String, f64>,
+    pub trace_results: HashMap<EntryPointId, TracingResult>,
 }
 
 impl BlockAggregatedChanges {
@@ -107,6 +108,7 @@ impl BlockAggregatedChanges {
         component_balances: HashMap<ComponentId, HashMap<Bytes, ComponentBalance>>,
         account_balances: HashMap<Address, HashMap<Address, AccountBalance>>,
         component_tvl: HashMap<String, f64>,
+        trace_results: HashMap<EntryPointId, TracingResult>,
     ) -> Self {
         Self {
             extractor: extractor.to_string(),
@@ -122,6 +124,7 @@ impl BlockAggregatedChanges {
             component_balances,
             account_balances,
             component_tvl,
+            trace_results,
         }
     }
 }
@@ -153,6 +156,7 @@ impl NormalisedMessage for BlockAggregatedChanges {
             component_balances: self.component_balances.clone(),
             account_balances: self.account_balances.clone(),
             component_tvl: self.component_tvl.clone(),
+            trace_results: self.trace_results.clone(),
         })
     }
 
@@ -439,6 +443,15 @@ impl TracingResult {
     ) -> Self {
         Self { retriggers, called_addresses }
     }
+
+    /// Merges this tracing result with another one.
+    ///
+    /// The method combines two [`TracingResult`] instances.
+    pub fn merge(&mut self, other: TracingResult) {
+        self.retriggers.extend(other.retriggers);
+        self.called_addresses
+            .extend(other.called_addresses);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -459,6 +472,13 @@ impl TracedEntryPoint {
         result: TracingResult,
     ) -> Self {
         Self { entry_point_with_params, detection_block_hash, tracing_result: result }
+    }
+
+    pub fn entry_point_id(&self) -> String {
+        self.entry_point_with_data
+            .entry_point
+            .external_id
+            .clone()
     }
 }
 
@@ -689,5 +709,48 @@ pub mod fixtures {
         // Verify we can deserialize it back
         let deserialized: RPCTracerParams = serde_json::from_str(&serialized).unwrap();
         assert_eq!(entry_point, deserialized);
+    }
+
+    #[test]
+    fn test_tracing_result_merge() {
+        let address1 = Address::from_str("0x1234567890123456789012345678901234567890").unwrap();
+        let address2 = Address::from_str("0x2345678901234567890123456789012345678901").unwrap();
+        let address3 = Address::from_str("0x3456789012345678901234567890123456789012").unwrap();
+
+        let store_key1 = StoreKey::from(vec![1, 2, 3, 4]);
+        let store_key2 = StoreKey::from(vec![5, 6, 7, 8]);
+
+        let mut result1 = TracingResult::new(
+            HashSet::from([(address1.clone(), store_key1.clone())]),
+            HashSet::from([address2.clone(), address3.clone()]),
+        );
+
+        let result2 = TracingResult::new(
+            HashSet::from([(address3.clone(), store_key2.clone())]),
+            HashSet::from([address1.clone()]),
+        );
+
+        result1.merge(result2);
+
+        // Verify retriggers were merged
+        assert_eq!(result1.retriggers.len(), 2);
+        assert!(result1
+            .retriggers
+            .contains(&(address1.clone(), store_key1)));
+        assert!(result1
+            .retriggers
+            .contains(&(address3.clone(), store_key2.clone())));
+
+        // Verify called_addresses were merged
+        assert_eq!(result1.called_addresses.len(), 3);
+        assert!(result1
+            .called_addresses
+            .contains(&address1));
+        assert!(result1
+            .called_addresses
+            .contains(&address2));
+        assert!(result1
+            .called_addresses
+            .contains(&address3));
     }
 }
