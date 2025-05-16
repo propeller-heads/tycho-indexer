@@ -140,7 +140,7 @@ contract TychoRouter is
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        tstoreTransferFromInfo(tokenIn, amountIn, false, msg.sender);
+        _tstoreTransferFromInfo(tokenIn, amountIn, false);
         if (transferFromNeeded) {
             _transfer(address(this));
         }
@@ -205,7 +205,7 @@ contract TychoRouter is
         if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
         }
-        tstoreTransferFromInfo(tokenIn, amountIn, true, msg.sender);
+        _tstoreTransferFromInfo(tokenIn, amountIn, true);
         if (transferFromNeeded) {
             _transfer(address(this));
         }
@@ -262,7 +262,7 @@ contract TychoRouter is
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        tstoreTransferFromInfo(tokenIn, amountIn, false, msg.sender);
+        _tstoreTransferFromInfo(tokenIn, amountIn, false);
         if (transferFromNeeded) {
             _transfer(tokenInReceiver);
         }
@@ -325,7 +325,7 @@ contract TychoRouter is
             permit2.permit(msg.sender, permitSingle, signature);
         }
 
-        tstoreTransferFromInfo(tokenIn, amountIn, true, msg.sender);
+        _tstoreTransferFromInfo(tokenIn, amountIn, true);
         if (transferFromNeeded) {
             _transfer(tokenInReceiver);
         }
@@ -377,7 +377,7 @@ contract TychoRouter is
         bytes calldata swapData
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        tstoreTransferFromInfo(tokenIn, amountIn, false, msg.sender);
+        _tstoreTransferFromInfo(tokenIn, amountIn, false);
         if (transferFromNeeded) {
             _transfer(tokenInReceiver);
         }
@@ -439,7 +439,7 @@ contract TychoRouter is
         if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
         }
-        tstoreTransferFromInfo(tokenIn, amountIn, true, msg.sender);
+        _tstoreTransferFromInfo(tokenIn, amountIn, true);
         if (transferFromNeeded) {
             _transfer(tokenInReceiver);
         }

@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@interfaces/ICallback.sol";
 import {OneTransferFromOnly} from "../OneTransferFromOnly.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
 error UniswapV3Executor__InvalidDataLength();
 error UniswapV3Executor__InvalidFactory();
@@ -111,7 +112,7 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
             _transfer(msg.sender);
         } else if (transferNeeded) {
             if (tokenIn == address(0)) {
-                payable(msg.sender).transfer(amountOwed);
+                Address.sendValue(payable(msg.sender), amountOwed);
             } else {
                 IERC20(tokenIn).safeTransfer(msg.sender, amountOwed);
             }
@@ -169,7 +170,7 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
         uint24 fee,
         bool transferFromNeeded,
         bool transferNeeded
-    ) internal view returns (bytes memory) {
+    ) internal pure returns (bytes memory) {
         return abi.encodePacked(
             tokenIn, tokenOut, fee, transferFromNeeded, transferNeeded
         );

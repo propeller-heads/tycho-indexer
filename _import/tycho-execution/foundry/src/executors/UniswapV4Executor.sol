@@ -23,6 +23,7 @@ import {SafeCast} from "@uniswap/v4-core/src/libraries/SafeCast.sol";
 import {TransientStateLibrary} from
     "@uniswap/v4-core/src/libraries/TransientStateLibrary.sol";
 import "../OneTransferFromOnly.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
 error UniswapV4Executor__InvalidDataLength();
 error UniswapV4Executor__NotPoolManager();
@@ -410,14 +411,14 @@ contract UniswapV4Executor is
         } else {
             if (transferFromNeeded) {
                 // transferFrom swapper's wallet into the core contract
-                _transfer(msg.sender);
+                _transfer(address(poolManager));
             } else if (transferNeeded) {
                 address tokenIn = Currency.unwrap(currency);
                 // transfer from router contract into the core contract
                 if (tokenIn == address(0)) {
-                    payable(msg.sender).transfer(amount);
+                    Address.sendValue(payable(address(poolManager)), amount);
                 } else {
-                    IERC20(tokenIn).safeTransfer(msg.sender, amount);
+                    IERC20(tokenIn).safeTransfer(address(poolManager), amount);
                 }
             }
             // slither-disable-next-line unused-return

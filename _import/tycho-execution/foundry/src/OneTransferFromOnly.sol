@@ -43,17 +43,16 @@ contract OneTransferFromOnly {
     }
 
     // slither-disable-next-line assembly
-    function tstoreTransferFromInfo(
+    function _tstoreTransferFromInfo(
         address tokenIn,
         uint256 amountIn,
-        bool isPermit2,
-        address sender
+        bool isPermit2
     ) internal {
         assembly {
             tstore(_TOKEN_IN_SLOT, tokenIn)
             tstore(_AMOUNT_IN_SLOT, amountIn)
             tstore(_IS_PERMIT2_SLOT, isPermit2)
-            tstore(_SENDER_SLOT, sender)
+            tstore(_SENDER_SLOT, caller())
             tstore(_IS_TRANSFER_EXECUTED_SLOT, false)
         }
     }
@@ -75,19 +74,15 @@ contract OneTransferFromOnly {
         if (isTransferExecuted) {
             revert OneTransferFromOnly__MultipleTransferFrom();
         }
-
+        assembly {
+            tstore(_IS_TRANSFER_EXECUTED_SLOT, true)
+        }
         if (isPermit2) {
             // Permit2.permit is already called from the TychoRouter
             permit2.transferFrom(sender, receiver, uint160(amount), tokenIn);
-            assembly {
-                tstore(_IS_TRANSFER_EXECUTED_SLOT, true)
-            }
         } else {
             // slither-disable-next-line arbitrary-send-erc20
             IERC20(tokenIn).safeTransferFrom(sender, receiver, amount);
-            assembly {
-                tstore(_IS_TRANSFER_EXECUTED_SLOT, true)
-            }
         }
     }
 }

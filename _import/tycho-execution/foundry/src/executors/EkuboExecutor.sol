@@ -12,6 +12,7 @@ import {LibBytes} from "@solady/utils/LibBytes.sol";
 import {Config, EkuboPoolKey} from "@ekubo/types/poolKey.sol";
 import {MAX_SQRT_RATIO, MIN_SQRT_RATIO} from "@ekubo/types/sqrtRatio.sol";
 import "../OneTransferFromOnly.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
 contract EkuboExecutor is
     IExecutor,
@@ -204,11 +205,7 @@ contract EkuboExecutor is
         if (transferFromNeeded) {
             _transfer(msg.sender);
         } else if (transferNeeded) {
-            if (token == address(0)) {
-                payable(msg.sender).transfer(amount);
-            } else {
-                IERC20(token).safeTransfer(msg.sender, amount);
-            }
+            IERC20(token).safeTransfer(msg.sender, amount);
         }
     }
 
