@@ -27,7 +27,7 @@ contract EkuboExecutor is
 
     ICore immutable core;
 
-    uint256 constant POOL_DATA_OFFSET = 58;
+    uint256 constant POOL_DATA_OFFSET = 57;
     uint256 constant HOP_BYTE_LEN = 52;
 
     bytes4 constant LOCKED_SELECTOR = 0xb45a3c0e; // locked(uint256)

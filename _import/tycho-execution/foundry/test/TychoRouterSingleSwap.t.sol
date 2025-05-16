@@ -26,7 +26,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             WETH_DAI_POOL,
             ALICE,
             false,
-            RestrictTransferFrom.TransferType.None // funds already in WETH_DAI_POOL, no transfer necessary
+            RestrictTransferFrom.TransferType.TransferFrom
         );
 
         bytes memory swap =
@@ -67,7 +67,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             WETH_DAI_POOL,
             ALICE,
             false,
-            RestrictTransferFrom.TransferType.None // funds already in WETH_DAI_POOL, no transfer necessary
+            RestrictTransferFrom.TransferType.TransferFrom
         );
 
         bytes memory swap =
@@ -134,7 +134,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             WETH_DAI_POOL,
             ALICE,
             false,
-            RestrictTransferFrom.TransferType.None // funds already in WETH_DAI_POOL, no transfer necessary
+            RestrictTransferFrom.TransferType.TransferFrom
         );
 
         bytes memory swap =
@@ -169,7 +169,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             WETH_DAI_POOL,
             ALICE,
             false,
-            RestrictTransferFrom.TransferType.None // funds already in WETH_DAI_POOL, no transfer necessary
+            RestrictTransferFrom.TransferType.TransferFrom
         );
 
         bytes memory swap =
@@ -218,7 +218,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             WETH_DAI_POOL,
             ALICE,
             false,
-            RestrictTransferFrom.TransferType.None
+            RestrictTransferFrom.TransferType.Transfer // ETH has already been transferred to router
         );
 
         bytes memory swap =
@@ -261,7 +261,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             WETH_DAI_POOL,
             tychoRouterAddr,
             true,
-            RestrictTransferFrom.TransferType.None
+            RestrictTransferFrom.TransferType.TransferFrom
         );
 
         bytes memory swap =

@@ -2693,6 +2693,7 @@ mod tests {
                 .unwrap();
 
             let hex_calldata = encode(&calldata);
+            println!("calldata: {}", hex_calldata);
             write_calldata_to_file("test_single_encoding_strategy_curve", hex_calldata.as_str());
         }
 

@@ -2,19 +2,26 @@
 pragma solidity ^0.8.26;
 
 import "@src/executors/UniswapV4Executor.sol";
-import {TychoRouter} from "@src/TychoRouter.sol";
+import {TychoRouter, RestrictTransferFrom} from "@src/TychoRouter.sol";
 import "./TychoRouterTestSetup.sol";
 import "./executors/UniswapV4Utils.sol";
 import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 
 contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
-    function _getSplitSwaps() private view returns (bytes[] memory) {
+    function _getSplitSwaps(bool transferFrom)
+        private
+        view
+        returns (bytes[] memory)
+    {
         // Trade 1 WETH for USDC through DAI and WBTC with 4 swaps on Uniswap V2
         //          ->   DAI   ->
         // 1 WETH                   USDC
         //          ->   WBTC  ->
         //       (univ2)     (univ2)
         bytes[] memory swaps = new bytes[](4);
+        RestrictTransferFrom.TransferType transferType = transferFrom
+            ? RestrictTransferFrom.TransferType.TransferFrom
+            : RestrictTransferFrom.TransferType.Transfer;
 
         // WETH -> WBTC (60%)
         swaps[0] = encodeSplitSwap(
@@ -23,11 +30,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             (0xffffff * 60) / 100, // 60%
             address(usv2Executor),
             encodeUniswapV2Swap(
-                WETH_ADDR,
-                WETH_WBTC_POOL,
-                tychoRouterAddr,
-                false,
-                RestrictTransferFrom.TransferType.Transfer
+                WETH_ADDR, WETH_WBTC_POOL, tychoRouterAddr, false, transferType
             )
         );
         // WBTC -> USDC
@@ -51,11 +54,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             uint24(0),
             address(usv2Executor),
             encodeUniswapV2Swap(
-                WETH_ADDR,
-                WETH_DAI_POOL,
-                tychoRouterAddr,
-                false,
-                RestrictTransferFrom.TransferType.Transfer
+                WETH_ADDR, WETH_DAI_POOL, tychoRouterAddr, false, transferType
             )
         );
 
@@ -83,7 +82,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         uint256 amountIn = 1 ether;
         deal(WETH_ADDR, address(tychoRouterAddr), amountIn);
         vm.startPrank(ALICE);
-        bytes[] memory swaps = _getSplitSwaps();
+        bytes[] memory swaps = _getSplitSwaps(false);
         tychoRouter.exposedSplitSwap(amountIn, 4, pleEncode(swaps));
         vm.stopPrank();
 
@@ -104,7 +103,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             bytes memory signature
         ) = handlePermit2Approval(WETH_ADDR, tychoRouterAddr, amountIn);
 
-        bytes[] memory swaps = _getSplitSwaps();
+        bytes[] memory swaps = _getSplitSwaps(true);
 
         tychoRouter.splitSwapPermit2(
             amountIn,
@@ -133,7 +132,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
 
-        bytes[] memory swaps = _getSplitSwaps();
+        bytes[] memory swaps = _getSplitSwaps(true);
 
         tychoRouter.splitSwap(
             amountIn,
@@ -160,7 +159,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
-        bytes[] memory swaps = _getSplitSwaps();
+        bytes[] memory swaps = _getSplitSwaps(true);
 
         vm.expectRevert(TychoRouter__UndefinedMinAmountOut.selector);
         tychoRouter.splitSwap(
@@ -185,7 +184,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         // Approve less than the amountIn
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn - 1);
-        bytes[] memory swaps = _getSplitSwaps();
+        bytes[] memory swaps = _getSplitSwaps(true);
 
         vm.expectRevert();
         tychoRouter.splitSwap(
@@ -214,7 +213,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             bytes memory signature
         ) = handlePermit2Approval(WETH_ADDR, tychoRouterAddr, amountIn);
 
-        bytes[] memory swaps = _getSplitSwaps();
+        bytes[] memory swaps = _getSplitSwaps(true);
 
         uint256 minAmountOut = 3000 * 1e18;
 
@@ -314,7 +313,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             WETH_DAI_POOL,
             tychoRouterAddr,
             true,
-            RestrictTransferFrom.TransferType.Transfer
+            RestrictTransferFrom.TransferType.TransferFrom
         );
 
         bytes memory swap = encodeSplitSwap(

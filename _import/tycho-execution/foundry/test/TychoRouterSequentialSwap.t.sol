@@ -22,7 +22,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
                 WETH_DAI_POOL,
                 DAI_USDC_POOL, // receiver (direct to next pool)
                 false,
-                RestrictTransferFrom.TransferType.None // transfer to protocol from router
+                RestrictTransferFrom.TransferType.TransferFrom // transfer to protocol from router
             )
         );
 
@@ -34,7 +34,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
                 DAI_USDC_POOL,
                 ALICE,
                 true,
-                RestrictTransferFrom.TransferType.None // transfer to protocol from router
+                RestrictTransferFrom.TransferType.None // funds already sent to pool
             )
         );
         return swaps;

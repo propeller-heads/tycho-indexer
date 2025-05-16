@@ -28,6 +28,12 @@ contract TychoRouterExposed is TychoRouter {
         return _unwrapETH(amount);
     }
 
+    function tstoreExposed(address tokenIn, uint256 amountIn, bool isPermit2)
+        external
+    {
+        _tstoreTransferFromInfo(tokenIn, amountIn, isPermit2);
+    }
+
     function exposedSplitSwap(
         uint256 amountIn,
         uint256 nTokens,

@@ -38,7 +38,7 @@ contract UniswapV4Executor is
     IExecutor,
     IUnlockCallback,
     ICallback,
-RestrictTransferFrom
+    RestrictTransferFrom
 {
     using SafeERC20 for IERC20;
     using CurrencyLibrary for Currency;
@@ -48,8 +48,8 @@ RestrictTransferFrom
     IPoolManager public immutable poolManager;
     address private immutable _self;
 
-    bytes4 constant SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0xbaa46608;
-    bytes4 constant SWAP_EXACT_INPUT_SELECTOR = 0x653f1785;
+    bytes4 constant SWAP_EXACT_INPUT_SINGLE_SELECTOR = 0x6022fbcd;
+    bytes4 constant SWAP_EXACT_INPUT_SELECTOR = 0x044f0d3d;
 
     struct UniswapV4Pool {
         address intermediaryToken;

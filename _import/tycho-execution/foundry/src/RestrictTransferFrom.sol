@@ -7,7 +7,9 @@ import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
 error RestrictTransferFrom__AddressZero();
-error RestrictTransferFrom__ExceededTransferFromAllowance();
+error RestrictTransferFrom__ExceededTransferFromAllowance(
+    uint256 allowedAmount, uint256 amountAttempted
+);
 error RestrictTransferFrom__UnknownTransferType();
 
 /**
@@ -75,7 +77,6 @@ contract RestrictTransferFrom {
         if (transferType == TransferType.TransferFrom) {
             bool isPermit2;
             address sender;
-            bool isTransferExecuted;
             uint256 amountSpent;
             uint256 amountAllowed;
             assembly {
@@ -85,11 +86,14 @@ contract RestrictTransferFrom {
                 sender := tload(_SENDER_SLOT)
                 amountSpent := tload(_AMOUNT_SPENT_SLOT)
             }
-            if (amount + amountSpent > amountAllowed) {
-                revert RestrictTransferFrom__ExceededTransferFromAllowance();
+            uint256 amountAttempted = amountSpent + amount;
+            if (amountAttempted > amountAllowed) {
+                revert RestrictTransferFrom__ExceededTransferFromAllowance(
+                    amountAllowed, amountAttempted
+                );
             }
             assembly {
-                tstore(_AMOUNT_SPENT_SLOT, amount)
+                tstore(_AMOUNT_SPENT_SLOT, amountAttempted)
             }
             if (isPermit2) {
                 // Permit2.permit is already called from the TychoRouter

@@ -43,7 +43,6 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
             GHO_ADDR,
             GHO_USDC_POOL,
             address(2),
-            true,
             RestrictTransferFrom.TransferType.Transfer
         );
 

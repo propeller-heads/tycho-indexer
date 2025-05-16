@@ -78,8 +78,14 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
 
     function testSwap() public {
         uint256 amountIn = 10 ** 18;
-        bytes memory protocolData =
-            abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID, BOB, true);
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR,
+            BAL_ADDR,
+            WETH_BAL_POOL_ID,
+            BOB,
+            true,
+            RestrictTransferFrom.TransferType.Transfer
+        );
 
         deal(WETH_ADDR, address(balancerV2Exposed), amountIn);
         uint256 balanceBefore = BAL.balanceOf(BOB);

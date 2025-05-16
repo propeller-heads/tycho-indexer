@@ -77,7 +77,7 @@ contract BalancerV2Executor is IExecutor, RestrictTransferFrom {
             TransferType transferType
         )
     {
-        if (data.length != 93) {
+        if (data.length != 94) {
             revert BalancerV2Executor__InvalidDataLength();
         }
 
