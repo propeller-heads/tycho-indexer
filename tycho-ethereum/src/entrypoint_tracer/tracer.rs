@@ -16,7 +16,9 @@ use thiserror::Error;
 use tycho_common::{
     keccak256,
     models::{
-        blockchain::{EntryPointTracingData, EntryPointWithData, TracedEntryPoint, TracingResult},
+        blockchain::{
+            EntryPointTracingParams, EntryPointWithTracingParams, TracedEntryPoint, TracingResult,
+        },
         Address, BlockHash,
     },
     traits::EntryPointTracer,
@@ -74,12 +76,12 @@ impl EntryPointTracer for EVMEntrypointService {
     async fn trace(
         &self,
         block_hash: BlockHash,
-        entry_points: Vec<EntryPointWithData>,
+        entry_points: Vec<EntryPointWithTracingParams>,
     ) -> Result<Vec<TracedEntryPoint>, Self::Error> {
         let mut results = Vec::new();
         for entry_point in &entry_points {
-            match &entry_point.data {
-                EntryPointTracingData::RPCTracer(ref rpc_entry_point) => {
+            match &entry_point.params {
+                EntryPointTracingParams::RPCTracer(ref rpc_entry_point) => {
                     // First call to get the list of called addresses
                     // TODO: Can we only use one call to get the retriggers and called addresses?
                     let call_trace = self
@@ -89,7 +91,7 @@ impl EntryPointTracer for EVMEntrypointService {
                                 .caller
                                 .as_ref()
                                 .unwrap_or(&EthersAddress::zero().to_bytes()),
-                            &rpc_entry_point.data,
+                            &rpc_entry_point.calldata,
                             &block_hash,
                             GethDebugBuiltInTracerType::CallTracer,
                         )
@@ -112,7 +114,7 @@ impl EntryPointTracer for EVMEntrypointService {
                                 .caller
                                 .as_ref()
                                 .unwrap_or(&EthersAddress::zero().to_bytes()),
-                            &rpc_entry_point.data,
+                            &rpc_entry_point.calldata,
                             &block_hash,
                             GethDebugBuiltInTracerType::PreStateTracer,
                         )
@@ -198,24 +200,24 @@ mod tests {
         let url = env::var("RPC_URL").expect("RPC_URL is not set");
         let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
         let entry_points = vec![
-            EntryPointWithData::new(
+            EntryPointWithTracingParams::new(
                 EntryPoint::new(
                     "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()".to_string(),
                     Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
                     "getRate()".to_string(),
                 ),
-                EntryPointTracingData::RPCTracer(RPCTracerEntryPoint::new(
+                EntryPointTracingParams::RPCTracer(RPCTracerEntryPoint::new(
                     None,
                     Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
                 )),
             ),
-            EntryPointWithData::new(
+            EntryPointWithTracingParams::new(
                 EntryPoint::new(
                     "0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9:getRate()".to_string(),
                     Bytes::from_str("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9").unwrap(),
                     "getRate()".to_string(),
                 ),
-                EntryPointTracingData::RPCTracer(RPCTracerEntryPoint::new(
+                EntryPointTracingParams::RPCTracer(RPCTracerEntryPoint::new(
                     None,
                     Bytes::from(&keccak256("getRate()")[0..4]),
                 )),
@@ -236,7 +238,7 @@ mod tests {
             traced_entry_points,
             vec![
                 TracedEntryPoint {
-                    entry_point_with_data: entry_points[0].clone(),
+                    entry_point_with_params: entry_points[0].clone(),
                     detection_block_hash: Bytes::from_str("0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2").unwrap(),
                     tracing_result: TracingResult::new(
                         HashSet::from([
@@ -259,7 +261,7 @@ mod tests {
                     ),
                 },
                 TracedEntryPoint {
-                    entry_point_with_data: entry_points[1].clone(),
+                    entry_point_with_params: entry_points[1].clone(),
                     detection_block_hash: Bytes::from_str("0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2").unwrap(),
                     tracing_result: TracingResult::new(
                         HashSet::from([

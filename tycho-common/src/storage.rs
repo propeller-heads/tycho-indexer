@@ -12,8 +12,8 @@ use crate::{
     dto,
     models::{
         blockchain::{
-            Block, EntryPoint, EntryPointTracingData, EntryPointWithData, TracedEntryPoint,
-            TracingResult, Transaction,
+            Block, EntryPoint, EntryPointTracingParams, EntryPointWithTracingParams,
+            TracedEntryPoint, TracingResult, Transaction,
         },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
@@ -529,10 +529,13 @@ pub trait EntryPointGateway {
         entry_points: &[(ComponentId, Vec<EntryPoint>)],
     ) -> Result<(), StorageError>;
 
-    /// Upserts a list of entry points with their tracing data into the database.
-    async fn upsert_entry_point_tracing_data(
+    /// Upserts a list of entry points with their tracing params into the database.
+    async fn upsert_entry_point_tracing_params(
         &self,
-        entry_points_data: &[(EntryPointId, Vec<(EntryPointTracingData, Option<ComponentId>)>)],
+        entry_points_params: &[(
+            EntryPointId,
+            Vec<(EntryPointTracingParams, Option<ComponentId>)>,
+        )],
     ) -> Result<(), StorageError>;
 
     /// Retrieves a list of entry points from the database.
@@ -542,10 +545,10 @@ pub trait EntryPointGateway {
     ) -> Result<Vec<EntryPoint>, StorageError>;
 
     /// Retrieves a list of entry points with their tracing data from the database.
-    async fn get_entry_points_with_data(
+    async fn get_entry_points_tracing_params(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<Vec<EntryPointWithData>, StorageError>;
+    ) -> Result<Vec<EntryPointWithTracingParams>, StorageError>;
 
     /// Upserts a list of traced entry points into the database.
     async fn upsert_traced_entry_points(

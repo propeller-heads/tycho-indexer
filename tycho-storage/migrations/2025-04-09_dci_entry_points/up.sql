@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS "entry_point"(
     UNIQUE ("target", "signature")
 );
 
-CREATE TABLE IF NOT EXISTS "entry_point_tracing_data"(
+CREATE TABLE IF NOT EXISTS "entry_point_tracing_params"(
     "id" bigserial PRIMARY KEY,
     "entry_point_id" bigint REFERENCES "entry_point"(id) ON DELETE CASCADE NOT NULL,
     "tracing_type" entry_point_tracing_type NOT NULL,
@@ -23,17 +23,17 @@ CREATE TABLE IF NOT EXISTS "entry_point_tracing_data"(
     UNIQUE ("entry_point_id", "tracing_type", "data")
 );
 
--- Keep tracks of the m2m relation between protocol components and entry point tracing data
+-- Keep tracks of the m2m relation between protocol components and entry point tracing params
 -- NOTE: Currently this is not mandatory, we should not rely on it for production code. It is only used for debugging purposes.
 -- Worst case scenario, we can delete the table
-CREATE TABLE IF NOT EXISTS "protocol_component_holds_entry_point_tracing_data"(
+CREATE TABLE IF NOT EXISTS "debug_protocol_component_has_entry_point_tracing_params"(
     "protocol_component_id" bigint REFERENCES "protocol_component"(id) ON DELETE CASCADE NOT NULL,
-    "entry_point_tracing_data_id" bigint REFERENCES "entry_point_tracing_data"(id) ON DELETE CASCADE NOT NULL,
-    PRIMARY KEY ("protocol_component_id", "entry_point_tracing_data_id")
+    "entry_point_tracing_params_id" bigint REFERENCES "entry_point_tracing_params"(id) ON DELETE CASCADE NOT NULL,
+    PRIMARY KEY ("protocol_component_id", "entry_point_tracing_params_id")
 );
 
 -- Keep tracks of the m2m relation between protocol components and entry points
-CREATE TABLE IF NOT EXISTS "protocol_component_holds_entry_point"(
+CREATE TABLE IF NOT EXISTS "protocol_component_uses_entry_point"(
     "protocol_component_id" bigint REFERENCES "protocol_component"(id) ON DELETE CASCADE NOT NULL,
     "entry_point_id" bigint REFERENCES "entry_point"(id) ON DELETE CASCADE NOT NULL,
     PRIMARY KEY ("protocol_component_id", "entry_point_id")
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS "protocol_component_holds_entry_point"(
 
 CREATE TABLE IF NOT EXISTS "entry_point_tracing_result"(
     "id" bigserial PRIMARY KEY,
-    "entry_point_tracing_data_id" bigint UNIQUE NOT NULL REFERENCES "entry_point_tracing_data"(id) ON DELETE CASCADE, -- Currently only one result per entry point tracing data, if we want to allow multiple results per entry point tracing data (like for versioning), we need to remove the UNIQUE constraint
+    "entry_point_tracing_params_id" bigint UNIQUE NOT NULL REFERENCES "entry_point_tracing_params"(id) ON DELETE CASCADE, -- Currently only one result per entry point tracing params, if we want to allow multiple results per entry point tracing params (like for versioning), we need to remove the UNIQUE constraint
     "detection_block" bigint NOT NULL REFERENCES "block"(id),
     "detection_data" JSONB NOT NULL,
     "inserted_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -49,10 +49,10 @@ CREATE TABLE IF NOT EXISTS "entry_point_tracing_result"(
 );
 
 -- Keep tracks of the m2m relation between entry_points and accounts
-CREATE TABLE IF NOT EXISTS "entry_point_tracing_data_calls_account"(
-    "entry_point_tracing_data_id" bigint NOT NULL REFERENCES "entry_point_tracing_data"(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS "entry_point_tracing_params_calls_account"(
+    "entry_point_tracing_params_id" bigint NOT NULL REFERENCES "entry_point_tracing_params"(id) ON DELETE CASCADE,
     "account_id" bigint NOT NULL REFERENCES "account"(id) ON DELETE CASCADE,
-    PRIMARY KEY("entry_point_tracing_data_id","account_id")
+    PRIMARY KEY("entry_point_tracing_params_id","account_id")
 );
 
 CREATE TRIGGER update_modtime_entry_point
@@ -60,8 +60,8 @@ CREATE TRIGGER update_modtime_entry_point
     FOR EACH ROW
     EXECUTE PROCEDURE update_modified_column();
 
-CREATE TRIGGER update_modtime_entry_point_tracing_data
-    BEFORE UPDATE ON "entry_point_tracing_data"
+CREATE TRIGGER update_modtime_entry_point_tracing_params
+    BEFORE UPDATE ON "entry_point_tracing_params"
     FOR EACH ROW
     EXECUTE PROCEDURE update_modified_column();
 
