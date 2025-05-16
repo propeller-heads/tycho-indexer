@@ -101,17 +101,19 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address ekuboCore = 0xe0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444;
 
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
-        usv2Executor = new UniswapV2Executor(factoryV2, initCodeV2, 30);
+        usv2Executor =
+            new UniswapV2Executor(factoryV2, initCodeV2, PERMIT2_ADDRESS, 30);
         usv3Executor =
             new UniswapV3Executor(factoryV3, initCodeV3, PERMIT2_ADDRESS);
         usv4Executor = new UniswapV4Executor(poolManager, PERMIT2_ADDRESS);
         pancakev3Executor = new UniswapV3Executor(
             factoryPancakeV3, initCodePancakeV3, PERMIT2_ADDRESS
         );
-        balancerv2Executor = new BalancerV2Executor();
+        balancerv2Executor = new BalancerV2Executor(PERMIT2_ADDRESS);
         ekuboExecutor = new EkuboExecutor(ekuboCore, PERMIT2_ADDRESS);
-        curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE);
-        maverickv2Executor = new MaverickV2Executor(MAVERICK_V2_FACTORY);
+        curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, PERMIT2_ADDRESS);
+        maverickv2Executor =
+            new MaverickV2Executor(MAVERICK_V2_FACTORY, PERMIT2_ADDRESS);
 
         address[] memory executors = new address[](8);
         executors[0] = address(usv2Executor);

@@ -6,6 +6,8 @@ import "@src/executors/BalancerV2Executor.sol";
 import {Constants} from "../Constants.sol";
 
 contract BalancerV2ExecutorExposed is BalancerV2Executor {
+    constructor(address _permit2) BalancerV2Executor(_permit2) {}
+
     function decodeParams(bytes calldata data)
         external
         pure
@@ -33,7 +35,7 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
     function setUp() public {
         uint256 forkBlock = 17323404;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        balancerV2Exposed = new BalancerV2ExecutorExposed();
+        balancerV2Exposed = new BalancerV2ExecutorExposed(PERMIT2_ADDRESS);
     }
 
     function testDecodeParams() public view {

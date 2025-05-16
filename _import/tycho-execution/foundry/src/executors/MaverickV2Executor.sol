@@ -14,7 +14,7 @@ contract MaverickV2Executor is IExecutor {
 
     address public immutable factory;
 
-    constructor(address _factory) {
+    constructor(address _factory, address _permit2) {
         if (_factory == address(0)) {
             revert MaverickV2Executor__InvalidFactory();
         }
