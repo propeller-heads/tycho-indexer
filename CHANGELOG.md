@@ -1,3 +1,12 @@
+## [0.70.5](https://github.com/propeller-heads/tycho-indexer/compare/0.70.4...0.70.5) (2025-05-16)
+
+
+### Bug Fixes
+
+* **tycho-client:** fix block position bug for delayed extractors on start up ([#570](https://github.com/propeller-heads/tycho-indexer/issues/570)) ([46aa1af](https://github.com/propeller-heads/tycho-indexer/commit/46aa1afe47ff5cfffc984215a6ecc4f78ee92e7b))
+* **tycho-client:** mark blocks older than the oldest in BlockHistory as delayed ([ebb55a9](https://github.com/propeller-heads/tycho-indexer/commit/ebb55a9844f8d7750f060f160bfd617224f33dc4))
+* **tycho-client:** skip detached blocks on BlockHistory creation ([116e75a](https://github.com/propeller-heads/tycho-indexer/commit/116e75a77f461e72194f5a513f39f474898ea5c1))
+
 ## [0.70.4](https://github.com/propeller-heads/tycho-indexer/compare/0.70.3...0.70.4) (2025-05-15)
 
 
