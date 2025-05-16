@@ -20,7 +20,8 @@ use tycho_common::{
     models::{
         self,
         blockchain::{
-            Block, EntryPoint, EntryPointWithData, TracedEntryPoint, TracingResult, Transaction,
+            Block, EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingResult,
+            Transaction,
         },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
@@ -41,7 +42,7 @@ use tycho_common::{
 
 use super::{PostgresError, PostgresGateway};
 
-type NewEntryPointData = (models::blockchain::EntryPointTracingData, Option<ComponentId>);
+type NewEntryPointParams = (models::blockchain::EntryPointTracingParams, Option<ComponentId>);
 
 /// Represents different types of database write operations.
 #[derive(PartialEq, Clone, Debug)]
@@ -72,7 +73,7 @@ pub(crate) enum WriteOp {
     // Simply merge
     UpsertEntryPoints(Vec<(models::ComponentId, Vec<models::blockchain::EntryPoint>)>),
     // Simply merge
-    UpsertEntryPointTracingData(Vec<(models::EntryPointId, Vec<NewEntryPointData>)>),
+    UpsertEntryPointTracingParams(Vec<(models::EntryPointId, Vec<NewEntryPointParams>)>),
     // Simply merge
     UpsertTracedEntryPoints(Vec<models::blockchain::TracedEntryPoint>),
 }
@@ -92,7 +93,7 @@ impl WriteOp {
             WriteOp::InsertComponentBalances(_) => "InsertComponentBalances",
             WriteOp::UpsertProtocolState(_) => "UpsertProtocolState",
             WriteOp::UpsertEntryPoints(_) => "UpsertEntryPoints",
-            WriteOp::UpsertEntryPointTracingData(_) => "UpsertEntryPointTracingData",
+            WriteOp::UpsertEntryPointTracingParams(_) => "UpsertEntryPointTracingParams",
             WriteOp::UpsertTracedEntryPoints(_) => "UpsertTracedEntryPoints",
         }
     }
@@ -110,7 +111,7 @@ impl WriteOp {
             WriteOp::InsertComponentBalances(_) => 8,
             WriteOp::UpsertProtocolState(_) => 9,
             WriteOp::UpsertEntryPoints(_) => 10,
-            WriteOp::UpsertEntryPointTracingData(_) => 11,
+            WriteOp::UpsertEntryPointTracingParams(_) => 11,
             WriteOp::UpsertTracedEntryPoints(_) => 12,
             WriteOp::SaveExtractionState(_) => 13,
         }
@@ -220,8 +221,8 @@ impl DBTransaction {
                     return Ok(());
                 }
                 (
-                    WriteOp::UpsertEntryPointTracingData(l),
-                    WriteOp::UpsertEntryPointTracingData(r),
+                    WriteOp::UpsertEntryPointTracingParams(l),
+                    WriteOp::UpsertEntryPointTracingParams(r),
                 ) => {
                     self.size += r.len();
                     l.extend(r.iter().cloned());
@@ -526,12 +527,12 @@ impl DBCacheWriteExecutor {
                     )
                     .await?
             }
-            WriteOp::UpsertEntryPointTracingData(new_entry_point_tracing_data) => {
+            WriteOp::UpsertEntryPointTracingParams(new_entry_point_tracing_params) => {
                 self.state_gateway
-                    .upsert_entry_point_tracing_data(
-                        &new_entry_point_tracing_data
+                    .upsert_entry_point_tracing_params(
+                        &new_entry_point_tracing_params
                             .iter()
-                            .map(|(entry_point_id, data)| (entry_point_id.clone(), data))
+                            .map(|(entry_point_id, params)| (entry_point_id.clone(), params))
                             .collect::<HashMap<_, _>>(),
                         &self.chain,
                         conn,
@@ -1179,14 +1180,14 @@ impl EntryPointGateway for CachedGateway {
     }
 
     #[instrument(skip_all)]
-    async fn upsert_entry_point_tracing_data(
+    async fn upsert_entry_point_tracing_params(
         &self,
-        entry_points_data: &[(
+        entry_points_params: &[(
             models::EntryPointId,
-            Vec<(models::blockchain::EntryPointTracingData, Option<ComponentId>)>,
+            Vec<(models::blockchain::EntryPointTracingParams, Option<ComponentId>)>,
         )],
     ) -> Result<(), StorageError> {
-        self.add_op(WriteOp::UpsertEntryPointTracingData(entry_points_data.to_vec()))
+        self.add_op(WriteOp::UpsertEntryPointTracingParams(entry_points_params.to_vec()))
             .await?;
         Ok(())
     }
@@ -1206,16 +1207,16 @@ impl EntryPointGateway for CachedGateway {
     }
 
     #[instrument(skip_all)]
-    async fn get_entry_points_with_data(
+    async fn get_entry_points_tracing_params(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<Vec<EntryPointWithData>, StorageError> {
+    ) -> Result<Vec<EntryPointWithTracingParams>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_entry_points_with_data(filter, &mut conn)
+            .get_entry_points_tracing_params(filter, &mut conn)
             .await
     }
 

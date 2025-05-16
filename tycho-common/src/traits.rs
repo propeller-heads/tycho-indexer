@@ -5,7 +5,7 @@ use async_trait::async_trait;
 
 use crate::{
     models::{
-        blockchain::{Block, BlockTag, EntryPointWithData, TracedEntryPoint},
+        blockchain::{Block, BlockTag, EntryPointWithTracingParams, TracedEntryPoint},
         contract::AccountDelta,
         token::{CurrencyToken, TokenQuality, TransferCost, TransferTax},
         Address, Balance, BlockHash,
@@ -115,6 +115,6 @@ pub trait EntryPointTracer {
     async fn trace(
         &self,
         block_hash: BlockHash,
-        entry_points: Vec<EntryPointWithData>,
+        entry_points: Vec<EntryPointWithTracingParams>,
     ) -> Result<Vec<TracedEntryPoint>, Self::Error>;
 }
