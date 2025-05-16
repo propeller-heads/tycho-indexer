@@ -5,7 +5,7 @@ import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@interfaces/ICallback.sol";
-import {OneTransferFromOnly} from "../OneTransferFromOnly.sol";
+import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
 error UniswapV3Executor__InvalidDataLength();
@@ -13,7 +13,7 @@ error UniswapV3Executor__InvalidFactory();
 error UniswapV3Executor__InvalidTarget();
 error UniswapV3Executor__InvalidInitCode();
 
-contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
+contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
     using SafeERC20 for IERC20;
 
     uint160 private constant MIN_SQRT_RATIO = 4295128739;
@@ -25,7 +25,7 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
     address private immutable self;
 
     constructor(address _factory, bytes32 _initCode, address _permit2)
-        OneTransferFromOnly(_permit2)
+        RestrictTransferFrom(_permit2)
     {
         if (_factory == address(0)) {
             revert UniswapV3Executor__InvalidFactory();
@@ -51,8 +51,7 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
             address receiver,
             address target,
             bool zeroForOne,
-            bool transferFromNeeded,
-            bool transferNeeded
+            uint8 transferType
         ) = _decodeData(data);
 
         _verifyPairAddress(tokenIn, tokenOut, fee, target);
@@ -62,7 +61,7 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
         bytes memory callbackData = _makeV3CallbackData(
-            tokenIn, tokenOut, fee, transferFromNeeded, transferNeeded
+            tokenIn, tokenOut, fee, transferType
         );
 
         {
@@ -99,24 +98,14 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
             abi.decode(msgData[4:68], (int256, int256));
 
         address tokenIn = address(bytes20(msgData[132:152]));
-
-        bool transferFromNeeded = msgData[175] != 0;
-        bool transferNeeded = msgData[176] != 0;
+        bool transferType = TransferType(uint8(msgData[175]));
 
         verifyCallback(msgData[132:]);
 
         uint256 amountOwed =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
 
-        if (transferFromNeeded) {
-            _transfer(msg.sender);
-        } else if (transferNeeded) {
-            if (tokenIn == address(0)) {
-                Address.sendValue(payable(msg.sender), amountOwed);
-            } else {
-                IERC20(tokenIn).safeTransfer(msg.sender, amountOwed);
-            }
-        }
+        _transfer(msg.sender, transferType, tokenIn, amountOwed);
 
         return abi.encode(amountOwed, tokenIn);
     }
@@ -147,11 +136,10 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
             address receiver,
             address target,
             bool zeroForOne,
-            bool transferFromNeeded,
-            bool transferNeeded
+            uint8 transferType
         )
     {
-        if (data.length != 86) {
+        if (data.length != 85) {
             revert UniswapV3Executor__InvalidDataLength();
         }
         tokenIn = address(bytes20(data[0:20]));
@@ -160,19 +148,17 @@ contract UniswapV3Executor is IExecutor, ICallback, OneTransferFromOnly {
         receiver = address(bytes20(data[43:63]));
         target = address(bytes20(data[63:83]));
         zeroForOne = uint8(data[83]) > 0;
-        transferFromNeeded = data[84] != 0;
-        transferNeeded = data[85] != 0;
+        transferType = uint8(data[84]);
     }
 
     function _makeV3CallbackData(
         address tokenIn,
         address tokenOut,
         uint24 fee,
-        bool transferFromNeeded,
-        bool transferNeeded
+        uint8 transferType
     ) internal pure returns (bytes memory) {
         return abi.encodePacked(
-            tokenIn, tokenOut, fee, transferFromNeeded, transferNeeded
+            tokenIn, tokenOut, fee, transferType
         );
     }
 

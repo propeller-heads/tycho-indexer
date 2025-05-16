@@ -4,8 +4,9 @@ pragma solidity ^0.8.26;
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 
-error CurveExecutor__AddressZero();
+    error CurveExecutor__AddressZero();
 error CurveExecutor__InvalidDataLength();
 
 interface CryptoPool {
@@ -34,12 +35,12 @@ interface CryptoPoolETH {
     // slither-disable-end naming-convention
 }
 
-contract CurveExecutor is IExecutor {
+contract CurveExecutor is IExecutor, RestrictTransferFrom {
     using SafeERC20 for IERC20;
 
     address public immutable nativeToken;
 
-    constructor(address _nativeToken, address _permit2) {
+    constructor(address _nativeToken, address _permit2) RestrictTransferFrom(_permit2) {
         if (_nativeToken == address(0)) {
             revert CurveExecutor__AddressZero();
         }
@@ -52,7 +53,7 @@ contract CurveExecutor is IExecutor {
         payable
         returns (uint256)
     {
-        if (data.length != 84) revert CurveExecutor__InvalidDataLength();
+        if (data.length != 85) revert CurveExecutor__InvalidDataLength();
 
         (
             address tokenIn,
@@ -62,6 +63,7 @@ contract CurveExecutor is IExecutor {
             int128 i,
             int128 j,
             bool approvalNeeded,
+            TransferType transferType,
             address receiver
         ) = _decodeData(data);
 
@@ -69,6 +71,7 @@ contract CurveExecutor is IExecutor {
             // slither-disable-next-line unused-return
             IERC20(tokenIn).forceApprove(address(pool), type(uint256).max);
         }
+        _transfer(address(this), transferType, tokenIn, amountIn);
 
         /// Inspired by Curve's router contract: https://github.com/curvefi/curve-router-ng/blob/9ab006ca848fc7f1995b6fbbecfecc1e0eb29e2a/contracts/Router.vy#L44
         uint256 balanceBefore = _balanceOf(tokenOut);
@@ -120,6 +123,7 @@ contract CurveExecutor is IExecutor {
             int128 i,
             int128 j,
             bool approvalNeeded,
+            TransferType transferType,
             address receiver
         )
     {
@@ -130,7 +134,8 @@ contract CurveExecutor is IExecutor {
         i = int128(uint128(uint8(data[61])));
         j = int128(uint128(uint8(data[62])));
         approvalNeeded = data[63] != 0;
-        receiver = address(bytes20(data[64:84]));
+        transferType = TransferType(uint8(data[64]));
+        receiver = address(bytes20(data[65:85]));
     }
 
     /**

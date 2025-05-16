@@ -14,7 +14,7 @@ import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 import "./Dispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {OneTransferFromOnly} from "./OneTransferFromOnly.sol";
+import {RestrictTransferFrom} from "./RestrictTransferFrom.sol";
 
 //                                         ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
 //                                   ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
@@ -71,7 +71,7 @@ contract TychoRouter is
     Dispatcher,
     Pausable,
     ReentrancyGuard,
-    OneTransferFromOnly
+RestrictTransferFrom
 {
     IWETH private immutable _weth;
 
@@ -93,7 +93,7 @@ contract TychoRouter is
         address indexed token, uint256 amount, address indexed receiver
     );
 
-    constructor(address _permit2, address weth) OneTransferFromOnly(_permit2) {
+    constructor(address _permit2, address weth) RestrictTransferFrom(_permit2) {
         if (_permit2 == address(0) || weth == address(0)) {
             revert TychoRouter__AddressZero();
         }

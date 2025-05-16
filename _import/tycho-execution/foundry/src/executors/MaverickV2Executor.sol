@@ -4,17 +4,18 @@ pragma solidity ^0.8.26;
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 
-error MaverickV2Executor__InvalidDataLength();
+    error MaverickV2Executor__InvalidDataLength();
 error MaverickV2Executor__InvalidTarget();
 error MaverickV2Executor__InvalidFactory();
 
-contract MaverickV2Executor is IExecutor {
+contract MaverickV2Executor is IExecutor, RestrictTransferFrom {
     using SafeERC20 for IERC20;
 
     address public immutable factory;
 
-    constructor(address _factory, address _permit2) {
+    constructor(address _factory, address _permit2) RestrictTransferFrom(_permit2) {
         if (_factory == address(0)) {
             revert MaverickV2Executor__InvalidFactory();
         }
@@ -30,9 +31,9 @@ contract MaverickV2Executor is IExecutor {
         address target;
         address receiver;
         IERC20 tokenIn;
-        bool transferNeeded;
+        TransferType transferType;
 
-        (tokenIn, target, receiver, transferNeeded) = _decodeData(data);
+        (tokenIn, target, receiver, transferType) = _decodeData(data);
 
         _verifyPairAddress(target);
         IMaverickV2Pool pool = IMaverickV2Pool(target);
@@ -47,14 +48,7 @@ contract MaverickV2Executor is IExecutor {
             tickLimit: tickLimit
         });
 
-        if (transferNeeded) {
-            if (address(tokenIn) == address(0)) {
-                Address.sendValue(payable(target), givenAmount);
-            } else {
-                // slither-disable-next-line arbitrary-send-erc20
-                tokenIn.safeTransfer(target, givenAmount);
-            }
-        }
+        _transfer(target, transferType, tokenIn, givenAmount);
 
         // slither-disable-next-line unused-return
         (, calculatedAmount) = pool.swap(receiver, swapParams, "");
@@ -67,7 +61,7 @@ contract MaverickV2Executor is IExecutor {
             IERC20 inToken,
             address target,
             address receiver,
-            bool transferNeeded
+            TransferType transferType
         )
     {
         if (data.length != 61) {
@@ -76,7 +70,7 @@ contract MaverickV2Executor is IExecutor {
         inToken = IERC20(address(bytes20(data[0:20])));
         target = address(bytes20(data[20:40]));
         receiver = address(bytes20(data[40:60]));
-        transferNeeded = (data[60] != 0);
+        transferType = TransferType(uint8(data[60]));
     }
 
     function _verifyPairAddress(address target) internal view {

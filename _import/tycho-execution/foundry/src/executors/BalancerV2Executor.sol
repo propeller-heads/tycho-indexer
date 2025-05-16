@@ -10,15 +10,16 @@ import {
 import {IAsset} from "@balancer-labs/v2-interfaces/contracts/vault/IAsset.sol";
 // slither-disable-next-line solc-version
 import {IVault} from "@balancer-labs/v2-interfaces/contracts/vault/IVault.sol";
+import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 
-error BalancerV2Executor__InvalidDataLength();
+    error BalancerV2Executor__InvalidDataLength();
 
-contract BalancerV2Executor is IExecutor {
+contract BalancerV2Executor is IExecutor, RestrictTransferFrom {
     using SafeERC20 for IERC20;
 
     address private constant VAULT = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
-    constructor(address _permit2) {}
+    constructor(address _permit2) RestrictTransferFrom(_permit2) {}
 
     // slither-disable-next-line locked-ether
     function swap(uint256 givenAmount, bytes calldata data)
@@ -31,8 +32,11 @@ contract BalancerV2Executor is IExecutor {
             IERC20 tokenOut,
             bytes32 poolId,
             address receiver,
-            bool approvalNeeded
+            bool approvalNeeded,
+            TransferType transferType
         ) = _decodeData(data);
+
+        _transfer(address(this), transferType, tokenIn, givenAmount);
 
         if (approvalNeeded) {
             // slither-disable-next-line unused-return

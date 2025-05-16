@@ -11,7 +11,7 @@ import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
 import {LibBytes} from "@solady/utils/LibBytes.sol";
 import {Config, EkuboPoolKey} from "@ekubo/types/poolKey.sol";
 import {MAX_SQRT_RATIO, MIN_SQRT_RATIO} from "@ekubo/types/sqrtRatio.sol";
-import "../OneTransferFromOnly.sol";
+import "../RestrictTransferFrom.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
 contract EkuboExecutor is
@@ -19,7 +19,7 @@ contract EkuboExecutor is
     ILocker,
     IPayer,
     ICallback,
-    OneTransferFromOnly
+RestrictTransferFrom
 {
     error EkuboExecutor__InvalidDataLength();
     error EkuboExecutor__CoreOnly();
@@ -36,7 +36,7 @@ contract EkuboExecutor is
     using SafeERC20 for IERC20;
 
     constructor(address _core, address _permit2)
-        OneTransferFromOnly(_permit2)
+        RestrictTransferFrom(_permit2)
     {
         core = ICore(_core);
     }
@@ -46,7 +46,7 @@ contract EkuboExecutor is
         payable
         returns (uint256 calculatedAmount)
     {
-        if (data.length < 93) revert EkuboExecutor__InvalidDataLength();
+        if (data.length < 92) revert EkuboExecutor__InvalidDataLength();
 
         // amountIn must be at most type(int128).MAX
         calculatedAmount =
@@ -125,10 +125,9 @@ contract EkuboExecutor is
     function _locked(bytes calldata swapData) internal returns (int128) {
         int128 nextAmountIn = int128(uint128(bytes16(swapData[0:16])));
         uint128 tokenInDebtAmount = uint128(nextAmountIn);
-        bool transferFromNeeded = (swapData[16] != 0);
-        bool transferNeeded = (swapData[17] != 0);
-        address receiver = address(bytes20(swapData[18:38]));
-        address tokenIn = address(bytes20(swapData[38:58]));
+        TransferType transferType = TransferType(uint8(swapData[16]));
+        address receiver = address(bytes20(swapData[17:37]));
+        address tokenIn = address(bytes20(swapData[37:57]));
 
         address nextTokenIn = tokenIn;
 
@@ -162,7 +161,7 @@ contract EkuboExecutor is
             offset += HOP_BYTE_LEN;
         }
 
-        _pay(tokenIn, tokenInDebtAmount, transferFromNeeded, transferNeeded);
+        _pay(tokenIn, tokenInDebtAmount, transferType);
         core.withdraw(nextTokenIn, receiver, uint128(nextAmountIn));
         return nextAmountIn;
     }
@@ -170,8 +169,7 @@ contract EkuboExecutor is
     function _pay(
         address token,
         uint128 amount,
-        bool transferFromNeeded,
-        bool transferNeeded
+        TransferType transferType
     ) internal {
         address target = address(core);
 
@@ -185,11 +183,10 @@ contract EkuboExecutor is
                 mstore(free, shl(224, 0x0c11dedd))
                 mstore(add(free, 4), token)
                 mstore(add(free, 36), shl(128, amount))
-                mstore(add(free, 52), shl(248, transferFromNeeded))
-                mstore(add(free, 53), shl(248, transferNeeded))
+                mstore(add(free, 52), shl(248, transferType))
 
-                // 4 (selector) + 32 (token) + 16 (amount) + 1 (transferFromNeeded) + 1 (transferNeeded) = 54
-                if iszero(call(gas(), target, 0, free, 54, 0, 0)) {
+                // 4 (selector) + 32 (token) + 16 (amount) + 1 (transferType) = 53
+                if iszero(call(gas(), target, 0, free, 53, 0, 0)) {
                     returndatacopy(0, 0, returndatasize())
                     revert(0, returndatasize())
                 }
@@ -200,13 +197,8 @@ contract EkuboExecutor is
     function _payCallback(bytes calldata payData) internal {
         address token = address(bytes20(payData[12:32])); // This arg is abi-encoded
         uint128 amount = uint128(bytes16(payData[32:48]));
-        bool transferFromNeeded = (payData[48] != 0);
-        bool transferNeeded = (payData[49] != 0);
-        if (transferFromNeeded) {
-            _transfer(msg.sender);
-        } else if (transferNeeded) {
-            IERC20(token).safeTransfer(msg.sender, amount);
-        }
+        TransferType transferType = TransferType(uint8(payData[48]));
+        _transfer(core, transferType, token, amount);
     }
 
     // To receive withdrawals from Core

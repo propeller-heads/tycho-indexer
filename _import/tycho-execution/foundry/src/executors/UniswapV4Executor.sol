@@ -22,7 +22,7 @@ import {IUnlockCallback} from
 import {SafeCast} from "@uniswap/v4-core/src/libraries/SafeCast.sol";
 import {TransientStateLibrary} from
     "@uniswap/v4-core/src/libraries/TransientStateLibrary.sol";
-import "../OneTransferFromOnly.sol";
+import "../RestrictTransferFrom.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
 error UniswapV4Executor__InvalidDataLength();
@@ -38,7 +38,7 @@ contract UniswapV4Executor is
     IExecutor,
     IUnlockCallback,
     ICallback,
-    OneTransferFromOnly
+RestrictTransferFrom
 {
     using SafeERC20 for IERC20;
     using CurrencyLibrary for Currency;
@@ -58,7 +58,7 @@ contract UniswapV4Executor is
     }
 
     constructor(IPoolManager _poolManager, address _permit2)
-        OneTransferFromOnly(_permit2)
+        RestrictTransferFrom(_permit2)
     {
         poolManager = _poolManager;
         _self = address(this);
@@ -83,8 +83,7 @@ contract UniswapV4Executor is
             address tokenIn,
             address tokenOut,
             bool zeroForOne,
-            bool transferFromNeeded,
-            bool transferNeeded,
+            TransferType transferType,
             address receiver,
             UniswapV4Executor.UniswapV4Pool[] memory pools
         ) = _decodeData(data);
@@ -102,8 +101,7 @@ contract UniswapV4Executor is
                 key,
                 zeroForOne,
                 amountIn,
-                transferFromNeeded,
-                transferNeeded,
+                transferType,
                 receiver,
                 bytes("")
             );
@@ -125,8 +123,7 @@ contract UniswapV4Executor is
                 currencyIn,
                 path,
                 amountIn,
-                transferFromNeeded,
-                transferNeeded,
+                transferType,
                 receiver
             );
         }
@@ -144,26 +141,24 @@ contract UniswapV4Executor is
             address tokenIn,
             address tokenOut,
             bool zeroForOne,
-            bool transferFromNeeded,
-            bool transferNeeded,
+            TransferType transferType,
             address receiver,
             UniswapV4Pool[] memory pools
         )
     {
-        if (data.length < 89) {
+        if (data.length < 88) {
             revert UniswapV4Executor__InvalidDataLength();
         }
 
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         zeroForOne = data[40] != 0;
-        transferFromNeeded = data[41] != 0;
-        transferNeeded = data[42] != 0;
-        receiver = address(bytes20(data[43:63]));
+        transferType = TransferType(uint8(data[41]));
+        receiver = address(bytes20(data[42:62]));
 
-        uint256 poolsLength = (data.length - 63) / 26; // 26 bytes per pool object
+        uint256 poolsLength = (data.length - 62) / 26; // 26 bytes per pool object
         pools = new UniswapV4Pool[](poolsLength);
-        bytes memory poolsData = data[63:];
+        bytes memory poolsData = data[62:];
         uint256 offset = 0;
         for (uint256 i = 0; i < poolsLength; i++) {
             address intermediaryToken;
@@ -243,8 +238,7 @@ contract UniswapV4Executor is
      * @param poolKey The key of the pool to swap in.
      * @param zeroForOne Whether the swap is from token0 to token1 (true) or vice versa (false).
      * @param amountIn The amount of tokens to swap in.
-     * @param transferFromNeeded Whether to transferFrom input tokens into the core contract from the swapper's wallet .
-     * @param transferNeeded Whether to transfer input tokens into the core contract from the router contract
+     * @param transferType The type of action necessary to pay back the pool.
      * @param receiver The address of the receiver.
      * @param hookData Additional data for hook contracts.
      */
@@ -252,8 +246,7 @@ contract UniswapV4Executor is
         PoolKey memory poolKey,
         bool zeroForOne,
         uint128 amountIn,
-        bool transferFromNeeded,
-        bool transferNeeded,
+        TransferType transferType,
         address receiver,
         bytes calldata hookData
     ) external returns (uint128) {
@@ -266,7 +259,7 @@ contract UniswapV4Executor is
         if (amount > amountIn) {
             revert UniswapV4Executor__V4TooMuchRequested(amountIn, amount);
         }
-        _settle(currencyIn, amount, transferFromNeeded, transferNeeded);
+        _settle(currencyIn, amount, transferType);
 
         Currency currencyOut =
             zeroForOne ? poolKey.currency1 : poolKey.currency0;
@@ -279,16 +272,14 @@ contract UniswapV4Executor is
      * @param currencyIn The currency of the input token.
      * @param path The path to swap along.
      * @param amountIn The amount of tokens to swap in.
-     * @param transferFromNeeded Whether to transferFrom input tokens into the core contract from the swapper's wallet .
-     * @param transferNeeded Whether to transfer input tokens into the core contract from the router contract
+     * @param transferType The type of action necessary to pay back the pool.
      * @param receiver The address of the receiver.
      */
     function swapExactInput(
         Currency currencyIn,
         PathKey[] calldata path,
         uint128 amountIn,
-        bool transferFromNeeded,
-        bool transferNeeded,
+        TransferType transferType,
         address receiver
     ) external returns (uint128) {
         uint128 amountOut = 0;
@@ -319,7 +310,7 @@ contract UniswapV4Executor is
         if (amount > amountIn) {
             revert UniswapV4Executor__V4TooMuchRequested(amountIn, amount);
         }
-        _settle(currencyIn, amount, transferFromNeeded, transferNeeded);
+        _settle(currencyIn, amount, transferType);
 
         _take(
             swapCurrencyIn, // at the end of the loop this is actually currency out
@@ -391,17 +382,13 @@ contract UniswapV4Executor is
      * @dev The implementing contract must ensure that the `payer` is a secure address.
      * @param currency The currency to settle.
      * @param amount The amount to send.
-     * @param transferFromNeeded Whether to manually transferFrom input tokens into the
-     *  core contract from the swapper.
-     * @param transferNeeded Whether to manually transfer input tokens into the
-     *  core contract from the router.
+     * @param transferType The type of action necessary to pay back the pool.
      * @dev Returns early if the amount is 0.
      */
     function _settle(
         Currency currency,
         uint256 amount,
-        bool transferFromNeeded,
-        bool transferNeeded
+        TransferType transferType
     ) internal {
         if (amount == 0) return;
         poolManager.sync(currency);
@@ -409,18 +396,12 @@ contract UniswapV4Executor is
             // slither-disable-next-line unused-return
             poolManager.settle{value: amount}();
         } else {
-            if (transferFromNeeded) {
-                // transferFrom swapper's wallet into the core contract
-                _transfer(address(poolManager));
-            } else if (transferNeeded) {
-                address tokenIn = Currency.unwrap(currency);
-                // transfer from router contract into the core contract
-                if (tokenIn == address(0)) {
-                    Address.sendValue(payable(address(poolManager)), amount);
-                } else {
-                    IERC20(tokenIn).safeTransfer(address(poolManager), amount);
-                }
-            }
+            _transfer(
+                address(poolManager),
+                transferType,
+                address(currency),
+                amount
+            );
             // slither-disable-next-line unused-return
             poolManager.settle();
         }
