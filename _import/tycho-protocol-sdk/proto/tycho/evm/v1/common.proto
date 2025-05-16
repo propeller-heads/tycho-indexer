@@ -159,6 +159,29 @@ message EntryPoint {
   bytes target = 2;
   // The signature of the function to analyse.
   string signature = 3;
+  // The id of the component that uses this entrypoint.
+  string component_id = 4;
+}
+
+// Parameters to trace the entrypoint
+message EntryPointParams {
+  // The entrypoint id.
+  string entrypoint_id = 1;
+  // [optional] The component that uses these entrypoint parameters. Currently used for debugging purposes only.
+  string component_id = 2;
+  // The strategy and its corresponding data
+  oneof trace_data {
+    RPCTraceData rpc = 3;
+    // Add more strategies here
+  }
+}
+
+// RPC tracing strategy with its data
+message RPCTraceData {
+  // [optional] The caller to be used for the trace. If none is provided a chain default will be used.
+  bytes caller = 1;
+  // The calldata to be used for the trace
+  bytes calldata = 2;
 }
 
 // A contract and associated storage changes
@@ -187,6 +210,8 @@ message TransactionChanges {
   repeated BalanceChange balance_changes = 5;
   // An array of newly added entrypoints. Used for DCI enabled protocols.
   repeated EntryPoint entrypoints = 6;
+  // An array of entrypoint tracing parameteres. Used for DCI enabled protocols.
+  repeated EntryPointParams entrypoint_params = 7;
 }
 
 // A set of storage changes aggregated by transaction.

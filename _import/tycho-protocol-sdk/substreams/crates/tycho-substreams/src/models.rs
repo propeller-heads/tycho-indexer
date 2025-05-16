@@ -184,6 +184,7 @@ impl TransactionChangesBuilder {
                 .entrypoints
                 .into_iter()
                 .collect::<Vec<_>>(),
+            entrypoint_params: Vec::new(), // TODO: Add entrypoint params to builder
         };
         if tx_changes.is_empty() {
             None

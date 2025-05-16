@@ -189,6 +189,45 @@ pub struct EntryPoint {
     /// The signature of the function to analyse.
     #[prost(string, tag="3")]
     pub signature: ::prost::alloc::string::String,
+    /// The id of the component that uses this entrypoint.
+    #[prost(string, tag="4")]
+    pub component_id: ::prost::alloc::string::String,
+}
+/// Parameters to trace the entrypoint
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EntryPointParams {
+    /// The entrypoint id.
+    #[prost(string, tag="1")]
+    pub entrypoint_id: ::prost::alloc::string::String,
+    /// \[optional\] The component that uses these entrypoint parameters. Currently used for debugging purposes only.
+    #[prost(string, tag="2")]
+    pub component_id: ::prost::alloc::string::String,
+    /// The strategy and its corresponding data
+    #[prost(oneof="entry_point_params::TraceData", tags="3")]
+    pub trace_data: ::core::option::Option<entry_point_params::TraceData>,
+}
+/// Nested message and enum types in `EntryPointParams`.
+pub mod entry_point_params {
+    /// The strategy and its corresponding data
+    #[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum TraceData {
+        /// Add more strategies here
+        #[prost(message, tag="3")]
+        Rpc(super::RpcTraceData),
+    }
+}
+/// RPC tracing strategy with its data
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RpcTraceData {
+    /// \[optional\] The caller to be used for the trace. If none is provided a chain default will be used.
+    #[prost(bytes="vec", tag="1")]
+    pub caller: ::prost::alloc::vec::Vec<u8>,
+    /// The calldata to be used for the trace
+    #[prost(bytes="vec", tag="2")]
+    pub calldata: ::prost::alloc::vec::Vec<u8>,
 }
 /// A contract and associated storage changes
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -227,6 +266,9 @@ pub struct TransactionChanges {
     /// An array of newly added entrypoints. Used for DCI enabled protocols.
     #[prost(message, repeated, tag="6")]
     pub entrypoints: ::prost::alloc::vec::Vec<EntryPoint>,
+    /// An array of entrypoint tracing parameteres. Used for DCI enabled protocols.
+    #[prost(message, repeated, tag="7")]
+    pub entrypoint_params: ::prost::alloc::vec::Vec<EntryPointParams>,
 }
 /// A set of storage changes aggregated by transaction.
 #[allow(clippy::derive_partial_eq_without_eq)]
