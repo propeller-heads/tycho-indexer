@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     str::FromStr,
 };
 
@@ -9,7 +9,7 @@ use ethers::{
     prelude::{spoof, Middleware},
     providers::{Http, Provider},
     types::{
-        Address as EthersAddress, BlockId, Bytes as EthersBytes, CallFrame,
+        AccountState, Address as EthersAddress, BlockId, Bytes as EthersBytes, CallFrame,
         GethDebugBuiltInTracerType, GethDebugTracerType, GethDebugTracingCallOptions,
         GethDebugTracingOptions, GethTrace, GethTraceFrame, NameOrAddress, PreStateFrame,
         PreStateMode, TransactionRequest, U256,
@@ -19,7 +19,7 @@ use tycho_common::{
     keccak256,
     models::{
         blockchain::{
-            EntryPointTracingData, EntryPointWithData, RPCTracerEntryPoint, Storage,
+            CallNode, EntryPointTracingData, EntryPointWithData, RPCTracerEntryPoint, Storage,
             TracedEntryPoint, TracingResult,
         },
         Address, BlockHash, StoreKey, StoreVal,
@@ -109,6 +109,50 @@ fn convert_storage(slots: &HashMap<StoreKey, StoreVal>) -> HashMap<H256, H256> {
         .collect::<HashMap<_, _>>()
 }
 
+fn convert_call_frame_to_node(
+    frame: &CallFrame,
+    // TODO: ideally ARC all values in here and have them already extracted and converted
+    prestate: &BTreeMap<EthersAddress, AccountState>,
+) -> CallNode {
+    let ethers_address = frame
+        .to
+        .as_ref()
+        .unwrap()
+        .as_address()
+        .unwrap();
+    let address = Address::from(ethers_address.as_bytes());
+    let signature = Bytes::from(
+        frame
+            .input
+            .as_ref()
+            .get(..4)
+            .unwrap_or(frame.input.as_ref()),
+    );
+    let storage_reads = prestate
+        .get(ethers_address)
+        .map(|account| {
+            account
+                .storage
+                .as_ref()
+                .map(|hm| {
+                    hm.iter()
+                        .map(|(k, v)| (StoreKey::from(k.as_bytes()), StoreVal::from(v.as_bytes())))
+                        .collect()
+                })
+                .unwrap_or_else(HashMap::new)
+        })
+        .unwrap_or_else(HashMap::new);
+    if let Some(calls) = frame.calls.as_ref() {
+        let calls = calls
+            .iter()
+            .map(|frame| convert_call_frame_to_node(frame, prestate))
+            .collect::<Vec<_>>();
+        CallNode::new(address, signature, storage_reads, calls)
+    } else {
+        CallNode::new(address, signature, storage_reads, vec![])
+    }
+}
+
 #[async_trait]
 impl EntryPointTracer for EVMEntrypointService {
     type Error = RPCError;
@@ -122,27 +166,6 @@ impl EntryPointTracer for EVMEntrypointService {
         for entry_point in &entry_points {
             match &entry_point.data {
                 EntryPointTracingData::RPCTracer(ref rpc_entry_point) => {
-                    let call_trace = self
-                        .trace_call(
-                            &entry_point.entry_point.target,
-                            rpc_entry_point,
-                            &block_hash,
-                            GethDebugBuiltInTracerType::CallTracer,
-                        )
-                        .await?;
-
-                    let called_addresses =
-                        if let GethTrace::Known(GethTraceFrame::CallTracer(frame)) = call_trace {
-                            if let Some(reason) = frame.error.as_ref() {
-                                return Err(RPCError::UnknownError(format!(
-                                    "Call failed: {reason}"
-                                )));
-                            }
-                            flatten_calls(&frame)
-                        } else {
-                            return Err(RPCError::UnknownError("CallTracer failed".to_string()));
-                        };
-
                     let pre_state_trace = self
                         .trace_call(
                             &entry_point.entry_point.target,
@@ -152,38 +175,61 @@ impl EntryPointTracer for EVMEntrypointService {
                         )
                         .await?;
 
+                    let prestate = if let GethTrace::Known(GethTraceFrame::PreStateTracer(
+                        PreStateFrame::Default(PreStateMode(frame)),
+                    )) = pre_state_trace
+                    {
+                        frame
+                    } else {
+                        return Err(RPCError::UnknownError("PreStateTracer failed".to_string()));
+                    };
+
+                    let call_trace = self
+                        .trace_call(
+                            &entry_point.entry_point.target,
+                            rpc_entry_point,
+                            &block_hash,
+                            GethDebugBuiltInTracerType::CallTracer,
+                        )
+                        .await?;
+
+                    let (call_tree, called_addresses) =
+                        if let GethTrace::Known(GethTraceFrame::CallTracer(frame)) = call_trace {
+                            if let Some(reason) = frame.error.as_ref() {
+                                return Err(RPCError::UnknownError(format!(
+                                    "Call failed: {reason}"
+                                )));
+                            }
+
+                            (convert_call_frame_to_node(&frame, &prestate), flatten_calls(&frame))
+                        } else {
+                            return Err(RPCError::UnknownError("CallTracer failed".to_string()));
+                        };
+
                     // Provides a very simplistic way of finding retriggers. A better way would
                     // involve using the structure of callframes. So basically iterate the call
                     // tree in a parent child manner then search the
                     // childs address in the prestate of parent.
-                    let retriggers = if let GethTrace::Known(GethTraceFrame::PreStateTracer(
-                        PreStateFrame::Default(PreStateMode(frame)),
-                    )) = pre_state_trace
-                    {
-                        let mut retriggers = HashSet::new();
-                        for (address, account) in frame.iter() {
-                            if let Some(storage) = &account.storage {
-                                for (slot, val) in storage.iter() {
-                                    for call_address in called_addresses.iter() {
-                                        let address_bytes = call_address.as_bytes();
-                                        let value_bytes = val.as_bytes();
-                                        if value_bytes
-                                            .windows(address_bytes.len())
-                                            .any(|window| window == address_bytes)
-                                        {
-                                            retriggers.insert((
-                                                (*address).to_bytes(),
-                                                (*slot).to_bytes(),
-                                            ));
-                                        }
+                    // TODO: rewrite this using only the call_tree
+                    let mut retriggers = HashSet::new();
+                    for (address, account) in prestate.iter() {
+                        if let Some(storage) = &account.storage {
+                            for (slot, val) in storage.iter() {
+                                for call_address in called_addresses.iter() {
+                                    let address_bytes = call_address.as_bytes();
+                                    let value_bytes = val.as_bytes();
+                                    if value_bytes
+                                        .windows(address_bytes.len())
+                                        .any(|window| window == address_bytes)
+                                    {
+                                        retriggers
+                                            .insert(((*address).to_bytes(), (*slot).to_bytes()));
                                     }
                                 }
                             }
                         }
-                        retriggers
-                    } else {
-                        return Err(RPCError::UnknownError("PreStateTracer failed".to_string()));
-                    };
+                    }
+
                     results.push(TracedEntryPoint::new(
                         entry_point.clone(),
                         block_hash.clone(),
@@ -193,6 +239,7 @@ impl EntryPointTracer for EVMEntrypointService {
                                 .into_iter()
                                 .map(BytesCodec::to_bytes)
                                 .collect(),
+                            Some(call_tree),
                         ),
                     ));
                 }
@@ -202,9 +249,10 @@ impl EntryPointTracer for EVMEntrypointService {
     }
 }
 
-fn flatten_calls(call: &CallFrame) -> Vec<EthersAddress> {
-    let to = if let Some(NameOrAddress::Address(a)) = &call.to { *a } else { return vec![] };
-    let mut flat_calls = vec![to];
+fn flatten_calls(call: &CallFrame) -> HashSet<EthersAddress> {
+    let to =
+        if let Some(NameOrAddress::Address(a)) = &call.to { *a } else { return HashSet::new() };
+    let mut flat_calls: HashSet<_> = vec![to].into_iter().collect();
     if let Some(sub_calls) = &call.calls {
         for sub_call in sub_calls {
             flat_calls.extend(flatten_calls(sub_call));

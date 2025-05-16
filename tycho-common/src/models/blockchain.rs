@@ -440,14 +440,38 @@ pub struct TracingResult {
     pub retriggers: HashSet<(Address, StoreKey)>,
     /// A set of all addresses that were called during the trace.
     pub called_addresses: HashSet<Address>,
+    /// Detailed call tree of the trace result
+    pub call_tree: Option<CallNode>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CallNode {
+    pub address: Address,
+    pub selector: Bytes,
+    pub store_reads: HashSet<(StoreKey, StoreVal)>,
+    pub calls: Vec<CallNode>,
+}
+
+impl CallNode {
+    pub fn new(
+        address: Address,
+        selector: Bytes,
+        store_reads: impl IntoIterator<Item = (StoreKey, StoreVal)>,
+        calls: Vec<CallNode>,
+    ) -> Self {
+        let store_reads = store_reads.into_iter().collect();
+        let calls = calls.into_iter().collect();
+        Self { address, selector, store_reads, calls }
+    }
 }
 
 impl TracingResult {
     pub fn new(
         retriggers: HashSet<(Address, StoreKey)>,
         called_addresses: HashSet<Address>,
+        call_tree: Option<CallNode>,
     ) -> Self {
-        Self { retriggers, called_addresses }
+        Self { retriggers, called_addresses, call_tree }
     }
 }
 
