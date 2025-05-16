@@ -1172,6 +1172,7 @@ where
             component_balances: combined_component_balances,
             account_balances: combined_account_balances,
             component_tvl: HashMap::new(),
+            trace_results: HashMap::new(), // TODO: get reverted tracing results
         };
 
         debug!("Successfully retrieved all previous states during revert!");

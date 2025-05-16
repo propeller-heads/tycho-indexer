@@ -1664,7 +1664,6 @@ mod test {
 
         crate::models::blockchain::BlockAggregatedChanges {
             extractor: "native_name".to_string(),
-            chain: models::Chain::Ethereum,
             block: models::blockchain::Block::new(
                 3,
                 models::Chain::Ethereum,
@@ -1684,7 +1683,6 @@ mod test {
                     deleted_attributes: HashSet::new(),
                 }),
             ]),
-            new_tokens: HashMap::new(),
             new_protocol_components: HashMap::from([
                 ("pc_2".to_string(), crate::models::protocol::ProtocolComponent {
                     id: "pc_2".to_string(),
@@ -1748,7 +1746,7 @@ mod test {
                     ])),
             ]),
             component_tvl: HashMap::new(),
-            account_deltas: Default::default(),
+            ..Default::default()
         }
     }
 
