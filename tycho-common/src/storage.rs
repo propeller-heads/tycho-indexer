@@ -11,7 +11,10 @@ use thiserror::Error;
 use crate::{
     dto,
     models::{
-        blockchain::{Block, EntryPointWithData, TracedEntryPoint, TracingResult, Transaction},
+        blockchain::{
+            Block, EntryPoint, EntryPointTracingData, EntryPointWithData, TracedEntryPoint,
+            TracingResult, Transaction,
+        },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
@@ -520,11 +523,23 @@ impl EntryPointFilter {
 // Trait for entry point gateway operations.
 #[async_trait]
 pub trait EntryPointGateway {
-    /// Upserts a list of entry points with their tracing data into the database.
-    async fn upsert_entry_points_with_data(
+    /// Upserts a list of entry points into the database.
+    async fn upsert_entry_points(
         &self,
-        entry_points: &[(ComponentId, Vec<EntryPointWithData>)],
+        entry_points: &[(ComponentId, Vec<EntryPoint>)],
     ) -> Result<(), StorageError>;
+
+    /// Upserts a list of entry points with their tracing data into the database.
+    async fn upsert_entry_point_tracing_data(
+        &self,
+        entry_points_data: &[(EntryPointId, Vec<(EntryPointTracingData, Option<ComponentId>)>)],
+    ) -> Result<(), StorageError>;
+
+    /// Retrieves a list of entry points from the database.
+    async fn get_entry_points(
+        &self,
+        filter: EntryPointFilter,
+    ) -> Result<Vec<EntryPoint>, StorageError>;
 
     /// Retrieves a list of entry points with their tracing data from the database.
     async fn get_entry_points_with_data(
