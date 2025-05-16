@@ -8093,9 +8093,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.70.3"
+version = "0.70.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11afbfa0c211b1d65b7b6fe7992bb634e91ddee264e4bf8038104fa1a2d03f6f"
+checksum = "407cc27e284d27e8826df2bf1a0f67397a1c0c5efe218fd777d882cf6bdb631c"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8120,9 +8120,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.70.3"
+version = "0.70.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a68cff315416f335afcd7619ff49aa7c85ec84d26d4c8187c548588fce228926"
+checksum = "22afc488ba537fb646c697fbe93e0abcccb2c34c9bcb0ef5064363f5b1444d5d"
 dependencies = [
  "anyhow",
  "async-trait",
