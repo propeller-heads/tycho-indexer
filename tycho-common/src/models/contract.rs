@@ -527,7 +527,7 @@ mod test {
         let mut update_right = update_slots_delta();
         update_right.address = Bytes::zero(20);
         let exp = Err(MergeError::IdMismatch(
-            "AccountDeltas".to_string(),
+            "AccountDelta".to_string(),
             format!("{:#020x}", update_left.address),
             format!("{:#020x}", update_right.address),
         ));
