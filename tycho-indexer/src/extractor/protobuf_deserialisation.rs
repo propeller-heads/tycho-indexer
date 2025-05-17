@@ -5,7 +5,7 @@ use chrono::NaiveDateTime;
 use tracing::warn;
 use tycho_common::{
     models::{
-        blockchain::{Block, Transaction, TxWithChanges},
+        blockchain::{Block, EntryPoint, Transaction, TxWithChanges},
         contract::{AccountBalance, AccountChangesWithTx, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
@@ -17,7 +17,7 @@ use tycho_common::{
 use tycho_substreams::pb::tycho::evm::v1 as substreams;
 
 use crate::extractor::{
-    models::{BlockChanges, BlockContractChanges, BlockEntityChanges},
+    models::{BlockChanges, BlockContractChanges, BlockEntityChanges, TxWithStorageChanges},
     u256_num::bytes_to_f64,
     ExtractionError,
 };
@@ -224,6 +224,16 @@ impl TryFromMessage for ProtocolComponentStateDelta {
     }
 }
 
+impl TryFromMessage for EntryPoint {
+    type Args<'a> = substreams::EntryPoint;
+
+    fn try_from_message(args: Self::Args<'_>) -> Result<Self, ExtractionError> {
+        let msg = args;
+
+        Ok(Self { external_id: msg.id, target: msg.target.into(), signature: msg.signature })
+    }
+}
+
 impl TryFromMessage for ProtocolChangesWithTx {
     type Args<'a> = (
         substreams::TransactionEntityChanges,
@@ -323,8 +333,9 @@ impl TryFromMessage for TxWithChanges {
             HashMap::new();
         let mut account_balance_changes: HashMap<Address, HashMap<Address, AccountBalance>> =
             HashMap::new();
+        let mut entrypoints: Vec<EntryPoint> = Vec::new();
 
-        // First, parse the new protocol components
+        // Parse the new protocol components
         for change in msg.component_changes.into_iter() {
             let component = ProtocolComponent::try_from_message((
                 change,
@@ -337,13 +348,13 @@ impl TryFromMessage for TxWithChanges {
             new_protocol_components.insert(component.id.clone(), component);
         }
 
-        // Then, parse the account updates
+        // Parse the account updates
         for contract_change in msg.contract_changes.clone().into_iter() {
             let update = AccountDelta::try_from_message((contract_change, block.chain))?;
             account_updates.insert(update.address.clone(), update);
         }
 
-        // Then, parse the state updates
+        // Parse the state updates
         for state_msg in msg.entity_changes.into_iter() {
             let state = ProtocolComponentStateDelta::try_from_message(state_msg)?;
             // Check if a state update for the same component already exists
@@ -359,7 +370,7 @@ impl TryFromMessage for TxWithChanges {
             }
         }
 
-        // Finally, parse the component balance changes
+        // Parse the component balance changes
         for balance_change in msg.balance_changes.into_iter() {
             let component_id = String::from_utf8(balance_change.component_id.clone())
                 .map_err(|error| ExtractionError::DecodeError(error.to_string()))?;
@@ -372,7 +383,7 @@ impl TryFromMessage for TxWithChanges {
                 .insert(token_address, balance);
         }
 
-        // parse the account balance changes
+        // Parse the account balance changes
         for contract_change in msg.contract_changes.into_iter() {
             for balance_change in contract_change
                 .token_balances
@@ -390,13 +401,20 @@ impl TryFromMessage for TxWithChanges {
             }
         }
 
+        // Parse the entrypoints
+        for entrypoint in msg.entrypoints.into_iter() {
+            let entrypoint = EntryPoint::try_from_message(entrypoint)?;
+            entrypoints.push(entrypoint);
+        }
+
         Ok(Self {
+            tx,
             protocol_components: new_protocol_components,
             account_deltas: account_updates,
             state_updates,
             balance_changes,
             account_balance_changes,
-            tx,
+            entrypoints,
         })
     }
 }
@@ -560,6 +578,31 @@ impl TryFromMessage for BlockEntityChanges {
     }
 }
 
+impl TryFromMessage for TxWithStorageChanges {
+    type Args<'a> = (substreams::TransactionStorageChanges, &'a Block);
+
+    fn try_from_message(args: Self::Args<'_>) -> Result<Self, ExtractionError> {
+        let (msg, block) = args;
+        let tx = Transaction::try_from_message((
+            msg.tx
+                .expect("TransactionChanges should have a transaction"),
+            &block.hash.clone(),
+        ))?;
+        let mut all_storage_changes = HashMap::new();
+        msg.storage_changes
+            .into_iter()
+            .for_each(|contract_changes| {
+                let mut storage_changes = HashMap::new();
+                for change in contract_changes.slots.into_iter() {
+                    storage_changes.insert(change.slot.into(), change.value.into());
+                }
+                all_storage_changes.insert(contract_changes.address.into(), storage_changes);
+            });
+
+        Ok(Self { tx, storage_changes: all_storage_changes })
+    }
+}
+
 impl TryFromMessage for BlockChanges {
     type Args<'a> =
         (substreams::BlockChanges, &'a str, Chain, &'a str, &'a HashMap<String, ProtocolType>, u64);
@@ -593,6 +636,12 @@ impl TryFromMessage for BlockChanges {
             let mut txs_with_update = txs_with_update;
             txs_with_update.sort_unstable_by_key(|update| update.tx.index);
 
+            let block_storage_changes = msg
+                .storage_changes
+                .into_iter()
+                .map(|change| TxWithStorageChanges::try_from_message((change, &block)))
+                .collect::<Result<Vec<TxWithStorageChanges>, ExtractionError>>()?;
+
             Ok(Self::new(
                 extractor.to_string(),
                 chain,
@@ -600,6 +649,7 @@ impl TryFromMessage for BlockChanges {
                 finalized_block_height,
                 false,
                 txs_with_update,
+                block_storage_changes,
             ))
         } else {
             Err(ExtractionError::Empty)
@@ -628,6 +678,42 @@ mod test {
         let res = ProtocolComponentStateDelta::try_from_message(msg).unwrap();
 
         assert_eq!(res, fixtures::protocol_state_delta());
+    }
+
+    #[test]
+    fn test_parse_tx_with_storage_changes() {
+        let msg = fixtures::pb_transaction_storage_changes(0);
+        let tx = Transaction::new(
+            Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000001")
+                .unwrap(),
+            Bytes::default(),
+            Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+            Some(Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap()),
+            1,
+        );
+        let exp = TxWithStorageChanges {
+            tx,
+            storage_changes: HashMap::from([
+                (
+                    Bytes::from_str("0000000000000000000000000000000000000001").unwrap(),
+                    HashMap::from([
+                        (Bytes::from_str("0x01").unwrap(), Bytes::from_str("0x01").unwrap()),
+                        (Bytes::from_str("0x02").unwrap(), Bytes::from_str("0x02").unwrap()),
+                    ]),
+                ),
+                (
+                    Bytes::from_str("0000000000000000000000000000000000000002").unwrap(),
+                    HashMap::from([(
+                        Bytes::from_str("0x03").unwrap(),
+                        Bytes::from_str("0x03").unwrap(),
+                    )]),
+                ),
+            ]),
+        };
+
+        let res = TxWithStorageChanges::try_from_message((msg, &Block::default())).unwrap();
+
+        assert_eq!(res, exp);
     }
 
     #[rstest]

@@ -3,11 +3,14 @@ use std::collections::{HashMap, HashSet};
 
 use tycho_common::{
     models::{
-        blockchain::{Block, BlockAggregatedChanges, BlockScoped, TxWithChanges},
+        blockchain::{
+            Block, BlockAggregatedChanges, BlockScoped, TracedEntryPoint, TracingResult,
+            Transaction, TxWithChanges,
+        },
         contract::{AccountBalance, AccountChangesWithTx},
         protocol::{ComponentBalance, ProtocolChangesWithTx, ProtocolComponent},
         token::CurrencyToken,
-        Address, AttrStoreKey, Chain, ComponentId,
+        AccountToContractStore, Address, AttrStoreKey, Chain, ComponentId,
     },
     Bytes,
 };
@@ -132,6 +135,13 @@ impl BlockScoped for BlockEntityChanges {
     }
 }
 
+/// Storage changes grouped by transaction
+#[derive(Debug, PartialEq, Default, Clone)]
+pub struct TxWithStorageChanges {
+    pub tx: Transaction,
+    pub storage_changes: AccountToContractStore,
+}
+
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct BlockChanges {
     extractor: String,
@@ -139,11 +149,15 @@ pub struct BlockChanges {
     pub block: Block,
     pub finalized_block_height: u64,
     pub revert: bool,
-    /// Required here, so it is part of the revert buffer and thus inserted into storage once
-    /// finalized.
     pub new_tokens: HashMap<Address, CurrencyToken>,
     /// Vec of updates at this block, aggregated by tx and sorted by tx index in ascending order
     pub txs_with_update: Vec<TxWithChanges>,
+    // Raw block storage changes. This is intended as DCI input and is to be omitted from the
+    // reorg buffer and aggregation into the `BlockAggregatedChanges` object.
+    pub block_storage_changes: Vec<TxWithStorageChanges>,
+    /// Required here so that it is part of the reorg buffer and thus inserted into storage once
+    /// finalized.
+    pub trace_results: Vec<TracedEntryPoint>,
 }
 
 impl BlockChanges {
@@ -154,6 +168,7 @@ impl BlockChanges {
         finalized_block_height: u64,
         revert: bool,
         txs_with_update: Vec<TxWithChanges>,
+        block_storage_changes: Vec<TxWithStorageChanges>,
     ) -> Self {
         BlockChanges {
             extractor,
@@ -163,37 +178,50 @@ impl BlockChanges {
             revert,
             new_tokens: HashMap::new(),
             txs_with_update,
+            block_storage_changes,
+            trace_results: Vec::new(),
         }
     }
 
-    /// Aggregates state updates.
+    /// Aggregates component and account updates.
     ///
-    /// This function aggregates the protocol updates
-    /// for different protocol components into a [`AggregatedBlockChanges`] object.
-    /// This new object should have only one final ProtocolStateDelta and a HashMap to hold
-    /// `AccountUpdate` per component_id.
+    /// This function aggregates all protocol updates into a [`BlockAggregatedChanges`] object. This
+    /// new object should have all individual changes merged into only one final/compacted change
+    /// per component and account. This means there is only one state delta and component balance
+    /// per component, and one account delta and account balance per account. DCI trace results are
+    /// also aggregated into a result per entry point.
     ///
-    /// After merging all updates, a [`AggregatedBlockChanges`] object is returned
-    /// which contains, amongst other data, the compacted state updates.
+    /// Note - all non-protocol specific data in the BlockChanges object are lost during
+    /// aggregation. This means block_storage_changes is dropped.
     ///
     /// # Errors
     ///
-    /// This returns an error if there was a problem during merge. The error
-    /// type is `ExtractionError`.
+    /// This returns an `ExtractionError` if there was a problem during merge.
     pub fn aggregate_updates(self) -> Result<BlockAggregatedChanges, ExtractionError> {
         let mut iter = self.txs_with_update.into_iter();
 
         // Use unwrap_or_else to provide a default state if iter.next() is None
         let first_state = iter.next().unwrap_or_default();
 
+        // Aggregate txs_with_update
         let aggregated_changes = iter
             .try_fold(first_state, |mut acc_state, new_state| {
-                acc_state
-                    .merge(new_state.clone())
-                    .map_err(ExtractionError::MergeError)?;
+                acc_state.merge(new_state.clone())?;
                 Ok::<_, ExtractionError>(acc_state.clone())
             })
             .unwrap();
+
+        // Aggregate trace_results
+        let mut aggregated_trace_results = HashMap::new();
+        for result in self.trace_results {
+            let external_id = result.entry_point_id();
+            aggregated_trace_results
+                .entry(external_id)
+                .and_modify(|existing: &mut TracingResult| {
+                    existing.merge(result.tracing_result.clone())
+                })
+                .or_insert(result.tracing_result);
+        }
 
         Ok(BlockAggregatedChanges {
             extractor: self.extractor,
@@ -209,6 +237,7 @@ impl BlockChanges {
             component_balances: aggregated_changes.balance_changes,
             account_balances: aggregated_changes.account_balance_changes,
             component_tvl: HashMap::new(),
+            trace_results: aggregated_trace_results,
         })
     }
 
@@ -344,6 +373,8 @@ impl From<BlockContractChanges> for BlockChanges {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
+            block_storage_changes: Vec::new(),
+            trace_results: Vec::new(),
         }
     }
 }
@@ -362,6 +393,8 @@ impl From<BlockEntityChanges> for BlockChanges {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
+            block_storage_changes: Vec::new(),
+            trace_results: Vec::new(),
         }
     }
 }
@@ -403,6 +436,8 @@ pub mod fixtures {
                 revert,
                 new_tokens,
                 txs_with_update,
+                block_storage_changes: Vec::new(),
+                trace_results: Vec::new(),
             }
         }
     }

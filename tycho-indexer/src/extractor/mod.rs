@@ -9,7 +9,7 @@ use tycho_common::{
         blockchain::{Block, BlockScoped},
         contract::AccountBalance,
         protocol::ComponentBalance,
-        Address, ExtractorIdentity, NormalisedMessage,
+        Address, ExtractorIdentity, MergeError, NormalisedMessage,
     },
     storage::StorageError,
     Bytes,
@@ -53,7 +53,7 @@ pub enum ExtractionError {
     #[error("Service error: {0}")]
     ServiceError(String),
     #[error("Merge error: {0}")]
-    MergeError(String),
+    MergeError(#[from] MergeError),
     #[error("Reorg buffer error: {0}")]
     ReorgBufferError(String),
 }

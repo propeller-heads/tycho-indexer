@@ -132,8 +132,6 @@ mod tests {
     #[test]
     fn test_ignore_self_balances() {
         let txs_with_update = vec![TxWithChanges {
-            account_deltas: HashMap::new(),
-            protocol_components: HashMap::new(),
             balance_changes: HashMap::from([(
                 "0xabc".to_string(),
                 HashMap::from([
@@ -193,7 +191,7 @@ mod tests {
                 Some(Bytes::zero(20)),
                 10,
             ),
-            state_updates: Default::default(),
+            ..Default::default()
         }];
 
         let changes = BlockChanges::new(
@@ -203,6 +201,7 @@ mod tests {
             0,
             false,
             txs_with_update.clone(),
+            Vec::new(),
         );
 
         // expected to skip itself as a component balance, but still track it as an account balance
@@ -213,8 +212,6 @@ mod tests {
             0,
             false,
             vec![TxWithChanges {
-                account_deltas: HashMap::new(),
-                protocol_components: HashMap::new(),
                 balance_changes: HashMap::from([(
                     "0xabc".to_string(),
                     HashMap::from([(
@@ -261,8 +258,9 @@ mod tests {
                     Some(Bytes::zero(20)),
                     10,
                 ),
-                state_updates: Default::default(),
+                ..Default::default()
             }],
+            Vec::new(),
         );
 
         let processed = ignore_self_balances(changes);
