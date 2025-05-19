@@ -4,8 +4,7 @@
       "vault_address": "0xba12222222228d8ba445958a75a0704d566bf2c8"
     },
     "vm:curve": {
-      "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-      "meta_registry_address": "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC"
+      "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
     }
   },
   "base": {},
