@@ -1,3 +1,12 @@
+## [0.101.0](https://github.com/propeller-heads/tycho-simulation/compare/0.100.1...0.101.0) (2025-05-19)
+
+
+### Features
+
+* add Clone to BlockUpdate ([015d36d](https://github.com/propeller-heads/tycho-simulation/commit/015d36df8ddaadf9640c975b0af1bada7cd81ed2))
+* add Serialize support to ProtocolComponent ([8c6d385](https://github.com/propeller-heads/tycho-simulation/commit/8c6d38584ce4bd897257010586e201440a856723))
+* add Serialize support to Token ([9b164c6](https://github.com/propeller-heads/tycho-simulation/commit/9b164c6c37e1fd647f0315dd50b3ec130802dc07))
+
 ## [0.100.1](https://github.com/propeller-heads/tycho-simulation/compare/0.100.0...0.100.1) (2025-05-16)
 
 
