@@ -63,7 +63,7 @@ alloy-sol-types = { version = "0.8.14" }
 alloy = { version = "0.5.4", features = ["providers", "signer-local", "rpc-types-eth"] }
 revm = { version = "17.1.0", features = ["ethersdb", "serde"], optional = true }
 revm-inspectors = { version = "0.10", features = ["serde"], optional = true }
-num-bigint = "0.4.6"
+num-bigint = { version = "0.4", features = ["serde"] }
 tokio-stream = "0.1.16"
 
 # Dialoguer

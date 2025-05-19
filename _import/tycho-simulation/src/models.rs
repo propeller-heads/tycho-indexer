@@ -12,6 +12,7 @@ use std::{
 
 use alloy_primitives::U256;
 use num_bigint::BigUint;
+use serde::Serialize;
 use thiserror::Error;
 use tycho_common::{dto::ResponseToken, Bytes};
 
@@ -25,7 +26,7 @@ pub enum ModelError {
     MissingData(String),
 }
 
-#[derive(Clone, Debug, Eq)]
+#[derive(Clone, Debug, Eq, Serialize)]
 pub struct Token {
     /// The address of the token on the blockchain network
     pub address: Bytes,
