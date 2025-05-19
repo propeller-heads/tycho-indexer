@@ -1117,7 +1117,7 @@ impl Gateway for CachedGateway {}
 
 #[cfg(test)]
 mod test_serial_db {
-    use std::{collections::HashSet, str::FromStr, time::Duration};
+    use std::{collections::HashSet, slice, str::FromStr, time::Duration};
 
     use tycho_common::models::ChangeType;
 
@@ -1385,11 +1385,11 @@ mod test_serial_db {
                 .start_transaction(&block_1, None)
                 .await;
             cached_gw
-                .upsert_block(&[block_1.clone()])
+                .upsert_block(slice::from_ref(&block_1))
                 .await
                 .expect("Upsert block 1 ok");
             cached_gw
-                .upsert_tx(&[tx_1.clone()])
+                .upsert_tx(slice::from_ref(&tx_1))
                 .await
                 .expect("Upsert tx 1 ok");
             cached_gw
@@ -1403,7 +1403,7 @@ mod test_serial_db {
                 .start_transaction(&block_2, None)
                 .await;
             cached_gw
-                .upsert_block(&[block_2.clone()])
+                .upsert_block(slice::from_ref(&block_2))
                 .await
                 .expect("Upsert block 2 ok");
             cached_gw
@@ -1417,7 +1417,7 @@ mod test_serial_db {
                 .start_transaction(&block_3, None)
                 .await;
             cached_gw
-                .upsert_block(&[block_3.clone()])
+                .upsert_block(slice::from_ref(&block_3))
                 .await
                 .expect("Upsert block 3 ok");
             cached_gw

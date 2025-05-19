@@ -131,6 +131,7 @@ WHERE id IN (SELECT account_id FROM tokens_to_delete);
 
 --- Find and remove all linked accounts (accounts are not cascade deleted on component deletions). Note, this will cascade 
 --- delete the linked contract code entries too.
+
 --- Delete linked balances for all accounts exclusively linked to the protocol components of the system being deleted. This
 --- is explicitly done to ensure we delete balances for accounts that are removed as components, but kept as tokens.
 DELETE FROM account_balance
@@ -150,6 +151,27 @@ WHERE account_id IN (
         AND ps2.name <> :'protocol_system_name'
     )
 );
+
+--- Delete linked contract code for all accounts exclusively linked to the protocol components of the system being deleted. This
+--- is explicitly done to ensure we delete contract code for accounts that are removed as components, but kept as tokens.
+DELETE FROM contract_code
+WHERE account_id IN (
+    SELECT DISTINCT cc.account_id
+    FROM contract_code cc
+    JOIN protocol_component_holds_contract pchc ON pchc.contract_code_id = cc.id
+    JOIN protocol_component pc ON pchc.protocol_component_id = pc.id
+    JOIN protocol_system ps ON pc.protocol_system_id = ps.id
+    WHERE ps.name = :'protocol_system_name'
+    AND NOT EXISTS (
+        SELECT 1
+        FROM protocol_component_holds_contract pchc2
+        JOIN protocol_component pc2 ON pchc2.protocol_component_id = pc2.id
+        JOIN protocol_system ps2 ON pc2.protocol_system_id = ps2.id
+        WHERE pchc2.contract_code_id = cc.id
+        AND ps2.name <> :'protocol_system_name'
+    )
+);
+
 --- Delete accounts exclusively linked to the protocol components of the system being deleted, skipping accounts that are
 --- linked used as tokens by other protocol systems.
 DELETE FROM account
