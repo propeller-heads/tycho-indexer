@@ -494,11 +494,17 @@ pub trait ProtocolGateway {
 // Shalow but can be used to add more filters without breaking backwards compatibility in the future
 pub struct EntryPointFilter {
     pub protocol_system: ProtocolSystem,
+    pub component_ids: Option<Vec<ComponentId>>,
 }
 
 impl EntryPointFilter {
     pub fn new(protocol: ProtocolSystem) -> Self {
-        Self { protocol_system: protocol }
+        Self { protocol_system: protocol, component_ids: None }
+    }
+
+    pub fn with_component_ids(mut self, component_ids: Vec<ComponentId>) -> Self {
+        self.component_ids = Some(component_ids);
+        self
     }
 }
 
@@ -521,13 +527,13 @@ pub trait EntryPointGateway {
     async fn get_entry_points(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<Vec<EntryPoint>, StorageError>;
+    ) -> Result<HashMap<String, EntryPoint>, StorageError>;
 
     /// Retrieves a list of entry points with their tracing data from the database.
     async fn get_entry_points_tracing_params(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<Vec<EntryPointWithTracingParams>, StorageError>;
+    ) -> Result<HashMap<String, EntryPointWithTracingParams>, StorageError>;
 
     /// Upserts a list of traced entry points into the database.
     async fn upsert_traced_entry_points(
