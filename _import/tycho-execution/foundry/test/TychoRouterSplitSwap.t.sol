@@ -143,6 +143,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             false,
             4,
             ALICE,
+            true,
             pleEncode(swaps)
         );
 
@@ -171,6 +172,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             false,
             4,
             ALICE,
+            true,
             pleEncode(swaps)
         );
         vm.stopPrank();
@@ -196,6 +198,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             false,
             2,
             ALICE,
+            true,
             pleEncode(swaps)
         );
 
@@ -482,6 +485,7 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             false,
             2,
             ALICE,
+            true,
             pleEncode(swaps)
         );
         vm.stopPrank();

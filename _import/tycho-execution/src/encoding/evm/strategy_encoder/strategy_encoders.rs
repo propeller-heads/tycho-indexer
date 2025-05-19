@@ -33,6 +33,7 @@ use crate::encoding::{
 /// * `selector`: String, the selector for the swap function in the router contract
 /// * `router_address`: Address of the router to be used to execute swaps
 /// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
+/// * `token_in_already_in_router`: bool, whether the token in is already in the router
 #[derive(Clone)]
 pub struct SingleSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -40,6 +41,7 @@ pub struct SingleSwapStrategyEncoder {
     selector: String,
     router_address: Bytes,
     transfer_optimization: TransferOptimization,
+    token_in_already_in_router: bool,
 }
 
 impl SingleSwapStrategyEncoder {
@@ -55,7 +57,8 @@ impl SingleSwapStrategyEncoder {
         } else {
             (
                 None,
-                "singleSwap(uint256,address,address,uint256,bool,bool,address,bytes)".to_string(),
+                "singleSwap(uint256,address,address,uint256,bool,bool,address,bool,bytes)"
+                    .to_string(),
             )
         };
         Ok(Self {
@@ -69,6 +72,7 @@ impl SingleSwapStrategyEncoder {
                 token_in_already_in_router,
                 router_address,
             ),
+            token_in_already_in_router,
         })
     }
 
@@ -132,7 +136,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
             router_address: Some(self.router_address.clone()),
             group_token_in: grouped_swap.token_in.clone(),
             group_token_out: grouped_swap.token_out.clone(),
-            transfer,
+            transfer_type: transfer,
         };
 
         let mut grouped_protocol_data: Vec<u8> = vec![];
@@ -176,6 +180,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
                 wrap,
                 unwrap,
                 bytes_to_address(&solution.receiver)?,
+                !self.token_in_already_in_router,
                 swap_data,
             )
                 .abi_encode()
@@ -208,6 +213,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 /// * `sequential_swap_validator`: SequentialSwapValidator, responsible for checking validity of
 ///   sequential swap solutions
 /// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
+/// * `token_in_already_in_router`: bool, whether the token in is already in the router
 #[derive(Clone)]
 pub struct SequentialSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -218,6 +224,7 @@ pub struct SequentialSwapStrategyEncoder {
     wrapped_address: Bytes,
     sequential_swap_validator: SequentialSwapValidator,
     transfer_optimization: TransferOptimization,
+    token_in_already_in_router: bool,
 }
 
 impl SequentialSwapStrategyEncoder {
@@ -233,7 +240,7 @@ impl SequentialSwapStrategyEncoder {
         } else {
             (
                 None,
-                "sequentialSwap(uint256,address,address,uint256,bool,bool,address,bytes)"
+                "sequentialSwap(uint256,address,address,uint256,bool,bool,address,bool,bytes)"
                     .to_string(),
             )
         };
@@ -251,6 +258,7 @@ impl SequentialSwapStrategyEncoder {
                 token_in_already_in_router,
                 router_address,
             ),
+            token_in_already_in_router,
         })
     }
 
@@ -322,7 +330,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
-                transfer,
+                transfer_type: transfer,
             };
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
@@ -371,6 +379,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 wrap,
                 unwrap,
                 bytes_to_address(&solution.receiver)?,
+                !self.token_in_already_in_router,
                 encoded_swaps,
             )
                 .abi_encode()
@@ -403,6 +412,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 ///   solutions
 /// * `router_address`: Address of the router to be used to execute swaps
 /// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
+/// * `token_in_already_in_router`: bool, whether the token in is already in the router
 #[derive(Clone)]
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -413,6 +423,7 @@ pub struct SplitSwapStrategyEncoder {
     split_swap_validator: SplitSwapValidator,
     router_address: Bytes,
     transfer_optimization: TransferOptimization,
+    token_in_already_in_router: bool,
 }
 
 impl SplitSwapStrategyEncoder {
@@ -428,7 +439,7 @@ impl SplitSwapStrategyEncoder {
         } else {
             (
                 None,
-                "splitSwap(uint256,address,address,uint256,bool,bool,uint256,address,bytes)"
+                "splitSwap(uint256,address,address,uint256,bool,bool,uint256,address,bool,bytes)"
                     .to_string(),
             )
         };
@@ -446,6 +457,7 @@ impl SplitSwapStrategyEncoder {
                 token_in_already_in_router,
                 router_address,
             ),
+            token_in_already_in_router,
         })
     }
 
@@ -557,7 +569,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
-                transfer,
+                transfer_type: transfer,
             };
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
@@ -616,6 +628,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 unwrap,
                 U256::from(tokens_len),
                 bytes_to_address(&solution.receiver)?,
+                !self.token_in_already_in_router,
                 encoded_swaps,
             )
                 .abi_encode()
@@ -834,7 +847,7 @@ mod tests {
                 .unwrap();
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
-                "20144a07",                                                           // Function selector
+                "5c4b639c",                                                           // Function selector
                 "0000000000000000000000000000000000000000000000000de0b6b3a7640000",   // amount in
                 "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",   // token in
                 "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",   // token out
@@ -842,7 +855,8 @@ mod tests {
                 "0000000000000000000000000000000000000000000000000000000000000000",   // wrap
                 "0000000000000000000000000000000000000000000000000000000000000000",   // unwrap
                 "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",   // receiver
-                "0000000000000000000000000000000000000000000000000000000000000100",   // offset of swap bytes
+                "0000000000000000000000000000000000000000000000000000000000000001",   // transfer from needed
+                "0000000000000000000000000000000000000000000000000000000000000120",   // offset of swap bytes
                 "0000000000000000000000000000000000000000000000000000000000000052",   // length of swap bytes without padding
 
                 // Swap data
@@ -916,7 +930,7 @@ mod tests {
                 .unwrap();
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
-                "20144a07",                                                           // Function selector
+                "5c4b639c",                                                           // Function selector
                 "0000000000000000000000000000000000000000000000000de0b6b3a7640000",   // amount in
                 "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",   // token in
                 "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",   // token out
@@ -924,7 +938,8 @@ mod tests {
                 "0000000000000000000000000000000000000000000000000000000000000000",   // wrap
                 "0000000000000000000000000000000000000000000000000000000000000000",   // unwrap
                 "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",   // receiver
-                "0000000000000000000000000000000000000000000000000000000000000100",   // offset of swap bytes
+                "0000000000000000000000000000000000000000000000000000000000000000",   // transfer from not needed
+                "0000000000000000000000000000000000000000000000000000000000000120",   // offset of swap bytes
                 "0000000000000000000000000000000000000000000000000000000000000052",   // length of swap bytes without padding
 
                 // Swap data
@@ -1186,7 +1201,7 @@ mod tests {
             let hex_calldata = encode(&calldata);
 
             let expected = String::from(concat!(
-                "e8a980d7",                                                         /* function selector */
+                "e21dd0d3",                                                         /* function selector */
                 "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
                 "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
                 "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token ou
@@ -1194,7 +1209,8 @@ mod tests {
                 "0000000000000000000000000000000000000000000000000000000000000000", // wrap
                 "0000000000000000000000000000000000000000000000000000000000000000", // unwrap
                 "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-                "0000000000000000000000000000000000000000000000000000000000000100", /* length ple
+                "0000000000000000000000000000000000000000000000000000000000000001", /* transfer from needed */
+                "0000000000000000000000000000000000000000000000000000000000000120", /* length ple
                                                                                      * encode */
                 "00000000000000000000000000000000000000000000000000000000000000a8",
                 // swap 1
@@ -2693,7 +2709,6 @@ mod tests {
                 .unwrap();
 
             let hex_calldata = encode(&calldata);
-            println!("calldata: {}", hex_calldata);
             write_calldata_to_file("test_single_encoding_strategy_curve", hex_calldata.as_str());
         }
 

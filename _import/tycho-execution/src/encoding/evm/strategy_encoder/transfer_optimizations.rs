@@ -35,7 +35,7 @@ impl TransferOptimization {
         }
     }
 
-    /// Returns the transfer type that should be used for the first transfer.
+    /// Returns the transfer type that should be used for the current transfer.
     pub fn get_transfers(
         &self,
         swap: SwapGroup,

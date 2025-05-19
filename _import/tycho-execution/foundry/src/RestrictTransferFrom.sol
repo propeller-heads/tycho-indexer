@@ -52,21 +52,37 @@ contract RestrictTransferFrom {
         None
     }
 
+    /**
+     * @dev This function is used to store the transfer information in the
+     * contract's storage. This is done as the first step in the swap process in TychoRouter.
+     */
     // slither-disable-next-line assembly
     function _tstoreTransferFromInfo(
         address tokenIn,
         uint256 amountIn,
-        bool isPermit2
+        bool isPermit2,
+        bool transferFromNeeded
     ) internal {
+        uint256 amountAllowed = amountIn;
+        if (!transferFromNeeded) {
+            amountAllowed = 0;
+        }
         assembly {
             tstore(_TOKEN_IN_SLOT, tokenIn)
-            tstore(_AMOUNT_ALLOWED_SLOT, amountIn)
+            tstore(_AMOUNT_ALLOWED_SLOT, amountAllowed)
             tstore(_IS_PERMIT2_SLOT, isPermit2)
             tstore(_SENDER_SLOT, caller())
             tstore(_AMOUNT_SPENT_SLOT, 0)
         }
     }
 
+    /**
+     * @dev This function is used to transfer the tokens from the sender to the receiver.
+     * This function is called within the Executor contracts.
+     * If the TransferType is TransferFrom, it will check if the amount is within the allowed amount and transfer those funds from the user.
+     * If the TransferType is Transfer, it will transfer the funds from the TychoRouter to the receiver.
+     * If the TransferType is None, it will do nothing.
+     */
     // slither-disable-next-line assembly
     function _transfer(
         address receiver,

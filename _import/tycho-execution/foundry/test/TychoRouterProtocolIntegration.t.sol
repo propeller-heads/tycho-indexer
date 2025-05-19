@@ -85,7 +85,15 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(USDE_ADDR).approve(tychoRouterAddr, amountIn);
         tychoRouter.singleSwap(
-            amountIn, USDE_ADDR, WBTC_ADDR, 118280, false, false, ALICE, swap
+            amountIn,
+            USDE_ADDR,
+            WBTC_ADDR,
+            118280,
+            false,
+            false,
+            ALICE,
+            true,
+            swap
         );
 
         assertEq(IERC20(WBTC_ADDR).balanceOf(ALICE), 118281);

@@ -114,15 +114,15 @@ pub struct EncodingContext {
     pub router_address: Option<Bytes>,
     pub group_token_in: Bytes,
     pub group_token_out: Bytes,
-    pub transfer: TransferType,
+    pub transfer_type: TransferType,
 }
 
 /// Represents the type of transfer to be performed into the pool.
 ///
 /// # Fields
 ///
-/// * `Transfer`: Transfer the token from the router into the protocol.
 /// * `TransferFrom`: Transfer the token from the sender to the protocol/router.
+/// * `Transfer`: Transfer the token from the router into the protocol.
 /// * `None`: No transfer is needed. Tokens are already in the pool.
 #[repr(u8)]
 #[derive(Clone, Debug, PartialEq)]

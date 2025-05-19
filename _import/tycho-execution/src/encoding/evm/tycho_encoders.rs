@@ -286,7 +286,7 @@ impl TychoExecutorEncoder {
                 router_address: None,
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
-                transfer,
+                transfer_type: transfer,
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
             grouped_protocol_data.extend(protocol_data);
@@ -468,7 +468,7 @@ mod tests {
                 Bytes::from_str("0x3ede3eca2a72b3aecc820e955b36f38437d01395").unwrap()
             );
             // single swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "20144a07");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "5c4b639c");
         }
 
         #[test]
@@ -493,7 +493,7 @@ mod tests {
             let transactions = transactions.unwrap();
             assert_eq!(transactions.len(), 1);
             // single swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "20144a07");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "5c4b639c");
         }
 
         #[test]
@@ -540,7 +540,7 @@ mod tests {
             assert_eq!(transactions.len(), 1);
             assert_eq!(transactions[0].value, eth_amount_in);
             // sequential swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "e8a980d7");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "e21dd0d3");
         }
 
         #[test]

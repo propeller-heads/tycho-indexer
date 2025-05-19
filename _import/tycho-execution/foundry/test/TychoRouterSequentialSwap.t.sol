@@ -87,6 +87,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             false,
             false,
             ALICE,
+            true,
             pleEncode(swaps)
         );
 
@@ -113,6 +114,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             false,
             false,
             ALICE,
+            true,
             pleEncode(swaps)
         );
     }
@@ -135,6 +137,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
             false,
             false,
             ALICE,
+            true,
             pleEncode(swaps)
         );
     }
