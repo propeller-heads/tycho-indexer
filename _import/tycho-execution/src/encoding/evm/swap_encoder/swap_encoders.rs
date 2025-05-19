@@ -1,22 +1,15 @@
 use std::{collections::HashMap, str::FromStr};
 
-use alloy::{
-    providers::Provider,
-    rpc::types::{TransactionInput, TransactionRequest},
-};
-use alloy_primitives::{Address, Bytes as AlloyBytes, TxKind, U256, U8};
+use alloy_primitives::{Address, Bytes as AlloyBytes, U8};
 use alloy_sol_types::SolValue;
-use tokio::task::block_in_place;
+use serde_json::from_str;
 use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
-        utils,
-        utils::{
-            bytes_to_address, encode_input, get_runtime, get_static_attribute, pad_to_fixed_size,
-        },
+        utils::{bytes_to_address, get_static_attribute, pad_to_fixed_size},
     },
     models::{Chain, EncodingContext, Swap},
     swap_encoder::SwapEncoder,
@@ -375,10 +368,8 @@ impl SwapEncoder for EkuboSwapEncoder {
 #[derive(Clone)]
 pub struct CurveSwapEncoder {
     executor_address: String,
-    meta_registry_address: String,
     native_token_curve_address: String,
     native_token_address: Bytes,
-    wrapped_native_token_address: Bytes,
 }
 
 impl CurveSwapEncoder {
@@ -416,68 +407,25 @@ impl CurveSwapEncoder {
 
     fn get_coin_indexes(
         &self,
-        pool_id: Address,
+        swap: Swap,
         token_in: Address,
         token_out: Address,
     ) -> Result<(U8, U8), EncodingError> {
-        let (handle, _runtime) = get_runtime()?;
-        let client = block_in_place(|| handle.block_on(utils::get_client()))?;
-        let args = (pool_id, token_in, token_out);
-        let data = encode_input("get_coin_indices(address,address,address)", args.abi_encode());
-        let tx = TransactionRequest {
-            to: Some(TxKind::from(Address::from_str(&self.meta_registry_address).map_err(
-                |_| EncodingError::FatalError("Invalid Curve meta registry address".to_string()),
-            )?)),
-            input: TransactionInput {
-                input: Some(alloy_primitives::Bytes::from(data)),
-                data: None,
-            },
-            ..Default::default()
-        };
-        let output = block_in_place(|| handle.block_on(async { client.call(&tx).await }));
-        type ResponseType = (U256, U256, bool);
-
-        match output {
-            Ok(response) => {
-                let (i_256, j_256, _): ResponseType = ResponseType::abi_decode(&response, true)
-                    .map_err(|_| {
-                        EncodingError::FatalError(
-                            "Failed to decode response when getting coin indexes on a curve pool"
-                                .to_string(),
-                        )
-                    })?;
-                let i = U8::from(i_256);
-                let j = U8::from(j_256);
-                Ok((i, j))
-            }
-            Err(err) => {
-                // Temporary until we get the coin indexes from the indexer
-                // This is because some curve pools hold ETH but the coin is defined as WETH
-                // Our indexer reports this pool as holding ETH but then here we need to use WETH
-                // This is valid only for some pools, that's why we are doing the trial and error
-                // approach
-                let native_token_curve_address =
-                    Address::from_str(&self.native_token_curve_address).map_err(|_| {
-                        EncodingError::FatalError(
-                            "Invalid Curve native token curve address".to_string(),
-                        )
-                    })?;
-                if token_in != native_token_curve_address && token_out != native_token_curve_address
-                {
-                    Err(EncodingError::RecoverableError(format!(
-                        "Curve meta registry call failed with error: {err}"
-                    )))
-                } else {
-                    let wrapped_token = bytes_to_address(&self.wrapped_native_token_address)?;
-                    let (i, j) = if token_in == native_token_curve_address {
-                        self.get_coin_indexes(pool_id, wrapped_token, token_out)?
-                    } else {
-                        self.get_coin_indexes(pool_id, token_in, wrapped_token)?
-                    };
-                    Ok((i, j))
-                }
-            }
-        }
+        let coins_bytes = get_static_attribute(&swap, "coins")?;
+        let coins: Vec<Address> = from_str(std::str::from_utf8(&coins_bytes)?)?;
+        let i = coins
+            .iter()
+            .position(|&addr| addr == token_in)
+            .ok_or(EncodingError::FatalError(format!(
+                "Token in address {token_in} not found in curve pool coins"
+            )))?;
+        let j = coins
+            .iter()
+            .position(|&addr| addr == token_out)
+            .ok_or(EncodingError::FatalError(format!(
+                "Token in address {token_in} not found in curve pool coins"
+            )))?;
+        Ok((U8::from(i), U8::from(j)))
     }
 }
 
@@ -496,17 +444,9 @@ impl SwapEncoder for CurveSwapEncoder {
                 "Missing native token curve address in config".to_string(),
             ))?
             .to_string();
-        let meta_registry_address = config
-            .get("meta_registry_address")
-            .ok_or(EncodingError::FatalError(
-                "Missing meta registry address in config".to_string(),
-            ))?
-            .to_string();
         Ok(Self {
             executor_address,
-            meta_registry_address,
             native_token_address: chain.native_token()?,
-            wrapped_native_token_address: chain.wrapped_token()?,
             native_token_curve_address,
         })
     }
@@ -565,7 +505,7 @@ impl SwapEncoder for CurveSwapEncoder {
         let pool_type =
             self.get_pool_type(&pool_address.to_string(), &factory_address.to_string())?;
 
-        let (i, j) = self.get_coin_indexes(component_address, token_in, token_out)?;
+        let (i, j) = self.get_coin_indexes(swap, token_in, token_out)?;
 
         let args = (
             token_in,
@@ -1249,43 +1189,36 @@ mod tests {
 
         #[rstest]
         #[case(
-            "0x5500307Bcf134E5851FB4D7D8D1Dc556dCdB84B4",
-            "0xdA16Cf041E2780618c49Dbae5d734B89a6Bac9b3",
-            "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-            1,
-            0
-        )]
-        #[case(
-            "0xef484de8C07B6e2d732A92B5F78e81B38f99f95E",
+            "0x5b22307838363533373733363730353435313665313730313463636465643165376438313465646339636534222c22307861353538386637636466353630383131373130613264383264336339633939373639646231646362225d",
             "0x865377367054516e17014CcdED1e7d814EDC9ce4",
             "0xA5588F7cdf560811710A2D82D3C9c99769DB1Dcb",
             0,
             1
         )]
         #[case(
-            "0xA5407eAE9Ba41422680e2e00537571bcC53efBfD",
+            "0x5b22307836623137353437346538393039346334346461393862393534656564656163343935323731643066222c22307861306238363939316336323138623336633164313964346132653965623063653336303665623438222c22307864616331376639353864326565353233613232303632303639393435393763313364383331656337222c22307835376162316563323864313239373037303532646634646634313864353861326434366435663531225d",
             "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
             "0x57Ab1ec28D129707052df4dF418D58a2D46d5f51",
             1,
             3
         )]
         #[case(
-            "0xD51a44d3FaE010294C616388b506AcdA1bfAAE46",
+            "0x5b22307864616331376639353864326565353233613232303632303639393435393763313364383331656337222c22307832323630666163356535353432613737336161343466626366656466376331393362633263353939222c22307863303261616133396232323366653864306130653563346632376561643930383363373536636332225d",
             "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
             "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
             2,
             1
         )]
         #[case(
-            "0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B",
-            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "0x5b22307861306238363939316336323138623336633164313964346132653965623063653336303665623438222c22307832323630666163356535353432613737336161343466626366656466376331393362633263353939222c22307865656565656565656565656565656565656565656565656565656565656565656565656565656565225d",
+            "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
             "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
             2,
             0
         )]
         // Pool that holds ETH but coin is WETH
         #[case(
-            "0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B",
+            "0x5b22307861306238363939316336323138623336633164313964346132653965623063653336303665623438222c22307832323630666163356535353432613737336161343466626366656466376331393362633263353939222c22307865656565656565656565656565656565656565656565656565656565656565656565656565656565225d",
             "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
             "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
             2,
@@ -1293,19 +1226,32 @@ mod tests {
         )]
         // Pool that holds ETH but coin is WETH
         #[case(
-            "0x7F86Bf177Dd4F3494b841a37e810A34dD56c829B",
+            "0x5b22307861306238363939316336323138623336633164313964346132653965623063653336303665623438222c22307832323630666163356535353432613737336161343466626366656466376331393362633263353939222c22307865656565656565656565656565656565656565656565656565656565656565656565656565656565225d",
             "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
             "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
             0,
             2
         )]
         fn test_curve_get_coin_indexes(
-            #[case] pool: &str,
+            #[case] coins: &str,
             #[case] token_in: &str,
             #[case] token_out: &str,
             #[case] expected_i: u64,
             #[case] expected_j: u64,
         ) {
+            let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+            static_attributes.insert("coins".into(), Bytes::from_str(coins).unwrap());
+            let swap = Swap {
+                component: ProtocolComponent {
+                    id: "pool-id".into(),
+                    protocol_system: String::from("vm:curve"),
+                    static_attributes,
+                    ..Default::default()
+                },
+                token_in: Bytes::from(token_in),
+                token_out: Bytes::from(token_out),
+                split: 0f64,
+            };
             let encoder = CurveSwapEncoder::new(
                 String::default(),
                 TychoCoreChain::Ethereum.into(),
@@ -1314,7 +1260,7 @@ mod tests {
             .unwrap();
             let (i, j) = encoder
                 .get_coin_indexes(
-                    Address::from_str(pool).unwrap(),
+                    swap,
                     Address::from_str(token_in).unwrap(),
                     Address::from_str(token_out).unwrap(),
                 )
@@ -1334,6 +1280,7 @@ mod tests {
                         .to_vec(),
                 ),
             );
+            static_attributes.insert("coins".into(), Bytes::from_str("0x5b22307836623137353437346538393039346334346461393862393534656564656163343935323731643066222c22307861306238363939316336323138623336633164313964346132653965623063653336303665623438222c22307864616331376639353864326565353233613232303632303639393435393763313364383331656337225d").unwrap());
             let curve_tri_pool = ProtocolComponent {
                 id: String::from("0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7"),
                 protocol_system: String::from("vm:curve"),
@@ -1404,6 +1351,7 @@ mod tests {
                         .to_vec(),
                 ),
             );
+            static_attributes.insert("coins".into(), Bytes::from_str("0x5b22307834633965646435383532636439303566303836633735396538333833653039626666316536386233222c22307861306238363939316336323138623336633164313964346132653965623063653336303665623438225d").unwrap());
             let curve_pool = ProtocolComponent {
                 id: String::from("0x02950460E2b9529D0E00284A5fA2d7bDF3fA4d72"),
                 protocol_system: String::from("vm:curve"),
@@ -1475,6 +1423,7 @@ mod tests {
                         .to_vec(),
                 ),
             );
+            static_attributes.insert("coins".into(), Bytes::from_str("0x5b22307865656565656565656565656565656565656565656565656565656565656565656565656565656565222c22307861653761623936353230646533613138653565313131623565616162303935333132643766653834225d").unwrap());
             let curve_pool = ProtocolComponent {
                 id: String::from("0xDC24316b9AE028F1497c275EB9192a3Ea0f67022"),
                 protocol_system: String::from("vm:curve"),
