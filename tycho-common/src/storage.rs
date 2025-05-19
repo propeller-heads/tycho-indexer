@@ -12,8 +12,8 @@ use crate::{
     dto,
     models::{
         blockchain::{
-            Block, EntryPoint, TracingParams, EntryPointWithTracingParams,
-            TracedEntryPoint, TracingResult, Transaction,
+            Block, EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingParams,
+            TracingResult, Transaction,
         },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
@@ -526,16 +526,13 @@ pub trait EntryPointGateway {
     /// Upserts a list of entry points into the database.
     async fn upsert_entry_points(
         &self,
-        entry_points: &[(ComponentId, Vec<EntryPoint>)],
+        entry_points: &HashMap<ComponentId, HashSet<EntryPoint>>,
     ) -> Result<(), StorageError>;
 
     /// Upserts a list of entry points with their tracing params into the database.
     async fn upsert_entry_point_tracing_params(
         &self,
-        entry_points_params: &[(
-            EntryPointId,
-            Vec<(TracingParams, Option<ComponentId>)>,
-        )],
+        entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
     ) -> Result<(), StorageError>;
 
     /// Retrieves a list of entry points from the database.

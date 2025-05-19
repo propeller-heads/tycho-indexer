@@ -16,8 +16,8 @@ use tycho_common::{
     models::{
         self,
         blockchain::{
-            TracingParams as EntryPointTracingParamsCommon,
             EntryPointWithTracingParams as EntryPointWithTracingParamsCommon,
+            TracingParams as EntryPointTracingParamsCommon,
         },
         Address, AttrStoreKey, Balance, BlockHash, Code, CodeHash, ComponentId, ContractId,
         EntryPointId, PaginationParams, StoreVal, TxHash,
