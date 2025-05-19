@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     fs::File,
     io::Read,
-    process,
+    process, slice,
     str::FromStr,
     sync::{mpsc, Arc},
 };
@@ -457,12 +457,12 @@ async fn initialize_accounts(
         .await;
 
     cached_gw
-        .upsert_block(&[block.clone()])
+        .upsert_block(slice::from_ref(&block))
         .await
         .expect("Failed to insert block");
 
     cached_gw
-        .upsert_tx(&[tx.clone()])
+        .upsert_tx(slice::from_ref(&tx))
         .await
         .expect("Failed to insert tx");
 

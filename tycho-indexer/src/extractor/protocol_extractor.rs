@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    slice,
     str::FromStr,
     sync::Arc,
 };
@@ -1310,7 +1311,7 @@ impl ExtractorGateway for ExtractorPgGateway {
                 .await?;
         }
         self.state_gateway
-            .upsert_block(&[changes.block.clone()])
+            .upsert_block(slice::from_ref(&changes.block))
             .await?;
 
         let mut new_protocol_components: Vec<ProtocolComponent> = vec![];
@@ -1325,7 +1326,7 @@ impl ExtractorGateway for ExtractorPgGateway {
 
             // Insert transaction
             self.state_gateway
-                .upsert_tx(&[tx_update.tx.clone()])
+                .upsert_tx(slice::from_ref(&tx_update.tx))
                 .await?;
 
             let hash: TxHash = tx_update.tx.hash.clone();

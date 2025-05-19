@@ -1745,7 +1745,7 @@ impl PostgresGateway {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
+    use std::{slice, str::FromStr};
 
     use diesel_async::AsyncConnection;
     use rstest::rstest;
@@ -3242,7 +3242,7 @@ mod test {
             Default::default(),
         );
 
-        gw.add_protocol_components(&[original_component.clone()], &mut conn)
+        gw.add_protocol_components(slice::from_ref(&original_component), &mut conn)
             .await
             .expect("adding components failed");
 

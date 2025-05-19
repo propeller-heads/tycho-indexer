@@ -1,4 +1,7 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    slice,
+};
 
 use chrono::{NaiveDateTime, Utc};
 use diesel::{
@@ -719,7 +722,7 @@ impl PostgresGateway {
         let chain = id.chain;
 
         let mut all_balances = self
-            .get_account_balances(&chain, Some(&[id.address.clone()]), version, true, conn)
+            .get_account_balances(&chain, Some(slice::from_ref(&id.address)), version, true, conn)
             .await?;
         let account_balances = all_balances
             .get_mut(&id.address)

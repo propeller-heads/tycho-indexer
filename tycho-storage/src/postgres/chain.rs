@@ -264,7 +264,7 @@ impl PostgresGateway {
 
 #[cfg(test)]
 mod test {
-    use std::{str::FromStr, time::Duration};
+    use std::{slice, str::FromStr, time::Duration};
 
     use diesel_async::AsyncConnection;
     use tycho_common::models::Chain;
@@ -360,7 +360,7 @@ mod test {
         let gw = EVMGateway::from_connection(&mut conn).await;
         let block = block("0xbadbabe000000000000000000000000000000000000000000000000000000000");
 
-        gw.upsert_block(&[block.clone()], &mut conn)
+        gw.upsert_block(slice::from_ref(&block), &mut conn)
             .await
             .unwrap();
         let retrieved_block = gw
@@ -384,7 +384,7 @@ mod test {
             yesterday_midnight(),
         );
 
-        gw.upsert_block(&[block.clone()], &mut conn)
+        gw.upsert_block(slice::from_ref(&block), &mut conn)
             .await
             .unwrap();
         let retrieved_block = gw
@@ -458,7 +458,7 @@ mod test {
             index: 1,
         };
 
-        gw.upsert_tx(&[tx.clone()], &mut conn)
+        gw.upsert_tx(slice::from_ref(&tx), &mut conn)
             .await
             .unwrap();
         let retrieved_tx = gw
