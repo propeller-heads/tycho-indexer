@@ -11,7 +11,10 @@ use thiserror::Error;
 use crate::{
     dto,
     models::{
-        blockchain::{Block, EntryPointWithData, TracedEntryPoint, TracingResult, Transaction},
+        blockchain::{
+            Block, EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingParams,
+            TracingResult, Transaction,
+        },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
@@ -502,17 +505,29 @@ impl EntryPointFilter {
 // Trait for entry point gateway operations.
 #[async_trait]
 pub trait EntryPointGateway {
-    /// Upserts a list of entry points with their tracing data into the database.
-    async fn upsert_entry_points_with_data(
+    /// Upserts a list of entry points into the database.
+    async fn upsert_entry_points(
         &self,
-        entry_points: &[(ComponentId, Vec<EntryPointWithData>)],
+        entry_points: &HashMap<ComponentId, HashSet<EntryPoint>>,
     ) -> Result<(), StorageError>;
 
-    /// Retrieves a list of entry points with their tracing data from the database.
-    async fn get_entry_points_with_data(
+    /// Upserts a list of entry points with their tracing params into the database.
+    async fn upsert_entry_point_tracing_params(
+        &self,
+        entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+    ) -> Result<(), StorageError>;
+
+    /// Retrieves a list of entry points from the database.
+    async fn get_entry_points(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<Vec<EntryPointWithData>, StorageError>;
+    ) -> Result<Vec<EntryPoint>, StorageError>;
+
+    /// Retrieves a list of entry points with their tracing data from the database.
+    async fn get_entry_points_tracing_params(
+        &self,
+        filter: EntryPointFilter,
+    ) -> Result<Vec<EntryPointWithTracingParams>, StorageError>;
 
     /// Upserts a list of traced entry points into the database.
     async fn upsert_traced_entry_points(

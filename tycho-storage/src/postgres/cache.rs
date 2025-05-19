@@ -19,7 +19,10 @@ use tracing::{debug, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
     models::{
         self,
-        blockchain::{Block, EntryPointWithData, TracedEntryPoint, TracingResult, Transaction},
+        blockchain::{
+            Block, EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingParams,
+            TracingResult, Transaction,
+        },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
@@ -66,7 +69,11 @@ pub(crate) enum WriteOp {
     // Simply merge
     UpsertProtocolState(Vec<(TxHash, models::protocol::ProtocolComponentStateDelta)>),
     // Simply merge
-    UpsertEntryPoints(Vec<(models::ComponentId, Vec<models::blockchain::EntryPointWithData>)>),
+    UpsertEntryPoints(HashMap<models::ComponentId, HashSet<models::blockchain::EntryPoint>>),
+    // Simply merge
+    UpsertEntryPointTracingParams(
+        HashMap<models::EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+    ),
     // Simply merge
     UpsertTracedEntryPoints(Vec<models::blockchain::TracedEntryPoint>),
 }
@@ -86,6 +93,7 @@ impl WriteOp {
             WriteOp::InsertComponentBalances(_) => "InsertComponentBalances",
             WriteOp::UpsertProtocolState(_) => "UpsertProtocolState",
             WriteOp::UpsertEntryPoints(_) => "UpsertEntryPoints",
+            WriteOp::UpsertEntryPointTracingParams(_) => "UpsertEntryPointTracingParams",
             WriteOp::UpsertTracedEntryPoints(_) => "UpsertTracedEntryPoints",
         }
     }
@@ -103,8 +111,9 @@ impl WriteOp {
             WriteOp::InsertComponentBalances(_) => 8,
             WriteOp::UpsertProtocolState(_) => 9,
             WriteOp::UpsertEntryPoints(_) => 10,
-            WriteOp::UpsertTracedEntryPoints(_) => 11,
-            WriteOp::SaveExtractionState(_) => 12,
+            WriteOp::UpsertEntryPointTracingParams(_) => 11,
+            WriteOp::UpsertTracedEntryPoints(_) => 12,
+            WriteOp::SaveExtractionState(_) => 13,
         }
     }
 }
@@ -207,8 +216,28 @@ impl DBTransaction {
                     return Ok(());
                 }
                 (WriteOp::UpsertEntryPoints(l), WriteOp::UpsertEntryPoints(r)) => {
-                    self.size += r.len();
-                    l.extend(r.iter().cloned());
+                    for (component_id, entry_points) in r.iter() {
+                        let entry = l
+                            .entry(component_id.clone())
+                            .or_insert_with(HashSet::new);
+                        let len_before = entry.len();
+                        entry.extend(entry_points.iter().cloned());
+                        self.size += entry.len() - len_before;
+                    }
+                    return Ok(());
+                }
+                (
+                    WriteOp::UpsertEntryPointTracingParams(l),
+                    WriteOp::UpsertEntryPointTracingParams(r),
+                ) => {
+                    for (entry_point_id, params) in r.iter() {
+                        let entry = l
+                            .entry(entry_point_id.clone())
+                            .or_insert_with(HashSet::new);
+                        let len_before = entry.len();
+                        entry.extend(params.iter().cloned());
+                        self.size += entry.len() - len_before;
+                    }
                     return Ok(());
                 }
                 (WriteOp::UpsertTracedEntryPoints(l), WriteOp::UpsertTracedEntryPoints(r)) => {
@@ -498,13 +527,13 @@ impl DBCacheWriteExecutor {
             }
             WriteOp::UpsertEntryPoints(new_entry_points) => {
                 self.state_gateway
-                    .insert_entry_points(
-                        &new_entry_points
-                            .iter()
-                            .map(|(component_id, entry_points)| {
-                                (component_id.as_str(), entry_points)
-                            })
-                            .collect::<HashMap<_, _>>(),
+                    .insert_entry_points(new_entry_points, &self.chain, conn)
+                    .await?
+            }
+            WriteOp::UpsertEntryPointTracingParams(new_entry_point_tracing_params) => {
+                self.state_gateway
+                    .upsert_entry_point_tracing_params(
+                        new_entry_point_tracing_params,
                         &self.chain,
                         conn,
                     )
@@ -1141,26 +1170,50 @@ impl ProtocolGateway for CachedGateway {
 #[async_trait]
 impl EntryPointGateway for CachedGateway {
     #[instrument(skip_all)]
-    async fn upsert_entry_points_with_data(
+    async fn upsert_entry_points(
         &self,
-        entry_points: &[(models::ComponentId, Vec<models::blockchain::EntryPointWithData>)],
+        entry_points: &HashMap<models::ComponentId, HashSet<models::blockchain::EntryPoint>>,
     ) -> Result<(), StorageError> {
-        self.add_op(WriteOp::UpsertEntryPoints(entry_points.to_vec()))
+        self.add_op(WriteOp::UpsertEntryPoints(entry_points.clone()))
             .await?;
         Ok(())
     }
 
     #[instrument(skip_all)]
-    async fn get_entry_points_with_data(
+    async fn upsert_entry_point_tracing_params(
+        &self,
+        entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+    ) -> Result<(), StorageError> {
+        self.add_op(WriteOp::UpsertEntryPointTracingParams(entry_points_params.clone()))
+            .await?;
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
+    async fn get_entry_points(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<Vec<EntryPointWithData>, StorageError> {
+    ) -> Result<Vec<EntryPoint>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_entry_points_with_data(filter, &mut conn)
+            .get_entry_points(filter, &mut conn)
+            .await
+    }
+
+    #[instrument(skip_all)]
+    async fn get_entry_points_tracing_params(
+        &self,
+        filter: EntryPointFilter,
+    ) -> Result<Vec<EntryPointWithTracingParams>, StorageError> {
+        let mut conn =
+            self.pool.get().await.map_err(|e| {
+                StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
+            })?;
+        self.state_gateway
+            .get_entry_points_tracing_params(filter, &mut conn)
             .await
     }
 
@@ -1184,7 +1237,7 @@ impl EntryPointGateway for CachedGateway {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_traced_entry_points(entry_points, &mut conn)
+            .get_tracing_results(entry_points, &mut conn)
             .await
     }
 }
@@ -1193,7 +1246,7 @@ impl Gateway for CachedGateway {}
 
 #[cfg(test)]
 mod test_serial_db {
-    use std::{collections::HashSet, str::FromStr, time::Duration};
+    use std::{collections::HashSet, slice, str::FromStr, time::Duration};
 
     use tycho_common::models::ChangeType;
 
@@ -1461,11 +1514,11 @@ mod test_serial_db {
                 .start_transaction(&block_1, None)
                 .await;
             cached_gw
-                .upsert_block(&[block_1.clone()])
+                .upsert_block(slice::from_ref(&block_1))
                 .await
                 .expect("Upsert block 1 ok");
             cached_gw
-                .upsert_tx(&[tx_1.clone()])
+                .upsert_tx(slice::from_ref(&tx_1))
                 .await
                 .expect("Upsert tx 1 ok");
             cached_gw
@@ -1479,7 +1532,7 @@ mod test_serial_db {
                 .start_transaction(&block_2, None)
                 .await;
             cached_gw
-                .upsert_block(&[block_2.clone()])
+                .upsert_block(slice::from_ref(&block_2))
                 .await
                 .expect("Upsert block 2 ok");
             cached_gw
@@ -1493,7 +1546,7 @@ mod test_serial_db {
                 .start_transaction(&block_3, None)
                 .await;
             cached_gw
-                .upsert_block(&[block_3.clone()])
+                .upsert_block(slice::from_ref(&block_3))
                 .await
                 .expect("Upsert block 3 ok");
             cached_gw

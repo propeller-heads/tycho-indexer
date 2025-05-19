@@ -358,53 +358,53 @@ impl EntryPoint {
     }
 }
 
-/// A struct that combines an entry point with its associated tracing data.
+/// A struct that combines an entry point with its associated tracing params.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct EntryPointWithData {
+pub struct EntryPointWithTracingParams {
     /// The entry point to trace, containing the target contract address and function signature
     pub entry_point: EntryPoint,
-    /// The tracing configuration and data for this entry point
-    pub data: EntryPointTracingData,
+    /// The tracing parameters for this entry point
+    pub params: TracingParams,
 }
 
-impl EntryPointWithData {
-    pub fn new(entry_point: EntryPoint, data: EntryPointTracingData) -> Self {
-        Self { entry_point, data }
+impl EntryPointWithTracingParams {
+    pub fn new(entry_point: EntryPoint, params: TracingParams) -> Self {
+        Self { entry_point, params }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
 /// An entry point to trace. Different types of entry points tracing will be supported in the
 /// future. Like RPC debug tracing, symbolic execution, etc.
-pub enum EntryPointTracingData {
+pub enum TracingParams {
     /// Uses RPC calls to retrieve the called addresses and retriggers
-    RPCTracer(RPCTracerEntryPoint),
+    RPCTracer(RPCTracerParams),
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Eq, Hash)]
-pub struct RPCTracerEntryPoint {
+pub struct RPCTracerParams {
     /// The caller address of the transaction, if not provided tracing will use the default value
     /// for an address defined by the VM.
     pub caller: Option<Address>,
-    /// The data used for the tracing call, this needs to include the function selector
-    pub data: Bytes,
+    /// The call data used for the tracing call, this needs to include the function selector
+    pub calldata: Bytes,
 }
 
-impl RPCTracerEntryPoint {
-    pub fn new(caller: Option<Address>, data: Bytes) -> Self {
-        Self { caller, data }
+impl RPCTracerParams {
+    pub fn new(caller: Option<Address>, calldata: Bytes) -> Self {
+        Self { caller, calldata }
     }
 }
 
 // Ensure serialization order, required by the storage layer
-impl Serialize for RPCTracerEntryPoint {
+impl Serialize for RPCTracerParams {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         let mut state = serializer.serialize_struct("RPCTracerEntryPoint", 2)?;
         state.serialize_field("caller", &self.caller)?;
-        state.serialize_field("data", &self.data)?;
+        state.serialize_field("calldata", &self.calldata)?;
         state.end()
     }
 }
@@ -430,8 +430,8 @@ impl TracingResult {
 #[derive(Debug, Clone, PartialEq)]
 /// Represents a traced entry point and the results of the tracing operation.
 pub struct TracedEntryPoint {
-    /// The combined entry point and tracing data that was traced
-    pub entry_point_with_data: EntryPointWithData,
+    /// The combined entry point and tracing params that was traced
+    pub entry_point_with_params: EntryPointWithTracingParams,
     /// The block hash of the block that the entry point was traced on.
     pub detection_block_hash: BlockHash,
     /// The results of the tracing operation
@@ -440,11 +440,11 @@ pub struct TracedEntryPoint {
 
 impl TracedEntryPoint {
     pub fn new(
-        entry_point: EntryPointWithData,
+        entry_point_with_params: EntryPointWithTracingParams,
         detection_block_hash: BlockHash,
         result: TracingResult,
     ) -> Self {
-        Self { entry_point_with_data: entry_point, detection_block_hash, tracing_result: result }
+        Self { entry_point_with_params, detection_block_hash, tracing_result: result }
     }
 }
 
@@ -698,18 +698,18 @@ pub mod fixtures {
 
         use serde_json;
 
-        let entry_point = RPCTracerEntryPoint::new(
+        let entry_point = RPCTracerParams::new(
             Some(Address::from_str("0x1234567890123456789012345678901234567890").unwrap()),
             Bytes::from_str("0xabcdef").unwrap(),
         );
 
         let serialized = serde_json::to_string(&entry_point).unwrap();
 
-        // Verify that "caller" comes before "data" in the serialized output
-        assert!(serialized.find("\"caller\"").unwrap() < serialized.find("\"data\"").unwrap());
+        // Verify that "caller" comes before "calldata" in the serialized output
+        assert!(serialized.find("\"caller\"").unwrap() < serialized.find("\"calldata\"").unwrap());
 
         // Verify we can deserialize it back
-        let deserialized: RPCTracerEntryPoint = serde_json::from_str(&serialized).unwrap();
+        let deserialized: RPCTracerParams = serde_json::from_str(&serialized).unwrap();
         assert_eq!(entry_point, deserialized);
     }
 }

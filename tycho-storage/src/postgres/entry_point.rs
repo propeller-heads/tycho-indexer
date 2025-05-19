@@ -1,16 +1,13 @@
-#![allow(unused)] //TODO: Remove this once we have usage in extractors
 use std::collections::{HashMap, HashSet};
 
-use async_trait::async_trait;
 use diesel::{prelude::*, upsert::excluded};
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
-use itertools::Itertools;
 use tycho_common::{
     models::{
         blockchain::{
-            EntryPoint, EntryPointTracingData, EntryPointWithData, TracedEntryPoint, TracingResult,
+            EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingParams, TracingResult,
         },
-        Chain, EntryPointId,
+        Chain, ComponentId, EntryPointId,
     },
     storage::{EntryPointFilter, StorageError},
     Bytes,
@@ -18,9 +15,9 @@ use tycho_common::{
 
 use super::{
     orm::{
-        self, EntryPointTracingType, NewEntryPoint, NewEntryPointTracingData,
-        NewEntryPointTracingDataCallsAccount, NewEntryPointTracingResult,
-        NewProtocolComponentHoldsEntryPointTracingData,
+        self, EntryPointTracingType, NewEntryPoint, NewEntryPointTracingParams,
+        NewEntryPointTracingParamsCallsAccount, NewEntryPointTracingResult,
+        NewProtocolComponentHasEntryPointTracingParams, NewProtocolComponentUsesEntryPoint,
     },
     schema::{self},
     storage_error_from_diesel, PostgresError, PostgresGateway,
@@ -36,21 +33,18 @@ impl PostgresGateway {
     /// * `conn` - The database connection to use.
     pub(crate) async fn insert_entry_points(
         &self,
-        new_data: &HashMap<&str, &Vec<EntryPointWithData>>,
+        new_data: &HashMap<ComponentId, HashSet<EntryPoint>>,
         chain: &Chain,
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
-        use schema::{
-            entry_point::dsl::*, entry_point_tracing_data::dsl::*,
-            protocol_component_holds_entry_point_tracing_data::dsl::*,
-        };
+        use schema::{entry_point::dsl::*, protocol_component_uses_entry_point::dsl::*};
 
         let chain_id = self.get_chain_id(chain);
 
         let pc_ids = orm::ProtocolComponent::ids_by_external_ids(
             &new_data
                 .keys()
-                .map(Clone::clone)
+                .map(AsRef::as_ref)
                 .collect::<Vec<_>>(),
             chain_id,
             conn,
@@ -66,15 +60,16 @@ impl PostgresGateway {
             .flat_map(|(_, ep)| {
                 ep.iter()
                     .map(|ep| NewEntryPoint {
-                        external_id: ep.entry_point.external_id.clone(),
-                        target: ep.entry_point.target.clone(),
-                        signature: ep.entry_point.signature.clone(),
+                        external_id: ep.external_id.clone(),
+                        target: ep.target.clone(),
+                        signature: ep.signature.clone(),
                     })
                     .collect::<Vec<_>>()
             })
             .collect::<HashSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
+
         diesel::insert_into(entry_point)
             .values(&new_entry_points)
             .on_conflict_do_nothing()
@@ -84,134 +79,244 @@ impl PostgresGateway {
 
         // Fetch entry points by their external_ids, we can't use .returning() on the insert above
         // because it doesn't return the ids on conflicts.
-        let input_external_ids: Vec<String> = new_data
+        let input_external_ids: Vec<EntryPointId> = new_data
             .iter()
             .flat_map(|(_, ep)| {
                 ep.iter()
-                    .map(|ep| ep.entry_point.external_id.clone())
+                    .map(|ep| ep.external_id.clone())
             })
             .collect();
 
         let entry_point_ids =
             orm::EntryPoint::ids_by_external_ids(&input_external_ids, conn).await?;
 
-        let new_tracing_data = new_data
-            .iter()
-            .flat_map(|(_, ep)| {
-                ep.iter().map(|ep| {
-                    let ext_id = ep.entry_point.external_id.clone();
-                    let ep_id = entry_point_ids
-                        .get(&ext_id)
-                        .ok_or_else(|| StorageError::NotFound("EntryPoint".to_string(), ext_id))?;
+        let mut pc_entry_point_links = Vec::new();
 
-                    let ep_data = match &ep.data {
-                        EntryPointTracingData::RPCTracer(rpc_tracer) => {
-                            Some(serde_json::to_value(rpc_tracer).map_err(|e| {
-                                StorageError::Unexpected(format!(
-                                    "Failed to serialize RPCTracer: {e}"
-                                ))
-                            })?)
-                        }
-                    };
+        for (pc_ext_id, eps) in new_data.iter() {
+            let pc_id = match pc_ids.get(pc_ext_id) {
+                Some(_id) => _id,
+                None => {
+                    return Err(StorageError::NotFound(
+                        "ProtocolComponent".to_string(),
+                        pc_ext_id.to_string(),
+                    ));
+                }
+            };
 
-                    Ok(NewEntryPointTracingData {
-                        entry_point_id: *ep_id,
-                        tracing_type: (&ep.data).into(),
-                        data: ep_data,
-                    })
-                })
-            })
-            .collect::<Result<Vec<_>, StorageError>>()?;
+            for ep in eps.iter() {
+                let ep_id = match entry_point_ids.get(&ep.external_id) {
+                    Some(_id) => _id,
+                    None => {
+                        return Err(StorageError::NotFound(
+                            "EntryPoint".to_string(),
+                            ep.external_id.clone(),
+                        ));
+                    }
+                };
 
-        // Fetch entry points by their external_ids, we can't use .returning() on the insert above
-        // because it doesn't return the ids on conflicts.
-        diesel::insert_into(entry_point_tracing_data)
-            .values(&new_tracing_data)
+                pc_entry_point_links.push(NewProtocolComponentUsesEntryPoint {
+                    protocol_component_id: *pc_id,
+                    entry_point_id: *ep_id,
+                });
+            }
+        }
+
+        // Insert links between protocol components and entry points
+        // Design choice: we don't want to delete previously inserted links here, they are
+        // cumulative
+        diesel::insert_into(protocol_component_uses_entry_point)
+            .values(&pc_entry_point_links)
             .on_conflict_do_nothing()
-            .execute(conn)
-            .await
-            .map_err(|e| storage_error_from_diesel(e, "EntryPointData", "Batch upsert", None))?;
-
-        let data_ids = orm::EntryPointTracingData::ids_by_entry_point_with_data(
-            &new_data
-                .iter()
-                .flat_map(|(_, ep)| ep.iter())
-                .cloned()
-                .collect::<Vec<_>>(),
-            conn,
-        )
-        .await?;
-
-        let pc_links = new_data
-            .iter()
-            .flat_map(|(pc_ext_id, ep)| {
-                ep.iter().map(|ep| {
-                    let pc_id = pc_ids.get(*pc_ext_id).ok_or_else(|| {
-                        StorageError::NotFound(
-                            "ProtocolComponent".to_string(),
-                            pc_ext_id.to_string(),
-                        )
-                    })?;
-                    Ok(NewProtocolComponentHoldsEntryPointTracingData {
-                        protocol_component_id: *pc_id,
-                        entry_point_tracing_data_id: *data_ids.get(ep).ok_or_else(|| {
-                            StorageError::NotFound(
-                                "EntryPointTracingData".to_string(),
-                                ep.entry_point.external_id.clone(),
-                            )
-                        })?,
-                    })
-                })
-            })
-            .collect::<Result<Vec<_>, StorageError>>()?;
-
-        diesel::insert_into(protocol_component_holds_entry_point_tracing_data)
-            .values(&pc_links)
-            .on_conflict_do_nothing() //Design choice: we don't want to delete previously inserted links here, they are
-            // cumulative
             .execute(conn)
             .await
             .map_err(|e| {
                 storage_error_from_diesel(
                     e,
-                    "ProtocolComponentHoldsEntryPointData",
+                    "ProtocolComponentUsesEntryPoint",
                     "Batch upsert",
                     None,
                 )
             })?;
+        Ok(())
+    }
+
+    /// Upsert entry point tracing params into the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `new_data` - A map of entry point ids to a list of tracing params and optional component
+    ///   id related to the tracing params.
+    /// * `conn` - The database connection to use.
+    pub(crate) async fn upsert_entry_point_tracing_params(
+        &self,
+        new_data: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+        chain: &Chain,
+        conn: &mut AsyncPgConnection,
+    ) -> Result<(), StorageError> {
+        use schema::{
+            debug_protocol_component_has_entry_point_tracing_params::dsl::*,
+            entry_point_tracing_params::dsl::*,
+        };
+
+        let input_external_ids: Vec<EntryPointId> = new_data
+            .keys()
+            .map(Clone::clone)
+            .collect();
+        let entry_point_ids =
+            orm::EntryPoint::ids_by_external_ids(&input_external_ids, conn).await?;
+
+        let mut new_tracing_params = Vec::new();
+        for (ep_id, ep) in new_data.iter() {
+            let entry_point_id_ = entry_point_ids
+                .get(ep_id)
+                .ok_or_else(|| {
+                    StorageError::NotFound("EntryPoint".to_string(), ep_id.to_string())
+                })?;
+            for (params, _) in ep.iter() {
+                let db_params = match params {
+                    TracingParams::RPCTracer(rpc_tracer) => serde_json::to_value(rpc_tracer)
+                        .map_err(|e| {
+                            StorageError::Unexpected(format!(
+                                "Failed to serialize RPCTracerEntryPoint: {e}"
+                            ))
+                        })?,
+                };
+                new_tracing_params.push(NewEntryPointTracingParams {
+                    entry_point_id: *entry_point_id_,
+                    tracing_type: EntryPointTracingType::from(params),
+                    data: Some(db_params),
+                });
+            }
+        }
+
+        diesel::insert_into(entry_point_tracing_params)
+            .values(&new_tracing_params)
+            .on_conflict_do_nothing()
+            .execute(conn)
+            .await
+            .map_err(|e| {
+                storage_error_from_diesel(e, "EntryPointTracingParams", "Batch upsert", None)
+            })?;
+
+        let new_links: &Vec<(&TracingParams, &String)> = &new_data
+            .values()
+            .flat_map(|ep| {
+                ep.iter()
+                    .filter_map(|(params, pc_ext_id)| {
+                        pc_ext_id
+                            .as_ref()
+                            .map(|pc_ext_id| (params, pc_ext_id))
+                    })
+            })
+            .collect::<Vec<_>>();
+
+        // Insert links between protocol components and tracing params
+        if !new_links.is_empty() {
+            let chain_id = self.get_chain_id(chain);
+
+            // Fetch entry points tracing params, we can't use .returning() on the insert above
+            // because it doesn't return the ids on conflicts.
+            let params_ids = orm::EntryPointTracingParams::ids_by_entry_point_with_tracing_params(
+                &new_data
+                    .iter()
+                    .flat_map(|(ep_id, ep)| {
+                        ep.iter()
+                            .map(|params| (ep_id.clone(), params.0.clone()))
+                    })
+                    .collect::<Vec<_>>(),
+                conn,
+            )
+            .await?;
+
+            let pc_ids = orm::ProtocolComponent::ids_by_external_ids(
+                &new_links
+                    .iter()
+                    .map(|(_, pc_ext_id)| pc_ext_id.as_str())
+                    .collect::<Vec<_>>(),
+                chain_id,
+                conn,
+            )
+            .await
+            .map_err(PostgresError::from)?
+            .into_iter()
+            .map(|(id_, ext_id)| (ext_id, id_))
+            .collect::<HashMap<_, _>>();
+
+            let mut pc_tracing_params_links = Vec::new();
+            for (ep, pc_ext_id) in new_links.iter() {
+                let pc_id = match pc_ids.get(*pc_ext_id) {
+                    Some(_id) => _id,
+                    None => {
+                        return Err(StorageError::NotFound(
+                            "ProtocolComponent".to_string(),
+                            pc_ext_id.to_string(),
+                        ));
+                    }
+                };
+
+                let params_id = match params_ids.get(ep) {
+                    Some(_id) => _id,
+                    None => {
+                        return Err(StorageError::NotFound(
+                            "EntryPointTracingParams".to_string(),
+                            format!("{ep:?}"),
+                        ));
+                    }
+                };
+
+                pc_tracing_params_links.push(NewProtocolComponentHasEntryPointTracingParams {
+                    protocol_component_id: *pc_id,
+                    entry_point_tracing_params_id: *params_id,
+                });
+            }
+
+            diesel::insert_into(debug_protocol_component_has_entry_point_tracing_params)
+                .values(&pc_tracing_params_links)
+                .on_conflict_do_nothing()
+                .execute(conn)
+                .await
+                .map_err(|e| {
+                    storage_error_from_diesel(
+                        e,
+                        "ProtocolComponentHasEntryPointTracingParams",
+                        "Batch upsert",
+                        None,
+                    )
+                })?;
+        }
 
         Ok(())
     }
 
-    /// Get entry points with data from the database.
+    /// Get entry points tracing params from the database.
     ///
     /// # Arguments
     ///
     /// * `filter` - The filter to apply to the query.
     /// * `conn` - The database connection to use.
-    pub(crate) async fn get_entry_points_with_data(
+    pub(crate) async fn get_entry_points_tracing_params(
         &self,
         filter: EntryPointFilter,
         conn: &mut AsyncPgConnection,
-    ) -> Result<Vec<EntryPointWithData>, StorageError> {
+    ) -> Result<Vec<EntryPointWithTracingParams>, StorageError> {
         use schema::{
-            entry_point::dsl::*, entry_point_tracing_data as eptd, protocol_component as pc,
-            protocol_component_holds_entry_point_tracing_data as pchep,
+            entry_point as ep, entry_point_tracing_params as eptp, protocol_component as pc,
+            protocol_component_uses_entry_point as pcuep,
         };
 
         let ps_id = self.get_protocol_system_id(&filter.protocol_system);
         let results = schema::entry_point::table
-            .inner_join(eptd::table.on(id.eq(eptd::entry_point_id)))
-            .inner_join(pchep::table.on(eptd::id.eq(pchep::entry_point_tracing_data_id)))
-            .inner_join(pc::table.on(pchep::protocol_component_id.eq(pc::id)))
+            .inner_join(eptp::table.on(ep::id.eq(eptp::entry_point_id)))
+            .inner_join(pcuep::table.on(ep::id.eq(pcuep::entry_point_id)))
+            .inner_join(pc::table.on(pcuep::protocol_component_id.eq(pc::id)))
             .filter(pc::protocol_system_id.eq(ps_id))
-            .select((orm::EntryPoint::as_select(), orm::EntryPointTracingData::as_select()))
-            .load::<(orm::EntryPoint, orm::EntryPointTracingData)>(conn)
+            .select((orm::EntryPoint::as_select(), orm::EntryPointTracingParams::as_select()))
+            .load::<(orm::EntryPoint, orm::EntryPointTracingParams)>(conn)
             .await
             .map_err(|err| {
                 storage_error_from_diesel(
                     err,
-                    "EntryPointWithData",
+                    "EntryPointWithTracingParams",
                     "None",
                     Some(format!("protocol: {:?}", filter.protocol_system)),
                 )
@@ -219,7 +324,49 @@ impl PostgresGateway {
 
         Ok(results
             .into_iter()
-            .map(|(ep, data)| EntryPointWithData { entry_point: ep.into(), data: (&data).into() })
+            .map(|(ep, params)| EntryPointWithTracingParams {
+                entry_point: ep.into(),
+                params: (&params).into(),
+            })
+            .collect())
+    }
+
+    /// Get entry points from the database.
+    ///
+    /// # Arguments
+    ///
+    /// * `filter` - The filter to apply to the query.
+    /// * `conn` - The database connection to use.
+    pub(crate) async fn get_entry_points(
+        &self,
+        filter: EntryPointFilter,
+        conn: &mut AsyncPgConnection,
+    ) -> Result<Vec<EntryPoint>, StorageError> {
+        use schema::{
+            entry_point as ep, protocol_component as pc,
+            protocol_component_uses_entry_point as pcuep,
+        };
+
+        let ps_id = self.get_protocol_system_id(&filter.protocol_system);
+        let results = schema::entry_point::table
+            .inner_join(pcuep::table.on(ep::id.eq(pcuep::entry_point_id)))
+            .inner_join(pc::table.on(pcuep::protocol_component_id.eq(pc::id)))
+            .filter(pc::protocol_system_id.eq(ps_id))
+            .select(orm::EntryPoint::as_select())
+            .load::<orm::EntryPoint>(conn)
+            .await
+            .map_err(|err| {
+                storage_error_from_diesel(
+                    err,
+                    "EntryPoint",
+                    "None",
+                    Some(format!("protocol: {:?}", filter.protocol_system)),
+                )
+            })?;
+
+        Ok(results
+            .into_iter()
+            .map(Into::into)
             .collect())
     }
 
@@ -235,7 +382,7 @@ impl PostgresGateway {
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
         use schema::{
-            entry_point_tracing_data_calls_account::dsl::*, entry_point_tracing_result::dsl::*,
+            entry_point_tracing_params_calls_account::dsl::*, entry_point_tracing_result::dsl::*,
         };
 
         let block_hashes: HashSet<_> = traced_entry_points
@@ -250,10 +397,20 @@ impl PostgresGateway {
             .map_err(PostgresError::from)?;
         let block_id_map: HashMap<_, _> = blocks.into_iter().collect();
 
-        let data_ids = orm::EntryPointTracingData::ids_by_entry_point_with_data(
+        let params_ids = orm::EntryPointTracingParams::ids_by_entry_point_with_tracing_params(
             &traced_entry_points
                 .iter()
-                .map(|tep| tep.entry_point_with_data.clone())
+                .map(|tep| {
+                    (
+                        tep.entry_point_with_params
+                            .entry_point
+                            .external_id
+                            .clone(),
+                        tep.entry_point_with_params
+                            .params
+                            .clone(),
+                    )
+                })
                 .collect::<Vec<_>>(),
             conn,
         )
@@ -261,12 +418,12 @@ impl PostgresGateway {
 
         let mut values = Vec::with_capacity(traced_entry_points.len());
         for tep in traced_entry_points {
-            let data_id = data_ids
-                .get(&tep.entry_point_with_data)
+            let params_id = params_ids
+                .get(&tep.entry_point_with_params.params)
                 .ok_or_else(|| {
                     StorageError::NotFound(
-                        "EntryPointTracingData".to_string(),
-                        tep.entry_point_with_data
+                        "EntryPointTracingParams".to_string(),
+                        tep.entry_point_with_params
                             .entry_point
                             .external_id
                             .clone(),
@@ -283,20 +440,20 @@ impl PostgresGateway {
                     )
                 })?;
 
-            let tracing_data = serde_json::to_value(&tep.tracing_result).map_err(|e| {
+            let tracing_result = serde_json::to_value(&tep.tracing_result).map_err(|e| {
                 StorageError::Unexpected(format!("Failed to serialize TracingResult: {e}"))
             })?;
 
             values.push(NewEntryPointTracingResult {
-                entry_point_tracing_data_id: *data_id,
+                entry_point_tracing_params_id: *params_id,
                 detection_block: block_id,
-                detection_data: tracing_data,
+                detection_data: tracing_result,
             });
         }
 
         diesel::insert_into(entry_point_tracing_result)
             .values(&values)
-            .on_conflict(schema::entry_point_tracing_result::entry_point_tracing_data_id)
+            .on_conflict(schema::entry_point_tracing_result::entry_point_tracing_params_id)
             .do_update()
             .set((
                 detection_block.eq(excluded(detection_block)),
@@ -329,9 +486,9 @@ impl PostgresGateway {
         let account_id_map: HashMap<_, _> = accounts.into_iter().collect();
 
         let mut new_entry_point_calls_account = Vec::new();
-        for (tep, &data_id) in traced_entry_points
+        for (tep, &params_id) in traced_entry_points
             .iter()
-            .zip(data_ids.values())
+            .zip(params_ids.values())
         {
             for address in &tep.tracing_result.called_addresses {
                 let acc_id = account_id_map
@@ -340,14 +497,14 @@ impl PostgresGateway {
                         StorageError::NotFound("Account".to_string(), address.to_string())
                     })?;
 
-                new_entry_point_calls_account.push(NewEntryPointTracingDataCallsAccount {
-                    entry_point_tracing_data_id: data_id,
+                new_entry_point_calls_account.push(NewEntryPointTracingParamsCallsAccount {
+                    entry_point_tracing_params_id: params_id,
                     account_id: *acc_id,
                 });
             }
         }
 
-        diesel::insert_into(entry_point_tracing_data_calls_account)
+        diesel::insert_into(entry_point_tracing_params_calls_account)
             .values(&new_entry_point_calls_account)
             .on_conflict_do_nothing() // Design choice: we don't want to delete previously inserted links here, they are
             // cumulative
@@ -366,12 +523,15 @@ impl PostgresGateway {
     ///
     /// * `entry_points` - The entry point ids to get tracing results for.
     /// * `conn` - The database connection to use.
-    pub(crate) async fn get_traced_entry_points(
+    pub(crate) async fn get_tracing_results(
         &self,
         entry_points: &HashSet<EntryPointId>,
         conn: &mut AsyncPgConnection,
     ) -> Result<HashMap<EntryPointId, Vec<TracingResult>>, StorageError> {
-        use schema::entry_point_tracing_result::dsl::*;
+        use schema::{
+            entry_point as ep, entry_point_tracing_params as eptp,
+            entry_point_tracing_result as eptr,
+        };
         let entry_point_ids = orm::EntryPoint::ids_by_external_ids(
             &entry_points
                 .iter()
@@ -381,25 +541,17 @@ impl PostgresGateway {
         )
         .await?;
 
-        // Reverse the map, this is safe because we know it's a 1:1 mapping.
-        // This makes retrieving the external id attached to a tracing result faster.
-        let reverse: HashMap<i64, String> = entry_point_ids
-            .iter()
-            .map(|(k, &v)| (v, k.clone()))
-            .collect();
-
-        let results = entry_point_tracing_result
-            .filter(entry_point_tracing_data_id.eq_any(entry_point_ids.values().cloned()))
-            .select((entry_point_tracing_data_id, detection_data))
-            .load::<(i64, serde_json::Value)>(conn)
+        let results = schema::entry_point_tracing_result::table
+            .inner_join(eptp::table.on(eptr::entry_point_tracing_params_id.eq(eptp::id)))
+            .inner_join(ep::table.on(eptp::entry_point_id.eq(ep::id)))
+            .filter(eptp::entry_point_id.eq_any(entry_point_ids.values().cloned()))
+            .select((ep::external_id, eptr::detection_data))
+            .load::<(String, serde_json::Value)>(conn)
             .await
             .map_err(|e| storage_error_from_diesel(e, "TracingResult", "Query", None))?;
 
         let mut results_by_entry_point = HashMap::new();
-        for (ep_id, tracing_result) in results {
-            let ep_ext_id = reverse.get(&ep_id).ok_or_else(|| {
-                StorageError::NotFound("EntryPoint".to_string(), ep_id.to_string())
-            })?;
+        for (ep_ext_id, tracing_result) in results {
             results_by_entry_point
                 .entry(ep_ext_id.clone())
                 .or_insert_with(Vec::new)
@@ -408,18 +560,18 @@ impl PostgresGateway {
 
         results_by_entry_point
             .into_iter()
-            .map(|(ep_ext_id, data)| {
-                let converted_data = data
+            .map(|(ep_ext_id, tracing_result)| {
+                let converted_tracing_result = tracing_result
                     .into_iter()
                     .map(|d| {
                         serde_json::from_value(d).map_err(|e| {
-                            StorageError::Unexpected(format!(
+                            StorageError::DecodeError(format!(
                                 "Failed to deserialize TracingResult: {e}"
                             ))
                         })
                     })
                     .collect::<Result<Vec<_>, StorageError>>()?;
-                Ok((ep_ext_id, converted_data))
+                Ok((ep_ext_id, converted_tracing_result))
             })
             .collect()
     }
@@ -427,15 +579,13 @@ impl PostgresGateway {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
+    use std::{slice, str::FromStr};
 
     use diesel_async::AsyncConnection;
     use tycho_common::{
         keccak256,
         models::{
-            blockchain::{
-                EntryPointTracingData, RPCTracerEntryPoint, TracedEntryPoint, TracingResult,
-            },
+            blockchain::{RPCTracerParams, TracedEntryPoint, TracingParams, TracingResult},
             FinancialType, ImplementationType, StoreKey,
         },
         Bytes,
@@ -508,28 +658,27 @@ mod test {
         .await;
     }
 
-    fn rpc_tracer_entry_point() -> EntryPointWithData {
-        EntryPointWithData {
-            entry_point: EntryPoint {
-                external_id: "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()".to_string(),
-                target: Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
-                signature: "getRate()".to_string(),
-            },
-            data: EntryPointTracingData::RPCTracer(RPCTracerEntryPoint {
-                caller: None,
-                data: Bytes::from(&keccak256("getRate()")[0..4]),
-            }),
-        }
+    fn rpc_tracer_entry_point() -> (EntryPoint, TracingParams) {
+        (
+            EntryPoint::new(
+                "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()".to_string(),
+                Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
+                "getRate()".to_string(),
+            ),
+            TracingParams::RPCTracer(RPCTracerParams::new(
+                None,
+                Bytes::from(&keccak256("getRate()")[0..4]),
+            )),
+        )
     }
 
     fn traced_entry_point() -> TracedEntryPoint {
-        TracedEntryPoint {
-            entry_point_with_data: rpc_tracer_entry_point(),
-            detection_block_hash: Bytes::from_str(
-                "88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6",
-            )
-            .unwrap(),
-            tracing_result: TracingResult::new(
+        let (entry_point, params) = rpc_tracer_entry_point();
+        TracedEntryPoint::new(
+            EntryPointWithTracingParams::new(entry_point, params),
+            Bytes::from_str("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
+                .unwrap(),
+            TracingResult::new(
                 vec![(
                     Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
                     StoreKey::from_str(
@@ -543,7 +692,7 @@ mod test {
                     .into_iter()
                     .collect(),
             ),
-        }
+        )
     }
 
     #[tokio::test]
@@ -552,9 +701,9 @@ mod test {
         setup_data(&mut conn).await;
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
-        let entry_point = rpc_tracer_entry_point();
+        let entry_point = rpc_tracer_entry_point().0;
         gw.insert_entry_points(
-            &HashMap::from([("pc_0", &vec![entry_point.clone()])]),
+            &HashMap::from([("pc_0".to_string(), HashSet::from([entry_point.clone()]))]),
             &Chain::Ethereum,
             &mut conn,
         )
@@ -563,11 +712,50 @@ mod test {
 
         let filter = EntryPointFilter::new("test_protocol".to_string());
         let retrieved_entry_points = gw
-            .get_entry_points_with_data(filter, &mut conn)
+            .get_entry_points(filter, &mut conn)
             .await
             .unwrap();
 
         assert_eq!(retrieved_entry_points[0], entry_point);
+    }
+
+    #[tokio::test]
+    async fn test_entry_points_with_data_round_trip() {
+        let mut conn = setup_db().await;
+        setup_data(&mut conn).await;
+        let gw = PostgresGateway::from_connection(&mut conn).await;
+
+        let (entry_point, params) = rpc_tracer_entry_point();
+
+        gw.insert_entry_points(
+            &HashMap::from([("pc_0".to_string(), HashSet::from([entry_point.clone()]))]),
+            &Chain::Ethereum,
+            &mut conn,
+        )
+        .await
+        .unwrap();
+
+        gw.upsert_entry_point_tracing_params(
+            &HashMap::from([(
+                entry_point.external_id.clone(),
+                HashSet::from([(params.clone(), Some("pc_0".to_string()))]),
+            )]),
+            &Chain::Ethereum,
+            &mut conn,
+        )
+        .await
+        .unwrap();
+
+        let filter = EntryPointFilter::new("test_protocol".to_string());
+        let retrieved_entry_points = gw
+            .get_entry_points_tracing_params(filter, &mut conn)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            retrieved_entry_points[0],
+            EntryPointWithTracingParams::new(entry_point, params)
+        );
     }
 
     #[tokio::test]
@@ -576,9 +764,9 @@ mod test {
         setup_data(&mut conn).await;
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
-        let entry_point = rpc_tracer_entry_point();
+        let entry_point = rpc_tracer_entry_point().0;
         gw.insert_entry_points(
-            &HashMap::from([("pc_0", &vec![entry_point.clone()])]),
+            &HashMap::from([("pc_0".to_string(), HashSet::from([entry_point.clone()]))]),
             &Chain::Ethereum,
             &mut conn,
         )
@@ -588,14 +776,14 @@ mod test {
         // Filter by protocol name
         let filter = EntryPointFilter::new("test_protocol".to_string());
         let retrieved_entry_points = gw
-            .get_entry_points_with_data(filter, &mut conn)
+            .get_entry_points(filter, &mut conn)
             .await
             .unwrap();
         assert_eq!(retrieved_entry_points, vec![entry_point]);
 
         let filter = EntryPointFilter::new("unknown".to_string());
         let retrieved_entry_points = gw
-            .get_entry_points_with_data(filter, &mut conn)
+            .get_entry_points(filter, &mut conn)
             .await
             .unwrap();
         assert_eq!(retrieved_entry_points, vec![]);
@@ -607,39 +795,41 @@ mod test {
         setup_data(&mut conn).await;
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
-        let entry_point = rpc_tracer_entry_point();
+        let (entry_point, params) = rpc_tracer_entry_point();
         let traced_entry_point = traced_entry_point();
 
         gw.insert_entry_points(
-            &HashMap::from([("pc_0", &vec![entry_point.clone()])]),
+            &HashMap::from([("pc_0".to_string(), HashSet::from([entry_point.clone()]))]),
             &Chain::Ethereum,
             &mut conn,
         )
         .await
         .unwrap();
 
-        gw.upsert_traced_entry_points(&[traced_entry_point.clone()], &mut conn)
+        gw.upsert_entry_point_tracing_params(
+            &HashMap::from([(
+                entry_point.external_id.clone(),
+                HashSet::from([(params.clone(), Some("pc_0".to_string()))]),
+            )]),
+            &Chain::Ethereum,
+            &mut conn,
+        )
+        .await
+        .unwrap();
+
+        gw.upsert_traced_entry_points(slice::from_ref(&traced_entry_point), &mut conn)
             .await
             .unwrap();
 
         let retrieved_traced_entry_points = gw
-            .get_traced_entry_points(
-                &HashSet::from([entry_point
-                    .entry_point
-                    .external_id
-                    .clone()]),
-                &mut conn,
-            )
+            .get_tracing_results(&HashSet::from([entry_point.external_id.clone()]), &mut conn)
             .await
             .unwrap();
 
         assert_eq!(
             retrieved_traced_entry_points,
             HashMap::from([(
-                entry_point
-                    .entry_point
-                    .external_id
-                    .clone(),
+                entry_point.external_id.clone(),
                 vec![traced_entry_point.tracing_result]
             )])
         );
