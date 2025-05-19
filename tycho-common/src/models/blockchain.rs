@@ -364,11 +364,11 @@ pub struct EntryPointWithTracingParams {
     /// The entry point to trace, containing the target contract address and function signature
     pub entry_point: EntryPoint,
     /// The tracing parameters for this entry point
-    pub params: EntryPointTracingParams,
+    pub params: TracingParams,
 }
 
 impl EntryPointWithTracingParams {
-    pub fn new(entry_point: EntryPoint, params: EntryPointTracingParams) -> Self {
+    pub fn new(entry_point: EntryPoint, params: TracingParams) -> Self {
         Self { entry_point, params }
     }
 }
@@ -376,13 +376,13 @@ impl EntryPointWithTracingParams {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
 /// An entry point to trace. Different types of entry points tracing will be supported in the
 /// future. Like RPC debug tracing, symbolic execution, etc.
-pub enum EntryPointTracingParams {
+pub enum TracingParams {
     /// Uses RPC calls to retrieve the called addresses and retriggers
-    RPCTracer(RPCTracerEntryPoint),
+    RPCTracer(RPCTracerParams),
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Eq, Hash)]
-pub struct RPCTracerEntryPoint {
+pub struct RPCTracerParams {
     /// The caller address of the transaction, if not provided tracing will use the default value
     /// for an address defined by the VM.
     pub caller: Option<Address>,
@@ -390,14 +390,14 @@ pub struct RPCTracerEntryPoint {
     pub calldata: Bytes,
 }
 
-impl RPCTracerEntryPoint {
+impl RPCTracerParams {
     pub fn new(caller: Option<Address>, calldata: Bytes) -> Self {
         Self { caller, calldata }
     }
 }
 
 // Ensure serialization order, required by the storage layer
-impl Serialize for RPCTracerEntryPoint {
+impl Serialize for RPCTracerParams {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -698,7 +698,7 @@ pub mod fixtures {
 
         use serde_json;
 
-        let entry_point = RPCTracerEntryPoint::new(
+        let entry_point = RPCTracerParams::new(
             Some(Address::from_str("0x1234567890123456789012345678901234567890").unwrap()),
             Bytes::from_str("0xabcdef").unwrap(),
         );
@@ -709,7 +709,7 @@ pub mod fixtures {
         assert!(serialized.find("\"caller\"").unwrap() < serialized.find("\"calldata\"").unwrap());
 
         // Verify we can deserialize it back
-        let deserialized: RPCTracerEntryPoint = serde_json::from_str(&serialized).unwrap();
+        let deserialized: RPCTracerParams = serde_json::from_str(&serialized).unwrap();
         assert_eq!(entry_point, deserialized);
     }
 }

@@ -5,8 +5,7 @@ use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use tycho_common::{
     models::{
         blockchain::{
-            EntryPoint, EntryPointTracingParams, EntryPointWithTracingParams, TracedEntryPoint,
-            TracingResult,
+            EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingParams, TracingResult,
         },
         Chain, ComponentId, EntryPointId,
     },
@@ -150,7 +149,7 @@ impl PostgresGateway {
     /// * `conn` - The database connection to use.
     pub(crate) async fn upsert_entry_point_tracing_params(
         &self,
-        new_data: &HashMap<EntryPointId, &Vec<(EntryPointTracingParams, Option<ComponentId>)>>,
+        new_data: &HashMap<EntryPointId, &Vec<(TracingParams, Option<ComponentId>)>>,
         chain: &Chain,
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
@@ -175,13 +174,12 @@ impl PostgresGateway {
                 })?;
             for (params, _) in ep.iter() {
                 let db_params = match params {
-                    EntryPointTracingParams::RPCTracer(rpc_tracer) => {
-                        serde_json::to_value(rpc_tracer).map_err(|e| {
+                    TracingParams::RPCTracer(rpc_tracer) => serde_json::to_value(rpc_tracer)
+                        .map_err(|e| {
                             StorageError::Unexpected(format!(
                                 "Failed to serialize RPCTracerEntryPoint: {e}"
                             ))
-                        })?
-                    }
+                        })?,
                 };
                 new_tracing_params.push(NewEntryPointTracingParams {
                     entry_point_id: *entry_point_id_,
@@ -200,7 +198,7 @@ impl PostgresGateway {
                 storage_error_from_diesel(e, "EntryPointTracingParams", "Batch upsert", None)
             })?;
 
-        let new_links: &Vec<(&EntryPointTracingParams, &String)> = &new_data
+        let new_links: &Vec<(&TracingParams, &String)> = &new_data
             .values()
             .flat_map(|ep| {
                 ep.iter()
@@ -587,9 +585,7 @@ mod test {
     use tycho_common::{
         keccak256,
         models::{
-            blockchain::{
-                EntryPointTracingParams, RPCTracerEntryPoint, TracedEntryPoint, TracingResult,
-            },
+            blockchain::{RPCTracerParams, TracedEntryPoint, TracingParams, TracingResult},
             FinancialType, ImplementationType, StoreKey,
         },
         Bytes,
@@ -662,14 +658,14 @@ mod test {
         .await;
     }
 
-    fn rpc_tracer_entry_point() -> (EntryPoint, EntryPointTracingParams) {
+    fn rpc_tracer_entry_point() -> (EntryPoint, TracingParams) {
         (
             EntryPoint::new(
                 "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()".to_string(),
                 Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
                 "getRate()".to_string(),
             ),
-            EntryPointTracingParams::RPCTracer(RPCTracerEntryPoint::new(
+            TracingParams::RPCTracer(RPCTracerParams::new(
                 None,
                 Bytes::from(&keccak256("getRate()")[0..4]),
             )),
