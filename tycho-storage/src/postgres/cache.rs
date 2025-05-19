@@ -42,7 +42,7 @@ use tycho_common::{
 
 use super::{PostgresError, PostgresGateway};
 
-type NewEntryPointParams = (models::blockchain::EntryPointTracingParams, Option<ComponentId>);
+type NewEntryPointParams = (models::blockchain::TracingParams, Option<ComponentId>);
 
 /// Represents different types of database write operations.
 #[derive(PartialEq, Clone, Debug)]
@@ -1184,7 +1184,7 @@ impl EntryPointGateway for CachedGateway {
         &self,
         entry_points_params: &[(
             models::EntryPointId,
-            Vec<(models::blockchain::EntryPointTracingParams, Option<ComponentId>)>,
+            Vec<(models::blockchain::TracingParams, Option<ComponentId>)>,
         )],
     ) -> Result<(), StorageError> {
         self.add_op(WriteOp::UpsertEntryPointTracingParams(entry_points_params.to_vec()))

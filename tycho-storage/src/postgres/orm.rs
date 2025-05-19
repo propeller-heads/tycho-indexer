@@ -16,7 +16,7 @@ use tycho_common::{
     models::{
         self,
         blockchain::{
-            EntryPointTracingParams as EntryPointTracingParamsCommon,
+            TracingParams as EntryPointTracingParamsCommon,
             EntryPointWithTracingParams as EntryPointWithTracingParamsCommon,
         },
         Address, AttrStoreKey, Balance, BlockHash, Code, CodeHash, ComponentId, ContractId,
@@ -1766,10 +1766,10 @@ pub enum EntryPointTracingType {
     RpcTracer,
 }
 
-impl From<&models::blockchain::EntryPointTracingParams> for EntryPointTracingType {
-    fn from(value: &models::blockchain::EntryPointTracingParams) -> Self {
+impl From<&models::blockchain::TracingParams> for EntryPointTracingType {
+    fn from(value: &models::blockchain::TracingParams) -> Self {
         match value {
-            models::blockchain::EntryPointTracingParams::RPCTracer(_) => Self::RpcTracer,
+            models::blockchain::TracingParams::RPCTracer(_) => Self::RpcTracer,
         }
     }
 }
@@ -1858,13 +1858,13 @@ pub struct EntryPointTracingParams {
     pub modified_ts: NaiveDateTime,
 }
 
-impl From<&EntryPointTracingParams> for models::blockchain::EntryPointTracingParams {
+impl From<&EntryPointTracingParams> for models::blockchain::TracingParams {
     fn from(value: &EntryPointTracingParams) -> Self {
         match value.tracing_type {
             EntryPointTracingType::RpcTracer => {
-                let rpc_tracer: models::blockchain::RPCTracerEntryPoint =
+                let rpc_tracer: models::blockchain::RPCTracerParams =
                     serde_json::from_value(value.data.clone().unwrap()).unwrap();
-                models::blockchain::EntryPointTracingParams::RPCTracer(rpc_tracer)
+                models::blockchain::TracingParams::RPCTracer(rpc_tracer)
             }
         }
     }

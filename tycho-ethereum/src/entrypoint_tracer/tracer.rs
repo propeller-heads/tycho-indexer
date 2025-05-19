@@ -17,7 +17,7 @@ use tycho_common::{
     keccak256,
     models::{
         blockchain::{
-            EntryPointTracingParams, EntryPointWithTracingParams, TracedEntryPoint, TracingResult,
+            TracingParams, EntryPointWithTracingParams, TracedEntryPoint, TracingResult,
         },
         Address, BlockHash,
     },
@@ -81,7 +81,7 @@ impl EntryPointTracer for EVMEntrypointService {
         let mut results = Vec::new();
         for entry_point in &entry_points {
             match &entry_point.params {
-                EntryPointTracingParams::RPCTracer(ref rpc_entry_point) => {
+                TracingParams::RPCTracer(ref rpc_entry_point) => {
                     // First call to get the list of called addresses
                     // TODO: Can we only use one call to get the retriggers and called addresses?
                     let call_trace = self
@@ -188,7 +188,7 @@ mod tests {
     use std::env;
 
     use tycho_common::{
-        models::blockchain::{EntryPoint, RPCTracerEntryPoint},
+        models::blockchain::{EntryPoint, RPCTracerParams},
         Bytes,
     };
 
@@ -206,7 +206,7 @@ mod tests {
                     Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
                     "getRate()".to_string(),
                 ),
-                EntryPointTracingParams::RPCTracer(RPCTracerEntryPoint::new(
+                TracingParams::RPCTracer(RPCTracerParams::new(
                     None,
                     Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
                 )),
@@ -217,7 +217,7 @@ mod tests {
                     Bytes::from_str("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9").unwrap(),
                     "getRate()".to_string(),
                 ),
-                EntryPointTracingParams::RPCTracer(RPCTracerEntryPoint::new(
+                TracingParams::RPCTracer(RPCTracerParams::new(
                     None,
                     Bytes::from(&keccak256("getRate()")[0..4]),
                 )),

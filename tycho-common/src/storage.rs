@@ -12,7 +12,7 @@ use crate::{
     dto,
     models::{
         blockchain::{
-            Block, EntryPoint, EntryPointTracingParams, EntryPointWithTracingParams,
+            Block, EntryPoint, TracingParams, EntryPointWithTracingParams,
             TracedEntryPoint, TracingResult, Transaction,
         },
         contract::{Account, AccountBalance, AccountDelta},
@@ -512,7 +512,7 @@ pub trait EntryPointGateway {
         &self,
         entry_points_params: &[(
             EntryPointId,
-            Vec<(EntryPointTracingParams, Option<ComponentId>)>,
+            Vec<(TracingParams, Option<ComponentId>)>,
         )],
     ) -> Result<(), StorageError>;
 
