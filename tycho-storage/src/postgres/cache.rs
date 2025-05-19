@@ -20,8 +20,8 @@ use tycho_common::{
     models::{
         self,
         blockchain::{
-            Block, EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingResult,
-            Transaction,
+            Block, EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingParams,
+            TracingResult, Transaction,
         },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
@@ -41,8 +41,6 @@ use tycho_common::{
 };
 
 use super::{PostgresError, PostgresGateway};
-
-type NewEntryPointParams = (models::blockchain::TracingParams, Option<ComponentId>);
 
 /// Represents different types of database write operations.
 #[derive(PartialEq, Clone, Debug)]
@@ -71,9 +69,11 @@ pub(crate) enum WriteOp {
     // Simply merge
     UpsertProtocolState(Vec<(TxHash, models::protocol::ProtocolComponentStateDelta)>),
     // Simply merge
-    UpsertEntryPoints(Vec<(models::ComponentId, Vec<models::blockchain::EntryPoint>)>),
+    UpsertEntryPoints(HashMap<models::ComponentId, HashSet<models::blockchain::EntryPoint>>),
     // Simply merge
-    UpsertEntryPointTracingParams(Vec<(models::EntryPointId, Vec<NewEntryPointParams>)>),
+    UpsertEntryPointTracingParams(
+        HashMap<models::EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+    ),
     // Simply merge
     UpsertTracedEntryPoints(Vec<models::blockchain::TracedEntryPoint>),
 }
@@ -216,16 +216,28 @@ impl DBTransaction {
                     return Ok(());
                 }
                 (WriteOp::UpsertEntryPoints(l), WriteOp::UpsertEntryPoints(r)) => {
-                    self.size += r.len();
-                    l.extend(r.iter().cloned());
+                    for (component_id, entry_points) in r.iter() {
+                        let entry = l
+                            .entry(component_id.clone())
+                            .or_insert_with(HashSet::new);
+                        let len_before = entry.len();
+                        entry.extend(entry_points.iter().cloned());
+                        self.size += entry.len() - len_before;
+                    }
                     return Ok(());
                 }
                 (
                     WriteOp::UpsertEntryPointTracingParams(l),
                     WriteOp::UpsertEntryPointTracingParams(r),
                 ) => {
-                    self.size += r.len();
-                    l.extend(r.iter().cloned());
+                    for (entry_point_id, params) in r.iter() {
+                        let entry = l
+                            .entry(entry_point_id.clone())
+                            .or_insert_with(HashSet::new);
+                        let len_before = entry.len();
+                        entry.extend(params.iter().cloned());
+                        self.size += entry.len() - len_before;
+                    }
                     return Ok(());
                 }
                 (WriteOp::UpsertTracedEntryPoints(l), WriteOp::UpsertTracedEntryPoints(r)) => {
@@ -515,25 +527,13 @@ impl DBCacheWriteExecutor {
             }
             WriteOp::UpsertEntryPoints(new_entry_points) => {
                 self.state_gateway
-                    .insert_entry_points(
-                        &new_entry_points
-                            .iter()
-                            .map(|(component_id, entry_points)| {
-                                (component_id.as_str(), entry_points)
-                            })
-                            .collect::<HashMap<_, _>>(),
-                        &self.chain,
-                        conn,
-                    )
+                    .insert_entry_points(new_entry_points, &self.chain, conn)
                     .await?
             }
             WriteOp::UpsertEntryPointTracingParams(new_entry_point_tracing_params) => {
                 self.state_gateway
                     .upsert_entry_point_tracing_params(
-                        &new_entry_point_tracing_params
-                            .iter()
-                            .map(|(entry_point_id, params)| (entry_point_id.clone(), params))
-                            .collect::<HashMap<_, _>>(),
+                        new_entry_point_tracing_params,
                         &self.chain,
                         conn,
                     )
@@ -1172,9 +1172,9 @@ impl EntryPointGateway for CachedGateway {
     #[instrument(skip_all)]
     async fn upsert_entry_points(
         &self,
-        entry_points: &[(models::ComponentId, Vec<models::blockchain::EntryPoint>)],
+        entry_points: &HashMap<models::ComponentId, HashSet<models::blockchain::EntryPoint>>,
     ) -> Result<(), StorageError> {
-        self.add_op(WriteOp::UpsertEntryPoints(entry_points.to_vec()))
+        self.add_op(WriteOp::UpsertEntryPoints(entry_points.clone()))
             .await?;
         Ok(())
     }
@@ -1182,12 +1182,9 @@ impl EntryPointGateway for CachedGateway {
     #[instrument(skip_all)]
     async fn upsert_entry_point_tracing_params(
         &self,
-        entry_points_params: &[(
-            models::EntryPointId,
-            Vec<(models::blockchain::TracingParams, Option<ComponentId>)>,
-        )],
+        entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
     ) -> Result<(), StorageError> {
-        self.add_op(WriteOp::UpsertEntryPointTracingParams(entry_points_params.to_vec()))
+        self.add_op(WriteOp::UpsertEntryPointTracingParams(entry_points_params.clone()))
             .await?;
         Ok(())
     }

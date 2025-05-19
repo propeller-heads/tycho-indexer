@@ -33,7 +33,7 @@ impl PostgresGateway {
     /// * `conn` - The database connection to use.
     pub(crate) async fn insert_entry_points(
         &self,
-        new_data: &HashMap<&str, &Vec<EntryPoint>>,
+        new_data: &HashMap<ComponentId, HashSet<EntryPoint>>,
         chain: &Chain,
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
@@ -44,7 +44,7 @@ impl PostgresGateway {
         let pc_ids = orm::ProtocolComponent::ids_by_external_ids(
             &new_data
                 .keys()
-                .map(Clone::clone)
+                .map(AsRef::as_ref)
                 .collect::<Vec<_>>(),
             chain_id,
             conn,
@@ -93,7 +93,7 @@ impl PostgresGateway {
         let mut pc_entry_point_links = Vec::new();
 
         for (pc_ext_id, eps) in new_data.iter() {
-            let pc_id = match pc_ids.get(*pc_ext_id) {
+            let pc_id = match pc_ids.get(pc_ext_id) {
                 Some(_id) => _id,
                 None => {
                     return Err(StorageError::NotFound(
@@ -149,7 +149,7 @@ impl PostgresGateway {
     /// * `conn` - The database connection to use.
     pub(crate) async fn upsert_entry_point_tracing_params(
         &self,
-        new_data: &HashMap<EntryPointId, &Vec<(TracingParams, Option<ComponentId>)>>,
+        new_data: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
         chain: &Chain,
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
@@ -579,7 +579,7 @@ impl PostgresGateway {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
+    use std::{slice, str::FromStr};
 
     use diesel_async::AsyncConnection;
     use tycho_common::{
@@ -703,7 +703,7 @@ mod test {
 
         let entry_point = rpc_tracer_entry_point().0;
         gw.insert_entry_points(
-            &HashMap::from([("pc_0", &vec![entry_point.clone()])]),
+            &HashMap::from([("pc_0".to_string(), HashSet::from([entry_point.clone()]))]),
             &Chain::Ethereum,
             &mut conn,
         )
@@ -728,7 +728,7 @@ mod test {
         let (entry_point, params) = rpc_tracer_entry_point();
 
         gw.insert_entry_points(
-            &HashMap::from([("pc_0", &vec![entry_point.clone()])]),
+            &HashMap::from([("pc_0".to_string(), HashSet::from([entry_point.clone()]))]),
             &Chain::Ethereum,
             &mut conn,
         )
@@ -738,7 +738,7 @@ mod test {
         gw.upsert_entry_point_tracing_params(
             &HashMap::from([(
                 entry_point.external_id.clone(),
-                &vec![(params.clone(), Some("pc_0".to_string()))],
+                HashSet::from([(params.clone(), Some("pc_0".to_string()))]),
             )]),
             &Chain::Ethereum,
             &mut conn,
@@ -766,7 +766,7 @@ mod test {
 
         let entry_point = rpc_tracer_entry_point().0;
         gw.insert_entry_points(
-            &HashMap::from([("pc_0", &vec![entry_point.clone()])]),
+            &HashMap::from([("pc_0".to_string(), HashSet::from([entry_point.clone()]))]),
             &Chain::Ethereum,
             &mut conn,
         )
@@ -799,7 +799,7 @@ mod test {
         let traced_entry_point = traced_entry_point();
 
         gw.insert_entry_points(
-            &HashMap::from([("pc_0", &vec![entry_point.clone()])]),
+            &HashMap::from([("pc_0".to_string(), HashSet::from([entry_point.clone()]))]),
             &Chain::Ethereum,
             &mut conn,
         )
@@ -809,7 +809,7 @@ mod test {
         gw.upsert_entry_point_tracing_params(
             &HashMap::from([(
                 entry_point.external_id.clone(),
-                &vec![(params.clone(), Some("pc_0".to_string()))],
+                HashSet::from([(params.clone(), Some("pc_0".to_string()))]),
             )]),
             &Chain::Ethereum,
             &mut conn,
@@ -817,7 +817,7 @@ mod test {
         .await
         .unwrap();
 
-        gw.upsert_traced_entry_points(&[traced_entry_point.clone()], &mut conn)
+        gw.upsert_traced_entry_points(slice::from_ref(&traced_entry_point), &mut conn)
             .await
             .unwrap();
 

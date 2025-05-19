@@ -16,9 +16,7 @@ use thiserror::Error;
 use tycho_common::{
     keccak256,
     models::{
-        blockchain::{
-            TracingParams, EntryPointWithTracingParams, TracedEntryPoint, TracingResult,
-        },
+        blockchain::{EntryPointWithTracingParams, TracedEntryPoint, TracingParams, TracingResult},
         Address, BlockHash,
     },
     traits::EntryPointTracer,
