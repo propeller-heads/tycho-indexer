@@ -1,3 +1,10 @@
+## [0.91.0](https://github.com/propeller-heads/tycho-execution/compare/0.90.0...0.91.0) (2025-05-19)
+
+
+### Features
+
+* **curve:** Get coin indexes from static attributes ([fcaacf2](https://github.com/propeller-heads/tycho-execution/commit/fcaacf21fbf8a8bc08a395fbb10295bb00e6ab15))
+
 ## [0.90.0](https://github.com/propeller-heads/tycho-execution/compare/0.89.0...0.90.0) (2025-05-15)
 
 
