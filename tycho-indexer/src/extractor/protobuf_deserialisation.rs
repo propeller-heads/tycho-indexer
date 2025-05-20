@@ -6,8 +6,7 @@ use tracing::warn;
 use tycho_common::{
     models::{
         blockchain::{
-            Block, EntryPoint, EntryPointTracingData, RPCTracerEntryPoint, Transaction,
-            TxWithChanges,
+            Block, EntryPoint, RPCTracerParams, TracingParams, Transaction, TxWithChanges,
         },
         contract::{AccountBalance, AccountChangesWithTx, AccountDelta},
         protocol::{
@@ -237,7 +236,7 @@ impl TryFromMessage for EntryPoint {
     }
 }
 
-impl TryFromMessage for EntryPointTracingData {
+impl TryFromMessage for TracingParams {
     type Args<'a> = substreams::EntryPointParams;
 
     fn try_from_message(args: Self::Args<'_>) -> Result<Self, ExtractionError> {
@@ -250,7 +249,7 @@ impl TryFromMessage for EntryPointTracingData {
             substreams::entry_point_params::TraceData::Rpc(rpc_data) => {
                 let caller =
                     if !rpc_data.caller.is_empty() { Some(rpc_data.caller.into()) } else { None };
-                Ok(Self::RPCTracer(RPCTracerEntryPoint::new(caller, rpc_data.calldata.into())))
+                Ok(Self::RPCTracer(RPCTracerParams::new(caller, rpc_data.calldata.into())))
             }
         }
     }
@@ -358,7 +357,7 @@ impl TryFromMessage for TxWithChanges {
         let mut entrypoints: HashMap<ComponentId, HashSet<EntryPoint>> = HashMap::new();
         let mut entrypoint_params: HashMap<
             EntryPointId,
-            HashSet<(EntryPointTracingData, Option<ComponentId>)>,
+            HashSet<(TracingParams, Option<ComponentId>)>,
         > = HashMap::new();
 
         // Parse the new protocol components
@@ -450,7 +449,7 @@ impl TryFromMessage for TxWithChanges {
                     .component_id
                     .clone()
             });
-            let tracing_data = EntryPointTracingData::try_from_message(msg_entrypoint_params)?;
+            let tracing_data = TracingParams::try_from_message(msg_entrypoint_params)?;
             entrypoint_params
                 .entry(entrypoint_id)
                 .or_default()
@@ -906,16 +905,16 @@ mod test {
                         .to_vec(),
                 },
             ),
-            EntryPointTracingData::RPCTracer(
-                RPCTracerEntryPoint {
+            TracingParams::RPCTracer(
+                RPCTracerParams {
                     caller: Some(Address::from_str("0x1234567890123456789012345678901234567890").unwrap()),
-                    data: Bytes::from_str("0xabcdef").unwrap(),
+                    calldata: Bytes::from_str("0xabcdef").unwrap(),
                 }
             )
     )]
-    fn test_parse_entrypoint_tracing_data(
+    fn test_parse_entrypoint_params(
         #[case] trace_data: substreams::entry_point_params::TraceData,
-        #[case] expected: EntryPointTracingData,
+        #[case] expected: TracingParams,
     ) {
         let msg = substreams::EntryPointParams {
             entrypoint_id: "test_entrypoint".to_string(),
@@ -923,7 +922,7 @@ mod test {
             trace_data: Some(trace_data),
         };
 
-        let result = EntryPointTracingData::try_from_message(msg).unwrap();
+        let result = TracingParams::try_from_message(msg).unwrap();
 
         assert_eq!(result, expected);
     }
