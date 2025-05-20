@@ -298,7 +298,7 @@ impl PostgresGateway {
         &self,
         filter: EntryPointFilter,
         conn: &mut AsyncPgConnection,
-    ) -> Result<HashMap<String, EntryPointWithTracingParams>, StorageError> {
+    ) -> Result<HashMap<String, HashSet<EntryPointWithTracingParams>>, StorageError> {
         use schema::{
             entry_point as ep, entry_point_tracing_params as eptp, protocol_component as pc,
             protocol_component_uses_entry_point as pcuep,
@@ -336,16 +336,12 @@ impl PostgresGateway {
 
         Ok(results
             .into_iter()
-            .map(|(pc_ext_id, ep, params)| {
-                (
-                    pc_ext_id,
-                    EntryPointWithTracingParams {
-                        entry_point: ep.into(),
-                        params: (&params).into(),
-                    },
-                )
-            })
-            .collect())
+            .fold(HashMap::new(), |mut acc, (pc_ext_id, ep, params)| {
+                acc.entry(pc_ext_id)
+                    .or_default()
+                    .insert(EntryPointWithTracingParams::new(ep.into(), (&params).into()));
+                acc
+            }))
     }
 
     /// Get entry points from the database.
@@ -358,7 +354,7 @@ impl PostgresGateway {
         &self,
         filter: EntryPointFilter,
         conn: &mut AsyncPgConnection,
-    ) -> Result<HashMap<String, EntryPoint>, StorageError> {
+    ) -> Result<HashMap<String, HashSet<EntryPoint>>, StorageError> {
         use schema::{
             entry_point as ep, protocol_component as pc,
             protocol_component_uses_entry_point as pcuep,
@@ -391,8 +387,12 @@ impl PostgresGateway {
 
         Ok(results
             .into_iter()
-            .map(|(pc_ext_id, ep)| (pc_ext_id, ep.into()))
-            .collect())
+            .fold(HashMap::new(), |mut acc, (pc_ext_id, ep)| {
+                acc.entry(pc_ext_id)
+                    .or_default()
+                    .insert(ep.into());
+                acc
+            }))
     }
 
     /// Upsert traced entry points into the database.
@@ -778,7 +778,10 @@ mod test {
         gw.insert_entry_points(
             &HashMap::from([
                 ("pc_0".to_string(), HashSet::from([rpc_tracer_entry_point(0).0])),
-                ("pc_1".to_string(), HashSet::from([rpc_tracer_entry_point(1).0])),
+                (
+                    "pc_1".to_string(),
+                    HashSet::from([rpc_tracer_entry_point(0).0, rpc_tracer_entry_point(1).0]),
+                ),
                 ("pc_2".to_string(), HashSet::from([rpc_tracer_entry_point(1).0])),
                 ("unknown_pc".to_string(), HashSet::from([rpc_tracer_entry_point(0).0])),
             ]),
@@ -797,9 +800,12 @@ mod test {
         assert_eq!(
             retrieved_entry_points,
             HashMap::from([
-                ("pc_0".to_string(), rpc_tracer_entry_point(0).0),
-                ("pc_1".to_string(), rpc_tracer_entry_point(1).0),
-                ("pc_2".to_string(), rpc_tracer_entry_point(1).0),
+                ("pc_0".to_string(), HashSet::from([rpc_tracer_entry_point(0).0])),
+                (
+                    "pc_1".to_string(),
+                    HashSet::from([rpc_tracer_entry_point(0).0, rpc_tracer_entry_point(1).0])
+                ),
+                ("pc_2".to_string(), HashSet::from([rpc_tracer_entry_point(1).0])),
             ])
         );
 
@@ -812,7 +818,10 @@ mod test {
 
         assert_eq!(
             retrieved_entry_points,
-            HashMap::from([("pc_1".to_string(), rpc_tracer_entry_point(1).0)])
+            HashMap::from([(
+                "pc_1".to_string(),
+                HashSet::from([rpc_tracer_entry_point(0).0, rpc_tracer_entry_point(1).0])
+            ),])
         );
     }
 
@@ -825,7 +834,10 @@ mod test {
         gw.insert_entry_points(
             &HashMap::from([
                 ("pc_0".to_string(), HashSet::from([rpc_tracer_entry_point(0).0])),
-                ("pc_1".to_string(), HashSet::from([rpc_tracer_entry_point(1).0])),
+                (
+                    "pc_1".to_string(),
+                    HashSet::from([rpc_tracer_entry_point(0).0, rpc_tracer_entry_point(1).0]),
+                ),
                 ("pc_2".to_string(), HashSet::from([rpc_tracer_entry_point(1).0])),
                 ("unknown_pc".to_string(), HashSet::from([rpc_tracer_entry_point(0).0])),
             ]),
@@ -849,7 +861,10 @@ mod test {
                         .0
                         .external_id
                         .clone(),
-                    HashSet::from([(rpc_tracer_entry_point(1).1, None)]),
+                    HashSet::from([
+                        (rpc_tracer_entry_point(1).1, None),
+                        (rpc_tracer_entry_point(0).1, None),
+                    ]),
                 ),
                 (
                     rpc_tracer_entry_point(1)
@@ -883,24 +898,30 @@ mod test {
             HashMap::from([
                 (
                     "pc_1".to_string(),
-                    EntryPointWithTracingParams::new(
-                        rpc_tracer_entry_point(1).0,
-                        rpc_tracer_entry_point(1).1
-                    )
+                    HashSet::from([
+                        EntryPointWithTracingParams::new(
+                            rpc_tracer_entry_point(0).0,
+                            rpc_tracer_entry_point(0).1
+                        ),
+                        EntryPointWithTracingParams::new(
+                            rpc_tracer_entry_point(1).0,
+                            rpc_tracer_entry_point(1).1
+                        ),
+                    ])
                 ),
                 (
                     "pc_0".to_string(),
-                    EntryPointWithTracingParams::new(
+                    HashSet::from([EntryPointWithTracingParams::new(
                         rpc_tracer_entry_point(0).0,
                         rpc_tracer_entry_point(0).1
-                    )
+                    )])
                 ),
                 (
                     "pc_2".to_string(),
-                    EntryPointWithTracingParams::new(
+                    HashSet::from([EntryPointWithTracingParams::new(
                         rpc_tracer_entry_point(1).0,
                         rpc_tracer_entry_point(1).1
-                    )
+                    )])
                 ),
             ])
         );
@@ -916,10 +937,16 @@ mod test {
             retrieved_entry_points,
             HashMap::from([(
                 "pc_1".to_string(),
-                EntryPointWithTracingParams::new(
-                    rpc_tracer_entry_point(1).0,
-                    rpc_tracer_entry_point(1).1
-                )
+                HashSet::from([
+                    EntryPointWithTracingParams::new(
+                        rpc_tracer_entry_point(1).0,
+                        rpc_tracer_entry_point(1).1
+                    ),
+                    EntryPointWithTracingParams::new(
+                        rpc_tracer_entry_point(0).0,
+                        rpc_tracer_entry_point(0).1
+                    ),
+                ])
             ),])
         );
     }
