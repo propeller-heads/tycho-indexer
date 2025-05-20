@@ -184,10 +184,13 @@ pub struct TxWithChanges {
     pub state_updates: HashMap<ComponentId, ProtocolComponentStateDelta>,
     pub balance_changes: HashMap<ComponentId, HashMap<Address, ComponentBalance>>,
     pub account_balance_changes: HashMap<Address, HashMap<Address, AccountBalance>>,
-    pub entrypoints: Vec<EntryPoint>,
+    pub entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
+    pub entrypoint_params:
+        HashMap<EntryPointId, HashSet<(EntryPointTracingData, Option<ComponentId>)>>,
 }
 
 impl TxWithChanges {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         tx: Transaction,
         protocol_components: HashMap<ComponentId, ProtocolComponent>,
@@ -195,7 +198,11 @@ impl TxWithChanges {
         protocol_states: HashMap<ComponentId, ProtocolComponentStateDelta>,
         balance_changes: HashMap<ComponentId, HashMap<Address, ComponentBalance>>,
         account_balance_changes: HashMap<Address, HashMap<Address, AccountBalance>>,
-        entrypoints: Vec<EntryPoint>,
+        entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
+        entrypoint_params: HashMap<
+            EntryPointId,
+            HashSet<(EntryPointTracingData, Option<ComponentId>)>,
+        >,
     ) -> Self {
         Self {
             tx,
@@ -205,6 +212,7 @@ impl TxWithChanges {
             balance_changes,
             account_balance_changes,
             entrypoints,
+            entrypoint_params,
         }
     }
 
@@ -304,14 +312,20 @@ impl TxWithChanges {
         }
 
         // Merge new entrypoints
-        self.entrypoints
-            .extend(other.entrypoints);
-        // Remove duplicates by converting to a HashSet and back
-        let entrypoints_set = self
-            .entrypoints
-            .drain(..)
-            .collect::<HashSet<_>>();
-        self.entrypoints = entrypoints_set.into_iter().collect();
+        for (component_id, entrypoints) in other.entrypoints {
+            self.entrypoints
+                .entry(component_id)
+                .or_default()
+                .extend(entrypoints);
+        }
+
+        // Merge new entrypoint params
+        for (entrypoint_id, params) in other.entrypoint_params {
+            self.entrypoint_params
+                .entry(entrypoint_id)
+                .or_default()
+                .extend(params);
+        }
 
         Ok(())
     }
@@ -323,10 +337,9 @@ impl From<AccountChangesWithTx> for TxWithChanges {
             tx: value.tx,
             protocol_components: value.protocol_components,
             account_deltas: value.account_deltas,
-            state_updates: HashMap::new(),
             balance_changes: value.component_balances,
             account_balance_changes: value.account_balances,
-            entrypoints: Vec::new(),
+            ..Default::default()
         }
     }
 }
@@ -336,11 +349,9 @@ impl From<ProtocolChangesWithTx> for TxWithChanges {
         Self {
             tx: value.tx,
             protocol_components: value.new_protocol_components,
-            account_deltas: HashMap::new(),
             state_updates: value.protocol_states,
             balance_changes: value.balance_changes,
-            account_balance_changes: HashMap::new(),
-            entrypoints: Vec::new(),
+            ..Default::default()
         }
     }
 }
@@ -570,11 +581,24 @@ pub mod fixtures {
                     },
                 )]),
             )]),
-            vec![EntryPoint::new(
+            HashMap::from([(
+                component.id.clone(),
+                HashSet::from([EntryPoint::new(
+                    "test".to_string(),
+                    contract_addr.clone(),
+                    "function()".to_string(),
+                )]),
+            )]),
+            HashMap::from([(
                 "test".to_string(),
-                contract_addr.clone(),
-                "function()".to_string(),
-            )],
+                HashSet::from([(
+                    EntryPointTracingData::RPCTracer(RPCTracerEntryPoint::new(
+                        None,
+                        Bytes::from_str("0x000001ef").unwrap(),
+                    )),
+                    Some(component.id.clone()),
+                )]),
+            )]),
         );
         let changes2 = TxWithChanges::new(
             create_transaction(tx_hash1, block, 2),
@@ -622,18 +646,31 @@ pub mod fixtures {
                     },
                 )]),
             )]),
-            vec![
-                EntryPoint::new(
-                    "test".to_string(),
-                    contract_addr.clone(),
-                    "function()".to_string(),
-                ),
-                EntryPoint::new(
-                    "test2".to_string(),
-                    contract_addr.clone(),
-                    "function_2()".to_string(),
-                ),
-            ],
+            HashMap::from([(
+                component.id.clone(),
+                HashSet::from([
+                    EntryPoint::new(
+                        "test".to_string(),
+                        contract_addr.clone(),
+                        "function()".to_string(),
+                    ),
+                    EntryPoint::new(
+                        "test2".to_string(),
+                        contract_addr.clone(),
+                        "function_2()".to_string(),
+                    ),
+                ]),
+            )]),
+            HashMap::from([(
+                "test2".to_string(),
+                HashSet::from([(
+                    EntryPointTracingData::RPCTracer(RPCTracerEntryPoint::new(
+                        None,
+                        Bytes::from_str("0x000001").unwrap(),
+                    )),
+                    None,
+                )]),
+            )]),
         );
 
         assert!(changes1.merge(changes2).is_ok());
@@ -658,11 +695,20 @@ pub mod fixtures {
             Bytes::from(1000_u64).lpad(32, 0),
         );
         assert_eq!(changes1.tx.hash, Bytes::from_str(tx_hash1).unwrap(),);
-        assert_eq!(changes1.entrypoints.len(), 2);
+        assert_eq!(changes1.entrypoints.len(), 1);
         assert_eq!(
             changes1
                 .entrypoints
-                .iter()
+                .get(&component.id)
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            changes1
+                .entrypoints
+                .values()
+                .flat_map(|ep| ep.iter())
                 .map(|ep| ep.signature.clone())
                 .collect::<Vec<_>>(),
             vec!["function()".to_string(), "function_2()".to_string()],
