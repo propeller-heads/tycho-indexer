@@ -5,12 +5,15 @@ use chrono::NaiveDateTime;
 use tracing::warn;
 use tycho_common::{
     models::{
-        blockchain::{Block, EntryPoint, Transaction, TxWithChanges},
+        blockchain::{
+            Block, EntryPoint, EntryPointTracingData, RPCTracerEntryPoint, Transaction,
+            TxWithChanges,
+        },
         contract::{AccountBalance, AccountChangesWithTx, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
         },
-        Address, Chain, ChangeType, ComponentId, ProtocolType, TxHash,
+        Address, Chain, ChangeType, ComponentId, EntryPointId, ProtocolType, TxHash,
     },
     Bytes,
 };
@@ -234,6 +237,25 @@ impl TryFromMessage for EntryPoint {
     }
 }
 
+impl TryFromMessage for EntryPointTracingData {
+    type Args<'a> = substreams::EntryPointParams;
+
+    fn try_from_message(args: Self::Args<'_>) -> Result<Self, ExtractionError> {
+        let msg = args;
+        let trace_data = msg.trace_data.ok_or_else(|| {
+            ExtractionError::DecodeError("Missing trace data in EntryPointParams".to_owned())
+        })?;
+
+        match trace_data {
+            substreams::entry_point_params::TraceData::Rpc(rpc_data) => {
+                let caller =
+                    if !rpc_data.caller.is_empty() { Some(rpc_data.caller.into()) } else { None };
+                Ok(Self::RPCTracer(RPCTracerEntryPoint::new(caller, rpc_data.calldata.into())))
+            }
+        }
+    }
+}
+
 impl TryFromMessage for ProtocolChangesWithTx {
     type Args<'a> = (
         substreams::TransactionEntityChanges,
@@ -333,7 +355,11 @@ impl TryFromMessage for TxWithChanges {
             HashMap::new();
         let mut account_balance_changes: HashMap<Address, HashMap<Address, AccountBalance>> =
             HashMap::new();
-        let mut entrypoints: Vec<EntryPoint> = Vec::new();
+        let mut entrypoints: HashMap<ComponentId, HashSet<EntryPoint>> = HashMap::new();
+        let mut entrypoint_params: HashMap<
+            EntryPointId,
+            HashSet<(EntryPointTracingData, Option<ComponentId>)>,
+        > = HashMap::new();
 
         // Parse the new protocol components
         for change in msg.component_changes.into_iter() {
@@ -402,9 +428,33 @@ impl TryFromMessage for TxWithChanges {
         }
 
         // Parse the entrypoints
-        for entrypoint in msg.entrypoints.into_iter() {
-            let entrypoint = EntryPoint::try_from_message(entrypoint)?;
-            entrypoints.push(entrypoint);
+        for msg_entrypoint in msg.entrypoints.into_iter() {
+            let component_id = msg_entrypoint.component_id.clone();
+            let entrypoint = EntryPoint::try_from_message(msg_entrypoint)?;
+            entrypoints
+                .entry(component_id)
+                .or_default()
+                .insert(entrypoint);
+        }
+
+        // Parse the entrypoint params
+        for msg_entrypoint_params in msg.entrypoint_params.into_iter() {
+            let entrypoint_id = msg_entrypoint_params
+                .entrypoint_id
+                .clone();
+            let component_id = (!msg_entrypoint_params
+                .component_id
+                .is_empty())
+            .then(|| {
+                msg_entrypoint_params
+                    .component_id
+                    .clone()
+            });
+            let tracing_data = EntryPointTracingData::try_from_message(msg_entrypoint_params)?;
+            entrypoint_params
+                .entry(entrypoint_id)
+                .or_default()
+                .insert((tracing_data, component_id));
         }
 
         Ok(Self {
@@ -414,7 +464,7 @@ impl TryFromMessage for TxWithChanges {
             state_updates,
             balance_changes,
             account_balance_changes,
-            entrypoints,
+            ..Default::default()
         })
     }
 }
@@ -716,7 +766,7 @@ mod test {
         assert_eq!(res, exp);
     }
 
-    #[rstest]
+    #[test]
     fn test_parse_protocol_component() {
         let msg = fixtures::pb_protocol_component();
 
@@ -783,7 +833,7 @@ mod test {
         )
     }
 
-    #[rstest]
+    #[test]
     fn test_parse_component_balance() {
         let tx = transaction();
         let expected_balance: f64 = 3000.0;
@@ -842,5 +892,39 @@ mod test {
         ))
         .unwrap();
         assert_eq!(res, block_entity_changes());
+    }
+
+    #[rstest]
+    #[case::rpc_trace_data(
+        substreams::entry_point_params::TraceData::Rpc(
+                substreams::RpcTraceData {
+                    caller: Bytes::from_str("0x1234567890123456789012345678901234567890")
+                        .unwrap()
+                        .to_vec(),
+                    calldata: Bytes::from_str("0xabcdef")
+                        .unwrap()
+                        .to_vec(),
+                },
+            ),
+            EntryPointTracingData::RPCTracer(
+                RPCTracerEntryPoint {
+                    caller: Some(Address::from_str("0x1234567890123456789012345678901234567890").unwrap()),
+                    data: Bytes::from_str("0xabcdef").unwrap(),
+                }
+            )
+    )]
+    fn test_parse_entrypoint_tracing_data(
+        #[case] trace_data: substreams::entry_point_params::TraceData,
+        #[case] expected: EntryPointTracingData,
+    ) {
+        let msg = substreams::EntryPointParams {
+            entrypoint_id: "test_entrypoint".to_string(),
+            component_id: "test_component".to_string(),
+            trace_data: Some(trace_data),
+        };
+
+        let result = EntryPointTracingData::try_from_message(msg).unwrap();
+
+        assert_eq!(result, expected);
     }
 }
