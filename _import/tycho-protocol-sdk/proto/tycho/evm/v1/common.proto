@@ -168,7 +168,7 @@ message EntryPointParams {
   // The entrypoint id.
   string entrypoint_id = 1;
   // [optional] The component that uses these entrypoint parameters. Currently used for debugging purposes only.
-  string component_id = 2;
+  optional string component_id = 2;
   // The strategy and its corresponding data
   oneof trace_data {
     RPCTraceData rpc = 3;

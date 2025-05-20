@@ -29,6 +29,7 @@ pub struct TransactionChangesBuilder {
     component_changes: HashMap<String, ProtocolComponent>,
     balance_changes: HashMap<(Vec<u8>, Vec<u8>), BalanceChange>,
     entrypoints: HashSet<EntryPoint>,
+    entrypoint_params: HashSet<EntryPointParams>,
 }
 
 impl TransactionChangesBuilder {
@@ -159,6 +160,11 @@ impl TransactionChangesBuilder {
             .insert(entrypoint.clone());
     }
 
+    pub fn add_entrypoint_params(&mut self, entrypoint: &EntryPointParams) {
+        self.entrypoint_params
+            .insert(entrypoint.clone());
+    }
+
     pub fn build(self) -> Option<TransactionChanges> {
         let tx_changes = TransactionChanges {
             tx: self.tx,
@@ -184,7 +190,10 @@ impl TransactionChangesBuilder {
                 .entrypoints
                 .into_iter()
                 .collect::<Vec<_>>(),
-            entrypoint_params: Vec::new(), // TODO: Add entrypoint params to builder
+            entrypoint_params: self
+                .entrypoint_params
+                .into_iter()
+                .collect::<Vec<_>>(),
         };
         if tx_changes.is_empty() {
             None
