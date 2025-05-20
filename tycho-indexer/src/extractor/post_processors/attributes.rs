@@ -133,7 +133,6 @@ mod test {
                         deleted_attributes: HashSet::new(),
                     },
                 )]),
-                balance_changes: HashMap::new(),
                 protocol_components: HashMap::from([(
                     CREATED_CONTRACT.to_string(),
                     ProtocolComponent {
@@ -145,16 +144,12 @@ mod test {
                             Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
                             Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
                         ],
-                        contract_addresses: vec![],
-                        creation_tx: Default::default(),
-                        static_attributes: Default::default(),
-                        created_at: Default::default(),
-                        change: Default::default(),
+                        ..Default::default()
                     },
                 )]),
-                account_deltas: Default::default(),
-                account_balance_changes: Default::default(),
+                ..Default::default()
             }],
+            Vec::new(),
         );
 
         let expected = BlockChanges::new(
@@ -182,16 +177,15 @@ mod test {
                         deleted_attributes: HashSet::new(),
                     },
                 )]),
-                balance_changes: HashMap::new(),
                 protocol_components: changes
                     .txs_with_update
                     .first()
                     .unwrap()
                     .protocol_components
                     .clone(),
-                account_deltas: Default::default(),
-                account_balance_changes: Default::default(),
+                ..Default::default()
             }],
+            Vec::new(),
         );
 
         let updated_changes = add_default_attributes(changes, &USV3_MANDATORY_ATTRIBUTES);
@@ -233,11 +227,9 @@ mod test {
                         deleted_attributes: HashSet::new(),
                     },
                 )]),
-                balance_changes: HashMap::new(),
-                protocol_components: HashMap::new(),
-                account_deltas: Default::default(),
-                account_balance_changes: Default::default(),
+                ..Default::default()
             }],
+            Vec::new(),
         );
 
         let updated_changes = add_default_attributes(changes.clone(), &USV3_MANDATORY_ATTRIBUTES);
@@ -260,7 +252,6 @@ mod test {
             0,
             false,
             vec![TxWithChanges {
-                account_deltas: HashMap::new(),
                 protocol_components: HashMap::from([(
                     CREATED_CONTRACT.to_string(),
                     ProtocolComponent {
@@ -274,14 +265,11 @@ mod test {
                             Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
                             Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
                         ],
-                        contract_addresses: vec![],
-                        creation_tx: Default::default(),
                         static_attributes: HashMap::from([
                             ("pool_type".to_string(), Bytes::from(PLAIN_POOL)),
                             ("factory_name".to_string(), Bytes::from(STABLE_SWAP_FACTORY)),
                         ]),
-                        created_at: Default::default(),
-                        change: Default::default(),
+                        ..Default::default()
                     },
                 )]),
                 tx: Transaction::new(
@@ -291,10 +279,9 @@ mod test {
                     Some(Bytes::zero(20)),
                     10,
                 ),
-                state_updates: HashMap::new(),
-                balance_changes: HashMap::new(),
-                account_balance_changes: Default::default(),
+                ..Default::default()
             }],
+            Vec::new(),
         );
 
         let expected = BlockChanges::new(
@@ -310,7 +297,6 @@ mod test {
             0,
             false,
             vec![TxWithChanges {
-                account_deltas: HashMap::new(),
                 protocol_components: HashMap::from([(
                     CREATED_CONTRACT.to_string(),
                     ProtocolComponent {
@@ -322,14 +308,11 @@ mod test {
                             Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
                             Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
                         ],
-                        contract_addresses: vec![],
-                        creation_tx: Default::default(),
                         static_attributes: HashMap::from([
                             ("pool_type".to_string(), Bytes::from(PLAIN_POOL)),
                             ("factory_name".to_string(), Bytes::from(STABLE_SWAP_FACTORY)),
                         ]),
-                        created_at: Default::default(),
-                        change: Default::default(),
+                        ..Default::default()
                     },
                 )]),
                 tx: Transaction::new(
@@ -339,10 +322,9 @@ mod test {
                     Some(Bytes::zero(20)),
                     10,
                 ),
-                state_updates: HashMap::new(),
-                balance_changes: HashMap::new(),
-                account_balance_changes: Default::default(),
+                ..Default::default()
             }],
+            Vec::new(),
         );
 
         let updated_changes = trim_curve_component_token(changes);

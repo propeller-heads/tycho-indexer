@@ -12,7 +12,7 @@ use tycho_common::{
         blockchain::BlockAggregatedChanges,
         contract::Account,
         protocol::{ProtocolComponent, ProtocolComponentState},
-        DeltaError, NormalisedMessage,
+        MergeError, NormalisedMessage,
     },
     storage::StorageError,
     Bytes,
@@ -48,7 +48,7 @@ pub enum PendingDeltasError {
     #[error("Unknown extractor: {0}")]
     UnknownExtractor(String),
     #[error("Failed applying deltas: {0}")]
-    DeltaApplicationFailure(#[from] DeltaError),
+    DeltaApplicationFailure(#[from] MergeError),
 }
 
 pub type Result<T> = std::result::Result<T, PendingDeltasError>;
@@ -512,14 +512,12 @@ mod test {
 
     fn vm_block_deltas() -> BlockAggregatedChanges {
         let address = Bytes::from_str("0x6F4Feb566b0f29e2edC231aDF88Fe7e1169D7c05").unwrap();
-        BlockAggregatedChanges::new(
-            "vm:extractor",
-            Chain::Ethereum,
-            block(1),
-            1,
-            false,
-            HashMap::new(),
-            [
+        BlockAggregatedChanges {
+            extractor: "vm:extractor".to_string(),
+            block: block(1),
+            finalized_block_height: 1,
+            revert: false,
+            account_deltas: HashMap::from([
                 (
                     address.clone(),
                     AccountDelta::new(
@@ -542,11 +540,8 @@ mod test {
                         ChangeType::Creation,
                     ),
                 ),
-            ]
-            .into_iter()
-            .collect::<HashMap<_, _>>(),
-            HashMap::new(),
-            [
+            ]),
+            new_protocol_components: HashMap::from([
                 (
                     "component2".to_string(),
                     ProtocolComponent {
@@ -592,12 +587,8 @@ mod test {
                         created_at: "2020-01-01T00:00:00".parse().unwrap(),
                     },
                 ),
-            ]
-            .into_iter()
-            .collect::<HashMap<_, _>>(),
-            HashMap::new(),
-            HashMap::new(),
-            [
+            ]),
+            account_balances: HashMap::from([
                 (
                     address.clone(),
                     [(
@@ -628,13 +619,13 @@ mod test {
                     .into_iter()
                     .collect(),
                 ),
-            ]
-            .into_iter()
-            .collect(),
-            [("component2".to_string(), 1.5), ("component3".to_string(), 0.5)]
-                .into_iter()
-                .collect::<HashMap<_, _>>(),
-        )
+            ]),
+            component_tvl: HashMap::from([
+                ("component2".to_string(), 1.5),
+                ("component3".to_string(), 0.5),
+            ]),
+            ..Default::default()
+        }
     }
 
     fn native_state() -> ProtocolComponentState {
@@ -651,36 +642,36 @@ mod test {
     }
 
     fn native_block_deltas() -> BlockAggregatedChanges {
-        BlockAggregatedChanges::new(
-            "native:extractor",
-            Chain::Ethereum,
-            block(1),
-            1,
-            false,
-            [
-                ProtocolComponentStateDelta::new(
-                    "component1",
-                    [("attr1", Bytes::from("0x01"))]
-                        .into_iter()
-                        .map(|(k, v)| (k.to_string(), v))
-                        .collect(),
-                    HashSet::new(),
+        BlockAggregatedChanges {
+            extractor: "native:extractor".to_string(),
+            block: block(1),
+            finalized_block_height: 1,
+            revert: false,
+            state_deltas: HashMap::from([
+                (
+                    "component1".to_string(),
+                    ProtocolComponentStateDelta::new(
+                        "component1",
+                        [("attr1", Bytes::from("0x01"))]
+                            .into_iter()
+                            .map(|(k, v)| (k.to_string(), v))
+                            .collect(),
+                        HashSet::new(),
+                    ),
                 ),
-                ProtocolComponentStateDelta::new(
-                    "component3",
-                    [("attr2", Bytes::from("0x05"))]
-                        .into_iter()
-                        .map(|(k, v)| (k.to_string(), v))
-                        .collect(),
-                    HashSet::new(),
+                (
+                    "component3".to_string(),
+                    ProtocolComponentStateDelta::new(
+                        "component3",
+                        [("attr2", Bytes::from("0x05"))]
+                            .into_iter()
+                            .map(|(k, v)| (k.to_string(), v))
+                            .collect(),
+                        HashSet::new(),
+                    ),
                 ),
-            ]
-            .into_iter()
-            .map(|v| (v.component_id.clone(), v))
-            .collect(),
-            HashMap::new(),
-            HashMap::new(),
-            [
+            ]),
+            new_protocol_components: HashMap::from([
                 (
                     "component3".to_string(),
                     ProtocolComponent {
@@ -711,11 +702,8 @@ mod test {
                         created_at: "2020-01-01T00:00:00".parse().unwrap(),
                     },
                 ),
-            ]
-            .into_iter()
-            .collect::<HashMap<_, _>>(),
-            HashMap::new(),
-            [
+            ]),
+            component_balances: HashMap::from([
                 (
                     "component1".to_string(),
                     [(
@@ -748,12 +736,9 @@ mod test {
                     .into_iter()
                     .collect(),
                 ),
-            ]
-            .into_iter()
-            .collect(),
-            HashMap::new(),
-            HashMap::new(),
-        )
+            ]),
+            ..Default::default()
+        }
     }
 
     #[test]
