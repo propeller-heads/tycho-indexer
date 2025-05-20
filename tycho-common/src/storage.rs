@@ -753,6 +753,7 @@ pub trait Gateway:
     + ExtractionStateGateway
     + ProtocolGateway
     + ContractStateGateway
+    + EntryPointGateway
     + Send
     + Sync
 {

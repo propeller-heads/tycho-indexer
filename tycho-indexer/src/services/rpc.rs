@@ -1,6 +1,9 @@
 //! This module contains Tycho RPC implementation
 #![allow(deprecated)]
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use actix_web::{web, HttpResponse, ResponseError};
 use anyhow::Error;
@@ -11,14 +14,19 @@ use reqwest::StatusCode;
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
-    dto::{self, PaginationResponse},
+    dto::{self, PaginationResponse, TracedEntryPointRequestBody, TracedEntryPointRequestResponse},
     models::{
-        blockchain::BlockAggregatedChanges, protocol::QualityRange, Address, Chain,
-        PaginationParams,
+        blockchain::{BlockAggregatedChanges, EntryPointWithTracingParams},
+        protocol::QualityRange,
+        Address, Chain, ComponentId, EntryPointId, PaginationParams,
     },
-    storage::{BlockIdentifier, BlockOrTimestamp, Gateway, StorageError, Version, VersionKind},
+    storage::{
+        BlockIdentifier, BlockOrTimestamp, EntryPointFilter, Gateway, StorageError, Version,
+        VersionKind,
+    },
     Bytes,
 };
+use tycho_common::dto::TracingResult;
 
 use crate::{
     extractor::reorg_buffer::{BlockNumberOrTimestamp, FinalityStatus},
@@ -717,6 +725,78 @@ where
                 Err(err.into())
             }
         }
+    }
+
+    async fn get_traced_entrypoints(
+        &self,
+        request: &TracedEntryPointRequestBody,
+    ) -> Result<TracedEntryPointRequestResponse, RpcError> {
+        // TODO move all of this to the inner method, in this method access the cache
+        let filter: EntryPointFilter = EntryPointFilter {
+            protocol_system: request.as_ref().protocol_system,
+            component_ids: request.as_ref().component_ids,
+        };
+        let entry_points_tracing_params_by_component: HashMap<
+            ComponentId,
+            HashSet<EntryPointWithTracingParams>,
+        > = self
+            .db_gateway
+            .get_entry_points_tracing_params(filter)
+            .await
+            .map_err(|err| {
+                error!(error = %err, "Error while getting entry points with tracing params.");
+                err
+            })?;
+        let entry_point_ids: HashSet<EntryPointId> = entry_points_tracing_params_by_component
+            .values()
+            .flat_map(|entry_points_with_tracing_params| {
+                entry_points_with_tracing_params
+                    .iter()
+                    .map(
+                        (|entry_point| entry_point.entry_point.external_id)
+                            .cloned()
+                            .collect(),
+                    )
+            })
+            .collect();
+
+        let traced_entry_points = self
+            .db_gateway
+            .get_traced_entry_points(&entry_point_ids)
+            .await
+            .map_err(|err| {
+                error!(error = %err, "Error while getting traced entry points.");
+                err
+            })?;
+
+        // TODO perhaps we can avoid looping twice here?
+        let traced_entrypoints: HashMap<
+            ComponentId,
+            Vec<(EntryPointWithTracingParams, TracingResult)>,
+        > = entry_points_tracing_params_by_component
+            .into_iter()
+            .map(|(component_id, entry_points_set)| {
+                let pairs = entry_points_set
+                    .into_iter()
+                    .filter_map(|entry_point_with_params| {
+                        let entry_point_id = entry_point_with_params.entry_point.external_id;
+                        traced_entry_points.get(&entry_point_id).map(|trace| {
+                            (entry_point_with_params.clone(), trace.clone())
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                (component_id, pairs)
+            })
+            .collect();
+
+        Ok(TracedEntryPointRequestResponse {
+            traced_entrypoints,
+            pagination: &PaginationResponse::new(
+                request.pagination.page,
+                request.pagination.page_size,
+                100 // TODO fix this. Put the actual total.
+            ),
+        })
     }
 }
 

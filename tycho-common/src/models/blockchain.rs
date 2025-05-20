@@ -369,7 +369,7 @@ pub enum BlockTag {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EntryPoint {
-    /// The id of the protocol component that the entry point belongs to.
+    /// Entry point id
     pub external_id: String,
     /// The address of the contract to trace.
     pub target: Address,

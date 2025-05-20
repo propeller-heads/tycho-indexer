@@ -106,6 +106,7 @@ where
                 rpc::protocol_systems,
                 rpc::tokens,
                 rpc::protocol_components,
+                rpc::traced_entrypoints
                 rpc::protocol_state,
                 rpc::contract_state,
             ),
@@ -126,6 +127,8 @@ where
                 schemas(ProtocolComponentRequestResponse),
                 schemas(ProtocolComponent),
                 schemas(ProtocolStateRequestBody),
+                schemas(TracedEntryPointRequestBody),
+                schemas(TracedEntryPointRequestResponse),
                 schemas(ProtocolStateRequestResponse),
                 schemas(AccountUpdate),
                 schemas(ProtocolId),
@@ -242,6 +245,10 @@ where
                 .service(
                     web::resource(format!("/{}/protocol_components", self.prefix))
                         .route(web::post().to(rpc::protocol_components::<G>)),
+                )
+                .service(
+                    web::resource(format!("/{}/traced_entrypoints", self.prefix))
+                        .route(web::post().to(rpc::traced_entrypoints::<G>)),
                 )
                 .service(
                     web::resource(format!("/{}/health", self.prefix))
