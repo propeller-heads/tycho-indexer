@@ -185,8 +185,7 @@ pub struct TxWithChanges {
     pub balance_changes: HashMap<ComponentId, HashMap<Address, ComponentBalance>>,
     pub account_balance_changes: HashMap<Address, HashMap<Address, AccountBalance>>,
     pub entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
-    pub entrypoint_params:
-        HashMap<EntryPointId, HashSet<(EntryPointTracingData, Option<ComponentId>)>>,
+    pub entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
 }
 
 impl TxWithChanges {
@@ -199,10 +198,7 @@ impl TxWithChanges {
         balance_changes: HashMap<ComponentId, HashMap<Address, ComponentBalance>>,
         account_balance_changes: HashMap<Address, HashMap<Address, AccountBalance>>,
         entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
-        entrypoint_params: HashMap<
-            EntryPointId,
-            HashSet<(EntryPointTracingData, Option<ComponentId>)>,
-        >,
+        entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
     ) -> Self {
         Self {
             tx,
@@ -486,7 +482,7 @@ impl TracedEntryPoint {
     }
 
     pub fn entry_point_id(&self) -> String {
-        self.entry_point_with_data
+        self.entry_point_with_params
             .entry_point
             .external_id
             .clone()
@@ -592,7 +588,7 @@ pub mod fixtures {
             HashMap::from([(
                 "test".to_string(),
                 HashSet::from([(
-                    EntryPointTracingData::RPCTracer(RPCTracerEntryPoint::new(
+                    TracingParams::RPCTracer(RPCTracerParams::new(
                         None,
                         Bytes::from_str("0x000001ef").unwrap(),
                     )),
@@ -664,7 +660,7 @@ pub mod fixtures {
             HashMap::from([(
                 "test2".to_string(),
                 HashSet::from([(
-                    EntryPointTracingData::RPCTracer(RPCTracerEntryPoint::new(
+                    TracingParams::RPCTracer(RPCTracerParams::new(
                         None,
                         Bytes::from_str("0x000001").unwrap(),
                     )),
