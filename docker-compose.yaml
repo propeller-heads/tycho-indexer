@@ -2,6 +2,7 @@ version: '3.1'
 services:
   db:
     build:
+      context: .
       dockerfile: postgres.Dockerfile
     restart: "always"
     environment:
@@ -35,6 +36,6 @@ services:
       - ./extractors.yaml:/opt/tycho-indexer/extractors.yaml
       - ./substreams/:/opt/tycho-indexer/substreams/
     entrypoint: [ "/usr/wait-for-postgres.sh", "db" ]
-    command: [ "/opt/tycho-indexer/tycho-indexer", "--endpoint", "https://mainnet.eth.streamingfast.io:443", "index"]
+    command: [ "/opt/tycho-indexer/tycho-indexer", "--endpoint", "https://mainnet.eth.streamingfast.io:443", "index" ]
 volumes:
   postgres_data:

@@ -460,29 +460,59 @@ impl PartitionedVersionedRow for NewComponentBalance {
             .zip(token_ids.iter())
             .collect::<HashSet<_>>();
 
-        // PERF: The removal of the filter 'valid_to = MAX_TS' means we now search in archived
-        // tables as well. A possible optimisation would be to add the valid_to filter back
-        // and then use a second query for balances still missing that will access the
-        // archived tables. Therefore, performance is not impacted in the common case
-        // (balances are rarely deleted).
-        Ok(component_balance::table
+        let mut results: Vec<ComponentBalance> = component_balance::table
             .select(ComponentBalance::as_select())
+            .into_boxed()
             .filter(
                 component_balance::protocol_component_id
                     .eq_any(&component_ids)
-                    .and(component_balance::token_id.eq_any(&token_ids)),
+                    .and(component_balance::token_id.eq_any(&token_ids))
+                    .and(component_balance::valid_to.eq(MAX_TS)),
             )
-            .distinct_on((component_balance::protocol_component_id, component_balance::token_id))
-            .order_by((
-                component_balance::protocol_component_id,
-                component_balance::token_id,
-                component_balance::valid_to.desc(),
-            ))
             .get_results(conn)
             .await
-            .map_err(PostgresError::from)?
+            .map_err(PostgresError::from)?;
+
+        let found_ids: HashSet<_> = results
+            .iter()
+            .map(|cb| (&cb.protocol_component_id, &cb.token_id))
+            .collect();
+
+        let missing_ids: Vec<_> = tuple_ids
+            .clone()
             .into_iter()
-            .filter(|cs| tuple_ids.contains(&(&cs.protocol_component_id, &cs.token_id)))
+            .filter(|id| !found_ids.contains(id))
+            .collect();
+
+        // If we have missing ids, we need to query the archived tables as well. This is necessary
+        // when entries are deleted
+        if !missing_ids.is_empty() {
+            let (missing_component_ids, missing_token_ids): (Vec<&i64>, Vec<&i64>) =
+                missing_ids.into_iter().unzip();
+            let deleted_results = component_balance::table
+                .select(ComponentBalance::as_select())
+                .filter(
+                    component_balance::protocol_component_id
+                        .eq_any(&missing_component_ids)
+                        .and(component_balance::token_id.eq_any(&missing_token_ids)),
+                )
+                .distinct_on((
+                    component_balance::protocol_component_id,
+                    component_balance::token_id,
+                ))
+                .order_by((
+                    component_balance::protocol_component_id,
+                    component_balance::token_id,
+                    component_balance::valid_to.desc(),
+                ))
+                .get_results(conn)
+                .await
+                .map_err(PostgresError::from)?;
+            results.extend(deleted_results);
+        }
+        Ok(results
+            .into_iter()
+            .filter(|cb| tuple_ids.contains(&(&cb.protocol_component_id, &cb.token_id)))
             .map(NewComponentBalance::from)
             .collect())
     }
@@ -1115,28 +1145,62 @@ impl PartitionedVersionedRow for NewProtocolState {
             .zip(attr_name.iter())
             .collect::<HashSet<_>>();
 
-        // PERF: The removal of the filter 'valid_to = MAX_TS' means we now search in archived
-        // tables as well. A possible optimisation would be to add the valid_to filter back
-        // and then use a second query for states still missing that will access the
-        // archived tables. Therefore, performance is not impacted in the common case.
-        Ok(protocol_state::table
+        let mut results: Vec<ProtocolState> = protocol_state::table
             .select(ProtocolState::as_select())
+            .into_boxed()
             .filter(
                 protocol_state::protocol_component_id
                     .eq_any(&pc_id)
-                    .and(protocol_state::attribute_name.eq_any(&attr_name)),
+                    .and(protocol_state::attribute_name.eq_any(&attr_name))
+                    .and(protocol_state::valid_to.eq(MAX_TS)),
             )
-            .distinct_on((protocol_state::protocol_component_id, protocol_state::attribute_name))
-            .order_by((
-                protocol_state::protocol_component_id,
-                protocol_state::attribute_name,
-                protocol_state::valid_to.desc(),
-            ))
             .get_results(conn)
             .await
-            .map_err(PostgresError::from)?
+            .map_err(PostgresError::from)?;
+
+        let found_ids: HashSet<_> = results
+            .iter()
+            .map(|ps| (&ps.protocol_component_id, &ps.attribute_name))
+            .collect();
+
+        let missing_ids: Vec<_> = tuple_ids
+            .clone()
             .into_iter()
-            .filter(|cs| tuple_ids.contains(&(&cs.protocol_component_id, &cs.attribute_name)))
+            .filter(|id| !found_ids.contains(id))
+            .collect();
+
+        // If we have missing ids, we need to query the archived tables as well. This is necessary
+        // when entries are deleted
+        if !missing_ids.is_empty() {
+            let (missing_protocol_component_ids, missing_attribute_names): (
+                Vec<&i64>,
+                Vec<&String>,
+            ) = missing_ids.into_iter().unzip();
+            let deleted_results: Vec<ProtocolState> = protocol_state::table
+                .select(ProtocolState::as_select())
+                .filter(
+                    protocol_state::protocol_component_id
+                        .eq_any(&missing_protocol_component_ids)
+                        .and(protocol_state::attribute_name.eq_any(&missing_attribute_names)),
+                )
+                .distinct_on((
+                    protocol_state::protocol_component_id,
+                    protocol_state::attribute_name,
+                ))
+                .order_by((
+                    protocol_state::protocol_component_id,
+                    protocol_state::attribute_name,
+                    protocol_state::valid_to.desc(),
+                ))
+                .get_results(conn)
+                .await
+                .map_err(PostgresError::from)?;
+            results.extend(deleted_results);
+        }
+
+        Ok(results
+            .into_iter()
+            .filter(|ps| tuple_ids.contains(&(&ps.protocol_component_id, &ps.attribute_name)))
             .map(NewProtocolState::from)
             .collect())
     }
@@ -1644,22 +1708,55 @@ impl PartitionedVersionedRow for NewSlot {
         // tables as well. A possible optimisation would be to add the valid_to filter back
         // and then use a second query for storage still missing that will access the
         // archived tables. Therefore, performance is not impacted in the common case.
-        Ok(contract_storage::table
+        let mut results: Vec<ContractStorage> = contract_storage::table
             .select(ContractStorage::as_select())
+            .into_boxed()
             .filter(
                 contract_storage::account_id
                     .eq_any(&accounts)
-                    .and(contract_storage::slot.eq_any(&slots)),
+                    .and(contract_storage::slot.eq_any(&slots))
+                    .and(contract_storage::valid_to.eq(MAX_TS)),
             )
-            .distinct_on((contract_storage::account_id, contract_storage::slot))
-            .order_by((
-                contract_storage::account_id,
-                contract_storage::slot,
-                contract_storage::valid_to.desc(),
-            ))
             .get_results(conn)
             .await
-            .map_err(PostgresError::from)?
+            .map_err(PostgresError::from)?;
+
+        let found_ids: HashSet<_> = results
+            .iter()
+            .map(|cs| (&cs.account_id, &cs.slot))
+            .collect();
+
+        let missing_ids: Vec<_> = tuple_ids
+            .clone()
+            .into_iter()
+            .filter(|id| !found_ids.contains(id))
+            .collect();
+
+        // If we have missing ids, we need to query the archived tables as well. This is necessary
+        // when entries are deleted
+        if !missing_ids.is_empty() {
+            let (missing_accounts, missing_slots): (Vec<&i64>, Vec<&Bytes>) =
+                missing_ids.into_iter().unzip();
+            let deleted_results: Vec<ContractStorage> = contract_storage::table
+                .select(ContractStorage::as_select())
+                .filter(
+                    contract_storage::account_id
+                        .eq_any(&missing_accounts)
+                        .and(contract_storage::slot.eq_any(&missing_slots)),
+                )
+                .distinct_on((contract_storage::account_id, contract_storage::slot))
+                .order_by((
+                    contract_storage::account_id,
+                    contract_storage::slot,
+                    contract_storage::valid_to.desc(),
+                ))
+                .get_results(conn)
+                .await
+                .map_err(PostgresError::from)?;
+            results.extend(deleted_results);
+        }
+
+        Ok(results
             .into_iter()
             .filter(|cs| tuple_ids.contains(&(&cs.account_id, &cs.slot)))
             .map(NewSlot::from)
