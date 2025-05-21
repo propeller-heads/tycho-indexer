@@ -1,6 +1,8 @@
-use tycho_common::Bytes;
-
-use crate::encoding::{errors::EncodingError, models::Solution, swap_encoder::SwapEncoder};
+use crate::encoding::{
+    errors::EncodingError,
+    models::{EncodedSolution, Solution},
+    swap_encoder::SwapEncoder,
+};
 
 /// A trait that defines how to encode a `Solution` for execution.
 pub trait StrategyEncoder {
@@ -13,11 +15,8 @@ pub trait StrategyEncoder {
     ///   path
     ///
     /// # Returns
-    /// * `Result<(Vec<u8>, Bytes, Option<String>), EncodingError>` - A tuple containing:
-    ///   - The encoded data as bytes
-    ///   - The address of the contract to call (router or executor)
-    ///   - Optionally, the function selector to use when calling the contract
-    fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError>;
+    /// * `Result<EncodedSwaps, EncodingError>`
+    fn encode_strategy(&self, solution: Solution) -> Result<EncodedSolution, EncodingError>;
 
     /// Retrieves the swap encoder for a specific protocol system.
     ///

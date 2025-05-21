@@ -6,14 +6,18 @@ use tycho_common::Bytes;
 use crate::encoding::{
     errors::EncodingError,
     evm::{
+        approvals::permit2::Permit2,
         constants::{GROUPABLE_PROTOCOLS, IN_TRANSFER_REQUIRED_PROTOCOLS},
+        encoding_utils::encode_tycho_router_call,
         group_swaps::group_swaps,
         strategy_encoder::strategy_encoders::{
             SequentialSwapStrategyEncoder, SingleSwapStrategyEncoder, SplitSwapStrategyEncoder,
         },
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
     },
-    models::{Chain, EncodingContext, NativeAction, Solution, Transaction, TransferType},
+    models::{
+        Chain, EncodedSolution, EncodingContext, NativeAction, Solution, Transaction, TransferType,
+    },
     strategy_encoder::StrategyEncoder,
     tycho_encoder::TychoEncoder,
 };
@@ -26,6 +30,8 @@ use crate::encoding::{
 /// * `split_swap_strategy`: Encoder for split swaps
 /// * `native_address`: Address of the chain's native token
 /// * `wrapped_address`: Address of the chain's wrapped native token
+/// * `router_address`: Address of the Tycho router contract
+/// * `token_in_already_in_router`: Indicates if the token in is already in the router at swap time
 #[derive(Clone)]
 pub struct TychoRouterEncoder {
     single_swap_strategy: SingleSwapStrategyEncoder,
@@ -33,6 +39,9 @@ pub struct TychoRouterEncoder {
     split_swap_strategy: SplitSwapStrategyEncoder,
     native_address: Bytes,
     wrapped_address: Bytes,
+    router_address: Bytes,
+    token_in_already_in_router: bool,
+    permit2: Option<Permit2>,
 }
 
 impl TychoRouterEncoder {
@@ -45,78 +54,111 @@ impl TychoRouterEncoder {
     ) -> Result<Self, EncodingError> {
         let native_address = chain.native_token()?;
         let wrapped_address = chain.wrapped_token()?;
+        let permit2 = if let Some(swapper_pk) = swapper_pk.clone() {
+            Some(Permit2::new(swapper_pk, chain.clone())?)
+        } else {
+            None
+        };
         Ok(TychoRouterEncoder {
             single_swap_strategy: SingleSwapStrategyEncoder::new(
                 chain.clone(),
                 swap_encoder_registry.clone(),
-                swapper_pk.clone(),
+                permit2.is_some(),
                 router_address.clone(),
                 token_in_already_in_router,
             )?,
             sequential_swap_strategy: SequentialSwapStrategyEncoder::new(
                 chain.clone(),
                 swap_encoder_registry.clone(),
-                swapper_pk.clone(),
+                permit2.is_some(),
                 router_address.clone(),
                 token_in_already_in_router,
             )?,
             split_swap_strategy: SplitSwapStrategyEncoder::new(
                 chain,
                 swap_encoder_registry,
-                None,
+                permit2.is_some(),
                 router_address.clone(),
                 token_in_already_in_router,
             )?,
             native_address,
             wrapped_address,
+            router_address,
+            token_in_already_in_router,
+            permit2,
         })
+    }
+
+    fn encode_solution(&self, solution: &Solution) -> Result<EncodedSolution, EncodingError> {
+        self.validate_solution(solution)?;
+        let protocols: HashSet<String> = solution
+            .clone()
+            .swaps
+            .into_iter()
+            .map(|swap| swap.component.protocol_system)
+            .collect();
+
+        let mut encoded_solution = if (solution.swaps.len() == 1) ||
+            (protocols.len() == 1 &&
+                protocols
+                    .iter()
+                    .any(|p| GROUPABLE_PROTOCOLS.contains(&p.as_str())))
+        {
+            self.single_swap_strategy
+                .encode_strategy(solution.clone())?
+        } else if solution
+            .swaps
+            .iter()
+            .all(|swap| swap.split == 0.0)
+        {
+            self.sequential_swap_strategy
+                .encode_strategy(solution.clone())?
+        } else {
+            self.split_swap_strategy
+                .encode_strategy(solution.clone())?
+        };
+
+        if let Some(permit2) = self.permit2.clone() {
+            let (permit, signature) = permit2.get_permit(
+                &self.router_address,
+                &solution.sender,
+                &solution.given_token,
+                &solution.given_amount,
+            )?;
+            encoded_solution.permit = Some(permit);
+            encoded_solution.signature = Some(signature);
+        }
+        Ok(encoded_solution)
     }
 }
 
 impl TychoEncoder for TychoRouterEncoder {
+    fn encode_solutions(
+        &self,
+        solutions: Vec<Solution>,
+    ) -> Result<Vec<EncodedSolution>, EncodingError> {
+        let mut result: Vec<EncodedSolution> = Vec::new();
+        for solution in solutions.iter() {
+            let encoded_solution = self.encode_solution(solution)?;
+            result.push(encoded_solution);
+        }
+        Ok(result)
+    }
+
     fn encode_calldata(&self, solutions: Vec<Solution>) -> Result<Vec<Transaction>, EncodingError> {
         let mut transactions: Vec<Transaction> = Vec::new();
         for solution in solutions.iter() {
-            self.validate_solution(solution)?;
+            let encoded_solution = self.encode_solution(solution)?;
 
-            let protocols: HashSet<String> = solution
-                .clone()
-                .swaps
-                .into_iter()
-                .map(|swap| swap.component.protocol_system)
-                .collect();
+            let transaction = encode_tycho_router_call(
+                encoded_solution,
+                solution,
+                self.token_in_already_in_router,
+                self.router_address.clone(),
+                self.native_address.clone(),
+            )?;
 
-            let (contract_interaction, target_address) = if (solution.swaps.len() == 1) ||
-                (protocols.len() == 1 &&
-                    protocols
-                        .iter()
-                        .any(|p| GROUPABLE_PROTOCOLS.contains(&p.as_str())))
-            {
-                self.single_swap_strategy
-                    .encode_strategy(solution.clone())?
-            } else if solution
-                .swaps
-                .iter()
-                .all(|swap| swap.split == 0.0)
-            {
-                self.sequential_swap_strategy
-                    .encode_strategy(solution.clone())?
-            } else {
-                self.split_swap_strategy
-                    .encode_strategy(solution.clone())?
-            };
-
-            let value = if solution.given_token == self.native_address {
-                solution.given_amount.clone()
-            } else {
-                BigUint::ZERO
-            };
-
-            transactions.push(Transaction {
-                value,
-                data: contract_interaction,
-                to: target_address,
-            });
+            transactions.push(transaction);
         }
         Ok(transactions)
     }
@@ -300,6 +342,14 @@ impl TychoExecutorEncoder {
 }
 
 impl TychoEncoder for TychoExecutorEncoder {
+    fn encode_solutions(
+        &self,
+        _solutions: Vec<Solution>,
+    ) -> Result<Vec<EncodedSolution>, EncodingError> {
+        Err(EncodingError::NotImplementedError(
+            "Encoding solutions for TychoExecutorEncoder is not implemented".to_string(),
+        ))
+    }
     fn encode_calldata(&self, solutions: Vec<Solution>) -> Result<Vec<Transaction>, EncodingError> {
         let mut transactions: Vec<Transaction> = Vec::new();
         let solution = solutions

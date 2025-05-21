@@ -19,7 +19,10 @@ use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::{biguint_to_u256, bytes_to_address, encode_input, get_client, get_runtime},
+    evm::{
+        encoding_utils::encode_input,
+        utils::{biguint_to_u256, bytes_to_address, get_client, get_runtime},
+    },
     models::Chain,
 };
 

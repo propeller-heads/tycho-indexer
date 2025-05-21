@@ -1,3 +1,4 @@
+use alloy_primitives::PrimitiveSignature as Signature;
 use hex;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
@@ -8,6 +9,7 @@ use tycho_common::{
 
 use crate::encoding::{
     errors::EncodingError,
+    evm::approvals::permit2::PermitSingle,
     serde_primitives::{biguint_string, biguint_string_option},
 };
 
@@ -94,6 +96,22 @@ pub struct Transaction {
     pub to: Bytes,
     pub value: BigUint,
     pub data: Vec<u8>,
+}
+
+/// Represents a solution that has been encoded for execution.
+///
+/// # Fields
+/// * `swaps`: Encoded swaps to be executed.
+/// * `selector`: The selector of the function to be called.
+/// * `n_tokens`: Number of tokens in the swap.
+/// * `permit`: Optional permit for the swap (if permit2 is enabled).
+/// * `signature`: Optional signature for the swap (if permit2 is enabled).
+pub struct EncodedSolution {
+    pub swaps: Vec<u8>,
+    pub selector: String,
+    pub n_tokens: usize,
+    pub permit: Option<PermitSingle>,
+    pub signature: Option<Signature>,
 }
 
 /// Represents necessary attributes for encoding an order.

@@ -10,7 +10,7 @@ use alloy::{
     providers::{ProviderBuilder, RootProvider},
     transports::BoxTransport,
 };
-use alloy_primitives::{aliases::U24, keccak256, Address, FixedBytes, Keccak256, U256, U8};
+use alloy_primitives::{aliases::U24, Address, U256, U8};
 use alloy_sol_types::SolValue;
 use num_bigint::BigUint;
 use once_cell::sync::Lazy;
@@ -38,28 +38,6 @@ pub fn bytes_to_address(address: &Bytes) -> Result<Address, EncodingError> {
 pub fn biguint_to_u256(value: &BigUint) -> U256 {
     let bytes = value.to_bytes_be();
     U256::from_be_slice(&bytes)
-}
-
-/// Encodes the input data for a function call to the given function selector.
-pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
-    let mut hasher = Keccak256::new();
-    hasher.update(selector.as_bytes());
-    let selector_bytes = &hasher.finalize()[..4];
-    let mut call_data = selector_bytes.to_vec();
-    // Remove extra prefix if present (32 bytes for dynamic data)
-    // Alloy encoding is including a prefix for dynamic data indicating the offset or length
-    // but at this point we don't want that
-    if encoded_args.len() > 32 &&
-        encoded_args[..32] ==
-            [0u8; 31]
-                .into_iter()
-                .chain([32].to_vec())
-                .collect::<Vec<u8>>()
-    {
-        encoded_args = encoded_args[32..].to_vec();
-    }
-    call_data.extend(encoded_args);
-    call_data
 }
 
 /// Converts a decimal to a `U24` value. The percentage is a `f64` value between 0 and 1.
@@ -114,12 +92,6 @@ pub fn pad_to_fixed_size<const N: usize>(input: &[u8]) -> Result<[u8; N], Encodi
     let start = N - input.len();
     padded[start..].copy_from_slice(input);
     Ok(padded)
-}
-
-/// Encodes a function selector to a fixed size array of 4 bytes.
-pub fn encode_function_selector(selector: &str) -> FixedBytes<4> {
-    let hash = keccak256(selector.as_bytes());
-    FixedBytes::<4>::from([hash[0], hash[1], hash[2], hash[3]])
 }
 
 /// Extracts a static attribute from a swap.
