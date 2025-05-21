@@ -718,7 +718,7 @@ impl ProtocolState {
         // Apply pagination and fetch total count
         let count: Option<i64> = if let Some(pagination) = pagination_params {
             component_query = component_query
-                .order_by(protocol_system::id)
+                .order_by(protocol_component::id)
                 .limit(pagination.page_size)
                 .offset(pagination.page * pagination.page_size);
 
