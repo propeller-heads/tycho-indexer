@@ -1,3 +1,24 @@
+## [0.92.0](https://github.com/propeller-heads/tycho-execution/compare/0.91.0...0.92.0) (2025-05-21)
+
+
+### Features
+
+* Add transferFromNeeded to non permit2 methods ([cc9e88c](https://github.com/propeller-heads/tycho-execution/commit/cc9e88cfed9763da14f2a9fd77b60f6b78b75e5c))
+* Bring back TransferType and simplify encoding logic ([3874892](https://github.com/propeller-heads/tycho-execution/commit/38748925b3fcc9daab1df981ee474c1939a1fadd))
+* Loosen version constrain on tycho-common ([046775b](https://github.com/propeller-heads/tycho-execution/commit/046775b7aee774a5e31d08575d8e779f6f883555))
+* perform all transfers in executors ([eeebd51](https://github.com/propeller-heads/tycho-execution/commit/eeebd511142464b4d36286539e1ad8c61fc1eb8c))
+* Sketch for OneTransferFromOnly.sol ([9401ce2](https://github.com/propeller-heads/tycho-execution/commit/9401ce26206b53740898aa05fff63042d1939d65))
+* Support new transfer logic in all executors ([27dfde3](https://github.com/propeller-heads/tycho-execution/commit/27dfde3118a76320b6c51958cae23e0136324802))
+* Support new transfer logic in encoding ([0f9af65](https://github.com/propeller-heads/tycho-execution/commit/0f9af658468f0ae29d7e075bd68f8a07f88970b4))
+
+
+### Bug Fixes
+
+* Fix remaining tests after latest encoding changes ([e0c195f](https://github.com/propeller-heads/tycho-execution/commit/e0c195f63d6a4b05ea635141d3760194e1d0da4f))
+* Fix tests (not there yet) ([d4244a7](https://github.com/propeller-heads/tycho-execution/commit/d4244a708949f5a2cf9810fdb2849d33cff63fa2))
+* Initial balance for cyclic swaps ([7fd9f61](https://github.com/propeller-heads/tycho-execution/commit/7fd9f611e51ae4bcaa87f11c25e992d220542446))
+* Make all tests pass! ([ee68703](https://github.com/propeller-heads/tycho-execution/commit/ee687038c5f8fefdc97b52991de8338c5351b90d))
+
 ## [0.91.0](https://github.com/propeller-heads/tycho-execution/compare/0.90.0...0.91.0) (2025-05-19)
 
 
