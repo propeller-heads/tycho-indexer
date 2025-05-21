@@ -8,9 +8,7 @@ use tycho_common::{
 };
 
 use crate::encoding::{
-    errors::EncodingError,
-    evm::approvals::permit2::PermitSingle,
-    serde_primitives::{biguint_string, biguint_string_option},
+    errors::EncodingError, evm::approvals::permit2::PermitSingle, serde_primitives::biguint_string,
 };
 
 /// Represents a solution containing details describing an order, and  instructions for filling
@@ -32,15 +30,9 @@ pub struct Solution {
     /// supported.
     #[serde(default)]
     pub exact_out: bool,
-    /// If set, it will be applied to expected_amount
-    pub slippage: Option<f64>,
-    /// Expected amount of the bought token (exact in) or sold token (exact out).
-    #[serde(with = "biguint_string_option")]
-    pub expected_amount: Option<BigUint>,
     /// Minimum amount to be checked for the solution to be valid.
-    /// If not set, the check will not be performed.
-    #[serde(with = "biguint_string_option")]
-    pub checked_amount: Option<BigUint>,
+    #[serde(with = "biguint_string")]
+    pub checked_amount: BigUint,
     /// List of swaps to fulfill the solution.
     pub swaps: Vec<Swap>,
     /// If set, the corresponding native action will be executed.

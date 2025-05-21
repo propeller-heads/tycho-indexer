@@ -5,7 +5,7 @@ use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::{biguint_to_u256, bytes_to_address, get_min_amount_for_solution},
+    evm::utils::{biguint_to_u256, bytes_to_address},
     models::{EncodedSolution, NativeAction, Solution, Transaction},
 };
 
@@ -90,7 +90,6 @@ pub fn encode_tycho_router_call(
     router_address: Bytes,
     native_address: Bytes,
 ) -> Result<Transaction, EncodingError> {
-    let min_amount_out = get_min_amount_for_solution(solution.clone());
     let (mut unwrap, mut wrap) = (false, false);
     if let Some(action) = solution.native_action.clone() {
         match action {
@@ -100,7 +99,7 @@ pub fn encode_tycho_router_call(
     }
 
     let given_amount = biguint_to_u256(&solution.given_amount);
-    let min_amount_out = biguint_to_u256(&min_amount_out);
+    let min_amount_out = biguint_to_u256(&solution.checked_amount);
     let given_token = bytes_to_address(&solution.given_token)?;
     let checked_token = bytes_to_address(&solution.checked_token)?;
     let receiver = bytes_to_address(&solution.receiver)?;

@@ -217,8 +217,6 @@ impl SequentialSwapStrategyEncoder {
 impl StrategyEncoder for SequentialSwapStrategyEncoder {
     fn encode_strategy(&self, solution: Solution) -> Result<EncodedSolution, EncodingError> {
         self.sequential_swap_validator
-            .validate_solution_min_amounts(&solution)?;
-        self.sequential_swap_validator
             .validate_swap_path(
                 &solution.swaps,
                 &solution.given_token,
@@ -383,8 +381,6 @@ impl SplitSwapStrategyEncoder {
 impl StrategyEncoder for SplitSwapStrategyEncoder {
     fn encode_strategy(&self, solution: Solution) -> Result<EncodedSolution, EncodingError> {
         self.split_swap_validator
-            .validate_solution_min_amounts(&solution)?;
-        self.split_swap_validator
             .validate_split_percentages(&solution.swaps)?;
         self.split_swap_validator
             .validate_swap_path(
@@ -520,7 +516,6 @@ mod tests {
     use alloy::hex::encode;
     use alloy_primitives::{hex, Address, PrimitiveSignature as Signature, U256};
     use num_bigint::{BigInt, BigUint};
-    use rstest::rstest;
     use tycho_common::{
         models::{protocol::ProtocolComponent, Chain as TychoCommonChain},
         Bytes,
@@ -582,34 +577,12 @@ mod tests {
         use alloy_sol_types::SolValue;
 
         use super::*;
-        #[rstest]
-        #[case::with_check_no_slippage(
-            None,
-            None,
-            Some(BigUint::from_str("2659881924818443699787").unwrap()),
-            U256::from_str("2659881924818443699787").unwrap(),
-        )]
-        #[case::no_check_with_slippage(
-            Some(BigUint::from_str("2_000_000000000000000000").unwrap()),
-            Some(0.01f64),
-            None,
-            U256::from_str("1_980_000000000000000000").unwrap(),
-        )]
-        #[case::with_check_and_slippage(
-            Some(BigUint::from_str("2_000_000000000000000000").unwrap()),
-            Some(0.01f64),
-            Some(BigUint::from_str("1_999_000000000000000000").unwrap()),
-            U256::from_str("1_999_000000000000000000").unwrap(),
-        )]
-        fn test_single_swap_strategy_encoder(
-            #[case] expected_amount: Option<BigUint>,
-            #[case] slippage: Option<f64>,
-            #[case] checked_amount: Option<BigUint>,
-            #[case] expected_min_amount: U256,
-        ) {
+        #[test]
+        fn test_single_swap_strategy_encoder() {
             // Performs a single swap from WETH to DAI on a USV2 pool, with no grouping
             // optimizations.
-
+            let checked_amount = BigUint::from_str("2659881924818443699787").unwrap();
+            let expected_min_amount = U256::from_str("2659881924818443699787").unwrap();
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
@@ -637,8 +610,6 @@ mod tests {
                 given_token: weth,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: dai,
-                expected_amount: expected_amount.clone(),
-                slippage,
                 checked_amount: checked_amount.clone(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -694,13 +665,7 @@ mod tests {
 
             assert_eq!(hex_calldata[..456], expected_input);
             assert_eq!(hex_calldata[1224..], expected_swap);
-            if expected_amount.is_some() & slippage.is_some() & checked_amount.is_none() {
-                // only write to file for 1 test case
-                write_calldata_to_file(
-                    "test_single_swap_strategy_encoder",
-                    &hex_calldata.to_string(),
-                );
-            }
+            write_calldata_to_file("test_single_swap_strategy_encoder", &hex_calldata.to_string());
         }
 
         #[test]
@@ -711,9 +676,7 @@ mod tests {
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-            let expected_amount = Some(BigUint::from_str("1_650_000000000000000000").unwrap());
-            let slippage = Some(0.01f64);
-            let checked_amount = Some(BigUint::from_str("1_640_000000000000000000").unwrap());
+            let checked_amount = BigUint::from_str("1_640_000000000000000000").unwrap();
             let expected_min_amount = U256::from_str("1_640_000000000000000000").unwrap();
 
             let swap = Swap {
@@ -740,8 +703,6 @@ mod tests {
                 given_token: weth,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: dai,
-                expected_amount,
-                slippage,
                 checked_amount,
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -803,9 +764,7 @@ mod tests {
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-            let expected_amount = Some(BigUint::from_str("1_650_000000000000000000").unwrap());
-            let slippage = Some(0.01f64);
-            let checked_amount = Some(BigUint::from_str("1_640_000000000000000000").unwrap());
+            let checked_amount = BigUint::from_str("1_640_000000000000000000").unwrap();
             let expected_min_amount = U256::from_str("1_640_000000000000000000").unwrap();
 
             let swap = Swap {
@@ -832,8 +791,6 @@ mod tests {
                 given_token: weth,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: dai,
-                expected_amount,
-                slippage,
                 checked_amount,
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -919,13 +876,11 @@ mod tests {
                 given_token: eth(),
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: dai,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("1659881924818443699787").unwrap()),
+                checked_amount: BigUint::from_str("1659881924818443699787").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap],
                 native_action: Some(NativeAction::Wrap),
-                ..Default::default()
             };
 
             let mut encoded_solution = encoder
@@ -981,13 +936,11 @@ mod tests {
                 given_token: dai,
                 given_amount: BigUint::from_str("3_000_000000000000000000").unwrap(),
                 checked_token: eth(),
-                expected_amount: Some(BigUint::from_str("1_000000000000000000").unwrap()),
-                checked_amount: Some(BigUint::from_str("1_000000000000000000").unwrap()),
+                checked_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap],
                 native_action: Some(NativeAction::Unwrap),
-                ..Default::default()
             };
 
             let mut encoded_solution = encoder
@@ -1066,8 +1019,7 @@ mod tests {
                 given_token: weth,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: usdc,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("26173932").unwrap()),
+                checked_amount: BigUint::from_str("26173932").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
@@ -1139,8 +1091,7 @@ mod tests {
                 given_token: weth,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: usdc,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("26173932").unwrap()),
+                checked_amount: BigUint::from_str("26173932").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
@@ -1269,10 +1220,8 @@ mod tests {
                 given_token: usdc.clone(),
                 given_amount: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
                 checked_token: usdc.clone(),
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("99389294").unwrap()), /* Expected output
-                                                                               * from test */
-                slippage: None,
+                checked_amount: BigUint::from_str("99389294").unwrap(), /* Expected output
+                                                                         * from test */
                 swaps: vec![swap_usdc_weth, swap_weth_usdc],
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -1398,8 +1347,7 @@ mod tests {
                     given_token: weth,
                     given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                     checked_token: usdc,
-                    expected_amount: None,
-                    checked_amount: Some(BigUint::from_str("26173932").unwrap()),
+                    checked_amount: BigUint::from_str("26173932").unwrap(),
                     sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                     receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
                         .unwrap(),
@@ -1490,8 +1438,7 @@ mod tests {
                     given_token: weth,
                     given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                     checked_token: usdc,
-                    expected_amount: None,
-                    checked_amount: Some(BigUint::from_str("26173932").unwrap()),
+                    checked_amount: BigUint::from_str("26173932").unwrap(),
                     sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                     receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
                         .unwrap(),
@@ -1591,8 +1538,7 @@ mod tests {
                     given_token: weth,
                     given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                     checked_token: usdt,
-                    expected_amount: None,
-                    checked_amount: Some(BigUint::from_str("26173932").unwrap()),
+                    checked_amount: BigUint::from_str("26173932").unwrap(),
                     sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                     receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
                         .unwrap(),
@@ -1668,8 +1614,7 @@ mod tests {
                     given_token: weth,
                     given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                     checked_token: usdc,
-                    expected_amount: None,
-                    checked_amount: Some(BigUint::from_str("26173932").unwrap()),
+                    checked_amount: BigUint::from_str("26173932").unwrap(),
                     sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                     receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
                         .unwrap(),
@@ -1821,8 +1766,7 @@ mod tests {
                     given_token: dai,
                     given_amount: BigUint::from_str("1500_000000000000000000").unwrap(),
                     checked_token: eth.clone(),
-                    expected_amount: None,
-                    checked_amount: Some(BigUint::from_str("732214216964381330").unwrap()),
+                    checked_amount: BigUint::from_str("732214216964381330").unwrap(),
                     sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                     receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
                         .unwrap(),
@@ -1936,8 +1880,7 @@ mod tests {
                 given_token: weth,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: usdc,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("26173932").unwrap()),
+                checked_amount: BigUint::from_str("26173932").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_weth_dai, swap_weth_wbtc, swap_dai_usdc, swap_wbtc_usdc],
@@ -2056,13 +1999,11 @@ mod tests {
                 given_token: usdc.clone(),
                 given_amount: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
                 checked_token: usdc.clone(),
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("99574171").unwrap()), /* Expected output
-                                                                               * from
-                                                                               * test */
+                checked_amount: BigUint::from_str("99574171").unwrap(), /* Expected output
+                                                                         * from
+                                                                         * test */
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                slippage: None,
                 swaps: vec![swap_usdc_weth_pool1, swap_usdc_weth_pool2, swap_weth_usdc_pool2],
                 ..Default::default()
             };
@@ -2228,13 +2169,11 @@ mod tests {
                 given_token: usdc.clone(),
                 given_amount: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
                 checked_token: usdc.clone(),
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("99025908").unwrap()), /* Expected output
-                                                                               * from
-                                                                               * test */
+                checked_amount: BigUint::from_str("99025908").unwrap(), /* Expected output
+                                                                         * from
+                                                                         * test */
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                slippage: None,
                 swaps: vec![swap_usdc_weth_v2, swap_weth_usdc_v3_pool1, swap_weth_usdc_v3_pool2],
                 ..Default::default()
             };
@@ -2367,9 +2306,7 @@ mod tests {
                 given_token: token_in,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: token_out,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("1000").unwrap()),
-                slippage: None,
+                checked_amount: BigUint::from_str("1000").unwrap(),
                 // Alice
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -2426,9 +2363,7 @@ mod tests {
                 given_token: token_in,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: token_out,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("1000").unwrap()),
-                slippage: None,
+                checked_amount: BigUint::from_str("1000").unwrap(),
                 // Alice
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -2497,9 +2432,7 @@ mod tests {
                 given_token: eth.clone(),
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: pepe,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("152373460199848577067005852").unwrap()),
-                slippage: None,
+                checked_amount: BigUint::from_str("152373460199848577067005852").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_eth_pepe],
@@ -2573,9 +2506,7 @@ mod tests {
                 given_token: usdc,
                 given_amount: BigUint::from_str("3000_000000").unwrap(),
                 checked_token: eth.clone(),
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("1117254495486192350").unwrap()),
-                slippage: None,
+                checked_amount: BigUint::from_str("1117254495486192350").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth],
@@ -2667,9 +2598,7 @@ mod tests {
                 given_token: usdc,
                 given_amount: BigUint::from_str("1000_000000").unwrap(),
                 checked_token: pepe,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("97191013220606467325121599").unwrap()),
-                slippage: None,
+                checked_amount: BigUint::from_str("97191013220606467325121599").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth, swap_eth_pepe],
@@ -2781,9 +2710,7 @@ mod tests {
                 given_token: token_in,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: token_out,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("1").unwrap()),
-                slippage: None,
+                checked_amount: BigUint::from_str("1").unwrap(),
                 // Alice
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -2855,9 +2782,7 @@ mod tests {
                 given_token: token_in,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: token_out,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("1").unwrap()),
-                slippage: None,
+                checked_amount: BigUint::from_str("1").unwrap(),
                 // Alice
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),

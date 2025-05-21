@@ -529,9 +529,7 @@ mod tests {
                 given_token: usdc(),
                 given_amount: BigUint::from_str("1000_000000").unwrap(),
                 checked_token: pepe(),
-                expected_amount: Some(BigUint::from_str("105_152_000000000000000000").unwrap()),
-                checked_amount: None,
-                slippage: None,
+                checked_amount: BigUint::from_str("105_152_000000000000000000").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
@@ -580,7 +578,7 @@ mod tests {
                 swaps: vec![swap_weth_dai, swap_dai_usdc],
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 native_action: Some(NativeAction::Wrap),
-                checked_amount: Some(BigUint::from(1000u32)),
+                checked_amount: BigUint::from(1000u32),
                 ..Default::default()
             };
 
@@ -629,7 +627,6 @@ mod tests {
                 exact_out: false,
                 given_token: eth(),
                 checked_token: dai(),
-                checked_amount: None,
                 swaps: vec![swap],
                 native_action: Some(NativeAction::Wrap),
                 ..Default::default()
@@ -743,7 +740,6 @@ mod tests {
             let solution = Solution {
                 exact_out: false,
                 checked_token: eth(),
-                checked_amount: None,
                 swaps: vec![swap],
                 native_action: Some(NativeAction::Unwrap),
                 ..Default::default()
@@ -1083,14 +1079,12 @@ mod tests {
                 exact_out: false,
                 given_token: token_in,
                 given_amount: BigUint::from(1000000000000000000u64),
-                expected_amount: Some(BigUint::from(1000000000000000000u64)),
                 checked_token: token_out,
-                checked_amount: None,
+                checked_amount: BigUint::from(1000000000000000000u64),
                 sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
                 swaps: vec![swap],
-                slippage: None,
                 native_action: None,
             };
 
@@ -1146,13 +1140,11 @@ mod tests {
                 exact_out: false,
                 given_token: token_in,
                 given_amount: BigUint::from(1000000000000000000u64),
-                expected_amount: Some(BigUint::from(1000000000000000000u64)),
                 checked_token: token_out,
-                checked_amount: None,
+                checked_amount: BigUint::from(1000000000000000000u64),
                 sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
                 receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
                 swaps: vec![swap.clone(), swap],
-                slippage: None,
                 native_action: None,
             };
 
@@ -1175,9 +1167,7 @@ mod tests {
                 given_token: usdc,
                 given_amount: BigUint::from_str("1000_000000").unwrap(),
                 checked_token: pepe,
-                expected_amount: Some(BigUint::from_str("105_152_000000000000000000").unwrap()),
-                checked_amount: None,
-                slippage: None,
+                checked_amount: BigUint::from(1000000000000000000u64),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
