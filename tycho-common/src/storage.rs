@@ -512,37 +512,56 @@ impl EntryPointFilter {
 #[async_trait]
 pub trait EntryPointGateway {
     /// Upserts a list of entry points into the database.
+    ///
+    /// * `entry_points` - The map of component ids to their entry points to upsert.
     async fn upsert_entry_points(
         &self,
         entry_points: &HashMap<ComponentId, HashSet<EntryPoint>>,
     ) -> Result<(), StorageError>;
 
     /// Upserts a list of entry points with their tracing params into the database.
+    ///
+    /// * `entry_points_params` - The map of entry points to their tracing params to upsert and
+    ///   optionally a component id used for debugging only.
     async fn upsert_entry_point_tracing_params(
         &self,
         entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
     ) -> Result<(), StorageError>;
 
     /// Retrieves a map of component ids to a set of entry points from the database.
+    ///
+    /// * `filter` - The EntryPointFilter to apply to the query.
+    /// * `pagination_params` - The pagination parameters to apply to the query, if None, all
+    ///   results are returned.
     async fn get_entry_points(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<HashMap<ComponentId, HashSet<EntryPoint>>, StorageError>;
+        pagination_params: Option<&PaginationParams>,
+    ) -> Result<WithTotal<HashMap<ComponentId, HashSet<EntryPoint>>>, StorageError>;
 
     /// Retrieves a map of component ids to a set of entry points with their tracing data from the
     /// database.
+    ///
+    /// * `filter` - The EntryPointFilter to apply to the query.
+    /// * `pagination_params` - The pagination parameters to apply to the query, if None, all
+    ///   results are returned.
     async fn get_entry_points_tracing_params(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<HashMap<ComponentId, HashSet<EntryPointWithTracingParams>>, StorageError>;
+        pagination_params: Option<&PaginationParams>,
+    ) -> Result<WithTotal<HashMap<ComponentId, HashSet<EntryPointWithTracingParams>>>, StorageError>;
 
     /// Upserts a list of traced entry points into the database.
+    ///
+    /// * `traced_entry_points` - The list of traced entry points to upsert.
     async fn upsert_traced_entry_points(
         &self,
         traced_entry_points: &[TracedEntryPoint],
     ) -> Result<(), StorageError>;
 
     /// Retrieves all tracing results for a set of entry points from the database.
+    ///
+    /// * `entry_points` - The set of entry points to retrieve tracing results for.
     async fn get_traced_entry_points(
         &self,
         entry_points: &HashSet<EntryPointId>,
