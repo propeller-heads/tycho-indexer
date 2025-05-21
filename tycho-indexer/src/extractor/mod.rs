@@ -57,6 +57,10 @@ pub enum ExtractionError {
     MergeError(#[from] MergeError),
     #[error("Reorg buffer error: {0}")]
     ReorgBufferError(String),
+    #[error("Tracing error: {0}")]
+    TracingError(String),
+    #[error("Account extraction error: {0}")]
+    AccountExtractionError(String),
 }
 
 #[derive(Error, Debug)]
