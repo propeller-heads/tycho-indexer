@@ -1193,7 +1193,7 @@ impl EntryPointGateway for CachedGateway {
     async fn get_entry_points(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<HashMap<String, EntryPoint>, StorageError> {
+    ) -> Result<HashMap<ComponentId, HashSet<EntryPoint>>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -1207,7 +1207,7 @@ impl EntryPointGateway for CachedGateway {
     async fn get_entry_points_tracing_params(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<HashMap<String, EntryPointWithTracingParams>, StorageError> {
+    ) -> Result<HashMap<ComponentId, HashSet<EntryPointWithTracingParams>>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))

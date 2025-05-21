@@ -523,17 +523,18 @@ pub trait EntryPointGateway {
         entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
     ) -> Result<(), StorageError>;
 
-    /// Retrieves a list of entry points from the database.
+    /// Retrieves a map of component ids to a set of entry points from the database.
     async fn get_entry_points(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<HashMap<String, EntryPoint>, StorageError>;
+    ) -> Result<HashMap<ComponentId, HashSet<EntryPoint>>, StorageError>;
 
-    /// Retrieves a list of entry points with their tracing data from the database.
+    /// Retrieves a map of component ids to a set of entry points with their tracing data from the
+    /// database.
     async fn get_entry_points_tracing_params(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<HashMap<String, EntryPointWithTracingParams>, StorageError>;
+    ) -> Result<HashMap<ComponentId, HashSet<EntryPointWithTracingParams>>, StorageError>;
 
     /// Upserts a list of traced entry points into the database.
     async fn upsert_traced_entry_points(
