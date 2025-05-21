@@ -68,7 +68,14 @@ const executors_to_deploy = {
                 "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
                 "0x000000000022D473030F116dDEE9F6B43aC78BA3"
             ]
-        }
+        },
+        // Args: factory, permit2
+        {
+            exchange: "MaverickV2Executor", args: [
+                "0x0A7e848Aca42d879EF06507Fca0E7b33A0a63c1e",
+                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+            ]
+        },
     ],
     "base": [
          // Args: Factory, Pool Init Code Hash, Permit2, Fee BPS
@@ -114,9 +121,15 @@ const executors_to_deploy = {
                  "0x000000000022D473030F116dDEE9F6B43aC78BA3"
             ]
         },
-        // Args: Pool manager
-        {exchange: "UniswapV4Executor", args: ["0x498581ff718922c3f8e6a244956af099b2652b2b"]},
-        {exchange: "BalancerV2Executor", args: []},
+        // Args: Pool manager, Permit2
+        {
+            exchange: "UniswapV4Executor", args: [
+                "0x498581ff718922c3f8e6a244956af099b2652b2b",
+                "0x000000000022D473030F116dDEE9F6B43aC78BA3"
+            ]
+        },
+        // Args: Permit2
+        {exchange: "BalancerV2Executor", args: ["0x000000000022D473030F116dDEE9F6B43aC78BA3"]},
     ],
     "unichain": [
         // Args: Factory, Pool Init Code Hash, Permit2, Fee BPS
@@ -137,10 +150,11 @@ const executors_to_deploy = {
             ]
         },
         // Args: Pool manager, Permit2
-        {exchange: "UniswapV4Executor", args: [
+        {
+            exchange: "UniswapV4Executor", args: [
                 "0x1f98400000000000000000000000000000000004",
                 "0x000000000022D473030F116dDEE9F6B43aC78BA3"
-                ]
+            ]
         },
     ],
 }

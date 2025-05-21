@@ -1,14 +1,15 @@
 {
   "ethereum": {
-    "uniswap_v2": "0xf6c5be66FFf9DC69962d73da0A617a827c382329",
-    "sushiswap_v2": "0x8ABd4075cF54E0A9C52D18e6951b969AF3249cF9",
-    "pancakeswap_v2": "0x08B0C001D323da1DC8D2465119BAcCb82c3741f8",
-    "uniswap_v3": "0xdD8559c917393FC8DD2b4dD289c52Ff445fDE1B0",
-    "pancakeswap_v3": "0x4929B619A8F0D9c06ed0FfD497636580D823F65d",
-    "uniswap_v4": "0x042C0ebBEAb9d9987c2f64Ee05f2B3aeB86eAf70",
-    "vm:balancer_v2": "0x2380a9ff20565191b67cd66914cf5151434d71f5",
-    "ekubo_v2": "0x4f88f6630a33dB05BEa1FeF7Dc7ff7508D1c531D",
-    "vm:curve": "0x2751999a30A0026c909c4f1EB92d123254CABa7F"
+    "uniswap_v2": "0xEA8b7BC64dc58E4c702CDEcA439033bcdEd8D61f",
+    "sushiswap_v2": "0xF0E698751051daC13f20A49D3752275dDA02BA3A",
+    "pancakeswap_v2": "0x13bbDa1c372f314E92f729a16a58a6210aAB6596",
+    "uniswap_v3": "0xc5A53382B3caA24A81E07a3508063a06C05B65C3",
+    "pancakeswap_v3": "0x1C1d33f86dD7D8f2E729fde0b24B340FedC1D6a9",
+    "uniswap_v4": "0x7708505465bb9a1074f04e947f3903b840693fb6",
+    "vm:balancer_v2": "0xb89ef3EFAd54968A4A51E7fF77E397C735d1EA97",
+    "ekubo_v2": "0x25197ecCFB672ea78744997BfeFb3d181a9c6Ed3",
+    "vm:curve": "0x9bbD00a793Ea8Af721c37aAB189330754e7CdfE8",
+    "vm:maverick_v2": "0x7C413D61BdaF253E3FeE8a1C99EeA6A5Cb9FCf66"
   },
   "tenderly_ethereum": {
     "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",

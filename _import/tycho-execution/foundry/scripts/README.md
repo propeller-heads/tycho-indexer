@@ -19,6 +19,9 @@ export PRIVATE_KEY=<private-key>
 
 ## Deploy on Ethereum Mainnet or Base
 
+Make sure to run `unset HISTFILE` in your terminal before setting the private key. This will prevent the private key
+from being stored in the shell history.
+
 1. Set the following environment variables:
 
 ```
@@ -27,9 +30,6 @@ export DEPLOY_WALLET=<wallet-address>
 export PRIVATE_KEY=<private-key>
 export BLOCKCHAIN_EXPLORER_API_KEY=<blockchain-explorer-api-key>
 ```
-
-Make sure to run `unset HISTFILE` in your terminal before setting the private key. This will prevent the private key
-from being stored in the shell history.
 
 ## Deploy Tycho Router
 
