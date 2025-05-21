@@ -28,6 +28,17 @@ contract TychoRouterExposed is TychoRouter {
         return _unwrapETH(amount);
     }
 
+    function tstoreExposed(
+        address tokenIn,
+        uint256 amountIn,
+        bool isPermit2,
+        bool transferFromNeeded
+    ) external {
+        _tstoreTransferFromInfo(
+            tokenIn, amountIn, isPermit2, transferFromNeeded
+        );
+    }
+
     function exposedSplitSwap(
         uint256 amountIn,
         uint256 nTokens,
@@ -185,7 +196,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address target,
         address receiver,
         bool zero2one,
-        TokenTransfer.TransferType transferType
+        RestrictTransferFrom.TransferType transferType
     ) internal pure returns (bytes memory) {
         return
             abi.encodePacked(tokenIn, target, receiver, zero2one, transferType);
@@ -197,7 +208,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address receiver,
         address target,
         bool zero2one,
-        TokenTransfer.TransferType transferType
+        RestrictTransferFrom.TransferType transferType
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
         return abi.encodePacked(

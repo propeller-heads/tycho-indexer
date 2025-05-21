@@ -6,7 +6,7 @@ use tycho_common::Bytes;
 use crate::encoding::{
     errors::EncodingError,
     evm::{
-        constants::GROUPABLE_PROTOCOLS,
+        constants::{GROUPABLE_PROTOCOLS, IN_TRANSFER_REQUIRED_PROTOCOLS},
         group_swaps::group_swaps,
         strategy_encoder::strategy_encoders::{
             SequentialSwapStrategyEncoder, SingleSwapStrategyEncoder, SplitSwapStrategyEncoder,
@@ -273,13 +273,20 @@ impl TychoExecutorEncoder {
 
         let mut grouped_protocol_data: Vec<u8> = vec![];
         for swap in grouped_swap.swaps.iter() {
+            let transfer = if IN_TRANSFER_REQUIRED_PROTOCOLS
+                .contains(&swap.component.protocol_system.as_str())
+            {
+                TransferType::Transfer
+            } else {
+                TransferType::None
+            };
             let encoding_context = EncodingContext {
                 receiver: receiver.clone(),
                 exact_out: solution.exact_out,
                 router_address: None,
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
-                transfer_type: TransferType::TransferToProtocol,
+                transfer_type: transfer,
             };
             let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
             grouped_protocol_data.extend(protocol_data);
@@ -461,7 +468,7 @@ mod tests {
                 Bytes::from_str("0x3ede3eca2a72b3aecc820e955b36f38437d01395").unwrap()
             );
             // single swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "20144a07");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "5c4b639c");
         }
 
         #[test]
@@ -486,7 +493,7 @@ mod tests {
             let transactions = transactions.unwrap();
             assert_eq!(transactions.len(), 1);
             // single swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "20144a07");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "5c4b639c");
         }
 
         #[test]
@@ -533,7 +540,7 @@ mod tests {
             assert_eq!(transactions.len(), 1);
             assert_eq!(transactions[0].value, eth_amount_in);
             // sequential swap selector
-            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "e8a980d7");
+            assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "e21dd0d3");
         }
 
         #[test]
@@ -1059,8 +1066,8 @@ mod tests {
                     "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                     // zero for one
                     "00",
-                    // transfer type
-                    "00",
+                    // transfer true
+                    "01",
                 ))
             );
         }
@@ -1147,8 +1154,8 @@ mod tests {
                     "6982508145454ce325ddbe47a25d4ec3d2311933",
                     // zero for one
                     "00",
-                    // transfer type
-                    "00",
+                    // transfer type Transfer
+                    "01",
                     // receiver
                     "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                     // first pool intermediary token (ETH)

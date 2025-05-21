@@ -33,6 +33,7 @@ use crate::encoding::{
 /// * `selector`: String, the selector for the swap function in the router contract
 /// * `router_address`: Address of the router to be used to execute swaps
 /// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
+/// * `token_in_already_in_router`: bool, whether the token in is already in the router
 #[derive(Clone)]
 pub struct SingleSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -40,6 +41,7 @@ pub struct SingleSwapStrategyEncoder {
     selector: String,
     router_address: Bytes,
     transfer_optimization: TransferOptimization,
+    token_in_already_in_router: bool,
 }
 
 impl SingleSwapStrategyEncoder {
@@ -55,10 +57,10 @@ impl SingleSwapStrategyEncoder {
         } else {
             (
                 None,
-                "singleSwap(uint256,address,address,uint256,bool,bool,address,bytes)".to_string(),
+                "singleSwap(uint256,address,address,uint256,bool,bool,address,bool,bytes)"
+                    .to_string(),
             )
         };
-        let permit2_is_active = permit2.is_some();
         Ok(Self {
             permit2,
             selector,
@@ -67,10 +69,10 @@ impl SingleSwapStrategyEncoder {
             transfer_optimization: TransferOptimization::new(
                 chain.native_token()?,
                 chain.wrapped_token()?,
-                permit2_is_active,
                 token_in_already_in_router,
                 router_address,
             ),
+            token_in_already_in_router,
         })
     }
 
@@ -125,16 +127,16 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
         let swap_receiver =
             if !unwrap { solution.receiver.clone() } else { self.router_address.clone() };
 
-        let transfer_type = self
+        let transfer = self
             .transfer_optimization
-            .get_transfer_type(grouped_swap.clone(), solution.given_token.clone(), wrap, false);
+            .get_transfers(grouped_swap.clone(), solution.given_token.clone(), wrap, false);
         let encoding_context = EncodingContext {
             receiver: swap_receiver.clone(),
             exact_out: solution.exact_out,
             router_address: Some(self.router_address.clone()),
             group_token_in: grouped_swap.token_in.clone(),
             group_token_out: grouped_swap.token_out.clone(),
-            transfer_type: transfer_type.clone(),
+            transfer_type: transfer,
         };
 
         let mut grouped_protocol_data: Vec<u8> = vec![];
@@ -178,6 +180,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
                 wrap,
                 unwrap,
                 bytes_to_address(&solution.receiver)?,
+                !self.token_in_already_in_router,
                 swap_data,
             )
                 .abi_encode()
@@ -210,6 +213,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 /// * `sequential_swap_validator`: SequentialSwapValidator, responsible for checking validity of
 ///   sequential swap solutions
 /// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
+/// * `token_in_already_in_router`: bool, whether the token in is already in the router
 #[derive(Clone)]
 pub struct SequentialSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -220,6 +224,7 @@ pub struct SequentialSwapStrategyEncoder {
     wrapped_address: Bytes,
     sequential_swap_validator: SequentialSwapValidator,
     transfer_optimization: TransferOptimization,
+    token_in_already_in_router: bool,
 }
 
 impl SequentialSwapStrategyEncoder {
@@ -235,11 +240,10 @@ impl SequentialSwapStrategyEncoder {
         } else {
             (
                 None,
-                "sequentialSwap(uint256,address,address,uint256,bool,bool,address,bytes)"
+                "sequentialSwap(uint256,address,address,uint256,bool,bool,address,bool,bytes)"
                     .to_string(),
             )
         };
-        let permit2_is_active = permit2.is_some();
         Ok(Self {
             permit2,
             selector,
@@ -251,10 +255,10 @@ impl SequentialSwapStrategyEncoder {
             transfer_optimization: TransferOptimization::new(
                 chain.native_token()?,
                 chain.wrapped_token()?,
-                permit2_is_active,
                 token_in_already_in_router,
                 router_address,
             ),
+            token_in_already_in_router,
         })
     }
 
@@ -311,9 +315,10 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 .transfer_optimization
                 .get_receiver(solution.receiver.clone(), next_swap)?;
             next_in_between_swap_optimization_allowed = next_swap_optimization;
-            let transfer_type = self
+
+            let transfer = self
                 .transfer_optimization
-                .get_transfer_type(
+                .get_transfers(
                     grouped_swap.clone(),
                     solution.given_token.clone(),
                     wrap,
@@ -325,7 +330,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
-                transfer_type: transfer_type.clone(),
+                transfer_type: transfer,
             };
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
@@ -374,6 +379,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 wrap,
                 unwrap,
                 bytes_to_address(&solution.receiver)?,
+                !self.token_in_already_in_router,
                 encoded_swaps,
             )
                 .abi_encode()
@@ -406,6 +412,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 ///   solutions
 /// * `router_address`: Address of the router to be used to execute swaps
 /// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
+/// * `token_in_already_in_router`: bool, whether the token in is already in the router
 #[derive(Clone)]
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -416,6 +423,7 @@ pub struct SplitSwapStrategyEncoder {
     split_swap_validator: SplitSwapValidator,
     router_address: Bytes,
     transfer_optimization: TransferOptimization,
+    token_in_already_in_router: bool,
 }
 
 impl SplitSwapStrategyEncoder {
@@ -431,11 +439,10 @@ impl SplitSwapStrategyEncoder {
         } else {
             (
                 None,
-                "splitSwap(uint256,address,address,uint256,bool,bool,uint256,address,bytes)"
+                "splitSwap(uint256,address,address,uint256,bool,bool,uint256,address,bool,bytes)"
                     .to_string(),
             )
         };
-        let permit2_is_active = permit2.is_some();
         Ok(Self {
             permit2,
             selector,
@@ -447,10 +454,10 @@ impl SplitSwapStrategyEncoder {
             transfer_optimization: TransferOptimization::new(
                 chain.native_token()?,
                 chain.wrapped_token()?,
-                permit2_is_active,
                 token_in_already_in_router,
                 router_address,
             ),
+            token_in_already_in_router,
         })
     }
 
@@ -553,16 +560,16 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             } else {
                 self.router_address.clone()
             };
-            let transfer_type = self
+            let transfer = self
                 .transfer_optimization
-                .get_transfer_type(grouped_swap.clone(), solution.given_token.clone(), wrap, false);
+                .get_transfers(grouped_swap.clone(), solution.given_token.clone(), wrap, false);
             let encoding_context = EncodingContext {
                 receiver: swap_receiver.clone(),
                 exact_out: solution.exact_out,
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
-                transfer_type: transfer_type.clone(),
+                transfer_type: transfer,
             };
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
@@ -621,6 +628,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 unwrap,
                 U256::from(tokens_len),
                 bytes_to_address(&solution.receiver)?,
+                !self.token_in_already_in_router,
                 encoded_swaps,
             )
                 .abi_encode()
@@ -750,7 +758,7 @@ mod tests {
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
                 "30ace1b1",                                                             // Function selector
-                "0000000000000000000000000000000000000000000000000de0b6b3a7640000",      // amount out
+                "0000000000000000000000000000000000000000000000000de0b6b3a7640000",      // amount in
                 "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",      // token in
                 "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",      // token out
                 &expected_min_amount_encoded,                                            // min amount out
@@ -772,7 +780,7 @@ mod tests {
                 "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "00",                                       // zero2one
-                "02",                                       // transfer type
+                "00",                                       // transfer type TransferFrom
                 "0000000000000000000000000000",             // padding
             ));
             let hex_calldata = encode(&calldata);
@@ -839,7 +847,7 @@ mod tests {
                 .unwrap();
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
-                "20144a07",                                                           // Function selector
+                "5c4b639c",                                                           // Function selector
                 "0000000000000000000000000000000000000000000000000de0b6b3a7640000",   // amount in
                 "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",   // token in
                 "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",   // token out
@@ -847,7 +855,8 @@ mod tests {
                 "0000000000000000000000000000000000000000000000000000000000000000",   // wrap
                 "0000000000000000000000000000000000000000000000000000000000000000",   // unwrap
                 "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",   // receiver
-                "0000000000000000000000000000000000000000000000000000000000000100",   // offset of swap bytes
+                "0000000000000000000000000000000000000000000000000000000000000001",   // transfer from needed
+                "0000000000000000000000000000000000000000000000000000000000000120",   // offset of swap bytes
                 "0000000000000000000000000000000000000000000000000000000000000052",   // length of swap bytes without padding
 
                 // Swap data
@@ -856,8 +865,8 @@ mod tests {
                 "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "00",                                       // zero2one
-                "01",                                       // transfer type
-                "0000000000000000000000000000",               // padding
+                "00",                                       // transfer type TransferFrom
+                "0000000000000000000000000000",             // padding
             ]
                 .join("");
 
@@ -921,7 +930,7 @@ mod tests {
                 .unwrap();
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
-                "20144a07",                                                           // Function selector
+                "5c4b639c",                                                           // Function selector
                 "0000000000000000000000000000000000000000000000000de0b6b3a7640000",   // amount in
                 "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",   // token in
                 "0000000000000000000000006b175474e89094c44da98b954eedeac495271d0f",   // token out
@@ -929,7 +938,8 @@ mod tests {
                 "0000000000000000000000000000000000000000000000000000000000000000",   // wrap
                 "0000000000000000000000000000000000000000000000000000000000000000",   // unwrap
                 "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",   // receiver
-                "0000000000000000000000000000000000000000000000000000000000000100",   // offset of swap bytes
+                "0000000000000000000000000000000000000000000000000000000000000000",   // transfer from not needed
+                "0000000000000000000000000000000000000000000000000000000000000120",   // offset of swap bytes
                 "0000000000000000000000000000000000000000000000000000000000000052",   // length of swap bytes without padding
 
                 // Swap data
@@ -938,7 +948,7 @@ mod tests {
                 "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "00",                                       // zero2one
-                "00",                                       // transfer type
+                "01",                                       // transfer type Transfer
                 "0000000000000000000000000000",             // padding
             ]
                 .join("");
@@ -1191,7 +1201,7 @@ mod tests {
             let hex_calldata = encode(&calldata);
 
             let expected = String::from(concat!(
-                "e8a980d7",                                                         /* function selector */
+                "e21dd0d3",                                                         /* function selector */
                 "0000000000000000000000000000000000000000000000000de0b6b3a7640000", // amount in
                 "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
                 "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token ou
@@ -1199,7 +1209,8 @@ mod tests {
                 "0000000000000000000000000000000000000000000000000000000000000000", // wrap
                 "0000000000000000000000000000000000000000000000000000000000000000", // unwrap
                 "000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
-                "0000000000000000000000000000000000000000000000000000000000000100", /* length ple
+                "0000000000000000000000000000000000000000000000000000000000000001", /* transfer from needed */
+                "0000000000000000000000000000000000000000000000000000000000000120", /* length ple
                                                                                      * encode */
                 "00000000000000000000000000000000000000000000000000000000000000a8",
                 // swap 1
@@ -1209,7 +1220,7 @@ mod tests {
                 "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id
                 "004375dff511095cc5a197a54140a24efef3a416", // receiver (next pool)
                 "00",                                       // zero to one
-                "01",                                       // transfer type
+                "00",                                       // transfer type TransferFrom
                 // swap 2
                 "0052",                                             // swap length
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f",         // executor address
@@ -1217,7 +1228,7 @@ mod tests {
                 "004375dff511095cc5a197a54140a24efef3a416",         // component id
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",         // receiver (final user)
                 "01",                                               // zero to one
-                "05",                                               // transfer type - None
+                "02",                                               // transfer type None
                 "000000000000000000000000000000000000000000000000", // padding
             ));
 
@@ -1336,7 +1347,7 @@ mod tests {
                 "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
                 "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
                 "01",                                       // zero2one
-                "02",                                       // transfer type
+                "00",                                       // transfer type TransferFrom
                 "0069",                                     // ple encoded swaps
                 "2e234dae75c793f67a35089c9d99245e1c58470b", // executor address
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in
@@ -1345,7 +1356,7 @@ mod tests {
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
                 "00",                                       // zero2one
-                "00",                                       // transfer type
+                "01",                                       // transfer type Transfer
                 "00000000000000000000",                     // padding
             ]
                 .join("");
@@ -2062,7 +2073,7 @@ mod tests {
                 "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
                 "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
                 "01", // zero2one
-                "02", // transfer type
+                "00", // transfer type TransferFrom
                 "006e", // ple encoded swaps
                 "00", // token in index
                 "01", // token out index
@@ -2074,7 +2085,7 @@ mod tests {
                 "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
                 "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
                 "01", // zero2one
-                "02", // transfer type
+                "00", // transfer type TransferFrom
                 "0057", // ple encoded swaps
                 "01", // token in index
                 "00", // token out index
@@ -2084,7 +2095,7 @@ mod tests {
                 "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id,
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "00", // zero2one
-                "00", // transfer type
+                "01", // transfer type Transfer
                 "00000000000000" // padding
             ]
                 .join("");
@@ -2224,7 +2235,7 @@ mod tests {
                 "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id
                 "3ede3eca2a72b3aecc820e955b36f38437d01395", // receiver
                 "01", // zero2one
-                "02", // transfer type
+                "00", // transfer type TransferFrom
                 "006e", // ple encoded swaps
                 "01", // token in index
                 "00", // token out index
@@ -2236,7 +2247,7 @@ mod tests {
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640", // component id
                 "00", // zero2one
-                "00", // transfer type
+                "01", // transfer type Transfer
                 "006e", // ple encoded swaps
                 "01", // token in index
                 "00", // token out index
@@ -2248,7 +2259,7 @@ mod tests {
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
                 "00", // zero2one
-                "00", // transfer type
+                "01", // transfer type Transfer
                 "00000000000000" // padding
             ]
                 .join("");
@@ -2625,7 +2636,7 @@ mod tests {
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // group token in
                 "6982508145454ce325ddbe47a25d4ec3d2311933", // group token in
                 "00",                                       // zero2one
-                "02",                                       // transfer type (transfer to router)
+                "00",                                       // transfer type TransferFrom
                 "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2", // receiver
                 // First pool params
                 "0000000000000000000000000000000000000000", // intermediary token (ETH)

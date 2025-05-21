@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
+import "../TestUtils.sol";
 import "@src/executors/UniswapV2Executor.sol";
-import "@src/executors/TokenTransfer.sol";
-import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
 import {Permit2TestHelper} from "../Permit2TestHelper.sol";
+import {Test} from "../../lib/forge-std/src/Test.sol";
 
 contract UniswapV2ExecutorExposed is UniswapV2Executor {
     constructor(
@@ -23,7 +23,7 @@ contract UniswapV2ExecutorExposed is UniswapV2Executor {
             address target,
             address receiver,
             bool zeroForOne,
-            TransferType transferType
+            RestrictTransferFrom.TransferType transferType
         )
     {
         return _decodeData(data);
@@ -52,7 +52,7 @@ contract FakeUniswapV2Pool {
     }
 }
 
-contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
+contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
     using SafeERC20 for IERC20;
 
     UniswapV2ExecutorExposed uniswapV2Exposed;
@@ -60,7 +60,6 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
     UniswapV2ExecutorExposed pancakeswapV2Exposed;
     IERC20 WETH = IERC20(WETH_ADDR);
     IERC20 DAI = IERC20(DAI_ADDR);
-    IAllowanceTransfer permit2;
 
     function setUp() public {
         uint256 forkBlock = 17323404;
@@ -80,7 +79,6 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             PERMIT2_ADDRESS,
             25
         );
-        permit2 = IAllowanceTransfer(PERMIT2_ADDRESS);
     }
 
     function testDecodeParams() public view {
@@ -89,7 +87,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             address(2),
             address(3),
             false,
-            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
+            RestrictTransferFrom.TransferType.Transfer
         );
 
         (
@@ -97,7 +95,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             address target,
             address receiver,
             bool zeroForOne,
-            TokenTransfer.TransferType transferType
+            RestrictTransferFrom.TransferType transferType
         ) = uniswapV2Exposed.decodeParams(params);
 
         assertEq(address(tokenIn), WETH_ADDR);
@@ -105,8 +103,8 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
         assertEq(receiver, address(3));
         assertEq(zeroForOne, false);
         assertEq(
-            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL),
-            uint8(transferType)
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
         );
     }
 
@@ -163,66 +161,13 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             WETH_DAI_POOL,
             BOB,
             zeroForOne,
-            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL)
+            RestrictTransferFrom.TransferType.Transfer
         );
 
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
         uniswapV2Exposed.swap(amountIn, protocolData);
 
         uint256 finalBalance = DAI.balanceOf(BOB);
-        assertGe(finalBalance, amountOut);
-    }
-
-    function testSwapWithTransferFrom() public {
-        uint256 amountIn = 10 ** 18;
-        uint256 amountOut = 1847751195973566072891;
-        bool zeroForOne = false;
-        bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR,
-            WETH_DAI_POOL,
-            BOB,
-            zeroForOne,
-            uint8(TokenTransfer.TransferType.TRANSFER_FROM_TO_PROTOCOL)
-        );
-
-        deal(WETH_ADDR, address(this), amountIn);
-        IERC20(WETH_ADDR).approve(address(uniswapV2Exposed), amountIn);
-
-        uniswapV2Exposed.swap(amountIn, protocolData);
-
-        uint256 finalBalance = DAI.balanceOf(BOB);
-        assertGe(finalBalance, amountOut);
-    }
-
-    function testSwapWithPermit2TransferFrom() public {
-        uint256 amountIn = 10 ** 18;
-        uint256 amountOut = 1847751195973566072891;
-        bool zeroForOne = false;
-        bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR,
-            WETH_DAI_POOL,
-            ALICE,
-            zeroForOne,
-            uint8(TokenTransfer.TransferType.TRANSFER_PERMIT2_TO_PROTOCOL)
-        );
-
-        deal(WETH_ADDR, ALICE, amountIn);
-        vm.startPrank(ALICE);
-        (
-            IAllowanceTransfer.PermitSingle memory permitSingle,
-            bytes memory signature
-        ) = handlePermit2Approval(
-            WETH_ADDR, address(uniswapV2Exposed), amountIn
-        );
-
-        // Assume the permit2.approve method will be called from the TychoRouter
-        // Replicate this scenario in this test.
-        permit2.permit(ALICE, permitSingle, signature);
-
-        uniswapV2Exposed.swap(amountIn, protocolData);
-        vm.stopPrank();
-
-        uint256 finalBalance = DAI.balanceOf(ALICE);
         assertGe(finalBalance, amountOut);
     }
 
@@ -235,7 +180,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             WETH_DAI_POOL,
             BOB,
             zeroForOne,
-            uint8(TokenTransfer.TransferType.NONE)
+            RestrictTransferFrom.TransferType.None
         );
 
         deal(WETH_ADDR, address(this), amountIn);
@@ -248,27 +193,29 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
 
     function testDecodeIntegration() public view {
         bytes memory protocolData =
-            hex"c02aaa39b223fe8d0a0e5c4f27ead9083c756cc288e6a0c2ddd26feeb64f039a2c41296fcb3f564000000000000000000000000000000000000000010000";
+            hex"c02aaa39b223fe8d0a0e5c4f27ead9083c756cc288e6a0c2ddd26feeb64f039a2c41296fcb3f564000000000000000000000000000000000000000010001";
 
         (
             IERC20 tokenIn,
             address target,
             address receiver,
             bool zeroForOne,
-            TokenTransfer.TransferType transferType
+            RestrictTransferFrom.TransferType transferType
         ) = uniswapV2Exposed.decodeParams(protocolData);
 
         assertEq(address(tokenIn), WETH_ADDR);
         assertEq(target, 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640);
         assertEq(receiver, 0x0000000000000000000000000000000000000001);
         assertEq(zeroForOne, false);
-        // TRANSFER = 0
-        assertEq(0, uint8(transferType));
+        assertEq(
+            uint8(transferType),
+            uint8(RestrictTransferFrom.TransferType.Transfer)
+        );
     }
 
     function testSwapIntegration() public {
         bytes memory protocolData =
-            hex"c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2a478c2975ab1ea89e8196811f51a7b7ade33eb111d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e0000";
+            loadCallDataFromFile("test_encode_uniswap_v2");
         uint256 amountIn = 10 ** 18;
         uint256 amountOut = 1847751195973566072891;
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
@@ -287,7 +234,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             fakePool,
             BOB,
             zeroForOne,
-            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL)
+            RestrictTransferFrom.TransferType.Transfer
         );
 
         deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
@@ -307,7 +254,7 @@ contract UniswapV2ExecutorTest is Test, Constants, Permit2TestHelper {
             USDC_MAG7_POOL,
             BOB,
             zeroForOne,
-            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL)
+            RestrictTransferFrom.TransferType.Transfer
         );
 
         deal(BASE_USDC, address(uniswapV2Exposed), amountIn);

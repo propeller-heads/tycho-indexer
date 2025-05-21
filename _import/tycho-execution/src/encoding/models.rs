@@ -96,27 +96,6 @@ pub struct Transaction {
     pub data: Vec<u8>,
 }
 
-/// Represents the type of transfer to be performed into the pool.
-///
-/// # Fields
-///
-/// * `TransferToProtocol`: Transfer the token from the router into the protocol.
-/// * `TransferFromToProtocol`: Transfer the token from the sender to the protocol.
-/// * `TransferPermit2ToProtocol`: Transfer the token from the sender to the protocol using Permit2.
-/// * `TransferFromToRouter`: Transfer the token from the sender to the router.
-/// * `TransferPermit2ToRouter`: Transfer the token from the sender to the router using Permit2.
-/// * `None`: No transfer is needed. Tokens are already in the pool.
-#[repr(u8)]
-#[derive(Clone, Debug, PartialEq)]
-pub enum TransferType {
-    TransferToProtocol = 0,
-    TransferFromToProtocol = 1,
-    TransferPermit2ToProtocol = 2,
-    TransferFromToRouter = 3,
-    TransferPermit2ToRouter = 4,
-    None = 5,
-}
-
 /// Represents necessary attributes for encoding an order.
 ///
 /// # Fields
@@ -127,6 +106,7 @@ pub enum TransferType {
 ///   solution does not require router address.
 /// * `group_token_in`: Token to be used as the input for the group swap.
 /// * `group_token_out`: Token to be used as the output for the group swap.
+/// * `transfer`: Type of transfer to be performed. See `TransferType` for more details.
 #[derive(Clone, Debug)]
 pub struct EncodingContext {
     pub receiver: Bytes,
@@ -135,6 +115,21 @@ pub struct EncodingContext {
     pub group_token_in: Bytes,
     pub group_token_out: Bytes,
     pub transfer_type: TransferType,
+}
+
+/// Represents the type of transfer to be performed into the pool.
+///
+/// # Fields
+///
+/// * `TransferFrom`: Transfer the token from the sender to the protocol/router.
+/// * `Transfer`: Transfer the token from the router into the protocol.
+/// * `None`: No transfer is needed. Tokens are already in the pool.
+#[repr(u8)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum TransferType {
+    TransferFrom = 0,
+    Transfer = 1,
+    None = 2,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]

@@ -26,7 +26,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             WETH_DAI_POOL,
             ALICE,
             false,
-            TokenTransfer.TransferType.TRANSFER_PERMIT2_TO_PROTOCOL
+            RestrictTransferFrom.TransferType.TransferFrom
         );
 
         bytes memory swap =
@@ -67,7 +67,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             WETH_DAI_POOL,
             ALICE,
             false,
-            TokenTransfer.TransferType.TRANSFER_FROM_TO_PROTOCOL
+            RestrictTransferFrom.TransferType.TransferFrom
         );
 
         bytes memory swap =
@@ -82,6 +82,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             false,
             false,
             ALICE,
+            true,
             swap
         );
 
@@ -108,7 +109,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             WETH_DAI_POOL,
             ALICE,
             false,
-            TokenTransfer.TransferType.TRANSFER_FROM_TO_PROTOCOL
+            RestrictTransferFrom.TransferType.None
         );
 
         bytes memory swap =
@@ -116,7 +117,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
 
         vm.expectRevert(TychoRouter__UndefinedMinAmountOut.selector);
         tychoRouter.singleSwap(
-            amountIn, WETH_ADDR, DAI_ADDR, 0, false, false, ALICE, swap
+            amountIn, WETH_ADDR, DAI_ADDR, 0, false, false, ALICE, true, swap
         );
     }
 
@@ -134,7 +135,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             WETH_DAI_POOL,
             ALICE,
             false,
-            TokenTransfer.TransferType.TRANSFER_FROM_TO_PROTOCOL
+            RestrictTransferFrom.TransferType.TransferFrom
         );
 
         bytes memory swap =
@@ -150,6 +151,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             false,
             false,
             ALICE,
+            true,
             swap
         );
     }
@@ -169,7 +171,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             WETH_DAI_POOL,
             ALICE,
             false,
-            TokenTransfer.TransferType.TRANSFER_FROM_TO_PROTOCOL
+            RestrictTransferFrom.TransferType.TransferFrom
         );
 
         bytes memory swap =
@@ -192,6 +194,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             false,
             false,
             ALICE,
+            true,
             swap
         );
     }
@@ -218,7 +221,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             WETH_DAI_POOL,
             ALICE,
             false,
-            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
+            RestrictTransferFrom.TransferType.Transfer // ETH has already been transferred to router
         );
 
         bytes memory swap =
@@ -261,7 +264,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             WETH_DAI_POOL,
             tychoRouterAddr,
             true,
-            TokenTransfer.TransferType.TRANSFER_PERMIT2_TO_PROTOCOL
+            RestrictTransferFrom.TransferType.TransferFrom
         );
 
         bytes memory swap =
@@ -283,6 +286,49 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         uint256 expectedAmount = 1475644707225677606;
         assertEq(amountOut, expectedAmount);
         assertEq(ALICE.balance, expectedAmount);
+
+        vm.stopPrank();
+    }
+
+    function testSingleSwapNoTransferNeededIllegalTransfer() public {
+        // Tokens are already in the router, there is no need to transfer them.
+        // Failure because there will be an attempt on an illegal transfer.
+        uint256 amountIn = 1 ether;
+
+        deal(WETH_ADDR, address(tychoRouter), amountIn);
+        vm.startPrank(ALICE);
+        // Approve the tokenIn to be transferred to the router
+        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
+
+        bytes memory protocolData = encodeUniswapV2Swap(
+            WETH_ADDR,
+            WETH_DAI_POOL,
+            ALICE,
+            false,
+            RestrictTransferFrom.TransferType.TransferFrom
+        );
+
+        bytes memory swap =
+            encodeSingleSwap(address(usv2Executor), protocolData);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                RestrictTransferFrom__ExceededTransferFromAllowance.selector,
+                0, // allowed amount
+                amountIn // attempted amount
+            )
+        );
+        uint256 amountOut = tychoRouter.singleSwap(
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            2000 * 1e18,
+            false,
+            false,
+            ALICE,
+            false,
+            swap
+        );
 
         vm.stopPrank();
     }

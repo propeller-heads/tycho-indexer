@@ -592,7 +592,7 @@ mod tests {
         #[test]
         fn test_encode_uniswap_v2() {
             let usv2_pool = ProtocolComponent {
-                id: String::from("0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"),
+                id: String::from("0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11"),
                 ..Default::default()
             };
 
@@ -605,12 +605,12 @@ mod tests {
                 split: 0f64,
             };
             let encoding_context = EncodingContext {
-                receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
+                receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
                 exact_out: false,
                 router_address: Some(Bytes::zero(20)),
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
-                transfer_type: TransferType::TransferToProtocol,
+                transfer_type: TransferType::Transfer,
             };
             let encoder = UniswapV2SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -628,15 +628,16 @@ mod tests {
                     // in token
                     "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                     // component id
-                    "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+                    "a478c2975ab1ea89e8196811f51a7b7ade33eb11",
                     // receiver
-                    "0000000000000000000000000000000000000001",
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                     // zero for one
                     "00",
-                    // transfer type (transfer)
-                    "00",
+                    // transfer type Transfer
+                    "01",
                 ))
             );
+            write_calldata_to_file("test_encode_uniswap_v2", hex_swap.as_str());
         }
     }
 
@@ -668,7 +669,7 @@ mod tests {
                 router_address: Some(Bytes::zero(20)),
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
-                transfer_type: TransferType::TransferToProtocol,
+                transfer_type: TransferType::Transfer,
             };
             let encoder = UniswapV3SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -695,8 +696,8 @@ mod tests {
                     "88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
                     // zero for one
                     "00",
-                    // transfer type (transfer)
-                    "00",
+                    // transfer type Transfer
+                    "01",
                 ))
             );
         }
@@ -759,8 +760,8 @@ mod tests {
                     "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                     // approval needed
                     "01",
-                    // transfer type
-                    "05"
+                    // transfer type None
+                    "02"
                 ))
             );
             write_calldata_to_file("test_encode_balancer_v2", hex_swap.as_str());
@@ -804,7 +805,7 @@ mod tests {
 
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
-                transfer_type: TransferType::TransferToProtocol,
+                transfer_type: TransferType::Transfer,
             };
             let encoder = UniswapV4SwapEncoder::new(
                 String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
@@ -826,8 +827,8 @@ mod tests {
                     "dac17f958d2ee523a2206206994597c13d831ec7",
                     // zero for one
                     "01",
-                    // transfer type
-                    "00",
+                    // transfer type Transfer
+                    "01",
                     // receiver
                     "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                     // pool params:
@@ -875,7 +876,7 @@ mod tests {
                 group_token_in: group_token_in.clone(),
                 // Token out is the same as the group token out
                 group_token_out: token_out.clone(),
-                transfer_type: TransferType::TransferToProtocol,
+                transfer_type: TransferType::Transfer,
             };
 
             let encoder = UniswapV4SwapEncoder::new(
@@ -918,7 +919,7 @@ mod tests {
                 router_address: Some(router_address.clone()),
                 group_token_in: usde_address.clone(),
                 group_token_out: wbtc_address.clone(),
-                transfer_type: TransferType::TransferToProtocol,
+                transfer_type: TransferType::Transfer,
             };
 
             // Setup - First sequence: USDE -> USDT
@@ -996,8 +997,8 @@ mod tests {
                     "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
                     // zero for one
                     "01",
-                    // transfer type
-                    "00",
+                    // transfer type Transfer
+                    "01",
                     // receiver
                     "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
                     // pool params:
@@ -1053,7 +1054,7 @@ mod tests {
                 group_token_out: token_out.clone(),
                 exact_out: false,
                 router_address: Some(Bytes::default()),
-                transfer_type: TransferType::TransferToProtocol,
+                transfer_type: TransferType::Transfer,
             };
 
             let encoder =
@@ -1069,8 +1070,8 @@ mod tests {
             assert_eq!(
                 hex_swap,
                 concat!(
-                    // transfer type
-                    "00",
+                    // transfer type Transfer
+                    "01",
                     // receiver
                     "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6",
                     // group token in
@@ -1099,7 +1100,7 @@ mod tests {
                 group_token_out: group_token_out.clone(),
                 exact_out: false,
                 router_address: Some(Bytes::default()),
-                transfer_type: TransferType::TransferToProtocol,
+                transfer_type: TransferType::Transfer,
             };
 
             let first_swap = Swap {
@@ -1149,8 +1150,8 @@ mod tests {
                 combined_hex,
                 // transfer type
                 concat!(
-                    // transfer type
-                    "00",
+                    // transfer type Transfer
+                    "01",
                     // receiver
                     "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6",
                     // group token in
@@ -1332,10 +1333,10 @@ mod tests {
                     "01",
                     // approval needed
                     "01",
-                    // transfer type
-                    "05",
+                    // transfer type None
+                    "02",
                     // receiver,
-                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                 ))
             );
         }
@@ -1403,10 +1404,10 @@ mod tests {
                     "00",
                     // approval needed
                     "01",
-                    // transfer type
-                    "05",
+                    // transfer type None
+                    "02",
                     // receiver
-                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                 ))
             );
         }
@@ -1484,10 +1485,10 @@ mod tests {
                     "01",
                     // approval needed
                     "01",
-                    // transfer type
-                    "05",
+                    // transfer type None
+                    "02",
                     // receiver
-                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
                 ))
             );
         }
@@ -1516,7 +1517,7 @@ mod tests {
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            transfer_type: TransferType::TransferToProtocol,
+            transfer_type: TransferType::Transfer,
         };
         let encoder = MaverickV2SwapEncoder::new(
             String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -1539,8 +1540,8 @@ mod tests {
                 "14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67",
                 // receiver
                 "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
-                // transfer from router to protocol
-                "00",
+                // transfer true
+                "01",
             ))
             .to_lowercase()
         );

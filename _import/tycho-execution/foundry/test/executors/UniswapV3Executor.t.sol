@@ -22,7 +22,7 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
             address receiver,
             address target,
             bool zeroForOne,
-            TransferType transferType
+            RestrictTransferFrom.TransferType transferType
         )
     {
         return _decodeData(data);
@@ -71,7 +71,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             address(2),
             address(3),
             false,
-            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
+            RestrictTransferFrom.TransferType.Transfer
         );
 
         (
@@ -81,7 +81,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             address receiver,
             address target,
             bool zeroForOne,
-            TokenTransfer.TransferType transferType
+            RestrictTransferFrom.TransferType transferType
         ) = uniswapV3Exposed.decodeData(data);
 
         assertEq(tokenIn, WETH_ADDR);
@@ -92,7 +92,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
         assertEq(zeroForOne, false);
         assertEq(
             uint8(transferType),
-            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL)
+            uint8(RestrictTransferFrom.TransferType.Transfer)
         );
     }
 
@@ -109,7 +109,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             address(this),
             DAI_WETH_USV3,
             zeroForOne,
-            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
+            RestrictTransferFrom.TransferType.Transfer
         );
 
         uint256 amountOut = uniswapV3Exposed.swap(amountIn, data);
@@ -150,7 +150,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             WETH_ADDR,
             DAI_ADDR,
             poolFee,
-            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL,
+            RestrictTransferFrom.TransferType.Transfer,
             address(uniswapV3Exposed)
         );
         uint256 dataOffset = 3; // some offset
@@ -184,7 +184,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             address(this),
             fakePool,
             zeroForOne,
-            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
+            RestrictTransferFrom.TransferType.Transfer
         );
 
         vm.expectRevert(UniswapV3Executor__InvalidTarget.selector);
@@ -197,7 +197,7 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
         address receiver,
         address target,
         bool zero2one,
-        TokenTransfer.TransferType transferType
+        RestrictTransferFrom.TransferType transferType
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
         return abi.encodePacked(

@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import "../TestUtils.sol";
 import {Constants} from "../Constants.sol";
-import {EkuboExecutor, TokenTransfer} from "@src/executors/EkuboExecutor.sol";
+import "@src/executors/EkuboExecutor.sol";
 import {ICore} from "@ekubo/interfaces/ICore.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NATIVE_TOKEN_ADDRESS} from "@ekubo/math/constants.sol";
@@ -45,7 +45,7 @@ contract EkuboExecutorTest is Constants, TestUtils {
         uint256 usdcBalanceBeforeExecutor = USDC.balanceOf(address(executor));
 
         bytes memory data = abi.encodePacked(
-            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL), // transferType (transfer from executor to core)
+            uint8(RestrictTransferFrom.TransferType.Transfer), // transfer type (transfer from executor to core)
             address(executor), // receiver
             NATIVE_TOKEN_ADDRESS, // tokenIn
             USDC_ADDR, // tokenOut
@@ -82,7 +82,7 @@ contract EkuboExecutorTest is Constants, TestUtils {
         uint256 ethBalanceBeforeExecutor = address(executor).balance;
 
         bytes memory data = abi.encodePacked(
-            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL), // transferType (transfer from executor to core)
+            uint8(RestrictTransferFrom.TransferType.Transfer), // transferNeeded (transfer from executor to core)
             address(executor), // receiver
             USDC_ADDR, // tokenIn
             NATIVE_TOKEN_ADDRESS, // tokenOut
@@ -140,7 +140,7 @@ contract EkuboExecutorTest is Constants, TestUtils {
     // Same test case as in swap_encoder::tests::ekubo::test_encode_swap_multi
     function testMultiHopSwap() public {
         bytes memory data = abi.encodePacked(
-            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL), // transferType
+            uint8(RestrictTransferFrom.TransferType.Transfer), // transferNeeded (transfer from executor to core)
             address(executor), // receiver
             NATIVE_TOKEN_ADDRESS, // tokenIn
             USDC_ADDR, // tokenOut of 1st swap

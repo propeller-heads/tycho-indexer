@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap-v2/contracts/interfaces/IUniswapV2Pair.sol";
-import "./TokenTransfer.sol";
+import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 
 error UniswapV2Executor__InvalidDataLength();
 error UniswapV2Executor__InvalidTarget();
@@ -12,7 +12,7 @@ error UniswapV2Executor__InvalidFactory();
 error UniswapV2Executor__InvalidInitCode();
 error UniswapV2Executor__InvalidFee();
 
-contract UniswapV2Executor is IExecutor, TokenTransfer {
+contract UniswapV2Executor is IExecutor, RestrictTransferFrom {
     using SafeERC20 for IERC20;
 
     address public immutable factory;
@@ -25,7 +25,7 @@ contract UniswapV2Executor is IExecutor, TokenTransfer {
         bytes32 _initCode,
         address _permit2,
         uint256 _feeBps
-    ) TokenTransfer(_permit2) {
+    ) RestrictTransferFrom(_permit2) {
         if (_factory == address(0)) {
             revert UniswapV2Executor__InvalidFactory();
         }
@@ -59,9 +59,8 @@ contract UniswapV2Executor is IExecutor, TokenTransfer {
         _verifyPairAddress(target);
 
         calculatedAmount = _getAmountOut(target, givenAmount, zeroForOne);
-        _transfer(
-            address(tokenIn), msg.sender, target, givenAmount, transferType
-        );
+
+        _transfer(target, transferType, address(tokenIn), givenAmount);
 
         IUniswapV2Pair pool = IUniswapV2Pair(target);
         if (zeroForOne) {
@@ -88,7 +87,7 @@ contract UniswapV2Executor is IExecutor, TokenTransfer {
         inToken = IERC20(address(bytes20(data[0:20])));
         target = address(bytes20(data[20:40]));
         receiver = address(bytes20(data[40:60]));
-        zeroForOne = uint8(data[60]) > 0;
+        zeroForOne = data[60] != 0;
         transferType = TransferType(uint8(data[61]));
     }
 

@@ -46,7 +46,7 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
             WETH_BAL_POOL_ID,
             address(2),
             true,
-            TokenTransfer.TransferType.NONE
+            RestrictTransferFrom.TransferType.None
         );
 
         (
@@ -55,7 +55,7 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
             bytes32 poolId,
             address receiver,
             bool needsApproval,
-            TokenTransfer.TransferType transferType
+            RestrictTransferFrom.TransferType transferType
         ) = balancerV2Exposed.decodeParams(params);
 
         assertEq(address(tokenIn), WETH_ADDR);
@@ -63,7 +63,9 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
         assertEq(poolId, WETH_BAL_POOL_ID);
         assertEq(receiver, address(2));
         assertEq(needsApproval, true);
-        assertEq(uint8(transferType), uint8(TokenTransfer.TransferType.NONE));
+        assertEq(
+            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
+        );
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -82,7 +84,7 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
             WETH_BAL_POOL_ID,
             BOB,
             true,
-            TokenTransfer.TransferType.NONE
+            RestrictTransferFrom.TransferType.Transfer
         );
 
         deal(WETH_ADDR, address(balancerV2Exposed), amountIn);
@@ -104,7 +106,7 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
             bytes32 poolId,
             address receiver,
             bool needsApproval,
-            TokenTransfer.TransferType transferType
+            RestrictTransferFrom.TransferType transferType
         ) = balancerV2Exposed.decodeParams(protocolData);
 
         assertEq(address(tokenIn), WETH_ADDR);
@@ -112,7 +114,9 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
         assertEq(poolId, WETH_BAL_POOL_ID);
         assertEq(receiver, BOB);
         assertEq(needsApproval, true);
-        assertEq(uint8(transferType), uint8(TokenTransfer.TransferType.NONE));
+        assertEq(
+            uint8(transferType), uint8(RestrictTransferFrom.TransferType.None)
+        );
     }
 
     function testSwapIntegration() public {

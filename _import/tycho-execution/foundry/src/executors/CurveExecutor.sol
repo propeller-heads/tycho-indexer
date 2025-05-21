@@ -3,8 +3,8 @@ pragma solidity ^0.8.26;
 
 import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./TokenTransfer.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 
 error CurveExecutor__AddressZero();
 error CurveExecutor__InvalidDataLength();
@@ -35,13 +35,13 @@ interface CryptoPoolETH {
     // slither-disable-end naming-convention
 }
 
-contract CurveExecutor is IExecutor, TokenTransfer {
+contract CurveExecutor is IExecutor, RestrictTransferFrom {
     using SafeERC20 for IERC20;
 
     address public immutable nativeToken;
 
     constructor(address _nativeToken, address _permit2)
-        TokenTransfer(_permit2)
+        RestrictTransferFrom(_permit2)
     {
         if (_nativeToken == address(0)) {
             revert CurveExecutor__AddressZero();
@@ -64,25 +64,16 @@ contract CurveExecutor is IExecutor, TokenTransfer {
             uint8 poolType,
             int128 i,
             int128 j,
-            bool tokenApprovalNeeded,
+            bool approvalNeeded,
             TransferType transferType,
             address receiver
         ) = _decodeData(data);
 
-        _transfer(
-            tokenIn,
-            msg.sender,
-            // Receiver can never be the pool, since the pool expects funds in the router contract
-            // Thus, this call will only ever be used to transfer funds from the user into the router.
-            address(this),
-            amountIn,
-            transferType
-        );
-
-        if (tokenApprovalNeeded && tokenIn != nativeToken) {
+        if (approvalNeeded && tokenIn != nativeToken) {
             // slither-disable-next-line unused-return
             IERC20(tokenIn).forceApprove(address(pool), type(uint256).max);
         }
+        _transfer(address(this), transferType, tokenIn, amountIn);
 
         /// Inspired by Curve's router contract: https://github.com/curvefi/curve-router-ng/blob/9ab006ca848fc7f1995b6fbbecfecc1e0eb29e2a/contracts/Router.vy#L44
         uint256 balanceBefore = _balanceOf(tokenOut);
@@ -133,7 +124,7 @@ contract CurveExecutor is IExecutor, TokenTransfer {
             uint8 poolType,
             int128 i,
             int128 j,
-            bool tokenApprovalNeeded,
+            bool approvalNeeded,
             TransferType transferType,
             address receiver
         )
@@ -144,7 +135,7 @@ contract CurveExecutor is IExecutor, TokenTransfer {
         poolType = uint8(data[60]);
         i = int128(uint128(uint8(data[61])));
         j = int128(uint128(uint8(data[62])));
-        tokenApprovalNeeded = data[63] != 0;
+        approvalNeeded = data[63] != 0;
         transferType = TransferType(uint8(data[64]));
         receiver = address(bytes20(data[65:85]));
     }

@@ -17,7 +17,7 @@ contract MaverickV2ExecutorExposed is MaverickV2Executor {
             IERC20 tokenIn,
             address target,
             address receiver,
-            TransferType transferType
+            RestrictTransferFrom.TransferType transferType
         )
     {
         return _decodeData(data);
@@ -43,14 +43,14 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
             GHO_ADDR,
             GHO_USDC_POOL,
             address(2),
-            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
+            RestrictTransferFrom.TransferType.Transfer
         );
 
         (
             IERC20 tokenIn,
             address target,
             address receiver,
-            TokenTransfer.TransferType transferType
+            RestrictTransferFrom.TransferType transferType
         ) = maverickV2Exposed.decodeParams(params);
 
         assertEq(address(tokenIn), GHO_ADDR);
@@ -58,7 +58,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         assertEq(receiver, address(2));
         assertEq(
             uint8(transferType),
-            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL)
+            uint8(RestrictTransferFrom.TransferType.Transfer)
         );
     }
 
@@ -76,7 +76,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
             GHO_ADDR,
             GHO_USDC_POOL,
             BOB,
-            TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL
+            RestrictTransferFrom.TransferType.Transfer
         );
 
         deal(GHO_ADDR, address(maverickV2Exposed), amountIn);
@@ -98,7 +98,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
             IERC20 tokenIn,
             address pool,
             address receiver,
-            TokenTransfer.TransferType transferType
+            RestrictTransferFrom.TransferType transferType
         ) = maverickV2Exposed.decodeParams(protocolData);
 
         assertEq(address(tokenIn), GHO_ADDR);
@@ -106,7 +106,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         assertEq(receiver, BOB);
         assertEq(
             uint8(transferType),
-            uint8(TokenTransfer.TransferType.TRANSFER_TO_PROTOCOL)
+            uint8(RestrictTransferFrom.TransferType.Transfer)
         );
     }
 

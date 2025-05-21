@@ -10,7 +10,6 @@ error Dispatcher__InvalidDataLength();
 
 /**
  * @title Dispatcher - Dispatch execution to external contracts
- * @author PropellerHeads Devs
  * @dev Provides the ability to delegate execution of swaps to external
  *  contracts. This allows dynamically adding new supported protocols
  *  without needing to upgrade any contracts. External contracts will

@@ -5,15 +5,15 @@ import "@interfaces/IExecutor.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@interfaces/ICallback.sol";
-import {TokenTransfer} from "./TokenTransfer.sol";
+import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
 error UniswapV3Executor__InvalidDataLength();
 error UniswapV3Executor__InvalidFactory();
 error UniswapV3Executor__InvalidTarget();
 error UniswapV3Executor__InvalidInitCode();
-error UniswapV3Executor__InvalidTransferType(uint8 transferType);
 
-contract UniswapV3Executor is IExecutor, ICallback, TokenTransfer {
+contract UniswapV3Executor is IExecutor, ICallback, RestrictTransferFrom {
     using SafeERC20 for IERC20;
 
     uint160 private constant MIN_SQRT_RATIO = 4295128739;
@@ -25,7 +25,7 @@ contract UniswapV3Executor is IExecutor, ICallback, TokenTransfer {
     address private immutable self;
 
     constructor(address _factory, bytes32 _initCode, address _permit2)
-        TokenTransfer(_permit2)
+        RestrictTransferFrom(_permit2)
     {
         if (_factory == address(0)) {
             revert UniswapV3Executor__InvalidFactory();
@@ -97,21 +97,14 @@ contract UniswapV3Executor is IExecutor, ICallback, TokenTransfer {
             abi.decode(msgData[4:68], (int256, int256));
 
         address tokenIn = address(bytes20(msgData[132:152]));
-
-        // Transfer type does not exist
-        if (uint8(msgData[175]) > uint8(TransferType.NONE)) {
-            revert UniswapV3Executor__InvalidTransferType(uint8(msgData[175]));
-        }
-
         TransferType transferType = TransferType(uint8(msgData[175]));
-        address sender = address(bytes20(msgData[176:196]));
 
         verifyCallback(msgData[132:]);
 
         uint256 amountOwed =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
 
-        _transfer(tokenIn, sender, msg.sender, amountOwed, transferType);
+        _transfer(msg.sender, transferType, tokenIn, amountOwed);
 
         return abi.encode(amountOwed, tokenIn);
     }
@@ -162,10 +155,8 @@ contract UniswapV3Executor is IExecutor, ICallback, TokenTransfer {
         address tokenOut,
         uint24 fee,
         TransferType transferType
-    ) internal view returns (bytes memory) {
-        return abi.encodePacked(
-            tokenIn, tokenOut, fee, uint8(transferType), msg.sender
-        );
+    ) internal pure returns (bytes memory) {
+        return abi.encodePacked(tokenIn, tokenOut, fee, uint8(transferType));
     }
 
     function _verifyPairAddress(
