@@ -69,9 +69,9 @@ pub(crate) enum WriteOp {
     // Simply merge
     UpsertProtocolState(Vec<(TxHash, models::protocol::ProtocolComponentStateDelta)>),
     // Simply merge
-    UpsertEntryPoints(HashMap<models::ComponentId, HashSet<models::blockchain::EntryPoint>>),
+    InsertEntryPoints(HashMap<models::ComponentId, HashSet<models::blockchain::EntryPoint>>),
     // Simply merge
-    UpsertEntryPointTracingParams(
+    InsertEntryPointTracingParams(
         HashMap<models::EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
     ),
     // Simply merge
@@ -92,8 +92,8 @@ impl WriteOp {
             WriteOp::UpdateTokens(_) => "UpdateTokens",
             WriteOp::InsertComponentBalances(_) => "InsertComponentBalances",
             WriteOp::UpsertProtocolState(_) => "UpsertProtocolState",
-            WriteOp::UpsertEntryPoints(_) => "UpsertEntryPoints",
-            WriteOp::UpsertEntryPointTracingParams(_) => "UpsertEntryPointTracingParams",
+            WriteOp::InsertEntryPoints(_) => "InsertEntryPoints",
+            WriteOp::InsertEntryPointTracingParams(_) => "InsertEntryPointTracingParams",
             WriteOp::UpsertTracedEntryPoints(_) => "UpsertTracedEntryPoints",
         }
     }
@@ -110,8 +110,8 @@ impl WriteOp {
             WriteOp::InsertProtocolComponents(_) => 7,
             WriteOp::InsertComponentBalances(_) => 8,
             WriteOp::UpsertProtocolState(_) => 9,
-            WriteOp::UpsertEntryPoints(_) => 10,
-            WriteOp::UpsertEntryPointTracingParams(_) => 11,
+            WriteOp::InsertEntryPoints(_) => 10,
+            WriteOp::InsertEntryPointTracingParams(_) => 11,
             WriteOp::UpsertTracedEntryPoints(_) => 12,
             WriteOp::SaveExtractionState(_) => 13,
         }
@@ -215,7 +215,7 @@ impl DBTransaction {
                     l.extend(r.iter().cloned());
                     return Ok(());
                 }
-                (WriteOp::UpsertEntryPoints(l), WriteOp::UpsertEntryPoints(r)) => {
+                (WriteOp::InsertEntryPoints(l), WriteOp::InsertEntryPoints(r)) => {
                     for (component_id, entry_points) in r.iter() {
                         let entry = l
                             .entry(component_id.clone())
@@ -227,8 +227,8 @@ impl DBTransaction {
                     return Ok(());
                 }
                 (
-                    WriteOp::UpsertEntryPointTracingParams(l),
-                    WriteOp::UpsertEntryPointTracingParams(r),
+                    WriteOp::InsertEntryPointTracingParams(l),
+                    WriteOp::InsertEntryPointTracingParams(r),
                 ) => {
                     for (entry_point_id, params) in r.iter() {
                         let entry = l
@@ -525,14 +525,14 @@ impl DBCacheWriteExecutor {
                     .upsert_traced_entry_points(traced_entry_points.as_slice(), conn)
                     .await?
             }
-            WriteOp::UpsertEntryPoints(new_entry_points) => {
+            WriteOp::InsertEntryPoints(new_entry_points) => {
                 self.state_gateway
-                    .upsert_entry_points(new_entry_points, &self.chain, conn)
+                    .insert_entry_points(new_entry_points, &self.chain, conn)
                     .await?
             }
-            WriteOp::UpsertEntryPointTracingParams(new_entry_point_tracing_params) => {
+            WriteOp::InsertEntryPointTracingParams(new_entry_point_tracing_params) => {
                 self.state_gateway
-                    .upsert_entry_point_tracing_params(
+                    .insert_entry_point_tracing_params(
                         new_entry_point_tracing_params,
                         &self.chain,
                         conn,
@@ -1170,21 +1170,21 @@ impl ProtocolGateway for CachedGateway {
 #[async_trait]
 impl EntryPointGateway for CachedGateway {
     #[instrument(skip_all)]
-    async fn upsert_entry_points(
+    async fn insert_entry_points(
         &self,
         entry_points: &HashMap<models::ComponentId, HashSet<models::blockchain::EntryPoint>>,
     ) -> Result<(), StorageError> {
-        self.add_op(WriteOp::UpsertEntryPoints(entry_points.clone()))
+        self.add_op(WriteOp::InsertEntryPoints(entry_points.clone()))
             .await?;
         Ok(())
     }
 
     #[instrument(skip_all)]
-    async fn upsert_entry_point_tracing_params(
+    async fn insert_entry_point_tracing_params(
         &self,
         entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
     ) -> Result<(), StorageError> {
-        self.add_op(WriteOp::UpsertEntryPointTracingParams(entry_points_params.clone()))
+        self.add_op(WriteOp::InsertEntryPointTracingParams(entry_points_params.clone()))
             .await?;
         Ok(())
     }

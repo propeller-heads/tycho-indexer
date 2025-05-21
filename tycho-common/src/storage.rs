@@ -511,19 +511,23 @@ impl EntryPointFilter {
 // Trait for entry point gateway operations.
 #[async_trait]
 pub trait EntryPointGateway {
-    /// Upserts a list of entry points into the database.
+    /// Inserts a list of entry points into the database.
     ///
-    /// * `entry_points` - The map of component ids to their entry points to upsert.
-    async fn upsert_entry_points(
+    /// * `entry_points` - The map of component ids to their entry points to insert.
+    ///
+    /// Note: This function ignores conflicts on inserts.
+    async fn insert_entry_points(
         &self,
         entry_points: &HashMap<ComponentId, HashSet<EntryPoint>>,
     ) -> Result<(), StorageError>;
 
-    /// Upserts a list of entry points with their tracing params into the database.
+    /// Inserts a list of entry points with their tracing params into the database.
     ///
-    /// * `entry_points_params` - The map of entry points to their tracing params to upsert and
+    /// * `entry_points_params` - The map of entry points to their tracing params to insert and
     ///   optionally a component id used for debugging only.
-    async fn upsert_entry_point_tracing_params(
+    ///
+    /// Note: This function ignores conflicts on inserts.
+    async fn insert_entry_point_tracing_params(
         &self,
         entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
     ) -> Result<(), StorageError>;
@@ -551,7 +555,8 @@ pub trait EntryPointGateway {
         pagination_params: Option<&PaginationParams>,
     ) -> Result<WithTotal<HashMap<ComponentId, HashSet<EntryPointWithTracingParams>>>, StorageError>;
 
-    /// Upserts a list of traced entry points into the database.
+    /// Upserts a list of traced entry points into the database. Updates the result if it already
+    /// exists for the same entry point and tracing params.
     ///
     /// * `traced_entry_points` - The list of traced entry points to upsert.
     async fn upsert_traced_entry_points(

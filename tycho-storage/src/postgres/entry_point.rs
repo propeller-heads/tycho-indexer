@@ -24,14 +24,14 @@ use super::{
 };
 
 impl PostgresGateway {
-    /// Upsert entry points into the database.
+    /// Insert new entry points into the database. This function ignores conflicts on inserts.
     ///
     /// # Arguments
     ///
     /// * `new_data` - A map of protocol component external ids to a list of entry points.
     /// * `chain` - The chain to insert the entry points for.
     /// * `conn` - The database connection to use.
-    pub(crate) async fn upsert_entry_points(
+    pub(crate) async fn insert_entry_points(
         &self,
         new_data: &HashMap<ComponentId, HashSet<EntryPoint>>,
         chain: &Chain,
@@ -140,14 +140,15 @@ impl PostgresGateway {
         Ok(())
     }
 
-    /// Upsert entry point tracing params into the database.
+    /// Insert entry point tracing params into the database. This function ignores conflicts on
+    /// inserts.
     ///
     /// # Arguments
     ///
     /// * `new_data` - A map of entry point ids to a list of tracing params and optional component
     ///   id related to the tracing params.
     /// * `conn` - The database connection to use.
-    pub(crate) async fn upsert_entry_point_tracing_params(
+    pub(crate) async fn insert_entry_point_tracing_params(
         &self,
         new_data: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
         chain: &Chain,
@@ -454,7 +455,8 @@ impl PostgresGateway {
         Ok(WithTotal { entity: res, total: count })
     }
 
-    /// Upsert traced entry points into the database.
+    /// Upsert traced entry points into the database. Updates the result if it already exists for
+    /// the same entry point and tracing params.
     ///
     /// # Arguments
     ///
@@ -837,7 +839,7 @@ mod test {
         setup_data(&mut conn).await;
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
-        gw.upsert_entry_points(
+        gw.insert_entry_points(
             &HashMap::from([
                 ("pc_0".to_string(), HashSet::from([rpc_tracer_entry_point(0)])),
                 (
@@ -893,7 +895,7 @@ mod test {
         setup_data(&mut conn).await;
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
-        gw.upsert_entry_points(
+        gw.insert_entry_points(
             &HashMap::from([
                 ("pc_0".to_string(), HashSet::from([rpc_tracer_entry_point(0)])),
                 (
@@ -909,7 +911,7 @@ mod test {
         .await
         .unwrap();
 
-        gw.upsert_entry_point_tracing_params(
+        gw.insert_entry_point_tracing_params(
             &HashMap::from([
                 (
                     rpc_tracer_entry_point(0)
@@ -1027,7 +1029,7 @@ mod test {
         let entry_point = rpc_tracer_entry_point(0);
         let traced_entry_point = traced_entry_point();
 
-        gw.upsert_entry_points(
+        gw.insert_entry_points(
             &HashMap::from([("pc_0".to_string(), HashSet::from([entry_point.clone()]))]),
             &Chain::Ethereum,
             &mut conn,
@@ -1035,7 +1037,7 @@ mod test {
         .await
         .unwrap();
 
-        gw.upsert_entry_point_tracing_params(
+        gw.insert_entry_point_tracing_params(
             &HashMap::from([(
                 entry_point.external_id.clone(),
                 HashSet::from([(tracing_params(0), Some("pc_0".to_string()))]),
