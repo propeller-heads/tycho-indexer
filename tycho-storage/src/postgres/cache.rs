@@ -527,7 +527,7 @@ impl DBCacheWriteExecutor {
             }
             WriteOp::UpsertEntryPoints(new_entry_points) => {
                 self.state_gateway
-                    .insert_entry_points(new_entry_points, &self.chain, conn)
+                    .upsert_entry_points(new_entry_points, &self.chain, conn)
                     .await?
             }
             WriteOp::UpsertEntryPointTracingParams(new_entry_point_tracing_params) => {
@@ -1210,13 +1210,14 @@ impl EntryPointGateway for CachedGateway {
     async fn get_entry_points(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<HashMap<ComponentId, HashSet<EntryPoint>>, StorageError> {
+        pagination_params: Option<&PaginationParams>,
+    ) -> Result<WithTotal<HashMap<ComponentId, HashSet<EntryPoint>>>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_entry_points(filter, &mut conn)
+            .get_entry_points(filter, pagination_params, &mut conn)
             .await
     }
 
@@ -1224,13 +1225,15 @@ impl EntryPointGateway for CachedGateway {
     async fn get_entry_points_tracing_params(
         &self,
         filter: EntryPointFilter,
-    ) -> Result<HashMap<ComponentId, HashSet<EntryPointWithTracingParams>>, StorageError> {
+        pagination_params: Option<&PaginationParams>,
+    ) -> Result<WithTotal<HashMap<ComponentId, HashSet<EntryPointWithTracingParams>>>, StorageError>
+    {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
             })?;
         self.state_gateway
-            .get_entry_points_tracing_params(filter, &mut conn)
+            .get_entry_points_tracing_params(filter, pagination_params, &mut conn)
             .await
     }
 

@@ -7,9 +7,9 @@ use tycho_common::{
         blockchain::{
             EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingParams, TracingResult,
         },
-        Chain, ComponentId, EntryPointId,
+        Chain, ComponentId, EntryPointId, PaginationParams,
     },
-    storage::{EntryPointFilter, StorageError},
+    storage::{EntryPointFilter, StorageError, WithTotal},
     Bytes,
 };
 
@@ -24,14 +24,14 @@ use super::{
 };
 
 impl PostgresGateway {
-    /// Insert entry points into the database.
+    /// Upsert entry points into the database.
     ///
     /// # Arguments
     ///
     /// * `new_data` - A map of protocol component external ids to a list of entry points.
     /// * `chain` - The chain to insert the entry points for.
     /// * `conn` - The database connection to use.
-    pub(crate) async fn insert_entry_points(
+    pub(crate) async fn upsert_entry_points(
         &self,
         new_data: &HashMap<ComponentId, HashSet<EntryPoint>>,
         chain: &Chain,
@@ -293,31 +293,58 @@ impl PostgresGateway {
     /// # Arguments
     ///
     /// * `filter` - The filter to apply to the query.
+    /// * `pagination_params` - The pagination parameters to apply to the query, if None, all
+    ///   results are returned.
     /// * `conn` - The database connection to use.
+    ///
+    /// Note: to avoid getting partial results, the pagination is applied to components, not
+    /// entry points.
     pub(crate) async fn get_entry_points_tracing_params(
         &self,
         filter: EntryPointFilter,
+        pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<HashMap<String, HashSet<EntryPointWithTracingParams>>, StorageError> {
+    ) -> Result<WithTotal<HashMap<ComponentId, HashSet<EntryPointWithTracingParams>>>, StorageError>
+    {
         use schema::{
             entry_point as ep, entry_point_tracing_params as eptp, protocol_component as pc,
             protocol_component_uses_entry_point as pcuep,
         };
 
         let ps_id = self.get_protocol_system_id(&filter.protocol_system);
-
-        let mut query = schema::entry_point::table
-            .inner_join(eptp::table.on(ep::id.eq(eptp::entry_point_id)))
-            .inner_join(pcuep::table.on(ep::id.eq(pcuep::entry_point_id)))
-            .inner_join(pc::table.on(pcuep::protocol_component_id.eq(pc::id)))
+        let mut component_query = schema::protocol_component::table
             .filter(pc::protocol_system_id.eq(ps_id))
+            .select(pc::id)
             .into_boxed();
 
         if let Some(component_ids) = filter.component_ids {
-            query = query.filter(pc::external_id.eq_any(component_ids));
+            component_query = component_query.filter(pc::external_id.eq_any(component_ids));
         }
 
-        let results = query
+        // Apply pagination and fetch total count
+        let count: Option<i64> = if let Some(pagination_params) = pagination_params {
+            component_query = component_query
+                .order_by(pc::id)
+                .limit(pagination_params.page_size)
+                .offset(pagination_params.offset());
+
+            Some(
+                schema::protocol_component::table
+                    .filter(pc::protocol_system_id.eq(ps_id))
+                    .count()
+                    .get_result::<i64>(conn)
+                    .await
+                    .unwrap_or(0),
+            )
+        } else {
+            None
+        };
+
+        let results = schema::entry_point::table
+            .inner_join(eptp::table.on(ep::id.eq(eptp::entry_point_id)))
+            .inner_join(pcuep::table.on(ep::id.eq(pcuep::entry_point_id)))
+            .inner_join(pc::table.on(pcuep::protocol_component_id.eq(pc::id)))
+            .filter(pc::id.eq_any(component_query))
             .select((
                 pc::external_id,
                 orm::EntryPoint::as_select(),
@@ -334,14 +361,17 @@ impl PostgresGateway {
                 )
             })?;
 
-        Ok(results
-            .into_iter()
-            .fold(HashMap::new(), |mut acc, (pc_ext_id, ep, params)| {
-                acc.entry(pc_ext_id)
-                    .or_default()
-                    .insert(EntryPointWithTracingParams::new(ep.into(), (&params).into()));
-                acc
-            }))
+        let res: HashMap<String, HashSet<EntryPointWithTracingParams>> =
+            results
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, (pc_ext_id, ep, params)| {
+                    acc.entry(pc_ext_id)
+                        .or_default()
+                        .insert(EntryPointWithTracingParams::new(ep.into(), (&params).into()));
+                    acc
+                });
+
+        Ok(WithTotal { entity: res, total: count })
     }
 
     /// Get entry points from the database.
@@ -349,30 +379,56 @@ impl PostgresGateway {
     /// # Arguments
     ///
     /// * `filter` - The filter to apply to the query.
+    /// * `pagination_params` - The pagination parameters to apply to the query, if None, all
+    ///   results are returned.
     /// * `conn` - The database connection to use.
+    ///
+    /// Note: to avoid getting partial results, the pagination is applied to components, not
+    /// entry points.
     pub(crate) async fn get_entry_points(
         &self,
         filter: EntryPointFilter,
+        pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<HashMap<String, HashSet<EntryPoint>>, StorageError> {
+    ) -> Result<WithTotal<HashMap<ComponentId, HashSet<EntryPoint>>>, StorageError> {
         use schema::{
             entry_point as ep, protocol_component as pc,
             protocol_component_uses_entry_point as pcuep,
         };
 
         let ps_id = self.get_protocol_system_id(&filter.protocol_system);
-
-        let mut query = schema::entry_point::table
-            .inner_join(pcuep::table.on(ep::id.eq(pcuep::entry_point_id)))
-            .inner_join(pc::table.on(pcuep::protocol_component_id.eq(pc::id)))
+        let mut component_query = schema::protocol_component::table
             .filter(pc::protocol_system_id.eq(ps_id))
+            .select(pc::id)
             .into_boxed();
 
         if let Some(component_ids) = filter.component_ids {
-            query = query.filter(pc::external_id.eq_any(component_ids));
+            component_query = component_query.filter(pc::external_id.eq_any(component_ids));
         }
 
-        let results = query
+        // Apply pagination and fetch total count
+        let count: Option<i64> = if let Some(pagination_params) = pagination_params {
+            component_query = component_query
+                .order_by(pc::id)
+                .limit(pagination_params.page_size)
+                .offset(pagination_params.offset());
+
+            Some(
+                schema::protocol_component::table
+                    .filter(pc::protocol_system_id.eq(ps_id))
+                    .count()
+                    .get_result::<i64>(conn)
+                    .await
+                    .unwrap_or(0),
+            )
+        } else {
+            None
+        };
+
+        let results = schema::entry_point::table
+            .inner_join(pcuep::table.on(ep::id.eq(pcuep::entry_point_id)))
+            .inner_join(pc::table.on(pcuep::protocol_component_id.eq(pc::id)))
+            .filter(pc::id.eq_any(component_query))
             .select((pc::external_id, orm::EntryPoint::as_select()))
             .load::<(String, orm::EntryPoint)>(conn)
             .await
@@ -385,14 +441,17 @@ impl PostgresGateway {
                 )
             })?;
 
-        Ok(results
-            .into_iter()
-            .fold(HashMap::new(), |mut acc, (pc_ext_id, ep)| {
-                acc.entry(pc_ext_id)
-                    .or_default()
-                    .insert(ep.into());
-                acc
-            }))
+        let res: HashMap<ComponentId, HashSet<EntryPoint>> =
+            results
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, (pc_ext_id, ep)| {
+                    acc.entry(pc_ext_id)
+                        .or_default()
+                        .insert(ep.into());
+                    acc
+                });
+
+        Ok(WithTotal { entity: res, total: count })
     }
 
     /// Upsert traced entry points into the database.
@@ -718,38 +777,41 @@ mod test {
         .await;
     }
 
-    fn rpc_tracer_entry_point(version: u8) -> (EntryPoint, TracingParams) {
+    fn rpc_tracer_entry_point(version: u8) -> EntryPoint {
         match version {
-            0 => (
-                EntryPoint::new(
-                    "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()".to_string(),
-                    Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
-                    "getRate()".to_string(),
-                ),
-                TracingParams::RPCTracer(RPCTracerParams::new(
-                    None,
-                    Bytes::from(&keccak256("getRate()")[0..4]),
-                )),
+            0 => EntryPoint::new(
+                "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()".to_string(),
+                Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
+                "getRate()".to_string(),
             ),
-            1 => (
-                EntryPoint::new(
-                    "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2:totalSupply()".to_string(),
-                    Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
-                    "totalSupply()".to_string(),
-                ),
-                TracingParams::RPCTracer(RPCTracerParams::new(
-                    None,
-                    Bytes::from(&keccak256("totalSupply()")[0..4]),
-                )),
+            1 => EntryPoint::new(
+                "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2:totalSupply()".to_string(),
+                Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
+                "totalSupply()".to_string(),
             ),
             _ => panic!("Invalid rpc_tracer_entry_point version"),
         }
     }
 
+    fn tracing_params(version: u8) -> TracingParams {
+        match version {
+            0 => TracingParams::RPCTracer(RPCTracerParams::new(
+                None,
+                Bytes::from(&keccak256("getRate()")[0..4]),
+            )),
+            1 => TracingParams::RPCTracer(RPCTracerParams::new(
+                None,
+                Bytes::from(&keccak256("totalSupply()")[0..4]),
+            )),
+            _ => panic!("Invalid tracing_params version"),
+        }
+    }
+
     fn traced_entry_point() -> TracedEntryPoint {
-        let (entry_point, params) = rpc_tracer_entry_point(0);
+        let entry_point_with_tracing_params =
+            EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0));
         TracedEntryPoint::new(
-            EntryPointWithTracingParams::new(entry_point, params),
+            entry_point_with_tracing_params,
             Bytes::from_str("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
                 .unwrap(),
             TracingResult::new(
@@ -775,15 +837,15 @@ mod test {
         setup_data(&mut conn).await;
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
-        gw.insert_entry_points(
+        gw.upsert_entry_points(
             &HashMap::from([
-                ("pc_0".to_string(), HashSet::from([rpc_tracer_entry_point(0).0])),
+                ("pc_0".to_string(), HashSet::from([rpc_tracer_entry_point(0)])),
                 (
                     "pc_1".to_string(),
-                    HashSet::from([rpc_tracer_entry_point(0).0, rpc_tracer_entry_point(1).0]),
+                    HashSet::from([rpc_tracer_entry_point(0), rpc_tracer_entry_point(1)]),
                 ),
-                ("pc_2".to_string(), HashSet::from([rpc_tracer_entry_point(1).0])),
-                ("unknown_pc".to_string(), HashSet::from([rpc_tracer_entry_point(0).0])),
+                ("pc_2".to_string(), HashSet::from([rpc_tracer_entry_point(1)])),
+                ("unknown_pc".to_string(), HashSet::from([rpc_tracer_entry_point(0)])),
             ]),
             &Chain::Ethereum,
             &mut conn,
@@ -793,34 +855,34 @@ mod test {
 
         let filter = EntryPointFilter::new("test_protocol".to_string());
         let retrieved_entry_points = gw
-            .get_entry_points(filter, &mut conn)
+            .get_entry_points(filter, None, &mut conn)
             .await
             .unwrap();
 
         assert_eq!(
-            retrieved_entry_points,
+            retrieved_entry_points.entity,
             HashMap::from([
-                ("pc_0".to_string(), HashSet::from([rpc_tracer_entry_point(0).0])),
+                ("pc_0".to_string(), HashSet::from([rpc_tracer_entry_point(0)])),
                 (
                     "pc_1".to_string(),
-                    HashSet::from([rpc_tracer_entry_point(0).0, rpc_tracer_entry_point(1).0])
+                    HashSet::from([rpc_tracer_entry_point(0), rpc_tracer_entry_point(1)])
                 ),
-                ("pc_2".to_string(), HashSet::from([rpc_tracer_entry_point(1).0])),
+                ("pc_2".to_string(), HashSet::from([rpc_tracer_entry_point(1)])),
             ])
         );
 
         let filter = EntryPointFilter::new("test_protocol".to_string())
             .with_component_ids(vec!["pc_1".to_string(), "unknown_pc".to_string()]);
         let retrieved_entry_points = gw
-            .get_entry_points(filter, &mut conn)
+            .get_entry_points(filter, None, &mut conn)
             .await
             .unwrap();
 
         assert_eq!(
-            retrieved_entry_points,
+            retrieved_entry_points.entity,
             HashMap::from([(
                 "pc_1".to_string(),
-                HashSet::from([rpc_tracer_entry_point(0).0, rpc_tracer_entry_point(1).0])
+                HashSet::from([rpc_tracer_entry_point(0), rpc_tracer_entry_point(1)])
             ),])
         );
     }
@@ -831,15 +893,15 @@ mod test {
         setup_data(&mut conn).await;
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
-        gw.insert_entry_points(
+        gw.upsert_entry_points(
             &HashMap::from([
-                ("pc_0".to_string(), HashSet::from([rpc_tracer_entry_point(0).0])),
+                ("pc_0".to_string(), HashSet::from([rpc_tracer_entry_point(0)])),
                 (
                     "pc_1".to_string(),
-                    HashSet::from([rpc_tracer_entry_point(0).0, rpc_tracer_entry_point(1).0]),
+                    HashSet::from([rpc_tracer_entry_point(0), rpc_tracer_entry_point(1)]),
                 ),
-                ("pc_2".to_string(), HashSet::from([rpc_tracer_entry_point(1).0])),
-                ("unknown_pc".to_string(), HashSet::from([rpc_tracer_entry_point(0).0])),
+                ("pc_2".to_string(), HashSet::from([rpc_tracer_entry_point(1)])),
+                ("unknown_pc".to_string(), HashSet::from([rpc_tracer_entry_point(0)])),
             ]),
             &Chain::Ethereum,
             &mut conn,
@@ -851,34 +913,27 @@ mod test {
             &HashMap::from([
                 (
                     rpc_tracer_entry_point(0)
-                        .0
                         .external_id
                         .clone(),
-                    HashSet::from([(rpc_tracer_entry_point(0).1, Some("pc_0".to_string()))]),
+                    HashSet::from([(tracing_params(0), Some("pc_0".to_string()))]),
                 ),
                 (
                     rpc_tracer_entry_point(1)
-                        .0
                         .external_id
                         .clone(),
-                    HashSet::from([
-                        (rpc_tracer_entry_point(1).1, None),
-                        (rpc_tracer_entry_point(0).1, None),
-                    ]),
+                    HashSet::from([(tracing_params(1), None), (tracing_params(0), None)]),
                 ),
                 (
                     rpc_tracer_entry_point(1)
-                        .0
                         .external_id
                         .clone(),
-                    HashSet::from([(rpc_tracer_entry_point(1).1, Some("pc_2".to_string()))]),
+                    HashSet::from([(tracing_params(1), Some("pc_2".to_string()))]),
                 ),
                 (
                     rpc_tracer_entry_point(0)
-                        .0
                         .external_id
                         .clone(),
-                    HashSet::from([(rpc_tracer_entry_point(0).1, Some("unknown_pc".to_string()))]),
+                    HashSet::from([(tracing_params(0), Some("unknown_pc".to_string()))]),
                 ),
             ]),
             &Chain::Ethereum,
@@ -889,38 +944,38 @@ mod test {
 
         let filter = EntryPointFilter::new("test_protocol".to_string());
         let retrieved_entry_points = gw
-            .get_entry_points_tracing_params(filter, &mut conn)
+            .get_entry_points_tracing_params(filter, None, &mut conn)
             .await
             .unwrap();
 
         assert_eq!(
-            retrieved_entry_points,
+            retrieved_entry_points.entity,
             HashMap::from([
                 (
                     "pc_1".to_string(),
                     HashSet::from([
                         EntryPointWithTracingParams::new(
-                            rpc_tracer_entry_point(0).0,
-                            rpc_tracer_entry_point(0).1
+                            rpc_tracer_entry_point(0),
+                            tracing_params(0)
                         ),
                         EntryPointWithTracingParams::new(
-                            rpc_tracer_entry_point(1).0,
-                            rpc_tracer_entry_point(1).1
+                            rpc_tracer_entry_point(1),
+                            tracing_params(1)
                         ),
                     ])
                 ),
                 (
                     "pc_0".to_string(),
                     HashSet::from([EntryPointWithTracingParams::new(
-                        rpc_tracer_entry_point(0).0,
-                        rpc_tracer_entry_point(0).1
+                        rpc_tracer_entry_point(0),
+                        tracing_params(0)
                     )])
                 ),
                 (
                     "pc_2".to_string(),
                     HashSet::from([EntryPointWithTracingParams::new(
-                        rpc_tracer_entry_point(1).0,
-                        rpc_tracer_entry_point(1).1
+                        rpc_tracer_entry_point(1),
+                        tracing_params(1)
                     )])
                 ),
             ])
@@ -929,23 +984,35 @@ mod test {
         let filter = EntryPointFilter::new("test_protocol".to_string())
             .with_component_ids(vec!["pc_1".to_string()]);
         let retrieved_entry_points = gw
-            .get_entry_points_tracing_params(filter, &mut conn)
+            .get_entry_points_tracing_params(filter, None, &mut conn)
             .await
             .unwrap();
 
         assert_eq!(
-            retrieved_entry_points,
+            retrieved_entry_points.entity,
             HashMap::from([(
                 "pc_1".to_string(),
                 HashSet::from([
-                    EntryPointWithTracingParams::new(
-                        rpc_tracer_entry_point(1).0,
-                        rpc_tracer_entry_point(1).1
-                    ),
-                    EntryPointWithTracingParams::new(
-                        rpc_tracer_entry_point(0).0,
-                        rpc_tracer_entry_point(0).1
-                    ),
+                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(1), tracing_params(1)),
+                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
+                ])
+            ),])
+        );
+
+        //Test pagination
+        let filter = EntryPointFilter::new("test_protocol".to_string());
+        let retrieved_entry_points = gw
+            .get_entry_points_tracing_params(filter, Some(&PaginationParams::new(1, 1)), &mut conn)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            retrieved_entry_points.entity,
+            HashMap::from([(
+                "pc_1".to_string(),
+                HashSet::from([
+                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(1), tracing_params(1)),
+                    EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
                 ])
             ),])
         );
@@ -957,10 +1024,10 @@ mod test {
         setup_data(&mut conn).await;
         let gw = PostgresGateway::from_connection(&mut conn).await;
 
-        let (entry_point, params) = rpc_tracer_entry_point(0);
+        let entry_point = rpc_tracer_entry_point(0);
         let traced_entry_point = traced_entry_point();
 
-        gw.insert_entry_points(
+        gw.upsert_entry_points(
             &HashMap::from([("pc_0".to_string(), HashSet::from([entry_point.clone()]))]),
             &Chain::Ethereum,
             &mut conn,
@@ -971,7 +1038,7 @@ mod test {
         gw.upsert_entry_point_tracing_params(
             &HashMap::from([(
                 entry_point.external_id.clone(),
-                HashSet::from([(params.clone(), Some("pc_0".to_string()))]),
+                HashSet::from([(tracing_params(0), Some("pc_0".to_string()))]),
             )]),
             &Chain::Ethereum,
             &mut conn,
