@@ -22,9 +22,10 @@ pub struct StorageSnapshotRequest {
 /// Trait for getting multiple account states from chain data.
 #[async_trait]
 pub trait AccountExtractor {
-    type Error;
+    type Error: Debug;
 
-    ///
+    /// Get the account states at the end of the given block (after all transactions in the block
+    /// have been applied).
     ///
     /// # Arguments
     ///
@@ -37,11 +38,6 @@ pub trait AccountExtractor {
     /// returns: Result<HashMap<Bytes, AccountDelta, RandomState>, Self::Error>
     /// A result containing a HashMap where the keys are `Bytes` (addresses) and the values are
     /// `AccountDelta` objects.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// ```
     async fn get_accounts_at_block(
         &self,
         block: &Block,
@@ -122,7 +118,7 @@ pub trait TokenPreProcessor: Send + Sync {
 /// Trait for tracing blockchain transaction execution.
 #[async_trait]
 pub trait EntryPointTracer {
-    type Error;
+    type Error: Debug;
 
     /// Traces the execution of a list of entry points at a specific block.
     ///

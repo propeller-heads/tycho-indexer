@@ -172,6 +172,22 @@ impl Bytes {
         rand::thread_rng().fill(&mut data[..]);
         Bytes::from(data)
     }
+
+    /// Checks if the byte array is full of zeros.
+    ///
+    /// # Returns
+    ///
+    /// A boolean value indicating whether all bytes in the byte array are zero.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let b = Bytes::zero(5);
+    /// assert!(b.is_zero());
+    /// ```
+    pub fn is_zero(&self) -> bool {
+        self.as_ref().iter().all(|b| *b == 0)
+    }
 }
 
 impl Deref for Bytes {

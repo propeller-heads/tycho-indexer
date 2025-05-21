@@ -157,6 +157,7 @@ pub struct BlockChanges {
     pub block_storage_changes: Vec<TxWithStorageChanges>,
     /// Required here so that it is part of the reorg buffer and thus inserted into storage once
     /// finalized.
+    /// Populated by the `DynamicContractIndexer`
     pub trace_results: Vec<TracedEntryPoint>,
 }
 
