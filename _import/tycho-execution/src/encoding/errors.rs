@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, str::Utf8Error};
 
 use thiserror::Error;
 
@@ -30,6 +30,12 @@ impl From<io::Error> for EncodingError {
 
 impl From<serde_json::Error> for EncodingError {
     fn from(err: serde_json::Error) -> Self {
+        EncodingError::FatalError(err.to_string())
+    }
+}
+
+impl From<Utf8Error> for EncodingError {
+    fn from(err: Utf8Error) -> Self {
         EncodingError::FatalError(err.to_string())
     }
 }
