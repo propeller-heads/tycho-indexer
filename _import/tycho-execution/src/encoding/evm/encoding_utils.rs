@@ -87,7 +87,6 @@ pub fn encode_tycho_router_call(
     encoded_solution: EncodedSolution,
     solution: &Solution,
     token_in_already_in_router: bool,
-    router_address: Bytes,
     native_address: Bytes,
 ) -> Result<Transaction, EncodingError> {
     let (mut unwrap, mut wrap) = (false, false);
@@ -246,5 +245,5 @@ pub fn encode_tycho_router_call(
     } else {
         BigUint::ZERO
     };
-    Ok(Transaction { to: router_address, value, data: contract_interaction })
+    Ok(Transaction { to: encoded_solution.interacting_with, value, data: contract_interaction })
 }

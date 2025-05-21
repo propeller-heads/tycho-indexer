@@ -94,12 +94,15 @@ pub struct Transaction {
 ///
 /// # Fields
 /// * `swaps`: Encoded swaps to be executed.
+/// * `interacting_with`: Address of the contract to be called.
 /// * `selector`: The selector of the function to be called.
 /// * `n_tokens`: Number of tokens in the swap.
 /// * `permit`: Optional permit for the swap (if permit2 is enabled).
 /// * `signature`: Optional signature for the swap (if permit2 is enabled).
+#[derive(Clone, Debug)]
 pub struct EncodedSolution {
     pub swaps: Vec<u8>,
+    pub interacting_with: Bytes,
     pub selector: String,
     pub n_tokens: usize,
     pub permit: Option<PermitSingle>,

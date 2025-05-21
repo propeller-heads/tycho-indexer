@@ -135,6 +135,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
         );
         Ok(EncodedSolution {
             selector: self.selector.clone(),
+            interacting_with: self.router_address.clone(),
             swaps: swap_data,
             permit: None,
             signature: None,
@@ -289,6 +290,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 
         let encoded_swaps = ple_encode(swaps);
         Ok(EncodedSolution {
+            interacting_with: self.router_address.clone(),
             selector: self.selector.clone(),
             swaps: encoded_swaps,
             permit: None,
@@ -491,6 +493,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             tokens.len()
         };
         Ok(EncodedSolution {
+            interacting_with: self.router_address.clone(),
             selector: self.selector.clone(),
             swaps: encoded_swaps,
             permit: None,
@@ -624,15 +627,9 @@ mod tests {
             encoded_solution.permit = Some(permit);
             encoded_solution.signature = Some(signature);
 
-            let calldata = encode_tycho_router_call(
-                encoded_solution,
-                &solution,
-                false,
-                router_address(),
-                eth(),
-            )
-            .unwrap()
-            .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
                 "30ace1b1",                                                             // Function selector
@@ -713,15 +710,9 @@ mod tests {
             let encoded_solution = encoder
                 .encode_strategy(solution.clone())
                 .unwrap();
-            let calldata = encode_tycho_router_call(
-                encoded_solution,
-                &solution,
-                false,
-                router_address(),
-                eth(),
-            )
-            .unwrap()
-            .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
                 "5c4b639c",                                                           // Function selector
@@ -801,15 +792,9 @@ mod tests {
             let encoded_solution = encoder
                 .encode_strategy(solution.clone())
                 .unwrap();
-            let calldata = encode_tycho_router_call(
-                encoded_solution,
-                &solution,
-                true,
-                router_address(),
-                eth(),
-            )
-            .unwrap()
-            .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, true, eth())
+                .unwrap()
+                .data;
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
                 "5c4b639c",                                                           // Function selector
@@ -891,15 +876,9 @@ mod tests {
             encoded_solution.permit = Some(permit);
             encoded_solution.signature = Some(signature);
 
-            let calldata = encode_tycho_router_call(
-                encoded_solution,
-                &solution,
-                false,
-                router_address(),
-                eth(),
-            )
-            .unwrap()
-            .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_single_swap_strategy_encoder_wrap", hex_calldata.as_str());
         }
@@ -951,15 +930,9 @@ mod tests {
             encoded_solution.permit = Some(permit);
             encoded_solution.signature = Some(signature);
 
-            let calldata = encode_tycho_router_call(
-                encoded_solution,
-                &solution,
-                false,
-                router_address(),
-                eth(),
-            )
-            .unwrap()
-            .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file(
@@ -1033,15 +1006,9 @@ mod tests {
             encoded_solution.permit = Some(permit);
             encoded_solution.signature = Some(signature);
 
-            let calldata = encode_tycho_router_call(
-                encoded_solution,
-                &solution,
-                false,
-                router_address(),
-                eth(),
-            )
-            .unwrap()
-            .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_sequential_swap_strategy_encoder", hex_calldata.as_str());
@@ -1102,15 +1069,9 @@ mod tests {
                 .encode_strategy(solution.clone())
                 .unwrap();
 
-            let calldata = encode_tycho_router_call(
-                encoded_solution,
-                &solution,
-                false,
-                router_address(),
-                eth(),
-            )
-            .unwrap()
-            .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = encode(&calldata);
 
@@ -1235,15 +1196,9 @@ mod tests {
             encoded_solution.permit = Some(permit);
             encoded_solution.signature = Some(signature);
 
-            let calldata = encode_tycho_router_call(
-                encoded_solution,
-                &solution,
-                false,
-                router_address(),
-                eth(),
-            )
-            .unwrap()
-            .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
             let hex_calldata = hex::encode(&calldata);
             let expected_input = [
                 "51bcc7b6",                                                         // selector
@@ -1359,15 +1314,9 @@ mod tests {
                     .encode_strategy(solution.clone())
                     .unwrap();
 
-                let calldata = encode_tycho_router_call(
-                    encoded_solution,
-                    &solution,
-                    false,
-                    router_address(),
-                    eth(),
-                )
-                .unwrap()
-                .data;
+                let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                    .unwrap()
+                    .data;
 
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file("test_uniswap_v3_uniswap_v2", hex_calldata.as_str());
@@ -1450,15 +1399,9 @@ mod tests {
                     .encode_strategy(solution.clone())
                     .unwrap();
 
-                let calldata = encode_tycho_router_call(
-                    encoded_solution,
-                    &solution,
-                    false,
-                    router_address(),
-                    eth(),
-                )
-                .unwrap()
-                .data;
+                let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                    .unwrap()
+                    .data;
 
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file("test_uniswap_v3_uniswap_v3", hex_calldata.as_str());
@@ -1550,15 +1493,9 @@ mod tests {
                     .encode_strategy(solution.clone())
                     .unwrap();
 
-                let calldata = encode_tycho_router_call(
-                    encoded_solution,
-                    &solution,
-                    false,
-                    router_address(),
-                    eth(),
-                )
-                .unwrap()
-                .data;
+                let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                    .unwrap()
+                    .data;
 
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file("test_uniswap_v3_curve", hex_calldata.as_str());
@@ -1626,15 +1563,9 @@ mod tests {
                     .encode_strategy(solution.clone())
                     .unwrap();
 
-                let calldata = encode_tycho_router_call(
-                    encoded_solution,
-                    &solution,
-                    false,
-                    router_address(),
-                    eth(),
-                )
-                .unwrap()
-                .data;
+                let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                    .unwrap()
+                    .data;
 
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file("test_balancer_v2_uniswap_v2", hex_calldata.as_str());
@@ -1787,15 +1718,9 @@ mod tests {
                 encoded_solution.permit = Some(permit);
                 encoded_solution.signature = Some(signature);
 
-                let calldata = encode_tycho_router_call(
-                    encoded_solution,
-                    &solution,
-                    false,
-                    router_address(),
-                    eth,
-                )
-                .unwrap()
-                .data;
+                let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
+                    .unwrap()
+                    .data;
 
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file("test_multi_protocol", hex_calldata.as_str());
@@ -1894,15 +1819,9 @@ mod tests {
             encoded_solution.permit = Some(permit);
             encoded_solution.signature = Some(signature);
 
-            let calldata = encode_tycho_router_call(
-                encoded_solution,
-                &solution,
-                false,
-                router_address(),
-                eth(),
-            )
-            .unwrap()
-            .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_split_swap_strategy_encoder", hex_calldata.as_str());
@@ -2015,15 +1934,9 @@ mod tests {
             encoded_solution.permit = Some(permit);
             encoded_solution.signature = Some(signature);
 
-            let calldata = encode_tycho_router_call(
-                encoded_solution,
-                &solution,
-                false,
-                router_address(),
-                eth(),
-            )
-            .unwrap()
-            .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = hex::encode(&calldata);
             let expected_input = [
@@ -2185,15 +2098,9 @@ mod tests {
             encoded_solution.permit = Some(permit);
             encoded_solution.signature = Some(signature);
 
-            let calldata = encode_tycho_router_call(
-                encoded_solution,
-                &solution,
-                false,
-                router_address(),
-                eth(),
-            )
-            .unwrap()
-            .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = hex::encode(&calldata);
             let expected_input = [
@@ -2318,15 +2225,9 @@ mod tests {
                 .encode_strategy(solution.clone())
                 .unwrap();
 
-            let calldata = encode_tycho_router_call(
-                encoded_solution,
-                &solution,
-                false,
-                router_address(),
-                eth(),
-            )
-            .unwrap()
-            .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_single_encoding_strategy_ekubo", hex_calldata.as_str());
         }
@@ -2375,15 +2276,9 @@ mod tests {
                 .encode_strategy(solution.clone())
                 .unwrap();
 
-            let calldata = encode_tycho_router_call(
-                encoded_solution,
-                &solution,
-                false,
-                router_address(),
-                eth(),
-            )
-            .unwrap()
-            .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_single_encoding_strategy_maverick", hex_calldata.as_str());
         }
@@ -2446,10 +2341,9 @@ mod tests {
             encoded_solution.permit = Some(permit);
             encoded_solution.signature = Some(signature);
 
-            let calldata =
-                encode_tycho_router_call(encoded_solution, &solution, false, router_address(), eth)
-                    .unwrap()
-                    .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
+                .unwrap()
+                .data;
             let hex_calldata = encode(&calldata);
 
             write_calldata_to_file(
@@ -2520,10 +2414,9 @@ mod tests {
             encoded_solution.permit = Some(permit);
             encoded_solution.signature = Some(signature);
 
-            let calldata =
-                encode_tycho_router_call(encoded_solution, &solution, false, router_address(), eth)
-                    .unwrap()
-                    .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
+                .unwrap()
+                .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file(
@@ -2612,10 +2505,9 @@ mod tests {
             encoded_solution.permit = Some(permit);
             encoded_solution.signature = Some(signature);
 
-            let calldata =
-                encode_tycho_router_call(encoded_solution, &solution, false, router_address(), eth)
-                    .unwrap()
-                    .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
+                .unwrap()
+                .data;
 
             let expected_input = [
                 "30ace1b1",                                                              // Function selector (single swap)
@@ -2722,15 +2614,9 @@ mod tests {
                 .encode_strategy(solution.clone())
                 .unwrap();
 
-            let calldata = encode_tycho_router_call(
-                encoded_solution,
-                &solution,
-                false,
-                router_address(),
-                eth(),
-            )
-            .unwrap()
-            .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_single_encoding_strategy_curve", hex_calldata.as_str());
@@ -2793,15 +2679,9 @@ mod tests {
             let encoded_solution = encoder
                 .encode_strategy(solution.clone())
                 .unwrap();
-            let calldata = encode_tycho_router_call(
-                encoded_solution,
-                &solution,
-                false,
-                router_address(),
-                eth(),
-            )
-            .unwrap()
-            .data;
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file(

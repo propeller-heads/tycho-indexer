@@ -61,17 +61,17 @@ fn main() {
     };
 
     // Encode the solution
-    let tx = encoder
-        .encode_calldata(vec![solution.clone()])
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
         .expect("Failed to encode router calldata")[0]
         .clone();
     println!(" ====== Simple swap WETH -> USDC ======");
     println!(
-        "The simple swap encoded transaction should be sent to address {:?} with the value of {:?} and the \
+        "The simple swap encoded solution should be sent to address {:?} and selector {:?} and the \
     following encoded data: {:?}",
-        tx.to,
-        tx.value,
-        hex::encode(tx.data)
+        encoded_solution.interacting_with,
+        encoded_solution.selector,
+        hex::encode(encoded_solution.swaps)
     );
 
     // ------------------- Encode a swap with multiple splits -------------------
@@ -134,17 +134,17 @@ fn main() {
     complex_solution.swaps = vec![swap_weth_dai, swap_weth_wbtc, swap_dai_usdc, swap_wbtc_usdc];
 
     // Encode the solution
-    let complex_tx = encoder
-        .encode_calldata(vec![complex_solution])
+    let complex_encoded_solution = encoder
+        .encode_solutions(vec![complex_solution])
         .expect("Failed to encode router calldata")[0]
         .clone();
 
     println!(" ====== Complex split swap WETH -> USDC ======");
     println!(
-        "The complex solution encoded transaction should be sent to address {:?} with the value of {:?} and the \
+    "The complex swaps encoded solution should be sent to address {:?} and selector {:?} and the \
     following encoded data: {:?}",
-        complex_tx.to,
-        complex_tx.value,
-        hex::encode(complex_tx.data)
+    complex_encoded_solution.interacting_with,
+    complex_encoded_solution.selector,
+    hex::encode(complex_encoded_solution.swaps)
     );
 }
