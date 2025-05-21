@@ -1,3 +1,11 @@
+## [0.70.7](https://github.com/propeller-heads/tycho-indexer/compare/0.70.6...0.70.7) (2025-05-21)
+
+
+### Bug Fixes
+
+* order protocol states query by protocol component ([a45d4a0](https://github.com/propeller-heads/tycho-indexer/commit/a45d4a01828c0346cf99ed1de136f4ec846064fd))
+* order protocol states query by protocol component ([#582](https://github.com/propeller-heads/tycho-indexer/issues/582)) ([4597925](https://github.com/propeller-heads/tycho-indexer/commit/4597925eda1292bf1f05f06ad51c64a409e1c7d4))
+
 ## [0.70.6](https://github.com/propeller-heads/tycho-indexer/compare/0.70.5...0.70.6) (2025-05-19)
 
 ## [0.70.5](https://github.com/propeller-heads/tycho-indexer/compare/0.70.4...0.70.5) (2025-05-16)
