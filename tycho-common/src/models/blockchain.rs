@@ -700,13 +700,15 @@ pub mod fixtures {
                 .len(),
             2
         );
+        let mut expected_entry_points = changes1
+            .entrypoints
+            .values()
+            .flat_map(|ep| ep.iter())
+            .map(|ep| ep.signature.clone())
+            .collect::<Vec<_>>();
+        expected_entry_points.sort();
         assert_eq!(
-            changes1
-                .entrypoints
-                .values()
-                .flat_map(|ep| ep.iter())
-                .map(|ep| ep.signature.clone())
-                .collect::<Vec<_>>(),
+            expected_entry_points,
             vec!["function()".to_string(), "function_2()".to_string()],
         );
     }
