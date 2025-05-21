@@ -472,9 +472,10 @@ impl PartitionedVersionedRow for NewComponentBalance {
             .get_results(conn)
             .await
             .map_err(PostgresError::from)?;
+
         let found_ids: HashSet<_> = results
             .iter()
-            .map(|cs| (&cs.protocol_component_id, &cs.token_id))
+            .map(|cb| (&cb.protocol_component_id, &cb.token_id))
             .collect();
 
         let missing_ids: Vec<_> = tuple_ids
@@ -511,7 +512,7 @@ impl PartitionedVersionedRow for NewComponentBalance {
         }
         Ok(results
             .into_iter()
-            .filter(|cs| tuple_ids.contains(&(&cs.protocol_component_id, &cs.token_id)))
+            .filter(|cb| tuple_ids.contains(&(&cb.protocol_component_id, &cb.token_id)))
             .map(NewComponentBalance::from)
             .collect())
     }
@@ -1159,7 +1160,7 @@ impl PartitionedVersionedRow for NewProtocolState {
 
         let found_ids: HashSet<_> = results
             .iter()
-            .map(|cs| (&cs.protocol_component_id, &cs.attribute_name))
+            .map(|ps| (&ps.protocol_component_id, &ps.attribute_name))
             .collect();
 
         let missing_ids: Vec<_> = tuple_ids
@@ -1199,7 +1200,7 @@ impl PartitionedVersionedRow for NewProtocolState {
 
         Ok(results
             .into_iter()
-            .filter(|cs| tuple_ids.contains(&(&cs.protocol_component_id, &cs.attribute_name)))
+            .filter(|ps| tuple_ids.contains(&(&ps.protocol_component_id, &ps.attribute_name)))
             .map(NewProtocolState::from)
             .collect())
     }
