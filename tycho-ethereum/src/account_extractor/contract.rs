@@ -233,8 +233,7 @@ impl EVMBatchAccountExtractor {
 
         batch.send().await.map_err(|e| {
             RPCError::RequestError(ProviderError::CustomError(format!(
-                "Failed to send batch request: {}",
-                e
+                "Failed to send batch request: {e}",
             )))
         })?;
 
@@ -249,8 +248,7 @@ impl EVMBatchAccountExtractor {
                 .await
                 .map_err(|e| {
                     RPCError::RequestError(ProviderError::CustomError(format!(
-                        "Failed to collect code request data: {}",
-                        e
+                        "Failed to collect code request data: {e}",
                     )))
                 })?;
 
@@ -261,8 +259,7 @@ impl EVMBatchAccountExtractor {
                 .await
                 .map_err(|e| {
                     RPCError::RequestError(ProviderError::CustomError(format!(
-                        "Failed to collect balance request data: {}",
-                        e
+                        "Failed to collect balance request data: {e}",
                     )))
                 })?;
 
@@ -308,8 +305,7 @@ impl EVMBatchAccountExtractor {
                         .await
                         .map_err(|e| {
                             RPCError::RequestError(ProviderError::CustomError(format!(
-                                "Failed to send batch request: {}",
-                                e
+                                "Failed to send batch request: {e}",
                             )))
                         })?;
 
@@ -319,8 +315,7 @@ impl EVMBatchAccountExtractor {
                             .await
                             .map_err(|e| {
                                 RPCError::RequestError(ProviderError::CustomError(format!(
-                                    "Failed to collect storage request data: {}",
-                                    e
+                                    "Failed to collect storage request data: {e}",
                                 )))
                             })?;
 
@@ -408,7 +403,8 @@ impl AccountExtractor for EVMBatchAccountExtractor {
     async fn get_accounts_at_block(
         &self,
         block: &Block,
-        requests: &[StorageSnapshotRequest],
+        requests: &[StorageSnapshotRequest], /* TODO: We should remove duplicates, else we would
+                                              * make more requests than necessary */
     ) -> Result<HashMap<Address, AccountDelta>, Self::Error> {
         let mut updates = HashMap::new();
 
@@ -602,13 +598,13 @@ mod tests {
 
         let requests = vec![TestFixture::create_storage_request(STETH_STR, None)];
 
-        println!("Getting accounts for block: {:?}", TEST_BLOCK_NUMBER);
+        println!("Getting accounts for block: {TEST_BLOCK_NUMBER:?}");
         let start_time = std::time::Instant::now();
         let updates = extractor
             .get_accounts_at_block(&fixture.block, &requests)
             .await?;
         let duration = start_time.elapsed();
-        println!("Time taken to get accounts: {:?}", duration);
+        println!("Time taken to get accounts: {duration:?}");
 
         assert_eq!(updates.len(), 1);
         let update = updates
@@ -639,7 +635,7 @@ mod tests {
             .get_accounts_at_block(&fixture.block, &requests)
             .await?;
         let duration = start_time.elapsed();
-        println!("Time taken to get storage snapshots: {:?}", duration);
+        println!("Time taken to get storage snapshots: {duration:?}");
 
         assert_eq!(result.len(), 2);
 
@@ -750,7 +746,7 @@ mod tests {
 
         // Check that each slot has a value
         for (key, value) in slots.iter().take(3) {
-            println!("slot: {}", key);
+            println!("slot: {key:?}");
             assert!(storage.contains_key(key));
             assert_eq!(
                 storage
@@ -785,7 +781,7 @@ mod tests {
 
         // Check that each slot has a value
         for (key, value) in slots.iter() {
-            println!("slot: {}", key);
+            println!("slot: {key:?}");
             assert!(storage.contains_key(key));
             assert_eq!(
                 storage
