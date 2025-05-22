@@ -616,7 +616,11 @@ fn create_solution(
         0f64,
     );
 
-    // compute a minimum amount out
+    // Compute a minimum amount out
+    //
+    // # ⚠️ Important Responsibility Note
+    // For maximum security, in production code, this minimum amount out should be computed
+    // from a third-party source.
     let slippage = 0.0025; // 0.25% slippage
     let bps = BigUint::from(10_000u32);
     let slippage_percent = BigUint::from((slippage * 10000.0) as u32);
