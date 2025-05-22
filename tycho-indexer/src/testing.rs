@@ -1,23 +1,30 @@
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use mockall::mock;
 use tycho_common::{
     models::{
-        blockchain::{Block, Transaction},
+        blockchain::{
+            Block, EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingParams,
+            TracingResult, Transaction,
+        },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta, QualityRange,
         },
         token::CurrencyToken,
-        Address, Chain, ComponentId, ContractId, ExtractionState, PaginationParams, ProtocolType,
-        TxHash,
+        Address, Chain, ComponentId, ContractId, EntryPointId, ExtractionState, PaginationParams,
+        ProtocolType, TxHash,
     },
     storage::{
-        BlockIdentifier, BlockOrTimestamp, ChainGateway, ContractStateGateway,
-        ExtractionStateGateway, Gateway, ProtocolGateway, StorageError, Version, WithTotal,
+        BlockIdentifier, BlockOrTimestamp, ChainGateway, ContractStateGateway, EntryPointFilter,
+        EntryPointGateway, ExtractionStateGateway, Gateway, ProtocolGateway, StorageError, Version,
+        WithTotal,
     },
     Bytes,
 };
@@ -28,6 +35,45 @@ mock! {
     impl ExtractionStateGateway for Gateway {
         async fn get_state(&self, name: &str, chain: &Chain) -> Result<ExtractionState, StorageError>;
         async fn save_state(&self, state: &ExtractionState) -> Result<(), StorageError>;
+    }
+
+    #[async_trait]
+    impl EntryPointGateway for Gateway {
+        async fn insert_entry_points(
+            &self,
+            entry_points: &HashMap<ComponentId, HashSet<EntryPoint>>,
+        ) -> Result<(), StorageError>;
+
+        async fn insert_entry_point_tracing_params(
+            &self,
+            entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+        ) -> Result<(), StorageError>;
+
+        async fn get_entry_points<'life0, 'async_trait>(
+            &self,
+            filter: EntryPointFilter,
+            pagination_params: Option<&'life0 PaginationParams>,
+        ) -> Result<WithTotal<HashMap<ComponentId, HashSet<EntryPoint>>>, StorageError>
+        where
+            'life0: 'async_trait;
+
+        async fn get_entry_points_tracing_params<'life0, 'async_trait>(
+            &self,
+            filter: EntryPointFilter,
+            pagination_params: Option<&'life0 PaginationParams>,
+        ) -> Result<WithTotal<HashMap<ComponentId, HashSet<EntryPointWithTracingParams>>>, StorageError>
+        where
+            'life0: 'async_trait;
+
+        async fn upsert_traced_entry_points(
+            &self,
+            traced_entry_points: &[TracedEntryPoint],
+        ) -> Result<(), StorageError>;
+
+        async fn get_traced_entry_points(
+            &self,
+            entry_points: &HashSet<EntryPointId>,
+        ) -> Result<HashMap<EntryPointId, Vec<TracingResult>>, StorageError>;
     }
 
     #[async_trait]

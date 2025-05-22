@@ -106,7 +106,7 @@ where
                 rpc::protocol_systems,
                 rpc::tokens,
                 rpc::protocol_components,
-                rpc::traced_entrypoints
+                rpc::traced_entry_points,
                 rpc::protocol_state,
                 rpc::contract_state,
             ),
@@ -247,8 +247,8 @@ where
                         .route(web::post().to(rpc::protocol_components::<G>)),
                 )
                 .service(
-                    web::resource(format!("/{}/traced_entrypoints", self.prefix))
-                        .route(web::post().to(rpc::traced_entrypoints::<G>)),
+                    web::resource(format!("/{}/traced_entry_points", self.prefix))
+                        .route(web::post().to(rpc::traced_entry_points::<G>)),
                 )
                 .service(
                     web::resource(format!("/{}/health", self.prefix))
