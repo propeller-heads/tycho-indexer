@@ -14,7 +14,7 @@ use reqwest::StatusCode;
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
-    dto::{self, PaginationResponse, TracedEntryPointRequestBody, TracedEntryPointRequestResponse},
+    dto::{self, PaginationResponse, TracingResult},
     models::{
         blockchain::{BlockAggregatedChanges, EntryPointWithTracingParams},
         protocol::QualityRange,
@@ -26,7 +26,6 @@ use tycho_common::{
     },
     Bytes,
 };
-use tycho_common::dto::TracingResult;
 
 use crate::{
     extractor::reorg_buffer::{BlockNumberOrTimestamp, FinalityStatus},
@@ -89,6 +88,8 @@ pub struct RpcHandler<G> {
         RpcCache<dto::ProtocolStateRequestBody, dto::ProtocolStateRequestResponse>,
     component_cache:
         RpcCache<dto::ProtocolComponentsRequestBody, dto::ProtocolComponentRequestResponse>,
+    traced_entry_point_cache:
+        RpcCache<dto::TracedEntryPointRequestBody, dto::TracedEntryPointRequestResponse>,
 }
 
 impl<G> RpcHandler<G>
@@ -122,6 +123,12 @@ where
             dto::ProtocolComponentRequestResponse,
         >::new("protocol_components", 500, 7 * 60);
 
+        let traced_entry_point_cache = RpcCache::<
+            dto::TracedEntryPointRequestBody,
+            // TODO is this a good capacity?
+            dto::TracedEntryPointRequestResponse,
+        >::new("traced_entry_points", 500, 7 * 60);
+
         Self {
             db_gateway,
             pending_deltas,
@@ -129,6 +136,7 @@ where
             contract_storage_cache,
             protocol_state_cache,
             component_cache,
+            traced_entry_point_cache,
         }
     }
 
@@ -183,6 +191,8 @@ where
             .db_gateway
             .get_contracts(
                 &chain,
+                // TODO question: Do we need to manually apply the pagination to the filter params
+                //  like it's done here?
                 paginated_addrs.as_deref(),
                 Some(&db_version),
                 true,
@@ -768,35 +778,61 @@ where
         }
     }
 
-    async fn get_traced_entrypoints(
+    async fn get_traced_entry_points(
         &self,
-        request: &TracedEntryPointRequestBody,
-    ) -> Result<TracedEntryPointRequestResponse, RpcError> {
-        // TODO move all of this to the inner method, in this method access the cache
+        request: &dto::TracedEntryPointRequestBody,
+    ) -> Result<dto::TracedEntryPointRequestResponse, RpcError> {
+        info!(?request, "Getting traced entry points.");
+
+        // TODO AFAIU this cache is automatically written to by the fallback method during a cache
+        //  miss. Is this correct?
+        self.traced_entry_point_cache
+            .get(request.clone(), |r| async {
+                self.get_traced_entry_points_inner(r)
+                    .await
+                    .map(|res| {
+                        // TODO should I check that all requested components are in the response?
+                        // TODO why do we not cache if it's the last page?
+                        let last_page = res.pagination.total_pages() - 1;
+                        (res, request.pagination.page < last_page)
+                    })
+            })
+            .await
+    }
+
+    async fn get_traced_entry_points_inner(
+        &self,
+        request: dto::TracedEntryPointRequestBody,
+    ) -> Result<dto::TracedEntryPointRequestResponse, RpcError> {
+        let pagination_params: PaginationParams = (&request.pagination).into();
+
         let filter: EntryPointFilter = EntryPointFilter {
-            protocol_system: request.as_ref().protocol_system,
-            component_ids: request.as_ref().component_ids,
+            protocol_system: request.protocol_system,
+            component_ids: request.component_ids,
         };
-        let entry_points_tracing_params_by_component: HashMap<
-            ComponentId,
-            HashSet<EntryPointWithTracingParams>,
-        > = self
+        let entry_points_tracing_params_data = self
             .db_gateway
-            .get_entry_points_tracing_params(filter)
+            .get_entry_points_tracing_params(filter, Some(&pagination_params))
             .await
             .map_err(|err| {
                 error!(error = %err, "Error while getting entry points with tracing params.");
                 err
             })?;
-        let entry_point_ids: HashSet<EntryPointId> = entry_points_tracing_params_by_component
+
+        // Flatten the ID lists, throwing away component ids, to avoid making duplicate db calls
+        // when getting traced entry points.
+        let entry_point_ids: HashSet<EntryPointId> = entry_points_tracing_params_data
+            .entity
             .values()
             .flat_map(|entry_points_with_tracing_params| {
                 entry_points_with_tracing_params
                     .iter()
                     .map(
-                        (|entry_point| entry_point.entry_point.external_id)
-                            .cloned()
-                            .collect(),
+                        (|entry_point: EntryPointWithTracingParams| {
+                            entry_point.entry_point.external_id
+                        })
+                        .cloned()
+                        .collect(),
                     )
             })
             .collect();
@@ -810,32 +846,38 @@ where
                 err
             })?;
 
-        // TODO perhaps we can avoid looping twice here?
-        let traced_entrypoints: HashMap<
+        // Match traced entry points back to their component ids
+        let traced_entry_points_by_component: HashMap<
             ComponentId,
             Vec<(EntryPointWithTracingParams, TracingResult)>,
-        > = entry_points_tracing_params_by_component
+        > = entry_points_tracing_params_data
+            .entity
             .into_iter()
             .map(|(component_id, entry_points_set)| {
                 let pairs = entry_points_set
                     .into_iter()
                     .filter_map(|entry_point_with_params| {
-                        let entry_point_id = entry_point_with_params.entry_point.external_id;
-                        traced_entry_points.get(&entry_point_id).map(|trace| {
-                            (entry_point_with_params.clone(), trace.clone())
-                        })
+                        let entry_point_id = entry_point_with_params
+                            .entry_point
+                            .external_id;
+                        traced_entry_points
+                            .get(&entry_point_id)
+                            // TODO check if cloning is necessary (this can be inefficient)
+                            .map(|trace| (entry_point_with_params.clone(), trace.clone()))
                     })
                     .collect::<Vec<_>>();
                 (component_id, pairs)
             })
-            .collect();
+            .collect::<HashMap<ComponentId, Vec<(EntryPointWithTracingParams, TracingResult)>>>();
 
-        Ok(TracedEntryPointRequestResponse {
-            traced_entrypoints,
-            pagination: &PaginationResponse::new(
+        Ok(dto::TracedEntryPointRequestResponse {
+            traced_entry_points: traced_entry_points_by_component,
+            pagination: PaginationResponse::new(
                 request.pagination.page,
                 request.pagination.page_size,
-                100 // TODO fix this. Put the actual total.
+                entry_points_tracing_params_data
+                    .total
+                    .unwrap_or_default(),
             ),
         })
     }
@@ -1048,11 +1090,11 @@ pub async fn protocol_state<G: Gateway>(
     post,
     path = "/v1/protocol_systems",
     responses(
-        (status = 200, description = "OK", body = ProtocolSystemsRequestResponse),
+    (status = 200, description = "OK", body = ProtocolSystemsRequestResponse),
     ),
     request_body = ProtocolSystemsRequestBody,
     security(
-         ("apiKey" = [])
+    ("apiKey" = [])
     ),
 )]
 pub async fn protocol_systems<G: Gateway>(
@@ -1123,6 +1165,53 @@ pub async fn component_tvl<G: Gateway>(
             error!(error = %err, ?body, "Error while getting component tvl.");
             let status = err.status_code().as_u16().to_string();
             counter!("rpc_requests_failed", "endpoint" => "component_tvl", "status" => status)
+                .increment(1);
+            HttpResponse::from_error(err)
+        }
+    }
+}
+
+/// Retrieve traced entry points
+///
+/// This endpoint retrieves the traced entry points available in the indexer
+#[utoipa::path(
+    post,
+    path = "/v1/traced_entry_points",
+    responses(
+    (status = 200, description = "OK", body = ProtocolSystemsRequestResponse),
+    ),
+    request_body = ProtocolSystemsRequestBody,
+    security(
+    ("apiKey" = [])
+    ),
+)]
+pub async fn traced_entry_points<G: Gateway>(
+    body: web::Json<dto::ProtocolSystemsRequestBody>,
+    handler: web::Data<RpcHandler<G>>,
+) -> HttpResponse {
+    // Tracing and metrics
+    tracing::Span::current().record("page", body.pagination.page);
+    tracing::Span::current().record("page.size", body.pagination.page_size);
+    counter!("rpc_requests", "endpoint" => "traced_entry_points").increment(1);
+
+    if body.pagination.page_size > 100 {
+        counter!("rpc_requests_failed", "endpoint" => "traced_entry_points", "status" => "400")
+            .increment(1);
+        return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
+    }
+
+    // Call the handler to get traced entry points
+    let response = handler
+        .into_inner()
+        .get_traced_entry_points(&body)
+        .await;
+
+    match response {
+        Ok(systems) => HttpResponse::Ok().json(systems),
+        Err(err) => {
+            error!(error = %err, ?body, "Error while getting traced entry points.");
+            let status = err.status_code().as_u16().to_string();
+            counter!("rpc_requests_failed", "endpoint" => "traced_entry_points", "status" => status)
                 .increment(1);
             HttpResponse::from_error(err)
         }
@@ -1288,8 +1377,8 @@ mod tests {
             .version
             .timestamp
             .unwrap()
-            .timestamp_millis() -
-            result
+            .timestamp_millis()
+            - result
                 .version
                 .timestamp
                 .unwrap()

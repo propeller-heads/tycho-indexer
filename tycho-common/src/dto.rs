@@ -1285,7 +1285,7 @@ impl ProtocolStateRequestResponse {
     }
 }
 
-#[derive(Clone, PartialEq, Hash, Eq)]
+#[derive(Serialize, Clone, PartialEq, Hash, Eq)]
 pub struct ProtocolComponentId {
     pub chain: Chain,
     pub system: String,
@@ -1388,7 +1388,6 @@ pub struct EntryPoint {
     pub external_id: String,
     #[serde(with = "hex_bytes")]
     pub target: Bytes,
-    #[serde(with = "hex_bytes")]
     pub signature: String,
 }
 
@@ -1404,7 +1403,7 @@ impl From<models::blockchain::RPCTracerParams> for RPCTracerParams {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
 #[serde(tag = "method", rename_all = "lowercase")]
 pub enum TracingParams {
     RPCTracer(RPCTracerParams),
@@ -1430,7 +1429,7 @@ impl From<models::blockchain::EntryPoint> for EntryPoint {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, ToSchema, Eq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, ToSchema, Eq, Clone)]
 pub struct EntryPointWithTracingParams {
     pub entry_point: EntryPoint,
     pub params: TracingParams,
@@ -1457,9 +1456,9 @@ impl From<models::blockchain::TracingResult> for TracingResult {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, ToSchema, Eq)]
+#[derive(Serialize, PartialEq, ToSchema, Eq, Clone)]
 pub struct TracedEntryPointRequestResponse {
-    pub traced_entrypoints:
+    pub traced_entry_points:
         HashMap<ProtocolComponentId, Vec<(EntryPointWithTracingParams, TracingResult)>>,
     pub pagination: PaginationResponse,
 }
