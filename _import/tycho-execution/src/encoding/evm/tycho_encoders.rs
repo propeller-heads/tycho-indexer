@@ -1,19 +1,22 @@
 use std::{collections::HashSet, str::FromStr};
 
-use num_bigint::BigUint;
 use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
+        approvals::permit2::Permit2,
         constants::{GROUPABLE_PROTOCOLS, IN_TRANSFER_REQUIRED_PROTOCOLS},
+        encoding_utils::encode_tycho_router_call,
         group_swaps::group_swaps,
         strategy_encoder::strategy_encoders::{
             SequentialSwapStrategyEncoder, SingleSwapStrategyEncoder, SplitSwapStrategyEncoder,
         },
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
     },
-    models::{Chain, EncodingContext, NativeAction, Solution, Transaction, TransferType},
+    models::{
+        Chain, EncodedSolution, EncodingContext, NativeAction, Solution, Transaction, TransferType,
+    },
     strategy_encoder::StrategyEncoder,
     tycho_encoder::TychoEncoder,
 };
@@ -26,6 +29,8 @@ use crate::encoding::{
 /// * `split_swap_strategy`: Encoder for split swaps
 /// * `native_address`: Address of the chain's native token
 /// * `wrapped_address`: Address of the chain's wrapped native token
+/// * `router_address`: Address of the Tycho router contract
+/// * `token_in_already_in_router`: Indicates if the token in is already in the router at swap time
 #[derive(Clone)]
 pub struct TychoRouterEncoder {
     single_swap_strategy: SingleSwapStrategyEncoder,
@@ -33,6 +38,9 @@ pub struct TychoRouterEncoder {
     split_swap_strategy: SplitSwapStrategyEncoder,
     native_address: Bytes,
     wrapped_address: Bytes,
+    router_address: Bytes,
+    token_in_already_in_router: bool,
+    permit2: Option<Permit2>,
 }
 
 impl TychoRouterEncoder {
@@ -45,78 +53,113 @@ impl TychoRouterEncoder {
     ) -> Result<Self, EncodingError> {
         let native_address = chain.native_token()?;
         let wrapped_address = chain.wrapped_token()?;
+        let permit2 = if let Some(swapper_pk) = swapper_pk.clone() {
+            Some(Permit2::new(swapper_pk, chain.clone())?)
+        } else {
+            None
+        };
         Ok(TychoRouterEncoder {
             single_swap_strategy: SingleSwapStrategyEncoder::new(
                 chain.clone(),
                 swap_encoder_registry.clone(),
-                swapper_pk.clone(),
+                permit2.is_some(),
                 router_address.clone(),
                 token_in_already_in_router,
             )?,
             sequential_swap_strategy: SequentialSwapStrategyEncoder::new(
                 chain.clone(),
                 swap_encoder_registry.clone(),
-                swapper_pk.clone(),
+                permit2.is_some(),
                 router_address.clone(),
                 token_in_already_in_router,
             )?,
             split_swap_strategy: SplitSwapStrategyEncoder::new(
                 chain,
                 swap_encoder_registry,
-                None,
+                permit2.is_some(),
                 router_address.clone(),
                 token_in_already_in_router,
             )?,
             native_address,
             wrapped_address,
+            router_address,
+            token_in_already_in_router,
+            permit2,
         })
+    }
+
+    fn encode_solution(&self, solution: &Solution) -> Result<EncodedSolution, EncodingError> {
+        self.validate_solution(solution)?;
+        let protocols: HashSet<String> = solution
+            .clone()
+            .swaps
+            .into_iter()
+            .map(|swap| swap.component.protocol_system)
+            .collect();
+
+        let mut encoded_solution = if (solution.swaps.len() == 1) ||
+            (protocols.len() == 1 &&
+                protocols
+                    .iter()
+                    .any(|p| GROUPABLE_PROTOCOLS.contains(&p.as_str())))
+        {
+            self.single_swap_strategy
+                .encode_strategy(solution.clone())?
+        } else if solution
+            .swaps
+            .iter()
+            .all(|swap| swap.split == 0.0)
+        {
+            self.sequential_swap_strategy
+                .encode_strategy(solution.clone())?
+        } else {
+            self.split_swap_strategy
+                .encode_strategy(solution.clone())?
+        };
+
+        if let Some(permit2) = self.permit2.clone() {
+            let (permit, signature) = permit2.get_permit(
+                &self.router_address,
+                &solution.sender,
+                &solution.given_token,
+                &solution.given_amount,
+            )?;
+            encoded_solution.permit = Some(permit);
+            encoded_solution.signature = Some(signature);
+        }
+        Ok(encoded_solution)
     }
 }
 
 impl TychoEncoder for TychoRouterEncoder {
-    fn encode_calldata(&self, solutions: Vec<Solution>) -> Result<Vec<Transaction>, EncodingError> {
+    fn encode_solutions(
+        &self,
+        solutions: Vec<Solution>,
+    ) -> Result<Vec<EncodedSolution>, EncodingError> {
+        let mut result: Vec<EncodedSolution> = Vec::new();
+        for solution in solutions.iter() {
+            let encoded_solution = self.encode_solution(solution)?;
+            result.push(encoded_solution);
+        }
+        Ok(result)
+    }
+
+    fn encode_full_calldata(
+        &self,
+        solutions: Vec<Solution>,
+    ) -> Result<Vec<Transaction>, EncodingError> {
         let mut transactions: Vec<Transaction> = Vec::new();
         for solution in solutions.iter() {
-            self.validate_solution(solution)?;
+            let encoded_solution = self.encode_solution(solution)?;
 
-            let protocols: HashSet<String> = solution
-                .clone()
-                .swaps
-                .into_iter()
-                .map(|swap| swap.component.protocol_system)
-                .collect();
+            let transaction = encode_tycho_router_call(
+                encoded_solution,
+                solution,
+                self.token_in_already_in_router,
+                self.native_address.clone(),
+            )?;
 
-            let (contract_interaction, target_address) = if (solution.swaps.len() == 1) ||
-                (protocols.len() == 1 &&
-                    protocols
-                        .iter()
-                        .any(|p| GROUPABLE_PROTOCOLS.contains(&p.as_str())))
-            {
-                self.single_swap_strategy
-                    .encode_strategy(solution.clone())?
-            } else if solution
-                .swaps
-                .iter()
-                .all(|swap| swap.split == 0.0)
-            {
-                self.sequential_swap_strategy
-                    .encode_strategy(solution.clone())?
-            } else {
-                self.split_swap_strategy
-                    .encode_strategy(solution.clone())?
-            };
-
-            let value = if solution.given_token == self.native_address {
-                solution.given_amount.clone()
-            } else {
-                BigUint::ZERO
-            };
-
-            transactions.push(Transaction {
-                value,
-                data: contract_interaction,
-                to: target_address,
-            });
+            transactions.push(transaction);
         }
         Ok(transactions)
     }
@@ -231,22 +274,17 @@ impl TychoEncoder for TychoRouterEncoder {
 #[derive(Clone)]
 pub struct TychoExecutorEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
-    native_address: Bytes,
 }
 
 impl TychoExecutorEncoder {
-    pub fn new(
-        chain: Chain,
-        swap_encoder_registry: SwapEncoderRegistry,
-    ) -> Result<Self, EncodingError> {
-        let native_address = chain.native_token()?;
-        Ok(TychoExecutorEncoder { swap_encoder_registry, native_address })
+    pub fn new(swap_encoder_registry: SwapEncoderRegistry) -> Result<Self, EncodingError> {
+        Ok(TychoExecutorEncoder { swap_encoder_registry })
     }
 
     fn encode_executor_calldata(
         &self,
         solution: Solution,
-    ) -> Result<(Vec<u8>, Bytes), EncodingError> {
+    ) -> Result<EncodedSolution, EncodingError> {
         let grouped_swaps = group_swaps(solution.clone().swaps);
         let number_of_groups = grouped_swaps.len();
         if number_of_groups > 1 {
@@ -295,29 +333,39 @@ impl TychoExecutorEncoder {
         let executor_address = Bytes::from_str(swap_encoder.executor_address())
             .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?;
 
-        Ok((grouped_protocol_data, executor_address))
+        Ok(EncodedSolution {
+            swaps: grouped_protocol_data,
+            interacting_with: executor_address,
+            permit: None,
+            signature: None,
+            selector: "".to_string(),
+            n_tokens: 0,
+        })
     }
 }
 
 impl TychoEncoder for TychoExecutorEncoder {
-    fn encode_calldata(&self, solutions: Vec<Solution>) -> Result<Vec<Transaction>, EncodingError> {
-        let mut transactions: Vec<Transaction> = Vec::new();
+    fn encode_solutions(
+        &self,
+        solutions: Vec<Solution>,
+    ) -> Result<Vec<EncodedSolution>, EncodingError> {
         let solution = solutions
             .first()
             .ok_or(EncodingError::FatalError("No solutions found".to_string()))?;
         self.validate_solution(solution)?;
 
-        let (contract_interaction, target_address) =
-            self.encode_executor_calldata(solution.clone())?;
+        let encoded_solution = self.encode_executor_calldata(solution.clone())?;
 
-        let value = if solution.given_token == self.native_address {
-            solution.given_amount.clone()
-        } else {
-            BigUint::ZERO
-        };
+        Ok(vec![encoded_solution])
+    }
 
-        transactions.push(Transaction { value, data: contract_interaction, to: target_address });
-        Ok(transactions)
+    fn encode_full_calldata(
+        &self,
+        _solutions: Vec<Solution>,
+    ) -> Result<Vec<Transaction>, EncodingError> {
+        Err(EncodingError::NotImplementedError(
+            "Full calldata encoding is not supported for TychoExecutorEncoder".to_string(),
+        ))
     }
 
     /// Raises an `EncodingError` if the solution is not considered valid.
@@ -338,7 +386,7 @@ impl TychoEncoder for TychoExecutorEncoder {
 mod tests {
     use std::{collections::HashMap, str::FromStr};
 
-    use num_bigint::BigInt;
+    use num_bigint::{BigInt, BigUint};
     use tycho_common::models::{protocol::ProtocolComponent, Chain as TychoCommonChain};
 
     use super::*;
@@ -458,7 +506,7 @@ mod tests {
                 ..Default::default()
             };
 
-            let transactions = encoder.encode_calldata(vec![solution]);
+            let transactions = encoder.encode_full_calldata(vec![solution]);
             assert!(transactions.is_ok());
             let transactions = transactions.unwrap();
             assert_eq!(transactions.len(), 1);
@@ -479,16 +527,14 @@ mod tests {
                 given_token: usdc(),
                 given_amount: BigUint::from_str("1000_000000").unwrap(),
                 checked_token: pepe(),
-                expected_amount: Some(BigUint::from_str("105_152_000000000000000000").unwrap()),
-                checked_amount: None,
-                slippage: None,
+                checked_amount: BigUint::from_str("105_152_000000000000000000").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
                 ..Default::default()
             };
 
-            let transactions = encoder.encode_calldata(vec![solution]);
+            let transactions = encoder.encode_full_calldata(vec![solution]);
             assert!(transactions.is_ok());
             let transactions = transactions.unwrap();
             assert_eq!(transactions.len(), 1);
@@ -530,11 +576,11 @@ mod tests {
                 swaps: vec![swap_weth_dai, swap_dai_usdc],
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 native_action: Some(NativeAction::Wrap),
-                checked_amount: Some(BigUint::from(1000u32)),
+                checked_amount: BigUint::from(1000u32),
                 ..Default::default()
             };
 
-            let transactions = encoder.encode_calldata(vec![solution]);
+            let transactions = encoder.encode_full_calldata(vec![solution]);
             assert!(transactions.is_ok());
             let transactions = transactions.unwrap();
             assert_eq!(transactions.len(), 1);
@@ -579,7 +625,6 @@ mod tests {
                 exact_out: false,
                 given_token: eth(),
                 checked_token: dai(),
-                checked_amount: None,
                 swaps: vec![swap],
                 native_action: Some(NativeAction::Wrap),
                 ..Default::default()
@@ -693,7 +738,6 @@ mod tests {
             let solution = Solution {
                 exact_out: false,
                 checked_token: eth(),
-                checked_amount: None,
                 swaps: vec![swap],
                 native_action: Some(NativeAction::Unwrap),
                 ..Default::default()
@@ -1011,9 +1055,7 @@ mod tests {
         #[test]
         fn test_executor_encoder_encode() {
             let swap_encoder_registry = get_swap_encoder_registry();
-            let encoder =
-                TychoExecutorEncoder::new(TychoCommonChain::Ethereum.into(), swap_encoder_registry)
-                    .unwrap();
+            let encoder = TychoExecutorEncoder::new(swap_encoder_registry).unwrap();
 
             let token_in = weth();
             let token_out = dai();
@@ -1033,26 +1075,24 @@ mod tests {
                 exact_out: false,
                 given_token: token_in,
                 given_amount: BigUint::from(1000000000000000000u64),
-                expected_amount: Some(BigUint::from(1000000000000000000u64)),
                 checked_token: token_out,
-                checked_amount: None,
+                checked_amount: BigUint::from(1000000000000000000u64),
                 sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
                 swaps: vec![swap],
-                slippage: None,
                 native_action: None,
             };
 
-            let transactions = encoder
-                .encode_calldata(vec![solution])
+            let encoded_solutions = encoder
+                .encode_solutions(vec![solution])
                 .unwrap();
-            let transaction = transactions
+            let encoded = encoded_solutions
                 .first()
-                .expect("Expected at least one transaction");
-            let hex_protocol_data = encode(&transaction.data);
+                .expect("Expected at least one encoded solution");
+            let hex_protocol_data = encode(&encoded.swaps);
             assert_eq!(
-                transaction.to,
+                encoded.interacting_with,
                 Bytes::from_str("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f").unwrap()
             );
             assert_eq!(
@@ -1075,9 +1115,7 @@ mod tests {
         #[test]
         fn test_executor_encoder_too_many_swaps() {
             let swap_encoder_registry = get_swap_encoder_registry();
-            let encoder =
-                TychoExecutorEncoder::new(TychoCommonChain::Ethereum.into(), swap_encoder_registry)
-                    .unwrap();
+            let encoder = TychoExecutorEncoder::new(swap_encoder_registry).unwrap();
 
             let token_in = weth();
             let token_out = dai();
@@ -1096,26 +1134,22 @@ mod tests {
                 exact_out: false,
                 given_token: token_in,
                 given_amount: BigUint::from(1000000000000000000u64),
-                expected_amount: Some(BigUint::from(1000000000000000000u64)),
                 checked_token: token_out,
-                checked_amount: None,
+                checked_amount: BigUint::from(1000000000000000000u64),
                 sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
                 receiver: Bytes::from_str("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e").unwrap(),
                 swaps: vec![swap.clone(), swap],
-                slippage: None,
                 native_action: None,
             };
 
-            let result = encoder.encode_calldata(vec![solution]);
+            let result = encoder.encode_solutions(vec![solution]);
             assert!(result.is_err());
         }
 
         #[test]
         fn test_executor_encoder_grouped_swaps() {
             let swap_encoder_registry = get_swap_encoder_registry();
-            let encoder =
-                TychoExecutorEncoder::new(TychoCommonChain::Ethereum.into(), swap_encoder_registry)
-                    .unwrap();
+            let encoder = TychoExecutorEncoder::new(swap_encoder_registry).unwrap();
 
             let usdc = usdc();
             let pepe = pepe();
@@ -1125,24 +1159,22 @@ mod tests {
                 given_token: usdc,
                 given_amount: BigUint::from_str("1000_000000").unwrap(),
                 checked_token: pepe,
-                expected_amount: Some(BigUint::from_str("105_152_000000000000000000").unwrap()),
-                checked_amount: None,
-                slippage: None,
+                checked_amount: BigUint::from(1000000000000000000u64),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
                 ..Default::default()
             };
 
-            let transactions = encoder
-                .encode_calldata(vec![solution])
+            let encoded_solutions = encoder
+                .encode_solutions(vec![solution])
                 .unwrap();
-            let transaction = transactions
+            let encoded_solution = encoded_solutions
                 .first()
-                .expect("Expected at least one transaction");
-            let hex_protocol_data = encode(&transaction.data);
+                .expect("Expected at least one encoded solution");
+            let hex_protocol_data = encode(&encoded_solution.swaps);
             assert_eq!(
-                transaction.to,
+                encoded_solution.interacting_with,
                 Bytes::from_str("0xf62849f9a0b5bf2913b396098f7c7019b51a820a").unwrap()
             );
             assert_eq!(

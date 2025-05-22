@@ -123,7 +123,7 @@ contract TychoRouter is
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
-     * @param transferFromNeeded If false, the contract will assume that the input token is already transferred to the contract and don't allow any transferFroms
+     * @param isTransferFromAllowed If false, the contract will assume that the input token is already transferred to the contract and don't allow any transferFroms
      * @param swaps Encoded swap graph data containing details of each swap.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -137,11 +137,11 @@ contract TychoRouter is
         bool unwrapEth,
         uint256 nTokens,
         address receiver,
-        bool transferFromNeeded,
+        bool isTransferFromAllowed,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        _tstoreTransferFromInfo(tokenIn, amountIn, false, transferFromNeeded);
+        _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
 
         return _splitSwapChecked(
             amountIn,
@@ -235,7 +235,7 @@ contract TychoRouter is
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param transferFromNeeded If false, the contract will assume that the input token is already transferred to the contract and don't allow any transferFroms
+     * @param isTransferFromAllowed If false, the contract will assume that the input token is already transferred to the contract and don't allow any transferFroms
      * @param swaps Encoded swap graph data containing details of each swap.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -248,11 +248,11 @@ contract TychoRouter is
         bool wrapEth,
         bool unwrapEth,
         address receiver,
-        bool transferFromNeeded,
+        bool isTransferFromAllowed,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        _tstoreTransferFromInfo(tokenIn, amountIn, false, transferFromNeeded);
+        _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
 
         return _sequentialSwapChecked(
             amountIn,
@@ -340,7 +340,7 @@ contract TychoRouter is
      * @param wrapEth If true, wraps the input token (native ETH) into WETH.
      * @param unwrapEth If true, unwraps the resulting WETH into native ETH and sends it to the receiver.
      * @param receiver The address to receive the output tokens.
-     * @param transferFromNeeded If false, the contract will assume that the input token is already transferred to the contract and don't allow any transferFroms
+     * @param isTransferFromAllowed If false, the contract will assume that the input token is already transferred to the contract and don't allow any transferFroms
      * @param swapData Encoded swap details.
      *
      * @return amountOut The total amount of the output token received by the receiver.
@@ -353,11 +353,11 @@ contract TychoRouter is
         bool wrapEth,
         bool unwrapEth,
         address receiver,
-        bool transferFromNeeded,
+        bool isTransferFromAllowed,
         bytes calldata swapData
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         uint256 initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        _tstoreTransferFromInfo(tokenIn, amountIn, false, transferFromNeeded);
+        _tstoreTransferFromInfo(tokenIn, amountIn, false, isTransferFromAllowed);
 
         return _singleSwap(
             amountIn,

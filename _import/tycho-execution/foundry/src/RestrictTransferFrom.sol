@@ -10,34 +10,35 @@ error RestrictTransferFrom__AddressZero();
 error RestrictTransferFrom__ExceededTransferFromAllowance(
     uint256 allowedAmount, uint256 amountAttempted
 );
+error RestrictTransferFrom__DifferentTokenIn(
+    address tokenIn, address tokenInStorage
+);
 error RestrictTransferFrom__UnknownTransferType();
 
 /**
  * @title RestrictTransferFrom - Restrict transferFrom upto allowed amount of token
- * @dev Restricts to one `transferFrom` (using `permit2` or regular `transferFrom`)
- * per swap, while ensuring that the `transferFrom` is only performed on the input
- * token upto input amount, from the msg.sender's wallet that calls the main swap
- * method. Reverts if `transferFrom`s are attempted above this allowed amount.
+ * @dev Restricts `transferFrom` (using `permit2` or regular `transferFrom`) upto
+ * allowed amount of token in per swap, while ensuring that the `transferFrom` is
+ * only performed on the input token upto input amount, from the msg.sender's wallet
+ * that calls the main swap method. Reverts if `transferFrom`s are attempted above
+ * this allowed amount.
  */
 contract RestrictTransferFrom {
     using SafeERC20 for IERC20;
 
     IAllowanceTransfer public immutable permit2;
-    // keccak256("Dispatcher#TOKEN_IN_SLOT")
+    // keccak256("RestrictTransferFrom#TOKEN_IN_SLOT")
     uint256 private constant _TOKEN_IN_SLOT =
-        0x66f353cfe8e3cbe0d03292348fbf0fca32e6e07fa0c2a52b4aac22193ac3b894;
-    // keccak256("Dispatcher#AMOUNT_ALLOWED_SLOT")
+        0x25712b2458c26c244401cacab2c4d40a337e6c15af51d98c87ca8c05ed74935f;
+    // keccak256("RestrictTransferFrom#AMOUNT_ALLOWED_SLOT")
     uint256 private constant _AMOUNT_ALLOWED_SLOT =
-        0xc76591aca92830b1554f3dcc7893e7519ec7c57bd4e64fec0c546d9078033291;
-    // keccak256("Dispatcher#IS_PERMIT2_SLOT")
+        0x9042309497172c3d7a894cb22c754029d2b44522a8039afc41f7d5ad87a35cb5;
+    // keccak256("RestrictTransferFrom#IS_PERMIT2_SLOT")
     uint256 private constant _IS_PERMIT2_SLOT =
-        0x3162c9d1175ca0ca7441f87984fdac41bbfdb13246f42c8bb4414d345da39e2a;
-    // keccak256("Dispatcher#SENDER_SLOT")
+        0x8b09772a37ddaa0009affae61f4c227f5ae294cb166289f28313bcce05ea5358;
+    // keccak256("RestrictTransferFrom#SENDER_SLOT")
     uint256 private constant _SENDER_SLOT =
-        0x5dcc7974be5cb30f183f878073999aaa6620995b9e052ab5a713071ff60ae9b5;
-    // keccak256("Dispatcher#AMOUNT_SPENT_SLOT")
-    uint256 private constant _AMOUNT_SPENT_SLOT =
-        0x56044a5eb3aa5bd3ad908b7f15d1e8cb830836bb4ad178a0bf08955c94c40d30;
+        0x6249046ac25ba4612871a1715b1abd1de7cf9c973c5045a9b08ce3f441ce6e3a;
 
     constructor(address _permit2) {
         if (_permit2 == address(0)) {
@@ -61,10 +62,10 @@ contract RestrictTransferFrom {
         address tokenIn,
         uint256 amountIn,
         bool isPermit2,
-        bool transferFromNeeded
+        bool isTransferFromAllowed
     ) internal {
         uint256 amountAllowed = amountIn;
-        if (!transferFromNeeded) {
+        if (!isTransferFromAllowed) {
             amountAllowed = 0;
         }
         assembly {
@@ -72,7 +73,6 @@ contract RestrictTransferFrom {
             tstore(_AMOUNT_ALLOWED_SLOT, amountAllowed)
             tstore(_IS_PERMIT2_SLOT, isPermit2)
             tstore(_SENDER_SLOT, caller())
-            tstore(_AMOUNT_SPENT_SLOT, 0)
         }
     }
 
@@ -91,25 +91,29 @@ contract RestrictTransferFrom {
         uint256 amount
     ) internal {
         if (transferType == TransferType.TransferFrom) {
+            address tokenInStorage;
             bool isPermit2;
             address sender;
-            uint256 amountSpent;
             uint256 amountAllowed;
             assembly {
-                tokenIn := tload(_TOKEN_IN_SLOT)
+                tokenInStorage := tload(_TOKEN_IN_SLOT)
                 amountAllowed := tload(_AMOUNT_ALLOWED_SLOT)
                 isPermit2 := tload(_IS_PERMIT2_SLOT)
                 sender := tload(_SENDER_SLOT)
-                amountSpent := tload(_AMOUNT_SPENT_SLOT)
             }
-            uint256 amountAttempted = amountSpent + amount;
-            if (amountAttempted > amountAllowed) {
+            if (amount > amountAllowed) {
                 revert RestrictTransferFrom__ExceededTransferFromAllowance(
-                    amountAllowed, amountAttempted
+                    amountAllowed, amount
                 );
             }
+            if (tokenIn != tokenInStorage) {
+                revert RestrictTransferFrom__DifferentTokenIn(
+                    tokenIn, tokenInStorage
+                );
+            }
+            amountAllowed -= amount;
             assembly {
-                tstore(_AMOUNT_SPENT_SLOT, amountAttempted)
+                tstore(_AMOUNT_ALLOWED_SLOT, amountAllowed)
             }
             if (isPermit2) {
                 // Permit2.permit is already called from the TychoRouter

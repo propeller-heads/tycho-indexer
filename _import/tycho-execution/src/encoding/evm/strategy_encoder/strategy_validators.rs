@@ -4,23 +4,10 @@ use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
-    models::{NativeAction, Solution, Swap},
+    models::{NativeAction, Swap},
 };
 
 pub trait SwapValidator {
-    /// Raises an error if the solution does not have checked amount set or slippage with checked
-    /// amount set.
-    fn validate_solution_min_amounts(&self, solution: &Solution) -> Result<(), EncodingError> {
-        if solution.checked_amount.is_none() &&
-            (solution.slippage.is_none() || solution.expected_amount.is_none())
-        {
-            return Err(EncodingError::InvalidInput(
-                "Checked amount or slippage with expected amount must be provided".to_string(),
-            ))
-        }
-        Ok(())
-    }
-
     /// Raises an error if swaps do not represent a valid path from the given token to the checked
     /// token.
     ///
@@ -207,8 +194,6 @@ impl SwapValidator for SequentialSwapValidator {}
 mod tests {
     use std::str::FromStr;
 
-    use num_bigint::BigUint;
-    use rstest::rstest;
     use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
@@ -614,81 +599,5 @@ mod tests {
             &weth,
         );
         assert_eq!(result, Ok(()));
-    }
-
-    #[rstest]
-    #[case::slippage_with_expected_amount_set(
-        Some(0.01),
-        Some(BigUint::from(1000u32)),
-        None,
-        Ok(())
-    )]
-    #[case::min_amount_set(
-        None,
-        None,
-        Some(BigUint::from(1000u32)),
-        Ok(())
-    )]
-    #[case::slippage_with_min_amount_set(
-        Some(0.01),
-        Some(BigUint::from(1000u32)),
-        Some(BigUint::from(1000u32)),
-        Ok(())
-    )]
-    #[case::slippage_without_expected_amount_set(
-        Some(0.01),
-        None,
-        None,
-        Err(
-            EncodingError::InvalidInput(
-                "Checked amount or slippage with expected amount must be provided".to_string()
-            )
-        )
-    )]
-    #[case::none_set(
-        None,
-        None,
-        None,
-        Err(
-            EncodingError::InvalidInput(
-                "Checked amount or slippage with expected amount must be provided".to_string()
-            )
-        )
-    )]
-    fn test_validate_min_amount_passed(
-        #[case] slippage: Option<f64>,
-        #[case] expected_amount: Option<BigUint>,
-        #[case] min_amount: Option<BigUint>,
-        #[case] expected_result: Result<(), EncodingError>,
-    ) {
-        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
-        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
-
-        let validator = SplitSwapValidator;
-        let swap = Swap {
-            component: ProtocolComponent {
-                id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
-                protocol_system: "uniswap_v2".to_string(),
-                ..Default::default()
-            },
-            token_in: weth.clone(),
-            token_out: usdc.clone(),
-            split: 0f64,
-        };
-
-        let solution = Solution {
-            exact_out: false,
-            given_token: weth,
-            checked_token: usdc,
-            slippage,
-            checked_amount: min_amount,
-            expected_amount,
-            swaps: vec![swap],
-            native_action: Some(NativeAction::Wrap),
-            ..Default::default()
-        };
-
-        let result = validator.validate_solution_min_amounts(&solution);
-        assert_eq!(result, expected_result);
     }
 }

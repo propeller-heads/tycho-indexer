@@ -1,5 +1,6 @@
 use std::io::{self, Read};
 
+use alloy_sol_types::SolValue;
 use clap::{Parser, Subcommand};
 use tycho_common::{hex_bytes::Bytes, models::Chain};
 use tycho_execution::encoding::{
@@ -99,11 +100,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .build()?,
     };
 
-    let transactions = encoder.encode_calldata(vec![solution])?;
+    let encoded_solutions = encoder.encode_solutions(vec![solution])?;
     let encoded = serde_json::json!({
-        "to": format!("0x{}", hex::encode(&transactions[0].to)),
-        "value": format!("0x{}", hex::encode(transactions[0].value.to_bytes_be())),
-        "data": format!("0x{}", hex::encode(&transactions[0].data)),
+        "swaps": format!("0x{}", hex::encode(&encoded_solutions[0].swaps)),
+        "interacting_with": format!("0x{}", hex::encode(&encoded_solutions[0].interacting_with)),
+        "selector": format!("{}",&encoded_solutions[0].selector),
+        "n_tokens": format!("{}", &encoded_solutions[0].n_tokens),
+        "permit": encoded_solutions[0].permit
+            .as_ref()
+            .map(|permit| format!("0x{}", hex::encode(permit.abi_encode())))
+            .unwrap_or_else(String::new),
+        "signature": encoded_solutions[0].signature
+            .as_ref()
+            .map(|signature| format!("0x{}", hex::encode(signature.as_bytes())))
+            .unwrap_or_else(String::new),
     });
     // Output the encoded result as JSON to stdout
     println!(

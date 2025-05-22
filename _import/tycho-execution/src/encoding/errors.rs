@@ -20,6 +20,8 @@ pub enum EncodingError {
     FatalError(String),
     #[error("Recoverable error: {0}")]
     RecoverableError(String),
+    #[error("Not implemented: {0}")]
+    NotImplementedError(String),
 }
 
 impl From<io::Error> for EncodingError {
