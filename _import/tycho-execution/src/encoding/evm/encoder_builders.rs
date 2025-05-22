@@ -145,7 +145,7 @@ impl TychoExecutorEncoderBuilder {
         if let Some(chain) = self.chain {
             let swap_encoder_registry =
                 SwapEncoderRegistry::new(self.executors_file_path.clone(), chain.clone())?;
-            Ok(Box::new(TychoExecutorEncoder::new(chain, swap_encoder_registry)?))
+            Ok(Box::new(TychoExecutorEncoder::new(swap_encoder_registry)?))
         } else {
             Err(EncodingError::FatalError(
                 "Please set the chain and strategy before building the encoder".to_string(),

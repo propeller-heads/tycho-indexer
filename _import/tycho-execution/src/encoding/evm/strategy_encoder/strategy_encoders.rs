@@ -1,25 +1,20 @@
 use std::{collections::HashSet, str::FromStr};
 
-use alloy_primitives::{aliases::U24, U256, U8};
-use alloy_sol_types::SolValue;
+use alloy_primitives::{aliases::U24, U8};
 use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
-        approvals::permit2::Permit2,
         group_swaps::group_swaps,
         strategy_encoder::{
             strategy_validators::{SequentialSwapValidator, SplitSwapValidator, SwapValidator},
             transfer_optimizations::TransferOptimization,
         },
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
-        utils::{
-            biguint_to_u256, bytes_to_address, encode_input, get_min_amount_for_solution,
-            get_token_position, percentage_to_uint24, ple_encode,
-        },
+        utils::{get_token_position, percentage_to_uint24, ple_encode},
     },
-    models::{Chain, EncodingContext, NativeAction, Solution},
+    models::{Chain, EncodedSolution, EncodingContext, NativeAction, Solution},
     strategy_encoder::StrategyEncoder,
     swap_encoder::SwapEncoder,
 };
@@ -28,41 +23,32 @@ use crate::encoding::{
 ///
 /// # Fields
 /// * `swap_encoder_registry`: SwapEncoderRegistry, containing all possible swap encoders
-/// * `permit2`: Permit2, responsible for managing permit2 operations and providing necessary
-///   signatures and permit2 objects for calling the router
 /// * `selector`: String, the selector for the swap function in the router contract
 /// * `router_address`: Address of the router to be used to execute swaps
 /// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
-/// * `token_in_already_in_router`: bool, whether the token in is already in the router
 #[derive(Clone)]
 pub struct SingleSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
-    permit2: Option<Permit2>,
     selector: String,
     router_address: Bytes,
     transfer_optimization: TransferOptimization,
-    token_in_already_in_router: bool,
 }
 
 impl SingleSwapStrategyEncoder {
     pub fn new(
         chain: Chain,
         swap_encoder_registry: SwapEncoderRegistry,
-        swapper_pk: Option<String>,
+        permit_2_active: bool,
         router_address: Bytes,
         token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
-        let (permit2, selector) = if let Some(swapper_pk) = swapper_pk {
-            (Some(Permit2::new(swapper_pk, chain.clone())?), "singleSwapPermit2(uint256,address,address,uint256,bool,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
+        let selector = if permit_2_active {
+            "singleSwapPermit2(uint256,address,address,uint256,bool,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"
         } else {
-            (
-                None,
-                "singleSwap(uint256,address,address,uint256,bool,bool,address,bool,bytes)"
-                    .to_string(),
-            )
-        };
+            "singleSwap(uint256,address,address,uint256,bool,bool,address,bool,bytes)"
+        }.to_string();
+
         Ok(Self {
-            permit2,
             selector,
             swap_encoder_registry,
             router_address: router_address.clone(),
@@ -72,7 +58,6 @@ impl SingleSwapStrategyEncoder {
                 token_in_already_in_router,
                 router_address,
             ),
-            token_in_already_in_router,
         })
     }
 
@@ -87,7 +72,7 @@ impl SingleSwapStrategyEncoder {
 }
 
 impl StrategyEncoder for SingleSwapStrategyEncoder {
-    fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
+    fn encode_strategy(&self, solution: Solution) -> Result<EncodedSolution, EncodingError> {
         let grouped_swaps = group_swaps(solution.clone().swaps);
         let number_of_groups = grouped_swaps.len();
         if number_of_groups != 1 {
@@ -105,8 +90,6 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
                 "Splits not supported for single swaps.".to_string(),
             ))
         }
-
-        let min_amount_out = get_min_amount_for_solution(solution.clone());
 
         let (mut unwrap, mut wrap) = (false, false);
         if let Some(action) = solution.native_action.clone() {
@@ -150,44 +133,14 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
                 .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?,
             grouped_protocol_data,
         );
-
-        let method_calldata = if let Some(permit2) = self.permit2.clone() {
-            let (permit, signature) = permit2.get_permit(
-                &self.router_address,
-                &solution.sender,
-                &solution.given_token,
-                &solution.given_amount,
-            )?;
-            (
-                biguint_to_u256(&solution.given_amount),
-                bytes_to_address(&solution.given_token)?,
-                bytes_to_address(&solution.checked_token)?,
-                biguint_to_u256(&min_amount_out),
-                wrap,
-                unwrap,
-                bytes_to_address(&solution.receiver)?,
-                permit,
-                signature.as_bytes().to_vec(),
-                swap_data,
-            )
-                .abi_encode()
-        } else {
-            (
-                biguint_to_u256(&solution.given_amount),
-                bytes_to_address(&solution.given_token)?,
-                bytes_to_address(&solution.checked_token)?,
-                biguint_to_u256(&min_amount_out),
-                wrap,
-                unwrap,
-                bytes_to_address(&solution.receiver)?,
-                !self.token_in_already_in_router,
-                swap_data,
-            )
-                .abi_encode()
-        };
-
-        let contract_interaction = encode_input(&self.selector, method_calldata);
-        Ok((contract_interaction, self.router_address.clone()))
+        Ok(EncodedSolution {
+            selector: self.selector.clone(),
+            interacting_with: self.router_address.clone(),
+            swaps: swap_data,
+            permit: None,
+            signature: None,
+            n_tokens: 0,
+        })
     }
 
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
@@ -204,8 +157,6 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 ///
 /// # Fields
 /// * `swap_encoder_registry`: SwapEncoderRegistry, containing all possible swap encoders
-/// * `permit2`: Permit2, responsible for managing permit2 operations and providing necessary
-///   signatures and permit2 objects for calling the router
 /// * `selector`: String, the selector for the swap function in the router contract
 /// * `native_address`: Address of the chain's native token
 /// * `wrapped_address`: Address of the chain's wrapped token
@@ -213,39 +164,32 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 /// * `sequential_swap_validator`: SequentialSwapValidator, responsible for checking validity of
 ///   sequential swap solutions
 /// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
-/// * `token_in_already_in_router`: bool, whether the token in is already in the router
 #[derive(Clone)]
 pub struct SequentialSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
-    permit2: Option<Permit2>,
     selector: String,
     router_address: Bytes,
     native_address: Bytes,
     wrapped_address: Bytes,
     sequential_swap_validator: SequentialSwapValidator,
     transfer_optimization: TransferOptimization,
-    token_in_already_in_router: bool,
 }
 
 impl SequentialSwapStrategyEncoder {
     pub fn new(
         chain: Chain,
         swap_encoder_registry: SwapEncoderRegistry,
-        swapper_pk: Option<String>,
+        permit_2_active: bool,
         router_address: Bytes,
         token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
-        let (permit2, selector) = if let Some(swapper_pk) = swapper_pk {
-            (Some(Permit2::new(swapper_pk, chain.clone())?), "sequentialSwapPermit2(uint256,address,address,uint256,bool,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
+        let selector = if permit_2_active {
+            "sequentialSwapPermit2(uint256,address,address,uint256,bool,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"
         } else {
-            (
-                None,
-                "sequentialSwap(uint256,address,address,uint256,bool,bool,address,bool,bytes)"
-                    .to_string(),
-            )
-        };
+            "sequentialSwap(uint256,address,address,uint256,bool,bool,address,bool,bytes)"
+
+        }.to_string();
         Ok(Self {
-            permit2,
             selector,
             swap_encoder_registry,
             router_address: router_address.clone(),
@@ -258,7 +202,6 @@ impl SequentialSwapStrategyEncoder {
                 token_in_already_in_router,
                 router_address,
             ),
-            token_in_already_in_router,
         })
     }
 
@@ -273,9 +216,7 @@ impl SequentialSwapStrategyEncoder {
 }
 
 impl StrategyEncoder for SequentialSwapStrategyEncoder {
-    fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
-        self.sequential_swap_validator
-            .validate_solution_min_amounts(&solution)?;
+    fn encode_strategy(&self, solution: Solution) -> Result<EncodedSolution, EncodingError> {
         self.sequential_swap_validator
             .validate_swap_path(
                 &solution.swaps,
@@ -286,14 +227,12 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 &self.wrapped_address,
             )?;
 
-        let min_amount_out = get_min_amount_for_solution(solution.clone());
         let grouped_swaps = group_swaps(solution.swaps);
 
-        let (mut unwrap, mut wrap) = (false, false);
+        let mut wrap = false;
         if let Some(action) = solution.native_action.clone() {
-            match action {
-                NativeAction::Wrap => wrap = true,
-                NativeAction::Unwrap => unwrap = true,
+            if action == NativeAction::Wrap {
+                wrap = true
             }
         }
 
@@ -350,43 +289,14 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
         }
 
         let encoded_swaps = ple_encode(swaps);
-        let method_calldata = if let Some(permit2) = self.permit2.clone() {
-            let (permit, signature) = permit2.get_permit(
-                &self.router_address,
-                &solution.sender,
-                &solution.given_token,
-                &solution.given_amount,
-            )?;
-            (
-                biguint_to_u256(&solution.given_amount),
-                bytes_to_address(&solution.given_token)?,
-                bytes_to_address(&solution.checked_token)?,
-                biguint_to_u256(&min_amount_out),
-                wrap,
-                unwrap,
-                bytes_to_address(&solution.receiver)?,
-                permit,
-                signature.as_bytes().to_vec(),
-                encoded_swaps,
-            )
-                .abi_encode()
-        } else {
-            (
-                biguint_to_u256(&solution.given_amount),
-                bytes_to_address(&solution.given_token)?,
-                bytes_to_address(&solution.checked_token)?,
-                biguint_to_u256(&min_amount_out),
-                wrap,
-                unwrap,
-                bytes_to_address(&solution.receiver)?,
-                !self.token_in_already_in_router,
-                encoded_swaps,
-            )
-                .abi_encode()
-        };
-
-        let contract_interaction = encode_input(&self.selector, method_calldata);
-        Ok((contract_interaction, self.router_address.clone()))
+        Ok(EncodedSolution {
+            interacting_with: self.router_address.clone(),
+            selector: self.selector.clone(),
+            swaps: encoded_swaps,
+            permit: None,
+            signature: None,
+            n_tokens: 0,
+        })
     }
 
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
@@ -403,8 +313,6 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 ///
 /// # Fields
 /// * `swap_encoder_registry`: SwapEncoderRegistry, containing all possible swap encoders
-/// * `permit2`: Permit2, responsible for managing permit2 operations and providing necessary
-///   signatures and permit2 objects for calling the router
 /// * `selector`: String, the selector for the swap function in the router contract
 /// * `native_address`: Address of the chain's native token
 /// * `wrapped_address`: Address of the chain's wrapped token
@@ -412,39 +320,31 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 ///   solutions
 /// * `router_address`: Address of the router to be used to execute swaps
 /// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
-/// * `token_in_already_in_router`: bool, whether the token in is already in the router
 #[derive(Clone)]
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
-    permit2: Option<Permit2>,
     selector: String,
     native_address: Bytes,
     wrapped_address: Bytes,
     split_swap_validator: SplitSwapValidator,
     router_address: Bytes,
     transfer_optimization: TransferOptimization,
-    token_in_already_in_router: bool,
 }
 
 impl SplitSwapStrategyEncoder {
     pub fn new(
         chain: Chain,
         swap_encoder_registry: SwapEncoderRegistry,
-        swapper_pk: Option<String>,
+        permit_2_active: bool,
         router_address: Bytes,
         token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
-        let (permit2, selector) = if let Some(swapper_pk) = swapper_pk {
-            (Some(Permit2::new(swapper_pk, chain.clone())?), "splitSwapPermit2(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)".to_string())
+        let selector = if permit_2_active{
+           "splitSwapPermit2(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"
         } else {
-            (
-                None,
                 "splitSwap(uint256,address,address,uint256,bool,bool,uint256,address,bool,bytes)"
-                    .to_string(),
-            )
-        };
+        }.to_string();
         Ok(Self {
-            permit2,
             selector,
             swap_encoder_registry,
             native_address: chain.native_token()?,
@@ -457,7 +357,6 @@ impl SplitSwapStrategyEncoder {
                 token_in_already_in_router,
                 router_address,
             ),
-            token_in_already_in_router,
         })
     }
 
@@ -482,9 +381,7 @@ impl SplitSwapStrategyEncoder {
 }
 
 impl StrategyEncoder for SplitSwapStrategyEncoder {
-    fn encode_strategy(&self, solution: Solution) -> Result<(Vec<u8>, Bytes), EncodingError> {
-        self.split_swap_validator
-            .validate_solution_min_amounts(&solution)?;
+    fn encode_strategy(&self, solution: Solution) -> Result<EncodedSolution, EncodingError> {
         self.split_swap_validator
             .validate_split_percentages(&solution.swaps)?;
         self.split_swap_validator
@@ -496,8 +393,6 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 &self.native_address,
                 &self.wrapped_address,
             )?;
-
-        let min_amount_out = get_min_amount_for_solution(solution.clone());
 
         // The tokens array is composed of the given token, the checked token and all the
         // intermediary tokens in between. The contract expects the tokens to be in this order.
@@ -597,45 +492,14 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         } else {
             tokens.len()
         };
-        let method_calldata = if let Some(permit2) = self.permit2.clone() {
-            let (permit, signature) = permit2.get_permit(
-                &self.router_address,
-                &solution.sender,
-                &solution.given_token,
-                &solution.given_amount,
-            )?;
-            (
-                biguint_to_u256(&solution.given_amount),
-                bytes_to_address(&solution.given_token)?,
-                bytes_to_address(&solution.checked_token)?,
-                biguint_to_u256(&min_amount_out),
-                wrap,
-                unwrap,
-                U256::from(tokens_len),
-                bytes_to_address(&solution.receiver)?,
-                permit,
-                signature.as_bytes().to_vec(),
-                encoded_swaps,
-            )
-                .abi_encode()
-        } else {
-            (
-                biguint_to_u256(&solution.given_amount),
-                bytes_to_address(&solution.given_token)?,
-                bytes_to_address(&solution.checked_token)?,
-                biguint_to_u256(&min_amount_out),
-                wrap,
-                unwrap,
-                U256::from(tokens_len),
-                bytes_to_address(&solution.receiver)?,
-                !self.token_in_already_in_router,
-                encoded_swaps,
-            )
-                .abi_encode()
-        };
-
-        let contract_interaction = encode_input(&self.selector, method_calldata);
-        Ok((contract_interaction, self.router_address.clone()))
+        Ok(EncodedSolution {
+            interacting_with: self.router_address.clone(),
+            selector: self.selector.clone(),
+            swaps: encoded_swaps,
+            permit: None,
+            signature: None,
+            n_tokens: tokens_len,
+        })
     }
 
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
@@ -653,16 +517,22 @@ mod tests {
     use std::{collections::HashMap, str::FromStr};
 
     use alloy::hex::encode;
-    use alloy_primitives::{hex, Address};
+    use alloy_primitives::{hex, Address, PrimitiveSignature as Signature, U256};
     use num_bigint::{BigInt, BigUint};
-    use rstest::rstest;
     use tycho_common::{
         models::{protocol::ProtocolComponent, Chain as TychoCommonChain},
         Bytes,
     };
 
     use super::*;
-    use crate::encoding::{evm::utils::write_calldata_to_file, models::Swap};
+    use crate::encoding::{
+        evm::{
+            approvals::permit2::{Permit2, PermitSingle},
+            encoding_utils::encode_tycho_router_call,
+            utils::write_calldata_to_file,
+        },
+        models::Swap,
+    };
 
     fn eth_chain() -> Chain {
         TychoCommonChain::Ethereum.into()
@@ -682,40 +552,40 @@ mod tests {
             .unwrap()
     }
 
+    fn router_address() -> Bytes {
+        Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap()
+    }
+
+    fn get_permit(
+        chain: Chain,
+        router_address: Bytes,
+        solution: &Solution,
+    ) -> (PermitSingle, Signature) {
+        // Set up a mock private key for signing (Alice's pk in our contract tests)
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let permit2 = Permit2::new(private_key, chain.clone()).unwrap();
+        permit2
+            .get_permit(
+                &router_address,
+                &solution.sender,
+                &solution.given_token,
+                &solution.given_amount,
+            )
+            .unwrap()
+    }
+
     mod single {
+        use alloy_sol_types::SolValue;
+
         use super::*;
-        #[rstest]
-        #[case::with_check_no_slippage(
-            None,
-            None,
-            Some(BigUint::from_str("2659881924818443699787").unwrap()),
-            U256::from_str("2659881924818443699787").unwrap(),
-        )]
-        #[case::no_check_with_slippage(
-            Some(BigUint::from_str("2_000_000000000000000000").unwrap()),
-            Some(0.01f64),
-            None,
-            U256::from_str("1_980_000000000000000000").unwrap(),
-        )]
-        #[case::with_check_and_slippage(
-            Some(BigUint::from_str("2_000_000000000000000000").unwrap()),
-            Some(0.01f64),
-            Some(BigUint::from_str("1_999_000000000000000000").unwrap()),
-            U256::from_str("1_999_000000000000000000").unwrap(),
-        )]
-        fn test_single_swap_strategy_encoder(
-            #[case] expected_amount: Option<BigUint>,
-            #[case] slippage: Option<f64>,
-            #[case] checked_amount: Option<BigUint>,
-            #[case] expected_min_amount: U256,
-        ) {
+        #[test]
+        fn test_single_swap_strategy_encoder() {
             // Performs a single swap from WETH to DAI on a USV2 pool, with no grouping
             // optimizations.
-
-            // Set up a mock private key for signing
-            let private_key =
-                "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
-
+            let checked_amount = BigUint::from_str("2659881924818443699787").unwrap();
+            let expected_min_amount = U256::from_str("2659881924818443699787").unwrap();
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
@@ -733,8 +603,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                Some(private_key),
-                Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                true,
+                router_address(),
                 false,
             )
             .unwrap();
@@ -743,8 +613,6 @@ mod tests {
                 given_token: weth,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: dai,
-                expected_amount: expected_amount.clone(),
-                slippage,
                 checked_amount: checked_amount.clone(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -752,9 +620,16 @@ mod tests {
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let mut encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
+            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            encoded_solution.permit = Some(permit);
+            encoded_solution.signature = Some(signature);
+
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
                 "30ace1b1",                                                             // Function selector
@@ -787,13 +662,7 @@ mod tests {
 
             assert_eq!(hex_calldata[..456], expected_input);
             assert_eq!(hex_calldata[1224..], expected_swap);
-            if expected_amount.is_some() & slippage.is_some() & checked_amount.is_none() {
-                // only write to file for 1 test case
-                write_calldata_to_file(
-                    "test_single_swap_strategy_encoder",
-                    &hex_calldata.to_string(),
-                );
-            }
+            write_calldata_to_file("test_single_swap_strategy_encoder", &hex_calldata.to_string());
         }
 
         #[test]
@@ -804,9 +673,7 @@ mod tests {
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-            let expected_amount = Some(BigUint::from_str("1_650_000000000000000000").unwrap());
-            let slippage = Some(0.01f64);
-            let checked_amount = Some(BigUint::from_str("1_640_000000000000000000").unwrap());
+            let checked_amount = BigUint::from_str("1_640_000000000000000000").unwrap();
             let expected_min_amount = U256::from_str("1_640_000000000000000000").unwrap();
 
             let swap = Swap {
@@ -823,8 +690,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                None,
-                Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
+                router_address(),
                 false,
             )
             .unwrap();
@@ -833,8 +700,6 @@ mod tests {
                 given_token: weth,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: dai,
-                expected_amount,
-                slippage,
                 checked_amount,
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -842,9 +707,12 @@ mod tests {
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
                 "5c4b639c",                                                           // Function selector
@@ -887,9 +755,7 @@ mod tests {
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-            let expected_amount = Some(BigUint::from_str("1_650_000000000000000000").unwrap());
-            let slippage = Some(0.01f64);
-            let checked_amount = Some(BigUint::from_str("1_640_000000000000000000").unwrap());
+            let checked_amount = BigUint::from_str("1_640_000000000000000000").unwrap();
             let expected_min_amount = U256::from_str("1_640_000000000000000000").unwrap();
 
             let swap = Swap {
@@ -906,8 +772,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                None,
-                Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
+                router_address(),
                 true,
             )
             .unwrap();
@@ -916,8 +782,6 @@ mod tests {
                 given_token: weth,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: dai,
-                expected_amount,
-                slippage,
                 checked_amount,
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -925,9 +789,12 @@ mod tests {
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, true, eth())
+                .unwrap()
+                .data;
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
                 "5c4b639c",                                                           // Function selector
@@ -968,10 +835,6 @@ mod tests {
             // Note: This test does not assert anything. It is only used to obtain integration test
             // data for our router solidity test.
 
-            // Set up a mock private key for signing
-            let private_key =
-                "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
-
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
             let swap = Swap {
@@ -988,8 +851,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                Some(private_key),
-                Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                true,
+                router_address(),
                 false,
             )
             .unwrap();
@@ -998,19 +861,24 @@ mod tests {
                 given_token: eth(),
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: dai,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("1659881924818443699787").unwrap()),
+                checked_amount: BigUint::from_str("1659881924818443699787").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap],
                 native_action: Some(NativeAction::Wrap),
-                ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let mut encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
 
+            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            encoded_solution.permit = Some(permit);
+            encoded_solution.signature = Some(signature);
+
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_single_swap_strategy_encoder_wrap", hex_calldata.as_str());
         }
@@ -1020,10 +888,6 @@ mod tests {
             // Performs a single swap from DAI to WETH on a USV2 pool, unwrapping ETH at the end
             // Note: This test does not assert anything. It is only used to obtain integration test
             // data for our router solidity test.
-
-            // Set up a mock private key for signing
-            let private_key =
-                "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
 
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
@@ -1041,7 +905,7 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                Some(private_key),
+                true,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
                 false,
             )
@@ -1051,18 +915,24 @@ mod tests {
                 given_token: dai,
                 given_amount: BigUint::from_str("3_000_000000000000000000").unwrap(),
                 checked_token: eth(),
-                expected_amount: Some(BigUint::from_str("1_000000000000000000").unwrap()),
-                checked_amount: Some(BigUint::from_str("1_000000000000000000").unwrap()),
+                checked_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap],
                 native_action: Some(NativeAction::Unwrap),
-                ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let mut encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
+
+            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            encoded_solution.permit = Some(permit);
+            encoded_solution.signature = Some(signature);
+
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file(
@@ -1083,10 +953,6 @@ mod tests {
             // Performs a sequential swap from WETH to USDC though WBTC using USV2 pools
             //
             //   WETH ───(USV2)──> WBTC ───(USV2)──> USDC
-
-            // Set up a mock private key for signing
-            let private_key =
-                "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
 
             let weth = weth();
             let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
@@ -1116,8 +982,8 @@ mod tests {
             let encoder = SequentialSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                Some(private_key),
-                Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                true,
+                router_address(),
                 false,
             )
             .unwrap();
@@ -1126,17 +992,23 @@ mod tests {
                 given_token: weth,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: usdc,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("26173932").unwrap()),
+                checked_amount: BigUint::from_str("26173932").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let mut encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
+            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            encoded_solution.permit = Some(permit);
+            encoded_solution.signature = Some(signature);
+
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_sequential_swap_strategy_encoder", hex_calldata.as_str());
@@ -1176,8 +1048,8 @@ mod tests {
             let encoder = SequentialSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                None,
-                Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
+                router_address(),
                 false,
             )
             .unwrap();
@@ -1186,17 +1058,20 @@ mod tests {
                 given_token: weth,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: usdc,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("26173932").unwrap()),
+                checked_amount: BigUint::from_str("26173932").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
+
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = encode(&calldata);
 
@@ -1244,10 +1119,6 @@ mod tests {
             // This test has start and end tokens that are the same
             // The flow is:
             // USDC -> WETH -> USDC  using two pools
-
-            // Set up a mock private key for signing (Alice's pk in our router tests)
-            let private_key =
-                "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
 
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
@@ -1299,7 +1170,7 @@ mod tests {
             let encoder = SequentialSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                Some(private_key),
+                true,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
                 false,
             )
@@ -1310,20 +1181,24 @@ mod tests {
                 given_token: usdc.clone(),
                 given_amount: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
                 checked_token: usdc.clone(),
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("99389294").unwrap()), /* Expected output
-                                                                               * from
-                                                                               * test */
-                slippage: None,
+                checked_amount: BigUint::from_str("99389294").unwrap(), /* Expected output
+                                                                         * from test */
                 swaps: vec![swap_usdc_weth, swap_weth_usdc],
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let mut encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
+            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            encoded_solution.permit = Some(permit);
+            encoded_solution.signature = Some(signature);
+
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
             let hex_calldata = hex::encode(&calldata);
             let expected_input = [
                 "51bcc7b6",                                                         // selector
@@ -1417,8 +1292,8 @@ mod tests {
                 let encoder = SequentialSwapStrategyEncoder::new(
                     eth_chain(),
                     swap_encoder_registry,
-                    None,
-                    Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                    false,
+                    router_address(),
                     false,
                 )
                 .unwrap();
@@ -1427,8 +1302,7 @@ mod tests {
                     given_token: weth,
                     given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                     checked_token: usdc,
-                    expected_amount: None,
-                    checked_amount: Some(BigUint::from_str("26173932").unwrap()),
+                    checked_amount: BigUint::from_str("26173932").unwrap(),
                     sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                     receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
                         .unwrap(),
@@ -1436,9 +1310,13 @@ mod tests {
                     ..Default::default()
                 };
 
-                let (calldata, _) = encoder
-                    .encode_strategy(solution)
+                let encoded_solution = encoder
+                    .encode_strategy(solution.clone())
                     .unwrap();
+
+                let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                    .unwrap()
+                    .data;
 
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file("test_uniswap_v3_uniswap_v2", hex_calldata.as_str());
@@ -1499,8 +1377,8 @@ mod tests {
                 let encoder = SequentialSwapStrategyEncoder::new(
                     eth_chain(),
                     swap_encoder_registry,
-                    None,
-                    Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                    false,
+                    router_address(),
                     false,
                 )
                 .unwrap();
@@ -1509,8 +1387,7 @@ mod tests {
                     given_token: weth,
                     given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                     checked_token: usdc,
-                    expected_amount: None,
-                    checked_amount: Some(BigUint::from_str("26173932").unwrap()),
+                    checked_amount: BigUint::from_str("26173932").unwrap(),
                     sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                     receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
                         .unwrap(),
@@ -1518,9 +1395,13 @@ mod tests {
                     ..Default::default()
                 };
 
-                let (calldata, _) = encoder
-                    .encode_strategy(solution)
+                let encoded_solution = encoder
+                    .encode_strategy(solution.clone())
                     .unwrap();
+
+                let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                    .unwrap()
+                    .data;
 
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file("test_uniswap_v3_uniswap_v3", hex_calldata.as_str());
@@ -1590,8 +1471,8 @@ mod tests {
                 let encoder = SequentialSwapStrategyEncoder::new(
                     eth_chain(),
                     swap_encoder_registry,
-                    None,
-                    Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                    false,
+                    router_address(),
                     false,
                 )
                 .unwrap();
@@ -1600,8 +1481,7 @@ mod tests {
                     given_token: weth,
                     given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                     checked_token: usdt,
-                    expected_amount: None,
-                    checked_amount: Some(BigUint::from_str("26173932").unwrap()),
+                    checked_amount: BigUint::from_str("26173932").unwrap(),
                     sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                     receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
                         .unwrap(),
@@ -1609,9 +1489,13 @@ mod tests {
                     ..Default::default()
                 };
 
-                let (calldata, _) = encoder
-                    .encode_strategy(solution)
+                let encoded_solution = encoder
+                    .encode_strategy(solution.clone())
                     .unwrap();
+
+                let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                    .unwrap()
+                    .data;
 
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file("test_uniswap_v3_curve", hex_calldata.as_str());
@@ -1657,8 +1541,8 @@ mod tests {
                 let encoder = SequentialSwapStrategyEncoder::new(
                     eth_chain(),
                     swap_encoder_registry,
-                    None,
-                    Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                    false,
+                    router_address(),
                     false,
                 )
                 .unwrap();
@@ -1667,8 +1551,7 @@ mod tests {
                     given_token: weth,
                     given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                     checked_token: usdc,
-                    expected_amount: None,
-                    checked_amount: Some(BigUint::from_str("26173932").unwrap()),
+                    checked_amount: BigUint::from_str("26173932").unwrap(),
                     sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                     receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
                         .unwrap(),
@@ -1676,9 +1559,13 @@ mod tests {
                     ..Default::default()
                 };
 
-                let (calldata, _) = encoder
-                    .encode_strategy(solution)
+                let encoded_solution = encoder
+                    .encode_strategy(solution.clone())
                     .unwrap();
+
+                let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                    .unwrap()
+                    .data;
 
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file("test_balancer_v2_uniswap_v2", hex_calldata.as_str());
@@ -1699,11 +1586,6 @@ mod tests {
                 let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
                 let usdt = Bytes::from_str("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
                 let dai = Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap();
-
-                // Set up a mock private key for signing (Alice's pk in our router tests)
-                let private_key =
-                    "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234"
-                        .to_string();
 
                 let usv2_swap_dai_weth = Swap {
                     component: ProtocolComponent {
@@ -1805,8 +1687,8 @@ mod tests {
                 let encoder = SequentialSwapStrategyEncoder::new(
                     eth_chain(),
                     swap_encoder_registry,
-                    Some(private_key),
-                    Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                    true,
+                    router_address(),
                     false,
                 )
                 .unwrap();
@@ -1814,9 +1696,8 @@ mod tests {
                     exact_out: false,
                     given_token: dai,
                     given_amount: BigUint::from_str("1500_000000000000000000").unwrap(),
-                    checked_token: eth,
-                    expected_amount: None,
-                    checked_amount: Some(BigUint::from_str("732214216964381330").unwrap()),
+                    checked_token: eth.clone(),
+                    checked_amount: BigUint::from_str("732214216964381330").unwrap(),
                     sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                     receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
                         .unwrap(),
@@ -1830,9 +1711,16 @@ mod tests {
                     ..Default::default()
                 };
 
-                let (calldata, _) = encoder
-                    .encode_strategy(solution)
+                let mut encoded_solution = encoder
+                    .encode_strategy(solution.clone())
                     .unwrap();
+                let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+                encoded_solution.permit = Some(permit);
+                encoded_solution.signature = Some(signature);
+
+                let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
+                    .unwrap()
+                    .data;
 
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file("test_multi_protocol", hex_calldata.as_str());
@@ -1854,10 +1742,6 @@ mod tests {
             //   WETH ─┤
             //         └──(USV2)──> DAI  ───(USV2)──> USDC
             //
-
-            // Set up a mock private key for signing
-            let private_key =
-                "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
 
             let weth = weth();
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
@@ -1911,7 +1795,7 @@ mod tests {
             let encoder = SplitSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                Some(private_key),
+                true,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
                 false,
             )
@@ -1921,17 +1805,23 @@ mod tests {
                 given_token: weth,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: usdc,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("26173932").unwrap()),
+                checked_amount: BigUint::from_str("26173932").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_weth_dai, swap_weth_wbtc, swap_dai_usdc, swap_wbtc_usdc],
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let mut encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
+            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            encoded_solution.permit = Some(permit);
+            encoded_solution.signature = Some(signature);
+
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_split_swap_strategy_encoder", hex_calldata.as_str());
@@ -1946,10 +1836,6 @@ mod tests {
             // USDC ──────┤                              ├──(USV2)──> USDC
             //            │                              │
             //            └─ (USV3, 40% split) ──> WETH ─┘
-
-            // Set up a mock private key for signing (Alice's pk in our router tests)
-            let private_key =
-                "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
 
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
@@ -2021,7 +1907,7 @@ mod tests {
             let encoder = SplitSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                Some(private_key.clone()),
+                true,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
                 false,
             )
@@ -2032,20 +1918,25 @@ mod tests {
                 given_token: usdc.clone(),
                 given_amount: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
                 checked_token: usdc.clone(),
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("99574171").unwrap()), /* Expected output
-                                                                               * from
-                                                                               * test */
+                checked_amount: BigUint::from_str("99574171").unwrap(), /* Expected output
+                                                                         * from
+                                                                         * test */
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                slippage: None,
                 swaps: vec![swap_usdc_weth_pool1, swap_usdc_weth_pool2, swap_weth_usdc_pool2],
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let mut encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
+            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            encoded_solution.permit = Some(permit);
+            encoded_solution.signature = Some(signature);
+
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = hex::encode(&calldata);
             let expected_input = [
@@ -2114,10 +2005,6 @@ mod tests {
             //                        │                         │
             //                        └─── (USV3, 40% split) ───┘
 
-            // Set up a mock private key for signing (Alice's pk in our router tests)
-            let private_key =
-                "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
-
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
@@ -2184,7 +2071,7 @@ mod tests {
             let encoder = SplitSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                Some(private_key.clone()),
+                true,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
                 false,
             )
@@ -2195,20 +2082,25 @@ mod tests {
                 given_token: usdc.clone(),
                 given_amount: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
                 checked_token: usdc.clone(),
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("99025908").unwrap()), /* Expected output
-                                                                               * from
-                                                                               * test */
+                checked_amount: BigUint::from_str("99025908").unwrap(), /* Expected output
+                                                                         * from
+                                                                         * test */
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                slippage: None,
                 swaps: vec![swap_usdc_weth_v2, swap_weth_usdc_v3_pool1, swap_weth_usdc_v3_pool2],
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let mut encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
+            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            encoded_solution.permit = Some(permit);
+            encoded_solution.signature = Some(signature);
+
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = hex::encode(&calldata);
             let expected_input = [
@@ -2310,7 +2202,7 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                None,
+                false,
                 Bytes::from_str("0xA4AD4f68d0b91CFD19687c881e50f3A00242828c").unwrap(),
                 false,
             )
@@ -2321,9 +2213,7 @@ mod tests {
                 given_token: token_in,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: token_out,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("1000").unwrap()),
-                slippage: None,
+                checked_amount: BigUint::from_str("1000").unwrap(),
                 // Alice
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -2331,10 +2221,13 @@ mod tests {
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
 
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_single_encoding_strategy_ekubo", hex_calldata.as_str());
         }
@@ -2360,7 +2253,7 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                None,
+                false,
                 Bytes::from_str("0xA4AD4f68d0b91CFD19687c881e50f3A00242828c").unwrap(),
                 false,
             )
@@ -2371,9 +2264,7 @@ mod tests {
                 given_token: token_in,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: token_out,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("1000").unwrap()),
-                slippage: None,
+                checked_amount: BigUint::from_str("1000").unwrap(),
                 // Alice
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -2381,10 +2272,13 @@ mod tests {
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
 
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_single_encoding_strategy_maverick", hex_calldata.as_str());
         }
@@ -2397,10 +2291,6 @@ mod tests {
             //
             //   ETH ───(USV4)──> PEPE
             //
-            // Set up a mock private key for signing (Alice's pk in our router tests)
-            let private_key =
-                "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
-
             let eth = eth();
             let pepe = Bytes::from_str("0x6982508145454Ce325dDbE47a25d4ec3d2311933").unwrap();
 
@@ -2426,7 +2316,7 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                Some(private_key),
+                true,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
                 false,
             )
@@ -2434,21 +2324,26 @@ mod tests {
 
             let solution = Solution {
                 exact_out: false,
-                given_token: eth,
+                given_token: eth.clone(),
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: pepe,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("152373460199848577067005852").unwrap()),
-                slippage: None,
+                checked_amount: BigUint::from_str("152373460199848577067005852").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_eth_pepe],
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let mut encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
+            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            encoded_solution.permit = Some(permit);
+            encoded_solution.signature = Some(signature);
+
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
+                .unwrap()
+                .data;
             let hex_calldata = encode(&calldata);
 
             write_calldata_to_file(
@@ -2465,10 +2360,6 @@ mod tests {
             //
             //   USDC ───(USV4)──> ETH
             //
-            // Set up a mock private key for signing (Alice's pk in our router tests)
-            let private_key =
-                "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
-
             let eth = eth();
             let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
@@ -2498,7 +2389,7 @@ mod tests {
             let encoder = SplitSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                Some(private_key),
+                true,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
                 false,
             )
@@ -2508,19 +2399,24 @@ mod tests {
                 exact_out: false,
                 given_token: usdc,
                 given_amount: BigUint::from_str("3000_000000").unwrap(),
-                checked_token: eth,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("1117254495486192350").unwrap()),
-                slippage: None,
+                checked_token: eth.clone(),
+                checked_amount: BigUint::from_str("1117254495486192350").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth],
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let mut encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
+            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            encoded_solution.permit = Some(permit);
+            encoded_solution.signature = Some(signature);
+
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
+                .unwrap()
+                .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file(
@@ -2536,10 +2432,6 @@ mod tests {
             //
             //   USDC ──(USV4)──> ETH ───(USV4)──> PEPE
             //
-
-            // Set up a mock private key for signing (Alice's pk in our router tests)
-            let private_key =
-                "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
 
             let eth = eth();
             let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
@@ -2589,7 +2481,7 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                Some(private_key),
+                true,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
                 false,
             )
@@ -2599,18 +2491,23 @@ mod tests {
                 given_token: usdc,
                 given_amount: BigUint::from_str("1000_000000").unwrap(),
                 checked_token: pepe,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("97191013220606467325121599").unwrap()),
-                slippage: None,
+                checked_amount: BigUint::from_str("97191013220606467325121599").unwrap(),
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 swaps: vec![swap_usdc_eth, swap_eth_pepe],
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let mut encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
+            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            encoded_solution.permit = Some(permit);
+            encoded_solution.signature = Some(signature);
+
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
+                .unwrap()
+                .data;
 
             let expected_input = [
                 "30ace1b1",                                                              // Function selector (single swap)
@@ -2694,8 +2591,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                None,
-                Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
+                router_address(),
                 false,
             )
             .unwrap();
@@ -2705,9 +2602,7 @@ mod tests {
                 given_token: token_in,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: token_out,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("1").unwrap()),
-                slippage: None,
+                checked_amount: BigUint::from_str("1").unwrap(),
                 // Alice
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -2715,9 +2610,13 @@ mod tests {
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
+
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_single_encoding_strategy_curve", hex_calldata.as_str());
@@ -2758,8 +2657,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                None,
-                Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
+                false,
+                router_address(),
                 false,
             )
             .unwrap();
@@ -2769,9 +2668,7 @@ mod tests {
                 given_token: token_in,
                 given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
                 checked_token: token_out,
-                expected_amount: None,
-                checked_amount: Some(BigUint::from_str("1").unwrap()),
-                slippage: None,
+                checked_amount: BigUint::from_str("1").unwrap(),
                 // Alice
                 sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -2779,9 +2676,12 @@ mod tests {
                 ..Default::default()
             };
 
-            let (calldata, _) = encoder
-                .encode_strategy(solution)
+            let encoded_solution = encoder
+                .encode_strategy(solution.clone())
                 .unwrap();
+            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
+                .unwrap()
+                .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file(
