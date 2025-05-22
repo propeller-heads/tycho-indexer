@@ -531,6 +531,7 @@ impl EntryPointFilter {
 pub trait EntryPointGateway {
     /// Inserts a list of entry points into the database.
     ///
+    /// # Arguments
     /// * `entry_points` - The map of component ids to their entry points to insert.
     ///
     /// Note: This function ignores conflicts on inserts.
@@ -541,6 +542,7 @@ pub trait EntryPointGateway {
 
     /// Inserts a list of entry points with their tracing params into the database.
     ///
+    /// # Arguments
     /// * `entry_points_params` - The map of entry points to their tracing params to insert and
     ///   optionally a component id used for debugging only.
     ///
@@ -552,9 +554,13 @@ pub trait EntryPointGateway {
 
     /// Retrieves a map of component ids to a set of entry points from the database.
     ///
+    /// # Arguments
     /// * `filter` - The EntryPointFilter to apply to the query.
     /// * `pagination_params` - The pagination parameters to apply to the query, if None, all
     ///   results are returned.
+    ///
+    /// # Returns
+    /// A map of component ids to a set of entry points.
     async fn get_entry_points(
         &self,
         filter: EntryPointFilter,
@@ -564,9 +570,13 @@ pub trait EntryPointGateway {
     /// Retrieves a map of component ids to a set of entry points with their tracing data from the
     /// database.
     ///
+    /// # Arguments
     /// * `filter` - The EntryPointFilter to apply to the query.
     /// * `pagination_params` - The pagination parameters to apply to the query, if None, all
     ///   results are returned.
+    ///
+    /// # Returns
+    /// A map of component ids to a set of entry points with their tracing data.
     async fn get_entry_points_tracing_params(
         &self,
         filter: EntryPointFilter,
@@ -576,6 +586,7 @@ pub trait EntryPointGateway {
     /// Upserts a list of traced entry points into the database. Updates the result if it already
     /// exists for the same entry point and tracing params.
     ///
+    /// # Arguments
     /// * `traced_entry_points` - The list of traced entry points to upsert.
     async fn upsert_traced_entry_points(
         &self,
@@ -584,11 +595,15 @@ pub trait EntryPointGateway {
 
     /// Retrieves all tracing results for a set of entry points from the database.
     ///
+    /// # Arguments
     /// * `entry_points` - The set of entry points to retrieve tracing results for.
+    ///
+    /// # Returns
+    /// A map of entry point ids to a map of tracing params to tracing results.
     async fn get_traced_entry_points(
         &self,
         entry_points: &HashSet<EntryPointId>,
-    ) -> Result<HashMap<EntryPointId, Vec<TracingResult>>, StorageError>;
+    ) -> Result<HashMap<EntryPointId, HashMap<TracingParams, TracingResult>>, StorageError>;
 }
 
 /// Manage contracts and their state in storage.
