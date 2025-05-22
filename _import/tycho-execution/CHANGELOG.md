@@ -1,3 +1,10 @@
+## [0.92.1](https://github.com/propeller-heads/tycho-execution/compare/0.92.0...0.92.1) (2025-05-22)
+
+
+### Bug Fixes
+
+* Small misc improvements from audit ([1f26fbc](https://github.com/propeller-heads/tycho-execution/commit/1f26fbce1468c46b866f4e03c503830ddb1bc8aa))
+
 ## [0.92.0](https://github.com/propeller-heads/tycho-execution/compare/0.91.0...0.92.0) (2025-05-21)
 
 
