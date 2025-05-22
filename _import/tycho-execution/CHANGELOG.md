@@ -1,3 +1,13 @@
+## [0.93.0](https://github.com/propeller-heads/tycho-execution/compare/0.92.1...0.93.0) (2025-05-22)
+
+
+### Features
+
+* Add encode_full_calldata to TychoEncoder trait ([5aff28e](https://github.com/propeller-heads/tycho-execution/commit/5aff28e34589c1b3db78b3c3b56a789eeadd71cb))
+* Add interacting_with to EncodedSolution ([facdf71](https://github.com/propeller-heads/tycho-execution/commit/facdf716bdb972013292918247583a4a74ae0bca))
+* Remove slippage and expected_amount from Solution ([08056c4](https://github.com/propeller-heads/tycho-execution/commit/08056c4a6c153d5d02db846d8dbc5a3a0e3601df))
+* Separate encoding swaps from encoding txs ([4e8c6dd](https://github.com/propeller-heads/tycho-execution/commit/4e8c6ddc8cffdb42471b31a4b334133f2cb975b9))
+
 ## [0.92.1](https://github.com/propeller-heads/tycho-execution/compare/0.92.0...0.92.1) (2025-05-22)
 
 
