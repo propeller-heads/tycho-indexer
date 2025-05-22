@@ -24,6 +24,7 @@ use crate::{
 };
 
 pub mod chain_state;
+mod dynamic_contract_indexer;
 pub mod models;
 pub mod post_processors;
 pub mod protobuf_deserialisation;
@@ -56,6 +57,10 @@ pub enum ExtractionError {
     MergeError(#[from] MergeError),
     #[error("Reorg buffer error: {0}")]
     ReorgBufferError(String),
+    #[error("Tracing error: {0}")]
+    TracingError(String),
+    #[error("Account extraction error: {0}")]
+    AccountExtractionError(String),
 }
 
 #[derive(Error, Debug)]
