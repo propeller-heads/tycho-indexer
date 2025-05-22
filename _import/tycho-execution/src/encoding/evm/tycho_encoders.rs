@@ -39,7 +39,6 @@ pub struct TychoRouterEncoder {
     native_address: Bytes,
     wrapped_address: Bytes,
     router_address: Bytes,
-    #[allow(dead_code)]
     token_in_already_in_router: bool,
     permit2: Option<Permit2>,
 }
@@ -130,22 +129,21 @@ impl TychoRouterEncoder {
         }
         Ok(encoded_solution)
     }
+}
 
-    /// Encodes a list of [`Solution`]s directly into executable transactions for the Tycho router.
-    ///
-    /// This method wraps around Tycho’s example encoding logic (see [`encode_tycho_router_call`])
-    /// and should only be used for **prototyping or development**.
-    ///
-    /// # Warning
-    /// This implementation uses default logic to construct the outer calldata (e.g., for setting
-    /// `minAmountOut`). This might not be optimal or safe for production use.
-    ///
-    /// To ensure correctness, **users should implement their own encoding pipeline** using
-    /// [`encode_solutions`].
-    ///
-    /// # Returns
-    /// A vector of fully constructed [`Transaction`]s that can be submitted to a node or bundler.
-    #[allow(dead_code)]
+impl TychoEncoder for TychoRouterEncoder {
+    fn encode_solutions(
+        &self,
+        solutions: Vec<Solution>,
+    ) -> Result<Vec<EncodedSolution>, EncodingError> {
+        let mut result: Vec<EncodedSolution> = Vec::new();
+        for solution in solutions.iter() {
+            let encoded_solution = self.encode_solution(solution)?;
+            result.push(encoded_solution);
+        }
+        Ok(result)
+    }
+
     fn encode_full_calldata(
         &self,
         solutions: Vec<Solution>,
@@ -164,20 +162,6 @@ impl TychoRouterEncoder {
             transactions.push(transaction);
         }
         Ok(transactions)
-    }
-}
-
-impl TychoEncoder for TychoRouterEncoder {
-    fn encode_solutions(
-        &self,
-        solutions: Vec<Solution>,
-    ) -> Result<Vec<EncodedSolution>, EncodingError> {
-        let mut result: Vec<EncodedSolution> = Vec::new();
-        for solution in solutions.iter() {
-            let encoded_solution = self.encode_solution(solution)?;
-            result.push(encoded_solution);
-        }
-        Ok(result)
     }
 
     /// Raises an `EncodingError` if the solution is not considered valid.
@@ -373,6 +357,15 @@ impl TychoEncoder for TychoExecutorEncoder {
         let encoded_solution = self.encode_executor_calldata(solution.clone())?;
 
         Ok(vec![encoded_solution])
+    }
+
+    fn encode_full_calldata(
+        &self,
+        _solutions: Vec<Solution>,
+    ) -> Result<Vec<Transaction>, EncodingError> {
+        Err(EncodingError::NotImplementedError(
+            "Full calldata encoding is not supported for TychoExecutorEncoder".to_string(),
+        ))
     }
 
     /// Raises an `EncodingError` if the solution is not considered valid.

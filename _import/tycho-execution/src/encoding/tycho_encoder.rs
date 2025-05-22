@@ -1,6 +1,6 @@
 use crate::encoding::{
     errors::EncodingError,
-    models::{EncodedSolution, Solution},
+    models::{EncodedSolution, Solution, Transaction},
 };
 
 /// A high-level interface for encoding solutions into Tycho-compatible transactions or raw call
@@ -46,6 +46,25 @@ pub trait TychoEncoder {
         &self,
         solutions: Vec<Solution>,
     ) -> Result<Vec<EncodedSolution>, EncodingError>;
+
+    /// Encodes a list of [`Solution`]s directly into executable transactions for the Tycho router.
+    ///
+    /// This method wraps around Tycho’s example encoding logic (see [`encode_tycho_router_call`])
+    /// and should only be used for **prototyping or development**.
+    ///
+    /// # Warning
+    /// This implementation uses default logic to construct the outer calldata (e.g., for setting
+    /// `minAmountOut`). This might not be optimal or safe for production use.
+    ///
+    /// To ensure correctness, **users should implement their own encoding pipeline** using
+    /// [`encode_solutions`].
+    ///
+    /// # Returns
+    /// A vector of fully constructed [`Transaction`]s that can be submitted to a node or bundler.
+    fn encode_full_calldata(
+        &self,
+        solutions: Vec<Solution>,
+    ) -> Result<Vec<Transaction>, EncodingError>;
 
     /// Performs solution-level validation and sanity checks.
     ///
