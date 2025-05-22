@@ -31,8 +31,9 @@ use tracing_subscriber::EnvFilter;
 use tycho_common::Bytes;
 pub mod utils;
 use tycho_execution::encoding::{
-    evm::{encoder_builders::TychoRouterEncoderBuilder, utils::encode_input},
-    models::{Solution, Swap, Transaction},
+    errors::EncodingError,
+    evm::{encoder_builders::TychoRouterEncoderBuilder, encoding_utils::encode_input},
+    models::{EncodedSolution, Solution, Swap, Transaction},
 };
 use tycho_simulation::{
     evm::{
@@ -186,11 +187,11 @@ async fn main() {
                     tvl_filter.clone(),
                     Some(curve_pool_filter),
                 )
-                .exchange::<EVMPoolState<PreCachedDB>>(
-                    "vm:maverick_v2",
-                    tvl_filter.clone(),
-                    None,
-                );
+            // .exchange::<EVMPoolState<PreCachedDB>>(
+            //     "vm:maverick_v2",
+            //     tvl_filter.clone(),
+            //     None,
+            // );
         }
         Chain::Base => {
             protocol_stream = protocol_stream
@@ -284,11 +285,18 @@ async fn main() {
                 expected_amount,
             );
 
-            // Encode the solution
-            let tx = encoder
-                .encode_calldata(vec![solution.clone()])
+            // Encode the swaps of the solution
+            let encoded_solution = encoder
+                .encode_solutions(vec![solution.clone()])
                 .expect("Failed to encode router calldata")[0]
                 .clone();
+
+            let tx = encode_tycho_router_call(
+                encoded_solution.clone(),
+                &solution,
+                chain.native_token().address,
+            )
+            .expect("Failed to encode router call");
 
             // Print token balances before showing the swap options
             if cli.swapper_pk != FAKE_PK {
@@ -608,6 +616,13 @@ fn create_solution(
         0f64,
     );
 
+    // compute a minimum amount out
+    let slippage = 0.0025; // 0.25% slippage
+    let bps = BigUint::from(10_000u32);
+    let slippage_percent = BigUint::from((slippage * 10000.0) as u32);
+    let multiplier = &bps - slippage_percent;
+    let min_amount_out = (expected_amount * &multiplier) / &bps;
+
     // Then we create a solution object with the previous swap
     Solution {
         sender: user_address.clone(),
@@ -615,13 +630,62 @@ fn create_solution(
         given_token: sell_token.address,
         given_amount: sell_amount,
         checked_token: buy_token.address,
-        slippage: Some(0.0025), // 0.25% slippage
-        expected_amount: Some(expected_amount),
-        exact_out: false,     // it's an exact in solution
-        checked_amount: None, // the amount out will not be checked in execution
+
+        exact_out: false,               // it's an exact in solution
+        checked_amount: min_amount_out, // the amount out will not be checked in execution
         swaps: vec![simple_swap],
         ..Default::default()
     }
+}
+
+/// Encodes a transaction for the Tycho Router using the `singleSwapPermit2` method.
+///
+/// # ⚠️ Important Responsibility Note
+///
+/// This function is intended as **an illustrative example only** and supports only the method of
+/// interest of this quickstart. **Users must implement their own encoding logic** to ensure:
+/// - Full control of parameters passed to the router.
+/// - Proper validation and setting of critical inputs such as `minAmountOut`.
+pub fn encode_tycho_router_call(
+    encoded_solution: EncodedSolution,
+    solution: &Solution,
+    native_address: Bytes,
+) -> Result<Transaction, EncodingError> {
+    let given_amount = biguint_to_u256(&solution.given_amount);
+    let min_amount_out = biguint_to_u256(&solution.checked_amount);
+    let given_token = Address::from_slice(&solution.given_token);
+    let checked_token = Address::from_slice(&solution.checked_token);
+    let receiver = Address::from_slice(&solution.receiver);
+
+    let method_calldata = (
+        given_amount,
+        given_token,
+        checked_token,
+        min_amount_out,
+        false,
+        false,
+        receiver,
+        encoded_solution
+            .permit
+            .ok_or(EncodingError::FatalError(
+                "permit2 object must be set to use permit2".to_string(),
+            ))?,
+        encoded_solution
+            .signature
+            .ok_or(EncodingError::FatalError("Signature must be set to use permit2".to_string()))?
+            .as_bytes()
+            .to_vec(),
+        encoded_solution.swaps,
+    )
+        .abi_encode();
+
+    let contract_interaction = encode_input(&encoded_solution.selector, method_calldata);
+    let value = if solution.given_token == native_address {
+        solution.given_amount.clone()
+    } else {
+        BigUint::ZERO
+    };
+    Ok(Transaction { to: encoded_solution.interacting_with, value, data: contract_interaction })
 }
 
 async fn get_tx_requests(
