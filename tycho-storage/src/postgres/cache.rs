@@ -1234,7 +1234,7 @@ impl EntryPointGateway for CachedGateway {
     async fn get_traced_entry_points(
         &self,
         entry_points: &HashSet<EntryPointId>,
-    ) -> Result<HashMap<EntryPointId, Vec<TracingResult>>, StorageError> {
+    ) -> Result<HashMap<EntryPointId, HashMap<TracingParams, TracingResult>>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
