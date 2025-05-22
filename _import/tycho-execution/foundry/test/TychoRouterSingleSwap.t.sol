@@ -318,7 +318,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
                 amountIn // attempted amount
             )
         );
-        uint256 amountOut = tychoRouter.singleSwap(
+        tychoRouter.singleSwap(
             amountIn,
             WETH_ADDR,
             DAI_ADDR,
