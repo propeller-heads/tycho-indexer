@@ -1,3 +1,10 @@
+## [0.94.0](https://github.com/propeller-heads/tycho-execution/compare/0.93.0...0.94.0) (2025-05-23)
+
+
+### Features
+
+* Create non alloy specific Permit and PermitDetails structs ([75f2c3a](https://github.com/propeller-heads/tycho-execution/commit/75f2c3a1c52b6ee8823d449b70147cb023202e93))
+
 ## [0.93.0](https://github.com/propeller-heads/tycho-execution/compare/0.92.1...0.93.0) (2025-05-22)
 
 
