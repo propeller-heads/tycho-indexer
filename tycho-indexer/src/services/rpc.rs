@@ -1245,6 +1245,10 @@ mod tests {
     use mockall::mock;
     use tycho_common::{
         models::{
+            blockchain::{
+                EntryPoint, EntryPointWithTracingParams, RPCTracerParams, TracingParams,
+                TracingResult,
+            },
             contract::Account,
             protocol::{ProtocolComponent, ProtocolComponentState},
             token::CurrencyToken,
@@ -1482,6 +1486,56 @@ mod tests {
         assert_eq!(state.accounts[0], expected.into());
         assert_eq!(state.accounts[1], buf_expected.into());
         assert_eq!(state.pagination.total, 2);
+    }
+
+    #[test]
+    async fn test_get_traced_entry_points() {
+        let component_id = "component1".to_string();
+        let entry_point_id = "0x0000000000000000000000000000000000000111".to_string();
+
+        let entry_point = EntryPoint {
+            external_id: entry_point_id.clone(),
+            target: Bytes::from("0x0000000000000000000000000000000000000001"),
+            signature: "sig()".to_string(),
+        };
+
+        let tracing_params = TracingParams::RPCTracer(RPCTracerParams {
+            caller: Some(Bytes::from("0x000000000000000000000000000000000000000a")),
+            calldata: Bytes::from("0x000000000000000000000000000000000000000b"),
+        });
+
+        let entry_point_with_params = EntryPointWithTracingParams {
+            entry_point: entry_point.clone(),
+            params: tracing_params.clone(),
+        };
+
+        let trace_result = TracingResult {
+            retriggers: HashSet::from([(
+                Bytes::from("0x000000000000000000000000000000000000000c"),
+                Bytes::from("0x000000000000000000000000000000000000000d"),
+            )]),
+            called_addresses: HashSet::from([Bytes::from(
+                "0x000000000000000000000000000000000000000e",
+            )]),
+        };
+
+        let mut expected_entry_points_with_params = HashMap::new();
+        expected_entry_points_with_params
+            .insert(component_id.clone(), HashSet::from([entry_point_with_params]));
+
+        let mut expected_trace_results = HashMap::new();
+        expected_trace_results.insert(entry_point_id.clone(), vec![trace_result.clone()]);
+
+        let mut gw = MockGateway::new();
+
+        let mock_get_entry_points_response =
+            Ok(WithTotal { entity: expected_entry_points_with_params.clone(), total: Some(1) });
+        gw.expect_get_entry_points_tracing_params()
+            .return_once(|_, _| Box::pin(async move { mock_get_entry_points_response }));
+
+        let mock_traced_entry_points_response = Ok(expected_trace_results.clone());
+        gw.expect_get_traced_entry_points()
+            .return_once(|_| Box::pin(async move { mock_traced_entry_points_response }));
     }
 
     #[test]
