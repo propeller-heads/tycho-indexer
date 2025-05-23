@@ -1,5 +1,7 @@
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
+use async_trait::async_trait;
+use mockall::automock;
 use tracing::{debug, instrument, trace};
 use tycho_common::{
     models::{
@@ -22,8 +24,19 @@ use super::{
 /// A unique identifier for a storage location, consisting of an address and a storage key.
 type StorageLocation = (Address, StoreKey);
 
-#[allow(unused)] // TODO: Remove this when it's used
-struct DynamicContractIndexer<AE, T, G>
+#[automock]
+#[async_trait]
+pub(super) trait DynamicContractIndexerTrait: Send + Sync {
+    async fn initialize(&mut self) -> Result<(), ExtractionError>;
+    async fn process_block_update(
+        &mut self,
+        block_changes: &mut BlockChanges,
+    ) -> Result<(), ExtractionError>;
+    async fn process_revert(&mut self, target_block: u64) -> Result<(), ExtractionError>;
+}
+
+#[allow(unused)]
+pub(super) struct DynamicContractIndexer<AE, T, G>
 where
     AE: AccountExtractor,
     T: EntryPointTracer,
@@ -57,33 +70,14 @@ impl DCICache {
     }
 }
 
-impl<AE, T, G> DynamicContractIndexer<AE, T, G>
+#[async_trait]
+impl<AE, T, G> DynamicContractIndexerTrait for DynamicContractIndexer<AE, T, G>
 where
-    AE: AccountExtractor,
-    T: EntryPointTracer,
-    G: EntryPointGateway,
+    AE: AccountExtractor + Send + Sync,
+    T: EntryPointTracer + Send + Sync,
+    G: EntryPointGateway + Send + Sync,
 {
-    pub fn new(
-        chain: Chain,
-        protocol: String,
-        entrypoint_gw: G,
-        storage_source: AE,
-        tracer: T,
-    ) -> Self {
-        Self {
-            chain,
-            protocol,
-            entrypoint_gw,
-            storage_source,
-            tracer,
-            cache: DCICache::new_empty(),
-        }
-    }
-
-    /// Initialize the DynamicContractIndexer. Loads all the entrypoints and their respective
-    /// trace results from the gateway.
-    #[instrument(skip_all, fields(chain = % self.chain, protocol = % self.protocol))]
-    pub async fn initialize(&mut self) -> Result<(), ExtractionError> {
+    async fn initialize(&mut self) -> Result<(), ExtractionError> {
         let entrypoint_filter = EntryPointFilter::new(self.protocol.clone());
 
         // We need to call the gateway twice, once to get the entrypoints and their tracing params,
@@ -158,7 +152,7 @@ where
     }
 
     #[instrument(skip_all, fields(chain = % self.chain, protocol = % self.protocol, block_number = % block_changes.block.number))]
-    pub(super) async fn process_block_update(
+    async fn process_block_update(
         &mut self,
         block_changes: &mut BlockChanges,
     ) -> Result<(), ExtractionError> {
@@ -399,6 +393,36 @@ where
             .extend(new_transactions);
 
         Ok(())
+    }
+
+    #[allow(unused)]
+    async fn process_revert(&mut self, target_block: u64) -> Result<(), ExtractionError> {
+        // TODO: Handle reverts, need to cleanup reverted internal state
+        todo!()
+    }
+}
+
+impl<AE, T, G> DynamicContractIndexer<AE, T, G>
+where
+    AE: AccountExtractor,
+    T: EntryPointTracer,
+    G: EntryPointGateway,
+{
+    pub fn new(
+        chain: Chain,
+        protocol: String,
+        entrypoint_gw: G,
+        storage_source: AE,
+        tracer: T,
+    ) -> Self {
+        Self {
+            chain,
+            protocol,
+            entrypoint_gw,
+            storage_source,
+            tracer,
+            cache: DCICache::new_empty(),
+        }
     }
 
     /// Scans the storage changes of the block and detects entrypoints that need to be re-traced
@@ -903,11 +927,11 @@ mod tests {
             .with(
                 eq(testing::block(2)),
                 predicate::function(|requests: &[StorageSnapshotRequest]| {
-                    requests.len() == 2 &&
-                        requests
+                    requests.len() == 2
+                        && requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x09")) &&
-                        requests
+                            .any(|r| r.address == Bytes::from("0x09"))
+                        && requests
                             .iter()
                             .any(|r| r.address == Bytes::from("0x99"))
                 }),
@@ -1063,14 +1087,14 @@ mod tests {
                 eq(Bytes::from(4_u8).lpad(32, 0)),
                 // Entrypoints to trace
                 predicate::function(|ep_with_params: &Vec<EntryPointWithTracingParams>| {
-                    ep_with_params.len() == 2 &&
-                        ep_with_params.iter().any(|ep| {
+                    ep_with_params.len() == 2
+                        && ep_with_params.iter().any(|ep| {
                             ep == &EntryPointWithTracingParams::new(
                                 get_entrypoint(1),
                                 get_tracing_params(1),
                             )
-                        }) &&
-                        ep_with_params.iter().any(|ep| {
+                        })
+                        && ep_with_params.iter().any(|ep| {
                             ep == &EntryPointWithTracingParams::new(
                                 get_entrypoint(4),
                                 get_tracing_params(1),
@@ -1100,11 +1124,11 @@ mod tests {
             .with(
                 eq(testing::block(4)),
                 predicate::function(|requests: &[StorageSnapshotRequest]| {
-                    requests.len() == 2 &&
-                        requests
+                    requests.len() == 2
+                        && requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x55")) &&
-                        requests
+                            .any(|r| r.address == Bytes::from("0x55"))
+                        && requests
                             .iter()
                             .any(|r| r.address == Bytes::from("0x05"))
                 }),
