@@ -527,11 +527,10 @@ mod tests {
     use super::*;
     use crate::encoding::{
         evm::{
-            approvals::permit2::{Permit2, PermitSingle},
-            encoding_utils::encode_tycho_router_call,
+            approvals::permit2::Permit2, encoding_utils::encode_tycho_router_call,
             utils::write_calldata_to_file,
         },
-        models::Swap,
+        models::{PermitSingle, Swap},
     };
 
     fn eth_chain() -> Chain {
@@ -580,12 +579,12 @@ mod tests {
         use alloy_sol_types::SolValue;
 
         use super::*;
+        use crate::encoding::evm::utils::biguint_to_u256;
         #[test]
         fn test_single_swap_strategy_encoder() {
             // Performs a single swap from WETH to DAI on a USV2 pool, with no grouping
             // optimizations.
-            let checked_amount = BigUint::from_str("2659881924818443699787").unwrap();
-            let expected_min_amount = U256::from_str("2659881924818443699787").unwrap();
+            let checked_amount = BigUint::from_str("2018817438608734439720").unwrap();
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
@@ -625,12 +624,13 @@ mod tests {
                 .unwrap();
             let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature);
+            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
             let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
                 .unwrap()
                 .data;
-            let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
+            let expected_min_amount_encoded =
+                hex::encode(U256::abi_encode(&biguint_to_u256(&checked_amount)));
             let expected_input = [
                 "30ace1b1",                                                             // Function selector
                 "0000000000000000000000000000000000000000000000000de0b6b3a7640000",      // amount in
@@ -874,7 +874,7 @@ mod tests {
 
             let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature);
+            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
             let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
                 .unwrap()
@@ -928,7 +928,7 @@ mod tests {
 
             let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature);
+            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
             let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
                 .unwrap()
@@ -1004,7 +1004,7 @@ mod tests {
                 .unwrap();
             let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature);
+            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
             let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
                 .unwrap()
@@ -1194,7 +1194,7 @@ mod tests {
                 .unwrap();
             let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature);
+            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
             let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
                 .unwrap()
@@ -1716,7 +1716,7 @@ mod tests {
                     .unwrap();
                 let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
                 encoded_solution.permit = Some(permit);
-                encoded_solution.signature = Some(signature);
+                encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
                 let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
                     .unwrap()
@@ -1817,7 +1817,7 @@ mod tests {
                 .unwrap();
             let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature);
+            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
             let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
                 .unwrap()
@@ -1932,7 +1932,7 @@ mod tests {
                 .unwrap();
             let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature);
+            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
             let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
                 .unwrap()
@@ -2096,7 +2096,7 @@ mod tests {
                 .unwrap();
             let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature);
+            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
             let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
                 .unwrap()
@@ -2339,7 +2339,7 @@ mod tests {
                 .unwrap();
             let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature);
+            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
             let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
                 .unwrap()
@@ -2412,7 +2412,7 @@ mod tests {
                 .unwrap();
             let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature);
+            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
             let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
                 .unwrap()
@@ -2503,7 +2503,7 @@ mod tests {
                 .unwrap();
             let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature);
+            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
             let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
                 .unwrap()

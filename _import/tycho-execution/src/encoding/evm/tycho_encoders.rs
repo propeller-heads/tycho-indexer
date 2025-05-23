@@ -125,7 +125,7 @@ impl TychoRouterEncoder {
                 &solution.given_amount,
             )?;
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature);
+            encoded_solution.signature = Some(signature.as_bytes().to_vec());
         }
         Ok(encoded_solution)
     }

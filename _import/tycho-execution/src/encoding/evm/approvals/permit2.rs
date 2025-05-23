@@ -23,6 +23,7 @@ use crate::encoding::{
         encoding_utils::encode_input,
         utils::{biguint_to_u256, bytes_to_address, get_client, get_runtime},
     },
+    models,
     models::Chain,
 };
 
@@ -65,6 +66,44 @@ sol! {
         uint160 amount;
         uint48 expiration;
         uint48 nonce;
+    }
+}
+
+impl TryFrom<PermitSingle> for models::PermitSingle {
+    type Error = EncodingError;
+
+    fn try_from(sol: PermitSingle) -> Result<Self, EncodingError> {
+        Ok(models::PermitSingle {
+            details: models::PermitDetails {
+                token: Bytes::from(sol.details.token.to_vec()),
+                amount: BigUint::from_bytes_be(&sol.details.amount.to_be_bytes::<20>()),
+                expiration: BigUint::from_bytes_be(
+                    &sol.details
+                        .expiration
+                        .to_be_bytes::<6>(),
+                ),
+                nonce: BigUint::from_bytes_be(&sol.details.nonce.to_be_bytes::<6>()),
+            },
+            spender: Bytes::from(sol.spender.to_vec()),
+            sig_deadline: BigUint::from_bytes_be(&sol.sigDeadline.to_be_bytes::<32>()),
+        })
+    }
+}
+
+impl TryFrom<models::PermitSingle> for PermitSingle {
+    type Error = EncodingError;
+
+    fn try_from(p: models::PermitSingle) -> Result<Self, EncodingError> {
+        Ok(PermitSingle {
+            details: PermitDetails {
+                token: bytes_to_address(&p.details.token)?,
+                amount: U160::from(biguint_to_u256(&p.details.amount)),
+                expiration: U48::from(biguint_to_u256(&p.details.expiration)),
+                nonce: U48::from(biguint_to_u256(&p.details.nonce)),
+            },
+            spender: bytes_to_address(&p.spender)?,
+            sigDeadline: biguint_to_u256(&p.sig_deadline),
+        })
     }
 }
 
@@ -130,7 +169,7 @@ impl Permit2 {
         owner: &Bytes,
         token: &Bytes,
         amount: &BigUint,
-    ) -> Result<(PermitSingle, Signature), EncodingError> {
+    ) -> Result<(models::PermitSingle, Signature), EncodingError> {
         let current_time = Utc::now()
             .naive_utc()
             .and_utc()
@@ -163,7 +202,7 @@ impl Permit2 {
                     "Failed to sign permit2 approval with error: {e}"
                 ))
             })?;
-        Ok((permit_single, signature))
+        Ok((models::PermitSingle::try_from(permit_single)?, signature))
     }
 }
 
@@ -247,16 +286,16 @@ mod tests {
             .get_permit(&spender, &owner, &token, &amount)
             .unwrap();
 
-        let expected_details = PermitDetails {
-            token: bytes_to_address(&token).unwrap(),
-            amount: U160::from(biguint_to_u256(&amount)),
-            expiration: U48::from(Utc::now().timestamp() as u64 + PERMIT_EXPIRATION),
-            nonce: U48::from(0),
+        let expected_details = models::PermitDetails {
+            token,
+            amount,
+            expiration: BigUint::from(Utc::now().timestamp() as u64 + PERMIT_EXPIRATION),
+            nonce: BigUint::from(0u64),
         };
-        let expected_permit_single = PermitSingle {
+        let expected_permit_single = models::PermitSingle {
             details: expected_details,
-            spender: Address::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8").unwrap(),
-            sigDeadline: U256::from(Utc::now().timestamp() as u64 + PERMIT_SIG_EXPIRATION),
+            spender: Bytes::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8").unwrap(),
+            sig_deadline: BigUint::from(Utc::now().timestamp() as u64 + PERMIT_SIG_EXPIRATION),
         };
 
         assert_eq!(
@@ -310,8 +349,10 @@ mod tests {
         let (permit, signature) = permit2
             .get_permit(&spender, &anvil_account, &token, &amount)
             .unwrap();
+        let sol_permit: PermitSingle =
+            PermitSingle::try_from(permit).expect("Failed to convert to PermitSingle");
         let encoded =
-            (bytes_to_address(&anvil_account).unwrap(), permit, signature.as_bytes().to_vec())
+            (bytes_to_address(&anvil_account).unwrap(), sol_permit, signature.as_bytes().to_vec())
                 .abi_encode();
 
         let function_signature =

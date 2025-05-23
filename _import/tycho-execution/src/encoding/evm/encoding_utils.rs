@@ -5,7 +5,10 @@ use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::{biguint_to_u256, bytes_to_address},
+    evm::{
+        approvals::permit2::PermitSingle,
+        utils::{biguint_to_u256, bytes_to_address},
+    },
     models::{EncodedSolution, NativeAction, Solution, Transaction},
 };
 
@@ -103,11 +106,23 @@ pub fn encode_tycho_router_call(
     let checked_token = bytes_to_address(&solution.checked_token)?;
     let receiver = bytes_to_address(&solution.receiver)?;
     let n_tokens = U256::from(encoded_solution.n_tokens);
+    let permit = if let Some(p) = encoded_solution.permit {
+        Some(
+            PermitSingle::try_from(p)
+                .map_err(|_| EncodingError::InvalidInput("Invalid permit".to_string()))?,
+        )
+    } else {
+        None
+    };
 
     let method_calldata = if encoded_solution
         .selector
         .contains("singleSwapPermit2")
     {
+        let sig = encoded_solution
+            .signature
+            .ok_or(EncodingError::FatalError("Signature must be set to use permit2".to_string()))?;
+        println!("sig {:}", hex::encode(&sig));
         (
             given_amount,
             given_token,
@@ -116,18 +131,10 @@ pub fn encode_tycho_router_call(
             wrap,
             unwrap,
             receiver,
-            encoded_solution
-                .permit
-                .ok_or(EncodingError::FatalError(
-                    "permit2 object must be set to use permit2".to_string(),
-                ))?,
-            encoded_solution
-                .signature
-                .ok_or(EncodingError::FatalError(
-                    "Signature must be set to use permit2".to_string(),
-                ))?
-                .as_bytes()
-                .to_vec(),
+            permit.ok_or(EncodingError::FatalError(
+                "permit2 object must be set to use permit2".to_string(),
+            ))?,
+            sig,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -159,18 +166,14 @@ pub fn encode_tycho_router_call(
             wrap,
             unwrap,
             receiver,
-            encoded_solution
-                .permit
-                .ok_or(EncodingError::FatalError(
-                    "permit2 object must be set to use permit2".to_string(),
-                ))?,
+            permit.ok_or(EncodingError::FatalError(
+                "permit2 object must be set to use permit2".to_string(),
+            ))?,
             encoded_solution
                 .signature
                 .ok_or(EncodingError::FatalError(
                     "Signature must be set to use permit2".to_string(),
-                ))?
-                .as_bytes()
-                .to_vec(),
+                ))?,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -203,18 +206,14 @@ pub fn encode_tycho_router_call(
             unwrap,
             n_tokens,
             receiver,
-            encoded_solution
-                .permit
-                .ok_or(EncodingError::FatalError(
-                    "permit2 object must be set to use permit2".to_string(),
-                ))?,
+            permit.ok_or(EncodingError::FatalError(
+                "permit2 object must be set to use permit2".to_string(),
+            ))?,
             encoded_solution
                 .signature
                 .ok_or(EncodingError::FatalError(
                     "Signature must be set to use permit2".to_string(),
-                ))?
-                .as_bytes()
-                .to_vec(),
+                ))?,
             encoded_solution.swaps,
         )
             .abi_encode()
