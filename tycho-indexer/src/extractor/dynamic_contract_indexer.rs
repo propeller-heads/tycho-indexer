@@ -30,7 +30,7 @@ type TxVecIndex = usize;
 
 #[automock]
 #[async_trait]
-pub(super) trait DynamicContractIndexerTrait: Send + Sync {
+pub trait DynamicContractIndexerTrait: Send + Sync {
     async fn initialize(&mut self) -> Result<(), ExtractionError>;
     async fn process_block_update(
         &mut self,
