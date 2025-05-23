@@ -21,12 +21,17 @@ use tycho_common::{
     models::{Chain, ExtractorIdentity, FinancialType, ImplementationType, ProtocolType},
     Bytes,
 };
-use tycho_ethereum::token_pre_processor::EthereumTokenPreProcessor;
+use tycho_ethereum::{
+    account_extractor::contract::EVMBatchAccountExtractor,
+    entrypoint_tracer::tracer::EVMEntrypointService,
+    token_pre_processor::EthereumTokenPreProcessor,
+};
 use tycho_storage::postgres::cache::CachedGateway;
 
 use crate::{
     extractor::{
         chain_state::ChainState,
+        dynamic_contract_indexer::DynamicContractIndexer,
         post_processors::POST_PROCESSOR_REGISTRY,
         protocol_cache::ProtocolMemoryCache,
         protocol_extractor::{ExtractorPgGateway, ProtocolExtractor},
@@ -348,6 +353,11 @@ impl ExtractorConfig {
     }
 }
 
+pub enum DCIType {
+    /// RPC DCI plugin - uses the RPC endpoint to fetch the account data
+    RPC(String),
+}
+
 pub struct ExtractorBuilder {
     config: ExtractorConfig,
     endpoint_url: String,
@@ -358,6 +368,7 @@ pub struct ExtractorBuilder {
     /// Handle of the tokio runtime on which the extraction tasks will be run.
     /// If 'None' the default runtime will be used.
     runtime_handle: Option<Handle>,
+    dci_type: Option<DCIType>,
 }
 
 pub type HandleResult = (JoinHandle<Result<(), ExtractionError>>, ExtractorHandle);
@@ -372,9 +383,11 @@ impl ExtractorBuilder {
             extractor: None,
             final_block_only: false,
             runtime_handle: None,
+            dci_type: None,
         }
     }
 
+    /// Set the substreams endpoint url
     pub fn endpoint_url(mut self, val: &str) -> Self {
         val.clone_into(&mut self.endpoint_url);
         self
@@ -402,6 +415,11 @@ impl ExtractorBuilder {
 
     pub fn set_runtime(mut self, runtime: Handle) -> Self {
         self.runtime_handle = Some(runtime);
+        self
+    }
+
+    pub fn set_dci_plugin(mut self, dci_type: DCIType) -> Self {
+        self.dci_type = Some(dci_type);
         self
     }
 
@@ -482,8 +500,45 @@ impl ExtractorBuilder {
             })
             .transpose()?;
 
+        let dci_plugin = if let Some(ref dci_type) = self.dci_type {
+            Some(match dci_type {
+                DCIType::RPC(rpc_url) => {
+                    let account_extractor =
+                        EVMBatchAccountExtractor::new(rpc_url, self.config.chain)
+                            .await
+                            .map_err(|err| {
+                                ExtractionError::Setup(format!(
+                                    "Failed to create account extractor for {rpc_url}: {err}"
+                                ))
+                            })?;
+                    let tracer = EVMEntrypointService::try_from_url(rpc_url).map_err(|err| {
+                        ExtractionError::Setup(format!(
+                            "Failed to create entrypoint tracer for {rpc_url}: {err}"
+                        ))
+                    })?;
+                    DynamicContractIndexer::new(
+                        self.config.chain,
+                        self.config.name.clone(),
+                        cached_gw.clone(),
+                        account_extractor,
+                        tracer,
+                    )
+                }
+            })
+        } else {
+            None
+        };
+
         self.extractor = Some(Arc::new(
-            ProtocolExtractor::new(
+            ProtocolExtractor::<
+                ExtractorPgGateway,
+                EthereumTokenPreProcessor,
+                DynamicContractIndexer<
+                    EVMBatchAccountExtractor,
+                    EVMEntrypointService,
+                    CachedGateway,
+                >,
+            >::new(
                 gw,
                 &self.config.name,
                 self.config.chain,
@@ -493,6 +548,7 @@ impl ExtractorBuilder {
                 protocol_types,
                 token_pre_processor.clone(),
                 post_processor,
+                dci_plugin,
             )
             .await?,
         ));
@@ -506,8 +562,9 @@ impl ExtractorBuilder {
             .extractor
             .clone()
             .expect("Extractor not set");
+        let extractor_id = extractor.get_id();
 
-        tracing::Span::current().record("id", format!("{}", extractor.get_id()));
+        tracing::Span::current().record("id", format!("{extractor_id}"));
 
         self.ensure_spkg().await?;
 
@@ -532,10 +589,9 @@ impl ExtractorBuilder {
             self.config.start_block,
             self.config.stop_block.unwrap_or(0) as u64,
             self.final_block_only,
-            extractor.get_id().to_string(),
+            extractor_id.to_string(),
         );
 
-        let id = extractor.get_id();
         let (ctrl_tx, ctrl_rx) = mpsc::channel(128);
         let runner = ExtractorRunner::new(
             extractor,
@@ -546,7 +602,7 @@ impl ExtractorBuilder {
         );
 
         let handle = runner.run();
-        Ok((handle, ExtractorHandle::new(id, ctrl_tx)))
+        Ok((handle, ExtractorHandle::new(extractor_id, ctrl_tx)))
     }
 }
 

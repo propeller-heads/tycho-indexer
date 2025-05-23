@@ -1,5 +1,7 @@
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
+use async_trait::async_trait;
+use mockall::automock;
 use tracing::{debug, instrument, trace};
 use tycho_common::{
     models::{
@@ -26,8 +28,19 @@ type StorageLocation = (Address, StoreKey);
 #[allow(dead_code)] // Clippy thinks this is dead code, but it's used below for clarity
 type TxVecIndex = usize;
 
+#[automock]
+#[async_trait]
+pub trait DynamicContractIndexerTrait: Send + Sync {
+    async fn initialize(&mut self) -> Result<(), ExtractionError>;
+    async fn process_block_update(
+        &mut self,
+        block_changes: &mut BlockChanges,
+    ) -> Result<(), ExtractionError>;
+    async fn process_revert(&mut self, target_block: u64) -> Result<(), ExtractionError>;
+}
+
 #[allow(unused)]
-struct DynamicContractIndexer<AE, T, G>
+pub(super) struct DynamicContractIndexer<AE, T, G>
 where
     AE: AccountExtractor,
     T: EntryPointTracer,
@@ -61,33 +74,14 @@ impl DCICache {
     }
 }
 
-impl<AE, T, G> DynamicContractIndexer<AE, T, G>
+#[async_trait]
+impl<AE, T, G> DynamicContractIndexerTrait for DynamicContractIndexer<AE, T, G>
 where
-    AE: AccountExtractor,
-    T: EntryPointTracer,
-    G: EntryPointGateway,
+    AE: AccountExtractor + Send + Sync,
+    T: EntryPointTracer + Send + Sync,
+    G: EntryPointGateway + Send + Sync,
 {
-    pub fn new(
-        chain: Chain,
-        protocol: String,
-        entrypoint_gw: G,
-        storage_source: AE,
-        tracer: T,
-    ) -> Self {
-        Self {
-            chain,
-            protocol,
-            entrypoint_gw,
-            storage_source,
-            tracer,
-            cache: DCICache::new_empty(),
-        }
-    }
-
-    /// Initialize the DynamicContractIndexer. Loads all the entrypoints and their respective
-    /// trace results from the gateway.
-    #[instrument(skip_all, fields(chain = % self.chain, protocol = % self.protocol))]
-    pub async fn initialize(&mut self) -> Result<(), ExtractionError> {
+    async fn initialize(&mut self) -> Result<(), ExtractionError> {
         let entrypoint_filter = EntryPointFilter::new(self.protocol.clone());
 
         let entrypoints_with_params = self
@@ -158,7 +152,7 @@ where
     }
 
     #[instrument(skip_all, fields(chain = % self.chain, protocol = % self.protocol, block_number = % block_changes.block.number))]
-    pub(super) async fn process_block_update(
+    async fn process_block_update(
         &mut self,
         block_changes: &mut BlockChanges,
     ) -> Result<(), ExtractionError> {
@@ -325,6 +319,36 @@ where
         block_changes.trace_results = traced_entry_points;
 
         Ok(())
+    }
+
+    #[allow(unused)]
+    async fn process_revert(&mut self, target_block: u64) -> Result<(), ExtractionError> {
+        // TODO: Handle reverts, need to cleanup reverted internal state
+        todo!()
+    }
+}
+
+impl<AE, T, G> DynamicContractIndexer<AE, T, G>
+where
+    AE: AccountExtractor,
+    T: EntryPointTracer,
+    G: EntryPointGateway,
+{
+    pub fn new(
+        chain: Chain,
+        protocol: String,
+        entrypoint_gw: G,
+        storage_source: AE,
+        tracer: T,
+    ) -> Self {
+        Self {
+            chain,
+            protocol,
+            entrypoint_gw,
+            storage_source,
+            tracer,
+            cache: DCICache::new_empty(),
+        }
     }
 
     /// Scans the storage changes of the block and detects entrypoints that need to be re-traced
@@ -509,11 +533,5 @@ where
         }
 
         tracked_updates
-    }
-
-    // TODO: Handle reverts, need to cleanup reverted internal state
-    #[allow(unused)]
-    pub(super) fn process_revert(&mut self, target_block: u64) -> Result<(), ExtractionError> {
-        todo!()
     }
 }
