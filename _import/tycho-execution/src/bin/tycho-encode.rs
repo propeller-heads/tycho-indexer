@@ -4,7 +4,10 @@ use alloy_sol_types::SolValue;
 use clap::{Parser, Subcommand};
 use tycho_common::{hex_bytes::Bytes, models::Chain};
 use tycho_execution::encoding::{
-    evm::encoder_builders::{TychoExecutorEncoderBuilder, TychoRouterEncoderBuilder},
+    evm::{
+        approvals::permit2::PermitSingle,
+        encoder_builders::{TychoExecutorEncoderBuilder, TychoRouterEncoderBuilder},
+    },
     models::Solution,
     tycho_encoder::TychoEncoder,
 };
@@ -102,19 +105,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let encoded_solutions = encoder.encode_solutions(vec![solution])?;
     let encoded = serde_json::json!({
-        "swaps": format!("0x{}", hex::encode(&encoded_solutions[0].swaps)),
-        "interacting_with": format!("0x{}", hex::encode(&encoded_solutions[0].interacting_with)),
-        "selector": format!("{}",&encoded_solutions[0].selector),
-        "n_tokens": format!("{}", &encoded_solutions[0].n_tokens),
-        "permit": encoded_solutions[0].permit
-            .as_ref()
-            .map(|permit| format!("0x{}", hex::encode(permit.abi_encode())))
-            .unwrap_or_else(String::new),
-        "signature": encoded_solutions[0].signature
-            .as_ref()
-            .map(|signature| format!("0x{}", hex::encode(signature.as_bytes())))
-            .unwrap_or_else(String::new),
-    });
+            "swaps": format!("0x{}", hex::encode(&encoded_solutions[0].swaps)),
+            "interacting_with": format!("0x{}", hex::encode(&encoded_solutions[0].interacting_with)),
+            "selector": format!("{}",&encoded_solutions[0].selector),
+            "n_tokens": format!("{}", &encoded_solutions[0].n_tokens),
+            "permit": match encoded_solutions[0].permit.as_ref() {
+        Some(permit) => {
+            match PermitSingle::try_from(permit.clone()) {
+                Ok(sol_permit) => format!("0x{}", hex::encode(sol_permit.abi_encode())),
+                Err(_) => String::new(), // or log or panic or whatever fallback
+            }
+        }
+        None => String::new(),
+    },
+            "signature": encoded_solutions[0].signature
+                .as_ref()
+                .map(|signature| format!("0x{}", hex::encode(signature)))
+                .unwrap_or_else(String::new),
+        });
     // Output the encoded result as JSON to stdout
     println!(
         "{}",

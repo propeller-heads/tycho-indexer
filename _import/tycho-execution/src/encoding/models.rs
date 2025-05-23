@@ -1,4 +1,3 @@
-use alloy_primitives::PrimitiveSignature as Signature;
 use hex;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
@@ -7,9 +6,7 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::encoding::{
-    errors::EncodingError, evm::approvals::permit2::PermitSingle, serde_primitives::biguint_string,
-};
+use crate::encoding::{errors::EncodingError, serde_primitives::biguint_string};
 
 /// Represents a solution containing details describing an order, and  instructions for filling
 /// the order.
@@ -106,7 +103,49 @@ pub struct EncodedSolution {
     pub selector: String,
     pub n_tokens: usize,
     pub permit: Option<PermitSingle>,
-    pub signature: Option<Signature>,
+    pub signature: Option<Vec<u8>>,
+}
+
+/// Represents a single permit for permit2.
+///
+/// # Fields
+/// * `details`: The details of the permit, such as token, amount, expiration, and nonce.
+/// * `spender`: The address authorized to spend the tokens.
+/// * `sig_deadline`: The deadline (as a timestamp) for the permit signature
+#[derive(Debug, Clone)]
+pub struct PermitSingle {
+    pub details: PermitDetails,
+    pub spender: Bytes,
+    pub sig_deadline: BigUint,
+}
+
+/// Details of a permit.
+///
+/// # Fields
+/// * `token`: The token address for which the permit is granted.
+/// * `amount`: The amount of tokens approved for spending.
+/// * `expiration`: The expiration time (as a timestamp) for the permit.
+/// * `nonce`: The unique nonce to prevent replay attacks.
+#[derive(Debug, Clone)]
+pub struct PermitDetails {
+    pub token: Bytes,
+    pub amount: BigUint,
+    pub expiration: BigUint,
+    pub nonce: BigUint,
+}
+
+impl PartialEq for PermitSingle {
+    fn eq(&self, other: &Self) -> bool {
+        self.details == other.details && self.spender == other.spender
+        // sig_deadline is intentionally ignored
+    }
+}
+
+impl PartialEq for PermitDetails {
+    fn eq(&self, other: &Self) -> bool {
+        self.token == other.token && self.amount == other.amount && self.nonce == other.nonce
+        // expiration is intentionally ignored
+    }
 }
 
 /// Represents necessary attributes for encoding an order.
