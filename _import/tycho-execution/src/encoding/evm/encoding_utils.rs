@@ -1,5 +1,11 @@
-use alloy_primitives::{Keccak256, U256};
-use alloy_sol_types::SolValue;
+use std::str::FromStr;
+
+use alloy::{
+    primitives::U256,
+    signers::{local::PrivateKeySigner, Signature, SignerSync},
+};
+use alloy_primitives::{Address, Keccak256};
+use alloy_sol_types::{eip712_domain, SolStruct, SolValue};
 use num_bigint::BigUint;
 use tycho_common::Bytes;
 
@@ -9,7 +15,8 @@ use crate::encoding::{
         approvals::permit2::PermitSingle,
         utils::{biguint_to_u256, bytes_to_address},
     },
-    models::{EncodedSolution, NativeAction, Solution, Transaction},
+    models,
+    models::{EncodedSolution, NativeAction, Solution, Transaction, UserTransferType},
 };
 
 /// Encodes the input data for a function call to the given function selector.
@@ -56,6 +63,7 @@ pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
 /// their own encoding logic** to ensure:
 /// - Full control of parameters passed to the router.
 /// - Proper validation and setting of critical inputs such as `minAmountOut`.
+/// - Signing of permit2 objects.
 ///
 /// While Tycho is responsible for encoding the swap paths themselves, the input arguments
 /// to the router's methods act as **guardrails** for on-chain execution safety.
@@ -87,10 +95,12 @@ pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
 /// - Returns `EncodingError::FatalError` if the selector is unsupported or required fields (e.g.,
 ///   permit or signature) are missing.
 pub fn encode_tycho_router_call(
+    chain_id: u64,
     encoded_solution: EncodedSolution,
     solution: &Solution,
-    token_in_already_in_router: bool,
+    user_transfer_type: UserTransferType,
     native_address: Bytes,
+    signer: Option<PrivateKeySigner>,
 ) -> Result<Transaction, EncodingError> {
     let (mut unwrap, mut wrap) = (false, false);
     if let Some(action) = solution.native_action.clone() {
@@ -106,23 +116,23 @@ pub fn encode_tycho_router_call(
     let checked_token = bytes_to_address(&solution.checked_token)?;
     let receiver = bytes_to_address(&solution.receiver)?;
     let n_tokens = U256::from(encoded_solution.n_tokens);
-    let permit = if let Some(p) = encoded_solution.permit {
-        Some(
-            PermitSingle::try_from(p)
+    let (permit, signature) = if let Some(p) = encoded_solution.permit {
+        let permit = Some(
+            PermitSingle::try_from(&p)
                 .map_err(|_| EncodingError::InvalidInput("Invalid permit".to_string()))?,
-        )
+        );
+        let signer = signer
+            .ok_or(EncodingError::FatalError("Signer must be set to use permit2".to_string()))?;
+        let signature = sign_permit(chain_id, &p, signer)?;
+        (permit, signature.as_bytes().to_vec())
     } else {
-        None
+        (None, vec![])
     };
 
     let method_calldata = if encoded_solution
         .selector
         .contains("singleSwapPermit2")
     {
-        let sig = encoded_solution
-            .signature
-            .ok_or(EncodingError::FatalError("Signature must be set to use permit2".to_string()))?;
-        println!("sig {:}", hex::encode(&sig));
         (
             given_amount,
             given_token,
@@ -134,7 +144,7 @@ pub fn encode_tycho_router_call(
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
-            sig,
+            signature,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -150,7 +160,7 @@ pub fn encode_tycho_router_call(
             wrap,
             unwrap,
             receiver,
-            !token_in_already_in_router,
+            user_transfer_type == UserTransferType::TransferFrom,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -169,11 +179,7 @@ pub fn encode_tycho_router_call(
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
-            encoded_solution
-                .signature
-                .ok_or(EncodingError::FatalError(
-                    "Signature must be set to use permit2".to_string(),
-                ))?,
+            signature,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -189,7 +195,7 @@ pub fn encode_tycho_router_call(
             wrap,
             unwrap,
             receiver,
-            !token_in_already_in_router,
+            user_transfer_type == UserTransferType::TransferFrom,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -209,11 +215,7 @@ pub fn encode_tycho_router_call(
             permit.ok_or(EncodingError::FatalError(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
-            encoded_solution
-                .signature
-                .ok_or(EncodingError::FatalError(
-                    "Signature must be set to use permit2".to_string(),
-                ))?,
+            signature,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -230,7 +232,7 @@ pub fn encode_tycho_router_call(
             unwrap,
             n_tokens,
             receiver,
-            !token_in_already_in_router,
+            user_transfer_type == UserTransferType::TransferFrom,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -245,4 +247,34 @@ pub fn encode_tycho_router_call(
         BigUint::ZERO
     };
     Ok(Transaction { to: encoded_solution.interacting_with, value, data: contract_interaction })
+}
+
+/// Signs a Permit2 `PermitSingle` struct using the EIP-712 signing scheme.
+///
+/// This function constructs an EIP-712 domain specific to the Permit2 contract and computes the
+/// hash of the provided `PermitSingle`. It then uses the given `PrivateKeySigner` to produce
+/// a cryptographic signature of the permit.
+///
+/// # Warning
+/// This is only an **example implementation** provided for reference purposes.
+/// **Do not rely on this in production.** You should implement your own version.
+pub fn sign_permit(
+    chain_id: u64,
+    permit_single: &models::PermitSingle,
+    signer: PrivateKeySigner,
+) -> Result<Signature, EncodingError> {
+    let permit2_address = Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
+        .map_err(|_| EncodingError::FatalError("Permit2 address not valid".to_string()))?;
+    let domain = eip712_domain! {
+        name: "Permit2",
+        chain_id: chain_id,
+        verifying_contract: permit2_address,
+    };
+    let permit_single: PermitSingle = PermitSingle::try_from(permit_single)?;
+    let hash = permit_single.eip712_signing_hash(&domain);
+    signer
+        .sign_hash_sync(&hash)
+        .map_err(|e| {
+            EncodingError::FatalError(format!("Failed to sign permit2 approval with error: {e}"))
+        })
 }

@@ -14,7 +14,7 @@ use crate::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::{get_token_position, percentage_to_uint24, ple_encode},
     },
-    models::{Chain, EncodedSolution, EncodingContext, NativeAction, Solution},
+    models::{Chain, EncodedSolution, EncodingContext, NativeAction, Solution, UserTransferType},
     strategy_encoder::StrategyEncoder,
     swap_encoder::SwapEncoder,
 };
@@ -38,11 +38,10 @@ impl SingleSwapStrategyEncoder {
     pub fn new(
         chain: Chain,
         swap_encoder_registry: SwapEncoderRegistry,
-        permit_2_active: bool,
+        user_transfer_type: UserTransferType,
         router_address: Bytes,
-        token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
-        let selector = if permit_2_active {
+        let selector = if user_transfer_type == UserTransferType::TransferFromPermit2 {
             "singleSwapPermit2(uint256,address,address,uint256,bool,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"
         } else {
             "singleSwap(uint256,address,address,uint256,bool,bool,address,bool,bytes)"
@@ -55,7 +54,7 @@ impl SingleSwapStrategyEncoder {
             transfer_optimization: TransferOptimization::new(
                 chain.native_token()?,
                 chain.wrapped_token()?,
-                token_in_already_in_router,
+                user_transfer_type,
                 router_address,
             ),
         })
@@ -138,7 +137,6 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
             interacting_with: self.router_address.clone(),
             swaps: swap_data,
             permit: None,
-            signature: None,
             n_tokens: 0,
         })
     }
@@ -179,11 +177,10 @@ impl SequentialSwapStrategyEncoder {
     pub fn new(
         chain: Chain,
         swap_encoder_registry: SwapEncoderRegistry,
-        permit_2_active: bool,
+        user_transfer_type: UserTransferType,
         router_address: Bytes,
-        token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
-        let selector = if permit_2_active {
+        let selector = if user_transfer_type == UserTransferType::TransferFromPermit2 {
             "sequentialSwapPermit2(uint256,address,address,uint256,bool,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"
         } else {
             "sequentialSwap(uint256,address,address,uint256,bool,bool,address,bool,bytes)"
@@ -199,7 +196,7 @@ impl SequentialSwapStrategyEncoder {
             transfer_optimization: TransferOptimization::new(
                 chain.native_token()?,
                 chain.wrapped_token()?,
-                token_in_already_in_router,
+                user_transfer_type,
                 router_address,
             ),
         })
@@ -294,7 +291,6 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
             selector: self.selector.clone(),
             swaps: encoded_swaps,
             permit: None,
-            signature: None,
             n_tokens: 0,
         })
     }
@@ -335,11 +331,10 @@ impl SplitSwapStrategyEncoder {
     pub fn new(
         chain: Chain,
         swap_encoder_registry: SwapEncoderRegistry,
-        permit_2_active: bool,
+        user_transfer_type: UserTransferType,
         router_address: Bytes,
-        token_in_already_in_router: bool,
     ) -> Result<Self, EncodingError> {
-        let selector = if permit_2_active{
+        let selector = if user_transfer_type == UserTransferType::TransferFromPermit2 {
            "splitSwapPermit2(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"
         } else {
                 "splitSwap(uint256,address,address,uint256,bool,bool,uint256,address,bool,bytes)"
@@ -354,7 +349,7 @@ impl SplitSwapStrategyEncoder {
             transfer_optimization: TransferOptimization::new(
                 chain.native_token()?,
                 chain.wrapped_token()?,
-                token_in_already_in_router,
+                user_transfer_type,
                 router_address,
             ),
         })
@@ -497,7 +492,6 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             selector: self.selector.clone(),
             swaps: encoded_swaps,
             permit: None,
-            signature: None,
             n_tokens: tokens_len,
         })
     }
@@ -516,8 +510,8 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 mod tests {
     use std::{collections::HashMap, str::FromStr};
 
-    use alloy::hex::encode;
-    use alloy_primitives::{hex, Address, PrimitiveSignature as Signature, U256};
+    use alloy::{hex::encode, signers::local::PrivateKeySigner};
+    use alloy_primitives::{hex, Address, B256, U256};
     use num_bigint::{BigInt, BigUint};
     use tycho_common::{
         models::{protocol::ProtocolComponent, Chain as TychoCommonChain},
@@ -555,24 +549,26 @@ mod tests {
         Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap()
     }
 
-    fn get_permit(
-        chain: Chain,
-        router_address: Bytes,
-        solution: &Solution,
-    ) -> (PermitSingle, Signature) {
-        // Set up a mock private key for signing (Alice's pk in our contract tests)
-        let private_key =
-            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
-
-        let permit2 = Permit2::new(private_key, chain.clone()).unwrap();
-        permit2
+    fn get_permit(router_address: Bytes, solution: &Solution) -> PermitSingle {
+        let permit2 = Permit2::new().unwrap();
+        let permit_single = permit2
             .get_permit(
                 &router_address,
                 &solution.sender,
                 &solution.given_token,
                 &solution.given_amount,
             )
-            .unwrap()
+            .unwrap();
+        permit_single
+    }
+
+    fn get_signer() -> PrivateKeySigner {
+        // Set up a mock private key for signing (Alice's pk in our contract tests)
+        let private_key =
+            "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
+
+        let pk = B256::from_str(&private_key).unwrap();
+        PrivateKeySigner::from_bytes(&pk).unwrap()
     }
 
     mod single {
@@ -602,9 +598,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                true,
+                UserTransferType::TransferFromPermit2,
                 router_address(),
-                false,
             )
             .unwrap();
             let solution = Solution {
@@ -622,13 +617,19 @@ mod tests {
             let mut encoded_solution = encoder
                 .encode_strategy(solution.clone())
                 .unwrap();
-            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            let permit = get_permit(router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFromPermit2,
+                eth(),
+                Some(get_signer()),
+            )
+            .unwrap()
+            .data;
             let expected_min_amount_encoded =
                 hex::encode(U256::abi_encode(&biguint_to_u256(&checked_amount)));
             let expected_input = [
@@ -690,9 +691,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                false,
+                UserTransferType::TransferFrom,
                 router_address(),
-                false,
             )
             .unwrap();
             let solution = Solution {
@@ -710,9 +710,16 @@ mod tests {
             let encoded_solution = encoder
                 .encode_strategy(solution.clone())
                 .unwrap();
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFrom,
+                eth(),
+                None,
+            )
+            .unwrap()
+            .data;
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
                 "5c4b639c",                                                           // Function selector
@@ -772,9 +779,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                false,
+                UserTransferType::None,
                 router_address(),
-                true,
             )
             .unwrap();
             let solution = Solution {
@@ -792,9 +798,16 @@ mod tests {
             let encoded_solution = encoder
                 .encode_strategy(solution.clone())
                 .unwrap();
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, true, eth())
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::None,
+                eth(),
+                None,
+            )
+            .unwrap()
+            .data;
             let expected_min_amount_encoded = hex::encode(U256::abi_encode(&expected_min_amount));
             let expected_input = [
                 "5c4b639c",                                                           // Function selector
@@ -851,9 +864,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                true,
+                UserTransferType::TransferFromPermit2,
                 router_address(),
-                false,
             )
             .unwrap();
             let solution = Solution {
@@ -872,13 +884,19 @@ mod tests {
                 .encode_strategy(solution.clone())
                 .unwrap();
 
-            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            let permit = get_permit(router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFromPermit2,
+                eth(),
+                Some(get_signer()),
+            )
+            .unwrap()
+            .data;
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_single_swap_strategy_encoder_wrap", hex_calldata.as_str());
         }
@@ -905,9 +923,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                true,
+                UserTransferType::TransferFromPermit2,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
-                false,
             )
             .unwrap();
             let solution = Solution {
@@ -926,13 +943,19 @@ mod tests {
                 .encode_strategy(solution.clone())
                 .unwrap();
 
-            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            let permit = get_permit(router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFromPermit2,
+                eth(),
+                Some(get_signer()),
+            )
+            .unwrap()
+            .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file(
@@ -982,9 +1005,8 @@ mod tests {
             let encoder = SequentialSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                true,
+                UserTransferType::TransferFromPermit2,
                 router_address(),
-                false,
             )
             .unwrap();
             let solution = Solution {
@@ -1002,13 +1024,19 @@ mod tests {
             let mut encoded_solution = encoder
                 .encode_strategy(solution.clone())
                 .unwrap();
-            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            let permit = get_permit(router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFromPermit2,
+                eth(),
+                Some(get_signer()),
+            )
+            .unwrap()
+            .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_sequential_swap_strategy_encoder", hex_calldata.as_str());
@@ -1048,9 +1076,8 @@ mod tests {
             let encoder = SequentialSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                false,
+                UserTransferType::TransferFrom,
                 router_address(),
-                false,
             )
             .unwrap();
             let solution = Solution {
@@ -1069,9 +1096,16 @@ mod tests {
                 .encode_strategy(solution.clone())
                 .unwrap();
 
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFrom,
+                eth(),
+                None,
+            )
+            .unwrap()
+            .data;
 
             let hex_calldata = encode(&calldata);
 
@@ -1170,9 +1204,8 @@ mod tests {
             let encoder = SequentialSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                true,
+                UserTransferType::TransferFromPermit2,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
-                false,
             )
             .unwrap();
 
@@ -1192,13 +1225,19 @@ mod tests {
             let mut encoded_solution = encoder
                 .encode_strategy(solution.clone())
                 .unwrap();
-            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            let permit = get_permit(router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFromPermit2,
+                eth(),
+                Some(get_signer()),
+            )
+            .unwrap()
+            .data;
             let hex_calldata = hex::encode(&calldata);
             let expected_input = [
                 "51bcc7b6",                                                         // selector
@@ -1292,9 +1331,8 @@ mod tests {
                 let encoder = SequentialSwapStrategyEncoder::new(
                     eth_chain(),
                     swap_encoder_registry,
-                    false,
+                    UserTransferType::TransferFrom,
                     router_address(),
-                    false,
                 )
                 .unwrap();
                 let solution = Solution {
@@ -1314,9 +1352,16 @@ mod tests {
                     .encode_strategy(solution.clone())
                     .unwrap();
 
-                let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                    .unwrap()
-                    .data;
+                let calldata = encode_tycho_router_call(
+                    eth_chain().id,
+                    encoded_solution,
+                    &solution,
+                    UserTransferType::TransferFrom,
+                    eth(),
+                    None,
+                )
+                .unwrap()
+                .data;
 
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file("test_uniswap_v3_uniswap_v2", hex_calldata.as_str());
@@ -1377,9 +1422,8 @@ mod tests {
                 let encoder = SequentialSwapStrategyEncoder::new(
                     eth_chain(),
                     swap_encoder_registry,
-                    false,
+                    UserTransferType::TransferFrom,
                     router_address(),
-                    false,
                 )
                 .unwrap();
                 let solution = Solution {
@@ -1399,9 +1443,16 @@ mod tests {
                     .encode_strategy(solution.clone())
                     .unwrap();
 
-                let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                    .unwrap()
-                    .data;
+                let calldata = encode_tycho_router_call(
+                    eth_chain().id,
+                    encoded_solution,
+                    &solution,
+                    UserTransferType::TransferFrom,
+                    eth(),
+                    None,
+                )
+                .unwrap()
+                .data;
 
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file("test_uniswap_v3_uniswap_v3", hex_calldata.as_str());
@@ -1471,9 +1522,8 @@ mod tests {
                 let encoder = SequentialSwapStrategyEncoder::new(
                     eth_chain(),
                     swap_encoder_registry,
-                    false,
+                    UserTransferType::TransferFrom,
                     router_address(),
-                    false,
                 )
                 .unwrap();
                 let solution = Solution {
@@ -1493,9 +1543,16 @@ mod tests {
                     .encode_strategy(solution.clone())
                     .unwrap();
 
-                let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                    .unwrap()
-                    .data;
+                let calldata = encode_tycho_router_call(
+                    eth_chain().id,
+                    encoded_solution,
+                    &solution,
+                    UserTransferType::TransferFrom,
+                    eth(),
+                    None,
+                )
+                .unwrap()
+                .data;
 
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file("test_uniswap_v3_curve", hex_calldata.as_str());
@@ -1541,9 +1598,8 @@ mod tests {
                 let encoder = SequentialSwapStrategyEncoder::new(
                     eth_chain(),
                     swap_encoder_registry,
-                    false,
+                    UserTransferType::TransferFrom,
                     router_address(),
-                    false,
                 )
                 .unwrap();
                 let solution = Solution {
@@ -1563,9 +1619,16 @@ mod tests {
                     .encode_strategy(solution.clone())
                     .unwrap();
 
-                let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                    .unwrap()
-                    .data;
+                let calldata = encode_tycho_router_call(
+                    eth_chain().id,
+                    encoded_solution,
+                    &solution,
+                    UserTransferType::TransferFrom,
+                    eth(),
+                    None,
+                )
+                .unwrap()
+                .data;
 
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file("test_balancer_v2_uniswap_v2", hex_calldata.as_str());
@@ -1687,9 +1750,8 @@ mod tests {
                 let encoder = SequentialSwapStrategyEncoder::new(
                     eth_chain(),
                     swap_encoder_registry,
-                    true,
+                    UserTransferType::TransferFromPermit2,
                     router_address(),
-                    false,
                 )
                 .unwrap();
                 let solution = Solution {
@@ -1714,13 +1776,19 @@ mod tests {
                 let mut encoded_solution = encoder
                     .encode_strategy(solution.clone())
                     .unwrap();
-                let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+                let permit = get_permit(router_address(), &solution);
                 encoded_solution.permit = Some(permit);
-                encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
-                let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
-                    .unwrap()
-                    .data;
+                let calldata = encode_tycho_router_call(
+                    eth_chain().id,
+                    encoded_solution,
+                    &solution,
+                    UserTransferType::TransferFromPermit2,
+                    eth,
+                    Some(get_signer()),
+                )
+                .unwrap()
+                .data;
 
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file("test_multi_protocol", hex_calldata.as_str());
@@ -1795,9 +1863,8 @@ mod tests {
             let encoder = SplitSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                true,
+                UserTransferType::TransferFromPermit2,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
-                false,
             )
             .unwrap();
             let solution = Solution {
@@ -1815,13 +1882,19 @@ mod tests {
             let mut encoded_solution = encoder
                 .encode_strategy(solution.clone())
                 .unwrap();
-            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            let permit = get_permit(router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFromPermit2,
+                eth(),
+                Some(get_signer()),
+            )
+            .unwrap()
+            .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_split_swap_strategy_encoder", hex_calldata.as_str());
@@ -1907,9 +1980,8 @@ mod tests {
             let encoder = SplitSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                true,
+                UserTransferType::TransferFromPermit2,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
-                false,
             )
             .unwrap();
 
@@ -1930,13 +2002,19 @@ mod tests {
             let mut encoded_solution = encoder
                 .encode_strategy(solution.clone())
                 .unwrap();
-            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            let permit = get_permit(router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFromPermit2,
+                eth(),
+                Some(get_signer()),
+            )
+            .unwrap()
+            .data;
 
             let hex_calldata = hex::encode(&calldata);
             let expected_input = [
@@ -2071,9 +2149,8 @@ mod tests {
             let encoder = SplitSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                true,
+                UserTransferType::TransferFromPermit2,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
-                false,
             )
             .unwrap();
 
@@ -2094,13 +2171,19 @@ mod tests {
             let mut encoded_solution = encoder
                 .encode_strategy(solution.clone())
                 .unwrap();
-            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            let permit = get_permit(router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFromPermit2,
+                eth(),
+                Some(get_signer()),
+            )
+            .unwrap()
+            .data;
 
             let hex_calldata = hex::encode(&calldata);
             let expected_input = [
@@ -2202,9 +2285,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                false,
+                UserTransferType::TransferFrom,
                 Bytes::from_str("0xA4AD4f68d0b91CFD19687c881e50f3A00242828c").unwrap(),
-                false,
             )
             .unwrap();
 
@@ -2225,9 +2307,16 @@ mod tests {
                 .encode_strategy(solution.clone())
                 .unwrap();
 
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFrom,
+                eth(),
+                None,
+            )
+            .unwrap()
+            .data;
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_single_encoding_strategy_ekubo", hex_calldata.as_str());
         }
@@ -2253,9 +2342,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                false,
+                UserTransferType::TransferFrom,
                 Bytes::from_str("0xA4AD4f68d0b91CFD19687c881e50f3A00242828c").unwrap(),
-                false,
             )
             .unwrap();
 
@@ -2276,9 +2364,16 @@ mod tests {
                 .encode_strategy(solution.clone())
                 .unwrap();
 
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFrom,
+                eth(),
+                None,
+            )
+            .unwrap()
+            .data;
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_single_encoding_strategy_maverick", hex_calldata.as_str());
         }
@@ -2316,9 +2411,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                true,
+                UserTransferType::TransferFromPermit2,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
-                false,
             )
             .unwrap();
 
@@ -2337,13 +2431,19 @@ mod tests {
             let mut encoded_solution = encoder
                 .encode_strategy(solution.clone())
                 .unwrap();
-            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            let permit = get_permit(router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFromPermit2,
+                eth,
+                Some(get_signer()),
+            )
+            .unwrap()
+            .data;
             let hex_calldata = encode(&calldata);
 
             write_calldata_to_file(
@@ -2389,9 +2489,8 @@ mod tests {
             let encoder = SplitSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                true,
+                UserTransferType::TransferFromPermit2,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
-                false,
             )
             .unwrap();
 
@@ -2410,13 +2509,19 @@ mod tests {
             let mut encoded_solution = encoder
                 .encode_strategy(solution.clone())
                 .unwrap();
-            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            let permit = get_permit(router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFromPermit2,
+                eth,
+                Some(get_signer()),
+            )
+            .unwrap()
+            .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file(
@@ -2481,9 +2586,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                true,
+                UserTransferType::TransferFromPermit2,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
-                false,
             )
             .unwrap();
             let solution = Solution {
@@ -2501,13 +2605,19 @@ mod tests {
             let mut encoded_solution = encoder
                 .encode_strategy(solution.clone())
                 .unwrap();
-            let (permit, signature) = get_permit(eth_chain(), router_address(), &solution);
+            let permit = get_permit(router_address(), &solution);
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature.as_bytes().to_vec());
 
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth)
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFromPermit2,
+                eth,
+                Some(get_signer()),
+            )
+            .unwrap()
+            .data;
 
             let expected_input = [
                 "30ace1b1",                                                              // Function selector (single swap)
@@ -2591,9 +2701,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                false,
+                UserTransferType::TransferFrom,
                 router_address(),
-                false,
             )
             .unwrap();
 
@@ -2614,9 +2723,16 @@ mod tests {
                 .encode_strategy(solution.clone())
                 .unwrap();
 
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFrom,
+                eth(),
+                None,
+            )
+            .unwrap()
+            .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file("test_single_encoding_strategy_curve", hex_calldata.as_str());
@@ -2657,9 +2773,8 @@ mod tests {
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
                 swap_encoder_registry,
-                false,
+                UserTransferType::TransferFrom,
                 router_address(),
-                false,
             )
             .unwrap();
 
@@ -2679,9 +2794,16 @@ mod tests {
             let encoded_solution = encoder
                 .encode_strategy(solution.clone())
                 .unwrap();
-            let calldata = encode_tycho_router_call(encoded_solution, &solution, false, eth())
-                .unwrap()
-                .data;
+            let calldata = encode_tycho_router_call(
+                eth_chain().id,
+                encoded_solution,
+                &solution,
+                UserTransferType::TransferFrom,
+                eth(),
+                None,
+            )
+            .unwrap()
+            .data;
 
             let hex_calldata = encode(&calldata);
             write_calldata_to_file(

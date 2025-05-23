@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use alloy::signers::local::PrivateKeySigner;
 use tycho_common::{models::Chain as TychoCommonChain, Bytes};
 
 use crate::encoding::{
@@ -9,7 +10,7 @@ use crate::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         tycho_encoders::{TychoExecutorEncoder, TychoRouterEncoder},
     },
-    models::Chain,
+    models::{Chain, UserTransferType},
     tycho_encoder::TychoEncoder,
 };
 
@@ -17,11 +18,11 @@ use crate::encoding::{
 ///
 /// This struct allows setting a chain and strategy encoder before building the final encoder.
 pub struct TychoRouterEncoderBuilder {
-    swapper_pk: Option<String>,
     chain: Option<Chain>,
+    user_transfer_type: Option<UserTransferType>,
     executors_file_path: Option<String>,
     router_address: Option<Bytes>,
-    token_in_already_in_router: Option<bool>,
+    signer: Option<PrivateKeySigner>,
 }
 
 impl Default for TychoRouterEncoderBuilder {
@@ -33,15 +34,20 @@ impl Default for TychoRouterEncoderBuilder {
 impl TychoRouterEncoderBuilder {
     pub fn new() -> Self {
         TychoRouterEncoderBuilder {
-            swapper_pk: None,
             chain: None,
             executors_file_path: None,
             router_address: None,
-            token_in_already_in_router: None,
+            signer: None,
+            user_transfer_type: None,
         }
     }
     pub fn chain(mut self, chain: TychoCommonChain) -> Self {
         self.chain = Some(chain.into());
+        self
+    }
+
+    pub fn user_transfer_type(mut self, user_transfer_type: UserTransferType) -> Self {
+        self.user_transfer_type = Some(user_transfer_type);
         self
     }
 
@@ -59,25 +65,15 @@ impl TychoRouterEncoderBuilder {
         self
     }
 
-    pub fn swapper_pk(mut self, swapper_pk: String) -> Self {
-        self.swapper_pk = Some(swapper_pk);
-        self
-    }
-
-    // Sets the `token_in_already_in_router` flag.
-    // If set to true, the encoder will assume that the token in is already in the router.
-    // WARNING: this is an advanced feature and should be used with caution. Make sure you have
-    // checks to make sure that your tokens won't be lost. The Router is not considered safe to hold
-    // tokens, so if this is not done within the same transaction you will lose your tokens.
-    pub fn token_in_already_in_router(mut self, token_in_already_in_router: bool) -> Self {
-        self.token_in_already_in_router = Some(token_in_already_in_router);
+    pub fn signer(mut self, signer: PrivateKeySigner) -> Self {
+        self.signer = Some(signer);
         self
     }
 
     /// Builds the `TychoRouterEncoder` instance using the configured chain.
     /// Returns an error if either the chain has not been set.
     pub fn build(self) -> Result<Box<dyn TychoEncoder>, EncodingError> {
-        if let Some(chain) = self.chain {
+        if let (Some(chain), Some(user_transfer_type)) = (self.chain, self.user_transfer_type) {
             let tycho_router_address;
             if let Some(address) = self.router_address {
                 tycho_router_address = address;
@@ -98,14 +94,14 @@ impl TychoRouterEncoderBuilder {
             Ok(Box::new(TychoRouterEncoder::new(
                 chain,
                 swap_encoder_registry,
-                self.swapper_pk,
                 tycho_router_address,
-                self.token_in_already_in_router
-                    .unwrap_or(false),
+                user_transfer_type,
+                self.signer,
             )?))
         } else {
             Err(EncodingError::FatalError(
-                "Please set the chain and router address before building the encoder".to_string(),
+                "Please set the chain and user transfer type before building the encoder"
+                    .to_string(),
             ))
         }
     }

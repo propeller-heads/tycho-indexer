@@ -1,5 +1,6 @@
 use std::{collections::HashSet, str::FromStr};
 
+use alloy::signers::local::PrivateKeySigner;
 use tycho_common::Bytes;
 
 use crate::encoding::{
@@ -16,6 +17,7 @@ use crate::encoding::{
     },
     models::{
         Chain, EncodedSolution, EncodingContext, NativeAction, Solution, Transaction, TransferType,
+        UserTransferType,
     },
     strategy_encoder::StrategyEncoder,
     tycho_encoder::TychoEncoder,
@@ -24,37 +26,36 @@ use crate::encoding::{
 /// Encodes solutions to be used by the TychoRouter.
 ///
 /// # Fields
+/// * `chain`: Chain to be used
 /// * `single_swap_strategy`: Encoder for single swaps
 /// * `sequential_swap_strategy`: Encoder for sequential swaps
 /// * `split_swap_strategy`: Encoder for split swaps
-/// * `native_address`: Address of the chain's native token
-/// * `wrapped_address`: Address of the chain's wrapped native token
 /// * `router_address`: Address of the Tycho router contract
-/// * `token_in_already_in_router`: Indicates if the token in is already in the router at swap time
+/// * `user_transfer_type`: Type of user transfer
+/// * `permit2`: Optional Permit2 instance for permit transfers
+/// * `signer`: Optional signer (used only for permit2 and full calldata encoding)
 #[derive(Clone)]
 pub struct TychoRouterEncoder {
+    chain: Chain,
     single_swap_strategy: SingleSwapStrategyEncoder,
     sequential_swap_strategy: SequentialSwapStrategyEncoder,
     split_swap_strategy: SplitSwapStrategyEncoder,
-    native_address: Bytes,
-    wrapped_address: Bytes,
     router_address: Bytes,
-    token_in_already_in_router: bool,
+    user_transfer_type: UserTransferType,
     permit2: Option<Permit2>,
+    signer: Option<PrivateKeySigner>,
 }
 
 impl TychoRouterEncoder {
     pub fn new(
         chain: Chain,
         swap_encoder_registry: SwapEncoderRegistry,
-        swapper_pk: Option<String>,
         router_address: Bytes,
-        token_in_already_in_router: bool,
+        user_transfer_type: UserTransferType,
+        signer: Option<PrivateKeySigner>,
     ) -> Result<Self, EncodingError> {
-        let native_address = chain.native_token()?;
-        let wrapped_address = chain.wrapped_token()?;
-        let permit2 = if let Some(swapper_pk) = swapper_pk.clone() {
-            Some(Permit2::new(swapper_pk, chain.clone())?)
+        let permit2 = if user_transfer_type == UserTransferType::TransferFromPermit2 {
+            Some(Permit2::new()?)
         } else {
             None
         };
@@ -62,29 +63,26 @@ impl TychoRouterEncoder {
             single_swap_strategy: SingleSwapStrategyEncoder::new(
                 chain.clone(),
                 swap_encoder_registry.clone(),
-                permit2.is_some(),
+                user_transfer_type.clone(),
                 router_address.clone(),
-                token_in_already_in_router,
             )?,
             sequential_swap_strategy: SequentialSwapStrategyEncoder::new(
                 chain.clone(),
                 swap_encoder_registry.clone(),
-                permit2.is_some(),
+                user_transfer_type.clone(),
                 router_address.clone(),
-                token_in_already_in_router,
             )?,
             split_swap_strategy: SplitSwapStrategyEncoder::new(
-                chain,
+                chain.clone(),
                 swap_encoder_registry,
-                permit2.is_some(),
+                user_transfer_type.clone(),
                 router_address.clone(),
-                token_in_already_in_router,
             )?,
-            native_address,
-            wrapped_address,
             router_address,
-            token_in_already_in_router,
             permit2,
+            signer,
+            chain,
+            user_transfer_type,
         })
     }
 
@@ -118,14 +116,13 @@ impl TychoRouterEncoder {
         };
 
         if let Some(permit2) = self.permit2.clone() {
-            let (permit, signature) = permit2.get_permit(
+            let permit = permit2.get_permit(
                 &self.router_address,
                 &solution.sender,
                 &solution.given_token,
                 &solution.given_amount,
             )?;
             encoded_solution.permit = Some(permit);
-            encoded_solution.signature = Some(signature.as_bytes().to_vec());
         }
         Ok(encoded_solution)
     }
@@ -153,10 +150,12 @@ impl TychoEncoder for TychoRouterEncoder {
             let encoded_solution = self.encode_solution(solution)?;
 
             let transaction = encode_tycho_router_call(
+                self.chain.id,
                 encoded_solution,
                 solution,
-                self.token_in_already_in_router,
-                self.native_address.clone(),
+                self.user_transfer_type.clone(),
+                self.chain.native_token()?.clone(),
+                self.signer.clone(),
             )?;
 
             transactions.push(transaction);
@@ -184,15 +183,17 @@ impl TychoEncoder for TychoRouterEncoder {
         if solution.swaps.is_empty() {
             return Err(EncodingError::FatalError("No swaps found in solution".to_string()));
         }
+        let native_address = self.chain.native_token()?;
+        let wrapped_address = self.chain.wrapped_token()?;
         if let Some(native_action) = solution.clone().native_action {
             if native_action == NativeAction::Wrap {
-                if solution.given_token != self.native_address {
+                if solution.given_token != native_address {
                     return Err(EncodingError::FatalError(
                         "Native token must be the input token in order to wrap".to_string(),
                     ));
                 }
                 if let Some(first_swap) = solution.swaps.first() {
-                    if first_swap.token_in != self.wrapped_address {
+                    if first_swap.token_in != wrapped_address {
                         return Err(EncodingError::FatalError(
                             "Wrapped token must be the first swap's input in order to wrap"
                                 .to_string(),
@@ -200,13 +201,13 @@ impl TychoEncoder for TychoRouterEncoder {
                     }
                 }
             } else if native_action == NativeAction::Unwrap {
-                if solution.checked_token != self.native_address {
+                if solution.checked_token != native_address {
                     return Err(EncodingError::FatalError(
                         "Native token must be the output token in order to unwrap".to_string(),
                     ));
                 }
                 if let Some(last_swap) = solution.swaps.last() {
-                    if last_swap.token_out != self.wrapped_address {
+                    if last_swap.token_out != wrapped_address {
                         return Err(EncodingError::FatalError(
                             "Wrapped token must be the last swap's output in order to unwrap"
                                 .to_string(),
@@ -337,7 +338,6 @@ impl TychoExecutorEncoder {
             swaps: grouped_protocol_data,
             interacting_with: executor_address,
             permit: None,
-            signature: None,
             selector: "".to_string(),
             n_tokens: 0,
         })
@@ -474,13 +474,14 @@ mod tests {
             TychoRouterEncoder::new(
                 TychoCommonChain::Ethereum.into(),
                 get_swap_encoder_registry(),
-                None,
                 Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap(),
-                false,
+                UserTransferType::TransferFrom,
+                None,
             )
             .unwrap()
         }
         #[test]
+        #[allow(deprecated)]
         fn test_encode_router_calldata_single_swap() {
             let encoder = get_tycho_router_encoder();
             let eth_amount_in = BigUint::from(1000u32);
@@ -520,6 +521,7 @@ mod tests {
         }
 
         #[test]
+        #[allow(deprecated)]
         fn test_encode_router_calldata_single_swap_group() {
             let encoder = get_tycho_router_encoder();
             let solution = Solution {
@@ -543,6 +545,7 @@ mod tests {
         }
 
         #[test]
+        #[allow(deprecated)]
         fn test_encode_router_calldata_sequential_swap() {
             let encoder = get_tycho_router_encoder();
             let eth_amount_in = BigUint::from(1000u32);

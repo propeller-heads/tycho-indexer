@@ -1,5 +1,10 @@
-use std::io::{self, Read};
+use std::{
+    io::{self, Read},
+    str::FromStr,
+};
 
+use alloy::signers::local::PrivateKeySigner;
+use alloy_primitives::B256;
 use alloy_sol_types::SolValue;
 use clap::{Parser, Subcommand};
 use tycho_common::{hex_bytes::Bytes, models::Chain};
@@ -8,7 +13,7 @@ use tycho_execution::encoding::{
         approvals::permit2::PermitSingle,
         encoder_builders::{TychoExecutorEncoderBuilder, TychoRouterEncoderBuilder},
     },
-    models::Solution,
+    models::{Solution, UserTransferType},
     tycho_encoder::TychoEncoder,
 };
 
@@ -56,7 +61,7 @@ pub struct Cli {
     #[arg(short, long)]
     swapper_pk: Option<String>,
     #[arg(short, long)]
-    token_in_already_in_router: Option<bool>,
+    user_transfer_type: Option<UserTransferType>,
 }
 
 #[derive(Subcommand)]
@@ -91,10 +96,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 builder = builder.router_address(router_address);
             }
             if let Some(swapper_pk) = cli.swapper_pk {
-                builder = builder.swapper_pk(swapper_pk);
+                let pk = B256::from_str(&swapper_pk)?;
+                builder = builder.signer(PrivateKeySigner::from_bytes(&pk)?);
             }
-            if let Some(token_in_already_in_router) = cli.token_in_already_in_router {
-                builder = builder.token_in_already_in_router(token_in_already_in_router);
+            if let Some(user_transfer_type) = cli.user_transfer_type {
+                builder = builder.user_transfer_type(user_transfer_type);
             }
             builder.build()?
         }
@@ -111,17 +117,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "n_tokens": format!("{}", &encoded_solutions[0].n_tokens),
             "permit": match encoded_solutions[0].permit.as_ref() {
         Some(permit) => {
-            match PermitSingle::try_from(permit.clone()) {
+            match PermitSingle::try_from(permit) {
                 Ok(sol_permit) => format!("0x{}", hex::encode(sol_permit.abi_encode())),
-                Err(_) => String::new(), // or log or panic or whatever fallback
+                Err(_) => String::new(),
             }
         }
         None => String::new(),
     },
-            "signature": encoded_solutions[0].signature
-                .as_ref()
-                .map(|signature| format!("0x{}", hex::encode(signature)))
-                .unwrap_or_else(String::new),
         });
     // Output the encoded result as JSON to stdout
     println!(
