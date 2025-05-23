@@ -85,12 +85,12 @@ pub trait Extractor: Send + Sync {
     async fn get_last_processed_block(&self) -> Option<Block>;
 
     async fn handle_tick_scoped_data(
-        &self,
+        &mut self,
         inp: BlockScopedData,
     ) -> Result<Option<ExtractorMsg>, ExtractionError>;
 
     async fn handle_revert(
-        &self,
+        &mut self,
         inp: BlockUndoSignal,
     ) -> Result<Option<ExtractorMsg>, ExtractionError>;
 
