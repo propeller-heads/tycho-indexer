@@ -1411,7 +1411,7 @@ impl From<models::blockchain::TracingResult> for TracingResult {
 #[derive(Serialize, PartialEq, ToSchema, Eq, Clone)]
 pub struct TracedEntryPointRequestResponse {
     pub traced_entry_points:
-        HashMap<ProtocolComponentId, Vec<(EntryPointWithTracingParams, TracingResult)>>,
+        HashMap<String, Vec<(EntryPointWithTracingParams, Vec<TracingResult>)>>,
     pub pagination: PaginationResponse,
 }
 
