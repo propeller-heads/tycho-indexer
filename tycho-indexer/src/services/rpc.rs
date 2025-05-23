@@ -14,11 +14,10 @@ use reqwest::StatusCode;
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
-    dto::{self, PaginationResponse, TracingResult},
+    dto::{self, PaginationResponse},
     models::{
-        blockchain::{BlockAggregatedChanges, EntryPointWithTracingParams},
-        protocol::QualityRange,
-        Address, Chain, ComponentId, EntryPointId, PaginationParams,
+        blockchain::BlockAggregatedChanges, protocol::QualityRange, Address, Chain, EntryPointId,
+        PaginationParams,
     },
     storage::{
         BlockIdentifier, BlockOrTimestamp, EntryPointFilter, Gateway, StorageError, Version,
@@ -125,7 +124,6 @@ where
 
         let traced_entry_point_cache = RpcCache::<
             dto::TracedEntryPointRequestBody,
-            // TODO is this a good capacity?
             dto::TracedEntryPointRequestResponse,
         >::new("traced_entry_points", 500, 7 * 60);
 
@@ -784,15 +782,11 @@ where
     ) -> Result<dto::TracedEntryPointRequestResponse, RpcError> {
         info!(?request, "Getting traced entry points.");
 
-        // TODO AFAIU this cache is automatically written to by the fallback method during a cache
-        //  miss. Is this correct?
         self.traced_entry_point_cache
             .get(request.clone(), |r| async {
                 self.get_traced_entry_points_inner(r)
                     .await
                     .map(|res| {
-                        // TODO should I check that all requested components are in the response?
-                        // TODO why do we not cache if it's the last page?
                         let last_page = res.pagination.total_pages() - 1;
                         (res, request.pagination.page < last_page)
                     })
@@ -827,13 +821,13 @@ where
             .flat_map(|entry_points_with_tracing_params| {
                 entry_points_with_tracing_params
                     .iter()
-                    .map(
-                        (|entry_point: EntryPointWithTracingParams| {
-                            entry_point.entry_point.external_id
-                        })
-                        .cloned()
-                        .collect(),
-                    )
+                    .map(|entry_point| {
+                        entry_point
+                            .clone()
+                            .entry_point
+                            .external_id
+                    })
+                    .collect::<HashSet<EntryPointId>>()
             })
             .collect();
 
@@ -847,28 +841,34 @@ where
             })?;
 
         // Match traced entry points back to their component ids
-        let traced_entry_points_by_component: HashMap<
-            ComponentId,
-            Vec<(EntryPointWithTracingParams, TracingResult)>,
-        > = entry_points_tracing_params_data
+        let traced_entry_points_by_component = entry_points_tracing_params_data
             .entity
             .into_iter()
             .map(|(component_id, entry_points_set)| {
                 let pairs = entry_points_set
                     .into_iter()
-                    .filter_map(|entry_point_with_params| {
+                    .map(|entry_point_with_params| {
                         let entry_point_id = entry_point_with_params
+                            .clone()
                             .entry_point
                             .external_id;
-                        traced_entry_points
+                        let tracing_results: Vec<dto::TracingResult> = traced_entry_points
                             .get(&entry_point_id)
                             // TODO check if cloning is necessary (this can be inefficient)
-                            .map(|trace| (entry_point_with_params.clone(), trace.clone()))
+                            .map(|trace_results| {
+                                trace_results
+                                    .clone()
+                                    .into_iter()
+                                    .map(|trace_result| trace_result.into())
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        (entry_point_with_params.into(), tracing_results)
                     })
-                    .collect::<Vec<_>>();
+                    .collect::<Vec<(dto::EntryPointWithTracingParams, Vec<dto::TracingResult>)>>();
                 (component_id, pairs)
             })
-            .collect::<HashMap<ComponentId, Vec<(EntryPointWithTracingParams, TracingResult)>>>();
+            .collect::<HashMap<String, Vec<(dto::EntryPointWithTracingParams, Vec<dto::TracingResult>)>>>();
 
         Ok(dto::TracedEntryPointRequestResponse {
             traced_entry_points: traced_entry_points_by_component,
@@ -1178,15 +1178,15 @@ pub async fn component_tvl<G: Gateway>(
     post,
     path = "/v1/traced_entry_points",
     responses(
-    (status = 200, description = "OK", body = ProtocolSystemsRequestResponse),
+    (status = 200, description = "OK", body = TracedEntryPointRequestResponse),
     ),
-    request_body = ProtocolSystemsRequestBody,
+    request_body = TracedEntryPointRequestBody,
     security(
     ("apiKey" = [])
     ),
 )]
 pub async fn traced_entry_points<G: Gateway>(
-    body: web::Json<dto::ProtocolSystemsRequestBody>,
+    body: web::Json<dto::TracedEntryPointRequestBody>,
     handler: web::Data<RpcHandler<G>>,
 ) -> HttpResponse {
     // Tracing and metrics

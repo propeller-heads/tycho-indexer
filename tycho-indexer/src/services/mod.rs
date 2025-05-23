@@ -18,7 +18,8 @@ use tycho_common::{
         ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody, ProtocolStateRequestResponse,
         ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, ResponseAccount,
         ResponseProtocolState, ResponseToken, StateRequestBody, StateRequestResponse,
-        TokensRequestBody, TokensRequestResponse, VersionParam,
+        TokensRequestBody, TokensRequestResponse, TracedEntryPointRequestBody,
+        TracedEntryPointRequestResponse, VersionParam,
     },
     storage::Gateway,
 };

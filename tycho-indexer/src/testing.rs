@@ -37,43 +37,114 @@ mock! {
         async fn save_state(&self, state: &ExtractionState) -> Result<(), StorageError>;
     }
 
-    #[async_trait]
     impl EntryPointGateway for Gateway {
-        async fn insert_entry_points(
-            &self,
-            entry_points: &HashMap<ComponentId, HashSet<EntryPoint>>,
-        ) -> Result<(), StorageError>;
-
-        async fn insert_entry_point_tracing_params(
-            &self,
-            entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
-        ) -> Result<(), StorageError>;
-
-        async fn get_entry_points<'life0, 'async_trait>(
-            &self,
-            filter: EntryPointFilter,
-            pagination_params: Option<&'life0 PaginationParams>,
-        ) -> Result<WithTotal<HashMap<ComponentId, HashSet<EntryPoint>>>, StorageError>
+        #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
+        fn insert_entry_points<'life0, 'life1, 'async_trait>(
+            &'life0 self,
+            entry_points: &'life1 HashMap<ComponentId, HashSet<EntryPoint>>,
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<Output = Result<(), StorageError>>
+                    + ::core::marker::Send
+                    + 'async_trait,
+            >,
+        >
         where
-            'life0: 'async_trait;
-
-        async fn get_entry_points_tracing_params<'life0, 'async_trait>(
-            &self,
-            filter: EntryPointFilter,
-            pagination_params: Option<&'life0 PaginationParams>,
-        ) -> Result<WithTotal<HashMap<ComponentId, HashSet<EntryPointWithTracingParams>>>, StorageError>
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            Self: 'async_trait;
+        #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
+        fn insert_entry_point_tracing_params<'life0, 'life1, 'async_trait>(
+            &'life0 self,
+            entry_points_params: &'life1 HashMap<
+                EntryPointId,
+                HashSet<(TracingParams, Option<ComponentId>)>,
+            >,
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<Output = Result<(), StorageError>>
+                    + ::core::marker::Send
+                    + 'async_trait,
+            >,
+        >
         where
-            'life0: 'async_trait;
-
-        async fn upsert_traced_entry_points(
-            &self,
-            traced_entry_points: &[TracedEntryPoint],
-        ) -> Result<(), StorageError>;
-
-        async fn get_traced_entry_points(
-            &self,
-            entry_points: &HashSet<EntryPointId>,
-        ) -> Result<HashMap<EntryPointId, Vec<TracingResult>>, StorageError>;
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            Self: 'async_trait;
+        #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
+        fn get_entry_points<'life0, 'life1, 'async_trait>(
+            &'life0 self,
+            filter: EntryPointFilter,
+            pagination_params: Option<&'life1 PaginationParams>,
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<
+                        Output = Result<
+                            WithTotal<HashMap<ComponentId, HashSet<EntryPoint>>>,
+                            StorageError,
+                        >,
+                    > + ::core::marker::Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            Self: 'async_trait;
+        #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
+        fn get_entry_points_tracing_params<'life0, 'life1, 'async_trait>(
+            &'life0 self,
+            filter: EntryPointFilter,
+            pagination_params: Option<&'life1 PaginationParams>,
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<
+                        Output = Result<
+                            WithTotal<HashMap<ComponentId, HashSet<EntryPointWithTracingParams>>>,
+                            StorageError,
+                        >,
+                    > + ::core::marker::Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            Self: 'async_trait;
+        #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
+        fn upsert_traced_entry_points<'life0, 'life1, 'async_trait>(
+            &'life0 self,
+            traced_entry_points: &'life1 [TracedEntryPoint],
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<Output = Result<(), StorageError>>
+                    + ::core::marker::Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            Self: 'async_trait;
+        #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
+        fn get_traced_entry_points<'life0, 'life1, 'async_trait>(
+            &'life0 self,
+            entry_points: &'life1 HashSet<EntryPointId>,
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<
+                        Output = Result<
+                            HashMap<EntryPointId, Vec<TracingResult>>,
+                            StorageError,
+                        >,
+                    > + ::core::marker::Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            Self: 'async_trait;
     }
 
     #[async_trait]
