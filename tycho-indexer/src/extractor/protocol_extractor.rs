@@ -70,7 +70,7 @@ pub struct ProtocolExtractor<G, T, DCI> {
     /// Allows to attach some custom logic, e.g. to fix encoding bugs without resync.
     post_processor: Option<fn(BlockChanges) -> BlockChanges>,
     reorg_buffer: Mutex<ReorgBuffer<BlockUpdateWithCursor<BlockChanges>>>,
-    dci_plugin: Option<DCI>,
+    dci_plugin: Option<Arc<Mutex<DCI>>>,
 }
 
 impl<G, T, DCI> ProtocolExtractor<G, T, DCI>
@@ -94,7 +94,7 @@ where
     ) -> Result<Self, ExtractionError> {
         let dci_plugin = if let Some(mut plugin) = dci_plugin {
             plugin.initialize().await?;
-            Some(plugin)
+            Some(Arc::new(Mutex::new(plugin)))
         } else {
             None
         };
@@ -628,7 +628,7 @@ where
     #[allow(deprecated)]
     #[instrument(skip_all, fields(block_number))]
     async fn handle_tick_scoped_data(
-        &mut self,
+        &self,
         inp: BlockScopedData,
     ) -> Result<Option<ExtractorMsg>, ExtractionError> {
         let data = inp
@@ -717,8 +717,10 @@ where
         }
 
         // Send message to DCI plugin
-        if let Some(dci_plugin) = &mut self.dci_plugin {
+        if let Some(dci_plugin) = &self.dci_plugin {
             dci_plugin
+                .lock()
+                .await
                 .process_block_update(&mut msg)
                 .await?;
         }
@@ -793,7 +795,7 @@ where
     #[instrument(skip_all, fields(target_hash, target_number))]
     #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
     async fn handle_revert(
-        &mut self,
+        &self,
         inp: BlockUndoSignal,
     ) -> Result<Option<ExtractorMsg>, ExtractionError> {
         let block_ref = inp
@@ -834,8 +836,10 @@ where
         }
 
         // Send revert to DCI plugin
-        if let Some(dci_plugin) = &mut self.dci_plugin {
+        if let Some(dci_plugin) = &self.dci_plugin {
             dci_plugin
+                .lock()
+                .await
                 .process_revert(block_ref.number)
                 .await?;
         }
@@ -1200,7 +1204,7 @@ where
             component_balances: combined_component_balances,
             account_balances: combined_account_balances,
             component_tvl: HashMap::new(),
-            trace_results: HashMap::new(), // TODO: get reverted tracing results
+            trace_results: HashMap::new(),
         };
 
         debug!("Successfully retrieved all previous states during revert!");
@@ -1653,7 +1657,7 @@ mod test {
             .times(1)
             .returning(|_| Ok(Block::default()));
 
-        let mut extractor = create_extractor(gw).await;
+        let extractor = create_extractor(gw).await;
 
         extractor
             .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
@@ -1702,7 +1706,7 @@ mod test {
             .times(1)
             .returning(|_| Ok(Block::default()));
 
-        let mut extractor = create_extractor(gw).await;
+        let extractor = create_extractor(gw).await;
 
         extractor
             .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
@@ -1761,7 +1765,7 @@ mod test {
             .times(1)
             .returning(|_| Ok(Block::default()));
 
-        let mut extractor = create_extractor(gw).await;
+        let extractor = create_extractor(gw).await;
 
         extractor
             .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
@@ -1819,7 +1823,7 @@ mod test {
             .times(1)
             .returning(|_| Ok(Block::default()));
 
-        let mut extractor = create_extractor(gw).await;
+        let extractor = create_extractor(gw).await;
 
         let inp = pb_fixtures::pb_block_scoped_data((), None, None);
         let res = extractor
@@ -1852,7 +1856,7 @@ mod test {
             .times(1)
             .returning(|_| Ok(Block::default()));
 
-        let mut extractor = create_extractor(gw).await;
+        let extractor = create_extractor(gw).await;
 
         let block_1 = pb_fixtures::pb_blocks(1);
         let mut block_2 = pb_fixtures::pb_blocks(2);
@@ -2826,7 +2830,7 @@ mod test_serial_db {
                 chrono::Duration::seconds(900),
                 Arc::new(cached_gw),
             );
-            let mut extractor = ProtocolExtractor::<
+            let extractor = ProtocolExtractor::<
                 ExtractorPgGateway,
                 MockTokenPreProcessor,
                 MockDynamicContractIndexerTrait,
@@ -3008,7 +3012,7 @@ mod test_serial_db {
                 Arc::new(cached_gw),
             );
             let preprocessor = get_mocked_token_pre_processor();
-            let mut extractor = ProtocolExtractor::<
+            let extractor = ProtocolExtractor::<
                 ExtractorPgGateway,
                 MockTokenPreProcessor,
                 MockDynamicContractIndexerTrait,
@@ -3209,7 +3213,7 @@ mod test_serial_db {
                 Arc::new(cached_gw),
             );
             let preprocessor = get_mocked_token_pre_processor();
-            let mut extractor = ProtocolExtractor::<
+            let extractor = ProtocolExtractor::<
                 ExtractorPgGateway,
                 MockTokenPreProcessor,
                 MockDynamicContractIndexerTrait,

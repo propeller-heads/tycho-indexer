@@ -110,7 +110,7 @@ impl MessageSender for ExtractorHandle {
 type SubscriptionsMap = HashMap<u64, Sender<ExtractorMsg>>;
 
 pub struct ExtractorRunner {
-    extractor: Arc<Mutex<dyn Extractor>>,
+    extractor: Arc<dyn Extractor>,
     substreams: SubstreamsStream,
     subscriptions: Arc<Mutex<SubscriptionsMap>>,
     next_subscriber_id: u64,
@@ -122,7 +122,7 @@ pub struct ExtractorRunner {
 
 impl ExtractorRunner {
     pub fn new(
-        extractor: Arc<Mutex<dyn Extractor>>,
+        extractor: Arc<dyn Extractor>,
         substreams: SubstreamsStream,
         subscriptions: Arc<Mutex<SubscriptionsMap>>,
         control_rx: Receiver<ControlMessage>,
@@ -145,7 +145,7 @@ impl ExtractorRunner {
             .unwrap_or_else(|| tokio::runtime::Handle::current());
 
         runtime.spawn(async move {
-            let id = self.extractor.lock().await.get_id();
+            let id = self.extractor.get_id();
             loop {
                 // this is the main info span of an extractor
                 let loop_span = tracing::info_span!(
@@ -189,7 +189,7 @@ impl ExtractorRunner {
                                 let start_time = std::time::Instant::now();
 
                                 // TODO: change interface to take a reference to avoid this clone
-                                match self.extractor.lock().await.handle_tick_scoped_data(data.clone()).await {
+                                match self.extractor.handle_tick_scoped_data(data.clone()).await {
                                     Ok(Some(msg)) => {
                                         trace!("Propagating new block data message.");
                                         Self::propagate_msg(&self.subscriptions, msg).await
@@ -213,7 +213,7 @@ impl ExtractorRunner {
                             }
                             Some(Ok(BlockResponse::Undo(undo_signal))) => {
                                 info!(block=?&undo_signal.last_valid_block,  "Revert requested!");
-                                match self.extractor.lock().await.handle_revert(undo_signal.clone()).await {
+                                match self.extractor.handle_revert(undo_signal.clone()).await {
                                     Ok(Some(msg)) => {
                                         trace!("Propagating block undo message.");
                                         Self::propagate_msg(&self.subscriptions, msg).await
@@ -363,7 +363,7 @@ pub struct ExtractorBuilder {
     endpoint_url: String,
     s3_bucket: Option<String>,
     token: String,
-    extractor: Option<Arc<Mutex<dyn Extractor>>>,
+    extractor: Option<Arc<dyn Extractor>>,
     final_block_only: bool,
     /// Handle of the tokio runtime on which the extraction tasks will be run.
     /// If 'None' the default runtime will be used.
@@ -424,7 +424,7 @@ impl ExtractorBuilder {
     }
 
     #[cfg(test)]
-    pub fn set_extractor(mut self, val: Arc<Mutex<dyn Extractor>>) -> Self {
+    pub fn set_extractor(mut self, val: Arc<dyn Extractor>) -> Self {
         self.extractor = Some(val);
         self
     }
@@ -529,7 +529,7 @@ impl ExtractorBuilder {
             None
         };
 
-        self.extractor = Some(Arc::new(Mutex::new(
+        self.extractor = Some(Arc::new(
             ProtocolExtractor::<
                 ExtractorPgGateway,
                 EthereumTokenPreProcessor,
@@ -551,7 +551,7 @@ impl ExtractorBuilder {
                 dci_plugin,
             )
             .await?,
-        )));
+        ));
 
         Ok(self)
     }
@@ -562,7 +562,7 @@ impl ExtractorBuilder {
             .extractor
             .clone()
             .expect("Extractor not set");
-        let extractor_id = extractor.lock().await.get_id();
+        let extractor_id = extractor.get_id();
 
         tracing::Span::current().record("id", format!("{extractor_id}"));
 
@@ -580,11 +580,7 @@ impl ExtractorBuilder {
                 .map_err(|err| ExtractionError::SubstreamsError(err.to_string()))?,
         );
 
-        let cursor = extractor
-            .lock()
-            .await
-            .get_cursor()
-            .await;
+        let cursor = extractor.get_cursor().await;
         let stream = SubstreamsStream::new(
             endpoint,
             Some(cursor),
@@ -692,7 +688,7 @@ mod test {
             .returning(ExtractorIdentity::default);
 
         // Build the ExtractorRunnerBuilder
-        let extractor = Arc::new(Mutex::new(mock_extractor));
+        let extractor = Arc::new(mock_extractor);
         let builder = ExtractorBuilder::new(
             &ExtractorConfig::new(
                 "test_module".to_owned(),
