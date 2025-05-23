@@ -1284,7 +1284,7 @@ impl ProtocolStateRequestResponse {
     }
 }
 
-#[derive(Clone, PartialEq, Hash, Eq)]
+#[derive(Serialize, Clone, PartialEq, Hash, Eq)]
 pub struct ProtocolComponentId {
     pub chain: Chain,
     pub system: String,
@@ -1320,6 +1320,104 @@ impl ProtocolSystemsRequestResponse {
     pub fn new(protocol_systems: Vec<String>, pagination: PaginationResponse) -> Self {
         Self { protocol_systems, pagination }
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone)]
+pub struct TracedEntryPointRequestBody {
+    pub chain: Chain,
+    /// Filters by protocol, required to correctly apply unconfirmed state from
+    /// ReorgBuffers
+    pub protocol_system: String,
+    /// Filter by component ids
+    pub component_ids: Option<Vec<String>>,
+    /// Max page size supported is 500
+    #[serde(default)]
+    pub pagination: PaginationParams,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
+pub struct EntryPoint {
+    pub external_id: String,
+    #[serde(with = "hex_bytes")]
+    pub target: Bytes,
+    pub signature: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
+pub struct RPCTracerParams {
+    pub caller: Option<Bytes>,
+    pub calldata: Bytes,
+}
+
+impl From<models::blockchain::RPCTracerParams> for RPCTracerParams {
+    fn from(value: models::blockchain::RPCTracerParams) -> Self {
+        RPCTracerParams { caller: value.caller, calldata: value.calldata }
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
+#[serde(tag = "method", rename_all = "lowercase")]
+pub enum TracingParams {
+    RPCTracer(RPCTracerParams),
+}
+
+impl From<models::blockchain::TracingParams> for TracingParams {
+    fn from(value: models::blockchain::TracingParams) -> Self {
+        match value {
+            models::blockchain::TracingParams::RPCTracer(params) => {
+                TracingParams::RPCTracer(params.into())
+            }
+        }
+    }
+}
+
+impl From<models::blockchain::EntryPoint> for EntryPoint {
+    fn from(value: models::blockchain::EntryPoint) -> Self {
+        EntryPoint {
+            external_id: value.external_id,
+            target: value.target,
+            signature: value.signature,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, ToSchema, Eq, Clone)]
+pub struct EntryPointWithTracingParams {
+    pub entry_point: EntryPoint,
+    pub params: TracingParams,
+}
+
+impl From<models::blockchain::EntryPointWithTracingParams> for EntryPointWithTracingParams {
+    fn from(value: models::blockchain::EntryPointWithTracingParams) -> Self {
+        EntryPointWithTracingParams {
+            entry_point: value.entry_point.into(),
+            params: value.params.into(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Clone)]
+pub struct TracingResult {
+    pub retriggers: HashSet<(Bytes, Bytes)>,
+    pub called_addresses: HashSet<Bytes>,
+}
+
+impl From<models::blockchain::TracingResult> for TracingResult {
+    fn from(value: models::blockchain::TracingResult) -> Self {
+        TracingResult { retriggers: value.retriggers, called_addresses: value.called_addresses }
+    }
+}
+
+#[derive(Serialize, PartialEq, ToSchema, Eq, Clone)]
+pub struct TracedEntryPointRequestResponse {
+    pub traced_entry_points:
+        HashMap<String, Vec<(EntryPointWithTracingParams, Vec<TracingResult>)>>,
+    pub pagination: PaginationResponse,
+}
+
+pub struct AddEntrypointRequestBody {
+    pub entrypoints_with_tracing_data: Vec<(String, Vec<EntryPointWithTracingParams>)>,
+    pub chain: Chain,
 }
 
 #[cfg(test)]
