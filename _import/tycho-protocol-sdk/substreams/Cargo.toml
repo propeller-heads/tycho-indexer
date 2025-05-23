@@ -15,6 +15,7 @@ members = [
     "ethereum-template-singleton",
     "ethereum-uniswap-v4",
     "ethereum-ekubo-v2",
+    "ethereum-maverick-v2",
 ]
 resolver = "2"
 

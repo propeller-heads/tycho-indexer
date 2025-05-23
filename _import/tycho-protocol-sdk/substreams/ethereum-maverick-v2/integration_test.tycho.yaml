@@ -1,0 +1,40 @@
+substreams_yaml_path: ./ethereum-maverick-v2.yaml
+adapter_contract: "MaverickV2SwapAdapter"
+adapter_build_signature: "constructor(address,address)"
+adapter_build_args: "0x0A7e848Aca42d879EF06507Fca0E7b33A0a63c1e,0xb40AfdB85a07f37aE217E7D6462e609900dD8D7A"
+skip_balance_check: false
+initialized_accounts:
+  - "0x0A7e848Aca42d879EF06507Fca0E7b33A0a63c1e" # Factory
+  - "0xb40AfdB85a07f37aE217E7D6462e609900dD8D7A" # Quoter
+protocol_type_names:
+  - "maverick_v2_pool"
+tests:
+  - name: test_pool_creation
+    start_block: 20122172
+    stop_block: 20122272
+    expected_components:
+      - id: "0xEB1da432D5C1a9FDF52aA5D37698f34706F91397"
+        tokens:
+          - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" # WETH
+          - "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" # USDC
+        static_attributes:
+          fee_a_in: "0x5af3107a4000"
+          fee_b_in: "0x5af3107a4000"
+          tick_spacing: "0x08b8"
+          kinds: "0x01"
+        creation_tx: "0xb181cf013f46b5bd13a0244733c463b120b3d7eef68c74c11e0f0e4b6a0027e4"
+
+  - name: test_gho_usdc_pool_creation
+    start_block: 20127132
+    stop_block: 20127232
+    expected_components:
+      - id: "0x14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67"
+        tokens:
+          - "0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f" # GHO
+          - "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" # USDC
+        static_attributes:
+          fee_a_in: "0x5af3107a4000"
+          fee_b_in: "0x5af3107a4000"
+          tick_spacing: "0x2"
+          kinds: "0xf"
+        creation_tx: "0xa1c5c6a7d5886caefa4ab660575f0d3a63297d4859644039fe656edcd031a9dc"
