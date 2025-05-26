@@ -4,7 +4,7 @@ use alloy::{
     primitives::U256,
     signers::{local::PrivateKeySigner, Signature, SignerSync},
 };
-use alloy_primitives::{Address, Keccak256};
+use alloy_primitives::Address;
 use alloy_sol_types::{eip712_domain, SolStruct, SolValue};
 use num_bigint::BigUint;
 use tycho_common::Bytes;
@@ -13,33 +13,12 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::PermitSingle,
+        utils,
         utils::{biguint_to_u256, bytes_to_address},
     },
     models,
     models::{EncodedSolution, NativeAction, Solution, Transaction, UserTransferType},
 };
-
-/// Encodes the input data for a function call to the given function selector.
-pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
-    let mut hasher = Keccak256::new();
-    hasher.update(selector.as_bytes());
-    let selector_bytes = &hasher.finalize()[..4];
-    let mut call_data = selector_bytes.to_vec();
-    // Remove extra prefix if present (32 bytes for dynamic data)
-    // Alloy encoding is including a prefix for dynamic data indicating the offset or length
-    // but at this point we don't want that
-    if encoded_args.len() > 32 &&
-        encoded_args[..32] ==
-            [0u8; 31]
-                .into_iter()
-                .chain([32].to_vec())
-                .collect::<Vec<u8>>()
-    {
-        encoded_args = encoded_args[32..].to_vec();
-    }
-    call_data.extend(encoded_args);
-    call_data
-}
 
 /// Encodes a transaction for the Tycho Router using one of its supported swap methods.
 ///
@@ -240,7 +219,7 @@ pub fn encode_tycho_router_call(
         Err(EncodingError::FatalError("Invalid selector for Tycho router".to_string()))?
     };
 
-    let contract_interaction = encode_input(&encoded_solution.selector, method_calldata);
+    let contract_interaction = utils::encode_input(&encoded_solution.selector, method_calldata);
     let value = if solution.given_token == native_address {
         solution.given_amount.clone()
     } else {
