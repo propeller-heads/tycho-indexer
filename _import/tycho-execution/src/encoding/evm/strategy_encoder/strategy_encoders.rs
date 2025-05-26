@@ -551,15 +551,14 @@ mod tests {
 
     fn get_permit(router_address: Bytes, solution: &Solution) -> PermitSingle {
         let permit2 = Permit2::new().unwrap();
-        let permit_single = permit2
+        permit2
             .get_permit(
                 &router_address,
                 &solution.sender,
                 &solution.given_token,
                 &solution.given_amount,
             )
-            .unwrap();
-        permit_single
+            .unwrap()
     }
 
     fn get_signer() -> PrivateKeySigner {

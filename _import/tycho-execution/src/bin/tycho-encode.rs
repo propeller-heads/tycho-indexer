@@ -1,10 +1,5 @@
-use std::{
-    io::{self, Read},
-    str::FromStr,
-};
+use std::io::{self, Read};
 
-use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::B256;
 use alloy_sol_types::SolValue;
 use clap::{Parser, Subcommand};
 use tycho_common::{hex_bytes::Bytes, models::Chain};
@@ -58,6 +53,8 @@ pub struct Cli {
     router_address: Option<Bytes>,
     #[arg(short, long)]
     user_transfer_type: Option<UserTransferType>,
+    #[arg(short, long)]
+    swapper_pk: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -93,6 +90,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             if let Some(user_transfer_type) = cli.user_transfer_type {
                 builder = builder.user_transfer_type(user_transfer_type);
+            }
+            #[allow(deprecated)]
+            if let Some(swapper_pk) = cli.swapper_pk {
+                builder = builder.swapper_pk(swapper_pk);
             }
             builder.build()?
         }

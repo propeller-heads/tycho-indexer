@@ -175,7 +175,7 @@ impl Permit2 {
             sigDeadline: sig_deadline,
         };
 
-        Ok(models::PermitSingle::try_from(&permit_single)?)
+        models::PermitSingle::try_from(&permit_single)
     }
 }
 
