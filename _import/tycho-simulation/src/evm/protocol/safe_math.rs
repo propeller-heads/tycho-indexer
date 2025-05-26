@@ -15,6 +15,9 @@ pub fn safe_mul_u256(a: U256, b: U256) -> Result<U256, SimulationError> {
 }
 
 pub fn safe_div_u256(a: U256, b: U256) -> Result<U256, SimulationError> {
+    if b.is_zero() {
+        return Err(SimulationError::FatalError("Division by zero".to_string()));
+    }
     let res = a.checked_div(b);
     _construc_result_u256(res)
 }
@@ -51,6 +54,9 @@ pub fn safe_mul_u512(a: U512, b: U512) -> Result<U512, SimulationError> {
 }
 
 pub fn safe_div_u512(a: U512, b: U512) -> Result<U512, SimulationError> {
+    if b.is_zero() {
+        return Err(SimulationError::FatalError("Division by zero".to_string()));
+    }
     let res = a.checked_div(b);
     _construc_result_u512(res)
 }
@@ -76,7 +82,7 @@ pub fn div_mod_u512(a: U512, b: U512) -> Result<(U512, U512), SimulationError> {
 
 pub fn _construc_result_u512(res: Option<U512>) -> Result<U512, SimulationError> {
     match res {
-        None => Err(SimulationError::FatalError("U256 arithmetic overflow".to_string())),
+        None => Err(SimulationError::FatalError("U512 arithmetic overflow".to_string())),
         Some(value) => Ok(value),
     }
 }
@@ -87,6 +93,9 @@ pub fn safe_mul_i256(a: I256, b: I256) -> Result<I256, SimulationError> {
 }
 
 pub fn safe_div_i256(a: I256, b: I256) -> Result<I256, SimulationError> {
+    if b.is_zero() {
+        return Err(SimulationError::FatalError("Division by zero".to_string()));
+    }
     let res = a.checked_div(b);
     _construc_result_i256(res)
 }
@@ -103,7 +112,7 @@ pub fn safe_sub_i256(a: I256, b: I256) -> Result<I256, SimulationError> {
 
 pub fn _construc_result_i256(res: Option<I256>) -> Result<I256, SimulationError> {
     match res {
-        None => Err(SimulationError::FatalError("U256 arithmetic overflow".to_string())),
+        None => Err(SimulationError::FatalError("I256 arithmetic overflow".to_string())),
         Some(value) => Ok(value),
     }
 }

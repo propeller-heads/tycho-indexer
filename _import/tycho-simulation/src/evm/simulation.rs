@@ -15,7 +15,7 @@ use revm::{
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use strum_macros::Display;
 use tokio::runtime::{Handle, Runtime};
-use tracing::{debug, info};
+use tracing::debug;
 
 use super::{
     account_storage::StateUpdate,
@@ -254,7 +254,6 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(
                 gas_used: None,
             }),
             EVMError::Database(db_error) => {
-                info!("Are we at database error? {db_error:?}", db_error = &db_error);
                 Err(SimulationEngineError::StorageError(format!("Storage error: {db_error:?}")))
             }
             EVMError::Custom(err) => Err(SimulationEngineError::TransactionError {
