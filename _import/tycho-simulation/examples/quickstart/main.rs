@@ -34,7 +34,7 @@ use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder,
-        encoding_utils::encode_input,
+        utils::encode_input,
     },
     models,
     models::{EncodedSolution, Solution, Swap, Transaction, UserTransferType},

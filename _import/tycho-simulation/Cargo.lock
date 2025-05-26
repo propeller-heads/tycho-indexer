@@ -8118,8 +8118,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.93.0"
-source = "git+https://github.com/propeller-heads/tycho-execution.git?rev=2af96e2f7990918fd14623c55d8ee3504980461e#2af96e2f7990918fd14623c55d8ee3504980461e"
+version = "0.94.0"
+source = "git+https://github.com/propeller-heads/tycho-execution.git?rev=5ddd2a9cd7d41d8899ff3667ca2587dc89fdce6a#5ddd2a9cd7d41d8899ff3667ca2587dc89fdce6a"
 dependencies = [
  "alloy",
  "alloy-primitives",
