@@ -1410,8 +1410,7 @@ impl From<models::blockchain::TracingResult> for TracingResult {
 
 #[derive(Serialize, PartialEq, ToSchema, Eq, Clone)]
 pub struct TracedEntryPointRequestResponse {
-    pub traced_entry_points:
-        HashMap<String, Vec<(EntryPointWithTracingParams, Vec<TracingResult>)>>,
+    pub traced_entry_points: HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
     pub pagination: PaginationResponse,
 }
 

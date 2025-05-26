@@ -134,7 +134,7 @@ mock! {
             Box<
                 dyn ::core::future::Future<
                         Output = Result<
-                            HashMap<EntryPointId, Vec<TracingResult>>,
+                            HashMap<EntryPointId,  HashMap<TracingParams, TracingResult>>,
                             StorageError,
                         >,
                     > + ::core::marker::Send
