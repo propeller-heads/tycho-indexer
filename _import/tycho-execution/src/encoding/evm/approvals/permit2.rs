@@ -149,7 +149,7 @@ impl Permit2 {
             ))),
         }
     }
-    /// Creates permit single and signature
+    /// Creates permit single
     pub fn get_permit(
         &self,
         spender: &Bytes,

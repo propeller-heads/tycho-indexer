@@ -29,8 +29,6 @@ use tycho_execution::encoding::{
 ///     "given_amount": "123...",
 ///     "checked_token": "0x...",
 ///     "exact_out": false,
-///     "slippage": 0.01,
-///     "expected_amount": "123...",
 ///     "checked_amount": "123...",
 ///     "swaps": [{
 ///         "component": {
@@ -58,8 +56,6 @@ pub struct Cli {
     executors_file_path: Option<String>,
     #[arg(short, long)]
     router_address: Option<Bytes>,
-    #[arg(short, long)]
-    swapper_pk: Option<String>,
     #[arg(short, long)]
     user_transfer_type: Option<UserTransferType>,
 }
@@ -94,10 +90,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             if let Some(router_address) = cli.router_address {
                 builder = builder.router_address(router_address);
-            }
-            if let Some(swapper_pk) = cli.swapper_pk {
-                let pk = B256::from_str(&swapper_pk)?;
-                builder = builder.signer(PrivateKeySigner::from_bytes(&pk)?);
             }
             if let Some(user_transfer_type) = cli.user_transfer_type {
                 builder = builder.user_transfer_type(user_transfer_type);

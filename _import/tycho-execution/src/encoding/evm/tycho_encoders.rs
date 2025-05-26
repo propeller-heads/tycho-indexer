@@ -271,7 +271,6 @@ impl TychoEncoder for TychoRouterEncoder {
 ///
 /// # Fields
 /// * `swap_encoder_registry`: Registry of swap encoders
-/// * `native_address`: Address of the chain's native token
 #[derive(Clone)]
 pub struct TychoExecutorEncoder {
     swap_encoder_registry: SwapEncoderRegistry,

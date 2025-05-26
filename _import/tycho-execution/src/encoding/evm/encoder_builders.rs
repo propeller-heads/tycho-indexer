@@ -65,6 +65,9 @@ impl TychoRouterEncoderBuilder {
         self
     }
 
+    /// Sets the `signer` for the encoder. This is used to sign permit2 objects. This is only needed
+    /// if you intend to get the full calldata for the transfer. We do not recommend using this
+    /// option, you should sign and create the function calldata entirely on your own.
     pub fn signer(mut self, signer: PrivateKeySigner) -> Self {
         self.signer = Some(signer);
         self
