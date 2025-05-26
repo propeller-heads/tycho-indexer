@@ -51,8 +51,8 @@ type MinGasUsageReturn = U256;
 /// - `min_gas_usage`: Queries the minimum gas usage required for operations within the adapter.
 impl<D: EngineDatabaseInterface + std::clone::Clone + Debug> TychoSimulationContract<D>
 where
-    <D as DatabaseRef>::Error: std::fmt::Debug,
-    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
 {
     pub fn price(
         &self,

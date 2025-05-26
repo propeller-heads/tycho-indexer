@@ -136,8 +136,8 @@ pub(crate) fn brute_force_slots<D: EngineDatabaseInterface + Clone + Debug>(
     engine: &SimulationEngine<D>,
 ) -> Result<(ERC20Slots, ContractCompiler), SimulationError>
 where
-    <D as DatabaseRef>::Error: std::fmt::Debug,
-    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
 {
     let token_contract = TychoSimulationContract::new(*token_addr, engine.clone()).unwrap();
 
