@@ -214,9 +214,9 @@ mod tests {
                 fee: 500,
                 exp: (
                     U256::from_str("1908498483466244238266951834509291").unwrap(),
-                    U256::from_str("1").unwrap(),
-                    U256::from_str("0").unwrap(),
-                    U256::from_str("1").unwrap(),
+                    U256::ZERO,
+                    U256::ZERO,
+                    U256::ZERO,
                 ),
             },
         ];
