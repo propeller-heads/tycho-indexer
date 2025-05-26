@@ -7,7 +7,7 @@ use std::{
 
 use alloy::{
     eips::BlockNumberOrTag,
-    network::{Ethereum, EthereumWallet},
+    network::{primitives::BlockTransactionsKind, Ethereum, EthereumWallet},
     providers::{
         fillers::{FillProvider, JoinFill, WalletFiller},
         Identity, Provider, ProviderBuilder, ReqwestProvider,
@@ -16,11 +16,11 @@ use alloy::{
         simulate::{SimBlock, SimulatePayload},
         TransactionInput, TransactionRequest,
     },
-    signers::local::PrivateKeySigner,
+    signers::{local::PrivateKeySigner, SignerSync},
     transports::http::{Client, Http},
 };
-use alloy_primitives::{Address, Bytes as AlloyBytes, TxKind, B256, U256};
-use alloy_sol_types::SolValue;
+use alloy_primitives::{Address, Bytes as AlloyBytes, PrimitiveSignature, TxKind, B256, U256};
+use alloy_sol_types::{eip712_domain, SolStruct, SolValue};
 use clap::Parser;
 use dialoguer::{theme::ColorfulTheme, Select};
 use foundry_config::NamedChain;
@@ -32,8 +32,12 @@ use tycho_common::Bytes;
 pub mod utils;
 use tycho_execution::encoding::{
     errors::EncodingError,
-    evm::{encoder_builders::TychoRouterEncoderBuilder, encoding_utils::encode_input},
-    models::{EncodedSolution, Solution, Swap, Transaction},
+    evm::{
+        approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder,
+        encoding_utils::encode_input,
+    },
+    models,
+    models::{EncodedSolution, Solution, Swap, Transaction, UserTransferType},
 };
 use tycho_simulation::{
     evm::{
@@ -124,6 +128,9 @@ async fn main() {
         env::var("TYCHO_API_KEY").unwrap_or_else(|_| "sampletoken".to_string());
 
     let tvl_filter = ComponentFilter::with_tvl_range(cli.tvl_threshold, cli.tvl_threshold);
+
+    let pk = B256::from_str(&cli.swapper_pk).expect("Failed to convert swapper pk to B256");
+    let signer = PrivateKeySigner::from_bytes(&pk).expect("Failed to create PrivateKeySigner");
 
     println!("Loading tokens from Tycho... {url}", url = tycho_url.as_str());
     let all_tokens =
@@ -228,7 +235,7 @@ async fn main() {
     // Initialize the encoder
     let encoder = TychoRouterEncoderBuilder::new()
         .chain(chain)
-        .swapper_pk(cli.swapper_pk.clone())
+        .user_transfer_type(UserTransferType::TransferFromPermit2)
         .build()
         .expect("Failed to build encoder");
 
@@ -292,9 +299,11 @@ async fn main() {
                 .clone();
 
             let tx = encode_tycho_router_call(
+                named_chain.into(),
                 encoded_solution.clone(),
                 &solution,
                 chain.native_token().address,
+                signer.clone(),
             )
             .expect("Failed to encode router call");
 
@@ -650,11 +659,19 @@ fn create_solution(
 /// interest of this quickstart. **Users must implement their own encoding logic** to ensure:
 /// - Full control of parameters passed to the router.
 /// - Proper validation and setting of critical inputs such as `minAmountOut`.
-pub fn encode_tycho_router_call(
+fn encode_tycho_router_call(
+    chain_id: u64,
     encoded_solution: EncodedSolution,
     solution: &Solution,
     native_address: Bytes,
+    signer: PrivateKeySigner,
 ) -> Result<Transaction, EncodingError> {
+    let p = encoded_solution
+        .permit
+        .expect("Permit object must be set");
+    let permit = PermitSingle::try_from(&p)
+        .map_err(|_| EncodingError::InvalidInput("Invalid permit".to_string()))?;
+    let signature = sign_permit(chain_id, &p, signer)?;
     let given_amount = biguint_to_u256(&solution.given_amount);
     let min_amount_out = biguint_to_u256(&solution.checked_amount);
     let given_token = Address::from_slice(&solution.given_token);
@@ -669,16 +686,8 @@ pub fn encode_tycho_router_call(
         false,
         false,
         receiver,
-        encoded_solution
-            .permit
-            .ok_or(EncodingError::FatalError(
-                "permit2 object must be set to use permit2".to_string(),
-            ))?,
-        encoded_solution
-            .signature
-            .ok_or(EncodingError::FatalError("Signature must be set to use permit2".to_string()))?
-            .as_bytes()
-            .to_vec(),
+        permit,
+        signature.as_bytes().to_vec(),
         encoded_solution.swaps,
     )
         .abi_encode();
@@ -690,6 +699,36 @@ pub fn encode_tycho_router_call(
         BigUint::ZERO
     };
     Ok(Transaction { to: encoded_solution.interacting_with, value, data: contract_interaction })
+}
+
+/// Signs a Permit2 `PermitSingle` struct using the EIP-712 signing scheme.
+///
+/// This function constructs an EIP-712 domain specific to the Permit2 contract and computes the
+/// hash of the provided `PermitSingle`. It then uses the given `PrivateKeySigner` to produce
+/// a cryptographic signature of the permit.
+///
+/// # Warning
+/// This is only an **example implementation** provided for reference purposes.
+/// **Do not rely on this in production.** You should implement your own version.
+fn sign_permit(
+    chain_id: u64,
+    permit_single: &models::PermitSingle,
+    signer: PrivateKeySigner,
+) -> Result<PrimitiveSignature, EncodingError> {
+    let permit2_address = Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
+        .map_err(|_| EncodingError::FatalError("Permit2 address not valid".to_string()))?;
+    let domain = eip712_domain! {
+        name: "Permit2",
+        chain_id: chain_id,
+        verifying_contract: permit2_address,
+    };
+    let permit_single: PermitSingle = PermitSingle::try_from(permit_single)?;
+    let hash = permit_single.eip712_signing_hash(&domain);
+    signer
+        .sign_hash_sync(&hash)
+        .map_err(|e| {
+            EncodingError::FatalError(format!("Failed to sign permit2 approval with error: {e}"))
+        })
 }
 
 async fn get_tx_requests(
@@ -706,7 +745,7 @@ async fn get_tx_requests(
     chain_id: u64,
 ) -> (TransactionRequest, TransactionRequest) {
     let block = provider
-        .get_block_by_number(BlockNumberOrTag::Latest, false)
+        .get_block_by_number(BlockNumberOrTag::Latest, BlockTransactionsKind::Hashes)
         .await
         .expect("Failed to fetch latest block")
         .expect("Block not found");

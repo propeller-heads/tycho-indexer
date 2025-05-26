@@ -16,7 +16,7 @@ dependencies = [
 name = "_tycho_simulation_py"
 version = "0.101.0"
 dependencies = [
- "alloy 0.5.4",
+ "alloy",
  "num-bigint",
  "pyo3",
  "pyo3-log",
@@ -80,27 +80,6 @@ name = "allocator-api2"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
-
-[[package]]
-name = "alloy"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea8ebf106e84a1c37f86244df7da0c7587e697b71a0d565cce079449b85ac6f8"
-dependencies = [
- "alloy-consensus 0.5.4",
- "alloy-core",
- "alloy-eips 0.5.4",
- "alloy-genesis 0.5.4",
- "alloy-network 0.5.4",
- "alloy-provider 0.5.4",
- "alloy-rpc-client 0.5.4",
- "alloy-rpc-types 0.5.4",
- "alloy-serde 0.5.4",
- "alloy-signer 0.5.4",
- "alloy-signer-local 0.5.4",
- "alloy-transport 0.5.4",
- "alloy-transport-http 0.5.4",
-]
 
 [[package]]
 name = "alloy"
@@ -498,7 +477,6 @@ dependencies = [
  "alloy-rpc-client 0.5.4",
  "alloy-rpc-types-eth 0.5.4",
  "alloy-transport 0.5.4",
- "alloy-transport-http 0.5.4",
  "async-stream",
  "async-trait",
  "auto_impl",
@@ -508,14 +486,12 @@ dependencies = [
  "lru",
  "parking_lot",
  "pin-project 1.1.10",
- "reqwest 0.12.15",
  "schnellru",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
- "url",
  "wasmtimer 0.2.1",
 ]
 
@@ -609,14 +585,12 @@ dependencies = [
  "alloy-transport-http 0.5.4",
  "futures 0.3.31",
  "pin-project 1.1.10",
- "reqwest 0.12.15",
  "serde",
  "serde_json",
  "tokio",
  "tokio-stream",
  "tower 0.5.2",
  "tracing",
- "url",
  "wasmtimer 0.2.1",
 ]
 
@@ -8145,9 +8119,9 @@ dependencies = [
 [[package]]
 name = "tycho-execution"
 version = "0.93.0"
-source = "git+https://github.com/propeller-heads/tycho-execution.git?rev=88ad67e5ffd9e970f2a1da65e0bd74f626920df5#88ad67e5ffd9e970f2a1da65e0bd74f626920df5"
+source = "git+https://github.com/propeller-heads/tycho-execution.git?rev=2af96e2f7990918fd14623c55d8ee3504980461e#2af96e2f7990918fd14623c55d8ee3504980461e"
 dependencies = [
- "alloy 0.9.2",
+ "alloy",
  "alloy-primitives",
  "alloy-sol-types",
  "chrono",
@@ -8169,7 +8143,7 @@ dependencies = [
 name = "tycho-simulation"
 version = "0.101.0"
 dependencies = [
- "alloy 0.5.4",
+ "alloy",
  "alloy-primitives",
  "alloy-sol-types",
  "anyhow",
