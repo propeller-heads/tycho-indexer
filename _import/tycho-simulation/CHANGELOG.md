@@ -1,3 +1,10 @@
+## [0.101.1](https://github.com/propeller-heads/tycho-simulation/compare/0.101.0...0.101.1) (2025-05-26)
+
+
+### Bug Fixes
+
+* improve solidity utils checks and errors ([dfb19f2](https://github.com/propeller-heads/tycho-simulation/commit/dfb19f2db82896c07b328af5e1d448a153140b98))
+
 ## [0.101.0](https://github.com/propeller-heads/tycho-simulation/compare/0.100.1...0.101.0) (2025-05-19)
 
 
