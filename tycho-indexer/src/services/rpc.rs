@@ -800,10 +800,11 @@ where
     ) -> Result<dto::TracedEntryPointRequestResponse, RpcError> {
         let pagination_params: PaginationParams = (&request.pagination).into();
 
-        let filter: EntryPointFilter = EntryPointFilter {
+        let filter = EntryPointFilter {
             protocol_system: request.protocol_system,
             component_ids: request.component_ids,
         };
+
         let entry_points_tracing_params_data = self
             .db_gateway
             .get_entry_points_tracing_params(filter, Some(&pagination_params))
@@ -823,11 +824,10 @@ where
                     .iter()
                     .map(|entry_point| {
                         entry_point
-                            .clone()
                             .entry_point
                             .external_id
+                            .clone()
                     })
-                    .collect::<HashSet<EntryPointId>>()
             })
             .collect();
 
@@ -840,35 +840,41 @@ where
                 err
             })?;
 
-        // Match traced entry points back to their component ids
-        let traced_entry_points_by_component = entry_points_tracing_params_data
-            .entity
-            .into_iter()
-            .map(|(component_id, entry_points_set)| {
-                let pairs = entry_points_set
-                    .into_iter()
-                    .map(|entry_point_with_params| {
-                        let entry_point_id = entry_point_with_params
-                            .clone()
-                            .entry_point
-                            .external_id;
-                        let tracing_results: Vec<dto::TracingResult> = traced_entry_points
-                            .get(&entry_point_id)
-                            // TODO check if cloning is necessary (this can be inefficient)
-                            .map(|trace_results| {
-                                trace_results
-                                    .clone()
-                                    .into_iter()
-                                    .map(|trace_result| trace_result.into())
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-                        (entry_point_with_params.into(), tracing_results)
-                    })
-                    .collect::<Vec<(dto::EntryPointWithTracingParams, Vec<dto::TracingResult>)>>();
-                (component_id, pairs)
-            })
-            .collect::<HashMap<String, Vec<(dto::EntryPointWithTracingParams, Vec<dto::TracingResult>)>>>();
+        let mut traced_entry_points_by_component = HashMap::new();
+
+        for (component_id, entry_points_set) in entry_points_tracing_params_data.entity {
+            let mut pairs = Vec::new();
+
+            for entry_point_with_params in entry_points_set {
+                let entry_point_id = entry_point_with_params
+                    .entry_point
+                    .external_id
+                    .clone();
+                let tracing_param = entry_point_with_params.params.clone();
+
+                let results_by_param = traced_entry_points
+                    .get(&entry_point_id)
+                    .ok_or_else(|| {
+                        RpcError::Storage(StorageError::NotFound(
+                            "TracedEntryPoint".to_string(),
+                            format!("{entry_point_id:?}"),
+                        ))
+                    })?;
+
+                let tracing_result = results_by_param
+                    .get(&tracing_param)
+                    .ok_or_else(|| {
+                        RpcError::Storage(StorageError::NotFound(
+                            "TracedEntryPoint".to_string(),
+                            format!("{entry_point_id:?} with params {tracing_param:?}"),
+                        ))
+                    })?;
+
+                pairs.push((entry_point_with_params.clone().into(), tracing_result.clone().into()));
+            }
+
+            traced_entry_points_by_component.insert(component_id, pairs);
+        }
 
         Ok(dto::TracedEntryPointRequestResponse {
             traced_entry_points: traced_entry_points_by_component,
@@ -1518,13 +1524,15 @@ mod tests {
                 "0x000000000000000000000000000000000000000e",
             )]),
         };
+        let params_to_trace_result =
+            HashMap::from([(tracing_params.clone(), trace_result.clone())]);
 
         let mut expected_entry_points_with_params = HashMap::new();
         expected_entry_points_with_params
             .insert(component_id.clone(), HashSet::from([entry_point_with_params]));
 
         let mut expected_trace_results = HashMap::new();
-        expected_trace_results.insert(entry_point_id.clone(), vec![trace_result.clone()]);
+        expected_trace_results.insert(entry_point_id.clone(), params_to_trace_result);
 
         let mut gw = MockGateway::new();
 
