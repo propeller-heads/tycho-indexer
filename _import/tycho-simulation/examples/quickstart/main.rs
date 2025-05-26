@@ -643,9 +643,8 @@ fn create_solution(
         given_token: sell_token.address,
         given_amount: sell_amount,
         checked_token: buy_token.address,
-
-        exact_out: false,               // it's an exact in solution
-        checked_amount: min_amount_out, // the amount out will not be checked in execution
+        exact_out: false, // it's an exact in solution
+        checked_amount: min_amount_out,
         swaps: vec![simple_swap],
         ..Default::default()
     }
