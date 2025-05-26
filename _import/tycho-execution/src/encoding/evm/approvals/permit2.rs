@@ -4,11 +4,9 @@ use alloy::{
     primitives::{aliases::U48, Address, Bytes as AlloyBytes, TxKind, U160, U256},
     providers::{Provider, RootProvider},
     rpc::types::{TransactionInput, TransactionRequest},
-    signers::{local::PrivateKeySigner, SignerSync},
     transports::BoxTransport,
 };
-use alloy_primitives::{PrimitiveSignature as Signature, B256};
-use alloy_sol_types::{eip712_domain, sol, SolStruct, SolValue};
+use alloy_sol_types::{sol, SolValue};
 use chrono::Utc;
 use num_bigint::BigUint;
 use tokio::{
@@ -19,12 +17,8 @@ use tycho_common::Bytes;
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::{
-        encoding_utils::encode_input,
-        utils::{biguint_to_u256, bytes_to_address, get_client, get_runtime},
-    },
+    evm::utils::{biguint_to_u256, bytes_to_address, encode_input, get_client, get_runtime},
     models,
-    models::Chain,
 };
 
 /// Struct for managing Permit2 operations, including encoding approvals and fetching allowance
@@ -33,8 +27,6 @@ use crate::encoding::{
 pub struct Permit2 {
     address: Address,
     client: Arc<RootProvider<BoxTransport>>,
-    signer: PrivateKeySigner,
-    chain_id: u64,
     runtime_handle: Handle,
     // Store the runtime to prevent it from being dropped before use.
     // This is required since tycho-execution does not have a pre-existing runtime.
@@ -69,10 +61,10 @@ sol! {
     }
 }
 
-impl TryFrom<PermitSingle> for models::PermitSingle {
+impl TryFrom<&PermitSingle> for models::PermitSingle {
     type Error = EncodingError;
 
-    fn try_from(sol: PermitSingle) -> Result<Self, EncodingError> {
+    fn try_from(sol: &PermitSingle) -> Result<Self, EncodingError> {
         Ok(models::PermitSingle {
             details: models::PermitDetails {
                 token: Bytes::from(sol.details.token.to_vec()),
@@ -90,10 +82,10 @@ impl TryFrom<PermitSingle> for models::PermitSingle {
     }
 }
 
-impl TryFrom<models::PermitSingle> for PermitSingle {
+impl TryFrom<&models::PermitSingle> for PermitSingle {
     type Error = EncodingError;
 
-    fn try_from(p: models::PermitSingle) -> Result<Self, EncodingError> {
+    fn try_from(p: &models::PermitSingle) -> Result<Self, EncodingError> {
         Ok(PermitSingle {
             details: PermitDetails {
                 token: bytes_to_address(&p.details.token)?,
@@ -108,22 +100,14 @@ impl TryFrom<models::PermitSingle> for PermitSingle {
 }
 
 impl Permit2 {
-    pub fn new(swapper_pk: String, chain: Chain) -> Result<Self, EncodingError> {
+    pub fn new() -> Result<Self, EncodingError> {
         let (handle, runtime) = get_runtime()?;
         let client = block_in_place(|| handle.block_on(get_client()))?;
-        let pk = B256::from_str(&swapper_pk).map_err(|_| {
-            EncodingError::FatalError("Failed to convert swapper private key to B256".to_string())
-        })?;
-        let signer = PrivateKeySigner::from_bytes(&pk).map_err(|_| {
-            EncodingError::FatalError("Failed to create signer from private key".to_string())
-        })?;
         Ok(Self {
             address: Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
                 .map_err(|_| EncodingError::FatalError("Permit2 address not valid".to_string()))?,
             client,
             runtime_handle: handle,
-            signer,
-            chain_id: chain.id,
             runtime,
         })
     }
@@ -162,14 +146,14 @@ impl Permit2 {
             ))),
         }
     }
-    /// Creates permit single and signature
+    /// Creates permit single
     pub fn get_permit(
         &self,
         spender: &Bytes,
         owner: &Bytes,
         token: &Bytes,
         amount: &BigUint,
-    ) -> Result<(models::PermitSingle, Signature), EncodingError> {
+    ) -> Result<models::PermitSingle, EncodingError> {
         let current_time = Utc::now()
             .naive_utc()
             .and_utc()
@@ -188,21 +172,7 @@ impl Permit2 {
             sigDeadline: sig_deadline,
         };
 
-        let domain = eip712_domain! {
-            name: "Permit2",
-            chain_id: self.chain_id,
-            verifying_contract: self.address,
-        };
-        let hash = permit_single.eip712_signing_hash(&domain);
-        let signature = self
-            .signer
-            .sign_hash_sync(&hash)
-            .map_err(|e| {
-                EncodingError::FatalError(format!(
-                    "Failed to sign permit2 approval with error: {e}"
-                ))
-            })?;
-        Ok((models::PermitSingle::try_from(permit_single)?, signature))
+        models::PermitSingle::try_from(&permit_single)
     }
 }
 
@@ -210,11 +180,13 @@ impl Permit2 {
 mod tests {
     use std::str::FromStr;
 
-    use alloy_primitives::Uint;
+    use alloy::signers::local::PrivateKeySigner;
+    use alloy_primitives::{Uint, B256};
     use num_bigint::BigUint;
     use tycho_common::models::Chain as TychoCommonChain;
 
     use super::*;
+    use crate::encoding::{evm::encoding_utils::sign_permit, models::Chain};
 
     // These two implementations are to avoid comparing the expiration and sig_deadline fields
     // because they are timestamps
@@ -253,9 +225,7 @@ mod tests {
 
     #[test]
     fn test_get_existing_allowance() {
-        let swapper_pk =
-            "4c0883a69102937d6231471b5dbb6204fe512961708279feb1be6ae5538da033".to_string();
-        let manager = Permit2::new(swapper_pk, eth_chain()).unwrap();
+        let manager = Permit2::new().unwrap();
 
         let token = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let owner = Bytes::from_str("0x2c6a3cd97c6283b95ac8c5a4459ebb0d5fd404f4").unwrap();
@@ -272,17 +242,14 @@ mod tests {
 
     #[test]
     fn test_get_permit() {
-        // Set up a mock private key for signing
-        let private_key =
-            "4c0883a69102937d6231471b5dbb6204fe512961708279feb1be6ae5538da033".to_string();
-        let permit2 = Permit2::new(private_key, eth_chain()).expect("Failed to create Permit2");
+        let permit2 = Permit2::new().expect("Failed to create Permit2");
 
         let owner = Bytes::from_str("0x2c6a3cd97c6283b95ac8c5a4459ebb0d5fd404f4").unwrap();
         let spender = Bytes::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8").unwrap();
         let token = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let amount = BigUint::from(1000u64);
 
-        let (permit, _) = permit2
+        let permit = permit2
             .get_permit(&spender, &owner, &token, &amount)
             .unwrap();
 
@@ -315,8 +282,19 @@ mod tests {
         let anvil_private_key =
             "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80".to_string();
 
-        let permit2 =
-            Permit2::new(anvil_private_key, eth_chain()).expect("Failed to create Permit2");
+        let pk = B256::from_str(&anvil_private_key)
+            .map_err(|_| {
+                EncodingError::FatalError(
+                    "Failed to convert swapper private key to B256".to_string(),
+                )
+            })
+            .unwrap();
+        let signer = PrivateKeySigner::from_bytes(&pk)
+            .map_err(|_| {
+                EncodingError::FatalError("Failed to create signer from private key".to_string())
+            })
+            .unwrap();
+        let permit2 = Permit2::new().expect("Failed to create Permit2");
 
         let token = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let amount = BigUint::from(1000u64);
@@ -346,11 +324,13 @@ mod tests {
 
         let spender = Bytes::from_str("0xba12222222228d8ba445958a75a0704d566bf2c8").unwrap();
 
-        let (permit, signature) = permit2
+        let permit = permit2
             .get_permit(&spender, &anvil_account, &token, &amount)
             .unwrap();
         let sol_permit: PermitSingle =
-            PermitSingle::try_from(permit).expect("Failed to convert to PermitSingle");
+            PermitSingle::try_from(&permit).expect("Failed to convert to PermitSingle");
+
+        let signature = sign_permit(eth_chain().id, &permit, signer).unwrap();
         let encoded =
             (bytes_to_address(&anvil_account).unwrap(), sol_permit, signature.as_bytes().to_vec())
                 .abi_encode();

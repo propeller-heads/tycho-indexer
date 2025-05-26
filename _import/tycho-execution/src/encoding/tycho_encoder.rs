@@ -61,6 +61,7 @@ pub trait TychoEncoder {
     ///
     /// # Returns
     /// A vector of fully constructed [`Transaction`]s that can be submitted to a node or bundler.
+    #[deprecated(note = "Please use `encode_solutions` instead")]
     fn encode_full_calldata(
         &self,
         solutions: Vec<Solution>,

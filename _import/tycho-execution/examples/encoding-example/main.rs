@@ -7,20 +7,17 @@ use tycho_common::{
 };
 use tycho_execution::encoding::{
     evm::encoder_builders::TychoRouterEncoderBuilder,
-    models::{Solution, Swap},
+    models::{Solution, Swap, UserTransferType},
 };
 
 fn main() {
-    // Setup variables
-    let swapper_pk =
-        "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234".to_string();
     let user_address = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
         .expect("Failed to create user address");
 
     // Initialize the encoder
     let encoder = TychoRouterEncoderBuilder::new()
         .chain(Chain::Ethereum)
-        .swapper_pk(swapper_pk)
+        .user_transfer_type(UserTransferType::TransferFrom)
         .build()
         .expect("Failed to build encoder");
 

@@ -9,7 +9,7 @@ use alloy::{
     providers::{ProviderBuilder, RootProvider},
     transports::BoxTransport,
 };
-use alloy_primitives::{aliases::U24, Address, U256, U8};
+use alloy_primitives::{aliases::U24, Address, Keccak256, U256, U8};
 use alloy_sol_types::SolValue;
 use num_bigint::BigUint;
 use once_cell::sync::Lazy;
@@ -158,4 +158,26 @@ pub fn write_calldata_to_file(test_identifier: &str, hex_calldata: &str) {
     for line in lines {
         writeln!(file, "{line}").expect("Failed to write calldata");
     }
+}
+
+/// Encodes the input data for a function call to the given function selector.
+pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
+    let mut hasher = Keccak256::new();
+    hasher.update(selector.as_bytes());
+    let selector_bytes = &hasher.finalize()[..4];
+    let mut call_data = selector_bytes.to_vec();
+    // Remove extra prefix if present (32 bytes for dynamic data)
+    // Alloy encoding is including a prefix for dynamic data indicating the offset or length
+    // but at this point we don't want that
+    if encoded_args.len() > 32 &&
+        encoded_args[..32] ==
+            [0u8; 31]
+                .into_iter()
+                .chain([32].to_vec())
+                .collect::<Vec<u8>>()
+    {
+        encoded_args = encoded_args[32..].to_vec();
+    }
+    call_data.extend(encoded_args);
+    call_data
 }

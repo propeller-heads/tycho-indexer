@@ -8,7 +8,7 @@ use tycho_execution::encoding::{
         approvals::permit2::PermitSingle,
         encoder_builders::{TychoExecutorEncoderBuilder, TychoRouterEncoderBuilder},
     },
-    models::Solution,
+    models::{Solution, UserTransferType},
     tycho_encoder::TychoEncoder,
 };
 
@@ -24,8 +24,6 @@ use tycho_execution::encoding::{
 ///     "given_amount": "123...",
 ///     "checked_token": "0x...",
 ///     "exact_out": false,
-///     "slippage": 0.01,
-///     "expected_amount": "123...",
 ///     "checked_amount": "123...",
 ///     "swaps": [{
 ///         "component": {
@@ -54,9 +52,9 @@ pub struct Cli {
     #[arg(short, long)]
     router_address: Option<Bytes>,
     #[arg(short, long)]
-    swapper_pk: Option<String>,
+    user_transfer_type: Option<UserTransferType>,
     #[arg(short, long)]
-    token_in_already_in_router: Option<bool>,
+    swapper_pk: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -90,11 +88,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(router_address) = cli.router_address {
                 builder = builder.router_address(router_address);
             }
+            if let Some(user_transfer_type) = cli.user_transfer_type {
+                builder = builder.user_transfer_type(user_transfer_type);
+            }
+            #[allow(deprecated)]
             if let Some(swapper_pk) = cli.swapper_pk {
                 builder = builder.swapper_pk(swapper_pk);
-            }
-            if let Some(token_in_already_in_router) = cli.token_in_already_in_router {
-                builder = builder.token_in_already_in_router(token_in_already_in_router);
             }
             builder.build()?
         }
@@ -111,17 +110,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "n_tokens": format!("{}", &encoded_solutions[0].n_tokens),
             "permit": match encoded_solutions[0].permit.as_ref() {
         Some(permit) => {
-            match PermitSingle::try_from(permit.clone()) {
+            match PermitSingle::try_from(permit) {
                 Ok(sol_permit) => format!("0x{}", hex::encode(sol_permit.abi_encode())),
-                Err(_) => String::new(), // or log or panic or whatever fallback
+                Err(_) => String::new(),
             }
         }
         None => String::new(),
     },
-            "signature": encoded_solutions[0].signature
-                .as_ref()
-                .map(|signature| format!("0x{}", hex::encode(signature)))
-                .unwrap_or_else(String::new),
         });
     // Output the encoded result as JSON to stdout
     println!(
