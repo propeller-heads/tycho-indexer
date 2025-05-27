@@ -1,3 +1,30 @@
+## [0.95.1](https://github.com/propeller-heads/tycho-execution/compare/0.95.0...0.95.1) (2025-05-27)
+
+
+### Bug Fixes
+
+* Move encode_input back into encoding_utils.rs ([92d36b9](https://github.com/propeller-heads/tycho-execution/commit/92d36b9f48d30aad2d1227c21f490ac9f47daa7b))
+
+## [0.95.0](https://github.com/propeller-heads/tycho-execution/compare/0.94.0...0.95.0) (2025-05-26)
+
+
+### Features
+
+* Don't sign permit2 objects ([c62af2f](https://github.com/propeller-heads/tycho-execution/commit/c62af2f232063d3a3c5baa759d484b0d2cc2c185))
+
+
+### Bug Fixes
+
+* Bring back swapper_pk for backwards compatibility ([d12e3d3](https://github.com/propeller-heads/tycho-execution/commit/d12e3d3b5fc302b1c266424189f984884b2d9ed7))
+* Make functions in encoding_utils.rs private ([5ddd2a9](https://github.com/propeller-heads/tycho-execution/commit/5ddd2a9cd7d41d8899ff3667ca2587dc89fdce6a))
+
+## [0.94.0](https://github.com/propeller-heads/tycho-execution/compare/0.93.0...0.94.0) (2025-05-23)
+
+
+### Features
+
+* Create non alloy specific Permit and PermitDetails structs ([75f2c3a](https://github.com/propeller-heads/tycho-execution/commit/75f2c3a1c52b6ee8823d449b70147cb023202e93))
+
 ## [0.93.0](https://github.com/propeller-heads/tycho-execution/compare/0.92.1...0.93.0) (2025-05-22)
 
 

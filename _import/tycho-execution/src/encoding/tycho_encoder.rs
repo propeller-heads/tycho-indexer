@@ -26,8 +26,8 @@ use crate::encoding::{
 /// outer function call arguments themselves** and verify that they enforce correct and secure
 /// behavior.
 pub trait TychoEncoder {
-    /// Encodes a list of [`Solution`]s into [`EncodedSolution`]s, which include the selector and
-    /// internal swap call data.
+    /// Encodes a list of [`Solution`]s into [`EncodedSolution`]s, which include the function
+    /// signature and internal swap call data.
     ///
     /// This method gives users maximum flexibility and control. It **does not** produce full
     /// transaction objects. Users are responsible for:
@@ -36,7 +36,7 @@ pub trait TychoEncoder {
     ///
     /// # Returns
     /// A vector of encoded solutions, each containing:
-    /// - The Tycho method selector
+    /// - The Tycho method function signature
     /// - The encoded swap path
     /// - Additional metadata (e.g., permit2 information)
     ///
@@ -61,6 +61,7 @@ pub trait TychoEncoder {
     ///
     /// # Returns
     /// A vector of fully constructed [`Transaction`]s that can be submitted to a node or bundler.
+    #[deprecated(note = "Please use `encode_solutions` instead")]
     fn encode_full_calldata(
         &self,
         solutions: Vec<Solution>,

@@ -1,4 +1,4 @@
-use alloy_primitives::PrimitiveSignature as Signature;
+use clap::ValueEnum;
 use hex;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
@@ -7,9 +7,32 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::encoding::{
-    errors::EncodingError, evm::approvals::permit2::PermitSingle, serde_primitives::biguint_string,
-};
+use crate::encoding::{errors::EncodingError, serde_primitives::biguint_string};
+
+/// Specifies the method for transferring user funds into Tycho execution.
+///
+/// Options:
+///
+/// - `TransferFromPermit2`: Use Permit2 for token transfer.
+///     - You must manually approve the Permit2 contract and sign the permit object externally
+///       (outside `tycho-execution`).
+///
+/// - `TransferFrom`: Use standard ERC-20 approval and `transferFrom`.
+///     - You must approve the Tycho Router contract to spend your tokens via standard `approve()`
+///       calls.
+///
+/// - `None`: No transfer will be performed.
+///     - Assumes the tokens are already present in the Tycho Router.
+///     - **Warning**: This is an advanced mode. Ensure your logic guarantees that the tokens are
+///       already in the router at the time of execution.
+///     - The Tycho router is **not** designed to safely hold tokens. If tokens are not transferred
+///       and used in the **same transaction**, they will be permanently lost.
+#[derive(Clone, Debug, PartialEq, ValueEnum)]
+pub enum UserTransferType {
+    TransferFromPermit2,
+    TransferFrom,
+    None,
+}
 
 /// Represents a solution containing details describing an order, and  instructions for filling
 /// the order.
@@ -82,7 +105,6 @@ impl Swap {
 /// * `to`: Address of the contract to call with the calldata
 /// * `value`: Native token value to be sent with the transaction.
 /// * `data`: Encoded calldata for the transaction.
-/// * `selector`: Only relevant for direct executions. The selector of the function to be called.
 #[derive(Clone, Debug)]
 pub struct Transaction {
     pub to: Bytes,
@@ -95,18 +117,58 @@ pub struct Transaction {
 /// # Fields
 /// * `swaps`: Encoded swaps to be executed.
 /// * `interacting_with`: Address of the contract to be called.
-/// * `selector`: The selector of the function to be called.
+/// * `function_signature`: The signature of the function to be called.
 /// * `n_tokens`: Number of tokens in the swap.
 /// * `permit`: Optional permit for the swap (if permit2 is enabled).
-/// * `signature`: Optional signature for the swap (if permit2 is enabled).
 #[derive(Clone, Debug)]
 pub struct EncodedSolution {
     pub swaps: Vec<u8>,
     pub interacting_with: Bytes,
-    pub selector: String,
+    pub function_signature: String,
     pub n_tokens: usize,
     pub permit: Option<PermitSingle>,
-    pub signature: Option<Signature>,
+}
+
+/// Represents a single permit for permit2.
+///
+/// # Fields
+/// * `details`: The details of the permit, such as token, amount, expiration, and nonce.
+/// * `spender`: The address authorized to spend the tokens.
+/// * `sig_deadline`: The deadline (as a timestamp) for the permit signature
+#[derive(Debug, Clone)]
+pub struct PermitSingle {
+    pub details: PermitDetails,
+    pub spender: Bytes,
+    pub sig_deadline: BigUint,
+}
+
+/// Details of a permit.
+///
+/// # Fields
+/// * `token`: The token address for which the permit is granted.
+/// * `amount`: The amount of tokens approved for spending.
+/// * `expiration`: The expiration time (as a timestamp) for the permit.
+/// * `nonce`: The unique nonce to prevent replay attacks.
+#[derive(Debug, Clone)]
+pub struct PermitDetails {
+    pub token: Bytes,
+    pub amount: BigUint,
+    pub expiration: BigUint,
+    pub nonce: BigUint,
+}
+
+impl PartialEq for PermitSingle {
+    fn eq(&self, other: &Self) -> bool {
+        self.details == other.details && self.spender == other.spender
+        // sig_deadline is intentionally ignored
+    }
+}
+
+impl PartialEq for PermitDetails {
+    fn eq(&self, other: &Self) -> bool {
+        self.token == other.token && self.amount == other.amount && self.nonce == other.nonce
+        // expiration is intentionally ignored
+    }
 }
 
 /// Represents necessary attributes for encoding an order.
