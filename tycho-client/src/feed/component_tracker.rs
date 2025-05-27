@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use tracing::{debug, instrument, warn};
 use tycho_common::{
-    dto::{BlockChanges, Chain, ProtocolComponent, ProtocolComponentsRequestBody},
+    dto::{BlockChanges, Chain, DCIData, ProtocolComponent, ProtocolComponentsRequestBody},
     Bytes,
 };
 
@@ -74,7 +74,7 @@ impl ComponentFilter {
     }
 }
 
-/// Helper struct to store which components are being tracked atm.
+/// Helper struct to determine which components and contracts are being tracked atm.
 pub struct ComponentTracker<R: RPCClient> {
     chain: Chain,
     protocol_system: String,
@@ -82,6 +82,9 @@ pub struct ComponentTracker<R: RPCClient> {
     // We will need to request a snapshot for components/contracts that we did not emit as
     // snapshot for yet but are relevant now, e.g. because min tvl threshold exceeded.
     pub components: HashMap<String, ProtocolComponent>,
+    /// Map of entrypoint id to a tuple of (set of component ids for components that have this
+    /// entrypoint, set of detected contracts for the entrypoint)
+    pub entrypoints: HashMap<String, (HashSet<String>, HashSet<Bytes>)>,
     /// Derived from tracked components. We need this if subscribed to a vm extractor because
     /// updates are emitted on a contract level instead of a component level.
     pub contracts: HashSet<Bytes>,
@@ -101,9 +104,12 @@ where
             components: Default::default(),
             contracts: Default::default(),
             rpc_client: rpc,
+            entrypoints: Default::default(),
         }
     }
-    /// Retrieve all components that belong to the system we are extracing and have sufficient tvl.
+
+    /// Retrieves all components that belong to the system we are streaming that have sufficient
+    /// tvl. Also detects which contracts are relevant for simulating on those components.
     pub async fn initialise_components(&mut self) -> Result<(), RPCError> {
         let body = match &self.filter.variant {
             ComponentFilterVariant::Ids(ids) => ProtocolComponentsRequestBody::id_filtered(
@@ -119,7 +125,6 @@ where
                 )
             }
         };
-
         self.components = self
             .rpc_client
             .get_protocol_components_paginated(&body, 500, 4)
@@ -128,16 +133,60 @@ where
             .into_iter()
             .map(|pc| (pc.id.clone(), pc))
             .collect::<HashMap<_, _>>();
-        self.update_contracts();
+
+        self.initialise_contracts();
+
         Ok(())
     }
 
-    fn update_contracts(&mut self) {
-        self.contracts.extend(
-            self.components
-                .values()
-                .flat_map(|comp| comp.contract_ids.iter().cloned()),
-        );
+    /// Initialise the tracked contracts list from tracked components and their entrypoints
+    fn initialise_contracts(&mut self) {
+        // Add contracts from all tracked components
+        self.contracts = self
+            .components
+            .values()
+            .flat_map(|comp| comp.contract_ids.iter().cloned())
+            .collect();
+
+        // Add contracts from entrypoints that are linked to tracked components
+        let tracked_component_ids = self
+            .components
+            .keys()
+            .cloned()
+            .collect::<HashSet<_>>();
+        for (_, (components, contracts)) in self.entrypoints.iter() {
+            if !components.is_disjoint(&tracked_component_ids) {
+                self.contracts
+                    .extend(contracts.iter().cloned());
+            }
+        }
+    }
+
+    /// Update the tracked contracts list with contracts associated with the given components
+    fn update_contracts(&mut self, components: Vec<String>) {
+        // Only process components that are actually being tracked. Convert to HashSet for
+        // efficient lookup.
+        let tracked_component_ids = components
+            .iter()
+            .filter(|&id| self.components.contains_key(id))
+            .map(|s| s.to_string())
+            .collect::<HashSet<_>>();
+
+        // Add contracts from the components
+        for comp in &tracked_component_ids {
+            if let Some(component) = self.components.get(comp) {
+                self.contracts
+                    .extend(component.contract_ids.iter().cloned());
+            }
+        }
+
+        // Identify entrypoints linked to the given components
+        for (_, (components, contracts)) in self.entrypoints.iter() {
+            if !components.is_disjoint(&tracked_component_ids) {
+                self.contracts
+                    .extend(contracts.iter().cloned());
+            }
+        }
     }
 
     /// Add a new component to be tracked
@@ -146,25 +195,32 @@ where
         if new_components.is_empty() {
             return Ok(());
         }
+
+        // Fetch the components
         let request = ProtocolComponentsRequestBody::id_filtered(
             &self.protocol_system,
             new_components
                 .iter()
-                .map(|pc_id| pc_id.to_string())
+                .map(|&id| id.to_string())
                 .collect(),
             self.chain,
         );
+        let components = self
+            .rpc_client
+            .get_protocol_components(&request)
+            .await?
+            .protocol_components
+            .into_iter()
+            .map(|pc| (pc.id.clone(), pc))
+            .collect::<HashMap<_, _>>();
 
-        self.components.extend(
-            self.rpc_client
-                .get_protocol_components(&request)
-                .await?
-                .protocol_components
-                .into_iter()
-                .map(|pc| (pc.id.clone(), pc)),
-        );
-        self.update_contracts();
-        debug!(n_components = new_components.len(), "StartedTracking");
+        // Update components and contracts
+        let component_ids: Vec<_> = components.keys().cloned().collect();
+        let component_count = component_ids.len();
+        self.components.extend(components);
+        self.update_contracts(component_ids);
+
+        debug!(n_components = component_count, "StartedTracking");
         Ok(())
     }
 
@@ -174,22 +230,50 @@ where
         &mut self,
         to_remove: I,
     ) -> HashMap<String, ProtocolComponent> {
-        let mut n_components = 0;
-        let res = to_remove
-            .into_iter()
-            .filter_map(|k| {
-                let comp = self.components.remove(k);
-                if let Some(component) = &comp {
-                    n_components += 1;
-                    for contract in component.contract_ids.iter() {
-                        self.contracts.remove(contract);
-                    }
+        let mut removed_components = HashMap::new();
+
+        for component_id in to_remove {
+            if let Some(component) = self.components.remove(component_id) {
+                removed_components.insert(component_id.clone(), component);
+            }
+        }
+
+        // Refresh the tracked contracts list. This is more reliable and efficient than directly
+        // removing contracts from the list because some contracts are shared between components.
+        self.initialise_contracts();
+
+        debug!(n_components = removed_components.len(), "StoppedTracking");
+        removed_components
+    }
+
+    /// Updates the tracked entrypoints and contracts based on the given DCI data.
+    pub fn process_entrypoints(&mut self, dci_data: &DCIData) -> Result<(), RPCError> {
+        // Update detected contracts for entrypoints
+        for (entrypoint, traces) in &dci_data.trace_results {
+            self.entrypoints
+                .entry(entrypoint.clone())
+                .or_insert_with(|| (HashSet::new(), HashSet::new()))
+                .1
+                .extend(traces.called_addresses.iter().cloned());
+        }
+
+        // Update linked components for entrypoints
+        for (component, entrypoints) in &dci_data.new_entrypoints {
+            for entrypoint in entrypoints {
+                let (components, contracts) = self
+                    .entrypoints
+                    .entry(entrypoint.external_id.clone())
+                    .or_insert_with(|| (HashSet::new(), HashSet::new()));
+                components.insert(component.clone());
+                // If the component is tracked, add the detected contracts to the tracker
+                if self.components.contains_key(component) {
+                    self.contracts
+                        .extend(contracts.iter().cloned());
                 }
-                comp.map(|c| (k.clone(), c))
-            })
-            .collect();
-        debug!(n_components, "StoppedTracking");
-        res
+            }
+        }
+
+        Ok(())
     }
 
     pub fn get_contracts_by_component<'a, I: IntoIterator<Item = &'a String>>(
