@@ -1,3 +1,10 @@
+## [0.101.2](https://github.com/propeller-heads/tycho-simulation/compare/0.101.1...0.101.2) (2025-05-27)
+
+
+### Bug Fixes
+
+* set base default 'last active' token filter to 1 day ([7d123d3](https://github.com/propeller-heads/tycho-simulation/commit/7d123d37bd01d1b4ff49dfd170f9e96cfb58c8ed))
+
 ## [0.101.1](https://github.com/propeller-heads/tycho-simulation/compare/0.101.0...0.101.1) (2025-05-26)
 
 
