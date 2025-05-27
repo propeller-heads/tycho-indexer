@@ -1,3 +1,16 @@
+## [0.102.0](https://github.com/propeller-heads/tycho-simulation/compare/0.101.2...0.102.0) (2025-05-27)
+
+
+### Features
+
+* Add maverickV2 runtime and include it on examples ([7b442ec](https://github.com/propeller-heads/tycho-simulation/commit/7b442ec920cc0adb6ca7f28c59ad41869857288d))
+* merge main ([4d87ec3](https://github.com/propeller-heads/tycho-simulation/commit/4d87ec3ca01c2f81234e4b89cd5d62cba4f0925d))
+
+
+### Bug Fixes
+
+* formatting ([3955924](https://github.com/propeller-heads/tycho-simulation/commit/3955924b08cef4cc70bd98db68d797d00003f0cf))
+
 ## [0.101.2](https://github.com/propeller-heads/tycho-simulation/compare/0.101.1...0.101.2) (2025-05-27)
 
 
