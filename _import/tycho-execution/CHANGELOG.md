@@ -1,3 +1,13 @@
+## [0.96.0](https://github.com/propeller-heads/tycho-execution/compare/0.95.1...0.96.0) (2025-05-27)
+
+
+### Features
+
+* Deploy new router on base ([0dafed0](https://github.com/propeller-heads/tycho-execution/commit/0dafed0cadd5142579fa5f9f875e2393baa2cc3b))
+* Update ethereum router + executor addresses ([5bf3b5d](https://github.com/propeller-heads/tycho-execution/commit/5bf3b5d7ad2a80ed882892367bb2bc23e0ce1a4d))
+* Update mainnet executors + router addrs ([cf6e7f0](https://github.com/propeller-heads/tycho-execution/commit/cf6e7f06a81b6bd888b5b699732606b72cc1891f))
+* Update unichain executors + router addrs ([e2e061e](https://github.com/propeller-heads/tycho-execution/commit/e2e061e73e25c8dcc89c4fdb3ad8148f6ba27c9f))
+
 ## [0.95.1](https://github.com/propeller-heads/tycho-execution/compare/0.95.0...0.95.1) (2025-05-27)
 
 
