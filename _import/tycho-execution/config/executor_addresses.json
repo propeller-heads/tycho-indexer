@@ -1,29 +1,20 @@
 {
   "ethereum": {
-    "uniswap_v2": "0xEA8b7BC64dc58E4c702CDEcA439033bcdEd8D61f",
-    "sushiswap_v2": "0xF0E698751051daC13f20A49D3752275dDA02BA3A",
-    "pancakeswap_v2": "0x13bbDa1c372f314E92f729a16a58a6210aAB6596",
-    "uniswap_v3": "0xc5A53382B3caA24A81E07a3508063a06C05B65C3",
-    "pancakeswap_v3": "0x1C1d33f86dD7D8f2E729fde0b24B340FedC1D6a9",
-    "uniswap_v4": "0x7708505465bb9a1074f04e947f3903b840693fb6",
-    "vm:balancer_v2": "0xb89ef3EFAd54968A4A51E7fF77E397C735d1EA97",
-    "ekubo_v2": "0x25197ecCFB672ea78744997BfeFb3d181a9c6Ed3",
-    "vm:curve": "0x9bbD00a793Ea8Af721c37aAB189330754e7CdfE8",
-    "vm:maverick_v2": "0x7C413D61BdaF253E3FeE8a1C99EeA6A5Cb9FCf66"
-  },
-  "tenderly_ethereum": {
-    "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",
-    "uniswap_v3": "0x5C2F5a71f67c01775180ADc06909288B4C329308",
-    "uniswap_v4": "0xF62849F9A0B5Bf2913b396098F7c7019b51A820a",
-    "vm:balancer_v2": "0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"
+    "uniswap_v2": "0xaE04CA7E9Ed79cBD988f6c536CE11C621166f41B",
+    "sushiswap_v2": "0x2017ad7035D781C14699C8E44ed62d3083723A18",
+    "pancakeswap_v2": "0xC9db3FEB380E4fd9af239e2595ECdEcE3b5c34A4",
+    "uniswap_v3": "0xbab7124C9662B15C6b9AF0b1f329907dD55a24FC",
+    "pancakeswap_v3": "0x9D32e9F569B22Ae8d8C6f788037C1CD53632A059",
+    "uniswap_v4": "0xD11496EAb53A9521f0bC1e5c1098Ecb467103Ad9",
+    "vm:balancer_v2": "0xB5b8dc3F0a1Be99685a0DEd015Af93bFBB55C411",
+    "ekubo_v2": "0xcCF8e1E39e9ddfa88282fA6a7B31eBFB41a1ED7B",
+    "vm:curve": "0x879F3008D96EBea0fc584aD684c7Df31777F3165",
+    "vm:maverick_v2": "0xF35e3F5F205769B41508A18787b62A21bC80200B"
   },
   "base": {
     "uniswap_v2": "0xF744EBfaA580cF3fFc25aD046E92BD8B770a0700",
     "uniswap_v3": "0x647bffbf8bd72bf6341ecba8b0279e090313a40d",
     "uniswap_v4": "0xb5628b97f491f85766673ac4d5d47bb1af7fcc4a"
-  },
-  "tenderly_base": {
-    "uniswap_v3": "0x7c7E06d7317e620a185078e236879D2a87fC8d22"
   },
   "unichain": {
     "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",
