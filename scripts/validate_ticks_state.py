@@ -13,14 +13,16 @@ log.basicConfig(
     level=log.INFO)
 
 """
-This script identifies protocol components with empty ticks in various exchanges. 
-Used to find components that have no net liquidity in their ticks, which can indicate issues with the protocol's state.
+This script analyses protocols that use ticks (e.g., Uniswap V3, Uniswap V4, Ekubo V2, PancakeSwap V3) to identify components with faulty state.
+By definition, the sum of net liquidity in all ticks of a component should be zero. If it is not, it indicates that the component has a wrong state.
 """
+
 
 class TychoClient:
     """Client for interacting with the Tycho API."""
 
-    def __init__(self, base_url: Optional[str] = None, auth_token: Optional[str] = None):
+    def __init__(self, chain: str, base_url: Optional[str] = None, auth_token: Optional[str] = None):
+        self.chain = chain
         self.base_url = base_url or os.getenv("TYCHO_URL", "https://tycho-dev.propellerheads.xyz/v1")
         self.auth_token = auth_token or os.getenv("TYCHO_AUTH_TOKEN", "sampletoken")
         self.headers = {
@@ -38,7 +40,7 @@ class TychoClient:
 
         while True:
             payload = {
-                "chain": "ethereum",
+                "chain": self.chain,
                 "pagination": {
                     "page": page,
                     "page_size": page_size
@@ -64,7 +66,8 @@ class TychoClient:
 
         return all_components
 
-    def get_protocol_states(self, component_ids: list[str], protocol_system: str, page_size: int = 100) -> list[dict[str, Any]]:
+    def get_protocol_states(self, component_ids: list[str], protocol_system: str, page_size: int = 100) -> list[
+        dict[str, Any]]:
         all_results = []
         endpoint = f"{self.base_url}/protocol_state"
         log.info(f"Fetching protocol states from {endpoint}")
@@ -77,7 +80,7 @@ class TychoClient:
                     "protocol_system": protocol_system,
                     "protocol_ids": [
                         {
-                            "chain": "ethereum",
+                            "chain": self.chain,
                             "id": cid
                         } for cid in component_chunk
                     ],
@@ -104,10 +107,12 @@ class TychoClient:
 
         return all_results
 
+
 def chunked_list(lst, n):
     """Splits the input list `lst` into chunks of size `n`."""
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
+
 
 def hex_to_signed_int(hex_str):
     # Remove '0x' prefix and convert to bytes
@@ -117,9 +122,9 @@ def hex_to_signed_int(hex_str):
     return int.from_bytes(bytes_val, byteorder="big", signed=True)
 
 
-def has_empty_ticks(attributes: dict[str, str]):
+def has_dangling_tick(attributes: dict[str, str]):
     """
-    Checks if a component has empty ticks by summing net liquidity.
+    Checks if a component has a dangling tick by summing net liquidity.
     """
 
     net_liquidity_sum = 0
@@ -132,24 +137,26 @@ def has_empty_ticks(attributes: dict[str, str]):
     return net_liquidity_sum != 0
 
 
-def identify_empty_ticks(protocol_components: list[dict[str, str]]):
-    empty_ticks = []
+def identify_faulty_tick_map(protocol_components: list[dict[str, str]]):
+    faulty_components = []
     for component in protocol_components:
         attributes = component.get("attributes", {})
-        if has_empty_ticks(attributes):
-            empty_ticks.append(component["component_id"])
+        if has_dangling_tick(attributes):
+            faulty_components.append(component["component_id"])
 
-    return empty_ticks
+    return faulty_components
 
 
 @click.command()
-@click.option("--tvl_gt", type=int, default=1,)
+@click.option("--tvl_gt", type=int, default=1, )
 @click.option("--exchange", type=StringListParamType(','), default="uniswap_v3,uniswap_v4,ekubo_v2,pancakeswap_v3",
               help="Comma-separated list of exchanges to filter by")
-def main(tvl_gt, exchange: list[str]):
-    """Identify protocol components with empty ticks for specified exchanges."""
+@click.option("--chain", type=str, default="ethereum",
+              help="Blockchain (default: ethereum)")
+def main(tvl_gt, exchange: list[str], chain: str):
+    """Identify protocol components with wrong tick state for specified exchanges."""
 
-    client = TychoClient()
+    client = TychoClient(chain)
     for protocol_system in exchange:
         try:
             log.info(f"Fetching components for {protocol_system}")
@@ -164,10 +171,10 @@ def main(tvl_gt, exchange: list[str]):
             continue
 
         log.info(f"Fetched {len(protocol_states)} protocol systems")
-        empty_tick_components = identify_empty_ticks(protocol_states)
+        wrong_tick_components = identify_faulty_tick_map(protocol_states)
 
-        log.info(f"Identified {len(empty_tick_components)} components with empty ticks:")
-        for protocol in empty_tick_components:
+        log.info(f"Identified {len(wrong_tick_components)} components with wrong tick map:")
+        for protocol in wrong_tick_components:
             log.info(protocol)
 
 
