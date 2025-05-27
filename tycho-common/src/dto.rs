@@ -977,11 +977,11 @@ impl PartialEq for ProtocolComponentsRequestBody {
             _ => false,
         };
 
-        self.protocol_system == other.protocol_system &&
-            self.component_ids == other.component_ids &&
-            tvl_close_enough &&
-            self.chain == other.chain &&
-            self.pagination == other.pagination
+        self.protocol_system == other.protocol_system
+            && self.component_ids == other.component_ids
+            && tvl_close_enough
+            && self.chain == other.chain
+            && self.pagination == other.pagination
     }
 }
 
@@ -1369,7 +1369,7 @@ impl From<models::blockchain::RPCTracerParams> for RPCTracerParams {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone, Hash)]
 #[serde(tag = "method", rename_all = "lowercase")]
 pub enum TracingParams {
     /// Uses RPC calls to retrieve the called addresses and retriggers
@@ -1420,7 +1420,7 @@ impl From<models::blockchain::TracingResult> for TracingResult {
     }
 }
 
-#[derive(Serialize, PartialEq, ToSchema, Eq, Clone)]
+#[derive(Serialize, PartialEq, ToSchema, Eq, Clone, Debug, Deserialize)]
 pub struct TracedEntryPointRequestResponse {
     /// Map of protocol component id to a list of a tuple containing each entry point with its
     /// tracing parameters and its corresponding tracing results.
@@ -1640,7 +1640,7 @@ mod test {
     }
 
     #[rstest]
-    #[case(
+    #[case::deprecated_ids(
         r#"
     {
         "protocol_ids": [
@@ -1664,7 +1664,7 @@ mod test {
     )]
     #[case(
         r#"
-            {
+    {
         "protocolIds": [
             "0xb4eccE46b8D4e4abFd03C9B806276A6735C9c092"
         ],
@@ -1719,6 +1719,7 @@ mod test {
         T: Into<String> + Clone,
     {
         let request_body = ProtocolStateRequestBody::id_filtered(input_ids);
+
         assert_eq!(request_body.protocol_ids, Some(expected_ids));
     }
 
@@ -1808,7 +1809,6 @@ mod test {
                     }),
                     ])),
             ]),
-            component_tvl: HashMap::new(),
             ..Default::default()
         }
     }
@@ -1996,33 +1996,27 @@ mod test {
         // Initialize ProtocolStateDelta instances
         let mut delta1 = ProtocolStateDelta {
             component_id: "Component1".to_string(),
-            updated_attributes: [("Attribute1".to_string(), Bytes::from("0xbadbabe420"))]
-                .iter()
-                .cloned()
-                .collect(),
+            updated_attributes: HashMap::from([(
+                "Attribute1".to_string(),
+                Bytes::from("0xbadbabe420"),
+            )]),
             deleted_attributes: HashSet::new(),
         };
         let delta2 = ProtocolStateDelta {
             component_id: "Component1".to_string(),
-            updated_attributes: [("Attribute2".to_string(), Bytes::from("0x0badbabe"))]
-                .iter()
-                .cloned()
-                .collect(),
-            deleted_attributes: ["Attribute1".to_string()]
-                .iter()
-                .cloned()
-                .collect(),
+            updated_attributes: HashMap::from([(
+                "Attribute2".to_string(),
+                Bytes::from("0x0badbabe"),
+            )]),
+            deleted_attributes: HashSet::from(["Attribute1".to_string()]),
         };
         let exp = ProtocolStateDelta {
             component_id: "Component1".to_string(),
-            updated_attributes: [("Attribute2".to_string(), Bytes::from("0x0badbabe"))]
-                .iter()
-                .cloned()
-                .collect(),
-            deleted_attributes: ["Attribute1".to_string()]
-                .iter()
-                .cloned()
-                .collect(),
+            updated_attributes: HashMap::from([(
+                "Attribute2".to_string(),
+                Bytes::from("0x0badbabe"),
+            )]),
+            deleted_attributes: HashSet::from(["Attribute1".to_string()]),
         };
 
         delta1.merge(&delta2);
@@ -2036,25 +2030,22 @@ mod test {
         let mut delta1 = ProtocolStateDelta {
             component_id: "Component1".to_string(),
             updated_attributes: HashMap::new(),
-            deleted_attributes: ["Attribute1".to_string()]
-                .iter()
-                .cloned()
-                .collect(),
+            deleted_attributes: HashSet::from(["Attribute1".to_string()]),
         };
         let delta2 = ProtocolStateDelta {
             component_id: "Component1".to_string(),
-            updated_attributes: [("Attribute1".to_string(), Bytes::from("0x0badbabe"))]
-                .iter()
-                .cloned()
-                .collect(),
+            updated_attributes: HashMap::from([(
+                "Attribute1".to_string(),
+                Bytes::from("0x0badbabe"),
+            )]),
             deleted_attributes: HashSet::new(),
         };
         let exp = ProtocolStateDelta {
             component_id: "Component1".to_string(),
-            updated_attributes: [("Attribute1".to_string(), Bytes::from("0x0badbabe"))]
-                .iter()
-                .cloned()
-                .collect(),
+            updated_attributes: HashMap::from([(
+                "Attribute1".to_string(),
+                Bytes::from("0x0badbabe"),
+            )]),
             deleted_attributes: HashSet::new(),
         };
 
@@ -2069,10 +2060,7 @@ mod test {
         let mut account1 = AccountUpdate::new(
             Bytes::from(b"0x1234"),
             Chain::Ethereum,
-            [(Bytes::from("0xaabb"), Bytes::from("0xccdd"))]
-                .iter()
-                .cloned()
-                .collect(),
+            HashMap::from([(Bytes::from("0xaabb"), Bytes::from("0xccdd"))]),
             Some(Bytes::from("0x1000")),
             Some(Bytes::from("0xdeadbeaf")),
             ChangeType::Creation,
@@ -2081,10 +2069,7 @@ mod test {
         let account2 = AccountUpdate::new(
             Bytes::from(b"0x1234"), // Same id as account1
             Chain::Ethereum,
-            [(Bytes::from("0xeeff"), Bytes::from("0x11223344"))]
-                .iter()
-                .cloned()
-                .collect(),
+            HashMap::from([(Bytes::from("0xeeff"), Bytes::from("0x11223344"))]),
             Some(Bytes::from("0x2000")),
             Some(Bytes::from("0xcafebabe")),
             ChangeType::Update,
@@ -2097,13 +2082,10 @@ mod test {
         let expected = AccountUpdate::new(
             Bytes::from(b"0x1234"), // Same id as before the merge
             Chain::Ethereum,
-            [
+            HashMap::from([
                 (Bytes::from("0xaabb"), Bytes::from("0xccdd")), // Original slot from account1
                 (Bytes::from("0xeeff"), Bytes::from("0x11223344")), // New slot from account2
-            ]
-            .iter()
-            .cloned()
-            .collect(),
+            ]),
             Some(Bytes::from("0x2000")),     // Updated balance
             Some(Bytes::from("0xcafebabe")), // Updated code
             ChangeType::Creation,            // Updated change type
@@ -2121,9 +2103,7 @@ mod test {
             AccountUpdate {
                 address: Bytes::from("0x00"),
                 chain: Chain::Ethereum,
-                slots: [(Bytes::from("0x0022"), Bytes::from("0x0033"))]
-                    .into_iter()
-                    .collect(),
+                slots: HashMap::from([(Bytes::from("0x0022"), Bytes::from("0x0033"))]),
                 balance: Some(Bytes::from("0x01")),
                 code: Some(Bytes::from("0x02")),
                 change: ChangeType::Creation,
@@ -2136,9 +2116,7 @@ mod test {
             AccountUpdate {
                 address: Bytes::from("0x00"),
                 chain: Chain::Ethereum,
-                slots: [(Bytes::from("0x0044"), Bytes::from("0x0055"))]
-                    .into_iter()
-                    .collect(),
+                slots: HashMap::from([(Bytes::from("0x0044"), Bytes::from("0x0055"))]),
                 balance: Some(Bytes::from("0x03")),
                 code: Some(Bytes::from("0x04")),
                 change: ChangeType::Update,
@@ -2147,33 +2125,19 @@ mod test {
         .into_iter()
         .collect();
         // Create initial and new BlockAccountChanges instances
-        let block_account_changes_initial = BlockChanges::new(
-            "extractor1",
-            Chain::Ethereum,
-            Block::default(),
-            0,
-            false,
-            old_account_updates,
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-        );
+        let block_account_changes_initial = BlockChanges {
+            extractor: "extractor1".to_string(),
+            revert: false,
+            account_updates: old_account_updates,
+            ..Default::default()
+        };
 
-        let block_account_changes_new = BlockChanges::new(
-            "extractor2",
-            Chain::Ethereum,
-            Block::default(),
-            0,
-            true,
-            new_account_updates,
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-        );
+        let block_account_changes_new = BlockChanges {
+            extractor: "extractor2".to_string(),
+            revert: true,
+            account_updates: new_account_updates,
+            ..Default::default()
+        };
 
         // Merge the new BlockChanges into the initial one
         let res = block_account_changes_initial.merge(block_account_changes_new);
@@ -2184,12 +2148,10 @@ mod test {
             AccountUpdate {
                 address: Bytes::from("0x00"),
                 chain: Chain::Ethereum,
-                slots: [
+                slots: HashMap::from([
                     (Bytes::from("0x0044"), Bytes::from("0x0055")),
                     (Bytes::from("0x0022"), Bytes::from("0x0033")),
-                ]
-                .into_iter()
-                .collect(),
+                ]),
                 balance: Some(Bytes::from("0x03")),
                 code: Some(Bytes::from("0x04")),
                 change: ChangeType::Creation,
@@ -2197,19 +2159,12 @@ mod test {
         )]
         .into_iter()
         .collect();
-        let block_account_changes_expected = BlockChanges::new(
-            "extractor1",
-            Chain::Ethereum,
-            Block::default(),
-            0,
-            true,
-            expected_account_updates,
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-        );
+        let block_account_changes_expected = BlockChanges {
+            extractor: "extractor1".to_string(),
+            revert: true,
+            account_updates: expected_account_updates,
+            ..Default::default()
+        };
         assert_eq!(res, block_account_changes_expected);
     }
 
@@ -2218,10 +2173,7 @@ mod test {
         // Initialize two BlockChanges instances with different details
         let block_entity_changes_result1 = BlockChanges {
             extractor: String::from("extractor1"),
-            chain: Chain::Ethereum,
-            block: Block::default(),
             revert: false,
-            new_tokens: HashMap::new(),
             state_updates: hashmap! { "state1".to_string() => ProtocolStateDelta::default() },
             new_protocol_components: hashmap! { "component1".to_string() => ProtocolComponent::default() },
             deleted_protocol_components: HashMap::new(),
@@ -2249,10 +2201,7 @@ mod test {
         };
         let block_entity_changes_result2 = BlockChanges {
             extractor: String::from("extractor2"),
-            chain: Chain::Ethereum,
-            block: Block::default(),
             revert: true,
-            new_tokens: HashMap::new(),
             state_updates: hashmap! { "state2".to_string() => ProtocolStateDelta::default() },
             new_protocol_components: hashmap! { "component2".to_string() => ProtocolComponent::default() },
             deleted_protocol_components: hashmap! { "component3".to_string() => ProtocolComponent::default() },
@@ -2268,10 +2217,7 @@ mod test {
 
         let expected_block_entity_changes_result = BlockChanges {
             extractor: String::from("extractor1"),
-            chain: Chain::Ethereum,
-            block: Block::default(),
             revert: true,
-            new_tokens: HashMap::new(),
             state_updates: hashmap! {
                 "state1".to_string() => ProtocolStateDelta::default(),
                 "state2".to_string() => ProtocolStateDelta::default(),
