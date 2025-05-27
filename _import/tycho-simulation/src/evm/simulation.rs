@@ -15,7 +15,7 @@ use revm::{
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use strum_macros::Display;
 use tokio::runtime::{Handle, Runtime};
-use tracing::{debug, info};
+use tracing::debug;
 
 use super::{
     account_storage::StateUpdate,
@@ -53,8 +53,8 @@ pub struct SimulationResult {
 #[derive(Debug, Clone)]
 pub struct SimulationEngine<D: EngineDatabaseInterface + Clone + Debug>
 where
-    <D as DatabaseRef>::Error: std::fmt::Debug,
-    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
 {
     pub state: D,
     pub trace: bool,
@@ -62,8 +62,8 @@ where
 
 impl<D: EngineDatabaseInterface + Clone + Debug> SimulationEngine<D>
 where
-    <D as DatabaseRef>::Error: std::fmt::Debug,
-    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
 {
     /// Create a new simulation engine
     ///
@@ -227,7 +227,7 @@ where
 /// # Errors
 ///
 /// * `SimulationError` - simulation wasn't successful for any reason. See variants for details.
-fn interpret_evm_result<DBError: std::fmt::Debug>(
+fn interpret_evm_result<DBError: Debug>(
     evm_result: EVMResult<DBError>,
 ) -> Result<SimulationResult, SimulationEngineError> {
     match evm_result {
@@ -254,7 +254,6 @@ fn interpret_evm_result<DBError: std::fmt::Debug>(
                 gas_used: None,
             }),
             EVMError::Database(db_error) => {
-                info!("Are we at database error? {db_error:?}", db_error = &db_error);
                 Err(SimulationEngineError::StorageError(format!("Storage error: {db_error:?}")))
             }
             EVMError::Custom(err) => Err(SimulationEngineError::TransactionError {

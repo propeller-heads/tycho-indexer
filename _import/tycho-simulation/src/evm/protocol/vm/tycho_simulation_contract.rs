@@ -52,8 +52,8 @@ pub struct TychoSimulationResponse {
 #[derive(Clone, Debug)]
 pub struct TychoSimulationContract<D: EngineDatabaseInterface + Clone + Debug>
 where
-    <D as DatabaseRef>::Error: std::fmt::Debug,
-    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
 {
     pub(crate) address: Address,
     pub(crate) engine: SimulationEngine<D>,
@@ -61,8 +61,8 @@ where
 
 impl<D: EngineDatabaseInterface + Clone + Debug> TychoSimulationContract<D>
 where
-    <D as DatabaseRef>::Error: std::fmt::Debug,
-    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
 {
     pub fn new(address: Address, engine: SimulationEngine<D>) -> Result<Self, SimulationError> {
         Ok(Self { address, engine })
