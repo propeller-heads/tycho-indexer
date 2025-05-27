@@ -185,6 +185,7 @@ mod tests {
                 balances: HashMap::new(),
             },
             component: usv3_component(),
+            component_tvl: None,
         };
 
         let result = UniswapV3State::try_from_with_block(
@@ -240,6 +241,7 @@ mod tests {
                 balances: HashMap::new(),
             },
             component,
+            component_tvl: None,
         };
 
         let result = UniswapV3State::try_from_with_block(
@@ -272,6 +274,7 @@ mod tests {
                 balances: HashMap::new(),
             },
             component,
+            component_tvl: None,
         };
 
         let result = UniswapV3State::try_from_with_block(

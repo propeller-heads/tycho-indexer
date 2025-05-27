@@ -61,7 +61,7 @@ pub async fn load_all_tokens(
     let rpc_client = HttpRPCClient::new(rpc_url.as_str(), auth_key).unwrap();
 
     // Chain specific defaults for special case chains. Otherwise defaults to 42 days.
-    let default_min_days = HashMap::from([(Chain::Base, 10_u64)]);
+    let default_min_days = HashMap::from([(Chain::Base, 1_u64)]);
 
     #[allow(clippy::mutable_key_type)]
     rpc_client

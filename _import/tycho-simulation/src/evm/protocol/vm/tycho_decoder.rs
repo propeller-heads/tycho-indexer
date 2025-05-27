@@ -286,6 +286,7 @@ mod tests {
                 balances: HashMap::new(),
             },
             component: vm_component(),
+            component_tvl: None,
         };
         // Initialize engine with balancer storage
         let block = header();

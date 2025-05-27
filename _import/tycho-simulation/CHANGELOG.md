@@ -1,3 +1,40 @@
+## [0.101.2](https://github.com/propeller-heads/tycho-simulation/compare/0.101.1...0.101.2) (2025-05-27)
+
+
+### Bug Fixes
+
+* set base default 'last active' token filter to 1 day ([7d123d3](https://github.com/propeller-heads/tycho-simulation/commit/7d123d37bd01d1b4ff49dfd170f9e96cfb58c8ed))
+
+## [0.101.1](https://github.com/propeller-heads/tycho-simulation/compare/0.101.0...0.101.1) (2025-05-26)
+
+
+### Bug Fixes
+
+* improve solidity utils checks and errors ([dfb19f2](https://github.com/propeller-heads/tycho-simulation/commit/dfb19f2db82896c07b328af5e1d448a153140b98))
+
+## [0.101.0](https://github.com/propeller-heads/tycho-simulation/compare/0.100.1...0.101.0) (2025-05-19)
+
+
+### Features
+
+* add Clone to BlockUpdate ([015d36d](https://github.com/propeller-heads/tycho-simulation/commit/015d36df8ddaadf9640c975b0af1bada7cd81ed2))
+* add Serialize support to ProtocolComponent ([8c6d385](https://github.com/propeller-heads/tycho-simulation/commit/8c6d38584ce4bd897257010586e201440a856723))
+* add Serialize support to Token ([9b164c6](https://github.com/propeller-heads/tycho-simulation/commit/9b164c6c37e1fd647f0315dd50b3ec130802dc07))
+
+## [0.100.1](https://github.com/propeller-heads/tycho-simulation/compare/0.100.0...0.100.1) (2025-05-16)
+
+
+### Bug Fixes
+
+* update tycho-client to version 0.70.5 ([0f75dae](https://github.com/propeller-heads/tycho-simulation/commit/0f75daeb29947a3422d8c9539303f7d1d69ba615))
+
+## [0.100.0](https://github.com/propeller-heads/tycho-simulation/compare/0.99.2...0.100.0) (2025-05-15)
+
+
+### Features
+
+* update tycho-indexer dependencies to version 0.70.3 ([980b0fd](https://github.com/propeller-heads/tycho-simulation/commit/980b0fdb7ed6acffbe80bbd870bfeb6bdee1445b))
+
 ## [0.99.2](https://github.com/propeller-heads/tycho-simulation/compare/0.99.1...0.99.2) (2025-05-05)
 
 
