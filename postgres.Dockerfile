@@ -5,6 +5,7 @@
 FROM ghcr.io/dbsystel/postgresql-partman:15-5
 ARG PGCRON_VERSION="1.6.2"
 USER root
+RUN apt-get update && apt-get install -y wget build-essential
 RUN cd /tmp \
     && wget "https://github.com/citusdata/pg_cron/archive/refs/tags/v${PGCRON_VERSION}.tar.gz" \
     && tar zxf v${PGCRON_VERSION}.tar.gz \
