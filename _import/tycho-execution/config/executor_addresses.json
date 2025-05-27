@@ -1,34 +1,24 @@
 {
   "ethereum": {
-    "uniswap_v2": "0xf6c5be66FFf9DC69962d73da0A617a827c382329",
-    "sushiswap_v2": "0x8ABd4075cF54E0A9C52D18e6951b969AF3249cF9",
-    "pancakeswap_v2": "0x08B0C001D323da1DC8D2465119BAcCb82c3741f8",
-    "uniswap_v3": "0xdD8559c917393FC8DD2b4dD289c52Ff445fDE1B0",
-    "pancakeswap_v3": "0x4929B619A8F0D9c06ed0FfD497636580D823F65d",
-    "uniswap_v4": "0x042C0ebBEAb9d9987c2f64Ee05f2B3aeB86eAf70",
-    "vm:balancer_v2": "0x2380a9ff20565191b67cd66914cf5151434d71f5",
-    "ekubo_v2": "0x4f88f6630a33dB05BEa1FeF7Dc7ff7508D1c531D",
-    "vm:curve": "0x2751999a30A0026c909c4f1EB92d123254CABa7F"
-  },
-  "tenderly_ethereum": {
-    "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",
-    "uniswap_v3": "0x5C2F5a71f67c01775180ADc06909288B4C329308",
-    "uniswap_v4": "0xF62849F9A0B5Bf2913b396098F7c7019b51A820a",
-    "vm:balancer_v2": "0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"
+    "uniswap_v2": "0xaE04CA7E9Ed79cBD988f6c536CE11C621166f41B",
+    "sushiswap_v2": "0x2017ad7035D781C14699C8E44ed62d3083723A18",
+    "pancakeswap_v2": "0xC9db3FEB380E4fd9af239e2595ECdEcE3b5c34A4",
+    "uniswap_v3": "0xbab7124C9662B15C6b9AF0b1f329907dD55a24FC",
+    "pancakeswap_v3": "0x9D32e9F569B22Ae8d8C6f788037C1CD53632A059",
+    "uniswap_v4": "0xD11496EAb53A9521f0bC1e5c1098Ecb467103Ad9",
+    "vm:balancer_v2": "0xB5b8dc3F0a1Be99685a0DEd015Af93bFBB55C411",
+    "ekubo_v2": "0xcCF8e1E39e9ddfa88282fA6a7B31eBFB41a1ED7B",
+    "vm:curve": "0x879F3008D96EBea0fc584aD684c7Df31777F3165",
+    "vm:maverick_v2": "0xF35e3F5F205769B41508A18787b62A21bC80200B"
   },
   "base": {
-    "uniswap_v2": "0x852389F3Cde47e7dab5a29Fdd3E58c7050f1a019",
-    "sushiswap_v2": "0xbAf4569234712233Ae2142A07Bf164f988bDf5B5",
-    "pancakeswap_v2": "0xA669d7b9249B9405bbDc2Ca7A18e6449C472e456",
-    "uniswap_v3": "0x447135F701A4650e4Bd19c2B2B99cb324f8942c3",
-    "uniswap_v4": "0xc34689d354B42b2780Fbe0A785080d761E5C882b"
-  },
-  "tenderly_base": {
-    "uniswap_v3": "0x7c7E06d7317e620a185078e236879D2a87fC8d22"
+    "uniswap_v2": "0xF744EBfaA580cF3fFc25aD046E92BD8B770a0700",
+    "uniswap_v3": "0x647bffbf8bd72bf6341ecba8b0279e090313a40d",
+    "uniswap_v4": "0xb5628b97f491f85766673ac4d5d47bb1af7fcc4a"
   },
   "unichain": {
-    "uniswap_v2": "0x2E80FBD880379744b46C2aB7249D2949E6696353",
-    "uniswap_v3": "0x7ba9149EaCC5801279FF8B4d7ECa020bbef18F90",
-    "uniswap_v4": "0x475EB503D630C2919DC8B24cB6603E17e69Bfe35"
+    "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",
+    "uniswap_v3": "0xD26A838A41af3d4815DfD745a080B2062c4124d1",
+    "uniswap_v4": "0xF744EBfaA580cF3fFc25aD046E92BD8B770a0700"
   }
 }
