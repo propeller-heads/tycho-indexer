@@ -1,3 +1,22 @@
+## [0.103.0](https://github.com/propeller-heads/tycho-simulation/compare/0.102.0...0.103.0) (2025-05-27)
+
+
+### Features
+
+* Update quickstart to sign the permit object itself ([73a21b0](https://github.com/propeller-heads/tycho-simulation/commit/73a21b07bd94665a2de750189cd612a1e20edc96))
+* Update quickstart with new encoders ([bbae67a](https://github.com/propeller-heads/tycho-simulation/commit/bbae67a18b61db75fdb79498fe0a3240fbcdcacd))
+* Update tycho-execution and quickstart ([cc41536](https://github.com/propeller-heads/tycho-simulation/commit/cc415365d5c152b90dccbcb9cc7bcd343917f092))
+* update tycho-execution version ([6939613](https://github.com/propeller-heads/tycho-simulation/commit/693961396d39b2d868207ee753da4e56448697db))
+* Update tycho-execution version ([aa04d06](https://github.com/propeller-heads/tycho-simulation/commit/aa04d06338dbd75760ae65e92412736f43d99211))
+* Update tycho-execution version, add maverick stream ([d0588f8](https://github.com/propeller-heads/tycho-simulation/commit/d0588f81d0f40ca4a7c3357636afb8bfde2ce847))
+* Upgrade tycho execution ([fdf62d5](https://github.com/propeller-heads/tycho-simulation/commit/fdf62d5b37ba01d833cef01e23aa931b98613a7c))
+
+
+### Bug Fixes
+
+* Don't use encode_input from tycho-execution ([641df02](https://github.com/propeller-heads/tycho-simulation/commit/641df02539c4cb7c83335b6b023e449d2ea4f2bf))
+* **quickstart:** Support checking ETH balance not only ERC20 tokens ([04cc953](https://github.com/propeller-heads/tycho-simulation/commit/04cc953a04c4517be4bf765f773b36a38552fef5))
+
 ## [0.102.0](https://github.com/propeller-heads/tycho-simulation/compare/0.101.2...0.102.0) (2025-05-27)
 
 
