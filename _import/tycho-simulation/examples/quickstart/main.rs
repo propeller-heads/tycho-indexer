@@ -19,7 +19,9 @@ use alloy::{
     signers::{local::PrivateKeySigner, SignerSync},
     transports::http::{Client, Http},
 };
-use alloy_primitives::{Address, Bytes as AlloyBytes, PrimitiveSignature, TxKind, B256, U256};
+use alloy_primitives::{
+    Address, Bytes as AlloyBytes, Keccak256, PrimitiveSignature, TxKind, B256, U256,
+};
 use alloy_sol_types::{eip712_domain, SolStruct, SolValue};
 use clap::Parser;
 use dialoguer::{theme::ColorfulTheme, Select};
@@ -32,10 +34,7 @@ use tycho_common::Bytes;
 pub mod utils;
 use tycho_execution::encoding::{
     errors::EncodingError,
-    evm::{
-        approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder,
-        utils::encode_input,
-    },
+    evm::{approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder},
     models,
     models::{EncodedSolution, Solution, Swap, Transaction, UserTransferType},
 };
@@ -691,7 +690,7 @@ fn encode_tycho_router_call(
     )
         .abi_encode();
 
-    let contract_interaction = encode_input(&encoded_solution.selector, method_calldata);
+    let contract_interaction = encode_input(&encoded_solution.function_signature, method_calldata);
     let value = if solution.given_token == native_address {
         solution.given_amount.clone()
     } else {
@@ -728,6 +727,28 @@ fn sign_permit(
         .map_err(|e| {
             EncodingError::FatalError(format!("Failed to sign permit2 approval with error: {e}"))
         })
+}
+
+/// Encodes the input data for a function call to the given function selector.
+pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
+    let mut hasher = Keccak256::new();
+    hasher.update(selector.as_bytes());
+    let selector_bytes = &hasher.finalize()[..4];
+    let mut call_data = selector_bytes.to_vec();
+    // Remove extra prefix if present (32 bytes for dynamic data)
+    // Alloy encoding is including a prefix for dynamic data indicating the offset or length
+    // but at this point we don't want that
+    if encoded_args.len() > 32 &&
+        encoded_args[..32] ==
+            [0u8; 31]
+                .into_iter()
+                .chain([32].to_vec())
+                .collect::<Vec<u8>>()
+    {
+        encoded_args = encoded_args[32..].to_vec();
+    }
+    call_data.extend(encoded_args);
+    call_data
 }
 
 async fn get_tx_requests(
