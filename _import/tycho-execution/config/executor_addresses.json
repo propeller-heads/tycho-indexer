@@ -18,11 +18,9 @@
     "vm:balancer_v2": "0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"
   },
   "base": {
-    "uniswap_v2": "0x852389F3Cde47e7dab5a29Fdd3E58c7050f1a019",
-    "sushiswap_v2": "0xbAf4569234712233Ae2142A07Bf164f988bDf5B5",
-    "pancakeswap_v2": "0xA669d7b9249B9405bbDc2Ca7A18e6449C472e456",
-    "uniswap_v3": "0x447135F701A4650e4Bd19c2B2B99cb324f8942c3",
-    "uniswap_v4": "0xc34689d354B42b2780Fbe0A785080d761E5C882b"
+    "uniswap_v2": "0xF744EBfaA580cF3fFc25aD046E92BD8B770a0700",
+    "uniswap_v3": "0x647bffbf8bd72bf6341ecba8b0279e090313a40d",
+    "uniswap_v4": "0xb5628b97f491f85766673ac4d5d47bb1af7fcc4a"
   },
   "tenderly_base": {
     "uniswap_v3": "0x7c7E06d7317e620a185078e236879D2a87fC8d22"
