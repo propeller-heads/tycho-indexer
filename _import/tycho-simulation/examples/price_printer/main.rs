@@ -1,7 +1,7 @@
+extern crate tycho_simulation;
 mod ui;
 pub mod utils;
 
-extern crate tycho_simulation;
 use std::{env, str::FromStr};
 
 use clap::Parser;
@@ -62,7 +62,12 @@ fn register_exchanges(
                     "uniswap_v4",
                     tvl_filter.clone(),
                     Some(uniswap_v4_pool_with_hook_filter),
-                );
+                )
+                .exchange::<EVMPoolState<PreCachedDB>>(
+                    "vm:maverick_v2",
+                    tvl_filter.clone(),
+                    Some(curve_pool_filter),
+                )
         }
         Chain::Base => {
             builder = builder

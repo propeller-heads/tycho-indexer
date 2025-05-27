@@ -14,10 +14,12 @@ lazy_static! {
 pub const ERC20_BYTECODE: &[u8] = include_bytes!("assets/ERC20.bin");
 pub const BALANCER_V2: &[u8] = include_bytes!("assets/BalancerV2SwapAdapter.evm.runtime");
 pub const CURVE: &[u8] = include_bytes!("assets/CurveSwapAdapter.evm.runtime");
+pub const MAVERICK_V2: &[u8] = include_bytes!("assets/MaverickV2SwapAdapter.evm.runtime");
 pub fn get_adapter_file(protocol: &str) -> Result<&'static [u8], SimulationError> {
     match protocol {
         "balancer_v2" => Ok(BALANCER_V2),
         "curve" => Ok(CURVE),
+        "maverick_v2" => Ok(MAVERICK_V2),
         _ => Err(SimulationError::FatalError(format!("Adapter for protocol {protocol} not found"))),
     }
 }
