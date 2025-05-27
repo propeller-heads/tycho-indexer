@@ -1,3 +1,10 @@
+## [0.95.1](https://github.com/propeller-heads/tycho-execution/compare/0.95.0...0.95.1) (2025-05-27)
+
+
+### Bug Fixes
+
+* Move encode_input back into encoding_utils.rs ([92d36b9](https://github.com/propeller-heads/tycho-execution/commit/92d36b9f48d30aad2d1227c21f490ac9f47daa7b))
+
 ## [0.95.0](https://github.com/propeller-heads/tycho-execution/compare/0.94.0...0.95.0) (2025-05-26)
 
 
