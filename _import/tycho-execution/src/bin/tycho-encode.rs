@@ -106,7 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let encoded = serde_json::json!({
             "swaps": format!("0x{}", hex::encode(&encoded_solutions[0].swaps)),
             "interacting_with": format!("0x{}", hex::encode(&encoded_solutions[0].interacting_with)),
-            "selector": format!("{}",&encoded_solutions[0].selector),
+            "function_signature": format!("{}",&encoded_solutions[0].function_signature),
             "n_tokens": format!("{}", &encoded_solutions[0].n_tokens),
             "permit": match encoded_solutions[0].permit.as_ref() {
         Some(permit) => {

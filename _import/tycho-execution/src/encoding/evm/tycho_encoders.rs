@@ -337,7 +337,7 @@ impl TychoExecutorEncoder {
             swaps: grouped_protocol_data,
             interacting_with: executor_address,
             permit: None,
-            selector: "".to_string(),
+            function_signature: "".to_string(),
             n_tokens: 0,
         })
     }
