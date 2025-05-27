@@ -4,7 +4,7 @@ use alloy::{
     primitives::U256,
     signers::{local::PrivateKeySigner, Signature, SignerSync},
 };
-use alloy_primitives::Address;
+use alloy_primitives::{Address, Keccak256};
 use alloy_sol_types::{eip712_domain, SolStruct, SolValue};
 use num_bigint::BigUint;
 use tycho_common::Bytes;
@@ -13,7 +13,6 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::PermitSingle,
-        utils,
         utils::{biguint_to_u256, bytes_to_address},
     },
     models,
@@ -34,7 +33,7 @@ use crate::encoding::{
 /// - `splitSwapPermit2`
 ///
 /// The encoding includes handling of native asset wrapping/unwrapping, permit2 support,
-/// and proper input argument formatting based on the selector string.
+/// and proper input argument formatting based on the function signature string.
 ///
 /// # ⚠️ Important Responsibility Note
 ///
@@ -60,7 +59,7 @@ use crate::encoding::{
 /// funds.
 ///
 /// # Parameters
-/// - `encoded_solution`: The solution already encoded by Tycho, including selector and swap path.
+/// - `encoded_solution`: The solution already encoded by Tycho.
 /// - `solution`: The high-level solution including tokens, amounts, and receiver info.
 /// - `token_in_already_in_router`: Whether the input token is already present in the router.
 /// - `router_address`: The address of the Tycho Router contract.
@@ -71,8 +70,8 @@ use crate::encoding::{
 /// value, data), or an error if the inputs are invalid.
 ///
 /// # Errors
-/// - Returns `EncodingError::FatalError` if the selector is unsupported or required fields (e.g.,
-///   permit or signature) are missing.
+/// - Returns `EncodingError::FatalError` if the function signature is unsupported or required
+///   fields (e.g., permit or signature) are missing.
 pub fn encode_tycho_router_call(
     chain_id: u64,
     encoded_solution: EncodedSolution,
@@ -109,7 +108,7 @@ pub fn encode_tycho_router_call(
     };
 
     let method_calldata = if encoded_solution
-        .selector
+        .function_signature
         .contains("singleSwapPermit2")
     {
         (
@@ -128,7 +127,7 @@ pub fn encode_tycho_router_call(
         )
             .abi_encode()
     } else if encoded_solution
-        .selector
+        .function_signature
         .contains("singleSwap")
     {
         (
@@ -144,7 +143,7 @@ pub fn encode_tycho_router_call(
         )
             .abi_encode()
     } else if encoded_solution
-        .selector
+        .function_signature
         .contains("sequentialSwapPermit2")
     {
         (
@@ -163,7 +162,7 @@ pub fn encode_tycho_router_call(
         )
             .abi_encode()
     } else if encoded_solution
-        .selector
+        .function_signature
         .contains("sequentialSwap")
     {
         (
@@ -179,7 +178,7 @@ pub fn encode_tycho_router_call(
         )
             .abi_encode()
     } else if encoded_solution
-        .selector
+        .function_signature
         .contains("splitSwapPermit2")
     {
         (
@@ -199,7 +198,7 @@ pub fn encode_tycho_router_call(
         )
             .abi_encode()
     } else if encoded_solution
-        .selector
+        .function_signature
         .contains("splitSwap")
     {
         (
@@ -216,10 +215,10 @@ pub fn encode_tycho_router_call(
         )
             .abi_encode()
     } else {
-        Err(EncodingError::FatalError("Invalid selector for Tycho router".to_string()))?
+        Err(EncodingError::FatalError("Invalid function signature for Tycho router".to_string()))?
     };
 
-    let contract_interaction = utils::encode_input(&encoded_solution.selector, method_calldata);
+    let contract_interaction = encode_input(&encoded_solution.function_signature, method_calldata);
     let value = if solution.given_token == native_address {
         solution.given_amount.clone()
     } else {
@@ -256,4 +255,26 @@ pub fn sign_permit(
         .map_err(|e| {
             EncodingError::FatalError(format!("Failed to sign permit2 approval with error: {e}"))
         })
+}
+
+/// Encodes the input data for a function call to the given function selector.
+pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
+    let mut hasher = Keccak256::new();
+    hasher.update(selector.as_bytes());
+    let selector_bytes = &hasher.finalize()[..4];
+    let mut call_data = selector_bytes.to_vec();
+    // Remove extra prefix if present (32 bytes for dynamic data)
+    // Alloy encoding is including a prefix for dynamic data indicating the offset or length
+    // but at this point we don't want that
+    if encoded_args.len() > 32 &&
+        encoded_args[..32] ==
+            [0u8; 31]
+                .into_iter()
+                .chain([32].to_vec())
+                .collect::<Vec<u8>>()
+    {
+        encoded_args = encoded_args[32..].to_vec();
+    }
+    call_data.extend(encoded_args);
+    call_data
 }

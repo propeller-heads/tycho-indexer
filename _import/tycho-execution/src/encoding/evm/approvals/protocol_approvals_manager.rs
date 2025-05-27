@@ -14,7 +14,10 @@ use tokio::{
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::{encode_input, get_client, get_runtime},
+    evm::{
+        encoding_utils::encode_input,
+        utils::{get_client, get_runtime},
+    },
 };
 
 /// A manager for checking if an approval is needed for interacting with a certain spender.

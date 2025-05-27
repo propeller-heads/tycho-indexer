@@ -64,10 +64,10 @@ fn main() {
         .clone();
     println!(" ====== Simple swap WETH -> USDC ======");
     println!(
-        "The simple swap encoded solution should be sent to address {:?} and selector {:?} and the \
-    following encoded data: {:?}",
+        "The simple swap encoded solution should be sent to address {:?} with function signature {:?} and the \
+    following encoded swaps: {:?}",
         encoded_solution.interacting_with,
-        encoded_solution.selector,
+        encoded_solution.function_signature,
         hex::encode(encoded_solution.swaps)
     );
 
@@ -138,10 +138,10 @@ fn main() {
 
     println!(" ====== Complex split swap WETH -> USDC ======");
     println!(
-    "The complex swaps encoded solution should be sent to address {:?} and selector {:?} and the \
-    following encoded data: {:?}",
-    complex_encoded_solution.interacting_with,
-    complex_encoded_solution.selector,
-    hex::encode(complex_encoded_solution.swaps)
+        "The complex swaps encoded solution should be sent to address {:?} with function signature {:?} and the \
+    following encoded swaps: {:?}",
+        complex_encoded_solution.interacting_with,
+        complex_encoded_solution.function_signature,
+        hex::encode(complex_encoded_solution.swaps)
     );
 }

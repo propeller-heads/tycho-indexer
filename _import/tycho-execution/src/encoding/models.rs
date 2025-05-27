@@ -105,7 +105,6 @@ impl Swap {
 /// * `to`: Address of the contract to call with the calldata
 /// * `value`: Native token value to be sent with the transaction.
 /// * `data`: Encoded calldata for the transaction.
-/// * `selector`: Only relevant for direct executions. The selector of the function to be called.
 #[derive(Clone, Debug)]
 pub struct Transaction {
     pub to: Bytes,
@@ -118,14 +117,14 @@ pub struct Transaction {
 /// # Fields
 /// * `swaps`: Encoded swaps to be executed.
 /// * `interacting_with`: Address of the contract to be called.
-/// * `selector`: The selector of the function to be called.
+/// * `function_signature`: The signature of the function to be called.
 /// * `n_tokens`: Number of tokens in the swap.
 /// * `permit`: Optional permit for the swap (if permit2 is enabled).
 #[derive(Clone, Debug)]
 pub struct EncodedSolution {
     pub swaps: Vec<u8>,
     pub interacting_with: Bytes,
-    pub selector: String,
+    pub function_signature: String,
     pub n_tokens: usize,
     pub permit: Option<PermitSingle>,
 }
