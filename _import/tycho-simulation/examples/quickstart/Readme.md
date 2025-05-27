@@ -12,7 +12,7 @@ export RPC_URL=<your-rpc-url>
 cargo run --release --example quickstart
 ```
 
-By default, the example will trade 1 WETH -> USDC on Ethereum Mainnet. Setting the chain will by default trade 1 WETH -> USDC on that chain.
+By default, the example will trade 10 USDC -> WETH on Ethereum Mainnet. Setting the chain will by default trade 10 USDC -> WETH on that chain.
 If you want a different trade or chain, you can do:
 
 ```bash
