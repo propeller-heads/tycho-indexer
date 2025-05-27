@@ -312,6 +312,7 @@ async fn main() {
                     &provider,
                     Address::from_slice(&sell_token.address),
                     wallet.address(),
+                    Address::from_slice(&chain.native_token().address),
                 )
                 .await
                 {
@@ -328,6 +329,7 @@ async fn main() {
                                 formatted_balance = formatted_balance,
                                 sell_symbol = sell_token.symbol,
                             );
+                            return;
                         }
                     }
                     Err(e) => eprintln!("Failed to get token balance: {e}"),
@@ -338,6 +340,7 @@ async fn main() {
                     &provider,
                     Address::from_slice(&buy_token.address),
                     wallet.address(),
+                    Address::from_slice(&chain.native_token().address),
                 )
                 .await
                 {
@@ -851,27 +854,33 @@ async fn get_token_balance(
     >,
     token_address: Address,
     wallet_address: Address,
+    native_token_address: Address,
 ) -> Result<BigUint, Box<dyn std::error::Error>> {
-    let balance_of_signature = "balanceOf(address)";
-    let args = (wallet_address,);
-    let data = encode_input(balance_of_signature, args.abi_encode());
+    let balance = if token_address == native_token_address {
+        provider
+            .get_balance(wallet_address)
+            .await?
+    } else {
+        let balance_of_signature = "balanceOf(address)";
+        let data = encode_input(balance_of_signature, (wallet_address,).abi_encode());
 
-    let result = provider
-        .call(&TransactionRequest {
-            to: Some(TxKind::Call(token_address)),
-            input: TransactionInput { input: Some(AlloyBytes::from(data)), data: None },
-            ..Default::default()
-        })
-        .await?;
+        let result = provider
+            .call(&TransactionRequest {
+                to: Some(TxKind::Call(token_address)),
+                input: TransactionInput { input: Some(AlloyBytes::from(data)), data: None },
+                ..Default::default()
+            })
+            .await?;
 
-    let balance = U256::from_be_bytes(
-        result
-            .to_vec()
-            .try_into()
-            .unwrap_or([0u8; 32]),
-    );
+        U256::from_be_bytes(
+            result
+                .to_vec()
+                .try_into()
+                .unwrap_or([0u8; 32]),
+        )
+    };
     // Convert the U256 to BigUint
-    Ok(num_bigint::BigUint::from_bytes_be(&balance.to_be_bytes::<32>()))
+    Ok(BigUint::from_bytes_be(&balance.to_be_bytes::<32>()))
 }
 
 async fn execute_swap_transaction(
@@ -887,21 +896,6 @@ async fn execute_swap_transaction(
     tx: Transaction,
     chain_id: u64,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Check token balance first
-    let token_contract = Address::from_slice(sell_token_address);
-    let token_balance = get_token_balance(&provider, token_contract, wallet_address).await?;
-
-    // Get a more human-readable representation of the balance check
-    let decimal_balance = token_balance.to_f64().unwrap_or(0.0);
-    let decimal_required = amount_in.to_f64().unwrap_or(0.0);
-
-    if token_balance < *amount_in {
-        return Err(format!(
-            "\nInsufficient token balance. You have {decimal_balance} tokens but need {decimal_required} tokens 
-            (raw values: have {token_balance}, need {amount_in})\n",
-        ).into());
-    }
-
     println!("\nExecuting by performing an approval (for permit2) and a swap transaction...");
     let (approval_request, swap_request) = get_tx_requests(
         provider.clone(),
