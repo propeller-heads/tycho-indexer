@@ -92,7 +92,7 @@ ratatui = "0.29.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
-tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", package = "tycho-execution", features = ["evm"], rev = "9356e87d3a6f0a5cd04315fc6a8fe37631c87da7" }
+tycho-execution = "0.96.0"
 
 [features]
 default = ["evm"]
