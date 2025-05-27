@@ -774,6 +774,7 @@ where
         }
     }
 
+    #[instrument(skip(self, request))]
     async fn get_traced_entry_points(
         &self,
         request: &dto::TracedEntryPointRequestBody,
@@ -828,6 +829,11 @@ where
                 err
             })?;
 
+        trace!(
+            entry_points_tracing_params = ?entry_points_tracing_params_data,
+            "Retrieved entry points with tracing params from database."
+        );
+
         // Flatten the ID lists, throwing away component ids, to avoid making duplicate db calls
         // when getting traced entry points.
         let entry_point_ids: HashSet<EntryPointId> = entry_points_tracing_params_data
@@ -853,6 +859,11 @@ where
                 error!(error = %err, "Error while getting traced entry points.");
                 err
             })?;
+
+        trace!(
+            traced_entry_points = ?traced_entry_points,
+            "Retrieved traced entry points entry points from database."
+        );
 
         let mut traced_entry_points_by_component = HashMap::new();
 
