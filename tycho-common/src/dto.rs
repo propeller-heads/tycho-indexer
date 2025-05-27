@@ -241,6 +241,7 @@ pub struct BlockChanges {
     pub component_balances: HashMap<String, TokenBalances>,
     pub account_balances: HashMap<Bytes, HashMap<Bytes, AccountBalance>>,
     pub component_tvl: HashMap<String, f64>,
+    pub dci_data: DCIData,
 }
 
 impl BlockChanges {
@@ -257,6 +258,7 @@ impl BlockChanges {
         deleted_protocol_components: HashMap<String, ProtocolComponent>,
         component_balances: HashMap<String, HashMap<Bytes, ComponentBalance>>,
         account_balances: HashMap<Bytes, HashMap<Bytes, AccountBalance>>,
+        dci_data: DCIData,
     ) -> Self {
         BlockChanges {
             extractor: extractor.to_owned(),
@@ -275,6 +277,7 @@ impl BlockChanges {
                 .collect(),
             account_balances,
             component_tvl: HashMap::new(),
+            dci_data,
         }
     }
 
@@ -1323,6 +1326,13 @@ impl ProtocolSystemsRequestResponse {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
+pub struct DCIData {
+    pub new_entrypoints: HashMap<String, HashSet<EntryPoint>>,
+    pub new_entrypoint_params: HashMap<String, HashSet<(TracingParams, Option<String>)>>,
+    pub trace_results: HashMap<String, TracingResult>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentTvlRequestBody {
@@ -1474,6 +1484,54 @@ pub struct TracedEntryPointRequestResponse {
     /// tracing parameters and its corresponding tracing results.
     pub traced_entry_points: HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
     pub pagination: PaginationResponse,
+}
+
+impl From<TracedEntryPointRequestResponse> for DCIData {
+    fn from(response: TracedEntryPointRequestResponse) -> Self {
+        let mut new_entrypoints = HashMap::new();
+        let mut new_entrypoint_params = HashMap::new();
+        let mut trace_results = HashMap::new();
+
+        for (component, traces) in response.traced_entry_points {
+            let mut entrypoints = HashSet::new();
+
+            for (entrypoint, trace) in traces {
+                let entrypoint_id = entrypoint
+                    .entry_point
+                    .external_id
+                    .clone();
+
+                // Collect entrypoints
+                entrypoints.insert(entrypoint.entry_point.clone());
+
+                // Collect entrypoint params
+                new_entrypoint_params
+                    .entry(entrypoint_id.clone())
+                    .or_insert_with(HashSet::new)
+                    .insert((entrypoint.params, Some(component.clone())));
+
+                // Collect trace results
+                trace_results
+                    .entry(entrypoint_id)
+                    .and_modify(|existing_trace: &mut TracingResult| {
+                        // Merge traces for the same entrypoint
+                        existing_trace
+                            .retriggers
+                            .extend(trace.retriggers.clone());
+                        existing_trace
+                            .called_addresses
+                            .extend(trace.called_addresses.clone());
+                    })
+                    .or_insert(trace);
+            }
+
+            if !entrypoints.is_empty() {
+                new_entrypoints.insert(component, entrypoints);
+            }
+        }
+
+        DCIData { new_entrypoints, new_entrypoint_params, trace_results }
+    }
 }
 
 pub struct AddEntrypointRequestBody {

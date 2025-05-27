@@ -89,7 +89,7 @@ pub struct BlockAggregatedChanges {
     pub component_balances: HashMap<ComponentId, HashMap<Bytes, ComponentBalance>>,
     pub account_balances: HashMap<Address, HashMap<Address, AccountBalance>>,
     pub component_tvl: HashMap<String, f64>,
-    pub trace_results: HashMap<EntryPointId, TracingResult>,
+    pub dci_data: DCIData,
 }
 
 impl BlockAggregatedChanges {
@@ -108,7 +108,7 @@ impl BlockAggregatedChanges {
         component_balances: HashMap<ComponentId, HashMap<Bytes, ComponentBalance>>,
         account_balances: HashMap<Address, HashMap<Address, AccountBalance>>,
         component_tvl: HashMap<String, f64>,
-        trace_results: HashMap<EntryPointId, TracingResult>,
+        dci_data: DCIData,
     ) -> Self {
         Self {
             extractor: extractor.to_string(),
@@ -124,7 +124,7 @@ impl BlockAggregatedChanges {
             component_balances,
             account_balances,
             component_tvl,
-            trace_results,
+            dci_data,
         }
     }
 }
@@ -156,7 +156,7 @@ impl NormalisedMessage for BlockAggregatedChanges {
             component_balances: self.component_balances.clone(),
             account_balances: self.account_balances.clone(),
             component_tvl: self.component_tvl.clone(),
-            trace_results: self.trace_results.clone(),
+            dci_data: self.dci_data.clone(),
         })
     }
 
@@ -173,6 +173,13 @@ impl BlockScoped for BlockAggregatedChanges {
     fn block(&self) -> Block {
         self.block.clone()
     }
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DCIData {
+    pub new_entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
+    pub new_entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+    pub trace_results: HashMap<EntryPointId, TracingResult>,
 }
 
 /// Changes grouped by their respective transaction.
@@ -367,7 +374,7 @@ pub enum BlockTag {
     /// Block by number
     Number(u64),
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EntryPoint {
     /// Entry point id
     pub external_id: String,
@@ -434,7 +441,7 @@ impl Serialize for RPCTracerParams {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct TracingResult {
     /// A set of (address, storage slot) pairs representing state that contain a called address.
     /// If any of these storage slots change, the execution path might change.

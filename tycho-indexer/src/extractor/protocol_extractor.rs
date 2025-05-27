@@ -14,7 +14,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     models::{
-        blockchain::{Block, BlockAggregatedChanges, BlockTag},
+        blockchain::{Block, BlockAggregatedChanges, BlockTag, DCIData},
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
@@ -1172,7 +1172,7 @@ where
             component_balances: combined_component_balances,
             account_balances: combined_account_balances,
             component_tvl: HashMap::new(),
-            trace_results: HashMap::new(), // TODO: get reverted tracing results
+            dci_data: DCIData::default(), // TODO: get reverted entrypoint info?
         };
 
         debug!("Successfully retrieved all previous states during revert!");
