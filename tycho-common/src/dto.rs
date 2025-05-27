@@ -1324,28 +1324,36 @@ impl ProtocolSystemsRequestResponse {
 
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone)]
 pub struct TracedEntryPointRequestBody {
+    #[serde(default)]
     pub chain: Chain,
     /// Filters by protocol, required to correctly apply unconfirmed state from
     /// ReorgBuffers
     pub protocol_system: String,
     /// Filter by component ids
     pub component_ids: Option<Vec<String>>,
-    /// Max page size supported is 500
+    /// Max page size supported is 100
     #[serde(default)]
     pub pagination: PaginationParams,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
 pub struct EntryPoint {
+    #[schema(example = "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()")]
     pub external_id: String,
+    #[schema(value_type=String, example="0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9")]
     #[serde(with = "hex_bytes")]
     pub target: Bytes,
+    #[schema(example = "getRate()")]
     pub signature: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
 pub struct RPCTracerParams {
+    #[schema(value_type=Option<String>)]
+    #[serde(with = "hex_bytes_option", default)]
     pub caller: Option<Bytes>,
+    #[schema(value_type=String, example="0x679aefce")]
+    #[serde(with = "hex_bytes")]
     pub calldata: Bytes,
 }
 
@@ -1398,7 +1406,9 @@ impl From<models::blockchain::EntryPointWithTracingParams> for EntryPointWithTra
 
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Clone)]
 pub struct TracingResult {
+    #[schema(value_type=HashSet<(String, String)>)]
     pub retriggers: HashSet<(Bytes, Bytes)>,
+    #[schema(value_type=HashSet<String>)]
     pub called_addresses: HashSet<Bytes>,
 }
 
