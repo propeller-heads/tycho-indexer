@@ -13,20 +13,6 @@
       "0x58Dc7Bf9eD1f4890A7505D5bE4E4252978eAF655"
     ]
   },
-  "tenderly_ethereum": {
-    "EXECUTOR_SETTER_ROLE": [
-      "0x58Dc7Bf9eD1f4890A7505D5bE4E4252978eAF655"
-    ],
-    "PAUSER_ROLE": [
-      "0x58Dc7Bf9eD1f4890A7505D5bE4E4252978eAF655"
-    ],
-    "UNPAUSER_ROLE": [
-      "0x58Dc7Bf9eD1f4890A7505D5bE4E4252978eAF655"
-    ],
-    "FUND_RESCUER_ROLE": [
-      "0x58Dc7Bf9eD1f4890A7505D5bE4E4252978eAF655"
-    ]
-  },
   "base": {
     "EXECUTOR_SETTER_ROLE": [
       "0x58Dc7Bf9eD1f4890A7505D5bE4E4252978eAF655"
@@ -39,20 +25,6 @@
     ],
     "FUND_RESCUER_ROLE": [
       "0x58Dc7Bf9eD1f4890A7505D5bE4E4252978eAF655"
-    ]
-  },
-  "tenderly_base": {
-    "EXECUTOR_SETTER_ROLE": [
-      "0xb0A77f867Fcec1e9b271Ee17354bC6bBC0dD5662"
-    ],
-    "PAUSER_ROLE": [
-      "0xb0A77f867Fcec1e9b271Ee17354bC6bBC0dD5662"
-    ],
-    "UNPAUSER_ROLE": [
-      "0xb0A77f867Fcec1e9b271Ee17354bC6bBC0dD5662"
-    ],
-    "FUND_RESCUER_ROLE": [
-      "0xb0A77f867Fcec1e9b271Ee17354bC6bBC0dD5662"
     ]
   },
   "unichain": {
