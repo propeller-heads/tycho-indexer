@@ -2006,6 +2006,37 @@ mod test {
             },
             "component_tvl": {
                 "protocol_1": 1000.0
+            },
+            "dci_data": {
+                "new_entrypoints": {
+                    "component_1": [
+                        {
+                            "external_id": "0x01:sig()",
+                            "target": "0x01",
+                            "signature": "sig()"
+                        }
+                    ]
+                },
+                "new_entrypoint_params": {
+                    "0x01:sig()": [
+                        [
+                            {
+                                "method": "rpctracer",
+                                "caller": "0x01",
+                                "calldata": "0x02"
+                            },
+                            "component_1"
+                        ]
+                    ]
+                },
+                "trace_results": {
+                    "0x01:sig()": {
+                        "retriggers": [
+                            ["0x01", "0x02"]
+                        ],
+                        "called_addresses": ["0x03", "0x04"]
+                    }
+                }
             }
         }
         "#;
@@ -2023,60 +2054,60 @@ mod test {
                 "extractor": "uniswap_v2",
                 "chain": "ethereum",
                 "block": {
-                "number": 19291517,
-                "hash": "0xbc3ea4896c0be8da6229387a8571b72818aa258daf4fab46471003ad74c4ee83",
-                "parent_hash": "0x89ca5b8d593574cf6c886f41ef8208bf6bdc1a90ef36046cb8c84bc880b9af8f",
-                "chain": "ethereum",
-                "ts": "2024-02-23T16:35:35"
+                    "number": 19291517,
+                    "hash": "0xbc3ea4896c0be8da6229387a8571b72818aa258daf4fab46471003ad74c4ee83",
+                    "parent_hash": "0x89ca5b8d593574cf6c886f41ef8208bf6bdc1a90ef36046cb8c84bc880b9af8f",
+                    "chain": "ethereum",
+                    "ts": "2024-02-23T16:35:35"
                 },
                 "finalized_block_height": 0,
                 "revert": false,
                 "new_tokens": {},
                 "account_updates": {
-                            "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
-                                "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
-                                "chain": "ethereum",
-                                "slots": {},
-                                "balance": "0x01f4",
-                                "code": "",
-                                "change": "Update"
-                            }
-                        },
+                    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
+                        "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+                        "chain": "ethereum",
+                        "slots": {},
+                        "balance": "0x01f4",
+                        "code": "",
+                        "change": "Update"
+                    }
+                },
                 "state_updates": {
                     "0xde6faedbcae38eec6d33ad61473a04a6dd7f6e28": {
                         "component_id": "0xde6faedbcae38eec6d33ad61473a04a6dd7f6e28",
                         "updated_attributes": {
-                        "reserve0": "0x87f7b5973a7f28a8b32404",
-                        "reserve1": "0x09e9564b11"
+                            "reserve0": "0x87f7b5973a7f28a8b32404",
+                            "reserve1": "0x09e9564b11"
                         },
-                        "deleted_attributes": [ ]
+                        "deleted_attributes": []
                     },
                     "0x99c59000f5a76c54c4fd7d82720c045bdcf1450d": {
                         "component_id": "0x99c59000f5a76c54c4fd7d82720c045bdcf1450d",
                         "updated_attributes": {
-                        "reserve1": "0x44d9a8fd662c2f4d03",
-                        "reserve0": "0x500b1261f811d5bf423e"
+                            "reserve1": "0x44d9a8fd662c2f4d03",
+                            "reserve0": "0x500b1261f811d5bf423e"
                         },
-                        "deleted_attributes": [ ]
+                        "deleted_attributes": []
                     }
                 },
-                "new_protocol_components": { },
-                "deleted_protocol_components": { },
+                "new_protocol_components": {},
+                "deleted_protocol_components": {},
                 "component_balances": {
                     "0x99c59000f5a76c54c4fd7d82720c045bdcf1450d": {
                         "0x9012744b7a564623b6c3e40b144fc196bdedf1a9": {
-                        "token": "0x9012744b7a564623b6c3e40b144fc196bdedf1a9",
-                        "balance": "0x500b1261f811d5bf423e",
-                        "balance_float": 3.779935574269033E23,
-                        "modify_tx": "0xe46c4db085fb6c6f3408a65524555797adb264e1d5cf3b66ad154598f85ac4bf",
-                        "component_id": "0x99c59000f5a76c54c4fd7d82720c045bdcf1450d"
+                            "token": "0x9012744b7a564623b6c3e40b144fc196bdedf1a9",
+                            "balance": "0x500b1261f811d5bf423e",
+                            "balance_float": 3.779935574269033E23,
+                            "modify_tx": "0xe46c4db085fb6c6f3408a65524555797adb264e1d5cf3b66ad154598f85ac4bf",
+                            "component_id": "0x99c59000f5a76c54c4fd7d82720c045bdcf1450d"
                         },
                         "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
-                        "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-                        "balance": "0x44d9a8fd662c2f4d03",
-                        "balance_float": 1.270062661329837E21,
-                        "modify_tx": "0xe46c4db085fb6c6f3408a65524555797adb264e1d5cf3b66ad154598f85ac4bf",
-                        "component_id": "0x99c59000f5a76c54c4fd7d82720c045bdcf1450d"
+                            "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                            "balance": "0x44d9a8fd662c2f4d03",
+                            "balance_float": 1.270062661329837E21,
+                            "modify_tx": "0xe46c4db085fb6c6f3408a65524555797adb264e1d5cf3b66ad154598f85ac4bf",
+                            "component_id": "0x99c59000f5a76c54c4fd7d82720c045bdcf1450d"
                         }
                     }
                 },
@@ -2090,9 +2121,40 @@ mod test {
                         }
                     }
                 },
-                "component_tvl": { }
+                "component_tvl": {},
+                "dci_data": {
+                    "new_entrypoints": {
+                        "0xde6faedbcae38eec6d33ad61473a04a6dd7f6e28": [
+                            {
+                                "external_id": "0x01:sig()",
+                                "target": "0x01",
+                                "signature": "sig()"
+                            }
+                        ]
+                    },
+                    "new_entrypoint_params": {
+                        "0x01:sig()": [
+                            [
+                                {
+                                    "method": "rpctracer",
+                                    "caller": "0x01",
+                                    "calldata": "0x02"
+                                },
+                                "0xde6faedbcae38eec6d33ad61473a04a6dd7f6e28"
+                            ]
+                        ]
+                    },
+                    "trace_results": {
+                        "0x01:sig()": {
+                            "retriggers": [
+                                ["0x01", "0x02"]
+                            ],
+                            "called_addresses": ["0x03", "0x04"]
+                        }
+                    }
+                }
             }
-            }
+        }
         "#;
         serde_json::from_str::<WebSocketMessage>(json_data).expect("parsing failed");
     }
