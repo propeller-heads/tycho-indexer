@@ -16,9 +16,12 @@ use tycho_common::{
 };
 
 use crate::{
-    extractor::reorg_buffer::{
-        AccountStateIdType, AccountStateKeyType, AccountStateValueType, ProtocolStateIdType,
-        ProtocolStateKeyType, ProtocolStateValueType, StateUpdateBufferEntry,
+    extractor::{
+        models::BlockChanges,
+        reorg_buffer::{
+            AccountStateIdType, AccountStateKeyType, AccountStateValueType, ProtocolStateIdType,
+            ProtocolStateKeyType, ProtocolStateValueType, StateUpdateBufferEntry,
+        },
     },
     pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
 };
@@ -95,6 +98,19 @@ pub trait Extractor: Send + Sync {
     ) -> Result<Option<ExtractorMsg>, ExtractionError>;
 
     async fn handle_progress(&self, inp: ModulesProgress) -> Result<(), ExtractionError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait ExtractorExtension: Send + Sync {
+    /// Process a block update message and update it in-place.
+    async fn process_block_update(
+        &mut self,
+        block_changes: &mut BlockChanges,
+    ) -> Result<(), ExtractionError>;
+
+    /// Process a revert
+    async fn process_revert(&mut self, target_block: u64) -> Result<(), ExtractionError>;
 }
 
 /// Wrapper to carry a cursor along with another struct.

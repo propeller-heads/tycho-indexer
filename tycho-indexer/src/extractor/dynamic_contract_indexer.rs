@@ -1,5 +1,6 @@
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
+use async_trait::async_trait;
 use tracing::{debug, instrument, trace};
 use tycho_common::{
     models::{
@@ -16,7 +17,7 @@ use tycho_common::{
 
 use super::{
     models::{BlockChanges, TxWithStorageChanges},
-    ExtractionError,
+    ExtractionError, ExtractorExtension,
 };
 
 /// A unique identifier for a storage location, consisting of an address and a storage key.
@@ -27,7 +28,7 @@ type StorageLocation = (Address, StoreKey);
 type TxVecIndex = usize;
 
 #[allow(unused)]
-struct DynamicContractIndexer<AE, T, G>
+pub(super) struct DynamicContractIndexer<AE, T, G>
 where
     AE: AccountExtractor,
     T: EntryPointTracer,
@@ -61,104 +62,15 @@ impl DCICache {
     }
 }
 
-impl<AE, T, G> DynamicContractIndexer<AE, T, G>
+#[async_trait]
+impl<AE, T, G> ExtractorExtension for DynamicContractIndexer<AE, T, G>
 where
-    AE: AccountExtractor,
-    T: EntryPointTracer,
-    G: EntryPointGateway,
+    AE: AccountExtractor + Send + Sync,
+    T: EntryPointTracer + Send + Sync,
+    G: EntryPointGateway + Send + Sync,
 {
-    pub fn new(
-        chain: Chain,
-        protocol: String,
-        entrypoint_gw: G,
-        storage_source: AE,
-        tracer: T,
-    ) -> Self {
-        Self {
-            chain,
-            protocol,
-            entrypoint_gw,
-            storage_source,
-            tracer,
-            cache: DCICache::new_empty(),
-        }
-    }
-
-    /// Initialize the DynamicContractIndexer. Loads all the entrypoints and their respective
-    /// trace results from the gateway.
-    #[instrument(skip_all, fields(chain = % self.chain, protocol = % self.protocol))]
-    pub async fn initialize(&mut self) -> Result<(), ExtractionError> {
-        let entrypoint_filter = EntryPointFilter::new(self.protocol.clone());
-
-        let entrypoints_with_params = self
-            .entrypoint_gw
-            .get_entry_points_tracing_params(entrypoint_filter, None)
-            .await
-            .map_err(ExtractionError::from)?
-            .entity;
-
-        let entrypoint_results: HashMap<EntryPointId, HashMap<TracingParams, TracingResult>> = self
-            .entrypoint_gw
-            .get_traced_entry_points(
-                &entrypoints_with_params
-                    .values()
-                    .flat_map(|e| {
-                        e.iter()
-                            .map(|ep| ep.entry_point.external_id.clone())
-                    })
-                    .collect(),
-            )
-            .await
-            .map_err(ExtractionError::from)?;
-
-        self.cache.ep_id_to_entrypoint.extend(
-            entrypoints_with_params
-                .values()
-                .flat_map(|e| {
-                    e.iter()
-                        .map(|ep| (ep.entry_point.external_id.clone(), ep.entry_point.clone()))
-                }),
-        );
-
-        for (entrypoint_id, params_results_map) in entrypoint_results.into_iter() {
-            for (param, result) in params_results_map.into_iter() {
-                for location in result.retriggers.clone() {
-                    let entrypoint_with_params = EntryPointWithTracingParams::new(
-                        self.cache
-                            .ep_id_to_entrypoint
-                            .get(&entrypoint_id)
-                            .ok_or(ExtractionError::Setup(format!(
-                                "Got a tracing result for a unknown entrypoint: {entrypoint_id:?}"
-                            )))?
-                            .clone(),
-                        param.clone(),
-                    );
-
-                    self.cache
-                        .retriggers
-                        .entry(location)
-                        .or_default()
-                        .insert(entrypoint_with_params);
-                }
-
-                for address in result.called_addresses.iter() {
-                    self.cache
-                        .tracked_contracts
-                        .entry(address.clone())
-                        .or_default(); //TODO: Add the tracked slots when tracer returns them
-                }
-
-                self.cache
-                    .entrypoint_results
-                    .insert((entrypoint_id.clone(), param), result);
-            }
-        }
-
-        Ok(())
-    }
-
     #[instrument(skip_all, fields(chain = % self.chain, protocol = % self.protocol, block_number = % block_changes.block.number))]
-    pub(super) async fn process_block_update(
+    async fn process_block_update(
         &mut self,
         block_changes: &mut BlockChanges,
     ) -> Result<(), ExtractionError> {
@@ -323,6 +235,106 @@ where
             .extend(new_transactions);
 
         block_changes.trace_results = traced_entry_points;
+
+        Ok(())
+    }
+
+    #[allow(unused)]
+    async fn process_revert(&mut self, target_block: u64) -> Result<(), ExtractionError> {
+        // TODO: Handle reverts, need to cleanup reverted internal state
+        todo!()
+    }
+}
+
+impl<AE, T, G> DynamicContractIndexer<AE, T, G>
+where
+    AE: AccountExtractor,
+    T: EntryPointTracer,
+    G: EntryPointGateway,
+{
+    pub fn new(
+        chain: Chain,
+        protocol: String,
+        entrypoint_gw: G,
+        storage_source: AE,
+        tracer: T,
+    ) -> Self {
+        Self {
+            chain,
+            protocol,
+            entrypoint_gw,
+            storage_source,
+            tracer,
+            cache: DCICache::new_empty(),
+        }
+    }
+
+    pub async fn initialize(&mut self) -> Result<(), ExtractionError> {
+        let entrypoint_filter = EntryPointFilter::new(self.protocol.clone());
+
+        let entrypoints_with_params = self
+            .entrypoint_gw
+            .get_entry_points_tracing_params(entrypoint_filter, None)
+            .await
+            .map_err(ExtractionError::from)?
+            .entity;
+
+        let entrypoint_results: HashMap<EntryPointId, HashMap<TracingParams, TracingResult>> = self
+            .entrypoint_gw
+            .get_traced_entry_points(
+                &entrypoints_with_params
+                    .values()
+                    .flat_map(|e| {
+                        e.iter()
+                            .map(|ep| ep.entry_point.external_id.clone())
+                    })
+                    .collect(),
+            )
+            .await
+            .map_err(ExtractionError::from)?;
+
+        self.cache.ep_id_to_entrypoint.extend(
+            entrypoints_with_params
+                .values()
+                .flat_map(|e| {
+                    e.iter()
+                        .map(|ep| (ep.entry_point.external_id.clone(), ep.entry_point.clone()))
+                }),
+        );
+
+        for (entrypoint_id, params_results_map) in entrypoint_results.into_iter() {
+            for (param, result) in params_results_map.into_iter() {
+                for location in result.retriggers.clone() {
+                    let entrypoint_with_params = EntryPointWithTracingParams::new(
+                        self.cache
+                            .ep_id_to_entrypoint
+                            .get(&entrypoint_id)
+                            .ok_or(ExtractionError::Setup(format!(
+                                "Got a tracing result for a unknown entrypoint: {entrypoint_id:?}"
+                            )))?
+                            .clone(),
+                        param.clone(),
+                    );
+
+                    self.cache
+                        .retriggers
+                        .entry(location)
+                        .or_default()
+                        .insert(entrypoint_with_params);
+                }
+
+                for address in result.called_addresses.iter() {
+                    self.cache
+                        .tracked_contracts
+                        .entry(address.clone())
+                        .or_default(); //TODO: Add the tracked slots when tracer returns them
+                }
+
+                self.cache
+                    .entrypoint_results
+                    .insert((entrypoint_id.clone(), param), result);
+            }
+        }
 
         Ok(())
     }
@@ -509,11 +521,5 @@ where
         }
 
         tracked_updates
-    }
-
-    // TODO: Handle reverts, need to cleanup reverted internal state
-    #[allow(unused)]
-    pub(super) fn process_revert(&mut self, target_block: u64) -> Result<(), ExtractionError> {
-        todo!()
     }
 }
