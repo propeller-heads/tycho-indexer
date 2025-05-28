@@ -522,13 +522,15 @@ impl ExtractorBuilder {
                             "Failed to create entrypoint tracer for {rpc_url}: {err}"
                         ))
                     })?;
-                    DynamicContractIndexer::new(
+                    let mut plugin = DynamicContractIndexer::new(
                         self.config.chain,
                         self.config.name.clone(),
                         cached_gw.clone(),
                         account_extractor,
                         tracer,
-                    )
+                    );
+                    plugin.initialize().await?;
+                    plugin
                 }
             })
         } else {

@@ -1,7 +1,6 @@
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use async_trait::async_trait;
-use mockall::automock;
 use tracing::{debug, instrument, trace};
 use tycho_common::{
     models::{
@@ -18,22 +17,11 @@ use tycho_common::{
 
 use super::{
     models::{BlockChanges, TxWithStorageChanges},
-    ExtractionError,
+    ExtractionError, ExtractorExtension,
 };
 
 /// A unique identifier for a storage location, consisting of an address and a storage key.
 type StorageLocation = (Address, StoreKey);
-
-#[automock]
-#[async_trait]
-pub trait DynamicContractIndexerTrait: Send + Sync {
-    async fn initialize(&mut self) -> Result<(), ExtractionError>;
-    async fn process_block_update(
-        &mut self,
-        block_changes: &mut BlockChanges,
-    ) -> Result<(), ExtractionError>;
-    async fn process_revert(&mut self, target_block: u64) -> Result<(), ExtractionError>;
-}
 
 #[allow(unused)]
 pub(super) struct DynamicContractIndexer<AE, T, G>
@@ -71,86 +59,12 @@ impl DCICache {
 }
 
 #[async_trait]
-impl<AE, T, G> DynamicContractIndexerTrait for DynamicContractIndexer<AE, T, G>
+impl<AE, T, G> ExtractorExtension for DynamicContractIndexer<AE, T, G>
 where
     AE: AccountExtractor + Send + Sync,
     T: EntryPointTracer + Send + Sync,
     G: EntryPointGateway + Send + Sync,
 {
-    async fn initialize(&mut self) -> Result<(), ExtractionError> {
-        let entrypoint_filter = EntryPointFilter::new(self.protocol.clone());
-
-        // We need to call the gateway twice, once to get the entrypoints and their tracing params,
-        // and once to get the tracing results.
-        // Perf: There is room for optimization here if we make a single custom function on the
-        // gateway that returns both.
-        let entrypoints_with_params = self
-            .entrypoint_gw
-            .get_entry_points_tracing_params(entrypoint_filter, None)
-            .await
-            .map_err(ExtractionError::from)?
-            .entity;
-
-        let entrypoint_results: HashMap<EntryPointId, HashMap<TracingParams, TracingResult>> = self
-            .entrypoint_gw
-            .get_traced_entry_points(
-                &entrypoints_with_params
-                    .values()
-                    .flat_map(|e| {
-                        e.iter()
-                            .map(|ep| ep.entry_point.external_id.clone())
-                    })
-                    .collect(),
-            )
-            .await
-            .map_err(ExtractionError::from)?;
-
-        self.cache.ep_id_to_entrypoint.extend(
-            entrypoints_with_params
-                .values()
-                .flat_map(|e| {
-                    e.iter()
-                        .map(|ep| (ep.entry_point.external_id.clone(), ep.entry_point.clone()))
-                }),
-        );
-
-        for (entrypoint_id, params_results_map) in entrypoint_results.into_iter() {
-            for (param, result) in params_results_map.into_iter() {
-                for location in result.retriggers.clone() {
-                    let entrypoint_with_params = EntryPointWithTracingParams::new(
-                        self.cache
-                            .ep_id_to_entrypoint
-                            .get(&entrypoint_id)
-                            .ok_or(ExtractionError::Setup(format!(
-                                "Got a tracing result for a unknown entrypoint: {entrypoint_id}"
-                            )))?
-                            .clone(),
-                        param.clone(),
-                    );
-
-                    self.cache
-                        .retriggers
-                        .entry(location)
-                        .or_default()
-                        .insert(entrypoint_with_params);
-                }
-
-                for address in result.called_addresses.iter() {
-                    self.cache
-                        .tracked_contracts
-                        .entry(address.clone())
-                        .or_default(); //TODO: Add the tracked slots when tracer returns them
-                }
-
-                self.cache
-                    .entrypoint_results
-                    .insert((entrypoint_id.clone(), param), result);
-            }
-        }
-
-        Ok(())
-    }
-
     #[instrument(skip_all, fields(chain = % self.chain, protocol = % self.protocol, block_number = % block_changes.block.number))]
     async fn process_block_update(
         &mut self,
@@ -423,6 +337,76 @@ where
             tracer,
             cache: DCICache::new_empty(),
         }
+    }
+
+    pub async fn initialize(&mut self) -> Result<(), ExtractionError> {
+        let entrypoint_filter = EntryPointFilter::new(self.protocol.clone());
+
+        let entrypoints_with_params = self
+            .entrypoint_gw
+            .get_entry_points_tracing_params(entrypoint_filter, None)
+            .await
+            .map_err(ExtractionError::from)?
+            .entity;
+
+        let entrypoint_results: HashMap<EntryPointId, HashMap<TracingParams, TracingResult>> = self
+            .entrypoint_gw
+            .get_traced_entry_points(
+                &entrypoints_with_params
+                    .values()
+                    .flat_map(|e| {
+                        e.iter()
+                            .map(|ep| ep.entry_point.external_id.clone())
+                    })
+                    .collect(),
+            )
+            .await
+            .map_err(ExtractionError::from)?;
+
+        self.cache.ep_id_to_entrypoint.extend(
+            entrypoints_with_params
+                .values()
+                .flat_map(|e| {
+                    e.iter()
+                        .map(|ep| (ep.entry_point.external_id.clone(), ep.entry_point.clone()))
+                }),
+        );
+
+        for (entrypoint_id, params_results_map) in entrypoint_results.into_iter() {
+            for (param, result) in params_results_map.into_iter() {
+                for location in result.retriggers.clone() {
+                    let entrypoint_with_params = EntryPointWithTracingParams::new(
+                        self.cache
+                            .ep_id_to_entrypoint
+                            .get(&entrypoint_id)
+                            .ok_or(ExtractionError::Setup(format!(
+                                "Got a tracing result for a unknown entrypoint: {entrypoint_id:?}"
+                            )))?
+                            .clone(),
+                        param.clone(),
+                    );
+
+                    self.cache
+                        .retriggers
+                        .entry(location)
+                        .or_default()
+                        .insert(entrypoint_with_params);
+                }
+
+                for address in result.called_addresses.iter() {
+                    self.cache
+                        .tracked_contracts
+                        .entry(address.clone())
+                        .or_default(); //TODO: Add the tracked slots when tracer returns them
+                }
+
+                self.cache
+                    .entrypoint_results
+                    .insert((entrypoint_id.clone(), param), result);
+            }
+        }
+
+        Ok(())
     }
 
     /// Scans the storage changes of the block and detects entrypoints that need to be re-traced
