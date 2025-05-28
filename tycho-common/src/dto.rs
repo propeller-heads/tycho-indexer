@@ -1387,11 +1387,14 @@ pub struct TracedEntryPointRequestBody {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
 pub struct EntryPoint {
     #[schema(example = "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()")]
+    /// Entry point id.
     pub external_id: String,
     #[schema(value_type=String, example="0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9")]
     #[serde(with = "hex_bytes")]
+    /// The address of the contract to trace.
     pub target: Bytes,
     #[schema(example = "getRate()")]
+    /// The signature of the function to trace.
     pub signature: String,
 }
 
@@ -1414,6 +1417,7 @@ impl From<models::blockchain::RPCTracerParams> for RPCTracerParams {
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
 #[serde(tag = "method", rename_all = "lowercase")]
 pub enum TracingParams {
+    /// Uses RPC calls to retrieve the called addresses and retriggers
     RPCTracer(RPCTracerParams),
 }
 
@@ -1439,7 +1443,9 @@ impl From<models::blockchain::EntryPoint> for EntryPoint {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, ToSchema, Eq, Clone)]
 pub struct EntryPointWithTracingParams {
+    /// The entry point object
     pub entry_point: EntryPoint,
+    /// The parameters used
     pub params: TracingParams,
 }
 
@@ -1468,6 +1474,8 @@ impl From<models::blockchain::TracingResult> for TracingResult {
 
 #[derive(Serialize, PartialEq, ToSchema, Eq, Clone)]
 pub struct TracedEntryPointRequestResponse {
+    /// Map of protocol component id to a list of a tuple containing each entry point with its
+    /// tracing parameters and its corresponding tracing results.
     pub traced_entry_points: HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
     pub pagination: PaginationResponse,
 }
