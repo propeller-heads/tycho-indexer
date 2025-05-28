@@ -40,12 +40,11 @@ use tycho_substreams::pb::tycho::evm::v1 as tycho_substreams;
 use crate::{
     extractor::{
         chain_state::ChainState,
-        dynamic_contract_indexer::DynamicContractIndexerTrait,
         models::{BlockChanges, BlockContractChanges, BlockEntityChanges},
         protobuf_deserialisation::TryFromMessage,
         protocol_cache::{ProtocolDataCache, ProtocolMemoryCache},
         reorg_buffer::ReorgBuffer,
-        BlockUpdateWithCursor, ExtractionError, Extractor, ExtractorMsg,
+        BlockUpdateWithCursor, ExtractionError, Extractor, ExtractorExtension, ExtractorMsg,
     },
     pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
 };
@@ -59,7 +58,7 @@ pub struct Inner {
     first_message_processed: bool,
 }
 
-pub struct ProtocolExtractor<G, T, DCI> {
+pub struct ProtocolExtractor<G, T, E> {
     gateway: G,
     name: String,
     chain: Chain,
@@ -72,14 +71,14 @@ pub struct ProtocolExtractor<G, T, DCI> {
     /// Allows to attach some custom logic, e.g. to fix encoding bugs without resync.
     post_processor: Option<fn(BlockChanges) -> BlockChanges>,
     reorg_buffer: Mutex<ReorgBuffer<BlockUpdateWithCursor<BlockChanges>>>,
-    dci_plugin: Option<Arc<Mutex<DCI>>>,
+    dci_plugin: Option<Arc<Mutex<E>>>,
 }
 
-impl<G, T, DCI> ProtocolExtractor<G, T, DCI>
+impl<G, T, E> ProtocolExtractor<G, T, E>
 where
     G: ExtractorGateway,
     T: TokenPreProcessor,
-    DCI: DynamicContractIndexerTrait,
+    E: ExtractorExtension,
 {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
@@ -92,14 +91,9 @@ where
         protocol_types: HashMap<String, ProtocolType>,
         token_pre_processor: T,
         post_processor: Option<fn(BlockChanges) -> BlockChanges>,
-        dci_plugin: Option<DCI>,
+        dci_plugin: Option<E>,
     ) -> Result<Self, ExtractionError> {
-        let dci_plugin = if let Some(mut plugin) = dci_plugin {
-            plugin.initialize().await?;
-            Some(Arc::new(Mutex::new(plugin)))
-        } else {
-            None
-        };
+        let dci_plugin = dci_plugin.map(|plugin| Arc::new(Mutex::new(plugin)));
 
         // check if this extractor has state
         let res = match gateway.get_cursor().await {
@@ -593,11 +587,11 @@ where
 }
 
 #[async_trait]
-impl<G, T, DCI> Extractor for ProtocolExtractor<G, T, DCI>
+impl<G, T, E> Extractor for ProtocolExtractor<G, T, E>
 where
     G: ExtractorGateway,
     T: TokenPreProcessor,
-    DCI: DynamicContractIndexerTrait,
+    E: ExtractorExtension,
 {
     fn get_id(&self) -> ExtractorIdentity {
         ExtractorIdentity::new(self.chain, &self.name)
@@ -1571,7 +1565,7 @@ mod test {
 
     use super::*;
     use crate::{
-        extractor::dynamic_contract_indexer::MockDynamicContractIndexerTrait,
+        extractor::MockExtractorExtension,
         testing::{fixtures as pb_fixtures, MockGateway},
     };
 
@@ -1593,11 +1587,8 @@ mod test {
     const TEST_PROTOCOL: &str = "TestProtocol";
     async fn create_extractor(
         gw: MockExtractorGateway,
-    ) -> ProtocolExtractor<
-        MockExtractorGateway,
-        MockTokenPreProcessor,
-        MockDynamicContractIndexerTrait,
-    > {
+    ) -> ProtocolExtractor<MockExtractorGateway, MockTokenPreProcessor, MockExtractorExtension>
+    {
         let protocol_types = HashMap::from([("pt_1".to_string(), ProtocolType::default())]);
         let protocol_cache = ProtocolMemoryCache::new(
             Chain::Ethereum,
@@ -2092,7 +2083,7 @@ mod test {
         let extractor = ProtocolExtractor::<
             MockExtractorGateway,
             MockTokenPreProcessor,
-            MockDynamicContractIndexerTrait,
+            MockExtractorExtension,
         >::new(
             extractor_gw,
             EXTRACTOR_NAME,
@@ -2225,7 +2216,7 @@ mod test {
         let extractor = ProtocolExtractor::<
             MockExtractorGateway,
             MockTokenPreProcessor,
-            MockDynamicContractIndexerTrait,
+            MockExtractorExtension,
         >::new(
             extractor_gw,
             "vm_name",
@@ -2284,7 +2275,7 @@ mod test_serial_db {
 
     use super::*;
     use crate::{
-        extractor::{dynamic_contract_indexer::MockDynamicContractIndexerTrait, models::fixtures},
+        extractor::{models::fixtures, MockExtractorExtension},
         pb::sf::substreams::v1::BlockRef,
         testing::fixtures as pb_fixtures,
     };
@@ -2835,7 +2826,7 @@ mod test_serial_db {
             let extractor = ProtocolExtractor::<
                 ExtractorPgGateway,
                 MockTokenPreProcessor,
-                MockDynamicContractIndexerTrait,
+                MockExtractorExtension,
             >::new(
                 gw,
                 "native_name",
@@ -3017,7 +3008,7 @@ mod test_serial_db {
             let extractor = ProtocolExtractor::<
                 ExtractorPgGateway,
                 MockTokenPreProcessor,
-                MockDynamicContractIndexerTrait,
+                MockExtractorExtension,
             >::new(
                 gw,
                 "vm_name",
@@ -3218,7 +3209,7 @@ mod test_serial_db {
             let extractor = ProtocolExtractor::<
                 ExtractorPgGateway,
                 MockTokenPreProcessor,
-                MockDynamicContractIndexerTrait,
+                MockExtractorExtension,
             >::new(
                 gw,
                 "vm_name",
