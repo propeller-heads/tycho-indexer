@@ -214,7 +214,7 @@ where
         openapi: utoipa::openapi::OpenApi,
         pending_deltas: Option<Arc<dyn PendingDeltasBuffer + Send + Sync>>,
     ) -> Result<(ServerHandle, JoinHandle<Result<(), ExtractionError>>), ExtractionError> {
-        let rpc_data = web::Data::new(rpc::RpcHandler::new(self.db_gateway, pending_deltas));
+        let rpc_data = web::Data::new(rpc::RpcHandler::new(self.db_gateway, pending_deltas, None));
 
         let server = HttpServer::new(move || {
             let cors = Cors::default()

@@ -16,15 +16,18 @@ use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     dto::{self, PaginationResponse},
     models::{
-        blockchain::BlockAggregatedChanges, protocol::QualityRange, Address, Chain, EntryPointId,
-        PaginationParams,
+        blockchain::{BlockAggregatedChanges, EntryPoint, TracedEntryPoint, TracingParams},
+        protocol::QualityRange,
+        Address, Chain, ComponentId, EntryPointId, PaginationParams,
     },
     storage::{
         BlockIdentifier, BlockOrTimestamp, EntryPointFilter, Gateway, StorageError, Version,
         VersionKind,
     },
+    traits::EntryPointTracer,
     Bytes,
 };
+use tycho_ethereum::entrypoint_tracer::tracer::EVMEntrypointService;
 
 use crate::{
     extractor::reorg_buffer::{BlockNumberOrTimestamp, FinalityStatus},
@@ -89,6 +92,8 @@ pub struct RpcHandler<G> {
         RpcCache<dto::ProtocolComponentsRequestBody, dto::ProtocolComponentRequestResponse>,
     traced_entry_point_cache:
         RpcCache<dto::TracedEntryPointRequestBody, dto::TracedEntryPointRequestResponse>,
+    #[allow(dead_code)]
+    tracer: Option<EVMEntrypointService>,
 }
 
 impl<G> RpcHandler<G>
@@ -98,6 +103,9 @@ where
     pub fn new(
         db_gateway: G,
         pending_deltas: Option<Arc<dyn PendingDeltasBuffer + Send + Sync>>,
+        // TODO leaving this as option for testing purposes. Not sure how to mock this in
+        //  tests otherwise.
+        tracer: Option<EVMEntrypointService>,
     ) -> Self {
         let token_cache = RpcCache::<dto::TokensRequestBody, dto::TokensRequestResponse>::new(
             "token",
@@ -135,6 +143,7 @@ where
             protocol_state_cache,
             component_cache,
             traced_entry_point_cache,
+            tracer,
         }
     }
 
@@ -866,6 +875,78 @@ where
             ),
         })
     }
+
+    #[allow(dead_code)]
+    async fn add_entry_points(
+        &self,
+        request: &dto::AddEntrypointRequestBody,
+        // TODO how do I get the block hash?
+        block_hash: Bytes,
+    ) -> Result<(), RpcError> {
+        let tracing_result = self
+            .trace_entry_points(request, block_hash)
+            .await?;
+        let mut entry_points: HashMap<ComponentId, HashSet<EntryPoint>> = HashMap::new();
+        let mut entry_points_params: HashMap<
+            EntryPointId,
+            HashSet<(TracingParams, Option<ComponentId>)>,
+        > = HashMap::new();
+        for (_entry_point_id, components_and_params) in &request.entry_points_with_tracing_data {
+            for (params, component_id_option) in components_and_params {
+                if let Some(component_id) = component_id_option.clone() {
+                    entry_points
+                        .entry(component_id)
+                        .or_default()
+                        .insert(params.entry_point.clone().into());
+                }
+                // Extend the entry point parameters for the given entry point id
+                entry_points_params
+                    .entry(params.entry_point.external_id.clone())
+                    .or_default()
+                    .insert((params.params.clone().into(), component_id_option.clone()));
+            }
+        }
+        // TODO is this sequence correct? Should I be calling all three?
+        self.db_gateway
+            .insert_entry_points(&entry_points)
+            .await?;
+        self.db_gateway
+            .insert_entry_point_tracing_params(&entry_points_params)
+            .await?;
+        self.db_gateway
+            .upsert_traced_entry_points(&tracing_result)
+            .await?;
+        Ok(())
+    }
+
+    async fn trace_entry_points(
+        &self,
+        request: &dto::AddEntrypointRequestBody,
+        block_hash: Bytes,
+    ) -> Result<Vec<TracedEntryPoint>, RpcError> {
+        if let Some(tracer) = &self.tracer {
+            let entry_points_with_params: Vec<_> = request
+                .entry_points_with_tracing_data
+                .iter()
+                .flat_map(|(_, params_and_components)| {
+                    params_and_components
+                        .iter()
+                        .map(|(param, _)| param.clone().into())
+                })
+                .collect();
+            let trace_results = tracer
+                .trace(block_hash, entry_points_with_params)
+                .await
+                .map_err(|e| {
+                    error!(error = %e, "Error while tracing entry points.");
+                    RpcError::Parse(e.to_string())
+                })?;
+            Ok(trace_results)
+        } else {
+            // TODO remove this error or return a better one
+            Err(RpcError::Parse("Tracer not set.".to_string()))
+        }
+    }
 }
 
 /// Retrieve contract states
@@ -1182,7 +1263,7 @@ pub async fn health() -> HttpResponse {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, str::FromStr};
+    use std::{collections::HashMap, env, str::FromStr};
 
     use actix_web::test;
     use chrono::NaiveDateTime;
@@ -1409,7 +1490,7 @@ mod tests {
             .expect_get_block_finality()
             .return_once(|_, _| Ok(Some(FinalityStatus::Unfinalized)));
 
-        let req_handler = RpcHandler::new(gw, Some(Arc::new(mock_buffer)));
+        let req_handler = RpcHandler::new(gw, Some(Arc::new(mock_buffer)), None);
 
         let request = dto::StateRequestBody {
             contract_ids: Some(vec![
@@ -1432,6 +1513,13 @@ mod tests {
         assert_eq!(state.pagination.total, 2);
     }
 
+    #[test]
+    async fn test_add_entry_points() {
+        let url = env::var("RPC_URL").expect("RPC_URL is not set");
+        let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
+        let gw = MockGateway::new();
+        let _req_handler = RpcHandler::new(gw, None, Some(tracer));
+    }
     #[test]
     async fn test_get_traced_entry_points() {
         // We attempt to fetch results for two components.
@@ -1513,7 +1601,7 @@ mod tests {
         gw.expect_get_traced_entry_points()
             .return_once(|_| Box::pin(async move { mock_traced_entry_points_response }));
 
-        let req_handler = RpcHandler::new(gw, None);
+        let req_handler = RpcHandler::new(gw, None, None);
 
         // Request for two protocol components
         let request = dto::TracedEntryPointRequestBody {
@@ -1687,7 +1775,7 @@ mod tests {
         gw.expect_get_traced_entry_points()
             .return_once(|_| Box::pin(async move { mock_traced_entry_points_response }));
 
-        let req_handler = RpcHandler::new(gw, None);
+        let req_handler = RpcHandler::new(gw, None, None);
 
         let request = dto::TracedEntryPointRequestBody {
             chain: dto::Chain::Ethereum,
@@ -1754,7 +1842,7 @@ mod tests {
         // ensure the gateway is only accessed once - the second request should hit cache
         gw.expect_get_tokens()
             .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
-        let req_handler = RpcHandler::new(gw, None);
+        let req_handler = RpcHandler::new(gw, None, None);
 
         // request for 2 tokens that are in the DB (WETH and USDC)
         let request = dto::TokensRequestBody {
@@ -1824,7 +1912,7 @@ mod tests {
             .expect_get_block_finality()
             .return_once(|_, _| Ok(Some(FinalityStatus::Unfinalized)));
 
-        let req_handler = RpcHandler::new(gw, Some(Arc::new(mock_buffer)));
+        let req_handler = RpcHandler::new(gw, Some(Arc::new(mock_buffer)), None);
 
         let request = dto::ProtocolStateRequestBody {
             protocol_ids: Some(vec!["state1".to_owned(), "state_buff".to_owned()]),
@@ -1905,7 +1993,7 @@ mod tests {
             .expect_get_new_components()
             .return_once(move |_, _, _| Ok(vec![mock_res]));
 
-        let req_handler = RpcHandler::new(gw, Some(Arc::new(mock_buffer)));
+        let req_handler = RpcHandler::new(gw, Some(Arc::new(mock_buffer)), None);
 
         let request = dto::ProtocolComponentsRequestBody {
             protocol_system: "ambient".to_string(),
@@ -1998,7 +2086,7 @@ mod tests {
                 move |_, _, _| Ok(vec![buf_expected1_clone.clone(), buf_expected2_clone.clone()])
             });
 
-        let req_handler = RpcHandler::new(gw, Some(Arc::new(mock_buffer)));
+        let req_handler = RpcHandler::new(gw, Some(Arc::new(mock_buffer)), None);
 
         let request = dto::ProtocolComponentsRequestBody {
             protocol_system: "ambient".to_string(),

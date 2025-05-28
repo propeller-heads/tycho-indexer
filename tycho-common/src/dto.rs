@@ -1490,9 +1490,16 @@ impl From<TracedEntryPointRequestResponse> for DCIUpdate {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Clone)]
 pub struct AddEntrypointRequestBody {
-    pub entrypoints_with_tracing_data: Vec<(String, Vec<EntryPointWithTracingParams>)>,
+    #[serde(default)]
     pub chain: Chain,
+    /// The map of entry point ids to their tracing params to insert and optionally a component id
+    /// used for debugging only.
+    // TODO fix this warning
+    #[allow(clippy::type_complexity)]
+    pub entry_points_with_tracing_data:
+        Vec<(String, Vec<(EntryPointWithTracingParams, Option<String>)>)>,
 }
 
 #[cfg(test)]
