@@ -874,12 +874,10 @@ where
                 let entry_point_id = entry_point_with_params
                     .entry_point
                     .external_id
-                    .as_str()
-                    .to_string();
+                    .as_str();
                 let tracing_param = &entry_point_with_params.params;
-
                 let results_by_param = traced_entry_points
-                    .get(&entry_point_id)
+                    .get(entry_point_id)
                     .ok_or_else(|| {
                         RpcError::Storage(StorageError::NotFound(
                             "TracedEntryPoint".to_string(),
