@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::Path, sync::Arc};
+use std::{collections::HashMap, env, path::Path, str::FromStr, sync::Arc};
 
 use anyhow::{format_err, Context, Result};
 use async_trait::async_trait;
@@ -301,7 +301,7 @@ impl ProtocolTypeConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct ExtractorConfig {
     name: String,
     chain: Chain,
@@ -318,6 +318,8 @@ pub struct ExtractorConfig {
     pub initialized_accounts_block: i64,
     #[serde(default)]
     pub post_processor: Option<String>,
+    #[serde(default)]
+    pub dci_plugin: Option<DCIType>,
 }
 
 impl ExtractorConfig {
@@ -335,6 +337,7 @@ impl ExtractorConfig {
         initialized_accounts: Vec<Bytes>,
         initialized_accounts_block: i64,
         post_processor: Option<String>,
+        dci_plugin: Option<DCIType>,
     ) -> Self {
         Self {
             name,
@@ -349,13 +352,23 @@ impl ExtractorConfig {
             initialized_accounts,
             initialized_accounts_block,
             post_processor,
+            dci_plugin,
         }
     }
 }
 
+#[derive(Debug, Deserialize, Clone)]
 pub enum DCIType {
     /// RPC DCI plugin - uses the RPC endpoint to fetch the account data
     RPC(String),
+}
+
+impl FromStr for DCIType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(DCIType::RPC(s.to_string()))
+    }
 }
 
 pub struct ExtractorBuilder {
@@ -368,7 +381,6 @@ pub struct ExtractorBuilder {
     /// Handle of the tokio runtime on which the extraction tasks will be run.
     /// If 'None' the default runtime will be used.
     runtime_handle: Option<Handle>,
-    dci_type: Option<DCIType>,
 }
 
 pub type HandleResult = (JoinHandle<Result<(), ExtractionError>>, ExtractorHandle);
@@ -383,7 +395,6 @@ impl ExtractorBuilder {
             extractor: None,
             final_block_only: false,
             runtime_handle: None,
-            dci_type: None,
         }
     }
 
@@ -415,11 +426,6 @@ impl ExtractorBuilder {
 
     pub fn set_runtime(mut self, runtime: Handle) -> Self {
         self.runtime_handle = Some(runtime);
-        self
-    }
-
-    pub fn set_dci_plugin(mut self, dci_type: DCIType) -> Self {
-        self.dci_type = Some(dci_type);
         self
     }
 
@@ -500,7 +506,7 @@ impl ExtractorBuilder {
             })
             .transpose()?;
 
-        let dci_plugin = if let Some(ref dci_type) = self.dci_type {
+        let dci_plugin = if let Some(ref dci_type) = self.config.dci_plugin {
             Some(match dci_type {
                 DCIType::RPC(rpc_url) => {
                     let account_extractor =
@@ -690,23 +696,17 @@ mod test {
         // Build the ExtractorRunnerBuilder
         let extractor = Arc::new(mock_extractor);
         let builder = ExtractorBuilder::new(
-            &ExtractorConfig::new(
-                "test_module".to_owned(),
-                Chain::Ethereum,
-                ImplementationType::Vm,
-                0,
-                0,
-                None,
-                vec![ProtocolTypeConfig {
+            &ExtractorConfig {
+                name: "test_module".to_owned(),
+                implementation_type: ImplementationType::Vm,
+                protocol_types: vec![ProtocolTypeConfig {
                     name: "test_module_pool".to_owned(),
                     financial_type: FinancialType::Swap,
                 }],
-                "./test/spkg/substreams-ethereum-quickstart-v1.0.0.spkg".to_owned(),
-                "test_module".to_owned(),
-                vec![],
-                0,
-                None,
-            ),
+                spkg: "./test/spkg/substreams-ethereum-quickstart-v1.0.0.spkg".to_owned(),
+                module_name: "test_module".to_owned(),
+                ..Default::default()
+            },
             "https://mainnet.eth.streamingfast.io",
             None,
         )
