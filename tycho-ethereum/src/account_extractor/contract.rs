@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -403,17 +403,24 @@ impl AccountExtractor for EVMBatchAccountExtractor {
     async fn get_accounts_at_block(
         &self,
         block: &Block,
-        requests: &[StorageSnapshotRequest], /* TODO: We should remove duplicates, else we would
-                                              * make more requests than necessary */
+        requests: &[StorageSnapshotRequest],
     ) -> Result<HashMap<Address, AccountDelta>, Self::Error> {
         let mut updates = HashMap::new();
+
+        // Remove duplicates to avoid making more requests than necessary.
+        let unique_requests: Vec<StorageSnapshotRequest> = requests
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
 
         // TODO: Make these configurable and optimize for preventing rate limiting.
         // TODO: Handle rate limiting / individual connection failures & retries
 
         let max_batch_size = 100;
         let storage_max_batch_size = 10000;
-        for chunk in requests.chunks(max_batch_size) {
+        for chunk in unique_requests.chunks(max_batch_size) {
             // Batch request code and balances of all accounts on the chunk.
             // Worst case scenario = 2 * chunk_size requests
             let metadata_fut =

@@ -33,6 +33,7 @@ typetag.workspace = true
 rand.workspace = true
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 bytes = "1.5.0"
+mockall = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json.workspace = true
@@ -44,6 +45,7 @@ maplit = "1.0.2"
 
 [features]
 diesel = ["dep:diesel"]
+test-utils = ["mockall"]
 
 [package.metadata.cargo-machete]
 ignored = ["strum"]
