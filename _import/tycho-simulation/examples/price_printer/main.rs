@@ -63,11 +63,8 @@ fn register_exchanges(
                     tvl_filter.clone(),
                     Some(uniswap_v4_pool_with_hook_filter),
                 )
-                .exchange::<EVMPoolState<PreCachedDB>>(
-                    "vm:maverick_v2",
-                    tvl_filter.clone(),
-                    Some(curve_pool_filter),
-                )
+            // COMING SOON!
+            // .exchange::<EVMPoolState<PreCachedDB>>("vm:maverick_v2", tvl_filter.clone(), None)
         }
         Chain::Base => {
             builder = builder
