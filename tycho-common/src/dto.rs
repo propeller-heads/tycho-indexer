@@ -1400,9 +1400,12 @@ pub struct EntryPoint {
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
 pub struct RPCTracerParams {
+    /// The caller address of the transaction, if not provided tracing uses the default value
+    /// for an address defined by the VM.
     #[schema(value_type=Option<String>)]
     #[serde(with = "hex_bytes_option", default)]
     pub caller: Option<Bytes>,
+    /// The call data used for the tracing call, this needs to include the function selector
     #[schema(value_type=String, example="0x679aefce")]
     #[serde(with = "hex_bytes")]
     pub calldata: Bytes,
@@ -1433,11 +1436,7 @@ impl From<models::blockchain::TracingParams> for TracingParams {
 
 impl From<models::blockchain::EntryPoint> for EntryPoint {
     fn from(value: models::blockchain::EntryPoint) -> Self {
-        EntryPoint {
-            external_id: value.external_id,
-            target: value.target,
-            signature: value.signature,
-        }
+        Self { external_id: value.external_id, target: value.target, signature: value.signature }
     }
 }
 
@@ -1451,10 +1450,7 @@ pub struct EntryPointWithTracingParams {
 
 impl From<models::blockchain::EntryPointWithTracingParams> for EntryPointWithTracingParams {
     fn from(value: models::blockchain::EntryPointWithTracingParams) -> Self {
-        EntryPointWithTracingParams {
-            entry_point: value.entry_point.into(),
-            params: value.params.into(),
-        }
+        Self { entry_point: value.entry_point.into(), params: value.params.into() }
     }
 }
 
