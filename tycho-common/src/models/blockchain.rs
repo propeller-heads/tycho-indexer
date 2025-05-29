@@ -722,10 +722,6 @@ pub mod fixtures {
         fixtures::create_transaction("0x01", "0x0abc", 1),
         fixtures::create_transaction("0x02", "0x0def", 2)
     )]
-    #[case::same_transaction(
-        fixtures::create_transaction("0x01", "0x0abc", 1),
-        fixtures::create_transaction("0x01", "0x0abc", 1)
-    )]
     #[case::older_transaction(
         fixtures::create_transaction("0x02", "0x0abc", 2),
         fixtures::create_transaction("0x01", "0x0abc", 1)

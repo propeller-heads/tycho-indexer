@@ -668,7 +668,6 @@ mod tests {
                                 HashMap::from([(Bytes::from("0x01"), Bytes::from("0x01"))]),
                             ),
                         ]),
-                        ..Default::default()
                     }],
                 )
             }
@@ -692,7 +691,6 @@ mod tests {
                                 HashMap::from([(Bytes::from("0x01"), Bytes::from("0xabcd"))]),
                             ),
                         ]),
-                        ..Default::default()
                     }],
                 )
             }
