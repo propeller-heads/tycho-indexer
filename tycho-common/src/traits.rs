@@ -13,13 +13,14 @@ use crate::{
     Bytes,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StorageSnapshotRequest {
     pub address: Address,
     pub slots: Option<Vec<Bytes>>,
 }
 
 /// Trait for getting multiple account states from chain data.
+#[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
 #[async_trait]
 pub trait AccountExtractor {
     type Error: Debug;
@@ -116,6 +117,7 @@ pub trait TokenPreProcessor: Send + Sync {
 }
 
 /// Trait for tracing blockchain transaction execution.
+#[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
 #[async_trait]
 pub trait EntryPointTracer {
     type Error: Debug;
