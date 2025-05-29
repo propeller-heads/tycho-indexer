@@ -86,6 +86,10 @@ where
     pub async fn initialize(&mut self) -> Result<(), ExtractionError> {
         let entrypoint_filter = EntryPointFilter::new(self.protocol.clone());
 
+        // We need to call the gateway twice, once to get the entrypoints and their tracing params,
+        // and once to get the tracing results.
+        // Perf: There is room for optimization here if we make a single custom function on the
+        // gateway that returns both.
         let entrypoints_with_params = self
             .entrypoint_gw
             .get_entry_points_tracing_params(entrypoint_filter, None)
@@ -158,6 +162,17 @@ where
         &mut self,
         block_changes: &mut BlockChanges,
     ) -> Result<(), ExtractionError> {
+        let new_entrypoints: HashMap<EntryPointId, EntryPoint> = block_changes
+            .txs_with_update
+            .iter()
+            .flat_map(|tx| {
+                tx.entrypoints
+                    .values()
+                    .flatten()
+                    .map(|ep| (ep.external_id.clone(), ep.clone()))
+            })
+            .collect::<HashMap<_, _>>();
+
         // Note: in the end we need to link DCI indexed accounts to a transaction, therefore we need
         // to keep track of the transaction related to any possible updates.
 
@@ -192,14 +207,19 @@ where
                     continue;
                 }
 
-                let entrypoint = self
-                    .cache
-                    .ep_id_to_entrypoint
+                let entrypoint = new_entrypoints
                     .get(entrypoint_id)
-                    .ok_or(ExtractionError::Storage(StorageError::NotFound(
-                        "Entrypoint".to_string(),
-                        entrypoint_id.to_string(),
-                    )))?;
+                    .or_else(|| {
+                        self.cache
+                            .ep_id_to_entrypoint
+                            .get(entrypoint_id)
+                    })
+                    .ok_or_else(|| {
+                        ExtractionError::Storage(StorageError::NotFound(
+                            "Entrypoint".to_string(),
+                            entrypoint_id.to_string(),
+                        ))
+                    })?;
 
                 let entrypoint_with_params =
                     EntryPointWithTracingParams::new(entrypoint.clone(), param.clone());
@@ -244,11 +264,14 @@ where
             for traced_entry_point in traced_entry_points.iter() {
                 let tx = entrypoints_to_analyze
                     .get(&traced_entry_point.entry_point_with_params)
-                    .expect("Traced entrypoint should be in the entrypoints_to_analyze map");
+                    // Safe to expect because we constructed the request to trace the entrypoints
+                    // with the entrypoints_to_analyze map. So every traced entrypoint should be in
+                    // the map.
+                    .expect("Every traced entrypoint should be in the entrypoints_to_analyze map");
                 tx_to_traced_entry_point.insert(tx, traced_entry_point);
             }
 
-            let mut account_to_tx: HashMap<Address, &Transaction> = HashMap::new();
+            let mut new_account_addr_to_tx: HashMap<Address, &Transaction> = HashMap::new();
             for (tx, traced_entry_point) in tx_to_traced_entry_point {
                 for account in traced_entry_point
                     .tracing_result
@@ -264,7 +287,7 @@ where
                 {
                     // Keep track of the first transaction that pushed the entrypoint that calls
                     // this account.
-                    account_to_tx
+                    new_account_addr_to_tx
                         .entry(account)
                         .and_modify(|existing_tx| {
                             if existing_tx.index > tx.index {
@@ -278,7 +301,7 @@ where
             // Get the code, balance and storage changes for the new traced entrypoints
             // This can contain duplicates, but the AccountExtractor implementation should ignore
             // them.
-            let storage_request: Vec<StorageSnapshotRequest> = account_to_tx
+            let storage_request: Vec<StorageSnapshotRequest> = new_account_addr_to_tx
                 .keys()
                 .map(|address| {
                     StorageSnapshotRequest {
@@ -296,7 +319,14 @@ where
                 .map_err(|e| ExtractionError::AccountExtractionError(format!("{e:?}")))?;
 
             // Update the block changes
-            for (account, tx) in account_to_tx.into_iter() {
+            for (account, tx) in new_account_addr_to_tx.into_iter() {
+                let account_delta = new_accounts
+                    .remove(&account)
+                    // Safe to expect because we constructed the request to get
+                    // the accounts with the new_account_addr_to_tx map. So every account
+                    // in the map should have a result.
+                    .expect("All accounts in request should have a result");
+
                 match block_changes
                     .txs_with_update
                     .iter_mut()
@@ -308,22 +338,17 @@ where
                             .entry(account.clone())
                         {
                             Entry::Occupied(mut entry) => {
-                                entry
-                                    .get_mut()
-                                    .merge(new_accounts.remove(&account).unwrap())?;
+                                entry.get_mut().merge(account_delta)?;
                             }
                             Entry::Vacant(entry) => {
-                                entry.insert(new_accounts.remove(&account).unwrap());
+                                entry.insert(account_delta);
                             }
                         }
                     }
                     None => {
                         let tx_with_changes = TxWithChanges {
                             tx: tx.clone(),
-                            account_deltas: HashMap::from([(
-                                account.clone(),
-                                new_accounts.remove(&account).unwrap(),
-                            )]),
+                            account_deltas: HashMap::from([(account.clone(), account_delta)]),
                             ..Default::default()
                         };
                         block_changes
@@ -341,15 +366,13 @@ where
         }
 
         // Update the entrypoint cache from the block changes
-        for tx in block_changes.txs_with_update.iter() {
-            for entrypoint in tx.entrypoints.values().flatten() {
-                self.cache
-                    .ep_id_to_entrypoint
-                    .insert(entrypoint.external_id.clone(), entrypoint.clone());
-            }
-        }
+        self.cache.ep_id_to_entrypoint.extend(
+            new_entrypoints
+                .into_values()
+                .map(|ep| (ep.external_id.clone(), ep)),
+        );
 
-        let tracked_updates = self.extract_tracked_updates(block_changes);
+        let tracked_updates = self.extract_tracked_updates(block_changes)?;
 
         let mut tx_with_changes = block_changes
             .txs_with_update
@@ -362,7 +385,7 @@ where
         let mut new_transactions = Vec::new();
         for (_, tx) in tracked_updates {
             if let Some(existing_tx) = tx_with_changes.get_mut(&tx.tx.hash) {
-                existing_tx.merge(tx).unwrap();
+                existing_tx.merge(tx)?;
             } else {
                 new_transactions.push(tx);
             }
@@ -481,7 +504,7 @@ where
     fn extract_tracked_updates(
         &self,
         block_changes: &BlockChanges,
-    ) -> HashMap<TxHash, TxWithChanges> {
+    ) -> Result<HashMap<TxHash, TxWithChanges>, ExtractionError> {
         let mut tracked_updates: HashMap<TxHash, TxWithChanges> = HashMap::new();
 
         for tx in block_changes
@@ -539,10 +562,7 @@ where
 
                 match tracked_updates.entry(tx.tx.hash.clone()) {
                     Entry::Occupied(mut entry) => {
-                        entry
-                            .get_mut()
-                            .merge(tx_with_changes)
-                            .unwrap();
+                        entry.get_mut().merge(tx_with_changes)?;
                     }
                     Entry::Vacant(entry) => {
                         entry.insert(tx_with_changes);
@@ -551,7 +571,7 @@ where
             }
         }
 
-        tracked_updates
+        Ok(tracked_updates)
     }
 
     // TODO: Handle reverts, need to cleanup reverted internal state
@@ -626,11 +646,11 @@ mod tests {
                         tx,
                         entrypoints: HashMap::from([(
                             "component_1".to_string(),
-                            HashSet::from([get_entrypoint(4)]),
+                            HashSet::from([get_entrypoint(9)]),
                         )]),
                         entrypoint_params: HashMap::from([(
-                            "entrypoint_4".to_string(),
-                            HashSet::from([(get_tracing_params(4), None)]),
+                            "entrypoint_9".to_string(),
+                            HashSet::from([(get_tracing_params(9), None)]),
                         )]),
                         ..Default::default()
                     }],
@@ -869,15 +889,15 @@ mod tests {
             .with(
                 eq(Bytes::from(2_u8).lpad(32, 0)),
                 eq(vec![EntryPointWithTracingParams::new(
-                    get_entrypoint(4),
-                    get_tracing_params(4),
+                    get_entrypoint(9),
+                    get_tracing_params(9),
                 )]),
             )
             .return_once(move |_, _| {
                 Ok(vec![TracedEntryPoint::new(
-                    EntryPointWithTracingParams::new(get_entrypoint(4), get_tracing_params(4)),
+                    EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
                     Bytes::zero(32),
-                    get_tracing_result(4),
+                    get_tracing_result(9),
                 )])
             });
 
@@ -889,19 +909,19 @@ mod tests {
                     requests.len() == 2 &&
                         requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x04")) &&
+                            .any(|r| r.address == Bytes::from("0x09")) &&
                         requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x44"))
+                            .any(|r| r.address == Bytes::from("0x99"))
                 }),
             )
             .return_once(move |_, _| {
                 Ok(HashMap::from([
                     (
-                        Bytes::from("0x04"),
+                        Bytes::from("0x09"),
                         AccountDelta::new(
                             Chain::Ethereum,
-                            Bytes::from("0x04"),
+                            Bytes::from("0x09"),
                             HashMap::new(),
                             None,
                             None,
@@ -909,10 +929,10 @@ mod tests {
                         ),
                     ),
                     (
-                        Bytes::from("0x44"),
+                        Bytes::from("0x99"),
                         AccountDelta::new(
                             Chain::Ethereum,
-                            Bytes::from("0x44"),
+                            Bytes::from("0x99"),
                             HashMap::new(),
                             None,
                             None,
@@ -942,10 +962,10 @@ mod tests {
             .account_deltas
             .extend([
                 (
-                    Bytes::from("0x04"),
+                    Bytes::from("0x99"),
                     AccountDelta::new(
                         Chain::Ethereum,
-                        Bytes::from("0x04"),
+                        Bytes::from("0x99"),
                         HashMap::new(),
                         None,
                         None,
@@ -953,10 +973,10 @@ mod tests {
                     ),
                 ),
                 (
-                    Bytes::from("0x44"),
+                    Bytes::from("0x09"),
                     AccountDelta::new(
                         Chain::Ethereum,
-                        Bytes::from("0x44"),
+                        Bytes::from("0x09"),
                         HashMap::new(),
                         None,
                         None,
@@ -966,9 +986,9 @@ mod tests {
             ]);
 
         expected_block_changes.trace_results = vec![TracedEntryPoint::new(
-            EntryPointWithTracingParams::new(get_entrypoint(4), get_tracing_params(4)),
+            EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
             Bytes::zero(32),
-            get_tracing_result(4),
+            get_tracing_result(9),
         )];
         assert_eq!(block_changes, expected_block_changes);
     }
