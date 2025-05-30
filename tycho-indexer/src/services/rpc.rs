@@ -1269,6 +1269,7 @@ mod tests {
     use chrono::NaiveDateTime;
     use mockall::mock;
     use tycho_common::{
+        keccak256,
         models::{
             blockchain::{
                 EntryPoint, EntryPointWithTracingParams, RPCTracerParams, TracingParams,
@@ -1519,6 +1520,58 @@ mod tests {
         let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
         let gw = MockGateway::new();
         let _req_handler = RpcHandler::new(gw, None, Some(tracer));
+
+        // Balancer v3 stable pool
+        let component_id = "0x0000000000000000000000000000000000000001".to_string();
+        let entry_points_to_add = vec![(
+            "entry!".to_string(),
+            vec![
+                (
+                    dto::EntryPointWithTracingParams {
+                        entry_point: dto::EntryPoint {
+                            external_id: "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()"
+                                .to_string(),
+                            target: Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988")
+                                .unwrap(),
+                            signature: "getRate()".to_string(),
+                        },
+                        params: dto::TracingParams::RPCTracer(dto::RPCTracerParams {
+                            caller: None,
+                            calldata: Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
+                        }),
+                    },
+                    Some(component_id.clone()),
+                ),
+                (
+                    dto::EntryPointWithTracingParams {
+                        entry_point: dto::EntryPoint {
+                            external_id: "0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9:getRate()"
+                                .to_string(),
+                            target: Bytes::from_str("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9")
+                                .unwrap(),
+                            signature: "getRate()".to_string(),
+                        },
+                        params: dto::TracingParams::RPCTracer(dto::RPCTracerParams {
+                            caller: None,
+                            calldata: Bytes::from(&keccak256("getRate()")[0..4]),
+                        }),
+                    },
+                    Some(component_id.clone()),
+                ),
+            ],
+        )];
+
+        let _block_hash =
+            Bytes::from_str("0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2")
+                .unwrap();
+
+        let _req_body = dto::AddEntrypointRequestBody {
+            chain: Chain::Ethereum.into(),
+            entry_points_with_tracing_data: entry_points_to_add,
+        };
+
+        // TODO call main method and assert results. Perhaps test helper method separately?
+        // TODO figure out how to check call values to the mock gateway?
     }
     #[test]
     async fn test_get_traced_entry_points() {
