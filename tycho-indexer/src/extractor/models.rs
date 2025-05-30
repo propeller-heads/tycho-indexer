@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use tycho_common::{
     models::{
         blockchain::{
-            Block, BlockAggregatedChanges, BlockScoped, DCIData, TracedEntryPoint, TracingResult,
+            Block, BlockAggregatedChanges, BlockScoped, DCIUpdate, TracedEntryPoint, TracingResult,
             Transaction, TxWithChanges,
         },
         contract::{AccountBalance, AccountChangesWithTx},
@@ -237,7 +237,7 @@ impl BlockChanges {
             component_balances: aggregated_changes.balance_changes,
             account_balances: aggregated_changes.account_balance_changes,
             component_tvl: HashMap::new(),
-            dci_data: DCIData {
+            dci_update: DCIUpdate {
                 new_entrypoints: aggregated_changes.entrypoints,
                 new_entrypoint_params: aggregated_changes.entrypoint_params,
                 trace_results: aggregated_trace_results,

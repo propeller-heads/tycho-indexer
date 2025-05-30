@@ -241,7 +241,7 @@ pub struct BlockChanges {
     pub component_balances: HashMap<String, TokenBalances>,
     pub account_balances: HashMap<Bytes, HashMap<Bytes, AccountBalance>>,
     pub component_tvl: HashMap<String, f64>,
-    pub dci_data: DCIData,
+    pub dci_update: DCIUpdate,
 }
 
 impl BlockChanges {
@@ -258,7 +258,7 @@ impl BlockChanges {
         deleted_protocol_components: HashMap<String, ProtocolComponent>,
         component_balances: HashMap<String, HashMap<Bytes, ComponentBalance>>,
         account_balances: HashMap<Bytes, HashMap<Bytes, AccountBalance>>,
-        dci_data: DCIData,
+        dci_update: DCIUpdate,
     ) -> Self {
         BlockChanges {
             extractor: extractor.to_owned(),
@@ -277,7 +277,7 @@ impl BlockChanges {
                 .collect(),
             account_balances,
             component_tvl: HashMap::new(),
-            dci_data,
+            dci_update,
         }
     }
 
@@ -1327,9 +1327,13 @@ impl ProtocolSystemsRequestResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
-pub struct DCIData {
+pub struct DCIUpdate {
+    /// Map of component id to the new entrypoints associated with the component
     pub new_entrypoints: HashMap<String, HashSet<EntryPoint>>,
+    /// Map of entrypoint id to the new entrypoint params associtated with it (and optionally the
+    /// component linked to those params)
     pub new_entrypoint_params: HashMap<String, HashSet<(TracingParams, Option<String>)>>,
+    /// Map of entrypoint id to its trace result
     pub trace_results: HashMap<String, TracingResult>,
 }
 
@@ -1486,7 +1490,7 @@ pub struct TracedEntryPointRequestResponse {
     pub pagination: PaginationResponse,
 }
 
-impl From<TracedEntryPointRequestResponse> for DCIData {
+impl From<TracedEntryPointRequestResponse> for DCIUpdate {
     fn from(response: TracedEntryPointRequestResponse) -> Self {
         let mut new_entrypoints = HashMap::new();
         let mut new_entrypoint_params = HashMap::new();
@@ -1530,7 +1534,7 @@ impl From<TracedEntryPointRequestResponse> for DCIData {
             }
         }
 
-        DCIData { new_entrypoints, new_entrypoint_params, trace_results }
+        DCIUpdate { new_entrypoints, new_entrypoint_params, trace_results }
     }
 }
 
@@ -2007,7 +2011,7 @@ mod test {
             "component_tvl": {
                 "protocol_1": 1000.0
             },
-            "dci_data": {
+            "dci_update": {
                 "new_entrypoints": {
                     "component_1": [
                         {
@@ -2122,7 +2126,7 @@ mod test {
                     }
                 },
                 "component_tvl": {},
-                "dci_data": {
+                "dci_update": {
                     "new_entrypoints": {
                         "0xde6faedbcae38eec6d33ad61473a04a6dd7f6e28": [
                             {

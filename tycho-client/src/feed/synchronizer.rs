@@ -504,7 +504,7 @@ where
                 };
 
                 // 3. Update entrypoints on the tracker (affects which contracts are tracked)
-                tracker.process_entrypoints(&deltas.dci_data)?;
+                tracker.process_entrypoints(&deltas.dci_update)?;
 
                 // 4. Filter deltas by currently tracked components / contracts
                 self.filter_deltas(&mut deltas, &tracker);
@@ -633,7 +633,7 @@ mod test {
 
     use test_log::test;
     use tycho_common::dto::{
-        Block, Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse, DCIData, EntryPoint,
+        Block, Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse, DCIUpdate, EntryPoint,
         PaginationResponse, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
         ProtocolStateRequestBody, ProtocolStateRequestResponse, ProtocolSystemsRequestBody,
         ProtocolSystemsRequestResponse, RPCTracerParams, StateRequestBody, StateRequestResponse,
@@ -1224,7 +1224,7 @@ mod test {
                     ts: Default::default(),
                 },
                 revert: false,
-                dci_data: DCIData {
+                dci_update: DCIUpdate {
                     new_entrypoints: HashMap::from([(
                         "Component1".to_string(),
                         HashSet::from([EntryPoint {

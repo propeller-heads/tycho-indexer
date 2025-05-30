@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use tracing::{debug, instrument, warn};
 use tycho_common::{
-    dto::{BlockChanges, Chain, DCIData, ProtocolComponent, ProtocolComponentsRequestBody},
+    dto::{BlockChanges, Chain, DCIUpdate, ProtocolComponent, ProtocolComponentsRequestBody},
     models::{Address, ComponentId, ProtocolSystem},
 };
 
@@ -272,9 +272,9 @@ where
     }
 
     /// Updates the tracked entrypoints and contracts based on the given DCI data.
-    pub fn process_entrypoints(&mut self, dci_data: &DCIData) -> Result<(), RPCError> {
+    pub fn process_entrypoints(&mut self, dci_update: &DCIUpdate) -> Result<(), RPCError> {
         // Update detected contracts for entrypoints
-        for (entrypoint, traces) in &dci_data.trace_results {
+        for (entrypoint, traces) in &dci_update.trace_results {
             self.entrypoints
                 .entry(entrypoint.clone())
                 .or_default()
@@ -283,7 +283,7 @@ where
         }
 
         // Update linked components for entrypoints
-        for (component, entrypoints) in &dci_data.new_entrypoints {
+        for (component, entrypoints) in &dci_update.new_entrypoints {
             for entrypoint in entrypoints {
                 let entrypoint_info = self
                     .entrypoints

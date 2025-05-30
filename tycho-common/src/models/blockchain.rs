@@ -89,7 +89,7 @@ pub struct BlockAggregatedChanges {
     pub component_balances: HashMap<ComponentId, HashMap<Bytes, ComponentBalance>>,
     pub account_balances: HashMap<Address, HashMap<Address, AccountBalance>>,
     pub component_tvl: HashMap<String, f64>,
-    pub dci_data: DCIData,
+    pub dci_update: DCIUpdate,
 }
 
 impl BlockAggregatedChanges {
@@ -108,7 +108,7 @@ impl BlockAggregatedChanges {
         component_balances: HashMap<ComponentId, HashMap<Bytes, ComponentBalance>>,
         account_balances: HashMap<Address, HashMap<Address, AccountBalance>>,
         component_tvl: HashMap<String, f64>,
-        dci_data: DCIData,
+        dci_update: DCIUpdate,
     ) -> Self {
         Self {
             extractor: extractor.to_string(),
@@ -124,7 +124,7 @@ impl BlockAggregatedChanges {
             component_balances,
             account_balances,
             component_tvl,
-            dci_data,
+            dci_update,
         }
     }
 }
@@ -156,7 +156,7 @@ impl NormalisedMessage for BlockAggregatedChanges {
             component_balances: self.component_balances.clone(),
             account_balances: self.account_balances.clone(),
             component_tvl: self.component_tvl.clone(),
-            dci_data: self.dci_data.clone(),
+            dci_update: self.dci_update.clone(),
         })
     }
 
@@ -176,7 +176,7 @@ impl BlockScoped for BlockAggregatedChanges {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
-pub struct DCIData {
+pub struct DCIUpdate {
     pub new_entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
     pub new_entrypoint_params: HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
     pub trace_results: HashMap<EntryPointId, TracingResult>,
