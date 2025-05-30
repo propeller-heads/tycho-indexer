@@ -8,7 +8,7 @@ use crate::{
         blockchain::{Block, BlockTag, EntryPointWithTracingParams, TracedEntryPoint},
         contract::AccountDelta,
         token::{CurrencyToken, TokenQuality, TransferCost, TransferTax},
-        Address, Balance, BlockHash,
+        Address, Balance, BlockHash, StoreKey,
     },
     Bytes,
 };
@@ -20,7 +20,7 @@ pub struct StorageSnapshotRequest {
     pub address: Address,
     // The specific slots to get the state of. If `None`, the entire account state will be
     // returned.
-    pub slots: Option<Vec<Bytes>>,
+    pub slots: Option<Vec<StoreKey>>,
 }
 
 /// Trait for getting multiple account states from chain data.
