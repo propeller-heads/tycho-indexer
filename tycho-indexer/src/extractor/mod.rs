@@ -9,7 +9,7 @@ use tycho_common::{
         blockchain::{Block, BlockScoped},
         contract::AccountBalance,
         protocol::ComponentBalance,
-        Address, ExtractorIdentity, MergeError, NormalisedMessage,
+        Address, BlockHash, ExtractorIdentity, MergeError, NormalisedMessage,
     },
     storage::StorageError,
     Bytes,
@@ -110,7 +110,7 @@ pub trait ExtractorExtension: Send + Sync {
     ) -> Result<(), ExtractionError>;
 
     /// Process a revert
-    async fn process_revert(&mut self, target_block: u64) -> Result<(), ExtractionError>;
+    async fn process_revert(&mut self, target_block: &BlockHash) -> Result<(), ExtractionError>;
 }
 
 /// Wrapper to carry a cursor along with another struct.

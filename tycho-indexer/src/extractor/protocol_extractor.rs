@@ -836,7 +836,7 @@ where
             dci_plugin
                 .lock()
                 .await
-                .process_revert(block_ref.number)
+                .process_revert(&block_hash)
                 .await?;
         }
 
