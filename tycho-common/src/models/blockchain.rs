@@ -42,7 +42,7 @@ impl Block {
     }
 }
 
-#[derive(Clone, Default, PartialEq, Debug)]
+#[derive(Clone, Default, PartialEq, Debug, Eq, Hash)]
 pub struct Transaction {
     pub hash: Bytes,
     pub block_hash: Bytes,
@@ -221,8 +221,7 @@ impl TxWithChanges {
 
     /// Merges this update with another one.
     ///
-    /// The method combines two [`TxWithChanges`] instances if they for different transactions on
-    /// the same block.
+    /// The method combines two [`TxWithChanges`] instances if they are on the same block.
     ///
     /// NB: It is expected that `other` is a more recent update than `self` is and the two are
     /// combined accordingly.
@@ -236,9 +235,6 @@ impl TxWithChanges {
                 self.tx.block_hash.clone(),
                 other.tx.block_hash,
             ));
-        }
-        if self.tx.hash == other.tx.hash {
-            return Err(MergeError::SameTransaction("TxWithChanges".to_string(), other.tx.hash));
         }
         if self.tx.index > other.tx.index {
             return Err(MergeError::TransactionOrderError(
@@ -724,10 +720,6 @@ pub mod fixtures {
     #[case::mismatched_blocks(
         fixtures::create_transaction("0x01", "0x0abc", 1),
         fixtures::create_transaction("0x02", "0x0def", 2)
-    )]
-    #[case::same_transaction(
-        fixtures::create_transaction("0x01", "0x0abc", 1),
-        fixtures::create_transaction("0x01", "0x0abc", 1)
     )]
     #[case::older_transaction(
         fixtures::create_transaction("0x02", "0x0abc", 2),

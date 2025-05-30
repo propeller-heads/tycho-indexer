@@ -8,19 +8,45 @@ use crate::{
         blockchain::{Block, BlockTag, EntryPointWithTracingParams, TracedEntryPoint},
         contract::AccountDelta,
         token::{CurrencyToken, TokenQuality, TransferCost, TransferTax},
-        Address, Balance, BlockHash,
+        Address, Balance, BlockHash, StoreKey,
     },
     Bytes,
 };
 
+/// A struct representing a request to get an account state.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct StorageSnapshotRequest {
+    // The address of the account to get the state of.
+    pub address: Address,
+    // The specific slots to get the state of. If `None`, the entire account state will be
+    // returned.
+    pub slots: Option<Vec<StoreKey>>,
+}
+
+/// Trait for getting multiple account states from chain data.
+#[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
 #[async_trait]
 pub trait AccountExtractor {
-    type Error;
+    type Error: Debug;
 
-    async fn get_accounts(
+    /// Get the account states at the end of the given block (after all transactions in the block
+    /// have been applied).
+    ///
+    /// # Arguments
+    ///
+    /// * `block`: The block at which to retrieve the account states.
+    /// * `requests`: A slice of `StorageSnapshotRequest` objects, each containing an address and
+    ///   optional slots.
+    /// Note: If the `slots` field is `None`, the function will return the entire account state.
+    /// That could be a lot of data, so use with caution.
+    ///
+    /// returns: Result<HashMap<Bytes, AccountDelta, RandomState>, Self::Error>
+    /// A result containing a HashMap where the keys are `Bytes` (addresses) and the values are
+    /// `AccountDelta` objects.
+    async fn get_accounts_at_block(
         &self,
-        block: Block,
-        account_addresses: Vec<Address>,
+        block: &Block,
+        requests: &[StorageSnapshotRequest],
     ) -> Result<HashMap<Bytes, AccountDelta>, Self::Error>; //TODO: do not return `AccountUpdate` but `Account`
 }
 
@@ -95,9 +121,10 @@ pub trait TokenPreProcessor: Send + Sync {
 }
 
 /// Trait for tracing blockchain transaction execution.
+#[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
 #[async_trait]
 pub trait EntryPointTracer {
-    type Error;
+    type Error: Debug;
 
     /// Traces the execution of a list of entry points at a specific block.
     ///

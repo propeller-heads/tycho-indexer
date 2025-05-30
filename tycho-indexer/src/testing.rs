@@ -37,6 +37,15 @@ mock! {
         async fn save_state(&self, state: &ExtractionState) -> Result<(), StorageError>;
     }
 
+    #[async_trait]
+    impl ChainGateway for Gateway {
+        async fn upsert_block(&self, new: &[Block]) -> Result<(), StorageError>;
+        async fn get_block(&self, id: &BlockIdentifier) -> Result<Block, StorageError>;
+        async fn upsert_tx(&self, new: &[Transaction]) -> Result<(), StorageError>;
+        async fn get_tx(&self, hash: &TxHash) -> Result<Transaction, StorageError>;
+        async fn revert_state(&self, to: &BlockIdentifier) -> Result<(), StorageError>;
+    }
+
     impl EntryPointGateway for Gateway {
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
         fn insert_entry_points<'life0, 'life1, 'async_trait>(
@@ -53,6 +62,7 @@ mock! {
             'life0: 'async_trait,
             'life1: 'async_trait,
             Self: 'async_trait;
+
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
         fn insert_entry_point_tracing_params<'life0, 'life1, 'async_trait>(
             &'life0 self,
@@ -71,6 +81,7 @@ mock! {
             'life0: 'async_trait,
             'life1: 'async_trait,
             Self: 'async_trait;
+
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
         fn get_entry_points<'life0, 'life1, 'async_trait>(
             &'life0 self,
@@ -91,6 +102,7 @@ mock! {
             'life0: 'async_trait,
             'life1: 'async_trait,
             Self: 'async_trait;
+
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
         fn get_entry_points_tracing_params<'life0, 'life1, 'async_trait>(
             &'life0 self,
@@ -111,6 +123,7 @@ mock! {
             'life0: 'async_trait,
             'life1: 'async_trait,
             Self: 'async_trait;
+
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
         fn upsert_traced_entry_points<'life0, 'life1, 'async_trait>(
             &'life0 self,
@@ -126,6 +139,7 @@ mock! {
             'life0: 'async_trait,
             'life1: 'async_trait,
             Self: 'async_trait;
+
         #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
         fn get_traced_entry_points<'life0, 'life1, 'async_trait>(
             &'life0 self,
@@ -134,7 +148,7 @@ mock! {
             Box<
                 dyn ::core::future::Future<
                         Output = Result<
-                            HashMap<EntryPointId,  HashMap<TracingParams, TracingResult>>,
+                            HashMap<EntryPointId, HashMap<TracingParams, TracingResult>>,
                             StorageError,
                         >,
                     > + ::core::marker::Send
@@ -145,15 +159,6 @@ mock! {
             'life0: 'async_trait,
             'life1: 'async_trait,
             Self: 'async_trait;
-    }
-
-    #[async_trait]
-    impl ChainGateway for Gateway {
-        async fn upsert_block(&self, new: &[Block]) -> Result<(), StorageError>;
-        async fn get_block(&self, id: &BlockIdentifier) -> Result<Block, StorageError>;
-        async fn upsert_tx(&self, new: &[Transaction]) -> Result<(), StorageError>;
-        async fn get_tx(&self, hash: &TxHash) -> Result<Transaction, StorageError>;
-        async fn revert_state(&self, to: &BlockIdentifier) -> Result<(), StorageError>;
     }
 
     impl ContractStateGateway for Gateway {
@@ -623,6 +628,21 @@ mock! {
 
     impl Gateway for Gateway {}
 }
+
+// mock! {
+//     pub AccountExtractor {}
+
+//     #[async_trait]
+//     impl tycho_common::traits::AccountExtractor for AccountExtractor {
+//         type Error = String;
+
+//         async fn get_accounts_at_block(
+//         &self,
+//         block: &Block,
+//         requests: &[StorageSnapshotRequest],
+//     ) -> Result<HashMap<Bytes, AccountDelta>, Self::Error>;
+//     }
+// }
 
 #[cfg(test)]
 pub fn evm_contract_slots(data: impl IntoIterator<Item = (i32, i32)>) -> HashMap<Bytes, Bytes> {
