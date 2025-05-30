@@ -880,33 +880,25 @@ where
     async fn add_entry_points(
         &self,
         request: &dto::AddEntrypointRequestBody,
-        // TODO how do I get the block hash?
-        block_hash: Bytes,
     ) -> Result<(), RpcError> {
-        let tracing_result = self
-            .trace_entry_points(request, block_hash)
-            .await?;
+        let tracing_result = self.trace_entry_points(request).await?;
         let mut entry_points: HashMap<ComponentId, HashSet<EntryPoint>> = HashMap::new();
         let mut entry_points_params: HashMap<
             EntryPointId,
             HashSet<(TracingParams, Option<ComponentId>)>,
         > = HashMap::new();
-        for (_entry_point_id, components_and_params) in &request.entry_points_with_tracing_data {
-            for (params, component_id_option) in components_and_params {
-                if let Some(component_id) = component_id_option.clone() {
-                    entry_points
-                        .entry(component_id)
-                        .or_default()
-                        .insert(params.entry_point.clone().into());
-                }
-                // Extend the entry point parameters for the given entry point id
+        for (component_id, components_and_params) in &request.entry_points_with_tracing_data {
+            for params in components_and_params {
+                entry_points
+                    .entry(component_id.into())
+                    .or_default()
+                    .insert(params.entry_point.clone().into());
                 entry_points_params
                     .entry(params.entry_point.external_id.clone())
                     .or_default()
-                    .insert((params.params.clone().into(), component_id_option.clone()));
+                    .insert((params.params.clone().into(), Some(component_id.into())));
             }
         }
-        // TODO is this sequence correct? Should I be calling all three?
         self.db_gateway
             .insert_entry_points(&entry_points)
             .await?;
@@ -922,20 +914,15 @@ where
     async fn trace_entry_points(
         &self,
         request: &dto::AddEntrypointRequestBody,
-        block_hash: Bytes,
     ) -> Result<Vec<TracedEntryPoint>, RpcError> {
         if let Some(tracer) = &self.tracer {
             let entry_points_with_params: Vec<_> = request
                 .entry_points_with_tracing_data
                 .iter()
-                .flat_map(|(_, params_and_components)| {
-                    params_and_components
-                        .iter()
-                        .map(|(param, _)| param.clone().into())
-                })
+                .flat_map(|(_, params)| params.iter().cloned().map(Into::into))
                 .collect();
             let trace_results = tracer
-                .trace(block_hash, entry_points_with_params)
+                .trace(request.block_hash.clone(), entry_points_with_params)
                 .await
                 .map_err(|e| {
                     error!(error = %e, "Error while tracing entry points.");
@@ -1524,49 +1511,43 @@ mod tests {
         // Balancer v3 stable pool
         let component_id = "0x0000000000000000000000000000000000000001".to_string();
         let entry_points_to_add = vec![(
-            "entry!".to_string(),
+            component_id.clone(),
             vec![
-                (
-                    dto::EntryPointWithTracingParams {
-                        entry_point: dto::EntryPoint {
-                            external_id: "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()"
-                                .to_string(),
-                            target: Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988")
-                                .unwrap(),
-                            signature: "getRate()".to_string(),
-                        },
-                        params: dto::TracingParams::RPCTracer(dto::RPCTracerParams {
-                            caller: None,
-                            calldata: Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
-                        }),
+                dto::EntryPointWithTracingParams {
+                    entry_point: dto::EntryPoint {
+                        external_id: "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()"
+                            .to_string(),
+                        target: Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988")
+                            .unwrap(),
+                        signature: "getRate()".to_string(),
                     },
-                    Some(component_id.clone()),
-                ),
-                (
-                    dto::EntryPointWithTracingParams {
-                        entry_point: dto::EntryPoint {
-                            external_id: "0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9:getRate()"
-                                .to_string(),
-                            target: Bytes::from_str("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9")
-                                .unwrap(),
-                            signature: "getRate()".to_string(),
-                        },
-                        params: dto::TracingParams::RPCTracer(dto::RPCTracerParams {
-                            caller: None,
-                            calldata: Bytes::from(&keccak256("getRate()")[0..4]),
-                        }),
+                    params: dto::TracingParams::RPCTracer(dto::RPCTracerParams {
+                        caller: None,
+                        calldata: Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
+                    }),
+                },
+                dto::EntryPointWithTracingParams {
+                    entry_point: dto::EntryPoint {
+                        external_id: "0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9:getRate()"
+                            .to_string(),
+                        target: Bytes::from_str("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9")
+                            .unwrap(),
+                        signature: "getRate()".to_string(),
                     },
-                    Some(component_id.clone()),
-                ),
+                    params: dto::TracingParams::RPCTracer(dto::RPCTracerParams {
+                        caller: None,
+                        calldata: Bytes::from(&keccak256("getRate()")[0..4]),
+                    }),
+                },
             ],
         )];
 
-        let _block_hash =
-            Bytes::from_str("0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2")
-                .unwrap();
-
         let _req_body = dto::AddEntrypointRequestBody {
             chain: Chain::Ethereum.into(),
+            block_hash: Bytes::from_str(
+                "0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2",
+            )
+            .unwrap(),
             entry_points_with_tracing_data: entry_points_to_add,
         };
 
