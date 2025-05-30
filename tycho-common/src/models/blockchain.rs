@@ -221,8 +221,7 @@ impl TxWithChanges {
 
     /// Merges this update with another one.
     ///
-    /// The method combines two [`TxWithChanges`] instances if they are for different transactions
-    /// on the same block.
+    /// The method combines two [`TxWithChanges`] instances if they are on the same block.
     ///
     /// NB: It is expected that `other` is a more recent update than `self` is and the two are
     /// combined accordingly.

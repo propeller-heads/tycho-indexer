@@ -263,7 +263,6 @@ impl EVMBatchAccountExtractor {
                     )))
                 })?;
 
-            // TODO: Check if this should be big-endian or little-endian
             balances.insert(address.clone(), Bytes::from(balance_result.to_be_bytes::<32>()));
         }
         Ok((codes, balances))
@@ -330,7 +329,6 @@ impl EVMBatchAccountExtractor {
                 }
             }
             None => {
-                // TODO: Implement this -> Call get_storage_range
                 let storage = self
                     .get_storage_range(&request.address, block)
                     .await?;
@@ -353,13 +351,7 @@ impl EVMBatchAccountExtractor {
 
         let mut all_slots = HashMap::new();
         let mut start_key = H256::zero();
-        // let block = format!("0x{:x}", block);
         loop {
-            // let params = serde_json::json!([
-            //     block, 0, // transaction index, 0 for the state at the end of the block
-            //     address, start_key, 100000 // limit
-            // ]);
-
             trace!("Requesting storage range for {:?}, block: {:?}", address.clone(), block);
             let result: StorageRange = self
                 .provider
@@ -367,11 +359,11 @@ impl EVMBatchAccountExtractor {
                     "debug_storageRangeAt",
                     &(
                         block.hash.to_string(),
-                        0, // transaction index, 0 for the state at the end of the block)
+                        0, // transaction index, 0 for the state at the end of the block
                         address,
                         start_key,
-                        100000,
-                    ), // limit
+                        100000, // limit
+                    ),
                 )
                 .await
                 .map_err(|_| {
