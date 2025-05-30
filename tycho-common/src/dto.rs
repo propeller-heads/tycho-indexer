@@ -241,6 +241,7 @@ pub struct BlockChanges {
     pub component_balances: HashMap<String, TokenBalances>,
     pub account_balances: HashMap<Bytes, HashMap<Bytes, AccountBalance>>,
     pub component_tvl: HashMap<String, f64>,
+    pub dci_update: DCIUpdate,
 }
 
 impl BlockChanges {
@@ -257,6 +258,7 @@ impl BlockChanges {
         deleted_protocol_components: HashMap<String, ProtocolComponent>,
         component_balances: HashMap<String, HashMap<Bytes, ComponentBalance>>,
         account_balances: HashMap<Bytes, HashMap<Bytes, AccountBalance>>,
+        dci_update: DCIUpdate,
     ) -> Self {
         BlockChanges {
             extractor: extractor.to_owned(),
@@ -275,6 +277,7 @@ impl BlockChanges {
                 .collect(),
             account_balances,
             component_tvl: HashMap::new(),
+            dci_update,
         }
     }
 
@@ -1322,6 +1325,17 @@ impl ProtocolSystemsRequestResponse {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
+pub struct DCIUpdate {
+    /// Map of component id to the new entrypoints associated with the component
+    pub new_entrypoints: HashMap<String, HashSet<EntryPoint>>,
+    /// Map of entrypoint id to the new entrypoint params associtated with it (and optionally the
+    /// component linked to those params)
+    pub new_entrypoint_params: HashMap<String, HashSet<(TracingParams, Option<String>)>>,
+    /// Map of entrypoint id to its trace result
+    pub trace_results: HashMap<String, TracingResult>,
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone)]
 pub struct TracedEntryPointRequestBody {
     #[serde(default)]
@@ -1369,7 +1383,7 @@ impl From<models::blockchain::RPCTracerParams> for RPCTracerParams {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone, Hash)]
 #[serde(tag = "method", rename_all = "lowercase")]
 pub enum TracingParams {
     /// Uses RPC calls to retrieve the called addresses and retriggers
@@ -1420,12 +1434,60 @@ impl From<models::blockchain::TracingResult> for TracingResult {
     }
 }
 
-#[derive(Serialize, PartialEq, ToSchema, Eq, Clone)]
+#[derive(Serialize, PartialEq, ToSchema, Eq, Clone, Debug, Deserialize)]
 pub struct TracedEntryPointRequestResponse {
     /// Map of protocol component id to a list of a tuple containing each entry point with its
     /// tracing parameters and its corresponding tracing results.
     pub traced_entry_points: HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
     pub pagination: PaginationResponse,
+}
+
+impl From<TracedEntryPointRequestResponse> for DCIUpdate {
+    fn from(response: TracedEntryPointRequestResponse) -> Self {
+        let mut new_entrypoints = HashMap::new();
+        let mut new_entrypoint_params = HashMap::new();
+        let mut trace_results = HashMap::new();
+
+        for (component, traces) in response.traced_entry_points {
+            let mut entrypoints = HashSet::new();
+
+            for (entrypoint, trace) in traces {
+                let entrypoint_id = entrypoint
+                    .entry_point
+                    .external_id
+                    .clone();
+
+                // Collect entrypoints
+                entrypoints.insert(entrypoint.entry_point.clone());
+
+                // Collect entrypoint params
+                new_entrypoint_params
+                    .entry(entrypoint_id.clone())
+                    .or_insert_with(HashSet::new)
+                    .insert((entrypoint.params, Some(component.clone())));
+
+                // Collect trace results
+                trace_results
+                    .entry(entrypoint_id)
+                    .and_modify(|existing_trace: &mut TracingResult| {
+                        // Merge traces for the same entrypoint
+                        existing_trace
+                            .retriggers
+                            .extend(trace.retriggers.clone());
+                        existing_trace
+                            .called_addresses
+                            .extend(trace.called_addresses.clone());
+                    })
+                    .or_insert(trace);
+            }
+
+            if !entrypoints.is_empty() {
+                new_entrypoints.insert(component, entrypoints);
+            }
+        }
+
+        DCIUpdate { new_entrypoints, new_entrypoint_params, trace_results }
+    }
 }
 
 pub struct AddEntrypointRequestBody {
@@ -1640,7 +1702,7 @@ mod test {
     }
 
     #[rstest]
-    #[case(
+    #[case::deprecated_ids(
         r#"
     {
         "protocol_ids": [
@@ -1664,7 +1726,7 @@ mod test {
     )]
     #[case(
         r#"
-            {
+    {
         "protocolIds": [
             "0xb4eccE46b8D4e4abFd03C9B806276A6735C9c092"
         ],
@@ -1719,6 +1781,7 @@ mod test {
         T: Into<String> + Clone,
     {
         let request_body = ProtocolStateRequestBody::id_filtered(input_ids);
+
         assert_eq!(request_body.protocol_ids, Some(expected_ids));
     }
 
@@ -1808,7 +1871,6 @@ mod test {
                     }),
                     ])),
             ]),
-            component_tvl: HashMap::new(),
             ..Default::default()
         }
     }
@@ -1900,6 +1962,37 @@ mod test {
             },
             "component_tvl": {
                 "protocol_1": 1000.0
+            },
+            "dci_update": {
+                "new_entrypoints": {
+                    "component_1": [
+                        {
+                            "external_id": "0x01:sig()",
+                            "target": "0x01",
+                            "signature": "sig()"
+                        }
+                    ]
+                },
+                "new_entrypoint_params": {
+                    "0x01:sig()": [
+                        [
+                            {
+                                "method": "rpctracer",
+                                "caller": "0x01",
+                                "calldata": "0x02"
+                            },
+                            "component_1"
+                        ]
+                    ]
+                },
+                "trace_results": {
+                    "0x01:sig()": {
+                        "retriggers": [
+                            ["0x01", "0x02"]
+                        ],
+                        "called_addresses": ["0x03", "0x04"]
+                    }
+                }
             }
         }
         "#;
@@ -1917,60 +2010,60 @@ mod test {
                 "extractor": "uniswap_v2",
                 "chain": "ethereum",
                 "block": {
-                "number": 19291517,
-                "hash": "0xbc3ea4896c0be8da6229387a8571b72818aa258daf4fab46471003ad74c4ee83",
-                "parent_hash": "0x89ca5b8d593574cf6c886f41ef8208bf6bdc1a90ef36046cb8c84bc880b9af8f",
-                "chain": "ethereum",
-                "ts": "2024-02-23T16:35:35"
+                    "number": 19291517,
+                    "hash": "0xbc3ea4896c0be8da6229387a8571b72818aa258daf4fab46471003ad74c4ee83",
+                    "parent_hash": "0x89ca5b8d593574cf6c886f41ef8208bf6bdc1a90ef36046cb8c84bc880b9af8f",
+                    "chain": "ethereum",
+                    "ts": "2024-02-23T16:35:35"
                 },
                 "finalized_block_height": 0,
                 "revert": false,
                 "new_tokens": {},
                 "account_updates": {
-                            "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
-                                "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
-                                "chain": "ethereum",
-                                "slots": {},
-                                "balance": "0x01f4",
-                                "code": "",
-                                "change": "Update"
-                            }
-                        },
+                    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d": {
+                        "address": "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",
+                        "chain": "ethereum",
+                        "slots": {},
+                        "balance": "0x01f4",
+                        "code": "",
+                        "change": "Update"
+                    }
+                },
                 "state_updates": {
                     "0xde6faedbcae38eec6d33ad61473a04a6dd7f6e28": {
                         "component_id": "0xde6faedbcae38eec6d33ad61473a04a6dd7f6e28",
                         "updated_attributes": {
-                        "reserve0": "0x87f7b5973a7f28a8b32404",
-                        "reserve1": "0x09e9564b11"
+                            "reserve0": "0x87f7b5973a7f28a8b32404",
+                            "reserve1": "0x09e9564b11"
                         },
-                        "deleted_attributes": [ ]
+                        "deleted_attributes": []
                     },
                     "0x99c59000f5a76c54c4fd7d82720c045bdcf1450d": {
                         "component_id": "0x99c59000f5a76c54c4fd7d82720c045bdcf1450d",
                         "updated_attributes": {
-                        "reserve1": "0x44d9a8fd662c2f4d03",
-                        "reserve0": "0x500b1261f811d5bf423e"
+                            "reserve1": "0x44d9a8fd662c2f4d03",
+                            "reserve0": "0x500b1261f811d5bf423e"
                         },
-                        "deleted_attributes": [ ]
+                        "deleted_attributes": []
                     }
                 },
-                "new_protocol_components": { },
-                "deleted_protocol_components": { },
+                "new_protocol_components": {},
+                "deleted_protocol_components": {},
                 "component_balances": {
                     "0x99c59000f5a76c54c4fd7d82720c045bdcf1450d": {
                         "0x9012744b7a564623b6c3e40b144fc196bdedf1a9": {
-                        "token": "0x9012744b7a564623b6c3e40b144fc196bdedf1a9",
-                        "balance": "0x500b1261f811d5bf423e",
-                        "balance_float": 3.779935574269033E23,
-                        "modify_tx": "0xe46c4db085fb6c6f3408a65524555797adb264e1d5cf3b66ad154598f85ac4bf",
-                        "component_id": "0x99c59000f5a76c54c4fd7d82720c045bdcf1450d"
+                            "token": "0x9012744b7a564623b6c3e40b144fc196bdedf1a9",
+                            "balance": "0x500b1261f811d5bf423e",
+                            "balance_float": 3.779935574269033E23,
+                            "modify_tx": "0xe46c4db085fb6c6f3408a65524555797adb264e1d5cf3b66ad154598f85ac4bf",
+                            "component_id": "0x99c59000f5a76c54c4fd7d82720c045bdcf1450d"
                         },
                         "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
-                        "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-                        "balance": "0x44d9a8fd662c2f4d03",
-                        "balance_float": 1.270062661329837E21,
-                        "modify_tx": "0xe46c4db085fb6c6f3408a65524555797adb264e1d5cf3b66ad154598f85ac4bf",
-                        "component_id": "0x99c59000f5a76c54c4fd7d82720c045bdcf1450d"
+                            "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                            "balance": "0x44d9a8fd662c2f4d03",
+                            "balance_float": 1.270062661329837E21,
+                            "modify_tx": "0xe46c4db085fb6c6f3408a65524555797adb264e1d5cf3b66ad154598f85ac4bf",
+                            "component_id": "0x99c59000f5a76c54c4fd7d82720c045bdcf1450d"
                         }
                     }
                 },
@@ -1984,9 +2077,40 @@ mod test {
                         }
                     }
                 },
-                "component_tvl": { }
+                "component_tvl": {},
+                "dci_update": {
+                    "new_entrypoints": {
+                        "0xde6faedbcae38eec6d33ad61473a04a6dd7f6e28": [
+                            {
+                                "external_id": "0x01:sig()",
+                                "target": "0x01",
+                                "signature": "sig()"
+                            }
+                        ]
+                    },
+                    "new_entrypoint_params": {
+                        "0x01:sig()": [
+                            [
+                                {
+                                    "method": "rpctracer",
+                                    "caller": "0x01",
+                                    "calldata": "0x02"
+                                },
+                                "0xde6faedbcae38eec6d33ad61473a04a6dd7f6e28"
+                            ]
+                        ]
+                    },
+                    "trace_results": {
+                        "0x01:sig()": {
+                            "retriggers": [
+                                ["0x01", "0x02"]
+                            ],
+                            "called_addresses": ["0x03", "0x04"]
+                        }
+                    }
+                }
             }
-            }
+        }
         "#;
         serde_json::from_str::<WebSocketMessage>(json_data).expect("parsing failed");
     }
@@ -1996,33 +2120,27 @@ mod test {
         // Initialize ProtocolStateDelta instances
         let mut delta1 = ProtocolStateDelta {
             component_id: "Component1".to_string(),
-            updated_attributes: [("Attribute1".to_string(), Bytes::from("0xbadbabe420"))]
-                .iter()
-                .cloned()
-                .collect(),
+            updated_attributes: HashMap::from([(
+                "Attribute1".to_string(),
+                Bytes::from("0xbadbabe420"),
+            )]),
             deleted_attributes: HashSet::new(),
         };
         let delta2 = ProtocolStateDelta {
             component_id: "Component1".to_string(),
-            updated_attributes: [("Attribute2".to_string(), Bytes::from("0x0badbabe"))]
-                .iter()
-                .cloned()
-                .collect(),
-            deleted_attributes: ["Attribute1".to_string()]
-                .iter()
-                .cloned()
-                .collect(),
+            updated_attributes: HashMap::from([(
+                "Attribute2".to_string(),
+                Bytes::from("0x0badbabe"),
+            )]),
+            deleted_attributes: HashSet::from(["Attribute1".to_string()]),
         };
         let exp = ProtocolStateDelta {
             component_id: "Component1".to_string(),
-            updated_attributes: [("Attribute2".to_string(), Bytes::from("0x0badbabe"))]
-                .iter()
-                .cloned()
-                .collect(),
-            deleted_attributes: ["Attribute1".to_string()]
-                .iter()
-                .cloned()
-                .collect(),
+            updated_attributes: HashMap::from([(
+                "Attribute2".to_string(),
+                Bytes::from("0x0badbabe"),
+            )]),
+            deleted_attributes: HashSet::from(["Attribute1".to_string()]),
         };
 
         delta1.merge(&delta2);
@@ -2036,25 +2154,22 @@ mod test {
         let mut delta1 = ProtocolStateDelta {
             component_id: "Component1".to_string(),
             updated_attributes: HashMap::new(),
-            deleted_attributes: ["Attribute1".to_string()]
-                .iter()
-                .cloned()
-                .collect(),
+            deleted_attributes: HashSet::from(["Attribute1".to_string()]),
         };
         let delta2 = ProtocolStateDelta {
             component_id: "Component1".to_string(),
-            updated_attributes: [("Attribute1".to_string(), Bytes::from("0x0badbabe"))]
-                .iter()
-                .cloned()
-                .collect(),
+            updated_attributes: HashMap::from([(
+                "Attribute1".to_string(),
+                Bytes::from("0x0badbabe"),
+            )]),
             deleted_attributes: HashSet::new(),
         };
         let exp = ProtocolStateDelta {
             component_id: "Component1".to_string(),
-            updated_attributes: [("Attribute1".to_string(), Bytes::from("0x0badbabe"))]
-                .iter()
-                .cloned()
-                .collect(),
+            updated_attributes: HashMap::from([(
+                "Attribute1".to_string(),
+                Bytes::from("0x0badbabe"),
+            )]),
             deleted_attributes: HashSet::new(),
         };
 
@@ -2069,10 +2184,7 @@ mod test {
         let mut account1 = AccountUpdate::new(
             Bytes::from(b"0x1234"),
             Chain::Ethereum,
-            [(Bytes::from("0xaabb"), Bytes::from("0xccdd"))]
-                .iter()
-                .cloned()
-                .collect(),
+            HashMap::from([(Bytes::from("0xaabb"), Bytes::from("0xccdd"))]),
             Some(Bytes::from("0x1000")),
             Some(Bytes::from("0xdeadbeaf")),
             ChangeType::Creation,
@@ -2081,10 +2193,7 @@ mod test {
         let account2 = AccountUpdate::new(
             Bytes::from(b"0x1234"), // Same id as account1
             Chain::Ethereum,
-            [(Bytes::from("0xeeff"), Bytes::from("0x11223344"))]
-                .iter()
-                .cloned()
-                .collect(),
+            HashMap::from([(Bytes::from("0xeeff"), Bytes::from("0x11223344"))]),
             Some(Bytes::from("0x2000")),
             Some(Bytes::from("0xcafebabe")),
             ChangeType::Update,
@@ -2097,13 +2206,10 @@ mod test {
         let expected = AccountUpdate::new(
             Bytes::from(b"0x1234"), // Same id as before the merge
             Chain::Ethereum,
-            [
+            HashMap::from([
                 (Bytes::from("0xaabb"), Bytes::from("0xccdd")), // Original slot from account1
                 (Bytes::from("0xeeff"), Bytes::from("0x11223344")), // New slot from account2
-            ]
-            .iter()
-            .cloned()
-            .collect(),
+            ]),
             Some(Bytes::from("0x2000")),     // Updated balance
             Some(Bytes::from("0xcafebabe")), // Updated code
             ChangeType::Creation,            // Updated change type
@@ -2121,9 +2227,7 @@ mod test {
             AccountUpdate {
                 address: Bytes::from("0x00"),
                 chain: Chain::Ethereum,
-                slots: [(Bytes::from("0x0022"), Bytes::from("0x0033"))]
-                    .into_iter()
-                    .collect(),
+                slots: HashMap::from([(Bytes::from("0x0022"), Bytes::from("0x0033"))]),
                 balance: Some(Bytes::from("0x01")),
                 code: Some(Bytes::from("0x02")),
                 change: ChangeType::Creation,
@@ -2136,9 +2240,7 @@ mod test {
             AccountUpdate {
                 address: Bytes::from("0x00"),
                 chain: Chain::Ethereum,
-                slots: [(Bytes::from("0x0044"), Bytes::from("0x0055"))]
-                    .into_iter()
-                    .collect(),
+                slots: HashMap::from([(Bytes::from("0x0044"), Bytes::from("0x0055"))]),
                 balance: Some(Bytes::from("0x03")),
                 code: Some(Bytes::from("0x04")),
                 change: ChangeType::Update,
@@ -2147,33 +2249,19 @@ mod test {
         .into_iter()
         .collect();
         // Create initial and new BlockAccountChanges instances
-        let block_account_changes_initial = BlockChanges::new(
-            "extractor1",
-            Chain::Ethereum,
-            Block::default(),
-            0,
-            false,
-            old_account_updates,
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-        );
+        let block_account_changes_initial = BlockChanges {
+            extractor: "extractor1".to_string(),
+            revert: false,
+            account_updates: old_account_updates,
+            ..Default::default()
+        };
 
-        let block_account_changes_new = BlockChanges::new(
-            "extractor2",
-            Chain::Ethereum,
-            Block::default(),
-            0,
-            true,
-            new_account_updates,
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-        );
+        let block_account_changes_new = BlockChanges {
+            extractor: "extractor2".to_string(),
+            revert: true,
+            account_updates: new_account_updates,
+            ..Default::default()
+        };
 
         // Merge the new BlockChanges into the initial one
         let res = block_account_changes_initial.merge(block_account_changes_new);
@@ -2184,12 +2272,10 @@ mod test {
             AccountUpdate {
                 address: Bytes::from("0x00"),
                 chain: Chain::Ethereum,
-                slots: [
+                slots: HashMap::from([
                     (Bytes::from("0x0044"), Bytes::from("0x0055")),
                     (Bytes::from("0x0022"), Bytes::from("0x0033")),
-                ]
-                .into_iter()
-                .collect(),
+                ]),
                 balance: Some(Bytes::from("0x03")),
                 code: Some(Bytes::from("0x04")),
                 change: ChangeType::Creation,
@@ -2197,19 +2283,12 @@ mod test {
         )]
         .into_iter()
         .collect();
-        let block_account_changes_expected = BlockChanges::new(
-            "extractor1",
-            Chain::Ethereum,
-            Block::default(),
-            0,
-            true,
-            expected_account_updates,
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-            HashMap::new(),
-        );
+        let block_account_changes_expected = BlockChanges {
+            extractor: "extractor1".to_string(),
+            revert: true,
+            account_updates: expected_account_updates,
+            ..Default::default()
+        };
         assert_eq!(res, block_account_changes_expected);
     }
 
@@ -2218,10 +2297,7 @@ mod test {
         // Initialize two BlockChanges instances with different details
         let block_entity_changes_result1 = BlockChanges {
             extractor: String::from("extractor1"),
-            chain: Chain::Ethereum,
-            block: Block::default(),
             revert: false,
-            new_tokens: HashMap::new(),
             state_updates: hashmap! { "state1".to_string() => ProtocolStateDelta::default() },
             new_protocol_components: hashmap! { "component1".to_string() => ProtocolComponent::default() },
             deleted_protocol_components: HashMap::new(),
@@ -2249,10 +2325,7 @@ mod test {
         };
         let block_entity_changes_result2 = BlockChanges {
             extractor: String::from("extractor2"),
-            chain: Chain::Ethereum,
-            block: Block::default(),
             revert: true,
-            new_tokens: HashMap::new(),
             state_updates: hashmap! { "state2".to_string() => ProtocolStateDelta::default() },
             new_protocol_components: hashmap! { "component2".to_string() => ProtocolComponent::default() },
             deleted_protocol_components: hashmap! { "component3".to_string() => ProtocolComponent::default() },
@@ -2268,10 +2341,7 @@ mod test {
 
         let expected_block_entity_changes_result = BlockChanges {
             extractor: String::from("extractor1"),
-            chain: Chain::Ethereum,
-            block: Block::default(),
             revert: true,
-            new_tokens: HashMap::new(),
             state_updates: hashmap! {
                 "state1".to_string() => ProtocolStateDelta::default(),
                 "state2".to_string() => ProtocolStateDelta::default(),

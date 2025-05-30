@@ -1,8 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -18,8 +14,8 @@ use tokio::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        BlockChanges, BlockParam, ExtractorIdentity, ProtocolComponent, ResponseAccount,
-        ResponseProtocolState, VersionParam,
+        BlockChanges, BlockParam, EntryPointWithTracingParams, ExtractorIdentity,
+        ProtocolComponent, ResponseAccount, ResponseProtocolState, TracingResult, VersionParam,
     },
     Bytes,
 };
@@ -58,6 +54,7 @@ struct SharedState {
 pub struct ComponentWithState {
     pub state: ResponseProtocolState,
     pub component: ProtocolComponent,
+    pub entrypoints: Vec<(EntryPointWithTracingParams, TracingResult)>,
 }
 
 #[derive(Clone, PartialEq, Debug, Default, Serialize, Deserialize)]
@@ -178,17 +175,11 @@ where
     }
 
     /// Retrieves state snapshots of the requested components
-    ///
-    /// TODO:
-    /// Future considerations:
-    /// The current design separates the concepts of snapshots and deltas, therefore requiring us to
-    /// fetch data for snapshots that might already exist in the deltas messages. This is
-    /// unnecessary and could be optimized by removing snapshots entirely and only using deltas.
     #[allow(deprecated)]
     async fn get_snapshots<'a, I: IntoIterator<Item = &'a String>>(
         &self,
         header: Header,
-        tracked_components: &ComponentTracker<R>,
+        tracked_components: &mut ComponentTracker<R>,
         ids: Option<I>,
     ) -> SyncResult<StateSyncMessage> {
         if !self.include_snapshots {
@@ -204,27 +195,34 @@ where
         );
 
         // Use given ids or use all if not passed
-        let request_ids = ids
-            .map(|it| {
-                it.into_iter()
-                    .cloned()
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_else(|| tracked_components.get_tracked_component_ids());
-
-        let component_ids = request_ids
-            .iter()
-            .collect::<HashSet<_>>();
+        let component_ids: Vec<_> = match ids {
+            Some(ids) => ids.into_iter().cloned().collect(),
+            None => tracked_components.get_tracked_component_ids(),
+        };
 
         if component_ids.is_empty() {
             return Ok(StateSyncMessage { header, ..Default::default() });
         }
 
+        // Fetch entrypoints
+        let entrypoints_result = self
+            .rpc_client
+            .get_traced_entry_points_paginated(
+                self.extractor_id.chain,
+                &self.extractor_id.name,
+                &component_ids,
+                100,
+                4,
+            )
+            .await?;
+        tracked_components.process_entrypoints(&entrypoints_result.clone().into())?;
+
+        // Fetch protocol states
         let mut protocol_states = self
             .rpc_client
             .get_protocol_states_paginated(
                 self.extractor_id.chain,
-                &request_ids,
+                &component_ids,
                 &self.extractor_id.name,
                 self.retrieve_balances,
                 &version,
@@ -245,9 +243,17 @@ where
                 if let Some(state) = protocol_states.remove(&component.id) {
                     Some((
                         component.id.clone(),
-                        ComponentWithState { state, component: component.clone() },
+                        ComponentWithState {
+                            state,
+                            component: component.clone(),
+                            entrypoints: entrypoints_result
+                                .traced_entry_points
+                                .get(&component.id)
+                                .cloned()
+                                .unwrap_or_default(),
+                        },
                     ))
-                } else if component_ids.contains(&&component.id) {
+                } else if component_ids.contains(&component.id) {
                     // only emit error event if we requested this component
                     let component_id = &component.id;
                     error!(?component_id, "Missing state for native component!");
@@ -258,7 +264,8 @@ where
             })
             .collect();
 
-        let contract_ids = tracked_components.get_contracts_by_component(component_ids.clone());
+        // Fetch contract states
+        let contract_ids = tracked_components.get_contracts_by_component(&component_ids);
         let vm_storage = if !contract_ids.is_empty() {
             let ids: Vec<Bytes> = contract_ids
                 .clone()
@@ -286,7 +293,7 @@ where
                 .components
                 .iter()
                 .filter_map(|(id, comp)| {
-                    if component_ids.contains(&id) {
+                    if component_ids.contains(id) {
                         Some(
                             comp.contract_ids
                                 .iter()
@@ -356,7 +363,7 @@ where
         info!(height = &block.number, "Deltas received. Retrieving snapshot");
         let header = Header::from_block(first_msg.get_block(), first_msg.is_revert());
         let snapshot = self
-            .get_snapshots::<Vec<&String>>(Header::from_block(&block, false), &tracker, None)
+            .get_snapshots::<Vec<&String>>(Header::from_block(&block, false), &mut tracker, None)
             .await
             .map_err(|rpc_err| anyhow::format_err!("failed to get initial snapshot: {}", rpc_err))?
             .merge(StateSyncMessage {
@@ -380,6 +387,7 @@ where
             if let Some(mut deltas) = msg_rx.recv().await {
                 let header = Header::from_block(deltas.get_block(), deltas.is_revert());
                 debug!(block_number=?header.number, "Received delta message");
+
                 let (snapshots, removed_components) = {
                     // 1. Remove components based on latest changes
                     // 2. Add components based on latest changes, query those for snapshots
@@ -399,7 +407,7 @@ where
                         .start_tracking(requiring_snapshot.as_slice())
                         .await?;
                     let snapshots = self
-                        .get_snapshots(header.clone(), &tracker, Some(requiring_snapshot))
+                        .get_snapshots(header.clone(), &mut tracker, Some(requiring_snapshot))
                         .await?
                         .snapshots;
 
@@ -408,13 +416,18 @@ where
                     } else {
                         Default::default()
                     };
+
                     (snapshots, removed_components)
                 };
 
-                // 3. Filter deltas by currently tracked components / contracts
+                // 3. Update entrypoints on the tracker (affects which contracts are tracked)
+                tracker.process_entrypoints(&deltas.dci_update)?;
+
+                // 4. Filter deltas by currently tracked components / contracts
                 self.filter_deltas(&mut deltas, &tracker);
                 let n_changes = deltas.n_changes();
 
+                // 5. Send the message
                 let next = StateSyncMessage {
                     header: header.clone(),
                     snapshots,
@@ -527,12 +540,15 @@ where
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashSet;
+
     use test_log::test;
     use tycho_common::dto::{
-        Block, Chain, PaginationResponse, ProtocolComponentRequestResponse,
+        Block, Chain, DCIUpdate, EntryPoint, PaginationResponse, ProtocolComponentRequestResponse,
         ProtocolComponentsRequestBody, ProtocolStateRequestBody, ProtocolStateRequestResponse,
-        ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, StateRequestBody,
-        StateRequestResponse, TokensRequestBody, TokensRequestResponse,
+        ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, RPCTracerParams,
+        StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse,
+        TracedEntryPointRequestBody, TracedEntryPointRequestResponse, TracingParams,
     };
     use uuid::Uuid;
 
@@ -592,6 +608,15 @@ mod test {
         ) -> Result<ProtocolSystemsRequestResponse, RPCError> {
             self.0
                 .get_protocol_systems(request)
+                .await
+        }
+
+        async fn get_traced_entry_points(
+            &self,
+            request: &TracedEntryPointRequestBody,
+        ) -> Result<TracedEntryPointRequestResponse, RPCError> {
+            self.0
+                .get_traced_entry_points(request)
                 .await
         }
     }
@@ -673,6 +698,13 @@ mod test {
         let mut rpc = MockRPCClient::new();
         rpc.expect_get_protocol_states()
             .returning(|_| Ok(state_snapshot_native()));
+        rpc.expect_get_traced_entry_points()
+            .returning(|_| {
+                Ok(TracedEntryPointRequestResponse {
+                    traced_entry_points: HashMap::new(),
+                    pagination: PaginationResponse::new(0, 20, 0),
+                })
+            });
         let state_sync = with_mocked_clients(true, Some(rpc), None);
         let mut tracker = ComponentTracker::new(
             Chain::Ethereum,
@@ -694,7 +726,11 @@ mod test {
                     .map(|state| {
                         (
                             state.component_id.clone(),
-                            ComponentWithState { state, component: component.clone() },
+                            ComponentWithState {
+                                state,
+                                component: component.clone(),
+                                entrypoints: vec![],
+                            },
                         )
                     })
                     .collect(),
@@ -705,7 +741,7 @@ mod test {
         };
 
         let snap = state_sync
-            .get_snapshots(header, &tracker, Some(&components_arg))
+            .get_snapshots(header, &mut tracker, Some(&components_arg))
             .await
             .expect("Retrieving snapshot failed");
 
@@ -722,6 +758,35 @@ mod test {
         }
     }
 
+    fn traced_entry_point_response() -> TracedEntryPointRequestResponse {
+        TracedEntryPointRequestResponse {
+            traced_entry_points: HashMap::from([(
+                "Component1".to_string(),
+                vec![(
+                    EntryPointWithTracingParams {
+                        entry_point: EntryPoint {
+                            external_id: "entrypoint_a".to_string(),
+                            target: Bytes::from("0x0badc0ffee"),
+                            signature: "sig()".to_string(),
+                        },
+                        params: TracingParams::RPCTracer(RPCTracerParams {
+                            caller: Some(Bytes::from("0x0badc0ffee")),
+                            calldata: Bytes::from("0x0badc0ffee"),
+                        }),
+                    },
+                    TracingResult {
+                        retriggers: HashSet::from([(
+                            Bytes::from("0x0badc0ffee"),
+                            Bytes::from("0x0badc0ffee"),
+                        )]),
+                        called_addresses: HashSet::from([Bytes::from("0x0badc0ffee")]),
+                    },
+                )],
+            )]),
+            pagination: PaginationResponse::new(0, 20, 0),
+        }
+    }
+
     #[test(tokio::test)]
     async fn test_get_snapshots_vm() {
         let header = Header::default();
@@ -730,6 +795,8 @@ mod test {
             .returning(|_| Ok(state_snapshot_native()));
         rpc.expect_get_contract_state()
             .returning(|_| Ok(state_snapshot_vm()));
+        rpc.expect_get_traced_entry_points()
+            .returning(|_| Ok(traced_entry_point_response()));
         let state_sync = with_mocked_clients(false, Some(rpc), None);
         let mut tracker = ComponentTracker::new(
             Chain::Ethereum,
@@ -757,6 +824,26 @@ mod test {
                             ..Default::default()
                         },
                         component: component.clone(),
+                        entrypoints: vec![(
+                            EntryPointWithTracingParams {
+                                entry_point: EntryPoint {
+                                    external_id: "entrypoint_a".to_string(),
+                                    target: Bytes::from("0x0badc0ffee"),
+                                    signature: "sig()".to_string(),
+                                },
+                                params: TracingParams::RPCTracer(RPCTracerParams {
+                                    caller: Some(Bytes::from("0x0badc0ffee")),
+                                    calldata: Bytes::from("0x0badc0ffee"),
+                                }),
+                            },
+                            TracingResult {
+                                retriggers: HashSet::from([(
+                                    Bytes::from("0x0badc0ffee"),
+                                    Bytes::from("0x0badc0ffee"),
+                                )]),
+                                called_addresses: HashSet::from([Bytes::from("0x0badc0ffee")]),
+                            },
+                        )],
                     },
                 )]
                 .into_iter()
@@ -772,7 +859,7 @@ mod test {
         };
 
         let snap = state_sync
-            .get_snapshots(header, &tracker, Some(&components_arg))
+            .get_snapshots(header, &mut tracker, Some(&components_arg))
             .await
             .expect("Retrieving snapshot failed");
 
@@ -859,6 +946,15 @@ mod test {
                     pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
+        rpc_client
+            .expect_get_traced_entry_points()
+            .returning(|_| {
+                Ok(TracedEntryPointRequestResponse {
+                    traced_entry_points: HashMap::new(),
+                    pagination: PaginationResponse::new(0, 20, 0),
+                })
+            });
+
         // Mock deltas client and messages
         let mut deltas_client = MockDeltasClient::new();
         let (tx, rx) = channel(1);
@@ -892,6 +988,36 @@ mod test {
                     ts: Default::default(),
                 },
                 revert: false,
+                dci_update: DCIUpdate {
+                    new_entrypoints: HashMap::from([(
+                        "Component1".to_string(),
+                        HashSet::from([EntryPoint {
+                            external_id: "entrypoint_a".to_string(),
+                            target: Bytes::from("0x0badc0ffee"),
+                            signature: "sig()".to_string(),
+                        }]),
+                    )]),
+                    new_entrypoint_params: HashMap::from([(
+                        "entrypoint_a".to_string(),
+                        HashSet::from([(
+                            TracingParams::RPCTracer(RPCTracerParams {
+                                caller: Some(Bytes::from("0x0badc0ffee")),
+                                calldata: Bytes::from("0x0badc0ffee"),
+                            }),
+                            Some("Component1".to_string()),
+                        )]),
+                    )]),
+                    trace_results: HashMap::from([(
+                        "entrypoint_a".to_string(),
+                        TracingResult {
+                            retriggers: HashSet::from([(
+                                Bytes::from("0x0badc0ffee"),
+                                Bytes::from("0x0badc0ffee"),
+                            )]),
+                            called_addresses: HashSet::from([Bytes::from("0x0badc0ffee")]),
+                        },
+                    )]),
+                },
                 ..Default::default()
             },
             BlockChanges {
@@ -966,6 +1092,7 @@ mod test {
                                 id: "Component1".to_string(),
                                 ..Default::default()
                             },
+                            entrypoints: vec![],
                         },
                     ),
                     (
@@ -979,6 +1106,7 @@ mod test {
                                 id: "Component2".to_string(),
                                 ..Default::default()
                             },
+                            entrypoints: vec![],
                         },
                     ),
                 ]
@@ -1011,6 +1139,7 @@ mod test {
                                 id: "Component3".to_string(),
                                 ..Default::default()
                             },
+                            entrypoints: vec![],
                         },
                     ),
                 ]
@@ -1082,7 +1211,6 @@ mod test {
                     pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
-
         rpc_client
             .expect_get_protocol_states()
             .with(mockall::predicate::function(move |request_params: &ProtocolStateRequestBody| {
@@ -1115,7 +1243,6 @@ mod test {
                     pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
                 })
             });
-
         rpc_client
             .expect_get_protocol_states()
             .returning(|_| {
@@ -1131,6 +1258,14 @@ mod test {
                         },
                     ],
                     pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+                })
+            });
+        rpc_client
+            .expect_get_traced_entry_points()
+            .returning(|_| {
+                Ok(TracedEntryPointRequestResponse {
+                    traced_entry_points: HashMap::new(),
+                    pagination: PaginationResponse::new(0, 20, 0),
                 })
             });
 
@@ -1240,6 +1375,7 @@ mod test {
                             id: "Component3".to_string(),
                             ..Default::default()
                         },
+                        entrypoints: vec![], // TODO: add entrypoints?
                     },
                 )]
                 .into_iter()
