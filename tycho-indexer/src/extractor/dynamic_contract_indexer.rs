@@ -9,7 +9,7 @@ use tycho_common::{
             TracingResult, Transaction, TxWithChanges,
         },
         contract::AccountDelta,
-        Address, Chain, ChangeType, ContractStoreDeltas, EntryPointId, StoreKey, TxHash,
+        Address, BlockHash, Chain, ChangeType, ContractStoreDeltas, EntryPointId, StoreKey, TxHash,
     },
     storage::{EntryPointFilter, EntryPointGateway, StorageError},
     traits::{AccountExtractor, EntryPointTracer, StorageSnapshotRequest},
@@ -310,7 +310,7 @@ where
     }
 
     #[allow(unused)]
-    async fn process_revert(&mut self, target_block: u64) -> Result<(), ExtractionError> {
+    async fn process_revert(&mut self, target_block: &BlockHash) -> Result<(), ExtractionError> {
         // TODO: Handle reverts, need to cleanup reverted internal state
         todo!()
     }
