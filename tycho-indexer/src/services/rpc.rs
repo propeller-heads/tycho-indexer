@@ -759,7 +759,7 @@ where
         let pagination_params: PaginationParams = (&request.pagination).into();
 
         // For consistency, we pre-apply pagination to the component ids to ensure it's
-        // predetermined which components ill appear on which page.
+        // predetermined which components will appear on which page.
         let mut paginated_component_ids: Option<Vec<String>> = None;
         if let Some(component_ids) = request.component_ids {
             paginated_component_ids = Some(
@@ -825,7 +825,7 @@ where
         let mut traced_entry_points_by_component = HashMap::new();
 
         for (component_id, entry_points_set) in entry_points_tracing_params_data.entity {
-            let mut pairs = Vec::new();
+            let mut pairs = Vec::with_capacity(entry_points_set.len());
 
             for entry_point_with_params in entry_points_set {
                 let entry_point_id = entry_point_with_params
@@ -847,6 +847,8 @@ where
                             "No tracing results found for entry point with params."
                         );
                     }
+                } else {
+                    warn!(?entry_point_id, "No tracing results found for entry point.");
                 }
             }
 
