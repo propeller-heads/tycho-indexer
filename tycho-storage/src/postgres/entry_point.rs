@@ -613,7 +613,7 @@ impl PostgresGateway {
         &self,
         entry_points: &HashSet<EntryPointId>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<HashMap<EntryPointId, Vec<TracingResult>>, StorageError> {
+    ) -> Result<HashMap<EntryPointId, HashMap<TracingParams, TracingResult>>, StorageError> {
         use schema::{
             entry_point as ep, entry_point_tracing_params as eptp,
             entry_point_tracing_result as eptr,
@@ -631,35 +631,27 @@ impl PostgresGateway {
             .inner_join(eptp::table.on(eptr::entry_point_tracing_params_id.eq(eptp::id)))
             .inner_join(ep::table.on(eptp::entry_point_id.eq(ep::id)))
             .filter(eptp::entry_point_id.eq_any(entry_point_ids.values().cloned()))
-            .select((ep::external_id, eptr::detection_data))
-            .load::<(String, serde_json::Value)>(conn)
+            .select((
+                ep::external_id,
+                orm::EntryPointTracingParams::as_select(),
+                eptr::detection_data,
+            ))
+            .load::<(String, orm::EntryPointTracingParams, serde_json::Value)>(conn)
             .await
             .map_err(|e| storage_error_from_diesel(e, "TracingResult", "Query", None))?;
 
         let mut results_by_entry_point = HashMap::new();
-        for (ep_ext_id, tracing_result) in results {
+        for (ep_ext_id, tracing_params, tracing_result) in results {
+            let converted_tracing_result = serde_json::from_value(tracing_result).map_err(|e| {
+                StorageError::DecodeError(format!("Failed to deserialize TracingResult: {e}"))
+            })?;
             results_by_entry_point
                 .entry(ep_ext_id.clone())
-                .or_insert_with(Vec::new)
-                .push(tracing_result);
+                .or_insert_with(HashMap::new)
+                .insert((&tracing_params).into(), converted_tracing_result);
         }
 
-        results_by_entry_point
-            .into_iter()
-            .map(|(ep_ext_id, tracing_result)| {
-                let converted_tracing_result = tracing_result
-                    .into_iter()
-                    .map(|d| {
-                        serde_json::from_value(d).map_err(|e| {
-                            StorageError::DecodeError(format!(
-                                "Failed to deserialize TracingResult: {e}"
-                            ))
-                        })
-                    })
-                    .collect::<Result<Vec<_>, StorageError>>()?;
-                Ok((ep_ext_id, converted_tracing_result))
-            })
-            .collect()
+        Ok(results_by_entry_point)
     }
 }
 
@@ -1061,7 +1053,7 @@ mod test {
             retrieved_traced_entry_points,
             HashMap::from([(
                 entry_point.external_id.clone(),
-                vec![traced_entry_point.tracing_result]
+                HashMap::from([(tracing_params(0), traced_entry_point.tracing_result)])
             )])
         );
     }

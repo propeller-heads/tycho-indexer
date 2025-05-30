@@ -17,7 +17,8 @@ use tycho_common::{
         ProtocolComponentsRequestBody, ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody,
         ProtocolStateRequestResponse, ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse,
         ResponseAccount, ResponseProtocolState, ResponseToken, StateRequestBody,
-        StateRequestResponse, TokensRequestBody, TokensRequestResponse, VersionParam,
+        StateRequestResponse, TokensRequestBody, TokensRequestResponse,
+        TracedEntryPointRequestBody, TracedEntryPointRequestResponse, VersionParam,
     },
     storage::Gateway,
 };
@@ -106,6 +107,7 @@ where
                 rpc::protocol_systems,
                 rpc::tokens,
                 rpc::protocol_components,
+                rpc::traced_entry_points,
                 rpc::protocol_state,
                 rpc::contract_state,
             ),
@@ -126,6 +128,8 @@ where
                 schemas(ProtocolComponentRequestResponse),
                 schemas(ProtocolComponent),
                 schemas(ProtocolStateRequestBody),
+                schemas(TracedEntryPointRequestBody),
+                schemas(TracedEntryPointRequestResponse),
                 schemas(ProtocolStateRequestResponse),
                 schemas(AccountUpdate),
                 schemas(ProtocolId),
@@ -242,6 +246,10 @@ where
                 .service(
                     web::resource(format!("/{}/protocol_components", self.prefix))
                         .route(web::post().to(rpc::protocol_components::<G>)),
+                )
+                .service(
+                    web::resource(format!("/{}/traced_entry_points", self.prefix))
+                        .route(web::post().to(rpc::traced_entry_points::<G>)),
                 )
                 .service(
                     web::resource(format!("/{}/health", self.prefix))
