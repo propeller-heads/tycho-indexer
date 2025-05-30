@@ -74,8 +74,11 @@ impl AccountExtractor for EVMAccountExtractor {
             .collect();
 
         // Execute all balance and code requests concurrently
-        let balances = try_join_all(balance_futures).await?;
-        let codes = try_join_all(code_futures).await?;
+        let (result_balances, result_codes) =
+            tokio::join!(try_join_all(balance_futures), try_join_all(code_futures));
+
+        let balances = result_balances?;
+        let codes = result_codes?;
 
         // Process each address with its corresponding balance and code
         for (i, &address) in h160_addresses.iter().enumerate() {

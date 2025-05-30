@@ -253,7 +253,7 @@ where
                     block_changes.block.hash.clone(),
                     entrypoints_to_analyze
                         .keys()
-                        .map(Clone::clone)
+                        .cloned()
                         .collect(),
                 )
                 .await
