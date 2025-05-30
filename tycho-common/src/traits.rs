@@ -123,7 +123,7 @@ pub trait TokenPreProcessor: Send + Sync {
 /// Trait for tracing blockchain transaction execution.
 #[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
 #[async_trait]
-pub trait EntryPointTracer {
+pub trait EntryPointTracer: Sync {
     type Error: Debug;
 
     /// Traces the execution of a list of entry points at a specific block.
