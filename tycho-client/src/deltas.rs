@@ -904,7 +904,7 @@ mod tests {
                         "component_tvl": {
                             "protocol_1": 1000.0
                         },
-                        "dci_data": {
+                        "dci_update": {
                             "new_entrypoints": {},
                             "new_entrypoint_params": {},
                             "trace_results": {}
@@ -1212,7 +1212,7 @@ mod tests {
                         "component_tvl": {
                             "protocol_1": 1000.0
                         },
-                        "dci_data": {
+                        "dci_update": {
                             "new_entrypoints": {},
                             "new_entrypoint_params": {},
                             "trace_results": {}
