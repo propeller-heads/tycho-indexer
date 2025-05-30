@@ -6,11 +6,13 @@ use std::{
 };
 
 use alloy::{
-    providers::{ProviderBuilder, RootProvider},
-    transports::BoxTransport,
+    primitives::{aliases::U24, Address, U256, U8},
+    providers::{
+        fillers::{BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller},
+        ProviderBuilder, RootProvider,
+    },
+    sol_types::SolValue,
 };
-use alloy_primitives::{aliases::U24, Address, U256, U8};
-use alloy_sol_types::SolValue;
 use num_bigint::BigUint;
 use once_cell::sync::Lazy;
 use tokio::runtime::{Handle, Runtime};
@@ -88,13 +90,23 @@ pub fn get_runtime() -> Result<(Handle, Option<Arc<Runtime>>), EncodingError> {
     }
 }
 
+pub type EVMProvider = Arc<
+    FillProvider<
+        JoinFill<
+            alloy::providers::Identity,
+            JoinFill<GasFiller, JoinFill<BlobGasFiller, JoinFill<NonceFiller, ChainIdFiller>>>,
+        >,
+        RootProvider,
+    >,
+>;
+
 /// Gets the client used for interacting with the EVM-compatible network.
-pub async fn get_client() -> Result<Arc<RootProvider<BoxTransport>>, EncodingError> {
+pub async fn get_client() -> Result<EVMProvider, EncodingError> {
     dotenv::dotenv().ok();
     let eth_rpc_url = env::var("RPC_URL")
         .map_err(|_| EncodingError::FatalError("Missing RPC_URL in environment".to_string()))?;
     let client = ProviderBuilder::new()
-        .on_builtin(&eth_rpc_url)
+        .connect(&eth_rpc_url)
         .await
         .map_err(|_| EncodingError::FatalError("Failed to build provider".to_string()))?;
     Ok(Arc::new(client))

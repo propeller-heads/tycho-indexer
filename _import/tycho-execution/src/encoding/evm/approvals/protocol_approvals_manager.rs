@@ -1,12 +1,11 @@
 use std::sync::Arc;
 
 use alloy::{
-    providers::{Provider, RootProvider},
+    primitives::{Address, Bytes, TxKind, U256},
+    providers::Provider,
     rpc::types::{TransactionInput, TransactionRequest},
-    transports::BoxTransport,
+    sol_types::SolValue,
 };
-use alloy_primitives::{Address, Bytes, TxKind, U256};
-use alloy_sol_types::SolValue;
 use tokio::{
     runtime::{Handle, Runtime},
     task::block_in_place,
@@ -16,13 +15,13 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         encoding_utils::encode_input,
-        utils::{get_client, get_runtime},
+        utils::{get_client, get_runtime, EVMProvider},
     },
 };
 
 /// A manager for checking if an approval is needed for interacting with a certain spender.
 pub struct ProtocolApprovalsManager {
-    client: Arc<RootProvider<BoxTransport>>,
+    client: EVMProvider,
     runtime_handle: Handle,
     // Store the runtime to prevent it from being dropped before use.
     // This is required since tycho-execution does not have a pre-existing runtime.
@@ -56,11 +55,11 @@ impl ProtocolApprovalsManager {
 
         let output = block_in_place(|| {
             self.runtime_handle
-                .block_on(async { self.client.call(&tx).await })
+                .block_on(async { self.client.call(tx).await })
         });
         match output {
             Ok(response) => {
-                let allowance: U256 = U256::abi_decode(&response, true).map_err(|_| {
+                let allowance: U256 = U256::abi_decode(&response).map_err(|_| {
                     EncodingError::FatalError("Failed to decode response for allowance".to_string())
                 })?;
 

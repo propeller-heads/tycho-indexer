@@ -73,7 +73,7 @@ pub fn group_swaps(swaps: Vec<Swap>) -> Vec<SwapGroup> {
 mod tests {
     use std::str::FromStr;
 
-    use alloy_primitives::hex;
+    use alloy::primitives::hex;
     use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;

@@ -1221,9 +1221,12 @@ mod tests {
     mod integration {
         use std::{collections::HashMap, str::FromStr};
 
-        use alloy::{hex::encode, signers::local::PrivateKeySigner};
-        use alloy_primitives::{hex, Address, B256, U256};
-        use alloy_sol_types::SolValue;
+        use alloy::{
+            hex::encode,
+            primitives::{hex, Address, B256, U256},
+            signers::local::PrivateKeySigner,
+            sol_types::SolValue,
+        };
         use num_bigint::{BigInt, BigUint};
         use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 

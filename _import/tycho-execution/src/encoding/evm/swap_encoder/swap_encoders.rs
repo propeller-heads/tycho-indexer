@@ -1,7 +1,9 @@
 use std::{collections::HashMap, str::FromStr};
 
-use alloy_primitives::{Address, Bytes as AlloyBytes, U8};
-use alloy_sol_types::SolValue;
+use alloy::{
+    primitives::{Address, Bytes as AlloyBytes, U8},
+    sol_types::SolValue,
+};
 use serde_json::from_str;
 use tycho_common::Bytes;
 

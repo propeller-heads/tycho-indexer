@@ -1,6 +1,6 @@
 use std::io::{self, Read};
 
-use alloy_sol_types::SolValue;
+use alloy::sol_types::SolValue;
 use clap::{Parser, Subcommand};
 use tycho_common::{hex_bytes::Bytes, models::Chain};
 use tycho_execution::encoding::{

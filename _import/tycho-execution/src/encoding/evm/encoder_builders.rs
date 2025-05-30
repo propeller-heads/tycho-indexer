@@ -1,7 +1,6 @@
 use std::{collections::HashMap, str::FromStr};
 
-use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::B256;
+use alloy::{primitives::B256, signers::local::PrivateKeySigner};
 use tycho_common::{models::Chain as TychoCommonChain, Bytes};
 
 use crate::encoding::{
