@@ -1,7 +1,7 @@
 //! This module contains Tycho web services implementation
 // TODO: remove once deprecated ProtocolId struct is removed
 #![allow(deprecated)]
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, env, sync::Arc};
 
 use actix_cors::Cors;
 use actix_web::{dev::ServerHandle, http, web, App, HttpServer};
@@ -22,6 +22,7 @@ use tycho_common::{
     },
     storage::Gateway,
 };
+use tycho_ethereum::entrypoint_tracer::tracer::EVMEntrypointService;
 use utoipa::{
     openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
     Modify, OpenApi,
@@ -214,7 +215,12 @@ where
         openapi: utoipa::openapi::OpenApi,
         pending_deltas: Option<Arc<dyn PendingDeltasBuffer + Send + Sync>>,
     ) -> Result<(ServerHandle, JoinHandle<Result<(), ExtractionError>>), ExtractionError> {
-        let rpc_data = web::Data::new(rpc::RpcHandler::new(self.db_gateway, pending_deltas, None));
+        // TODO remove expect
+        let url = env::var("RPC_URL").expect("RPC_URL is not set");
+        let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
+
+        let rpc_data =
+            web::Data::new(rpc::RpcHandler::new(self.db_gateway, pending_deltas, tracer));
 
         let server = HttpServer::new(move || {
             let cors = Cors::default()
@@ -233,23 +239,23 @@ where
                 .app_data(rpc_data.clone())
                 .service(
                     web::resource(format!("/{}/contract_state", self.prefix))
-                        .route(web::post().to(rpc::contract_state::<G>)),
+                        .route(web::post().to(rpc::contract_state::<G, EVMEntrypointService>)),
                 )
                 .service(
                     web::resource(format!("/{}/protocol_state", self.prefix))
-                        .route(web::post().to(rpc::protocol_state::<G>)),
+                        .route(web::post().to(rpc::protocol_state::<G, EVMEntrypointService>)),
                 )
                 .service(
                     web::resource(format!("/{}/tokens", self.prefix))
-                        .route(web::post().to(rpc::tokens::<G>)),
+                        .route(web::post().to(rpc::tokens::<G, EVMEntrypointService>)),
                 )
                 .service(
                     web::resource(format!("/{}/protocol_components", self.prefix))
-                        .route(web::post().to(rpc::protocol_components::<G>)),
+                        .route(web::post().to(rpc::protocol_components::<G, EVMEntrypointService>)),
                 )
                 .service(
                     web::resource(format!("/{}/traced_entry_points", self.prefix))
-                        .route(web::post().to(rpc::traced_entry_points::<G>)),
+                        .route(web::post().to(rpc::traced_entry_points::<G, EVMEntrypointService>)),
                 )
                 .service(
                     web::resource(format!("/{}/health", self.prefix))
@@ -257,7 +263,7 @@ where
                 )
                 .service(
                     web::resource(format!("/{}/protocol_systems", self.prefix))
-                        .route(web::post().to(rpc::protocol_systems::<G>)),
+                        .route(web::post().to(rpc::protocol_systems::<G, EVMEntrypointService>)),
                 )
                 .wrap(RequestTracing::new())
                 .service(
