@@ -128,7 +128,7 @@ where
                             .ep_id_to_entrypoint
                             .get(&entrypoint_id)
                             .ok_or(ExtractionError::Setup(format!(
-                                "Got a tracing result for a unknown entrypoint: {entrypoint_id:?}"
+                                "Got a tracing result for a unknown entrypoint: {entrypoint_id}"
                             )))?
                             .clone(),
                         param.clone(),
@@ -264,10 +264,12 @@ where
             for traced_entry_point in traced_entry_points.iter() {
                 let tx = entrypoints_to_analyze
                     .get(&traced_entry_point.entry_point_with_params)
-                    // Safe to expect because we constructed the request to trace the entrypoints
-                    // with the entrypoints_to_analyze map. So every traced entrypoint should be in
-                    // the map.
-                    .expect("Every traced entrypoint should be in the entrypoints_to_analyze map");
+                    .ok_or_else(|| {
+                        ExtractionError::Unknown(format!(
+                            "Traced entrypoint {traced_entry_point:?} not found in the entrypoints_to_analyze map. \
+                            Every traced entrypoint should be in the entrypoints_to_analyze map"
+                        ))
+                    })?;
                 tx_to_traced_entry_point.insert(tx, traced_entry_point);
             }
 
@@ -322,10 +324,11 @@ where
             for (account, tx) in new_account_addr_to_tx.into_iter() {
                 let account_delta = new_accounts
                     .remove(&account)
-                    // Safe to expect because we constructed the request to get
-                    // the accounts with the new_account_addr_to_tx map. So every account
-                    // in the map should have a result.
-                    .expect("All accounts in request should have a result");
+                    .ok_or_else(|| {
+                        ExtractionError::Unknown(format!(
+                            "Account {account} not found in the result. All accounts in request should have a result"
+                        ))
+                    })?;
 
                 match block_changes
                     .txs_with_update
@@ -512,14 +515,14 @@ where
             .iter()
         {
             for (account, contract_store) in tx.storage_changes.iter() {
-                // Early skip if the contract is not tracked
-                if !self
+                let tracked_keys = match self
                     .cache
                     .tracked_contracts
-                    .contains_key(account)
+                    .get(account)
                 {
-                    continue;
-                }
+                    None => continue, // Early skip if the contract is not tracked
+                    Some(keys) => keys,
+                };
 
                 let mut slot_updates = contract_store
                     .iter()
@@ -532,13 +535,7 @@ where
                     })
                     .collect::<ContractStoreDeltas>();
 
-                if let Some(tracked_keys) = self
-                    .cache
-                    .tracked_contracts
-                    .get(account)
-                    // Safe to expect because we checked that the contract is tracked above
-                    .expect("Contract should be tracked")
-                {
+                if let Some(tracked_keys) = tracked_keys {
                     slot_updates.retain(|slot, _| tracked_keys.contains(slot));
                 }
 
