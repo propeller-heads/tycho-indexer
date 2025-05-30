@@ -1,6 +1,6 @@
 use std::{any::Any, collections::HashMap};
 
-use alloy_primitives::{Address, Sign, I256, U256};
+use alloy::primitives::{Address, Sign, I256, U256};
 use num_bigint::BigUint;
 use num_traits::Zero;
 use tracing::trace;

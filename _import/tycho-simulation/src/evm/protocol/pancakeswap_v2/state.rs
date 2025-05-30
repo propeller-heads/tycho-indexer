@@ -1,4 +1,4 @@
-use alloy_primitives::U256;
+use alloy::primitives::U256;
 
 use crate::evm::protocol::cpmm::protocol::CPMMProtocol;
 
@@ -47,7 +47,7 @@ mod tests {
         str::FromStr,
     };
 
-    use alloy_primitives::Address;
+    use alloy::primitives::Address;
     use approx::assert_ulps_eq;
     use num_bigint::{BigUint, ToBigUint};
     use num_traits::One;

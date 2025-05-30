@@ -13,9 +13,9 @@ num-bigint = "0.4.3"
 pyo3 = { version = "0.19", features = ["num-bigint", "extension-module"] }
 tycho-simulation = { path = "../" }
 tokio = { version = "1.38.0", features = ["full"] }
-alloy = { version = "0.9.2", features = ["providers"] }
-revm = { version = "17.1.0", features = [
-    "ethersdb",
+alloy = { version = "1.0.6", features = ["providers"] }
+revm = { version = "24.0.0", features = [
+    "alloydb",
 ] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.17", default-features = false, features = [

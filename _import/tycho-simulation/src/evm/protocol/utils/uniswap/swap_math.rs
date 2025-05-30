@@ -1,4 +1,4 @@
-use alloy_primitives::{I256, U256};
+use alloy::primitives::{I256, U256};
 
 use super::{
     solidity_math::{mul_div, mul_div_rounding_up},

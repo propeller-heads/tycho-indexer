@@ -10,7 +10,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use alloy_primitives::U256;
+use alloy::primitives::U256;
 use num_bigint::BigUint;
 use serde::Serialize;
 use thiserror::Error;

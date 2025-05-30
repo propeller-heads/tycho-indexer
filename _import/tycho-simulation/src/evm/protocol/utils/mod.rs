@@ -1,6 +1,6 @@
 pub mod uniswap;
 
-use alloy_primitives::Address;
+use alloy::primitives::Address;
 use tycho_common::Bytes;
 
 use crate::protocol::errors::SimulationError;

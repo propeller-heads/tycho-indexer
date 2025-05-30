@@ -18,7 +18,7 @@
 //! # Examples
 //! ```
 //! use std::str::FromStr;
-//! use alloy_primitives::U256;
+//! use alloy::primitives::U256;
 //! use num_bigint::ToBigUint;
 //! use tycho_simulation::evm::protocol::uniswap_v2::state::UniswapV2State;
 //! use tycho_simulation::protocol::state::{ProtocolSim};
@@ -46,7 +46,7 @@
 //! ```
 use std::{any::Any, collections::HashMap};
 
-use alloy_primitives::Address;
+use alloy::primitives::Address;
 #[cfg(test)]
 use mockall::mock;
 use num_bigint::BigUint;

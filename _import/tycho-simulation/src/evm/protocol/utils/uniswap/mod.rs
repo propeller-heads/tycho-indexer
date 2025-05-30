@@ -1,4 +1,4 @@
-use alloy_primitives::{I256, U256};
+use alloy::primitives::{I256, U256};
 use tycho_common::Bytes;
 
 pub(crate) mod liquidity_math;

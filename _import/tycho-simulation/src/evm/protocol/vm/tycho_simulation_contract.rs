@@ -1,11 +1,13 @@
 use std::{collections::HashMap, fmt::Debug};
 
-use alloy_primitives::{keccak256, Address, Keccak256, B256, U256};
-use alloy_sol_types::SolValue;
+use alloy::{
+    primitives::{keccak256, Address, Keccak256, B256, U256},
+    sol_types::SolValue,
+};
 use chrono::Utc;
 use revm::{
-    db::DatabaseRef,
-    primitives::{AccountInfo, Bytecode},
+    state::{AccountInfo, Bytecode},
+    DatabaseRef,
 };
 
 use super::{
@@ -162,15 +164,11 @@ where
 mod tests {
     use std::str::FromStr;
 
-    use alloy_primitives::hex;
-    use revm::{
-        db::DatabaseRef,
-        primitives::{AccountInfo, Bytecode, B256},
-    };
+    use alloy::primitives::hex;
 
     use super::*;
     use crate::evm::{
-        engine_db::engine_db_interface::EngineDatabaseInterface,
+        engine_db::{engine_db_interface::EngineDatabaseInterface, tycho_db::PreCachedDBError},
         protocol::vm::{constants::BALANCER_V2, utils::string_to_bytes32},
     };
 
@@ -178,12 +176,9 @@ mod tests {
     struct MockDatabase;
 
     impl DatabaseRef for MockDatabase {
-        type Error = String;
+        type Error = PreCachedDBError;
 
-        fn basic_ref(
-            &self,
-            _address: revm::precompile::Address,
-        ) -> Result<Option<AccountInfo>, Self::Error> {
+        fn basic_ref(&self, _address: Address) -> Result<Option<AccountInfo>, Self::Error> {
             Ok(Some(AccountInfo::default()))
         }
 
@@ -191,11 +186,7 @@ mod tests {
             Ok(Bytecode::new())
         }
 
-        fn storage_ref(
-            &self,
-            _address: revm::precompile::Address,
-            _index: U256,
-        ) -> Result<U256, Self::Error> {
+        fn storage_ref(&self, _address: Address, _index: U256) -> Result<U256, Self::Error> {
             Ok(U256::from(0))
         }
 

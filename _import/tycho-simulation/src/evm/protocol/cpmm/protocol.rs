@@ -1,6 +1,6 @@
 use std::{any::Any, collections::HashMap};
 
-use alloy_primitives::{Address, U256};
+use alloy::primitives::{Address, U256};
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::Zero;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};

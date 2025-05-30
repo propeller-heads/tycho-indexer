@@ -52,17 +52,11 @@ tycho-common = "0.70.7"
 tycho-client = "0.70.7"
 
 # EVM dependencies
-foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e", optional = true }
-foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "57bb12e", optional = true }
-alloy-primitives = { version = "0.8.9", features = [
-    "getrandom",
-    "rand",
-    "map-foldhash",
-] }
-alloy-sol-types = { version = "0.8.14" }
-alloy = { version = "0.9.2", features = ["providers", "signer-local", "rpc-types-eth"] }
-revm = { version = "17.1.0", features = ["ethersdb", "serde"], optional = true }
-revm-inspectors = { version = "0.10", features = ["serde"], optional = true }
+foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "ab753e9", optional = true }
+foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "ab753e9", optional = true }
+alloy = { version = "1.0.6", features = ["providers", "signer-local", "rpc-types-eth"] }
+revm = { version = "24.0.0", features = ["alloydb", "serde"], optional = true }
+revm-inspectors = { version = "0.23", features = ["serde"], optional = true }
 num-bigint = { version = "0.4", features = ["serde"] }
 tokio-stream = "0.1.16"
 
@@ -92,13 +86,15 @@ ratatui = "0.29.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
-tycho-execution = "0.96.0"
+
+# tycho execution for quickstart
+tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", package = "tycho-execution", features = ["evm"], rev = "5fa97d08e593e5c7c6480c66e86305fef30e9747" }
 
 [features]
 default = ["evm"]
 network_tests = []
 evm = [
-    "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors"
+    "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors" # add alloy here??
 ]
 
 [profile.bench]

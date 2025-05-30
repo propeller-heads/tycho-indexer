@@ -1,7 +1,9 @@
 use std::{collections::HashMap, fmt::Debug};
 
-use alloy_primitives::{Address, U256};
-use alloy_sol_types::SolValue;
+use alloy::{
+    primitives::{Address, U256},
+    sol_types::SolValue,
+};
 use lazy_static::lazy_static;
 use revm::DatabaseRef;
 
@@ -164,7 +166,7 @@ where
                     U256::from(0u64),
                 )?
                 .return_value;
-            let decoded: U256Return = U256Return::abi_decode(&res, true).map_err(|e| {
+            let decoded: U256Return = U256Return::abi_decode(&res).map_err(|e| {
                 SimulationError::FatalError(format!("Failed to decode swap return value: {e:?}"))
             })?;
             if decoded == *MARKER_VALUE {
@@ -204,7 +206,7 @@ where
                 U256::from(0u64),
             )?
             .return_value;
-        let decoded: U256Return = U256Return::abi_decode(&res, true).map_err(|e| {
+        let decoded: U256Return = U256Return::abi_decode(&res).map_err(|e| {
             SimulationError::FatalError(format!("Failed to decode swap return value: {e:?}"))
         })?;
         if decoded == *MARKER_VALUE {
@@ -230,15 +232,12 @@ where
 mod tests {
     use std::{env, str::FromStr, sync::Arc};
 
-    use alloy::{
-        providers::{ProviderBuilder, RootProvider},
-        transports::BoxTransport,
-    };
+    use alloy::providers::ProviderBuilder;
     use chrono::NaiveDateTime;
     use dotenv::dotenv;
 
     use super::*;
-    use crate::evm::engine_db::simulation_db::SimulationDB;
+    use crate::evm::engine_db::simulation_db::{EVMProvider, SimulationDB};
 
     fn setup_factory() -> ERC20OverwriteFactory {
         let token_address: Address = Address::from_slice(
@@ -308,7 +307,7 @@ mod tests {
         assert_eq!(overwrites[&factory.token_address][&total_supply_slot], supply);
     }
 
-    fn new_state() -> SimulationDB<RootProvider<BoxTransport>> {
+    fn new_state() -> SimulationDB<EVMProvider> {
         dotenv().ok();
         let eth_rpc_url = env::var("RPC_URL").expect("Missing RPC_URL in environment");
         let runtime = tokio::runtime::Handle::try_current()
@@ -317,7 +316,7 @@ mod tests {
             .unwrap();
         let client = runtime.block_on(async {
             ProviderBuilder::new()
-                .on_builtin(&eth_rpc_url)
+                .connect(&eth_rpc_url)
                 .await
                 .unwrap()
         });

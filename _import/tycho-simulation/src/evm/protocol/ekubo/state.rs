@@ -1,6 +1,6 @@
 use std::{any::Any, collections::HashMap, fmt::Debug};
 
-use alloy_primitives::Address;
+use alloy::primitives::Address;
 use evm_ekubo_sdk::{
     math::uint::U256,
     quoting::types::{NodeKey, Tick, TokenAmount},
@@ -33,7 +33,7 @@ pub enum EkuboState {
 fn sqrt_price_q128_to_f64(x: U256, (token0_decimals, token1_decimals): (usize, usize)) -> f64 {
     let token_correction = 10f64.powi(token0_decimals as i32 - token1_decimals as i32);
 
-    let price = u256_to_f64(alloy_primitives::U256::from_limbs(x.0)) / 2.0f64.powi(128);
+    let price = u256_to_f64(alloy::primitives::U256::from_limbs(x.0)) / 2.0f64.powi(128);
     price.powi(2) * token_correction
 }
 

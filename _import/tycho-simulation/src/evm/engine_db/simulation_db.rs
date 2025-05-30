@@ -4,13 +4,20 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use alloy::providers::Provider;
-use alloy_primitives::StorageValue;
-use revm::{
-    db::DatabaseRef,
-    interpreter::analysis::to_analysed,
-    primitives::{AccountInfo, Address, Bytecode, B256, U256},
+use alloy::{
+    primitives::{Address, Bytes, StorageValue, B256, U256},
+    providers::{
+        fillers::{BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller},
+        Provider, RootProvider,
+    },
+    transports::{RpcError, TransportErrorKind},
 };
+use revm::{
+    context::DBErrorMarker,
+    state::{AccountInfo, Bytecode},
+    DatabaseRef,
+};
+use thiserror::Error;
 use tracing::{debug, info};
 
 use super::{
@@ -96,6 +103,14 @@ pub struct SimulationDB<P: Provider + Debug> {
     /// Tokio runtime to execute async code
     pub runtime: Option<Arc<tokio::runtime::Runtime>>,
 }
+
+pub type EVMProvider = FillProvider<
+    JoinFill<
+        alloy::providers::Identity,
+        JoinFill<GasFiller, JoinFill<BlobGasFiller, JoinFill<NonceFiller, ChainIdFiller>>>,
+    >,
+    RootProvider,
+>;
 
 impl<P: Provider + Debug + 'static> SimulationDB<P> {
     pub fn new(
@@ -206,7 +221,7 @@ impl<P: Provider + Debug + 'static> SimulationDB<P> {
 
             tokio::join!(balance_request, nonce_request, code_request,)
         });
-        let code = to_analysed(Bytecode::new_raw(revm::primitives::Bytes::copy_from_slice(&code?)));
+        let code = Bytecode::new_raw(Bytes::copy_from_slice(&code?));
 
         Ok(AccountInfo::new(balance?, nonce?, code.hash_slow(), code))
     }
@@ -278,7 +293,7 @@ where
         mocked: bool,
     ) {
         if account.code.is_some() {
-            account.code = Some(to_analysed(account.code.unwrap()));
+            account.code = Some(account.code.unwrap()); // TODO unwrap ew
         }
 
         let mut account_storage = self.account_storage.write().unwrap();
@@ -298,11 +313,25 @@ where
     }
 }
 
+#[derive(Error, Debug)]
+pub enum SimulationDBError {
+    #[error("Simulation error: {0} ")]
+    SimulationError(String),
+}
+
+impl DBErrorMarker for SimulationDBError {}
+
+impl From<RpcError<TransportErrorKind>> for SimulationDBError {
+    fn from(err: RpcError<TransportErrorKind>) -> Self {
+        SimulationDBError::SimulationError(err.to_string())
+    }
+}
+
 impl<P: Provider> DatabaseRef for SimulationDB<P>
 where
     P: Provider + Debug + Send + Sync + 'static,
 {
-    type Error = Box<dyn std::error::Error + Send + Sync>;
+    type Error = SimulationDBError;
 
     /// Retrieves basic information about an account.
     ///
@@ -349,6 +378,7 @@ where
     }
 
     fn code_by_hash_ref(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
+        // TODO: do we need to panic?
         panic!("Code by hash is not implemented")
     }
 
@@ -445,10 +475,7 @@ where
 mod tests {
     use std::{env, error::Error, str::FromStr};
 
-    use alloy::{
-        providers::{ProviderBuilder, RootProvider},
-        transports::BoxTransport,
-    };
+    use alloy::providers::ProviderBuilder;
     use dotenv::dotenv;
     use rstest::rstest;
     use tokio::runtime::Runtime;
@@ -463,7 +490,7 @@ mod tests {
         Some(Arc::new(runtime))
     }
 
-    fn get_client() -> Arc<RootProvider<BoxTransport>> {
+    fn get_client() -> Arc<EVMProvider> {
         let runtime = get_runtime().unwrap();
         let eth_rpc_url = env::var("RPC_URL").unwrap_or_else(|_| {
             dotenv().expect("Missing .env file");
@@ -471,7 +498,7 @@ mod tests {
         });
         let client = runtime.block_on(async {
             ProviderBuilder::new()
-                .on_builtin(&eth_rpc_url)
+                .connect(&eth_rpc_url)
                 .await
                 .unwrap()
         });

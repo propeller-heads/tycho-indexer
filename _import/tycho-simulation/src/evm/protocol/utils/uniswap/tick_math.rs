@@ -1,6 +1,6 @@
 use std::ops::BitOr;
 
-use alloy_primitives::{Sign, I256, U256};
+use alloy::primitives::{Sign, I256, U256};
 
 use crate::{
     evm::protocol::safe_math::{div_mod_u256, safe_div_u256, safe_mul_u256},

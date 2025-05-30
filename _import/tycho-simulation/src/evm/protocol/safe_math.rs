@@ -5,7 +5,7 @@
 //! Should an operation cause an overflow a result containing TradeSimulationError
 //! will be returned.
 //! Functions for the types I256, U256, U512 are available.
-use alloy_primitives::{I256, U256, U512};
+use alloy::primitives::{I256, U256, U512};
 
 use crate::protocol::errors::SimulationError;
 
