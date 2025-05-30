@@ -159,10 +159,7 @@ impl PostgresGateway {
             entry_point_tracing_params::dsl::*,
         };
 
-        let input_external_ids: Vec<EntryPointId> = new_data
-            .keys()
-            .map(Clone::clone)
-            .collect();
+        let input_external_ids: Vec<EntryPointId> = new_data.keys().cloned().collect();
         let entry_point_ids =
             orm::EntryPoint::ids_by_external_ids(&input_external_ids, conn).await?;
 
@@ -621,7 +618,7 @@ impl PostgresGateway {
         let entry_point_ids = orm::EntryPoint::ids_by_external_ids(
             &entry_points
                 .iter()
-                .map(Clone::clone)
+                .cloned()
                 .collect::<Vec<_>>(),
             conn,
         )
