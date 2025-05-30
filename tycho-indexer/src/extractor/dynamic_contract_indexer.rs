@@ -298,7 +298,7 @@ where
                 }
             }
 
-            // Get the code, balance and storage changes for the new traced entrypoints
+            // Get the code, balance and storage changes for the new traced entrypoints.
             // This can contain duplicates, but the AccountExtractor implementation should ignore
             // them.
             let storage_request: Vec<StorageSnapshotRequest> = new_account_addr_to_tx
@@ -493,13 +493,13 @@ where
         }
     }
 
-    /// Scan the block storage changes and extract the updates for the tracked contracts.
+    /// Scans the block storage changes and extracts the updates for the tracked contracts.
     ///
     /// # Returns
     /// A map of tx_hash to tx_with_changes, where the tx_with_changes contains the account deltas
     /// for the tracked contracts.
     ///
-    /// Note: the tx_with_changes are only containing the account deltas for the tracked contracts,
+    /// Note: the tx_with_changes are only contain the account deltas for the tracked contracts;
     /// they need to be merged with the `txs_with_update` vector from the block changes.
     fn extract_tracked_updates(
         &self,

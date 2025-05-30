@@ -558,7 +558,7 @@ pub trait EntryPointGateway {
     ///   results are returned.
     ///
     /// # Returns
-    /// A map of component ids to a set of entry points with their tracing data.
+    /// A map of component ids to a set of entry points with their tracing params.
     async fn get_entry_points_tracing_params(
         &self,
         filter: EntryPointFilter,

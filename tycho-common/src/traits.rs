@@ -13,9 +13,13 @@ use crate::{
     Bytes,
 };
 
+/// A struct representing a request to get an account state.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StorageSnapshotRequest {
+    // The address of the account to get the state of.
     pub address: Address,
+    // The specific slots to get the state of. If `None`, the entire account state will be
+    // returned.
     pub slots: Option<Vec<Bytes>>,
 }
 
