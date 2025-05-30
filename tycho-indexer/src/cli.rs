@@ -144,7 +144,8 @@ pub struct RunSpkgArgs {
 
     /// DCI plugin to use
     ///
-    /// Optional. If not provided, the extractor will not use DCI.
+    /// Optional. If not provided, the extractor will not use DCI. Available plugins:
+    /// - `rpc` - RPC is used to trace and retrieve detected accounts.
     #[clap(long)]
     pub dci_plugin: Option<String>,
 }
