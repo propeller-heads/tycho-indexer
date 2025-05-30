@@ -212,10 +212,10 @@ impl EVMBatchAccountExtractor {
                         "eth_getCode",
                         &(&request.address, BlockNumberOrTag::from(block.number)),
                     )
-                    .map_err(|_| {
-                        RPCError::RequestError(ProviderError::CustomError(
-                            "Failed to get code".to_string(),
-                        ))
+                    .map_err(|e| {
+                        RPCError::RequestError(ProviderError::CustomError(format!(
+                            "Failed to get code: {e}",
+                        )))
                     })?
                     .map_resp(|resp: Bytes| resp.to_vec()),
             ));
@@ -226,10 +226,10 @@ impl EVMBatchAccountExtractor {
                         "eth_getBalance",
                         &(&request.address, BlockNumberOrTag::from(block.number)),
                     )
-                    .map_err(|_| {
-                        RPCError::RequestError(ProviderError::CustomError(
-                            "Failed to get balance".to_string(),
-                        ))
+                    .map_err(|e| {
+                        RPCError::RequestError(ProviderError::CustomError(format!(
+                            "Failed to get balance: {e}",
+                        )))
                     })?,
             ));
         }
@@ -293,10 +293,10 @@ impl EVMBatchAccountExtractor {
                                     "eth_getStorageAt",
                                     &(&request.address, slot, BlockNumberOrTag::from(block.number)),
                                 )
-                                .map_err(|_| {
-                                    RPCError::RequestError(ProviderError::CustomError(
-                                        "Failed to get storage".to_string(),
-                                    ))
+                                .map_err(|e| {
+                                    RPCError::RequestError(ProviderError::CustomError(format!(
+                                        "Failed to get storage: {e}",
+                                    )))
                                 })?
                                 .map_resp(|res: Bytes| res.to_vec()),
                         ));
@@ -369,10 +369,10 @@ impl EVMBatchAccountExtractor {
                     ),
                 )
                 .await
-                .map_err(|_| {
-                    RPCError::RequestError(ProviderError::CustomError(
-                        "Failed to get storage".to_string(),
-                    ))
+                .map_err(|e| {
+                    RPCError::RequestError(ProviderError::CustomError(format!(
+                        "Failed to get storage: {e}",
+                    )))
                 })?;
 
             for (_, entry) in result.storage {
@@ -443,7 +443,11 @@ impl AccountExtractor for EVMBatchAccountExtractor {
                 let storage = storage_results
                     .get(idx)
                     .cloned()
-                    .expect("Failed to get account storage");
+                    .ok_or_else(|| {
+                        RPCError::UnknownError(format!(
+                            "Unable to find storage result. Request: {request:?} at block: {block:?}"
+                        ))
+                    })?;
 
                 let account_delta = AccountDelta {
                     address: address.clone(),
