@@ -6,12 +6,12 @@ use foundry_evm::traces::{SparsedTraceArena, TraceKind};
 use revm::{
     context::{
         result::{EVMError, ExecutionResult, Output, ResultAndState},
-        BlockEnv, CfgEnv, Context, TransactTo, TxEnv,
+        BlockEnv, CfgEnv, Context, TxEnv,
     },
     interpreter::{return_ok, InstructionResult},
     primitives::{hardfork::SpecId, TxKind},
     state::EvmState,
-    DatabaseRef, ExecuteEvm, MainBuilder, MainContext,
+    DatabaseRef, ExecuteEvm, InspectEvm, MainBuilder, MainContext,
 };
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use strum_macros::Display;
@@ -100,13 +100,11 @@ where
         };
 
         let tx_env = TxEnv {
-            caller: params.revm_caller(),
-            gas_limit: params
-                .revm_gas_limit()
-                .unwrap_or(8_000_000),
+            caller: params.caller,
+            gas_limit: params.gas_limit.unwrap_or(8_000_000),
             kind: TxKind::Call(params.to),
             value: params.value,
-            data: params.revm_data(),
+            data: Bytes::copy_from_slice(&params.data),
             ..Default::default()
         };
 
@@ -138,7 +136,7 @@ where
                     "Starting simulation with tx parameters: {:#?} {:#?}",
                     vm.ctx.tx, vm.ctx.block
                 );
-                vm.replay()
+                vm.inspect_replay()
             };
 
             Self::print_traces(tracer, res.as_ref().ok());
@@ -350,49 +348,15 @@ pub struct SimulationParameters {
     pub timestamp: u64,
 }
 
-// Converters of fields to revm types
-impl SimulationParameters {
-    fn revm_caller(&self) -> Address {
-        Address::from_slice(self.caller.as_slice())
-    }
-
-    fn revm_to(&self) -> TransactTo {
-        if self.to == Address::ZERO {
-            TransactTo::Create
-        } else {
-            TransactTo::Call(self.to)
-        }
-    }
-
-    fn revm_data(&self) -> revm::primitives::Bytes {
-        revm::primitives::Bytes::copy_from_slice(&self.data)
-    }
-
-    fn revm_gas_limit(&self) -> Option<u64> {
-        // In this case we don't need to convert. The method is here just for consistency.
-        self.gas_limit
-    }
-
-    fn revm_block_number(&self) -> U256 {
-        U256::from_limbs([self.block_number, 0, 0, 0])
-    }
-
-    fn revm_timestamp(&self) -> U256 {
-        U256::from_limbs([self.timestamp, 0, 0, 0])
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::{env, error::Error, str::FromStr, sync::Arc, time::Instant};
+    use std::{error::Error, str::FromStr, time::Instant};
 
     use alloy::{
         primitives::{Address, Bytes, Keccak256, B256},
-        providers::ProviderBuilder,
         sol_types::SolValue,
         transports::{RpcError, TransportError, TransportErrorKind},
     };
-    use dotenv::dotenv;
     use revm::{
         context::result::{HaltReason, InvalidTransaction, OutOfGasError, SuccessReason},
         state::{
@@ -405,79 +369,10 @@ mod tests {
         evm::engine_db::{
             engine_db_interface::EngineDatabaseInterface,
             simulation_db::{EVMProvider, SimulationDB},
+            utils::{get_client, get_runtime},
         },
         protocol::errors::SimulationError,
     };
-
-    #[test]
-    fn test_converting_to_revm() {
-        let address_string = "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D";
-        let params = SimulationParameters {
-            caller: Address::from_str(address_string).unwrap(),
-            to: Address::from_str(address_string).unwrap(),
-            data: b"Hello".to_vec(),
-            value: U256::from(123),
-            overrides: Some(
-                [(
-                    Address::ZERO,
-                    [(U256::from(1), U256::from(11)), (U256::from(2), U256::from(22))]
-                        .iter()
-                        .cloned()
-                        .collect(),
-                )]
-                .iter()
-                .cloned()
-                .collect(),
-            ),
-            gas_limit: Some(33),
-            block_number: 0,
-            timestamp: 0,
-        };
-
-        assert_eq!(params.revm_caller(), Address::from_str(address_string).unwrap());
-        assert_eq!(
-            if let TransactTo::Call(value) = params.revm_to() { value } else { panic!() },
-            Address::from_str(address_string).unwrap()
-        );
-        assert_eq!(params.revm_data(), revm::primitives::Bytes::from_static(b"Hello"));
-        assert_eq!(params.value, U256::from_str("123").unwrap());
-        // Below I am using `from_str` instead of `from`, because `from` for this type gives
-        // an ugly false positive error in Pycharm.
-        let expected_overrides = [(
-            Address::ZERO,
-            [
-                (U256::from_str("1").unwrap(), U256::from_str("11").unwrap()),
-                (U256::from_str("2").unwrap(), U256::from_str("22").unwrap()),
-            ]
-            .iter()
-            .cloned()
-            .collect(),
-        )]
-        .iter()
-        .cloned()
-        .collect();
-        assert_eq!(params.overrides.clone().unwrap(), expected_overrides);
-        assert_eq!(params.revm_gas_limit().unwrap(), 33_u64);
-        assert_eq!(params.revm_block_number(), U256::ZERO);
-        assert_eq!(params.revm_timestamp(), U256::ZERO);
-    }
-
-    #[test]
-    fn test_converting_nones_to_revm() {
-        let params = SimulationParameters {
-            caller: Address::ZERO,
-            to: Address::ZERO,
-            data: Vec::new(),
-            value: U256::from(0u64),
-            overrides: None,
-            gas_limit: None,
-            block_number: 0,
-            timestamp: 0,
-        };
-
-        assert_eq!(params.overrides, None);
-        assert_eq!(params.revm_gas_limit(), None);
-    }
 
     #[test]
     fn test_interpret_result_ok_success() {
@@ -638,20 +533,9 @@ mod tests {
         }
     }
     fn new_state() -> SimulationDB<EVMProvider> {
-        dotenv().ok();
-        let eth_rpc_url = env::var("RPC_URL").expect("Missing RPC_URL in environment");
-        let runtime = tokio::runtime::Handle::try_current()
-            .is_err()
-            .then(|| tokio::runtime::Runtime::new().unwrap())
-            .unwrap();
-        let client = runtime.block_on(async {
-            ProviderBuilder::new()
-                .connect(&eth_rpc_url)
-                .await
-                .unwrap()
-        });
-        let client = Arc::new(client);
-        SimulationDB::new(client, Some(Arc::new(runtime)), None)
+        let runtime = get_runtime();
+        let client = get_client(None);
+        SimulationDB::new(client, runtime, None)
     }
 
     #[test]

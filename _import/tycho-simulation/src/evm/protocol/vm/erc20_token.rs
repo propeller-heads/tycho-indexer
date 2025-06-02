@@ -230,14 +230,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{env, str::FromStr, sync::Arc};
+    use std::str::FromStr;
 
-    use alloy::providers::ProviderBuilder;
     use chrono::NaiveDateTime;
-    use dotenv::dotenv;
 
     use super::*;
-    use crate::evm::engine_db::simulation_db::{EVMProvider, SimulationDB};
+    use crate::evm::engine_db::{
+        simulation_db::{EVMProvider, SimulationDB},
+        utils::{get_client, get_runtime},
+    };
 
     fn setup_factory() -> ERC20OverwriteFactory {
         let token_address: Address = Address::from_slice(
@@ -308,19 +309,9 @@ mod tests {
     }
 
     fn new_state() -> SimulationDB<EVMProvider> {
-        dotenv().ok();
-        let eth_rpc_url = env::var("RPC_URL").expect("Missing RPC_URL in environment");
-        let runtime = tokio::runtime::Handle::try_current()
-            .is_err()
-            .then(|| tokio::runtime::Runtime::new().unwrap())
-            .unwrap();
-        let client = runtime.block_on(async {
-            ProviderBuilder::new()
-                .connect(&eth_rpc_url)
-                .await
-                .unwrap()
-        });
-        SimulationDB::new(Arc::new(client), Some(Arc::new(runtime)), None)
+        let runtime = get_runtime();
+        let client = get_client(None);
+        SimulationDB::new(client, runtime, None)
     }
 
     #[test]

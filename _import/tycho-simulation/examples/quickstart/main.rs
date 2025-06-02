@@ -8,7 +8,7 @@ use std::{
 use alloy::{
     eips::BlockNumberOrTag,
     network::{Ethereum, EthereumWallet},
-    primitives::{Address, Bytes as AlloyBytes, Keccak256, PrimitiveSignature, TxKind, B256, U256},
+    primitives::{Address, Bytes as AlloyBytes, Keccak256, Signature, TxKind, B256, U256},
     providers::{
         fillers::{FillProvider, JoinFill, WalletFiller},
         Identity, Provider, ProviderBuilder, RootProvider,
@@ -705,7 +705,7 @@ fn sign_permit(
     chain_id: u64,
     permit_single: &models::PermitSingle,
     signer: PrivateKeySigner,
-) -> Result<PrimitiveSignature, EncodingError> {
+) -> Result<Signature, EncodingError> {
     let permit2_address = Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
         .map_err(|_| EncodingError::FatalError("Permit2 address not valid".to_string()))?;
     let domain = eip712_domain! {

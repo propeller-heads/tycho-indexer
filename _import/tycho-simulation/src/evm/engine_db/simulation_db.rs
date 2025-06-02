@@ -476,41 +476,16 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{env, error::Error, str::FromStr};
+    use std::{error::Error, str::FromStr};
 
-    use alloy::providers::ProviderBuilder;
-    use dotenv::dotenv;
     use rstest::rstest;
-    use tokio::runtime::Runtime;
 
     use super::*;
-
-    fn get_runtime() -> Option<Arc<Runtime>> {
-        let runtime = tokio::runtime::Handle::try_current()
-            .is_err()
-            .then(|| Runtime::new().unwrap())
-            .unwrap();
-        Some(Arc::new(runtime))
-    }
-
-    fn get_client() -> Arc<EVMProvider> {
-        let runtime = get_runtime().unwrap();
-        let eth_rpc_url = env::var("RPC_URL").unwrap_or_else(|_| {
-            dotenv().expect("Missing .env file");
-            env::var("RPC_URL").expect("Missing RPC_URL in .env file")
-        });
-        let client = runtime.block_on(async {
-            ProviderBuilder::new()
-                .connect(&eth_rpc_url)
-                .await
-                .unwrap()
-        });
-        Arc::new(client)
-    }
+    use crate::evm::engine_db::utils::{get_client, get_runtime};
 
     #[rstest]
     fn test_query_storage_latest_block() -> Result<(), Box<dyn Error>> {
-        let db = SimulationDB::new(get_client(), get_runtime(), None);
+        let db = SimulationDB::new(get_client(None), get_runtime(), None);
         let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         let index = U256::from_limbs_slice(&[8]);
         db.init_account(address, AccountInfo::default(), None, false);
@@ -526,7 +501,7 @@ mod tests {
 
     #[rstest]
     fn test_query_account_info() {
-        let mut db = SimulationDB::new(get_client(), get_runtime(), None);
+        let mut db = SimulationDB::new(get_client(None), get_runtime(), None);
         let block = BlockHeader {
             number: 20308186,
             hash: B256::from_str(
@@ -547,7 +522,7 @@ mod tests {
 
     #[rstest]
     fn test_mock_account_get_acc_info() {
-        let db = SimulationDB::new(get_client(), get_runtime(), None);
+        let db = SimulationDB::new(get_client(None), get_runtime(), None);
         let mock_acc_address =
             Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
         db.init_account(mock_acc_address, AccountInfo::default(), None, true);
@@ -569,7 +544,7 @@ mod tests {
 
     #[rstest]
     fn test_mock_account_get_storage() {
-        let db = SimulationDB::new(get_client(), get_runtime(), None);
+        let db = SimulationDB::new(get_client(None), get_runtime(), None);
         let mock_acc_address =
             Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
         let storage_address = U256::ZERO;
@@ -584,7 +559,7 @@ mod tests {
 
     #[rstest]
     fn test_update_state() {
-        let mut db = SimulationDB::new(get_client(), get_runtime(), None);
+        let mut db = SimulationDB::new(get_client(None), get_runtime(), None);
         let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
         db.init_account(address, AccountInfo::default(), None, false);
 
@@ -637,7 +612,7 @@ mod tests {
 
     #[rstest]
     fn test_overridden_db() {
-        let db = SimulationDB::new(get_client(), get_runtime(), None);
+        let db = SimulationDB::new(get_client(None), get_runtime(), None);
         let slot1 = U256::from_limbs_slice(&[1]);
         let slot2 = U256::from_limbs_slice(&[2]);
         let orig_value1 = U256::from_limbs_slice(&[100]);
@@ -657,10 +632,7 @@ mod tests {
         db.init_account(address2, AccountInfo::default(), Some(original_storage), false);
 
         let overridden_value1 = U256::from_limbs_slice(&[101]);
-        let mut overrides: HashMap<
-            Address,
-            HashMap<revm::primitives::U256, revm::primitives::U256>,
-        > = HashMap::new();
+        let mut overrides: HashMap<Address, HashMap<U256, U256>> = HashMap::new();
         overrides.insert(
             address2,
             [(slot1, overridden_value1)]

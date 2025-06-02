@@ -1,18 +1,19 @@
 #![allow(non_local_definitions)] //TODO: Update PYO3 to >= 0.21.2 (https://github.com/PyO3/pyo3/issues/4094#issuecomment-2064510190)
-use std::{collections::HashMap, fmt::Debug, str::FromStr, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, str::FromStr};
 
-use alloy::{
-    primitives::{Address, B256, U256},
-    providers::ProviderBuilder,
-};
+use alloy::primitives::{Address, B256, U256};
 use num_bigint::BigUint;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use revm::state::Bytecode;
-use tokio::runtime::Runtime;
 use tracing::info;
 use tycho_simulation::evm::{
     account_storage,
-    engine_db::{simulation_db, simulation_db::EVMProvider, tycho_db},
+    engine_db::{
+        simulation_db,
+        simulation_db::EVMProvider,
+        tycho_db,
+        utils::{get_client, get_runtime},
+    },
     simulation, tycho_models,
 };
 
@@ -460,29 +461,6 @@ impl From<simulation::SimulationEngineError> for SimulationErrorDetails {
     }
 }
 
-fn get_runtime() -> Option<Arc<Runtime>> {
-    let runtime = tokio::runtime::Handle::try_current()
-        .is_err()
-        .then(|| Runtime::new().unwrap())
-        .unwrap();
-
-    Some(Arc::new(runtime))
-}
-
-fn get_client(rpc_url: &str) -> Arc<EVMProvider> {
-    let runtime = tokio::runtime::Handle::try_current()
-        .is_err()
-        .then(|| tokio::runtime::Runtime::new().unwrap())
-        .unwrap();
-    let client = runtime.block_on(async {
-        ProviderBuilder::new()
-            .connect(rpc_url)
-            .await
-            .unwrap()
-    });
-    Arc::new(client)
-}
-
 /// A database using a real Ethereum node as a backend.
 ///
 /// Uses a local cache to speed up queries.
@@ -499,7 +477,7 @@ impl SimulationDB {
     pub fn new(rpc_url: String, block: Option<BlockHeader>) -> Self {
         info!(?rpc_url, ?block, "Creating python SimulationDB wrapper instance");
         let db = simulation_db::SimulationDB::new(
-            get_client(&rpc_url),
+            get_client(Some(rpc_url)),
             get_runtime(),
             block.map(Into::into),
         );
