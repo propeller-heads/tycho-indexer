@@ -12,14 +12,14 @@ use tokio::task::JoinHandle;
 use tracing::info;
 use tycho_common::{
     dto::{
-        AccountUpdate, BlockParam, Chain, ChangeType, ComponentTvlRequestBody,
-        ComponentTvlRequestResponse, ContractId, Health, PaginationParams, PaginationResponse,
-        ProtocolComponent, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
-        ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody, ProtocolStateRequestResponse,
-        ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, ResponseAccount,
-        ResponseProtocolState, ResponseToken, StateRequestBody, StateRequestResponse,
-        TokensRequestBody, TokensRequestResponse, TracedEntryPointRequestBody,
-        TracedEntryPointRequestResponse, VersionParam,
+        AccountUpdate, AddEntryPointRequestBody, BlockParam, Chain, ChangeType,
+        ComponentTvlRequestBody, ComponentTvlRequestResponse, ContractId, Health, PaginationParams,
+        PaginationResponse, ProtocolComponent, ProtocolComponentRequestResponse,
+        ProtocolComponentsRequestBody, ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody,
+        ProtocolStateRequestResponse, ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse,
+        ResponseAccount, ResponseProtocolState, ResponseToken, StateRequestBody,
+        StateRequestResponse, TokensRequestBody, TokensRequestResponse,
+        TracedEntryPointRequestBody, TracedEntryPointRequestResponse, VersionParam,
     },
     storage::Gateway,
 };
@@ -106,6 +106,7 @@ where
                 rpc::tokens,
                 rpc::protocol_components,
                 rpc::traced_entry_points,
+                rpc::add_entry_points,
                 rpc::protocol_state,
                 rpc::contract_state,
                 rpc::component_tvl,
@@ -129,6 +130,7 @@ where
                 schemas(ProtocolStateRequestBody),
                 schemas(TracedEntryPointRequestBody),
                 schemas(TracedEntryPointRequestResponse),
+                schemas(AddEntryPointRequestBody),
                 schemas(ProtocolStateRequestResponse),
                 schemas(AccountUpdate),
                 schemas(ProtocolId),
@@ -261,6 +263,10 @@ where
                 .service(
                     web::resource(format!("/{}/traced_entry_points", self.prefix))
                         .route(web::post().to(rpc::traced_entry_points::<G, EVMEntrypointService>)),
+                )
+                .service(
+                    web::resource(format!("/{}/add_entry_points", self.prefix))
+                        .route(web::post().to(rpc::add_entry_points::<G, EVMEntrypointService>)),
                 )
                 .service(
                     web::resource(format!("/{}/health", self.prefix))

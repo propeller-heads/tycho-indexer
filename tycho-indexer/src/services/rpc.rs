@@ -918,7 +918,7 @@ where
     #[allow(dead_code)]
     async fn add_entry_points(
         &self,
-        request: &dto::AddEntrypointRequestBody,
+        request: &dto::AddEntryPointRequestBody,
     ) -> Result<(), RpcError> {
         let tracing_result = self.trace_entry_points(request).await?;
         let mut entry_points: HashMap<ComponentId, HashSet<EntryPoint>> = HashMap::new();
@@ -952,7 +952,7 @@ where
 
     async fn trace_entry_points(
         &self,
-        request: &dto::AddEntrypointRequestBody,
+        request: &dto::AddEntryPointRequestBody,
     ) -> Result<Vec<TracedEntryPoint>, RpcError> {
         let entry_points_with_params: Vec<_> = request
             .entry_points_with_tracing_data
@@ -1266,11 +1266,11 @@ pub async fn component_tvl<G: Gateway>(
     post,
     path = "/v1/traced_entry_points",
     responses(
-        (status = 200, description = "OK", body = TracedEntryPointRequestResponse),
+    (status = 200, description = "OK", body = TracedEntryPointRequestResponse),
     ),
     request_body = TracedEntryPointRequestBody,
     security(
-        ("apiKey" = [])
+    ("apiKey" = [])
     ),
 )]
 pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
@@ -1295,11 +1295,48 @@ pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
         .await;
 
     match response {
-        Ok(systems) => HttpResponse::Ok().json(systems),
+        Ok(entry_points) => HttpResponse::Ok().json(entry_points),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting traced entry points.");
             let status = err.status_code().as_u16().to_string();
             counter!("rpc_requests_failed", "endpoint" => "traced_entry_points", "status" => status)
+                .increment(1);
+            HttpResponse::from_error(err)
+        }
+    }
+}
+
+/// Trace given entry points and add results to db, along with entry points and tracing params.
+#[utoipa::path(
+    post,
+    path = "/v1/add_entry_points",
+    responses(
+    (status = 200, description = "OK", body = AddEntryPointRequestResponse),
+    ),
+    request_body = AddEntryPointRequestBody,
+    security(
+    ("apiKey" = [])
+    ),
+)]
+pub async fn add_entry_points<G: Gateway, T: EntryPointTracer>(
+    body: web::Json<dto::AddEntryPointRequestBody>,
+    handler: web::Data<RpcHandler<G, T>>,
+) -> HttpResponse {
+    // Tracing and metrics
+    counter!("rpc_requests", "endpoint" => "add_entry_points").increment(1);
+
+    // Call the handler to add entry points
+    let response = handler
+        .into_inner()
+        .add_entry_points(&body)
+        .await;
+
+    match response {
+        Ok(()) => HttpResponse::Ok().into(),
+        Err(err) => {
+            error!(error = %err, ?body, "Error while adding entry points.");
+            let status = err.status_code().as_u16().to_string();
+            counter!("rpc_requests_failed", "endpoint" => "add_entry_points", "status" => status)
                 .increment(1);
             HttpResponse::from_error(err)
         }
@@ -1629,7 +1666,7 @@ mod tests {
         let entry_points_by_component =
             vec![(component_id.clone(), entry_points_with_tracing_params.clone())];
 
-        let req_body = dto::AddEntrypointRequestBody {
+        let req_body = dto::AddEntryPointRequestBody {
             chain: Chain::Ethereum.into(),
             block_hash: Bytes::from_str(
                 "0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2",
