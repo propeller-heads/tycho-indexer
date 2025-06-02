@@ -1473,8 +1473,9 @@ mod tests {
                 Bytes::from("0x00000000000000000000000000000000000000aa"),
                 Bytes::from("0x0000000000000000000000000000000000000aaa"),
             )]),
-            called_addresses: HashSet::from([Bytes::from(
-                "0x0000000000000000000000000000000000aaaa",
+            accessed_slots: HashMap::from([(
+                Bytes::from("0x0000000000000000000000000000000000aaaa"),
+                HashSet::from([Bytes::from("0x0000000000000000000000000000000000aaaa")]),
             )]),
         };
         let trace_result_b = TracingResult {
@@ -1482,8 +1483,9 @@ mod tests {
                 Bytes::from("0x00000000000000000000000000000000000000bb"),
                 Bytes::from("0x0000000000000000000000000000000000000bbb"),
             )]),
-            called_addresses: HashSet::from([Bytes::from(
-                "0x0000000000000000000000000000000000bbbb",
+            accessed_slots: HashMap::from([(
+                Bytes::from("0x0000000000000000000000000000000000bbbb"),
+                HashSet::from([Bytes::from("0x0000000000000000000000000000000000bbbb")]),
             )]),
         };
 
@@ -1658,8 +1660,9 @@ mod tests {
                 Bytes::from("0x00000000000000000000000000000000000000aa"),
                 Bytes::from("0x0000000000000000000000000000000000000aaa"),
             )]),
-            called_addresses: HashSet::from([Bytes::from(
-                "0x0000000000000000000000000000000000aaaa",
+            accessed_slots: HashMap::from([(
+                Bytes::from("0x0000000000000000000000000000000000aaaa"),
+                HashSet::from([Bytes::from("0x0000000000000000000000000000000000aaaa")]),
             )]),
         };
 
