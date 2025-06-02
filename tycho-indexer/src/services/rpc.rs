@@ -1502,55 +1502,149 @@ mod tests {
     async fn test_add_entry_points() {
         let url = env::var("RPC_URL").expect("RPC_URL is not set");
         let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
-        let gw = MockGateway::new();
-        let _req_handler = RpcHandler::new(gw, None, tracer);
+        let mut gw = MockGateway::new();
 
         // Balancer v3 stable pool
         let component_id = "0x0000000000000000000000000000000000000001".to_string();
-        let entry_points_to_add = vec![(
-            component_id.clone(),
-            vec![
-                dto::EntryPointWithTracingParams {
-                    entry_point: dto::EntryPoint {
-                        external_id: "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()"
-                            .to_string(),
-                        target: Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988")
-                            .unwrap(),
-                        signature: "getRate()".to_string(),
-                    },
-                    params: dto::TracingParams::RPCTracer(dto::RPCTracerParams {
-                        caller: None,
-                        calldata: Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
-                    }),
-                },
-                dto::EntryPointWithTracingParams {
-                    entry_point: dto::EntryPoint {
-                        external_id: "0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9:getRate()"
-                            .to_string(),
-                        target: Bytes::from_str("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9")
-                            .unwrap(),
-                        signature: "getRate()".to_string(),
-                    },
-                    params: dto::TracingParams::RPCTracer(dto::RPCTracerParams {
-                        caller: None,
-                        calldata: Bytes::from(&keccak256("getRate()")[0..4]),
-                    }),
-                },
-            ],
-        )];
 
-        let _req_body = dto::AddEntrypointRequestBody {
+        let entry_point_ids = [
+            "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()".to_string(),
+            "0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9:getRate()".to_string(),
+        ];
+        let entry_points = [
+            dto::EntryPoint {
+                external_id: entry_point_ids[0].clone(),
+                target: Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
+                signature: "getRate()".to_string(),
+            },
+            dto::EntryPoint {
+                external_id: entry_point_ids[1].clone(),
+                target: Bytes::from_str("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9").unwrap(),
+                signature: "getRate()".to_string(),
+            },
+        ];
+        let tracing_params = [
+            dto::TracingParams::RPCTracer(dto::RPCTracerParams {
+                caller: None,
+                calldata: Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
+            }),
+            dto::TracingParams::RPCTracer(dto::RPCTracerParams {
+                caller: None,
+                calldata: Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
+            }),
+        ];
+        let entry_points_with_tracing_params = vec![
+            dto::EntryPointWithTracingParams {
+                entry_point: entry_points[0].clone(),
+                params: tracing_params[0].clone(),
+            },
+            dto::EntryPointWithTracingParams {
+                entry_point: entry_points[1].clone(),
+                params: tracing_params[1].clone(),
+            },
+        ];
+        let entry_points_by_component =
+            vec![(component_id.clone(), entry_points_with_tracing_params.clone())];
+
+        let req_body = dto::AddEntrypointRequestBody {
             chain: Chain::Ethereum.into(),
             block_hash: Bytes::from_str(
                 "0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2",
             )
             .unwrap(),
-            entry_points_with_tracing_data: entry_points_to_add,
+            entry_points_with_tracing_data: entry_points_by_component.clone(),
         };
 
-        // TODO call main method and assert results. Perhaps test helper method separately?
-        // TODO figure out how to check call values to the mock gateway?
+        let expected_inserted_entry_points: HashMap<ComponentId, HashSet<EntryPoint>> =
+            HashMap::from([(
+                component_id.clone(),
+                HashSet::from([entry_points[0].clone().into(), entry_points[1].clone().into()]),
+            )]);
+
+        let expected_inserted_tracing_params: HashMap<
+            EntryPointId,
+            HashSet<(TracingParams, Option<ComponentId>)>,
+        > = HashMap::from([
+            (
+                entry_point_ids[0].clone(),
+                HashSet::from([(tracing_params[0].clone().into(), Some(component_id.clone()))]),
+            ),
+            (
+                entry_point_ids[1].clone(),
+                HashSet::from([(tracing_params[1].clone().into(), Some(component_id.clone()))]),
+            ),
+        ]);
+
+        let expected_upserted_tracing_results = vec![TracedEntryPoint {
+            entry_point_with_params: entry_points_with_tracing_params[0].clone().into(),
+            detection_block_hash: Bytes::from_str("0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2").unwrap(),
+            tracing_result: TracingResult::new(
+                HashSet::from([
+                    (
+                        Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(),
+                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                    ),
+                    (
+                        Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
+                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                    ),
+                ]),
+                HashSet::from([
+                    Bytes::from_str("0xef434e4573b90b6ecd4a00f4888381e4d0cc5ccd").unwrap(),
+                    Bytes::from_str("0x487c2c53c0866f0a73ae317bd1a28f63adcd9ad1").unwrap(),
+                    Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
+                    Bytes::from_str("0xedf63cce4ba70cbe74064b7687882e71ebb0e988").unwrap(),
+                    Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(),
+                ]),
+            ),
+        },
+        TracedEntryPoint {
+            entry_point_with_params: entry_points_with_tracing_params[1].clone().into(),
+            detection_block_hash: Bytes::from_str("0x354c90a0a98912aff15b044bdff6ce3d4ace63a6fc5ac006ce53c8737d425ab2").unwrap(),
+            tracing_result: TracingResult::new(
+                HashSet::from([
+                    (
+                        Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(),
+                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                    ),
+                    (
+                        Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
+                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                    ),
+                ]),
+                HashSet::from([
+                    Bytes::from_str("0x8f4e8439b970363648421c692dd897fb9c0bd1d9").unwrap(),
+                    Bytes::from_str("0x487c2c53c0866f0a73ae317bd1a28f63adcd9ad1").unwrap(),
+                    Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(),
+                    Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
+                    Bytes::from_str("0xef434e4573b90b6ecd4a00f4888381e4d0cc5ccd").unwrap(),
+                ]),
+            ),
+        }];
+
+        gw.expect_insert_entry_points()
+            .return_once(move |inserted_entry_points| {
+                assert_eq!(*inserted_entry_points, expected_inserted_entry_points);
+                Box::pin(async move { Ok(()) })
+            });
+        gw.expect_insert_entry_point_tracing_params()
+            .return_once(move |inserted_tracing_params| {
+                assert_eq!(*inserted_tracing_params, expected_inserted_tracing_params.clone());
+                Box::pin(async move { Ok(()) })
+            });
+        gw.expect_upsert_traced_entry_points()
+            .return_once(move |upserted_tracing_results| {
+                assert_eq!(upserted_tracing_results, expected_upserted_tracing_results);
+                Box::pin(async move { Ok(()) })
+            });
+
+        let req_handler = RpcHandler::new(gw, None, tracer);
+        req_handler
+            .add_entry_points(&req_body)
+            .await
+            .unwrap();
     }
+
     #[test]
     async fn test_get_traced_entry_points() {
         // We attempt to fetch results for two components.
