@@ -1575,20 +1575,23 @@ mod tests {
     }
 
     /// Helper used to make tracing results comparisons deterministic.
-    fn normalize_tracing_result(result: &dto::TracingResult) -> (Vec<(Bytes, Bytes)>, Vec<Bytes>) {
+    #[allow(clippy::type_complexity)]
+    fn normalize_tracing_result(
+        result: &dto::TracingResult,
+    ) -> (Vec<(Bytes, Bytes)>, Vec<(Bytes, Vec<Bytes>)>) {
         let mut retriggers: Vec<_> = result
             .retriggers
             .iter()
             .cloned()
             .collect();
         retriggers.sort();
-        let mut called_addresses: Vec<_> = result
-            .called_addresses
+        let mut accessed_slots: Vec<_> = result
+            .accessed_slots
             .iter()
-            .cloned()
+            .map(|(k, v)| (k.clone(), v.iter().cloned().collect()))
             .collect();
-        called_addresses.sort();
-        (retriggers, called_addresses)
+        accessed_slots.sort_by(|(a, _), (b, _)| a.cmp(b));
+        (retriggers, accessed_slots)
     }
 
     fn sort_tracing_results(
@@ -1656,21 +1659,28 @@ mod tests {
                 detection_block_hash: block_hash.clone(),
                 tracing_result: TracingResult::new(
                     HashSet::from([
-                        (
-                            Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
-                        ),
-                        (
-                            Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
-                        ),
-                    ]),
-                    HashSet::from([
-                        Bytes::from_str("0xef434e4573b90b6ecd4a00f4888381e4d0cc5ccd").unwrap(),
-                        Bytes::from_str("0x487c2c53c0866f0a73ae317bd1a28f63adcd9ad1").unwrap(),
-                        Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                        Bytes::from_str("0xedf63cce4ba70cbe74064b7687882e71ebb0e988").unwrap(),
+                    (
                         Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(),
+                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                    ),
+                    (
+                        Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
+                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                    ),
+                ]),
+                HashMap::from([
+                        (Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(), HashSet::from([
+                            Bytes::from_str("0xca6decca4edae0c692b2b0c41376a54b812edb060282d36e07a7060ccb58244d").unwrap(),
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            Bytes::from_str("0xca6decca4edae0c692b2b0c41376a54b812edb060282d36e07a7060ccb58244f").unwrap(),
+                        ])),
+                        (Bytes::from_str("0x487c2c53c0866f0a73ae317bd1a28f63adcd9ad1").unwrap(), HashSet::new()),
+                        (Bytes::from_str("0x9aeb8aaa1ca38634aa8c0c8933e7fb4d61091327").unwrap(), HashSet::new()),
+                        (Bytes::from_str("0xedf63cce4ba70cbe74064b7687882e71ebb0e988").unwrap(), HashSet::new()),
+                        (Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(), HashSet::from([
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            Bytes::from_str("0x0773e532dfede91f04b12a73d3d2acd361424f41f76b4fb79f090161e36b4e00").unwrap(),
+                        ])),
                     ]),
                 ),
             },
@@ -1680,20 +1690,27 @@ mod tests {
                 tracing_result: TracingResult::new(
                     HashSet::from([
                         (
-                            Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
-                        ),
-                        (
-                            Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
-                        ),
-                    ]),
-                    HashSet::from([
-                        Bytes::from_str("0x8f4e8439b970363648421c692dd897fb9c0bd1d9").unwrap(),
-                        Bytes::from_str("0x487c2c53c0866f0a73ae317bd1a28f63adcd9ad1").unwrap(),
                         Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(),
+                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                    ),
+                    (
                         Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                        Bytes::from_str("0xef434e4573b90b6ecd4a00f4888381e4d0cc5ccd").unwrap(),
+                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                    ),
+                    ]),
+                    HashMap::from([
+                        (Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(), HashSet::from([
+                            Bytes::from_str("0xed960c71bd5fa1333658850f076b35ec5565086b606556c3dd36a916b43ddf23").unwrap(),
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            Bytes::from_str("0xed960c71bd5fa1333658850f076b35ec5565086b606556c3dd36a916b43ddf21").unwrap(),
+                        ])),
+                        (Bytes::from_str("0x487c2c53c0866f0a73ae317bd1a28f63adcd9ad1").unwrap(), HashSet::new()),
+                        (Bytes::from_str("0x9aeb8aaa1ca38634aa8c0c8933e7fb4d61091327").unwrap(), HashSet::new()),
+                        (Bytes::from_str("0x8f4e8439b970363648421c692dd897fb9c0bd1d9").unwrap(), HashSet::new()),
+                        (Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(), HashSet::from([
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            Bytes::from_str("0x0773e532dfede91f04b12a73d3d2acd361424f41f76b4fb79f090161e36b4e00").unwrap(),
+                        ])),
                     ]),
                 ),
             }];
@@ -1967,8 +1984,9 @@ mod tests {
                 Bytes::from("0x00000000000000000000000000000000000000aa"),
                 Bytes::from("0x0000000000000000000000000000000000000aaa"),
             )]),
-            called_addresses: HashSet::from([Bytes::from(
-                "0x0000000000000000000000000000000000aaaa",
+            accessed_slots: HashMap::from([(
+                Bytes::from("0x0000000000000000000000000000000000aaaa"),
+                HashSet::from([Bytes::from("0x0000000000000000000000000000000000aaaa")]),
             )]),
         };
         let trace_result_b = TracingResult {
@@ -1976,8 +1994,9 @@ mod tests {
                 Bytes::from("0x00000000000000000000000000000000000000bb"),
                 Bytes::from("0x0000000000000000000000000000000000000bbb"),
             )]),
-            called_addresses: HashSet::from([Bytes::from(
-                "0x0000000000000000000000000000000000bbbb",
+            accessed_slots: HashMap::from([(
+                Bytes::from("0x0000000000000000000000000000000000bbbb"),
+                HashSet::from([Bytes::from("0x0000000000000000000000000000000000bbbb")]),
             )]),
         };
 
@@ -2152,8 +2171,9 @@ mod tests {
                 Bytes::from("0x00000000000000000000000000000000000000aa"),
                 Bytes::from("0x0000000000000000000000000000000000000aaa"),
             )]),
-            called_addresses: HashSet::from([Bytes::from(
-                "0x0000000000000000000000000000000000aaaa",
+            accessed_slots: HashMap::from([(
+                Bytes::from("0x0000000000000000000000000000000000aaaa"),
+                HashSet::from([Bytes::from("0x0000000000000000000000000000000000aaaa")]),
             )]),
         };
 

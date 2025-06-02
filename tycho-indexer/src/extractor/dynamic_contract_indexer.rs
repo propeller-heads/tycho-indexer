@@ -23,12 +23,11 @@ use super::{
 /// A unique identifier for a storage location, consisting of an address and a storage key.
 type StorageLocation = (Address, StoreKey);
 
-#[allow(unused)]
 pub(super) struct DynamicContractIndexer<AE, T, G>
 where
-    AE: AccountExtractor,
-    T: EntryPointTracer,
-    G: EntryPointGateway,
+    AE: AccountExtractor + Send + Sync,
+    T: EntryPointTracer + Send + Sync,
+    G: EntryPointGateway + Send + Sync,
 {
     chain: Chain,
     protocol: String,
@@ -181,30 +180,38 @@ where
                 tx_to_traced_entry_point.insert(tx, traced_entry_point);
             }
 
+            let mut new_account_addr_to_slots: HashMap<Address, HashSet<StoreKey>> = HashMap::new();
             let mut new_account_addr_to_tx: HashMap<Address, &Transaction> = HashMap::new();
+
             for (tx, traced_entry_point) in tx_to_traced_entry_point {
-                for account in traced_entry_point
+                for (account, slots) in traced_entry_point
                     .tracing_result
-                    .called_addresses
+                    .accessed_slots
                     .iter()
-                    .filter(|account| {
-                        !self
-                            .cache
-                            .tracked_contracts
-                            .contains_key(*account)
-                    })
-                    .cloned()
                 {
-                    // Keep track of the first transaction that pushed the entrypoint that calls
-                    // this account.
-                    new_account_addr_to_tx
-                        .entry(account)
-                        .and_modify(|existing_tx| {
-                            if existing_tx.index > tx.index {
-                                *existing_tx = tx;
-                            }
-                        })
-                        .or_insert(tx);
+                    // Update slots for all accounts
+                    new_account_addr_to_slots
+                        .entry(account.clone())
+                        .or_default()
+                        .extend(slots.iter().cloned());
+
+                    // Update transaction mapping only for untracked accounts
+                    if !self
+                        .cache
+                        .tracked_contracts
+                        .contains_key(account)
+                    {
+                        // Keep track of the first transaction that pushed the entrypoint that calls
+                        // this account.
+                        new_account_addr_to_tx
+                            .entry(account.clone())
+                            .and_modify(|existing_tx| {
+                                if existing_tx.index > tx.index {
+                                    *existing_tx = tx;
+                                }
+                            })
+                            .or_insert(tx);
+                    }
                 }
             }
 
@@ -214,13 +221,20 @@ where
             let storage_request: Vec<StorageSnapshotRequest> = new_account_addr_to_tx
                 .keys()
                 .map(|address| {
-                    StorageSnapshotRequest {
-                        address: address.clone(),
-                        // TODO: Set the slots once it's available from the Tracer
-                        slots: None,
-                    }
+                    let slots = new_account_addr_to_slots
+                        .get(address)
+                        .cloned()
+                        .ok_or_else(|| {
+                            ExtractionError::Unknown(format!(
+                                "Account {address} not found in the address to slots map"
+                            ))
+                        })?
+                        .into_iter()
+                        .collect();
+
+                    Ok(StorageSnapshotRequest { address: address.clone(), slots: Some(slots) })
                 })
-                .collect();
+                .collect::<Result<Vec<_>, ExtractionError>>()?;
 
             let mut new_accounts = self
                 .storage_source
@@ -318,9 +332,9 @@ where
 
 impl<AE, T, G> DynamicContractIndexer<AE, T, G>
 where
-    AE: AccountExtractor,
-    T: EntryPointTracer,
-    G: EntryPointGateway,
+    AE: AccountExtractor + Send + Sync,
+    T: EntryPointTracer + Send + Sync,
+    G: EntryPointGateway + Send + Sync,
 {
     pub fn new(
         chain: Chain,
@@ -339,9 +353,16 @@ where
         }
     }
 
+    /// Initialize the DynamicContractIndexer. Loads all the entrypoints and their respective
+    /// trace results from the gateway.
+    #[instrument(skip_all, fields(chain = % self.chain, protocol = % self.protocol))]
     pub async fn initialize(&mut self) -> Result<(), ExtractionError> {
         let entrypoint_filter = EntryPointFilter::new(self.protocol.clone());
 
+        // We need to call the gateway twice, once to get the entrypoints and their tracing params,
+        // and once to get the tracing results.
+        // Perf: There is room for optimization here if we make a single custom function on the
+        // gateway that returns both.
         let entrypoints_with_params = self
             .entrypoint_gw
             .get_entry_points_tracing_params(entrypoint_filter, None)
@@ -380,7 +401,7 @@ where
                             .ep_id_to_entrypoint
                             .get(&entrypoint_id)
                             .ok_or(ExtractionError::Setup(format!(
-                                "Got a tracing result for a unknown entrypoint: {entrypoint_id:?}"
+                                "Got a tracing result for a unknown entrypoint: {entrypoint_id}"
                             )))?
                             .clone(),
                         param.clone(),
@@ -393,11 +414,21 @@ where
                         .insert(entrypoint_with_params);
                 }
 
-                for address in result.called_addresses.iter() {
+                for (address, slots) in result.accessed_slots.iter() {
+                    let slots_to_insert =
+                        if slots.is_empty() { None } else { Some(slots.iter().cloned().collect()) };
+
                     self.cache
                         .tracked_contracts
                         .entry(address.clone())
-                        .or_default(); //TODO: Add the tracked slots when tracer returns them
+                        .and_modify(|existing_slots| {
+                            if let Some(existing) = existing_slots {
+                                existing.extend(slots.iter().cloned());
+                            } else {
+                                *existing_slots = slots_to_insert.clone();
+                            }
+                        })
+                        .or_insert(slots_to_insert);
                 }
 
                 self.cache
@@ -474,15 +505,25 @@ where
                     );
             }
 
-            for address in traced_entry_point
+            for (address, slots) in traced_entry_point
                 .tracing_result
-                .called_addresses
+                .accessed_slots
                 .iter()
             {
+                let slots_to_insert =
+                    if slots.is_empty() { None } else { Some(slots.iter().cloned().collect()) };
+
                 self.cache
                     .tracked_contracts
                     .entry(address.clone())
-                    .or_default(); //TODO: Add the tracked slots when tracer returns them
+                    .and_modify(|existing_slots| {
+                        if let Some(existing) = existing_slots {
+                            existing.extend(slots.iter().cloned());
+                        } else {
+                            *existing_slots = slots_to_insert.clone();
+                        }
+                    })
+                    .or_insert(slots_to_insert);
             }
 
             self.cache.entrypoint_results.insert(
@@ -547,30 +588,32 @@ where
                     slot_updates.retain(|slot, _| tracked_keys.contains(slot));
                 }
 
-                let account_delta = HashMap::from([(
-                    account.clone(),
-                    AccountDelta::new(
-                        self.chain,
+                if !slot_updates.is_empty() {
+                    let account_delta = HashMap::from([(
                         account.clone(),
-                        slot_updates,
-                        None,
-                        None,
-                        ChangeType::Update,
-                    ),
-                )]);
+                        AccountDelta::new(
+                            self.chain,
+                            account.clone(),
+                            slot_updates,
+                            None,
+                            None,
+                            ChangeType::Update,
+                        ),
+                    )]);
 
-                let tx_with_changes = TxWithChanges {
-                    tx: tx.tx.clone(),
-                    account_deltas: account_delta,
-                    ..Default::default()
-                };
+                    let tx_with_changes = TxWithChanges {
+                        tx: tx.tx.clone(),
+                        account_deltas: account_delta,
+                        ..Default::default()
+                    };
 
-                match tracked_updates.entry(tx.tx.hash.clone()) {
-                    Entry::Occupied(mut entry) => {
-                        entry.get_mut().merge(tx_with_changes)?;
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(tx_with_changes);
+                    match tracked_updates.entry(tx.tx.hash.clone()) {
+                        Entry::Occupied(mut entry) => {
+                            entry.get_mut().merge(tx_with_changes)?;
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(tx_with_changes);
+                        }
                     }
                 }
             }
@@ -685,7 +728,7 @@ mod tests {
                             ),
                             (
                                 Bytes::from("0x22"),
-                                HashMap::from([(Bytes::from("0x01"), Bytes::from("0x01"))]),
+                                HashMap::from([(Bytes::from("0x22"), Bytes::from("0x01"))]),
                             ),
                             // These should be ignored because they are not tracked
                             (
@@ -738,7 +781,13 @@ mod tests {
     fn get_tracing_result(version: u8) -> TracingResult {
         TracingResult::new(
             HashSet::from([(Bytes::from(version), Bytes::from(version))]),
-            HashSet::from([Bytes::from(version), Bytes::from(version + version * 16)]),
+            HashMap::from([
+                (Bytes::from(version), HashSet::from([Bytes::from(version + version * 16)])),
+                (
+                    Bytes::from(version + version * 16),
+                    HashSet::from([Bytes::from(version + version * 16)]),
+                ),
+            ]),
         )
     }
 
@@ -851,10 +900,10 @@ mod tests {
         assert_eq!(
             dci.cache.tracked_contracts,
             HashMap::from([
-                (Bytes::from(1_u8), None),
-                (Bytes::from(2_u8), None),
-                (Bytes::from(1_u8 + 16_u8), None),
-                (Bytes::from(2_u8 + 2_u8 * 16_u8), None),
+                (Bytes::from("0x01"), Some(HashSet::from([Bytes::from("0x11")]))),
+                (Bytes::from("0x11"), Some(HashSet::from([Bytes::from("0x11")]))),
+                (Bytes::from("0x02"), Some(HashSet::from([Bytes::from("0x22")]))),
+                (Bytes::from("0x22"), Some(HashSet::from([Bytes::from("0x22")]))),
             ])
         );
     }
@@ -1031,10 +1080,7 @@ mod tests {
                         AccountDelta::new(
                             Chain::Ethereum,
                             Bytes::from("0x02"),
-                            HashMap::from([
-                                (Bytes::from("0x01"), Some(Bytes::from("0x01"))),
-                                (Bytes::from("0x22"), Some(Bytes::from("0x22"))),
-                            ]),
+                            HashMap::from([(Bytes::from("0x22"), Some(Bytes::from("0x22")))]),
                             None,
                             None,
                             ChangeType::Update,
@@ -1045,7 +1091,7 @@ mod tests {
                         AccountDelta::new(
                             Chain::Ethereum,
                             Bytes::from("0x22"),
-                            HashMap::from([(Bytes::from("0x01"), Some(Bytes::from("0x01")))]),
+                            HashMap::from([(Bytes::from("0x22"), Some(Bytes::from("0x01")))]),
                             None,
                             None,
                             ChangeType::Update,
@@ -1181,18 +1227,6 @@ mod tests {
                         Chain::Ethereum,
                         Bytes::from("0x55"),
                         HashMap::new(),
-                        None,
-                        None,
-                        ChangeType::Update,
-                    ),
-                ),
-                // This account is already tracked
-                (
-                    Bytes::from("0x01"),
-                    AccountDelta::new(
-                        Chain::Ethereum,
-                        Bytes::from("0x01"),
-                        HashMap::from([(Bytes::from("0x01"), Some(Bytes::from("0xabcd")))]),
                         None,
                         None,
                         ChangeType::Update,
