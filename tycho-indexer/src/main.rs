@@ -37,7 +37,8 @@ use tycho_indexer::{
         chain_state::ChainState,
         protocol_cache::ProtocolMemoryCache,
         runner::{
-            ExtractorBuilder, ExtractorConfig, ExtractorHandle, HandleResult, ProtocolTypeConfig,
+            DCIType, ExtractorBuilder, ExtractorConfig, ExtractorHandle, HandleResult,
+            ProtocolTypeConfig,
         },
         token_analysis_cron::analyze_tokens,
         ExtractionError,
@@ -253,6 +254,15 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
     create_tracing_subscriber();
     info!("Starting Tycho");
 
+    let dci_plugin = run_args
+        .dci_plugin
+        .clone()
+        .map_or(Ok(None), |s| {
+            DCIType::from_str(&s)
+                .map_err(|e| ExtractionError::Setup(format!("Failed to parse DCI plugin: {e}")))
+                .map(Some)
+        })?;
+
     let config = ExtractorConfigs::new(HashMap::from([(
         "test_protocol".to_string(),
         ExtractorConfig::new(
@@ -275,6 +285,7 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
             run_args.initialized_accounts,
             run_args.initialization_block,
             None,
+            dci_plugin,
         ),
     )]));
 

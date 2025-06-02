@@ -141,6 +141,13 @@ pub struct RunSpkgArgs {
     /// Block number to initialize the accounts at
     #[clap(long, default_value = "0")]
     pub initialization_block: i64,
+
+    /// DCI plugin to use
+    ///
+    /// Optional. If not provided, the extractor will not use DCI. Available plugins:
+    /// - `rpc` - RPC is used to trace and retrieve detected accounts.
+    #[clap(long)]
+    pub dci_plugin: Option<String>,
 }
 
 impl RunSpkgArgs {
@@ -232,6 +239,7 @@ mod cli_tests {
                 },
                 initialized_accounts: vec![],
                 initialization_block: 0,
+                dci_plugin: None,
             }),
         };
 
