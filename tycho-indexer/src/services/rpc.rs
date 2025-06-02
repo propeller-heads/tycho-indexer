@@ -1473,8 +1473,9 @@ mod tests {
                 Bytes::from("0x00000000000000000000000000000000000000aa"),
                 Bytes::from("0x0000000000000000000000000000000000000aaa"),
             )]),
-            called_addresses: HashSet::from([Bytes::from(
-                "0x0000000000000000000000000000000000aaaa",
+            accessed_slots: HashMap::from([(
+                Bytes::from("0x0000000000000000000000000000000000aaaa"),
+                HashSet::from([Bytes::from("0x0000000000000000000000000000000000aaaa")]),
             )]),
         };
         let trace_result_b = TracingResult {
@@ -1482,8 +1483,9 @@ mod tests {
                 Bytes::from("0x00000000000000000000000000000000000000bb"),
                 Bytes::from("0x0000000000000000000000000000000000000bbb"),
             )]),
-            called_addresses: HashSet::from([Bytes::from(
-                "0x0000000000000000000000000000000000bbbb",
+            accessed_slots: HashMap::from([(
+                Bytes::from("0x0000000000000000000000000000000000bbbb"),
+                HashSet::from([Bytes::from("0x0000000000000000000000000000000000bbbb")]),
             )]),
         };
 
@@ -1563,7 +1565,13 @@ mod tests {
             a.entry_point
                 .external_id
                 .cmp(&b.entry_point.external_id)
+                .then_with(|| match (a.params.clone(), b.params.clone()) {
+                    (dto::TracingParams::RPCTracer(a), dto::TracingParams::RPCTracer(b)) => {
+                        a.caller.cmp(&b.caller)
+                    }
+                })
         });
+
         assert_eq!(
             traced_entry_points_for_component,
             expected_rpc_result
@@ -1604,7 +1612,13 @@ mod tests {
             a.entry_point
                 .external_id
                 .cmp(&b.entry_point.external_id)
+                .then_with(|| match (a.params.clone(), b.params.clone()) {
+                    (dto::TracingParams::RPCTracer(a), dto::TracingParams::RPCTracer(b)) => {
+                        a.caller.cmp(&b.caller)
+                    }
+                })
         });
+
         assert_eq!(
             traced_entry_points_for_component_second_request,
             expected_rpc_result
@@ -1658,8 +1672,9 @@ mod tests {
                 Bytes::from("0x00000000000000000000000000000000000000aa"),
                 Bytes::from("0x0000000000000000000000000000000000000aaa"),
             )]),
-            called_addresses: HashSet::from([Bytes::from(
-                "0x0000000000000000000000000000000000aaaa",
+            accessed_slots: HashMap::from([(
+                Bytes::from("0x0000000000000000000000000000000000aaaa"),
+                HashSet::from([Bytes::from("0x0000000000000000000000000000000000aaaa")]),
             )]),
         };
 

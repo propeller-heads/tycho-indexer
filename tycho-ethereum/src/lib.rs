@@ -8,6 +8,10 @@ pub mod token_analyzer;
 #[cfg(feature = "onchain_data")]
 pub mod token_pre_processor;
 
+#[cfg(test)]
+#[macro_use]
+extern crate pretty_assertions;
+
 use ethers::{
     providers::ProviderError,
     types::{H160, H256, U256},
