@@ -8604,6 +8604,7 @@ dependencies = [
  "ethrpc",
  "futures 0.3.30",
  "humantime",
+ "pretty_assertions",
  "reqwest 0.11.24",
  "serde",
  "serde_json",

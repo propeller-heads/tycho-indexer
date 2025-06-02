@@ -1343,9 +1343,11 @@ mod tests {
                                     "0x0000000000000000000000000000000000000aaa"
                                 ]
                             ],
-                            "called_addresses": [
-                                "0x0000000000000000000000000000000000aaaa"
-                            ]
+                            "accessed_slots": {
+                                "0x0000000000000000000000000000000000aaaa": [
+                                    "0x0000000000000000000000000000000000aaaa"
+                                ]
+                            }
                         }
                     ]
                 ]
@@ -1402,10 +1404,13 @@ mod tests {
                 Bytes::from("0x0000000000000000000000000000000000000aaa")
             )])
         );
-        assert_eq!(trace_result.called_addresses.len(), 1);
+        assert_eq!(trace_result.accessed_slots.len(), 1);
         assert_eq!(
-            trace_result.called_addresses,
-            HashSet::from([Bytes::from("0x0000000000000000000000000000000000aaaa")])
+            trace_result.accessed_slots,
+            HashMap::from([(
+                Bytes::from("0x0000000000000000000000000000000000aaaa"),
+                HashSet::from([Bytes::from("0x0000000000000000000000000000000000aaaa")])
+            )])
         );
     }
 }

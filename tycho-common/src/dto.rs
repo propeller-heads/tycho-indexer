@@ -18,8 +18,7 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::{
-    models,
-    models::ComponentId,
+    models::{self, Address, ComponentId, StoreKey, StoreVal},
     serde_primitives::{
         hex_bytes, hex_bytes_option, hex_hashmap_key, hex_hashmap_key_value, hex_hashmap_value,
     },
@@ -1472,14 +1471,14 @@ impl From<models::blockchain::EntryPointWithTracingParams> for EntryPointWithTra
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Clone)]
 pub struct TracingResult {
     #[schema(value_type=HashSet<(String, String)>)]
-    pub retriggers: HashSet<(Bytes, Bytes)>,
-    #[schema(value_type=HashSet<String>)]
-    pub called_addresses: HashSet<Bytes>,
+    pub retriggers: HashSet<(StoreKey, StoreVal)>,
+    #[schema(value_type=HashMap<String,HashSet<String>>)]
+    pub accessed_slots: HashMap<Address, HashSet<StoreKey>>,
 }
 
 impl From<models::blockchain::TracingResult> for TracingResult {
     fn from(value: models::blockchain::TracingResult) -> Self {
-        TracingResult { retriggers: value.retriggers, called_addresses: value.called_addresses }
+        TracingResult { retriggers: value.retriggers, accessed_slots: value.accessed_slots }
     }
 }
 
@@ -1524,9 +1523,13 @@ impl From<TracedEntryPointRequestResponse> for DCIUpdate {
                         existing_trace
                             .retriggers
                             .extend(trace.retriggers.clone());
-                        existing_trace
-                            .called_addresses
-                            .extend(trace.called_addresses.clone());
+                        for (address, slots) in trace.accessed_slots.clone() {
+                            existing_trace
+                                .accessed_slots
+                                .entry(address)
+                                .or_default()
+                                .extend(slots);
+                        }
                     })
                     .or_insert(trace);
             }
@@ -2054,7 +2057,9 @@ mod test {
                         "retriggers": [
                             ["0x01", "0x02"]
                         ],
-                        "called_addresses": ["0x03", "0x04"]
+                        "accessed_slots": {
+                            "0x03": ["0x03", "0x04"]
+                        }
                     }
                 }
             }
@@ -2169,7 +2174,9 @@ mod test {
                             "retriggers": [
                                 ["0x01", "0x02"]
                             ],
-                            "called_addresses": ["0x03", "0x04"]
+                            "accessed_slots": {
+                                "0x03": ["0x03", "0x04"]
+                            }
                         }
                     }
                 }
