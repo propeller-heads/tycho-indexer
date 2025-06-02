@@ -1565,7 +1565,13 @@ mod tests {
             a.entry_point
                 .external_id
                 .cmp(&b.entry_point.external_id)
+                .then_with(|| match (a.params.clone(), b.params.clone()) {
+                    (dto::TracingParams::RPCTracer(a), dto::TracingParams::RPCTracer(b)) => {
+                        a.caller.cmp(&b.caller)
+                    }
+                })
         });
+
         assert_eq!(
             traced_entry_points_for_component,
             expected_rpc_result
@@ -1606,7 +1612,13 @@ mod tests {
             a.entry_point
                 .external_id
                 .cmp(&b.entry_point.external_id)
+                .then_with(|| match (a.params.clone(), b.params.clone()) {
+                    (dto::TracingParams::RPCTracer(a), dto::TracingParams::RPCTracer(b)) => {
+                        a.caller.cmp(&b.caller)
+                    }
+                })
         });
+
         assert_eq!(
             traced_entry_points_for_component_second_request,
             expected_rpc_result
