@@ -911,11 +911,11 @@ mod tests {
             .with(
                 eq(testing::block(2)),
                 predicate::function(|requests: &[StorageSnapshotRequest]| {
-                    requests.len() == 2
-                        && requests
+                    requests.len() == 2 &&
+                        requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x09"))
-                        && requests
+                            .any(|r| r.address == Bytes::from("0x09")) &&
+                        requests
                             .iter()
                             .any(|r| r.address == Bytes::from("0x99"))
                 }),
@@ -1071,14 +1071,14 @@ mod tests {
                 eq(Bytes::from(4_u8).lpad(32, 0)),
                 // Entrypoints to trace
                 predicate::function(|ep_with_params: &Vec<EntryPointWithTracingParams>| {
-                    ep_with_params.len() == 2
-                        && ep_with_params.iter().any(|ep| {
+                    ep_with_params.len() == 2 &&
+                        ep_with_params.iter().any(|ep| {
                             ep == &EntryPointWithTracingParams::new(
                                 get_entrypoint(1),
                                 get_tracing_params(1),
                             )
-                        })
-                        && ep_with_params.iter().any(|ep| {
+                        }) &&
+                        ep_with_params.iter().any(|ep| {
                             ep == &EntryPointWithTracingParams::new(
                                 get_entrypoint(4),
                                 get_tracing_params(1),
@@ -1108,11 +1108,11 @@ mod tests {
             .with(
                 eq(testing::block(4)),
                 predicate::function(|requests: &[StorageSnapshotRequest]| {
-                    requests.len() == 2
-                        && requests
+                    requests.len() == 2 &&
+                        requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x55"))
-                        && requests
+                            .any(|r| r.address == Bytes::from("0x55")) &&
+                        requests
                             .iter()
                             .any(|r| r.address == Bytes::from("0x05"))
                 }),
