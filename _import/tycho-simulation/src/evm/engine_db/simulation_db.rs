@@ -293,7 +293,7 @@ where
         mocked: bool,
     ) {
         if account.code.is_some() {
-            account.code = Some(account.code.unwrap()); // TODO unwrap ew
+            account.code = Some(account.code.unwrap());
         }
 
         let mut account_storage = self.account_storage.write().unwrap();
@@ -317,6 +317,8 @@ where
 pub enum SimulationDBError {
     #[error("Simulation error: {0} ")]
     SimulationError(String),
+    #[error("Not implemented error: {0}")]
+    NotImplementedError(String),
 }
 
 impl DBErrorMarker for SimulationDBError {}
@@ -378,8 +380,9 @@ where
     }
 
     fn code_by_hash_ref(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
-        // TODO: do we need to panic?
-        panic!("Code by hash is not implemented")
+        Err(SimulationDBError::NotImplementedError(
+            "Code by hash is not implemented in SimulationDB".to_string(),
+        ))
     }
 
     /// Retrieves the storage value at the specified address and index.

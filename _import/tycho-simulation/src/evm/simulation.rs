@@ -6,10 +6,10 @@ use foundry_evm::traces::{SparsedTraceArena, TraceKind};
 use revm::{
     context::{
         result::{EVMError, ExecutionResult, Output, ResultAndState},
-        BlockEnv, Context, TransactTo, TxEnv,
+        BlockEnv, CfgEnv, Context, TransactTo, TxEnv,
     },
     interpreter::{return_ok, InstructionResult},
-    primitives::TxKind,
+    primitives::{hardfork::SpecId, TxKind},
     state::EvmState,
     DatabaseRef, ExecuteEvm, MainBuilder, MainContext,
 };
@@ -116,20 +116,23 @@ where
             ..Default::default()
         };
 
+        let mut cfg_env: CfgEnv<SpecId> = CfgEnv::default();
+        cfg_env.disable_nonce_check = true;
+        cfg_env
+            .clone()
+            .with_spec(SpecId::CANCUN);
+
         let default_builder = Context::mainnet()
+            .with_cfg(cfg_env)
             .with_ref_db(db_ref)
             .with_block(block_env)
             .with_tx(tx_env.clone());
-        // TODO: what about chain????
 
         let evm_result = if self.trace {
             let mut tracer = TracingInspector::new(TracingInspectorConfig::default());
+
             let res = {
-                let mut vm = default_builder
-                    // .with_external_context(&mut tracer) // TODO figure this out
-                    // .append_handler_register(inspector_handle_register) // TODO: add inspector
-                    // handle register
-                    .build_mainnet();
+                let mut vm = default_builder.build_mainnet_with_inspector(&mut tracer);
 
                 debug!(
                     "Starting simulation with tx parameters: {:#?} {:#?}",

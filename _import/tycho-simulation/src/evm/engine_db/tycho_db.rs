@@ -18,17 +18,6 @@ use crate::evm::{
     tycho_models::{AccountUpdate, ChangeType},
 };
 
-/// Perform bytecode analysis on the code of an account.
-/// // TODO remove this
-// pub fn to_analysed(account_info: AccountInfo) -> AccountInfo {
-//     AccountInfo {
-//         code: account_info
-//             .code
-//             .map(revm::interpreter::analysis::to_analysed),
-//         ..account_info
-//     }
-// }
-
 #[derive(Error, Debug)]
 pub enum TychoClientError {
     #[error("Failed to parse URI: {0}. Error: {1}")]
@@ -262,8 +251,7 @@ impl EngineDatabaseInterface for PreCachedDB {
             .write()
             .unwrap()
             .accounts
-            .init_account(address, account, permanent_storage, true) // TODO: does this need the
-                                                                     // to_analysed?
+            .init_account(address, account, permanent_storage, true)
     }
 
     /// Deprecated in TychoDB
