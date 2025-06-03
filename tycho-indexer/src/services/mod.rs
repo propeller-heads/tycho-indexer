@@ -35,6 +35,7 @@ use crate::{
     services::deltas_buffer::PendingDeltas,
 };
 
+mod access_control;
 mod cache;
 mod deltas_buffer;
 mod rpc;
@@ -266,6 +267,7 @@ where
                 )
                 .service(
                     web::resource(format!("/{}/add_entry_points", self.prefix))
+                        .wrap(access_control::AccessControl::new("test-key"))
                         .route(web::post().to(rpc::add_entry_points::<G, EVMEntrypointService>)),
                 )
                 .service(
