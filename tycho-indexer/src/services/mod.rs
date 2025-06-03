@@ -1,7 +1,7 @@
 //! This module contains Tycho web services implementation
 // TODO: remove once deprecated ProtocolId struct is removed
 #![allow(deprecated)]
-use std::{collections::HashMap, env, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use actix_cors::Cors;
 use actix_web::{dev::ServerHandle, http, web, App, HttpServer};
@@ -45,6 +45,7 @@ pub struct ServicesBuilder<G> {
     prefix: String,
     port: u16,
     bind: String,
+    rpc_url: String,
     extractor_handles: ws::MessageSenderMap,
     db_gateway: G,
 }
@@ -53,11 +54,12 @@ impl<G> ServicesBuilder<G>
 where
     G: Gateway + Send + Sync + 'static,
 {
-    pub fn new(db_gateway: G) -> Self {
+    pub fn new(db_gateway: G, rpc_url: String) -> Self {
         Self {
             prefix: "v1".to_owned(),
             port: 4242,
             bind: "0.0.0.0".to_owned(),
+            rpc_url,
             extractor_handles: HashMap::new(),
             db_gateway,
         }
@@ -218,9 +220,8 @@ where
         openapi: utoipa::openapi::OpenApi,
         pending_deltas: Option<Arc<dyn PendingDeltasBuffer + Send + Sync>>,
     ) -> Result<(ServerHandle, JoinHandle<Result<(), ExtractionError>>), ExtractionError> {
-        // TODO remove expect
-        let url = env::var("RPC_URL").expect("RPC_URL is not set");
-        let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
+        let tracer = EVMEntrypointService::try_from_url(&self.rpc_url)
+            .map_err(|err| ExtractionError::Setup(format!("Failed to create tracer: {}", err)))?;
 
         let rpc_data =
             web::Data::new(rpc::RpcHandler::new(self.db_gateway, pending_deltas, tracer));

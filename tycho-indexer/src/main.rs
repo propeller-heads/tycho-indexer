@@ -1,6 +1,7 @@
 #![doc = include_str!("../../README.md")]
 use std::{
     collections::HashMap,
+    env,
     fs::File,
     io::Read,
     process, slice,
@@ -306,7 +307,11 @@ async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
 
     info!("Starting Tycho RPC");
     let server_url = format!("http://{}:{}", global_args.server_ip, global_args.server_port);
-    let (server_handle, server_task) = ServicesBuilder::new(direct_gw)
+
+    let rpc_url = env::var("RPC_URL").map_err(|_| {
+        ExtractionError::Setup("RPC_URL environment variable is not set".to_string())
+    })?;
+    let (server_handle, server_task) = ServicesBuilder::new(direct_gw, rpc_url)
         .prefix(&global_args.server_version_prefix)
         .bind(&global_args.server_ip)
         .port(global_args.server_port)
@@ -363,7 +368,10 @@ async fn create_indexing_tasks(
             .unzip();
 
     let server_url = format!("http://{}:{}", global_args.server_ip, global_args.server_port);
-    let (server_handle, server_task) = ServicesBuilder::new(cached_gw.clone())
+    let rpc_url = env::var("RPC_URL").map_err(|_| {
+        ExtractionError::Setup("RPC_URL environment variable is not set".to_string())
+    })?;
+    let (server_handle, server_task) = ServicesBuilder::new(cached_gw.clone(), rpc_url)
         .prefix(&global_args.server_version_prefix)
         .bind(&global_args.server_ip)
         .port(global_args.server_port)
