@@ -404,12 +404,12 @@ pub struct EntryPointWithTracingParams {
 
 impl From<dto::EntryPointWithTracingParams> for EntryPointWithTracingParams {
     fn from(value: dto::EntryPointWithTracingParams) -> Self {
-        match value.params.clone() {
+        match value.params {
             dto::TracingParams::RPCTracer(ref tracer_params) => Self {
                 entry_point: EntryPoint {
-                    external_id: value.entry_point.external_id.clone(),
-                    target: value.entry_point.target.clone(),
-                    signature: value.entry_point.signature.clone(),
+                    external_id: value.entry_point.external_id,
+                    target: value.entry_point.target,
+                    signature: value.entry_point.signature,
                 },
                 params: TracingParams::RPCTracer(RPCTracerParams {
                     caller: tracer_params.caller.clone(),

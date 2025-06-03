@@ -1,7 +1,6 @@
 use std::{
     future::{ready, Future, Ready},
     pin::Pin,
-    rc::Rc,
 };
 
 use actix_web::{
@@ -11,12 +10,12 @@ use actix_web::{
 };
 
 pub struct AccessControl {
-    required_key: Rc<String>,
+    required_key: String,
 }
 
 impl AccessControl {
     pub fn new(key: &str) -> Self {
-        Self { required_key: Rc::new(key.to_string()) }
+        Self { required_key: key.to_string() }
     }
 }
 
@@ -37,7 +36,7 @@ where
 
 pub struct AccessControlMiddleware<S> {
     service: S,
-    required_key: Rc<String>,
+    required_key: String,
 }
 
 impl<S> Service<ServiceRequest> for AccessControlMiddleware<S>
@@ -53,7 +52,7 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let required_key = self.required_key.clone();
 
-        if let Some(header_value) = req.headers().get("X-API-Key") {
+        if let Some(header_value) = req.headers().get("Authorization") {
             if header_value == required_key.as_str() {
                 let fut = self.service.call(req);
 
