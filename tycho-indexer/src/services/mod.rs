@@ -12,7 +12,7 @@ use tokio::task::JoinHandle;
 use tracing::info;
 use tycho_common::{
     dto::{
-        AccountUpdate, AddEntryPointRequestBody, BlockParam, Chain, ChangeType, ContractId, Health,
+        AccountUpdate, BlockParam, Chain, ChangeType, ContractId, Health,
         PaginationParams, PaginationResponse, ProtocolComponent, ProtocolComponentRequestResponse,
         ProtocolComponentsRequestBody, ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody,
         ProtocolStateRequestResponse, ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse,
