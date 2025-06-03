@@ -1542,6 +1542,7 @@ impl From<TracedEntryPointRequestResponse> for DCIUpdate {
 pub struct AddEntryPointRequestBody {
     #[serde(default)]
     pub chain: Chain,
+    #[schema(value_type=String)]
     #[serde(default)]
     pub block_hash: Bytes,
     /// The map of component ids to their tracing params to insert
