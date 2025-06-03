@@ -148,6 +148,7 @@ pub mod builder;
 pub mod cache;
 mod chain;
 mod contract;
+pub mod direct;
 mod entry_point;
 mod extraction_state;
 mod orm;

@@ -314,22 +314,15 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
 #[tokio::main]
 async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
     create_tracing_subscriber();
-    let cached_gw = GatewayBuilder::new(&global_args.database_url)
-        .build_gw()
-        .await?;
 
-    // TODO without this line I get Unexpected storage error: Usage error: No transaction started%
-    //  Calling this line solves the issue.
-    //  I can't put this inside the RPCHandler since it takes a Gateway - not a CachedGateway
-    //  generic - is it fine I change that?
-    //  Note to self: I guess I also have to commit after?
-    // cached_gw
-    //     .start_transaction(&Block::default(), None)
-    //     .await;
+    let direct_gw = GatewayBuilder::new(&global_args.database_url)
+        .set_chains(&[Chain::Ethereum]) // TODO: handle multichain
+        .build_direct_gw()
+        .await?;
 
     info!("Starting Tycho RPC");
     let server_url = format!("http://{}:{}", global_args.server_ip, global_args.server_port);
-    let (server_handle, server_task) = ServicesBuilder::new(cached_gw)
+    let (server_handle, server_task) = ServicesBuilder::new(direct_gw)
         .prefix(&global_args.server_version_prefix)
         .bind(&global_args.server_ip)
         .port(global_args.server_port)
