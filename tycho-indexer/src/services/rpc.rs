@@ -919,7 +919,7 @@ where
     async fn add_entry_points(
         &self,
         request: &dto::AddEntryPointRequestBody,
-    ) -> Result<(), RpcError> {
+    ) -> Result<dto::AddEntryPointRequestResponse, RpcError> {
         let tracing_result = self.trace_entry_points(request).await?;
         let mut entry_points: HashMap<ComponentId, HashSet<EntryPoint>> = HashMap::new();
         let mut entry_points_params: HashMap<
@@ -947,7 +947,42 @@ where
         self.db_gateway
             .upsert_traced_entry_points(&tracing_result)
             .await?;
-        Ok(())
+
+        let mut traced_entry_points: HashMap<
+            String,
+            Vec<(dto::EntryPointWithTracingParams, dto::TracingResult)>,
+        > = HashMap::new();
+        let mut entry_point_to_component: HashMap<EntryPoint, ComponentId> = HashMap::new();
+        for (component_id, entry_point_set) in &entry_points {
+            for entry_point in entry_point_set {
+                entry_point_to_component.insert(entry_point.clone(), component_id.clone());
+            }
+        }
+        for traced_entry_point in tracing_result {
+            let entry_point_with_tracing_params: dto::EntryPointWithTracingParams =
+                traced_entry_point
+                    .entry_point_with_params
+                    .clone()
+                    .into();
+            let tracing_result: dto::TracingResult = traced_entry_point
+                .tracing_result
+                .clone()
+                .into();
+            let component_id = entry_point_to_component
+                .get(
+                    &entry_point_with_tracing_params
+                        .entry_point
+                        .clone()
+                        .into(),
+                )
+                .cloned()
+                .unwrap_or_default();
+            traced_entry_points.insert(
+                component_id.to_string(),
+                vec![(entry_point_with_tracing_params, tracing_result)],
+            );
+        }
+        Ok(dto::AddEntryPointRequestResponse { traced_entry_points })
     }
 
     async fn trace_entry_points(
@@ -1332,7 +1367,7 @@ pub async fn add_entry_points<G: Gateway, T: EntryPointTracer>(
         .await;
 
     match response {
-        Ok(()) => HttpResponse::Ok().into(),
+        Ok(add_entry_points_result) => HttpResponse::Ok().json(add_entry_points_result),
         Err(err) => {
             error!(error = %err, ?body, "Error while adding entry points.");
             let status = err.status_code().as_u16().to_string();
@@ -1617,8 +1652,25 @@ mod tests {
         assert_eq!(state.pagination.total, 2);
     }
 
+    /// Helper used to make tracing results comparisons deterministic.
+    fn normalize_tracing_result(result: &dto::TracingResult) -> (Vec<(Bytes, Bytes)>, Vec<Bytes>) {
+        let mut retriggers: Vec<_> = result
+            .retriggers
+            .iter()
+            .cloned()
+            .collect();
+        retriggers.sort();
+        let mut called_addresses: Vec<_> = result
+            .called_addresses
+            .iter()
+            .cloned()
+            .collect();
+        called_addresses.sort();
+        (retriggers, called_addresses)
+    }
+
     #[test]
-    #[ignore = "requires a RPC connection"]
+    // #[ignore = "requires a RPC connection"]
     async fn test_add_entry_points() {
         let url = env::var("RPC_URL").expect("RPC_URL is not set");
         let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
@@ -1742,6 +1794,21 @@ mod tests {
             ),
         }];
 
+        let mut expected_traces_for_component: Vec<(
+            dto::EntryPointWithTracingParams,
+            dto::TracingResult,
+        )> = expected_upserted_tracing_results
+            .iter()
+            .map(|tep| {
+                (
+                    tep.entry_point_with_params
+                        .clone()
+                        .into(),
+                    tep.tracing_result.clone().into(),
+                )
+            })
+            .collect();
+
         gw.expect_insert_entry_points()
             .return_once(move |inserted_entry_points| {
                 assert_eq!(*inserted_entry_points, expected_inserted_entry_points);
@@ -1759,10 +1826,52 @@ mod tests {
             });
 
         let req_handler = RpcHandler::new(gw, None, tracer);
-        req_handler
+        let response = req_handler
             .add_entry_points(&req_body)
             .await
             .unwrap();
+
+        // Sort to make test deterministic
+        let mut traced_entry_points_response = response.traced_entry_points.clone();
+        let traced_entry_points_for_component: &mut Vec<(
+            dto::EntryPointWithTracingParams,
+            dto::TracingResult,
+        )> = traced_entry_points_response
+            .get_mut(&component_id)
+            .unwrap();
+
+        traced_entry_points_for_component.sort_by(|(a, _), (b, _)| {
+            a.entry_point
+                .external_id
+                .cmp(&b.entry_point.external_id)
+                .then_with(|| match (a.params.clone(), b.params.clone()) {
+                    (dto::TracingParams::RPCTracer(a), dto::TracingParams::RPCTracer(b)) => {
+                        a.caller.cmp(&b.caller)
+                    }
+                })
+        });
+        expected_traces_for_component.sort_by(|(a, _), (b, _)| {
+            a.entry_point
+                .external_id
+                .cmp(&b.entry_point.external_id)
+                .then_with(|| match (a.params.clone(), b.params.clone()) {
+                    (dto::TracingParams::RPCTracer(a), dto::TracingParams::RPCTracer(b)) => {
+                        a.caller.cmp(&b.caller)
+                    }
+                })
+        });
+
+        for ((actual_entry, actual_result), (expected_entry, expected_result)) in
+            traced_entry_points_for_component
+                .iter()
+                .zip(expected_traces_for_component.iter())
+        {
+            assert_eq!(actual_entry, expected_entry);
+            assert_eq!(
+                normalize_tracing_result(actual_result),
+                normalize_tracing_result(expected_result)
+            );
+        }
     }
 
     #[test]
