@@ -12,8 +12,8 @@ use tokio::task::JoinHandle;
 use tracing::info;
 use tycho_common::{
     dto::{
-        AccountUpdate, BlockParam, Chain, ChangeType, ContractId, Health,
-        PaginationParams, PaginationResponse, ProtocolComponent, ProtocolComponentRequestResponse,
+        AccountUpdate, BlockParam, Chain, ChangeType, ContractId, Health, PaginationParams,
+        PaginationResponse, ProtocolComponent, ProtocolComponentRequestResponse,
         ProtocolComponentsRequestBody, ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody,
         ProtocolStateRequestResponse, ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse,
         ResponseAccount, ResponseProtocolState, ResponseToken, StateRequestBody,
