@@ -1670,7 +1670,7 @@ mod tests {
     }
 
     #[test]
-    // #[ignore = "requires a RPC connection"]
+    #[ignore = "requires a RPC connection"]
     async fn test_add_entry_points() {
         let url = env::var("RPC_URL").expect("RPC_URL is not set");
         let tracer = EVMEntrypointService::try_from_url(&url).unwrap();

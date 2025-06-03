@@ -219,7 +219,7 @@ where
         pending_deltas: Option<Arc<dyn PendingDeltasBuffer + Send + Sync>>,
     ) -> Result<(ServerHandle, JoinHandle<Result<(), ExtractionError>>), ExtractionError> {
         let tracer = EVMEntrypointService::try_from_url(&self.rpc_url)
-            .map_err(|err| ExtractionError::Setup(format!("Failed to create tracer: {}", err)))?;
+            .map_err(|err| ExtractionError::Setup(format!("Failed to create tracer: {err}")))?;
 
         let rpc_data =
             web::Data::new(rpc::RpcHandler::new(self.db_gateway, pending_deltas, tracer));
