@@ -15,15 +15,13 @@ use tycho_common::{
     traits::{AccountExtractor, EntryPointTracer, StorageSnapshotRequest},
 };
 
-use super::{
+use super::cache::DCICache;
+use crate::extractor::{
     models::{BlockChanges, TxWithStorageChanges},
     ExtractionError, ExtractorExtension,
 };
 
-/// A unique identifier for a storage location, consisting of an address and a storage key.
-type StorageLocation = (Address, StoreKey);
-
-pub(super) struct DynamicContractIndexer<AE, T, G>
+pub(crate) struct DynamicContractIndexer<AE, T, G>
 where
     AE: AccountExtractor + Send + Sync,
     T: EntryPointTracer + Send + Sync,
@@ -35,26 +33,6 @@ where
     storage_source: AE,
     tracer: T,
     cache: DCICache,
-}
-
-#[allow(unused)]
-struct DCICache {
-    ep_id_to_entrypoint: HashMap<EntryPointId, EntryPoint>,
-    entrypoint_results: HashMap<(EntryPointId, TracingParams), TracingResult>,
-    retriggers: HashMap<StorageLocation, HashSet<EntryPointWithTracingParams>>,
-    tracked_contracts: HashMap<Address, Option<HashSet<StoreKey>>>,
-}
-
-impl DCICache {
-    #[allow(unused)]
-    fn new_empty() -> Self {
-        Self {
-            ep_id_to_entrypoint: HashMap::new(),
-            entrypoint_results: HashMap::new(),
-            retriggers: HashMap::new(),
-            tracked_contracts: HashMap::new(),
-        }
-    }
 }
 
 #[async_trait]
@@ -346,8 +324,7 @@ where
         Ok(())
     }
 
-    #[allow(unused)]
-    async fn process_revert(&mut self, target_block: &BlockHash) -> Result<(), ExtractionError> {
+    async fn process_revert(&mut self, _target_block: &BlockHash) -> Result<(), ExtractionError> {
         // TODO: Handle reverts, need to cleanup reverted internal state
         todo!()
     }
@@ -651,12 +628,6 @@ where
         }
 
         Ok(tracked_updates)
-    }
-
-    // TODO: Handle reverts, need to cleanup reverted internal state
-    #[allow(unused)]
-    pub(super) fn process_revert(&mut self, target_block: u64) -> Result<(), ExtractionError> {
-        todo!()
     }
 }
 

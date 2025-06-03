@@ -31,7 +31,7 @@ use tycho_storage::postgres::cache::CachedGateway;
 use crate::{
     extractor::{
         chain_state::ChainState,
-        dynamic_contract_indexer::DynamicContractIndexer,
+        dynamic_contract_indexer::dci::DynamicContractIndexer,
         post_processors::POST_PROCESSOR_REGISTRY,
         protocol_cache::ProtocolMemoryCache,
         protocol_extractor::{ExtractorPgGateway, ProtocolExtractor},
