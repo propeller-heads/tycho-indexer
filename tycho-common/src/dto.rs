@@ -1501,6 +1501,13 @@ pub struct AddEntryPointRequestBody {
     pub entry_points_with_tracing_data: Vec<(String, Vec<EntryPointWithTracingParams>)>,
 }
 
+#[derive(Serialize, PartialEq, ToSchema, Eq, Clone, Debug, Deserialize)]
+pub struct AddEntryPointRequestResponse {
+    /// Map of protocol component id to a list of a tuple containing each entry point with its
+    /// tracing parameters and its corresponding tracing results.
+    pub traced_entry_points: HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
+}
+
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
