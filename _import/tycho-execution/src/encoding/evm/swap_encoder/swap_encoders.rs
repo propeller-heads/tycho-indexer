@@ -569,6 +569,123 @@ impl SwapEncoder for MaverickV2SwapEncoder {
     }
 }
 
+/// Encodes a swap on Bebop (PMM RFQ) through the given executor address.
+///
+/// Bebop uses a Request-for-Quote model where quotes are obtained off-chain
+/// and settled on-chain. This encoder supports PMM RFQ execution.
+///
+/// # Fields
+/// * `executor_address` - The address of the executor contract that will perform the swap.
+/// * `settlement_address` - The address of the Bebop settlement contract.
+#[derive(Clone)]
+pub struct BebopSwapEncoder {
+    executor_address: String,
+    settlement_address: String,
+}
+
+impl BebopSwapEncoder {
+    /// Validates the component ID format
+    /// Component format: "bebop"
+    fn validate_component_id(component_id: &str) -> Result<(), EncodingError> {
+        if component_id != "bebop" {
+            return Err(EncodingError::FatalError(
+                "Invalid Bebop component ID format. Expected 'bebop'".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl SwapEncoder for BebopSwapEncoder {
+    fn new(
+        executor_address: String,
+        _chain: Chain,
+        config: Option<HashMap<String, String>>,
+    ) -> Result<Self, EncodingError> {
+        let config = config.ok_or(EncodingError::FatalError(
+            "Missing bebop specific addresses in config".to_string(),
+        ))?;
+        let settlement_address = config
+            .get("settlement_address")
+            .ok_or(EncodingError::FatalError(
+                "Missing bebop settlement address in config".to_string(),
+            ))?
+            .to_string();
+        Ok(Self { executor_address, settlement_address })
+    }
+
+    fn encode_swap(
+        &self,
+        swap: Swap,
+        encoding_context: EncodingContext,
+    ) -> Result<Vec<u8>, EncodingError> {
+        let token_in = bytes_to_address(&swap.token_in)?;
+        let token_out = bytes_to_address(&swap.token_out)?;
+
+        let token_approvals_manager = ProtocolApprovalsManager::new()?;
+        let approval_needed: bool;
+
+        if let Some(router_address) = encoding_context.router_address {
+            let tycho_router_address = bytes_to_address(&router_address)?;
+            let token_to_approve = token_in.clone();
+            let settlement_address = Address::from_str(&self.settlement_address)
+                .map_err(|_| EncodingError::FatalError("Invalid settlement address".to_string()))?;
+            
+            approval_needed = token_approvals_manager.approval_needed(
+                token_to_approve,
+                tycho_router_address,
+                settlement_address,
+            )?;
+        } else {
+            approval_needed = true;
+        }
+
+
+        // Validate component ID
+        Self::validate_component_id(&swap.component.id)?;
+
+        // Get quote data and signature from static attributes
+        let quote_data = get_static_attribute(&swap, "quote_data")?;
+        let signature = get_static_attribute(&swap, "signature")?;
+
+        // Get order type (default to Single if not specified)
+        let order_type = get_static_attribute(&swap, "order_type")
+            .map(|bytes| bytes[0])
+            .unwrap_or(0u8); // Default to Single (0)
+
+        // Get signature type (default to 0 = ECDSA if not specified)
+        let signature_type = get_static_attribute(&swap, "signature_type")
+            .map(|bytes| bytes[0])
+            .unwrap_or(0u8); // Default to ECDSA (0)
+
+        // Encode packed data for the executor
+        // Format: token_in | token_out | transfer_type | order_type |
+        //         quote_data_length | quote_data | signature_type | signature_length | signature | approval_needed
+        let args = (
+            token_in,
+            token_out,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
+            order_type.to_be_bytes(),
+            (quote_data.len() as u32).to_be_bytes(),
+            &quote_data[..],
+            signature_type.to_be_bytes(),
+            (signature.len() as u32).to_be_bytes(),
+            &signature[..],
+            (approval_needed as u8).to_be_bytes(),
+        );
+
+        Ok(args.abi_encode_packed())
+    }
+
+    fn executor_address(&self) -> &str {
+        &self.executor_address
+    }
+
+    fn clone_box(&self) -> Box<dyn SwapEncoder> {
+        Box::new(self.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -1543,5 +1660,89 @@ mod tests {
         );
 
         write_calldata_to_file("test_encode_maverick_v2", hex_swap.as_str());
+    }
+
+    mod bebop {
+        use super::*;
+        use crate::encoding::evm::utils::write_calldata_to_file;
+
+        #[test]
+        fn test_encode_bebop_rfq() {
+            use alloy::hex;
+
+            // Create static attributes for a Bebop RFQ quote
+            let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+            static_attributes
+                .insert("quote_data".into(), Bytes::from(hex::decode("1234567890abcdef").unwrap()));
+            static_attributes.insert("signature".into(), Bytes::from(hex::decode("aabbccdd").unwrap()));
+
+            let bebop_component = ProtocolComponent {
+                id: String::from("bebop"),
+                protocol_system: String::from("vm:bebop"),
+                static_attributes,
+                ..Default::default()
+            };
+
+            let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+            let token_out = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"); // WETH
+            let swap = Swap {
+                component: bebop_component,
+                token_in: token_in.clone(),
+                token_out: token_out.clone(),
+                split: 0f64,
+            };
+
+            let encoding_context = EncodingContext {
+                receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::Transfer,
+            };
+
+            let encoder = BebopSwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                TychoCoreChain::Ethereum.into(),
+                Some(HashMap::from([(
+                    "settlement_address".to_string(),
+                    "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F".to_string(),
+                )])),
+            )
+            .unwrap();
+
+            let encoded_swap = encoder
+                .encode_swap(swap, encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
+
+            assert_eq!(
+                hex_swap,
+                String::from(concat!(
+                    // token in
+                    "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                    // token out
+                    "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                    // transfer type Transfer
+                    "01",
+                    // order type Single (default 0)
+                    "00",
+                    // quote data length (8 bytes = 0x00000008)
+                    "00000008",
+                    // quote data
+                    "1234567890abcdef",
+                    // signature type ECDSA (default 0)
+                    "00",
+                    // signature length (4 bytes = 0x00000004)
+                    "00000004",
+                    // signature
+                    "aabbccdd",
+                    // approval needed
+                    "01"
+                ))
+            );
+
+            write_calldata_to_file("test_encode_bebop_rfq", hex_swap.as_str());
+        }
     }
 }

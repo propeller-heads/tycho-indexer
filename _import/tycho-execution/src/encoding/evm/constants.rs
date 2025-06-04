@@ -31,6 +31,7 @@ pub static IN_TRANSFER_REQUIRED_PROTOCOLS: LazyLock<HashSet<&'static str>> = Laz
     set.insert("uniswap_v4");
     set.insert("ekubo_v2");
     set.insert("vm:maverick_v2");
+    set.insert("vm:bebop");
     set
 });
 
