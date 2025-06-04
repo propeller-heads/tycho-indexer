@@ -1261,7 +1261,9 @@ pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
     }
 }
 
-/// Trace given entry points and add results to db, along with entry points and tracing params.
+/// Add Entry Point
+///
+/// Trace the given entry points and add the entry point, tracing params and results to DB.
 #[utoipa::path(
     post,
     path = "/v1/add_entry_points",
