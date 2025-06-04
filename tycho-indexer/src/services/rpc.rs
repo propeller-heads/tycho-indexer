@@ -962,7 +962,7 @@ where
             .tracer
             .trace(request.block_hash.clone(), entry_points_with_params)
             .await
-            .map_err(|e| RpcError::Unknown(format!("Error while tracing entry points: {:?}", e)))?;
+            .map_err(|e| RpcError::Unknown(format!("Error while tracing entry points: {e:?}")))?;
         Ok(trace_results)
     }
 }

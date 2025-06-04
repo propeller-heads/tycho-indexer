@@ -39,7 +39,16 @@ pub struct DirectGateway {
     chain: Chain,
 }
 
-/// Gateway that reads and writes directly to the database without using a write cache or bundling.
+impl Clone for DirectGateway {
+    fn clone(&self) -> Self {
+        Self {
+            pool: self.pool.clone(),
+            state_gateway: self.state_gateway.clone(),
+            chain: self.chain,
+        }
+    }
+}
+
 impl DirectGateway {
     #[allow(private_interfaces)]
     pub fn new(

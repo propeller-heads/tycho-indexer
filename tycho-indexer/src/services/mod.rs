@@ -46,6 +46,7 @@ pub struct ServicesBuilder<G> {
     port: u16,
     bind: String,
     rpc_url: String,
+    api_key: String,
     extractor_handles: ws::MessageSenderMap,
     db_gateway: G,
 }
@@ -54,12 +55,13 @@ impl<G> ServicesBuilder<G>
 where
     G: Gateway + Send + Sync + 'static,
 {
-    pub fn new(db_gateway: G, rpc_url: String) -> Self {
+    pub fn new(db_gateway: G, rpc_url: String, api_key: String) -> Self {
         Self {
             prefix: "v1".to_owned(),
             port: 4242,
             bind: "0.0.0.0".to_owned(),
             rpc_url,
+            api_key,
             extractor_handles: HashMap::new(),
             db_gateway,
         }
@@ -90,6 +92,12 @@ where
     /// Sets the port for the server
     pub fn port(mut self, v: u16) -> Self {
         self.port = v;
+        self
+    }
+
+    /// Sets the api key for access control
+    pub fn api_key(mut self, v: String) -> Self {
+        self.api_key = v;
         self
     }
 
@@ -261,7 +269,7 @@ where
                 )
                 .service(
                     web::resource(format!("/{}/add_entry_points", self.prefix))
-                        .wrap(access_control::AccessControl::new("test-key"))
+                        .wrap(access_control::AccessControl::new(&self.api_key))
                         .route(web::post().to(rpc::add_entry_points::<G, EVMEntrypointService>)),
                 )
                 .service(
