@@ -494,4 +494,27 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         assertEq(balanceAfter - balanceBefore, 1949668893);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
+
+    function testBebopUSV2Integration() public {
+        // Performs a sequential swap from USDC to WETH though Bebop and USV2 pools
+        //
+        //   USDC ──(bebop)──> WETH ───(USV2)──> USDC
+        deal(USDC_ADDR, ALICE, 1000 * 10 ** 6);
+        uint256 balanceBefore = IERC20(USDC_ADDR).balanceOf(ALICE);
+
+        // Approve permit2
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, type(uint256).max);
+        bytes memory callData = loadCallDataFromFile("test_encode_bebop_rfq");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = IERC20(USDC_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        // Expected amount would need to be determined from actual integration test
+        assertGt(balanceAfter, balanceBefore, "Should receive some tokens");
+        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 0);
+    }
 }

@@ -123,6 +123,9 @@ contract Constants is Test, BaseConstants {
     // Permit2
     address PERMIT2_ADDRESS = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
 
+    // Bebop Settlement
+    address BEBOP_SETTLEMENT = 0xbbbbbBB520d69a9775E85b458C58c648259FAD5F;
+
     // Pool Code Init Hashes
     bytes32 USV2_POOL_CODE_INIT_HASH =
         0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f;
