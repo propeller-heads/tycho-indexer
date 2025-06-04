@@ -1,27 +1,556 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet, VecDeque},
+    hash::Hash,
+};
 
+use thiserror::Error;
+use tracing::debug;
 use tycho_common::models::{
-    blockchain::{EntryPoint, EntryPointWithTracingParams, TracingParams, TracingResult},
-    Address, EntryPointId, StoreKey,
+    blockchain::{Block, EntryPoint, EntryPointWithTracingParams, TracingParams, TracingResult},
+    Address, BlockHash, EntryPointId, StoreKey,
 };
 
 /// A unique identifier for a storage location, consisting of an address and a storage key.
 type StorageLocation = (Address, StoreKey);
 
+/// Central data cache used by the Dynamic Contract Indexer (DCI).
 pub(super) struct DCICache {
-    pub(super) ep_id_to_entrypoint: HashMap<EntryPointId, EntryPoint>,
-    pub(super) entrypoint_results: HashMap<(EntryPointId, TracingParams), TracingResult>,
-    pub(super) retriggers: HashMap<StorageLocation, HashSet<EntryPointWithTracingParams>>,
-    pub(super) tracked_contracts: HashMap<Address, Option<HashSet<StoreKey>>>,
+    /// Maps entry point IDs to entry point definitions.
+    pub(super) ep_id_to_entrypoint: VersionedCache<EntryPointId, EntryPoint>,
+    /// Stores tracing results for entry points paired with specific tracing parameters.
+    pub(super) entrypoint_results: VersionedCache<(EntryPointId, TracingParams), TracingResult>,
+    /// Maps a storage location to entry points that should be retriggered when that location
+    /// changes.
+    pub(super) retriggers: VersionedCache<StorageLocation, HashSet<EntryPointWithTracingParams>>,
+    /// Stores tracked contract addresses and their associated storage keys.
+    pub(super) tracked_contracts: VersionedCache<Address, Option<HashSet<StoreKey>>>,
 }
 
 impl DCICache {
     pub(super) fn new_empty() -> Self {
         Self {
-            ep_id_to_entrypoint: HashMap::new(),
-            entrypoint_results: HashMap::new(),
-            retriggers: HashMap::new(),
-            tracked_contracts: HashMap::new(),
+            ep_id_to_entrypoint: VersionedCache::new(),
+            entrypoint_results: VersionedCache::new(),
+            retriggers: VersionedCache::new(),
+            tracked_contracts: VersionedCache::new(),
         }
+    }
+
+    /// Reverts the cache to the state at a specific block hash.
+    ///
+    /// This operation will discard all changes made in blocks after the specified block.
+    /// If the block hash is not found in the pending cache, all pending layers will be dropped.
+    ///
+    /// # Arguments
+    /// * `block` - Target block hash to revert to.
+    pub(super) fn revert_to(&mut self, block: &BlockHash) {
+        self.ep_id_to_entrypoint
+            .revert_to(block);
+        self.entrypoint_results.revert_to(block);
+        self.retriggers.revert_to(block);
+        self.tracked_contracts.revert_to(block);
+    }
+}
+
+#[derive(Error, Debug, PartialEq)]
+pub enum DCICacheError {
+    #[error("Unexpected block order: new block number {0} is not a child of {1}")]
+    UnexpectedBlockOrder(u64, u64),
+}
+
+/// A versioned data container scoped to a specific block.
+///
+/// Stores key-value pairs for a block, used in the pending portion of a cache.
+#[derive(Clone)]
+struct BlockScopedMap<K, V> {
+    /// Block metadata for this layer.
+    block: Block,
+    /// Key-value store scoped to the block.
+    data: HashMap<K, V>,
+}
+
+/// A cache structure that supports versioned storage by block.
+///
+/// It contains:
+/// - Permanent data that is not revertable.
+/// - Pending data organized in layers per block, supporting reverts.
+pub(super) struct VersionedCache<K, V> {
+    /// Entries that are permanent and not affected by block reverts.
+    permanent: HashMap<K, V>,
+    /// Stack of pending block-scoped layers. These can be reverted.
+    pending: VecDeque<BlockScopedMap<K, V>>,
+}
+impl<K, V> VersionedCache<K, V>
+where
+    K: Eq + Hash + Clone,
+    V: Clone,
+{
+    fn new() -> Self {
+        Self { permanent: HashMap::new(), pending: VecDeque::new() }
+    }
+
+    /// Inserts a key-value pair into the permanent layer.
+    pub(super) fn insert_permanent(&mut self, k: K, v: V) {
+        self.permanent.insert(k, v);
+    }
+
+    /// Inserts a key-value pair into the pending layer for the specified block.
+    ///
+    /// If the block is not found, we check if the block is the child of the latest pending
+    /// block. If it is, a new layer is created. Otherwise, an error is returned.
+    pub(super) fn insert_pending(&mut self, block: Block, k: K, v: V) -> Result<(), DCICacheError> {
+        let layer = self.validate_and_ensure_block_layer(&block)?;
+        layer.data.insert(k, v);
+        Ok(())
+    }
+
+    /// Adds multiple key-value pairs to the permanent layer.
+    pub(super) fn extend_permanent(&mut self, entries: impl IntoIterator<Item = (K, V)>) {
+        self.permanent.extend(entries);
+    }
+
+    /// Adds multiple key-value pairs to the pending layer for the given block.
+    ///
+    /// If the block is not found, we check if the block is the child of the latest pending
+    /// block. If it is, a new layer is created. Otherwise, an error is returned.
+    pub(super) fn extend_pending(
+        &mut self,
+        block: Block,
+        entries: impl IntoIterator<Item = (K, V)>,
+    ) -> Result<(), DCICacheError> {
+        let layer = self.validate_and_ensure_block_layer(&block)?;
+        layer.data.extend(entries);
+        Ok(())
+    }
+
+    /// Gets a mutable entry to a value in the permanent layer.
+    pub(super) fn permanent_entry(&mut self, k: &K) -> Entry<K, V> {
+        self.permanent.entry(k.clone())
+    }
+
+    /// Gets a mutable entry to a value in the pending layer for the specified block.
+    ///
+    /// If the block is not found, we check if the block is the child of the latest pending
+    /// block. If it is, a new layer is created. Otherwise, an error is returned.
+    pub(super) fn pending_entry(
+        &mut self,
+        block: &Block,
+        k: &K,
+    ) -> Result<Entry<K, V>, DCICacheError> {
+        let layer = self.validate_and_ensure_block_layer(block)?;
+        Ok(layer.data.entry(k.clone()))
+    }
+
+    /// Retrieves a value for a key, checking latest pending block first, then permanent.
+    pub(super) fn get(&self, k: &K) -> Option<&V> {
+        for layer in self.pending.iter().rev() {
+            if let Some(v) = layer.data.get(k) {
+                return Some(v);
+            }
+        }
+        self.permanent.get(k)
+    }
+
+    /// Checks if the given key exists in either the pending or permanent layer.
+    pub(super) fn contains_key(&self, key: &K) -> bool {
+        for layer in self.pending.iter().rev() {
+            if layer.data.contains_key(key) {
+                return true;
+            }
+        }
+        self.permanent.contains_key(key)
+    }
+
+    /// Reverts the pending layers to the state of a specific block.
+    ///
+    /// This will remove all block layers added after the specified block.
+    ///
+    /// If the block is not found, all pending blocks are discarded.
+    pub(super) fn revert_to(&mut self, block: &BlockHash) {
+        debug!("Purging DCI cache... Target hash {}", block.to_string());
+
+        let mut found = false;
+        for (index, layer) in self.pending.iter().rev().enumerate() {
+            if layer.block.hash == *block {
+                let _ = self.pending.split_off(index);
+                found = true;
+                break;
+            }
+        }
+
+        if !found {
+            self.pending.clear();
+        }
+    }
+
+    /// Validates block order and ensures the corresponding block layer exists.
+    ///
+    /// Should only be called by methods that operate on pending layers.
+    ///
+    /// A valid block must:
+    /// - Be the same block as the most recent pending layer;
+    /// - Or be the child of the current pending block.
+    ///
+    /// Fails if blocks arrive out of order.
+    ///
+    /// # Arguments
+    /// * `block` - The block used to determine or create the layer.
+    ///
+    /// # Returns
+    /// * `Ok(&mut BlockScopedMap<K, V>)` - Layer for the block
+    /// * `Err(DCICacheError::UnexpectedBlockOrder)` - On invalid chain progression
+    fn validate_and_ensure_block_layer(
+        &mut self,
+        block: &Block,
+    ) -> Result<&mut BlockScopedMap<K, V>, DCICacheError> {
+        match self.pending.back() {
+            None => {
+                self.pending
+                    .push_back(BlockScopedMap { block: block.clone(), data: HashMap::new() });
+            }
+            Some(last_layer) if last_layer.block == *block => {
+                // no-op, same block
+            }
+            Some(last_layer) if last_layer.block.hash == block.parent_hash => {
+                self.pending
+                    .push_back(BlockScopedMap { block: block.clone(), data: HashMap::new() });
+            }
+            Some(last_layer) => {
+                return Err(DCICacheError::UnexpectedBlockOrder(
+                    block.number,
+                    last_layer.block.number,
+                ));
+            }
+        }
+
+        Ok(self
+            .pending
+            .back_mut()
+            .expect("Layer should now exist"))
+    }
+
+    /// Returns full permanent state (only available in tests).
+    #[cfg(test)]
+    pub fn get_full_permanent_state(&self) -> &HashMap<K, V> {
+        &self.permanent
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use chrono::NaiveDateTime;
+    use tycho_common::{
+        models::{
+            blockchain::{
+                Block, EntryPoint, EntryPointWithTracingParams, RPCTracerParams, TracingParams,
+                TracingResult,
+            },
+            Address, BlockHash, Chain, StoreKey,
+        },
+        Bytes,
+    };
+
+    use super::*;
+
+    fn create_test_block(number: u64, hash: &str, parent_hash: &str) -> Block {
+        Block {
+            number,
+            hash: BlockHash::from(hash),
+            parent_hash: BlockHash::from(parent_hash),
+            ts: NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+            chain: Chain::Ethereum,
+        }
+    }
+
+    fn get_entrypoint(version: u8) -> EntryPoint {
+        EntryPoint::new(
+            format!("entrypoint_{version}"),
+            Bytes::from(version),
+            format!("test_entrypoint_{version}"),
+        )
+    }
+
+    fn get_tracing_params(version: u8) -> TracingParams {
+        TracingParams::RPCTracer(RPCTracerParams::new(None, Bytes::from(version)))
+    }
+
+    fn get_tracing_result(version: u8) -> TracingResult {
+        TracingResult::new(
+            HashSet::from([(Bytes::from(version), Bytes::from(version))]),
+            HashMap::from([
+                (Bytes::from(version), HashSet::from([Bytes::from(version + version * 16)])),
+                (
+                    Bytes::from(version + version * 16),
+                    HashSet::from([Bytes::from(version + version * 16)]),
+                ),
+            ]),
+        )
+    }
+
+    fn get_entrypoint_with_tracing_params(version: u8) -> EntryPointWithTracingParams {
+        EntryPointWithTracingParams::new(get_entrypoint(version), get_tracing_params(version))
+    }
+
+    #[test]
+    fn test_versioned_cache_permanent_operations() {
+        let mut cache: VersionedCache<String, u32> = VersionedCache::new();
+
+        // Test permanent operations
+        cache.insert_permanent("key1".to_string(), 1);
+        assert_eq!(cache.get(&"key1".to_string()), Some(&1));
+        assert!(cache.contains_key(&"key1".to_string()));
+
+        // Test permanent entry
+        cache
+            .permanent_entry(&"key2".to_string())
+            .or_insert(2);
+        assert_eq!(cache.get(&"key2".to_string()), Some(&2));
+
+        // Test permanent update
+        cache.extend_permanent(vec![("key3".to_string(), 3), ("key4".to_string(), 4)]);
+        assert_eq!(cache.get(&"key3".to_string()), Some(&3));
+        assert_eq!(cache.get(&"key4".to_string()), Some(&4));
+    }
+
+    #[test]
+    fn test_versioned_cache_pending_operations() {
+        let mut cache: VersionedCache<String, u32> = VersionedCache::new();
+        let block1 = create_test_block(1, "0x01", "0x00");
+        let block2 = create_test_block(2, "0x02", "0x01");
+
+        // Test pending insert
+        cache
+            .insert_pending(block1.clone(), "key1".to_string(), 1)
+            .unwrap();
+        assert_eq!(cache.get(&"key1".to_string()), Some(&1));
+
+        // Test pending entry
+        cache
+            .pending_entry(&block1, &"key2".to_string())
+            .unwrap()
+            .or_insert(2);
+        assert_eq!(cache.get(&"key2".to_string()), Some(&2));
+
+        // Test pending update
+        cache
+            .extend_pending(block1.clone(), vec![("key3".to_string(), 3), ("key4".to_string(), 4)])
+            .unwrap();
+        assert_eq!(cache.get(&"key3".to_string()), Some(&3));
+        assert_eq!(cache.get(&"key4".to_string()), Some(&4));
+
+        // Test block ordering
+        cache
+            .insert_pending(block2.clone(), "key5".to_string(), 5)
+            .unwrap();
+        assert_eq!(cache.get(&"key5".to_string()), Some(&5));
+
+        // Test invalid block order
+        let invalid_block = create_test_block(3, "0x03", "0x00"); // Wrong parent hash
+        assert!(cache
+            .insert_pending(invalid_block, "key6".to_string(), 6)
+            .is_err());
+    }
+
+    #[test]
+    fn test_versioned_cache_revert() {
+        let mut cache: VersionedCache<String, u32> = VersionedCache::new();
+        let block1 = create_test_block(1, "0x01", "0x00");
+        let block2 = create_test_block(2, "0x02", "0x01");
+
+        // Insert data in both blocks
+        cache.insert_permanent("perm".to_string(), 0);
+        cache
+            .insert_pending(block1.clone(), "key1".to_string(), 1)
+            .unwrap();
+        cache
+            .insert_pending(block2.clone(), "key2".to_string(), 2)
+            .unwrap();
+
+        // Verify initial state
+        assert_eq!(cache.get(&"perm".to_string()), Some(&0));
+        assert_eq!(cache.get(&"key1".to_string()), Some(&1));
+        assert_eq!(cache.get(&"key2".to_string()), Some(&2));
+
+        // Revert to block1
+        cache.revert_to(&block1.hash);
+        assert_eq!(cache.get(&"perm".to_string()), Some(&0));
+        assert_eq!(cache.get(&"key1".to_string()), Some(&1));
+        assert_eq!(cache.get(&"key2".to_string()), None);
+    }
+
+    #[test]
+    fn test_dci_cache_revert() {
+        let mut cache = DCICache::new_empty();
+        let block1 = create_test_block(1, "0x01", "0x00");
+        let block2 = create_test_block(2, "0x02", "0x01");
+
+        // Setup test data
+        let entrypoint = get_entrypoint(1);
+        let tracing_params = get_tracing_params(1);
+        let tracing_result = get_tracing_result(1);
+        let address = Address::from("0x1234");
+        let store_key = StoreKey::from("0x5678");
+        let entrypoint_with_params = get_entrypoint_with_tracing_params(1);
+        let mut retrigger_set = HashSet::new();
+        retrigger_set.insert(entrypoint_with_params);
+
+        // Insert data in block1
+        cache
+            .ep_id_to_entrypoint
+            .insert_pending(block1.clone(), entrypoint.external_id.clone(), entrypoint.clone())
+            .unwrap();
+        cache
+            .entrypoint_results
+            .insert_pending(
+                block1.clone(),
+                (entrypoint.external_id.clone(), tracing_params.clone()),
+                tracing_result.clone(),
+            )
+            .unwrap();
+        cache
+            .retriggers
+            .insert_pending(
+                block1.clone(),
+                (address.clone(), store_key.clone()),
+                retrigger_set.clone(),
+            )
+            .unwrap();
+
+        // Insert different data in block2
+        let entrypoint2 = get_entrypoint(2);
+        cache
+            .ep_id_to_entrypoint
+            .insert_pending(block2.clone(), entrypoint2.external_id.clone(), entrypoint2.clone())
+            .unwrap();
+
+        // Verify initial state
+        assert_eq!(
+            cache
+                .ep_id_to_entrypoint
+                .get(&entrypoint.external_id),
+            Some(&entrypoint)
+        );
+        assert_eq!(
+            cache
+                .ep_id_to_entrypoint
+                .get(&entrypoint2.external_id),
+            Some(&entrypoint2)
+        );
+
+        // Revert to block1
+        cache.revert_to(&block1.hash);
+
+        // Verify state after revert
+        assert_eq!(
+            cache
+                .ep_id_to_entrypoint
+                .get(&entrypoint.external_id),
+            Some(&entrypoint)
+        );
+        assert_eq!(
+            cache
+                .ep_id_to_entrypoint
+                .get(&entrypoint2.external_id),
+            None
+        );
+    }
+
+    #[test]
+    fn test_versioned_cache_get_latest_version() {
+        let mut cache: VersionedCache<String, u32> = VersionedCache::new();
+        let block1 = create_test_block(1, "0x01", "0x00");
+        let block2 = create_test_block(2, "0x02", "0x01");
+
+        // Insert same key with different values in different blocks
+        cache.insert_permanent("key".to_string(), 1);
+        cache
+            .insert_pending(block1.clone(), "key".to_string(), 2)
+            .unwrap();
+        cache
+            .insert_pending(block2.clone(), "key".to_string(), 3)
+            .unwrap();
+
+        // get() should return the latest version (from block2)
+        assert_eq!(cache.get(&"key".to_string()), Some(&3));
+
+        // Revert to block1
+        cache.revert_to(&block1.hash);
+        // Should now return version from block1
+        assert_eq!(cache.get(&"key".to_string()), Some(&2));
+
+        // Revert to permanent
+        cache.revert_to(&block1.parent_hash);
+        // Should now return permanent version
+        assert_eq!(cache.get(&"key".to_string()), Some(&1));
+    }
+
+    #[test]
+    fn test_versioned_cache_pending_entry_latest_version() {
+        let mut cache: VersionedCache<String, u32> = VersionedCache::new();
+        let block1 = create_test_block(1, "0x01", "0x00");
+        let block2 = create_test_block(2, "0x02", "0x01");
+
+        // Insert same key with different values in different blocks
+        cache.insert_permanent("key".to_string(), 1);
+        cache
+            .insert_pending(block1.clone(), "key".to_string(), 2)
+            .unwrap();
+        cache
+            .insert_pending(block2.clone(), "key".to_string(), 3)
+            .unwrap();
+
+        // pending_entry() should return the latest version for block2
+        let entry = cache
+            .pending_entry(&block2, &"key".to_string())
+            .unwrap();
+        assert_eq!(entry.or_insert(4), &3);
+
+        // pending_entry() should error when trying to access an older block
+        assert!(cache
+            .pending_entry(&block1, &"key".to_string())
+            .is_err());
+
+        // Test that pending_entry() creates a new entry if key doesn't exist in that block
+        let entry = cache
+            .pending_entry(&block2, &"new_key".to_string())
+            .unwrap();
+        entry.or_insert(5);
+        assert_eq!(cache.get(&"new_key".to_string()), Some(&5));
+    }
+
+    #[test]
+    fn test_versioned_cache_update_overwrites_latest() {
+        let mut cache: VersionedCache<String, u32> = VersionedCache::new();
+        let block1 = create_test_block(1, "0x01", "0x00");
+        let block2 = create_test_block(2, "0x02", "0x01");
+
+        // Insert initial values
+        cache.insert_permanent("key1".to_string(), 1);
+        cache.extend_permanent(vec![("key1".to_string(), 10), ("key2".to_string(), 20)]);
+
+        cache
+            .insert_pending(block1.clone(), "key2".to_string(), 2)
+            .unwrap();
+        cache
+            .extend_pending(
+                block1.clone(),
+                vec![("key2".to_string(), 21), ("key3".to_string(), 31)],
+            )
+            .unwrap();
+
+        cache
+            .insert_pending(block2.clone(), "key3".to_string(), 3)
+            .unwrap();
+        cache
+            .extend_pending(block2.clone(), vec![("key4".to_string(), 40)])
+            .unwrap();
+
+        // Verify latest versions
+        assert_eq!(cache.get(&"key1".to_string()), Some(&10)); // permanent
+        assert_eq!(cache.get(&"key2".to_string()), Some(&21)); // block1
+        assert_eq!(cache.get(&"key3".to_string()), Some(&3)); // block2
+        assert_eq!(cache.get(&"key4".to_string()), Some(&40)); // block2
     }
 }
