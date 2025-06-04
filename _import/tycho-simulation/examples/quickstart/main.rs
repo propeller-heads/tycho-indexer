@@ -192,8 +192,9 @@ async fn main() {
                     "vm:curve",
                     tvl_filter.clone(),
                     Some(curve_pool_filter),
-                )
-                .exchange::<EVMPoolState<PreCachedDB>>("vm:maverick_v2", tvl_filter.clone(), None);
+                );
+            // COMING SOON!
+            // .exchange::<EVMPoolState<PreCachedDB>>("vm:maverick_v2", tvl_filter.clone(), None);
         }
         Chain::Base => {
             protocol_stream = protocol_stream
