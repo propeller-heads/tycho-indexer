@@ -19,7 +19,7 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {PathKey} from "@uniswap/v4-periphery/src/libraries/PathKey.sol";
 import {IUnlockCallback} from
     "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
-import {SafeCast} from "@uniswap/v4-core/src/libraries/SafeCast.sol";
+import {SafeCast as V4SafeCast} from "@uniswap/v4-core/src/libraries/SafeCast.sol";
 import {TransientStateLibrary} from
     "@uniswap/v4-core/src/libraries/TransientStateLibrary.sol";
 import "../RestrictTransferFrom.sol";
@@ -42,7 +42,7 @@ contract UniswapV4Executor is
 {
     using SafeERC20 for IERC20;
     using CurrencyLibrary for Currency;
-    using SafeCast for *;
+    using V4SafeCast for *;
     using TransientStateLibrary for IPoolManager;
 
     IPoolManager public immutable poolManager;
