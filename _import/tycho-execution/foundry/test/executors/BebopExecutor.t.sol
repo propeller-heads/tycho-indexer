@@ -32,9 +32,8 @@ contract MockToken is ERC20 {
 contract BebopExecutorExposed is BebopExecutor {
     constructor(
         address _bebopSettlement,
-        address _nativeToken,
         address _permit2
-    ) BebopExecutor(_bebopSettlement, _nativeToken, _permit2) {}
+    ) BebopExecutor(_bebopSettlement, _permit2) {}
 
     function decodeParams(bytes calldata data)
         external
@@ -66,7 +65,7 @@ contract MockBebopSettlement is Test, Constants {
         require(filledTakerAmount <= order.taker_amount, "Exceeds order amount");
 
         // Mock implementation handles input tokens
-        if (order.taker_token == ETH_ADDR_FOR_CURVE) {
+        if (order.taker_token == address(0)) {
             // For ETH input, validate msg.value
             require(msg.value >= filledTakerAmount, "Insufficient ETH sent");
         } else {
@@ -80,11 +79,9 @@ contract MockBebopSettlement is Test, Constants {
         filledMakerAmount =
             (filledTakerAmount * order.maker_amount) / order.taker_amount;
 
-        // Send output tokens to receiver, or back to sender if receiver is zero
-        address recipient =
-            order.receiver != address(0) ? order.receiver : msg.sender;
+        address recipient = order.receiver;
 
-        if (order.maker_token == ETH_ADDR_FOR_CURVE) {
+        if (order.maker_token == address(0)) {
             // For ETH output, send ETH directly
             vm.deal(recipient, recipient.balance + filledMakerAmount);
         } else {
@@ -129,7 +126,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         // Deploy Bebop executor
         bebopExecutor = new BebopExecutorExposed(
             address(mockBebopSettlement),
-            ETH_ADDR_FOR_CURVE, // Native token address
             PERMIT2_ADDRESS
         );
 
@@ -242,7 +238,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             taker_address: address(0), // Any taker
             maker_address: address(mockBebopSettlement),
             maker_nonce: 1,
-            taker_token: ETH_ADDR_FOR_CURVE, // ETH input
+            taker_token: address(0), // ETH input
             maker_token: USDC_ADDR,
             taker_amount: amountIn,
             maker_amount: expectedAmountOut,
@@ -256,7 +252,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         bytes memory signature = hex"aabbccdd"; // Mock signature
 
         bytes memory params = abi.encodePacked(
-            ETH_ADDR_FOR_CURVE, // ETH input
+            address(0), // ETH input
             USDC_ADDR,
             uint8(RestrictTransferFrom.TransferType.None), // ETH comes via msg.value
             uint8(0), // OrderType.Single
@@ -292,7 +288,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             maker_address: address(mockBebopSettlement),
             maker_nonce: 1,
             taker_token: USDC_ADDR,
-            maker_token: ETH_ADDR_FOR_CURVE, // ETH output
+            maker_token: address(0), // ETH output
             taker_amount: amountIn,
             maker_amount: expectedAmountOut,
             receiver: address(bebopExecutor), // Output should go to executor
@@ -306,7 +302,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         bytes memory params = abi.encodePacked(
             USDC_ADDR,
-            ETH_ADDR_FOR_CURVE, // ETH output
+            address(0), // ETH output
             uint8(RestrictTransferFrom.TransferType.Transfer),
             uint8(0), // OrderType.Single
             uint32(quoteData.length),

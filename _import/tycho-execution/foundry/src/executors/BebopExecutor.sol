@@ -109,16 +109,12 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
     /// @notice The Bebop settlement contract address
     address public immutable bebopSettlement;
 
-    /// @notice The native ETH address representation (same as Curve)
-    address public immutable nativeToken;
 
     constructor(
         address _bebopSettlement,
-        address _nativeToken,
         address _permit2
     ) RestrictTransferFrom(_permit2) {
         bebopSettlement = _bebopSettlement;
-        nativeToken = _nativeToken;
     }
 
     /// @notice Executes a swap through Bebop's PMM RFQ system
@@ -181,12 +177,12 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         ) = _decodeQuoteData(quoteData, signatureType, signature);
 
         // Record balances before swap to calculate amountOut
-        uint256 balanceBefore = tokenOut == nativeToken
+        uint256 balanceBefore = tokenOut == address(0)
             ? order.receiver.balance
             : IERC20(tokenOut).balanceOf(order.receiver);
 
         // Handle ETH vs ERC20 execution
-        if (tokenIn == nativeToken) {
+        if (tokenIn == address(0)) {
             // For ETH input, use msg.value
             try IBebopSettlement(bebopSettlement).swapSingle{value: amountIn}(
                 order, sig, amountIn
@@ -207,7 +203,7 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         }
 
         // Calculate actual amount received
-        uint256 balanceAfter = tokenOut == nativeToken
+        uint256 balanceAfter = tokenOut == address(0)
             ? order.receiver.balance
             : IERC20(tokenOut).balanceOf(order.receiver);
 
