@@ -269,6 +269,7 @@ where
                 )
                 .service(
                     web::resource(format!("/{}/add_entry_points", self.prefix))
+                        // TODO: add swagger service for internal endpoints
                         .wrap(access_control::AccessControl::new(&self.api_key))
                         .route(web::post().to(rpc::add_entry_points::<G, EVMEntrypointService>)),
                 )
