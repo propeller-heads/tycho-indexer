@@ -53,6 +53,10 @@ pub struct GlobalArgs {
     //Default is for backward compatibility but needs to be removed later
     pub s3_bucket: Option<String>,
 
+    /// The RPC URL to connect to the Ethereum node
+    #[clap(env = "RPC_URL", long, hide_env_values = true)]
+    pub rpc_url: String,
+
     /// Substreams API endpoint
     #[clap(name = "endpoint", long, default_value = "https://mainnet.eth.streamingfast.io")]
     pub endpoint_url: String,
@@ -72,10 +76,6 @@ pub struct GlobalArgs {
 
 #[derive(Args, Debug, Clone, PartialEq)]
 pub struct SubstreamsArgs {
-    /// Node rpc url
-    #[clap(env, long)]
-    pub rpc_url: String,
-
     /// Substreams API token
     #[clap(long, env, hide_env_values = true, alias = "api_token")]
     pub substreams_api_token: String,
@@ -201,9 +201,9 @@ mod cli_tests {
             "http://example.com",
             "--database-url",
             "my_db",
-            "run",
             "--rpc-url",
             "http://example.com",
+            "run",
             "--api_token",
             "your_api_token",
             "--spkg",
@@ -221,6 +221,7 @@ mod cli_tests {
             global_args: GlobalArgs {
                 endpoint_url: "http://example.com".to_string(),
                 database_url: "my_db".to_string(),
+                rpc_url: "http://example.com".to_string(),
                 s3_bucket: Some("repo.propellerheads-propellerheads".to_string()),
                 server_ip: "0.0.0.0".to_string(),
                 server_port: 4242,
@@ -234,7 +235,6 @@ mod cli_tests {
                 start_block: 17361664,
                 stop_block: None,
                 substreams_args: SubstreamsArgs {
-                    rpc_url: "http://example.com".to_string(),
                     substreams_api_token: "your_api_token".to_string(),
                 },
                 initialized_accounts: vec![],
@@ -254,9 +254,9 @@ mod cli_tests {
             "http://example.com",
             "--database-url",
             "my_db",
-            "index",
             "--rpc-url",
             "http://example.com",
+            "index",
             "--extractors-config",
             "/opt/extractors.yaml",
             "--api_token",
@@ -268,6 +268,7 @@ mod cli_tests {
             global_args: GlobalArgs {
                 endpoint_url: "http://example.com".to_string(),
                 database_url: "my_db".to_string(),
+                rpc_url: "http://example.com".to_string(),
                 s3_bucket: Some("repo.propellerheads-propellerheads".to_string()),
                 server_ip: "0.0.0.0".to_string(),
                 server_port: 4242,
@@ -275,7 +276,6 @@ mod cli_tests {
             },
             command: Command::Index(IndexArgs {
                 substreams_args: SubstreamsArgs {
-                    rpc_url: "http://example.com".to_string(),
                     substreams_api_token: "your_api_token".to_string(),
                 },
                 chains: vec!["ethereum".to_string()],

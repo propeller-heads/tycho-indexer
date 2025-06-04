@@ -207,7 +207,6 @@ fn run_indexer(global_args: GlobalArgs, index_args: IndexArgs) -> Result<(), Ext
 
             let (extraction_tasks, other_tasks) = create_indexing_tasks(
                 &global_args,
-                &index_args.substreams_args.rpc_url,
                 &index_args
                     .chains
                     .iter()
@@ -297,7 +296,6 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
 
     let (extraction_tasks, mut other_tasks) = create_indexing_tasks(
         &global_args,
-        &run_args.substreams_args.rpc_url,
         &[Chain::from_str(&run_args.chain).unwrap()],
         Utc::now().naive_utc(),
         config,
@@ -323,16 +321,17 @@ async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
 
     info!("Starting Tycho RPC");
     let server_url = format!("http://{}:{}", global_args.server_ip, global_args.server_port);
-
-    let rpc_url = env::var("RPC_URL").map_err(|_| {
-        ExtractionError::Setup("RPC_URL environment variable is not set".to_string())
+    let api_key = env::var("AUTH_API_KEY").map_err(|_| {
+        ExtractionError::Setup("AUTH_API_KEY environment variable is not set".to_string())
     })?;
-    let (server_handle, server_task) = ServicesBuilder::new(direct_gw, rpc_url)
-        .prefix(&global_args.server_version_prefix)
-        .bind(&global_args.server_ip)
-        .port(global_args.server_port)
-        .register_extractors(vec![])
-        .run()?;
+
+    let (server_handle, server_task) =
+        ServicesBuilder::new(direct_gw.clone(), global_args.rpc_url.clone(), api_key)
+            .prefix(&global_args.server_version_prefix)
+            .bind(&global_args.server_ip)
+            .port(global_args.server_port)
+            .register_extractors(vec![])
+            .run()?;
     info!(server_url, "Http and Ws server started");
     let shutdown_task = tokio::spawn(shutdown_handler(server_handle, vec![], None));
     let (res, _, _) = select_all([server_task, shutdown_task]).await;
@@ -342,13 +341,12 @@ async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
 /// Creates extraction and server tasks.
 async fn create_indexing_tasks(
     global_args: &GlobalArgs,
-    rpc_url: &str,
     chains: &[Chain],
     retention_horizon: NaiveDateTime,
     extractors_config: ExtractorConfigs,
     extraction_runtime: Option<&Handle>,
 ) -> Result<(ExtractionTasks, ServerTasks), ExtractionError> {
-    let rpc_client = EthereumRpcClient::new_from_url(rpc_url);
+    let rpc_client = EthereumRpcClient::new_from_url(&global_args.rpc_url.clone());
     let block_number = rpc_client
         .get_block_number()
         .await
@@ -369,7 +367,7 @@ async fn create_indexing_tasks(
         .build()
         .await?;
     let token_processor = EthereumTokenPreProcessor::new_from_url(
-        rpc_url,
+        &global_args.rpc_url.clone(),
         *chains
             .first()
             .expect("No chain provided"), //TODO: handle multichain?
@@ -377,19 +375,23 @@ async fn create_indexing_tasks(
 
     let (tasks, extractor_handles): (Vec<_>, Vec<_>) =
         // TODO: accept substreams configuration from cli.
-        build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url,global_args.s3_bucket.as_deref(), &cached_gw, &token_processor, rpc_url, extraction_runtime)
+        build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url,global_args.s3_bucket.as_deref(), &cached_gw, &token_processor, &global_args.rpc_url.clone(), extraction_runtime)
             .await
             .map_err(|e| ExtractionError::Setup(format!("Failed to create extractors: {e}")))?
             .into_iter()
             .unzip();
 
     let server_url = format!("http://{}:{}", global_args.server_ip, global_args.server_port);
-    let (server_handle, server_task) = ServicesBuilder::new(cached_gw.clone(), rpc_url.to_string())
-        .prefix(&global_args.server_version_prefix)
-        .bind(&global_args.server_ip)
-        .port(global_args.server_port)
-        .register_extractors(extractor_handles.clone())
-        .run()?;
+    let api_key = env::var("AUTH_API_KEY").map_err(|_| {
+        ExtractionError::Setup("AUTH_API_KEY environment variable is not set".to_string())
+    })?;
+    let (server_handle, server_task) =
+        ServicesBuilder::new(cached_gw.clone(), global_args.rpc_url.clone(), api_key)
+            .prefix(&global_args.server_version_prefix)
+            .bind(&global_args.server_ip)
+            .port(global_args.server_port)
+            .register_extractors(extractor_handles.clone())
+            .run()?;
     info!(server_url, "Http and Ws server started");
 
     let shutdown_task =
