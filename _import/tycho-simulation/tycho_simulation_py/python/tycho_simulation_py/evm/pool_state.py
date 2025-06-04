@@ -124,7 +124,6 @@ class ThirdPartyPool:
         self._set_engine()
         self._adapter_contract = AdapterContract(ADAPTER_ADDRESS, self._engine)
         self._set_capabilities()
-        # self._init_token_storage_slots()
         if len(self.marginal_prices) == 0:
             self._set_marginal_prices()
 
@@ -247,17 +246,6 @@ class ThirdPartyPool:
             log.warning(
                 f"Pool {self.id_} hash different capabilities depending on the token pair!"
             )
-
-    def _init_token_storage_slots(self):
-        for t in self.tokens:
-            if (
-                t.address in self.involved_contracts
-                and t.address not in self.token_storage_slots
-            ):
-                self.token_storage_slots[t.address] = slots = token.brute_force_slots(
-                    t, self.block, self._engine
-                )
-                log.debug(f"Using custom storage slots for {t.address}: {slots}")
 
     def get_amount_out(
         self: TPoolState,
@@ -390,7 +378,7 @@ class ThirdPartyPool:
             for t in self.tokens:
                 proxy_address = self.token_proxy_tokens.get(HexBytes(t.address))
                 overwrites = TokenProxyOverwriteFactory(t, proxy_address)
-                amount = t.to_onchain_amount(self.balances[t.address])
+                amount = t.to_onchain_amount(self.balances.get(t.address, Decimal(0)))
                 overwrites.set_balance(amount, address)
                 balance_overwrites.update(overwrites.get_tycho_overwrites())
         return balance_overwrites

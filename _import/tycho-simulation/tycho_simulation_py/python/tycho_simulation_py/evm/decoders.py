@@ -118,11 +118,9 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
             t for v in snapshot.states.values() for t in v.component.tokens
         }
         for address in snapshot.vm_storage.keys():
-            # Checks if the addres is already identified as a proxy token
-            if address in self._token_proxy_tokens:
-                pass
-            # Checks if the address is a token so it can have a new address
-            elif address in all_tokens:
+            # Checks if the address is a token and hasn't already identified as a
+            # proxy token so it can have a new address.
+            if address not in self._token_proxy_tokens and address in all_tokens:
                 token_index = len(self._token_proxy_tokens)
                 new_address = self._generate_proxy_token_addr(token_index)
                 self._token_proxy_tokens[HexBytes(address)] = HexBytes(new_address)
@@ -181,7 +179,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         self,
         snapshot: ComponentWithState,
         block: EVMBlock,
-        account_balances: dict[HexBytes, dict[HexBytes, HexBytes]] = {},
+        account_balances: dict[HexBytes, dict[HexBytes, HexBytes]] = dict(),
         token_initial_states: dict[HexBytes, dict[int, int]] = dict(),
         token_proxy_tokens: dict[HexBytes, HexBytes] = dict(),
     ) -> ThirdPartyPool:
@@ -300,9 +298,7 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         for token in delta_msg.new_tokens.keys():
             self._all_tokens.add(token)
         for address in delta_msg.account_updates.keys():
-            if address in self._token_proxy_tokens:
-                pass
-            elif address in self._all_tokens:
+            if address not in self._token_proxy_tokens and address in self._all_tokens:
                 token_index = len(self._token_proxy_tokens)
                 new_address = self._generate_proxy_token_addr(token_index)
                 self._token_proxy_tokens[HexBytes(address)] = HexBytes(new_address)

@@ -238,23 +238,25 @@ class TokenProxyOverwriteFactory:
 
         Parameters:
             token: The token object.
+            proxy_address: The address of the original token contract. If None, it will not
+            set the implementation address.
         """
         self._token = token
         self._overwrites = dict()
         if proxy_address is not None:
             self.set_implementation(proxy_address.hex())
 
-    def set_implementation(self, implementation: Address):
+    def set_implementation(self, implementation_addr: Address):
         """
         Set the implementation address for the proxy.
 
         Parameters:
-            implementation: The address of the implementation contract.
+            implementation_addr: The address of the implementation contract.
         """
-        self._overwrites[self.IMPLEMENTATION_SLOT] = int(implementation, 16)
+        self._overwrites[self.IMPLEMENTATION_SLOT] = int(implementation_addr, 16)
         log.log(
             5,
-            f"Set implementation: token={self._token.address} implementation={implementation}",
+            f"Set implementation: token={self._token.address} implementation={implementation_addr}",
         )
 
     def set_balance(self, balance: int, owner: Address):
