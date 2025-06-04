@@ -49,6 +49,9 @@ pub enum RpcError {
 
     #[error("Failed to apply pending deltas: {0}")]
     DeltasError(#[from] PendingDeltasError),
+
+    #[error("Unknown error: {0}")]
+    Unknown(String),
 }
 
 impl From<anyhow::Error> for RpcError {
@@ -64,6 +67,7 @@ impl ResponseError for RpcError {
             RpcError::Parse(e) => HttpResponse::BadRequest().body(e.to_string()),
             RpcError::Connection(e) => HttpResponse::InternalServerError().body(e.to_string()),
             RpcError::DeltasError(e) => HttpResponse::InternalServerError().body(e.to_string()),
+            RpcError::Unknown(e) => HttpResponse::InternalServerError().body(e.to_string()),
         }
     }
 
@@ -73,6 +77,7 @@ impl ResponseError for RpcError {
             RpcError::Parse(_) => StatusCode::BAD_REQUEST,
             RpcError::Connection(_) => StatusCode::INTERNAL_SERVER_ERROR,
             RpcError::DeltasError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            RpcError::Unknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
@@ -957,10 +962,7 @@ where
             .tracer
             .trace(request.block_hash.clone(), entry_points_with_params)
             .await
-            .map_err(|_e| {
-                // TODO proper error handling.
-                RpcError::Parse("Error while tracing entry points.".to_string())
-            })?;
+            .map_err(|e| RpcError::Unknown(format!("Error while tracing entry points: {:?}", e)))?;
         Ok(trace_results)
     }
 }
