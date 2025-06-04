@@ -1,3 +1,10 @@
+## [0.103.2](https://github.com/propeller-heads/tycho-simulation/compare/0.103.1...0.103.2) (2025-06-04)
+
+
+### Bug Fixes
+
+* Disable maverick from the quickstart ([e82e7a2](https://github.com/propeller-heads/tycho-simulation/commit/e82e7a2ebaf9c65eca799813cbcc28ba6b4044b1))
+
 ## [0.103.1](https://github.com/propeller-heads/tycho-simulation/compare/0.103.0...0.103.1) (2025-05-29)
 
 
