@@ -43,12 +43,36 @@ impl DCICache {
     ///
     /// # Arguments
     /// * `block` - Target block hash to revert to.
-    pub(super) fn revert_to(&mut self, block: &BlockHash) {
+    pub(super) fn revert_to(&mut self, block: &BlockHash) -> Result<(), DCICacheError> {
         self.ep_id_to_entrypoint
-            .revert_to(block);
-        self.entrypoint_results.revert_to(block);
-        self.retriggers.revert_to(block);
-        self.tracked_contracts.revert_to(block);
+            .revert_to(block)?;
+        self.entrypoint_results
+            .revert_to(block)?;
+        self.retriggers.revert_to(block)?;
+        self.tracked_contracts
+            .revert_to(block)?;
+
+        Ok(())
+    }
+
+    /// Move new finalized blocks state to the permanent layer.
+    ///
+    /// # Arguments
+    /// * `finalized_block_height` - The height of the finalized block.
+    pub(super) fn handle_finality(
+        &mut self,
+        finalized_block_height: u64,
+    ) -> Result<(), DCICacheError> {
+        self.ep_id_to_entrypoint
+            .handle_finality(finalized_block_height)?;
+        self.entrypoint_results
+            .handle_finality(finalized_block_height)?;
+        self.retriggers
+            .handle_finality(finalized_block_height)?;
+        self.tracked_contracts
+            .handle_finality(finalized_block_height)?;
+
+        Ok(())
     }
 }
 
@@ -56,6 +80,10 @@ impl DCICache {
 pub enum DCICacheError {
     #[error("Unexpected block order: new block number {0} is not a child of {1}")]
     UnexpectedBlockOrder(u64, u64),
+    #[error("Revert to block {0} failed. Block not found in pending cache.")]
+    RevertToBlockNotFound(BlockHash),
+    #[error("Finality block {0} not found in pending cache.")]
+    FinalityNotFound(u64),
 }
 
 /// A versioned data container scoped to a specific block.
@@ -161,12 +189,67 @@ where
         self.permanent.contains_key(key)
     }
 
+    /// Process block finality by moving all finalized layers from pending to permanent storage.
+    ///
+    /// # Arguments
+    /// * `finalized_block_height` - The block number of the finalized block
+    ///
+    /// # Returns
+    /// * `Ok(())` - On successful processing
+    /// * `Err(DCICacheError::FinalityBlockNotFound)` - If the finalized block is not found in
+    ///   pending layers
+    ///
+    /// Note: to make sure the finalized height is always found in normal conditions, we keep the
+    /// finalized block in the pending layers. For example:
+    /// If pending layers contain blocks [100, 101, 102, 103] and block 102 is finalized:
+    /// - Blocks 100 and 101 are moved to permanent storage
+    /// - Block 102 and 103 remain in pending storage
+    pub(super) fn handle_finality(
+        &mut self,
+        finalized_block_height: u64,
+    ) -> Result<(), DCICacheError> {
+        if self.pending.is_empty() {
+            return Ok(());
+        }
+
+        let finalized_index = self
+            .pending
+            .iter()
+            .position(|layer| layer.block.number == finalized_block_height)
+            .ok_or_else(|| DCICacheError::FinalityNotFound(finalized_block_height))?;
+
+        // Move all finalized layers to permanent storage
+        let finalized_layers: Vec<_> = self
+            .pending
+            .drain(..finalized_index)
+            .collect();
+
+        for layer in finalized_layers {
+            self.permanent.extend(layer.data);
+        }
+
+        Ok(())
+    }
+
     /// Reverts the pending layers to the state of a specific block.
     ///
     /// This will remove all block layers added after the specified block.
     ///
-    /// If the block is not found, all pending blocks are discarded.
-    pub(super) fn revert_to(&mut self, block: &BlockHash) {
+    /// Errors if the block is not found and is not the parent of the latest pending block.
+    ///
+    /// # Arguments
+    /// * `block` - The block to revert to.
+    ///
+    /// # Returns
+    /// * `Ok(())` - On successful reversion
+    /// * `Err(DCICacheError::RevertToBlockNotFound)` - If the block is not found in the pending
+    ///   layers
+    pub(super) fn revert_to(&mut self, block: &BlockHash) -> Result<(), DCICacheError> {
+        // If there are no pending layers, do nothing
+        if self.pending.is_empty() {
+            return Ok(());
+        }
+
         debug!("Purging DCI cache... Target hash {}", block.to_string());
 
         let mut found = false;
@@ -179,8 +262,25 @@ where
         }
 
         if !found {
-            self.pending.clear();
+            // On startup, the pending cache could not contain the latest finalized block but only
+            // its child. In this case, we clear the pending cache and return.
+            if self
+                .pending
+                .front()
+                .unwrap()
+                .block
+                .parent_hash ==
+                *block
+            {
+                self.pending.clear();
+                return Ok(());
+            }
+
+            // Otherwise, we're in an erroneous state.
+            return Err(DCICacheError::RevertToBlockNotFound(block.clone()));
         }
+
+        Ok(())
     }
 
     /// Validates block order and ensures the corresponding block layer exists.
@@ -374,7 +474,7 @@ mod tests {
         assert_eq!(cache.get(&"key2".to_string()), Some(&2));
 
         // Revert to block1
-        cache.revert_to(&block1.hash);
+        cache.revert_to(&block1.hash).unwrap();
         assert_eq!(cache.get(&"perm".to_string()), Some(&0));
         assert_eq!(cache.get(&"key1".to_string()), Some(&1));
         assert_eq!(cache.get(&"key2".to_string()), None);
@@ -440,7 +540,7 @@ mod tests {
         );
 
         // Revert to block1
-        cache.revert_to(&block1.hash);
+        cache.revert_to(&block1.hash).unwrap();
 
         // Verify state after revert
         assert_eq!(
@@ -455,6 +555,54 @@ mod tests {
                 .get(&entrypoint2.external_id),
             None
         );
+
+        // Revert to the latest finalized block (parent of block1)
+        cache
+            .revert_to(&block1.parent_hash)
+            .unwrap();
+
+        assert_eq!(
+            cache
+                .ep_id_to_entrypoint
+                .get_full_permanent_state()
+                .len(),
+            0
+        );
+    }
+
+    #[test]
+    fn test_versioned_cache_handle_finality() {
+        let mut cache = VersionedCache::new();
+        let block1 = create_test_block(1, "0x01", "0x00");
+        let block2 = create_test_block(2, "0x02", "0x01");
+        let block3 = create_test_block(3, "0x03", "0x02");
+
+        // Insert data in block1
+        cache
+            .insert_pending(block1.clone(), "key1".to_string(), 1)
+            .unwrap();
+
+        // Insert data in block2
+        cache
+            .insert_pending(block2.clone(), "key2".to_string(), 2)
+            .unwrap();
+
+        // Insert data in block3
+        cache
+            .insert_pending(block3.clone(), "key3".to_string(), 3)
+            .unwrap();
+
+        assert_eq!(cache.get_full_permanent_state(), &HashMap::new());
+
+        // Handle finality of block2
+        cache
+            .handle_finality(block2.number)
+            .unwrap();
+
+        assert_eq!(cache.get_full_permanent_state(), &HashMap::from([("key1".to_string(), 1)]));
+
+        // block2 should still be in pending
+        assert_eq!(cache.pending.len(), 2);
     }
 
     #[test]
@@ -465,25 +613,27 @@ mod tests {
 
         // Insert same key with different values in different blocks
         cache.insert_permanent("key".to_string(), 1);
+        cache.insert_permanent("key2".to_string(), 2);
         cache
             .insert_pending(block1.clone(), "key".to_string(), 2)
             .unwrap();
         cache
             .insert_pending(block2.clone(), "key".to_string(), 3)
             .unwrap();
+        cache
+            .insert_pending(block2.clone(), "key2".to_string(), 3)
+            .unwrap();
 
         // get() should return the latest version (from block2)
         assert_eq!(cache.get(&"key".to_string()), Some(&3));
 
         // Revert to block1
-        cache.revert_to(&block1.hash);
-        // Should now return version from block1
-        assert_eq!(cache.get(&"key".to_string()), Some(&2));
+        cache.revert_to(&block1.hash).unwrap();
 
-        // Revert to permanent
-        cache.revert_to(&block1.parent_hash);
-        // Should now return permanent version
-        assert_eq!(cache.get(&"key".to_string()), Some(&1));
+        // Should return version from block1
+        assert_eq!(cache.get(&"key".to_string()), Some(&2));
+        // Should return permanent version
+        assert_eq!(cache.get(&"key2".to_string()), Some(&2));
     }
 
     #[test]

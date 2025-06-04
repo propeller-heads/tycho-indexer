@@ -262,6 +262,8 @@ where
             }
 
             // Update the cache with new traced entrypoints
+            self.cache
+                .handle_finality(block_changes.finalized_block_height)?;
             self.update_cache(&block_changes.block, &traced_entry_points)?;
 
             // Update the block changes with the traced entrypoints
@@ -305,7 +307,7 @@ where
     }
 
     async fn process_revert(&mut self, target_block: &BlockHash) -> Result<(), ExtractionError> {
-        self.cache.revert_to(target_block);
+        self.cache.revert_to(target_block)?;
         Ok(())
     }
 }
