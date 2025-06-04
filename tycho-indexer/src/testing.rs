@@ -651,21 +651,6 @@ mock! {
     impl Gateway for Gateway {}
 }
 
-// mock! {
-//     pub AccountExtractor {}
-
-//     #[async_trait]
-//     impl tycho_common::traits::AccountExtractor for AccountExtractor {
-//         type Error = String;
-
-//         async fn get_accounts_at_block(
-//         &self,
-//         block: &Block,
-//         requests: &[StorageSnapshotRequest],
-//     ) -> Result<HashMap<Bytes, AccountDelta>, Self::Error>;
-//     }
-// }
-
 #[cfg(test)]
 pub fn evm_contract_slots(data: impl IntoIterator<Item = (i32, i32)>) -> HashMap<Bytes, Bytes> {
     data.into_iter()

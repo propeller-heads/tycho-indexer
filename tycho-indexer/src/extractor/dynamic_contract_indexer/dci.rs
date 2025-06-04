@@ -5,7 +5,7 @@ use tracing::{debug, instrument, trace};
 use tycho_common::{
     models::{
         blockchain::{
-            EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingParams,
+            Block, EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingParams,
             TracingResult, Transaction, TxWithChanges,
         },
         contract::AccountDelta,
@@ -281,18 +281,21 @@ where
             }
 
             // Update the cache with new traced entrypoints
-            self.update_cache(&traced_entry_points);
+            self.update_cache(&block_changes.block, &traced_entry_points)?;
 
             // Update the block changes with the traced entrypoints
             block_changes.trace_results = traced_entry_points;
         }
 
         // Update the entrypoint cache from the block changes
-        self.cache.ep_id_to_entrypoint.extend(
-            new_entrypoints
-                .into_values()
-                .map(|ep| (ep.external_id.clone(), ep)),
-        );
+        self.cache
+            .ep_id_to_entrypoint
+            .extend_pending(
+                block_changes.block.clone(),
+                new_entrypoints
+                    .into_values()
+                    .map(|ep| (ep.external_id.clone(), ep)),
+            )?;
 
         let tracked_updates = self.extract_tracked_updates(block_changes)?;
 
@@ -324,9 +327,9 @@ where
         Ok(())
     }
 
-    async fn process_revert(&mut self, _target_block: &BlockHash) -> Result<(), ExtractionError> {
-        // TODO: Handle reverts, need to cleanup reverted internal state
-        todo!()
+    async fn process_revert(&mut self, target_block: &BlockHash) -> Result<(), ExtractionError> {
+        self.cache.revert_to(target_block);
+        Ok(())
     }
 }
 
@@ -384,14 +387,16 @@ where
             .await
             .map_err(ExtractionError::from)?;
 
-        self.cache.ep_id_to_entrypoint.extend(
-            entrypoints_with_params
-                .values()
-                .flat_map(|e| {
-                    e.iter()
-                        .map(|ep| (ep.entry_point.external_id.clone(), ep.entry_point.clone()))
-                }),
-        );
+        self.cache
+            .ep_id_to_entrypoint
+            .extend_permanent(
+                entrypoints_with_params
+                    .values()
+                    .flat_map(|e| {
+                        e.iter()
+                            .map(|ep| (ep.entry_point.external_id.clone(), ep.entry_point.clone()))
+                    }),
+            );
 
         for (entrypoint_id, params_results_map) in entrypoint_results.into_iter() {
             for (param, result) in params_results_map.into_iter() {
@@ -409,7 +414,7 @@ where
 
                     self.cache
                         .retriggers
-                        .entry(location)
+                        .permanent_entry(&location)
                         .or_default()
                         .insert(entrypoint_with_params);
                 }
@@ -420,7 +425,7 @@ where
 
                     self.cache
                         .tracked_contracts
-                        .entry(address.clone())
+                        .permanent_entry(address)
                         .and_modify(|existing_slots| {
                             if let Some(existing) = existing_slots {
                                 existing.extend(slots.iter().cloned());
@@ -433,7 +438,7 @@ where
 
                 self.cache
                     .entrypoint_results
-                    .insert((entrypoint_id.clone(), param), result);
+                    .insert_permanent((entrypoint_id.clone(), param), result);
             }
         }
 
@@ -490,7 +495,11 @@ where
     }
 
     /// Update the DCI cache with the new entrypoints and tracing results
-    fn update_cache(&mut self, new_tracing_results: &[TracedEntryPoint]) {
+    fn update_cache(
+        &mut self,
+        block: &Block,
+        new_tracing_results: &[TracedEntryPoint],
+    ) -> Result<(), ExtractionError> {
         // Update the cache with the traced entrypoints
         for traced_entry_point in new_tracing_results.iter() {
             for location in traced_entry_point
@@ -500,7 +509,7 @@ where
             {
                 self.cache
                     .retriggers
-                    .entry(location.clone())
+                    .pending_entry(block, location)?
                     .or_default()
                     .insert(
                         traced_entry_point
@@ -519,7 +528,7 @@ where
 
                 self.cache
                     .tracked_contracts
-                    .entry(address.clone())
+                    .pending_entry(block, address)?
                     .and_modify(|existing_slots| {
                         if let Some(existing) = existing_slots {
                             existing.extend(slots.iter().cloned());
@@ -530,23 +539,28 @@ where
                     .or_insert(slots_to_insert);
             }
 
-            self.cache.entrypoint_results.insert(
-                (
+            self.cache
+                .entrypoint_results
+                .insert_pending(
+                    block.clone(),
+                    (
+                        traced_entry_point
+                            .entry_point_with_params
+                            .entry_point
+                            .external_id
+                            .clone(),
+                        traced_entry_point
+                            .entry_point_with_params
+                            .params
+                            .clone(),
+                    ),
                     traced_entry_point
-                        .entry_point_with_params
-                        .entry_point
-                        .external_id
+                        .tracing_result
                         .clone(),
-                    traced_entry_point
-                        .entry_point_with_params
-                        .params
-                        .clone(),
-                ),
-                traced_entry_point
-                    .tracing_result
-                    .clone(),
-            );
+                )?;
         }
+
+        Ok(())
     }
 
     /// Scans the block storage changes and extracts the updates for the tracked contracts.
@@ -865,24 +879,30 @@ mod tests {
         dci.initialize().await.unwrap();
 
         assert_eq!(
-            dci.cache.ep_id_to_entrypoint,
-            HashMap::from([
+            dci.cache
+                .ep_id_to_entrypoint
+                .get_full_permanent_state(),
+            &HashMap::from([
                 ("entrypoint_1".to_string(), get_entrypoint(1)),
                 ("entrypoint_4".to_string(), get_entrypoint(4)),
                 ("entrypoint_2".to_string(), get_entrypoint(2)),
             ])
         );
         assert_eq!(
-            dci.cache.entrypoint_results,
-            HashMap::from([
+            dci.cache
+                .entrypoint_results
+                .get_full_permanent_state(),
+            &HashMap::from([
                 (("entrypoint_1".to_string(), get_tracing_params(1)), get_tracing_result(1)),
                 (("entrypoint_2".to_string(), get_tracing_params(3)), get_tracing_result(2)),
                 (("entrypoint_4".to_string(), get_tracing_params(1)), get_tracing_result(1)),
             ])
         );
         assert_eq!(
-            dci.cache.retriggers,
-            HashMap::from([
+            dci.cache
+                .retriggers
+                .get_full_permanent_state(),
+            &HashMap::from([
                 (
                     (Bytes::from(1_u8), Bytes::from(1_u8)),
                     HashSet::from([
@@ -900,8 +920,10 @@ mod tests {
             ])
         );
         assert_eq!(
-            dci.cache.tracked_contracts,
-            HashMap::from([
+            dci.cache
+                .tracked_contracts
+                .get_full_permanent_state(),
+            &HashMap::from([
                 (Bytes::from("0x01"), Some(HashSet::from([Bytes::from("0x11")]))),
                 (Bytes::from("0x11"), Some(HashSet::from([Bytes::from("0x11")]))),
                 (Bytes::from("0x02"), Some(HashSet::from([Bytes::from("0x22")]))),
