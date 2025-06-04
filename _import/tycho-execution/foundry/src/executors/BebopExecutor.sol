@@ -384,12 +384,13 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             assembly {
                 let src := add(signatureData, add(0x20, offset))
                 let dst := add(sigBytes, 0x20)
-                
+
                 // Copy sigLength bytes from src to dst
                 let end := add(dst, sigLength)
-                for { } lt(dst, end) { dst := add(dst, 0x20) src := add(src, 0x20) } {
-                    mstore(dst, mload(src))
-                }
+                for {} lt(dst, end) {
+                    dst := add(dst, 0x20)
+                    src := add(src, 0x20)
+                } { mstore(dst, mload(src)) }
             }
 
             signatures[i] = IBebopSettlement.MakerSignature({

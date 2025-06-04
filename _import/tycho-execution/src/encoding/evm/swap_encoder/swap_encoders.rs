@@ -630,7 +630,7 @@ impl SwapEncoder for BebopSwapEncoder {
             let token_to_approve = token_in.clone();
             let settlement_address = Address::from_str(&self.settlement_address)
                 .map_err(|_| EncodingError::FatalError("Invalid settlement address".to_string()))?;
-            
+
             approval_needed = token_approvals_manager.approval_needed(
                 token_to_approve,
                 tycho_router_address,
@@ -639,7 +639,6 @@ impl SwapEncoder for BebopSwapEncoder {
         } else {
             approval_needed = true;
         }
-
 
         // Validate component ID
         Self::validate_component_id(&swap.component.id)?;
@@ -660,7 +659,8 @@ impl SwapEncoder for BebopSwapEncoder {
 
         // Encode packed data for the executor
         // Format: token_in | token_out | transfer_type | order_type |
-        //         quote_data_length | quote_data | signature_type | signature_length | signature | approval_needed
+        //         quote_data_length | quote_data | signature_type | signature_length | signature |
+        // approval_needed
         let args = (
             token_in,
             token_out,
@@ -1674,7 +1674,8 @@ mod tests {
             let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
             static_attributes
                 .insert("quote_data".into(), Bytes::from(hex::decode("1234567890abcdef").unwrap()));
-            static_attributes.insert("signature".into(), Bytes::from(hex::decode("aabbccdd").unwrap()));
+            static_attributes
+                .insert("signature".into(), Bytes::from(hex::decode("aabbccdd").unwrap()));
 
             let bebop_component = ProtocolComponent {
                 id: String::from("bebop"),
@@ -1744,7 +1745,7 @@ mod tests {
 
             write_calldata_to_file("test_encode_bebop_single", hex_swap.as_str());
         }
-        
+
         #[test]
         fn test_encode_bebop_multi() {
             use alloy::hex;
@@ -1753,7 +1754,8 @@ mod tests {
             let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
             static_attributes
                 .insert("quote_data".into(), Bytes::from(hex::decode("abcdef1234567890").unwrap()));
-            static_attributes.insert("signature".into(), Bytes::from(hex::decode("11223344").unwrap()));
+            static_attributes
+                .insert("signature".into(), Bytes::from(hex::decode("11223344").unwrap()));
             static_attributes.insert("order_type".into(), Bytes::from(vec![1u8])); // Multi order
 
             let bebop_component = ProtocolComponent {
@@ -1824,7 +1826,7 @@ mod tests {
 
             write_calldata_to_file("test_encode_bebop_multi", hex_swap.as_str());
         }
-        
+
         #[test]
         fn test_encode_bebop_aggregate() {
             use alloy::hex;
@@ -1834,7 +1836,10 @@ mod tests {
             static_attributes
                 .insert("quote_data".into(), Bytes::from(hex::decode("deadbeef").unwrap()));
             // For aggregate, signature contains multiple signatures encoded
-            static_attributes.insert("signature".into(), Bytes::from(hex::decode("0000000200000004aabbccdd00000004eeff0011").unwrap()));
+            static_attributes.insert(
+                "signature".into(),
+                Bytes::from(hex::decode("0000000200000004aabbccdd00000004eeff0011").unwrap()),
+            );
             static_attributes.insert("order_type".into(), Bytes::from(vec![2u8])); // Aggregate order
 
             let bebop_component = ProtocolComponent {
