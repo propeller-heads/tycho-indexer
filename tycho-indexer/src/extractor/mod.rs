@@ -17,6 +17,7 @@ use tycho_common::{
 
 use crate::{
     extractor::{
+        dynamic_contract_indexer::cache::DCICacheError,
         models::BlockChanges,
         reorg_buffer::{
             AccountStateIdType, AccountStateKeyType, AccountStateValueType, ProtocolStateIdType,
@@ -64,6 +65,8 @@ pub enum ExtractionError {
     TracingError(String),
     #[error("Account extraction error: {0}")]
     AccountExtractionError(String),
+    #[error("DCI cache error: {0}")]
+    DCICacheError(#[from] DCICacheError),
 }
 
 #[derive(Error, Debug)]
