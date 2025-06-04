@@ -30,10 +30,9 @@ contract MockToken is ERC20 {
 }
 
 contract BebopExecutorExposed is BebopExecutor {
-    constructor(
-        address _bebopSettlement,
-        address _permit2
-    ) BebopExecutor(_bebopSettlement, _permit2) {}
+    constructor(address _bebopSettlement, address _permit2)
+        BebopExecutor(_bebopSettlement, _permit2)
+    {}
 
     function decodeParams(bytes calldata data)
         external
@@ -96,6 +95,144 @@ contract MockBebopSettlement is Test, Constants {
 
         return filledMakerAmount;
     }
+
+    function swapMulti(
+        IBebopSettlement.Multi calldata order,
+        IBebopSettlement.MakerSignature calldata, /* makerSignature */
+        uint256[] calldata filledTakerAmounts
+    ) external payable returns (uint256[] memory filledMakerAmounts) {
+        // Basic validation
+        require(order.expiry >= block.timestamp, "Order expired");
+        require(
+            order.taker_tokens.length == filledTakerAmounts.length,
+            "Array length mismatch"
+        );
+
+        filledMakerAmounts = new uint256[](order.maker_tokens.length);
+
+        // Handle each token input
+        uint256 totalEthRequired = 0;
+        for (uint256 i = 0; i < order.taker_tokens.length; i++) {
+            if (filledTakerAmounts[i] == 0) continue;
+
+            require(
+                filledTakerAmounts[i] <= order.taker_amounts[i],
+                "Exceeds order amount"
+            );
+
+            if (order.taker_tokens[i] == address(0)) {
+                // For ETH input, accumulate required ETH
+                totalEthRequired += filledTakerAmounts[i];
+            } else {
+                // For ERC20 input, transfer from sender
+                IERC20(order.taker_tokens[i]).transferFrom(
+                    msg.sender, address(this), filledTakerAmounts[i]
+                );
+            }
+        }
+
+        // Validate ETH sent
+        require(msg.value >= totalEthRequired, "Insufficient ETH sent");
+
+        // Calculate and distribute maker amounts
+        for (uint256 i = 0; i < order.maker_tokens.length; i++) {
+            // Find corresponding taker amount (assuming 1:1 token mapping for simplicity)
+            if (i < order.taker_tokens.length && filledTakerAmounts[i] > 0) {
+                filledMakerAmounts[i] = (
+                    filledTakerAmounts[i] * order.maker_amounts[i]
+                ) / order.taker_amounts[i];
+
+                if (order.maker_tokens[i] == address(0)) {
+                    // For ETH output
+                    vm.deal(
+                        order.receiver,
+                        order.receiver.balance + filledMakerAmounts[i]
+                    );
+                } else {
+                    // For ERC20 output
+                    deal(
+                        order.maker_tokens[i],
+                        order.receiver,
+                        IERC20(order.maker_tokens[i]).balanceOf(order.receiver)
+                            + filledMakerAmounts[i]
+                    );
+                }
+            }
+        }
+
+        return filledMakerAmounts;
+    }
+
+    function swapAggregate(
+        IBebopSettlement.Aggregate calldata order,
+        IBebopSettlement.MakerSignature[] calldata, /* makerSignatures */
+        uint256[] calldata filledTakerAmounts
+    ) external payable returns (uint256[][] memory filledMakerAmounts) {
+        // Basic validation
+        require(order.expiry >= block.timestamp, "Order expired");
+        require(
+            order.taker_tokens.length == filledTakerAmounts.length,
+            "Array length mismatch"
+        );
+        require(
+            order.maker_addresses.length == order.maker_tokens.length,
+            "Maker array mismatch"
+        );
+
+        filledMakerAmounts = new uint256[][](order.maker_addresses.length);
+
+        // Handle taker tokens
+        uint256 totalEthRequired = 0;
+        for (uint256 i = 0; i < order.taker_tokens.length; i++) {
+            if (filledTakerAmounts[i] == 0) continue;
+
+            require(
+                filledTakerAmounts[i] <= order.taker_amounts[i],
+                "Exceeds order amount"
+            );
+
+            if (order.taker_tokens[i] == address(0)) {
+                totalEthRequired += filledTakerAmounts[i];
+            } else {
+                IERC20(order.taker_tokens[i]).transferFrom(
+                    msg.sender, address(this), filledTakerAmounts[i]
+                );
+            }
+        }
+
+        require(msg.value >= totalEthRequired, "Insufficient ETH sent");
+
+        // Distribute to makers (simplified: assumes first taker token goes to all makers proportionally)
+        for (uint256 i = 0; i < order.maker_addresses.length; i++) {
+            filledMakerAmounts[i] = new uint256[](order.maker_tokens[i].length);
+
+            for (uint256 j = 0; j < order.maker_tokens[i].length; j++) {
+                if (filledTakerAmounts[0] > 0) {
+                    // Simplified logic
+                    filledMakerAmounts[i][j] = (
+                        filledTakerAmounts[0] * order.maker_amounts[i][j]
+                    ) / order.taker_amounts[0];
+
+                    if (order.maker_tokens[i][j] == address(0)) {
+                        vm.deal(
+                            order.receiver,
+                            order.receiver.balance + filledMakerAmounts[i][j]
+                        );
+                    } else {
+                        deal(
+                            order.maker_tokens[i][j],
+                            order.receiver,
+                            IERC20(order.maker_tokens[i][j]).balanceOf(
+                                order.receiver
+                            ) + filledMakerAmounts[i][j]
+                        );
+                    }
+                }
+            }
+        }
+
+        return filledMakerAmounts;
+    }
 }
 
 contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
@@ -125,8 +262,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         // Deploy Bebop executor
         bebopExecutor = new BebopExecutorExposed(
-            address(mockBebopSettlement),
-            PERMIT2_ADDRESS
+            address(mockBebopSettlement), PERMIT2_ADDRESS
         );
 
         // Fund test accounts
@@ -391,7 +527,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         // Add extra bytes at the end, this should fail
         bytes memory invalidParams = abi.encodePacked(validParams, hex"ff");
-        
+
         vm.expectRevert(BebopExecutor.BebopExecutor__InvalidDataLength.selector);
         bebopExecutor.decodeParams(invalidParams);
 
@@ -400,10 +536,160 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             WETH_ADDR,
             USDC_ADDR,
             uint8(RestrictTransferFrom.TransferType.Transfer)
-            // Missing rest of the data
         );
-        
+        // Missing rest of the data
+
         vm.expectRevert(BebopExecutor.BebopExecutor__InvalidDataLength.selector);
         bebopExecutor.decodeParams(tooShortParams);
+    }
+
+    function testMultiRFQSwap() public {
+        uint256 amountIn = 1e18; // 1 WETH
+        uint256 expectedAmountOut = 3000e6; // 3000 USDC
+
+        // Create arrays for Multi order
+        address[] memory takerTokens = new address[](2);
+        takerTokens[0] = WETH_ADDR;
+        takerTokens[1] = DAI_ADDR; // Not used in this test
+
+        address[] memory makerTokens = new address[](2);
+        makerTokens[0] = USDC_ADDR;
+        makerTokens[1] = WBTC_ADDR; // Not used in this test
+
+        uint256[] memory takerAmounts = new uint256[](2);
+        takerAmounts[0] = amountIn;
+        takerAmounts[1] = 0;
+
+        uint256[] memory makerAmounts = new uint256[](2);
+        makerAmounts[0] = expectedAmountOut;
+        makerAmounts[1] = 0;
+
+        // Create a valid Bebop Multi order
+        IBebopSettlement.Multi memory order = IBebopSettlement.Multi({
+            expiry: block.timestamp + 3600,
+            taker_address: address(0),
+            maker_address: address(mockBebopSettlement),
+            maker_nonce: 1,
+            taker_tokens: takerTokens,
+            maker_tokens: makerTokens,
+            taker_amounts: takerAmounts,
+            maker_amounts: makerAmounts,
+            receiver: address(bebopExecutor),
+            packed_commands: 0,
+            flags: 0
+        });
+
+        // Encode order as quote data
+        bytes memory quoteData = abi.encode(order);
+        bytes memory signature = hex"aabbccdd";
+
+        bytes memory params = abi.encodePacked(
+            WETH_ADDR,
+            USDC_ADDR,
+            uint8(RestrictTransferFrom.TransferType.Transfer),
+            uint8(1), // OrderType.Multi
+            uint32(quoteData.length),
+            quoteData,
+            uint8(0), // signatureType: ECDSA
+            uint32(signature.length),
+            signature,
+            uint8(1) // approvalNeeded: true
+        );
+
+        // Transfer WETH to executor first
+        WETH.transfer(address(bebopExecutor), amountIn);
+
+        // Execute swap
+        uint256 executorBalanceBefore = USDC.balanceOf(address(bebopExecutor));
+        uint256 amountOut = bebopExecutor.swap(amountIn, params);
+        uint256 executorBalanceAfter = USDC.balanceOf(address(bebopExecutor));
+
+        // Check results
+        assertGt(amountOut, 0);
+        assertEq(amountOut, expectedAmountOut);
+        assertEq(executorBalanceAfter - executorBalanceBefore, amountOut);
+    }
+
+    function testAggregateRFQSwap() public {
+        uint256 amountIn = 1e18; // 1 WETH
+        uint256 expectedAmountOut = 3000e6; // 3000 USDC total from 2 makers
+
+        // Create arrays for Aggregate order
+        address[] memory takerTokens = new address[](1);
+        takerTokens[0] = WETH_ADDR;
+
+        uint256[] memory takerAmounts = new uint256[](1);
+        takerAmounts[0] = amountIn;
+
+        address[] memory makerAddresses = new address[](2);
+        makerAddresses[0] = address(mockBebopSettlement);
+        makerAddresses[1] = makeAddr("maker2");
+
+        address[][] memory makerTokens = new address[][](2);
+        makerTokens[0] = new address[](1);
+        makerTokens[0][0] = USDC_ADDR;
+        makerTokens[1] = new address[](1);
+        makerTokens[1][0] = USDC_ADDR;
+
+        uint256[][] memory makerAmounts = new uint256[][](2);
+        makerAmounts[0] = new uint256[](1);
+        makerAmounts[0][0] = 1500e6; // First maker provides 1500 USDC
+        makerAmounts[1] = new uint256[](1);
+        makerAmounts[1][0] = 1500e6; // Second maker provides 1500 USDC
+
+        // Create a valid Bebop Aggregate order
+        IBebopSettlement.Aggregate memory order = IBebopSettlement.Aggregate({
+            expiry: block.timestamp + 3600,
+            taker_address: address(0),
+            taker_nonce: 1,
+            taker_tokens: takerTokens,
+            taker_amounts: takerAmounts,
+            maker_addresses: makerAddresses,
+            maker_tokens: makerTokens,
+            maker_amounts: makerAmounts,
+            receiver: address(bebopExecutor),
+            packed_commands: 0,
+            flags: 0
+        });
+
+        // Encode order as quote data
+        bytes memory quoteData = abi.encode(order);
+
+        // Encode multiple signatures (2 makers)
+        bytes memory sig1 = hex"aabbccdd";
+        bytes memory sig2 = hex"eeff0011";
+        bytes memory signatures = abi.encodePacked(
+            uint32(2), // number of signatures
+            uint32(sig1.length),
+            sig1,
+            uint32(sig2.length),
+            sig2
+        );
+
+        bytes memory params = abi.encodePacked(
+            WETH_ADDR,
+            USDC_ADDR,
+            uint8(RestrictTransferFrom.TransferType.Transfer),
+            uint8(2), // OrderType.Aggregate
+            uint32(quoteData.length),
+            quoteData,
+            uint8(0), // signatureType: ECDSA
+            uint32(signatures.length),
+            signatures,
+            uint8(1) // approvalNeeded: true
+        );
+
+        // Transfer WETH to executor first
+        WETH.transfer(address(bebopExecutor), amountIn);
+
+        // Execute swap
+        uint256 executorBalanceBefore = USDC.balanceOf(address(bebopExecutor));
+        uint256 amountOut = bebopExecutor.swap(amountIn, params);
+        uint256 executorBalanceAfter = USDC.balanceOf(address(bebopExecutor));
+
+        // Check results
+        assertGt(amountOut, 0);
+        assertEq(amountOut, expectedAmountOut);
+        assertEq(executorBalanceAfter - executorBalanceBefore, amountOut);
     }
 }

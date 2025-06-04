@@ -1667,7 +1667,7 @@ mod tests {
         use crate::encoding::evm::utils::write_calldata_to_file;
 
         #[test]
-        fn test_encode_bebop_rfq() {
+        fn test_encode_bebop_single() {
             use alloy::hex;
 
             // Create static attributes for a Bebop RFQ quote
@@ -1742,7 +1742,168 @@ mod tests {
                 ))
             );
 
-            write_calldata_to_file("test_encode_bebop_rfq", hex_swap.as_str());
+            write_calldata_to_file("test_encode_bebop_single", hex_swap.as_str());
+        }
+        
+        #[test]
+        fn test_encode_bebop_multi() {
+            use alloy::hex;
+
+            // Create static attributes for a Bebop Multi RFQ quote
+            let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+            static_attributes
+                .insert("quote_data".into(), Bytes::from(hex::decode("abcdef1234567890").unwrap()));
+            static_attributes.insert("signature".into(), Bytes::from(hex::decode("11223344").unwrap()));
+            static_attributes.insert("order_type".into(), Bytes::from(vec![1u8])); // Multi order
+
+            let bebop_component = ProtocolComponent {
+                id: String::from("bebop"),
+                protocol_system: String::from("vm:bebop"),
+                static_attributes,
+                ..Default::default()
+            };
+
+            let token_in = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"); // WETH
+            let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+            let swap = Swap {
+                component: bebop_component,
+                token_in: token_in.clone(),
+                token_out: token_out.clone(),
+                split: 0f64,
+            };
+
+            let encoding_context = EncodingContext {
+                receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::Transfer,
+            };
+
+            let encoder = BebopSwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                TychoCoreChain::Ethereum.into(),
+                Some(HashMap::from([(
+                    "settlement_address".to_string(),
+                    "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F".to_string(),
+                )])),
+            )
+            .unwrap();
+
+            let encoded_swap = encoder
+                .encode_swap(swap, encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
+
+            assert_eq!(
+                hex_swap,
+                String::from(concat!(
+                    // token in
+                    "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                    // token out
+                    "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                    // transfer type Transfer
+                    "01",
+                    // order type Multi
+                    "01",
+                    // quote data length (8 bytes = 0x00000008)
+                    "00000008",
+                    // quote data
+                    "abcdef1234567890",
+                    // signature type ECDSA (default 0)
+                    "00",
+                    // signature length (4 bytes = 0x00000004)
+                    "00000004",
+                    // signature
+                    "11223344",
+                    // approval needed
+                    "01"
+                ))
+            );
+
+            write_calldata_to_file("test_encode_bebop_multi", hex_swap.as_str());
+        }
+        
+        #[test]
+        fn test_encode_bebop_aggregate() {
+            use alloy::hex;
+
+            // Create static attributes for a Bebop Aggregate RFQ quote
+            let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+            static_attributes
+                .insert("quote_data".into(), Bytes::from(hex::decode("deadbeef").unwrap()));
+            // For aggregate, signature contains multiple signatures encoded
+            static_attributes.insert("signature".into(), Bytes::from(hex::decode("0000000200000004aabbccdd00000004eeff0011").unwrap()));
+            static_attributes.insert("order_type".into(), Bytes::from(vec![2u8])); // Aggregate order
+
+            let bebop_component = ProtocolComponent {
+                id: String::from("bebop"),
+                protocol_system: String::from("vm:bebop"),
+                static_attributes,
+                ..Default::default()
+            };
+
+            let token_in = Bytes::from("0x6B175474E89094C44Da98b954EedeAC495271d0F"); // DAI
+            let token_out = Bytes::from("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"); // WBTC
+            let swap = Swap {
+                component: bebop_component,
+                token_in: token_in.clone(),
+                token_out: token_out.clone(),
+                split: 0f64,
+            };
+
+            let encoding_context = EncodingContext {
+                receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::TransferFrom,
+            };
+
+            let encoder = BebopSwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                TychoCoreChain::Ethereum.into(),
+                Some(HashMap::from([(
+                    "settlement_address".to_string(),
+                    "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F".to_string(),
+                )])),
+            )
+            .unwrap();
+
+            let encoded_swap = encoder
+                .encode_swap(swap, encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
+
+            assert_eq!(
+                hex_swap,
+                String::from(concat!(
+                    // token in
+                    "6b175474e89094c44da98b954eedeac495271d0f",
+                    // token out
+                    "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+                    // transfer type TransferFrom
+                    "00",
+                    // order type Aggregate
+                    "02",
+                    // quote data length (4 bytes = 0x00000004)
+                    "00000004",
+                    // quote data
+                    "deadbeef",
+                    // signature type ECDSA (default 0)
+                    "00",
+                    // signature length (20 bytes for encoded signatures)
+                    "00000014",
+                    // encoded signatures (2 signatures)
+                    "0000000200000004aabbccdd00000004eeff0011",
+                    // approval needed
+                    "01"
+                ))
+            );
+
+            write_calldata_to_file("test_encode_bebop_aggregate", hex_swap.as_str());
         }
     }
 }
