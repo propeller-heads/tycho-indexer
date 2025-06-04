@@ -1,3 +1,21 @@
+## [0.104.0](https://github.com/propeller-heads/tycho-simulation/compare/0.103.2...0.104.0) (2025-06-04)
+
+
+### Features
+
+* Add ability to bypass approvals ([4839d4e](https://github.com/propeller-heads/tycho-simulation/commit/4839d4e86a62ba6b01005f312334767510e584ee))
+* Add build runtime script and fix simulation py code ([c134146](https://github.com/propeller-heads/tycho-simulation/commit/c134146d040be02b1884ff93cbe896b19dab522f))
+* Add new ERC20 override contract ([177ff9e](https://github.com/propeller-heads/tycho-simulation/commit/177ff9ec8a089b285b09bd40f6e8b2a021ff89a7))
+* initialize token balances for receiving accounts ([f0cb2e1](https://github.com/propeller-heads/tycho-simulation/commit/f0cb2e12114ab2efee0d16932c53ddafe06ec7a4))
+* remove ERCO20.sol ([9e6b336](https://github.com/propeller-heads/tycho-simulation/commit/9e6b3362f3cc5ae097e24dec2ea4e2604d8a256d))
+* update binaries ([63421d9](https://github.com/propeller-heads/tycho-simulation/commit/63421d95611b94c6a116e3a1cf66b65874486884))
+* Update README, remove duplicated contract, small code improvements ([a4be124](https://github.com/propeller-heads/tycho-simulation/commit/a4be124b5c9d7d22d1cb3c7d9b0ee65e449cf0b9))
+
+
+### Bug Fixes
+
+* formatting ([ffb80c2](https://github.com/propeller-heads/tycho-simulation/commit/ffb80c2d15aea97d906142932f76c341dac9fe49))
+
 ## [0.103.2](https://github.com/propeller-heads/tycho-simulation/compare/0.103.1...0.103.2) (2025-06-04)
 
 
