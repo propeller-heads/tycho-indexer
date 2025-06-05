@@ -1,3 +1,12 @@
+## [0.70.9](https://github.com/propeller-heads/tycho-indexer/compare/0.70.8...0.70.9) (2025-06-05)
+
+
+### Bug Fixes
+
+* convert ids to lowercase for the id base ComponentFilter ([0103c60](https://github.com/propeller-heads/tycho-indexer/commit/0103c60c95c8f61375d0d61c6f094e4a3058bf83))
+* **tycho-client:** update cli docs, validation and address handling ([45870b1](https://github.com/propeller-heads/tycho-indexer/commit/45870b1bb7d4c9ec51336fe53571f9bd11d6bb3c))
+* **tycho-client:** update cli docs, validation and address handling ([#591](https://github.com/propeller-heads/tycho-indexer/issues/591)) ([3272d34](https://github.com/propeller-heads/tycho-indexer/commit/3272d34cf420c2e0ce6d183ff0f1f07035b1eeea))
+
 ## [0.70.8](https://github.com/propeller-heads/tycho-indexer/compare/0.70.7...0.70.8) (2025-06-03)
 
 ## [0.70.7](https://github.com/propeller-heads/tycho-indexer/compare/0.70.6...0.70.7) (2025-05-21)
