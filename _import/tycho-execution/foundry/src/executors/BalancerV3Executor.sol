@@ -33,7 +33,7 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom, ICallback {
     {
         bytes memory result = VAULT.unlock(
             abi.encodeCall(
-                BalancerV3Executor.handleCallback,
+                BalancerV3Executor.swapCallback,
                 abi.encodePacked(givenAmount, data)
             )
         );
@@ -46,8 +46,8 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom, ICallback {
         }
     }
 
-    function handleCallback(bytes calldata data)
-        external
+    function _swapCallback(bytes calldata data)
+        internal
         returns (bytes memory result)
     {
         verifyCallback(data);
@@ -82,6 +82,24 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom, ICallback {
         return abi.encode(amountCalculated);
     }
 
+    function handleCallback(bytes calldata data)
+        external
+        returns (bytes memory result)
+    {
+        verifyCallback(data);
+        result = _swapCallback(data[68:]);
+        // Our general callback logic returns a not ABI encoded result.
+        // However, the Vault expects the result to be ABI encoded. That is why we need to encode it here again.
+        return abi.encode(result);
+    }
+
+    function swapCallback(bytes calldata data)
+        external
+        returns (bytes memory result)
+    {
+        return _swapCallback(data);
+    }
+
     function _decodeData(bytes calldata data)
         internal
         pure
@@ -94,7 +112,7 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom, ICallback {
             address receiver
         )
     {
-        if (data.length != 113) {
+        if (data.length < 113) {
             revert BalancerV3Executor__InvalidDataLength();
         }
 
