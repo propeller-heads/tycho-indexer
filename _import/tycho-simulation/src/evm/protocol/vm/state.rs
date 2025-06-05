@@ -611,9 +611,11 @@ where
 
     fn get_limits(
         &self,
-        sell_token: Address,
-        buy_token: Address,
+        sell_token: Bytes,
+        buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
+        let sell_token = bytes_to_address(&sell_token)?;
+        let buy_token = bytes_to_address(&buy_token)?;
         let overwrites =
             self.get_overwrites(vec![sell_token, buy_token], *MAX_BALANCE / U256::from(100))?;
         let limits = self.get_amount_limits(vec![sell_token, buy_token], Some(overwrites))?;

@@ -47,7 +47,6 @@ mod tests {
         str::FromStr,
     };
 
-    use alloy::primitives::Address;
     use approx::assert_ulps_eq;
     use num_bigint::{BigUint, ToBigUint};
     use num_traits::One;
@@ -245,8 +244,8 @@ mod tests {
 
         let (amount_in, _) = state
             .get_limits(
-                Address::from_str("0x0000000000000000000000000000000000000000").unwrap(),
-                Address::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+                Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+                Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
             )
             .unwrap();
 

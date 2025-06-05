@@ -1,6 +1,5 @@
 use std::{any::Any, collections::HashMap, fmt::Debug};
 
-use alloy::primitives::Address;
 use evm_ekubo_sdk::{
     math::uint::U256,
     quoting::types::{NodeKey, Tick, TokenAmount},
@@ -162,12 +161,12 @@ impl ProtocolSim for EkuboState {
 
     fn get_limits(
         &self,
-        sell_token: Address,
-        _buy_token: Address,
+        sell_token: Bytes,
+        _buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         // TODO Update once exact out is supported
         Ok((
-            self.get_limit(U256::from_big_endian(sell_token.as_slice()))?
+            self.get_limit(U256::from_big_endian(&sell_token))?
                 .into(),
             BigUint::ZERO,
         ))
@@ -239,8 +238,8 @@ mod tests {
 
         let max_amount_in = state
             .get_limits(
-                Address::from_word(POOL_KEY.token0.to_big_endian().into()),
-                Address::from_word(POOL_KEY.token1.to_big_endian().into()),
+                POOL_KEY.token0.to_big_endian().into(),
+                POOL_KEY.token1.to_big_endian().into(),
             )
             .unwrap()
             .0;

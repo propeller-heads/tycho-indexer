@@ -40,13 +40,12 @@
 //! );
 //!
 //! // Get the amount out for swapping WETH to USDC
-//! let out = state.get_amount_out(u256_to_biguint(weth.one()), &weth, &usdc).unwrap().amount;
+//! let out = state.get_amount_out(weth.one(), &weth, &usdc).unwrap().amount;
 //! assert_eq!(state.spot_price(&weth, &usdc).unwrap(), 1218.0683462769755f64);
 //! assert_eq!(out, 1214374202.to_biguint().unwrap());
 //! ```
 use std::{any::Any, collections::HashMap};
 
-use alloy::primitives::Address;
 #[cfg(test)]
 use mockall::mock;
 use num_bigint::BigUint;
@@ -134,8 +133,8 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     /// * `Err(SimulationError)` - If any unexpected error occurs
     fn get_limits(
         &self,
-        sell_token: Address,
-        buy_token: Address,
+        sell_token: Bytes,
+        buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError>;
 
     /// Decodes and applies a protocol state delta to the state
@@ -194,8 +193,8 @@ mock! {
         ) -> Result<GetAmountOutResult, SimulationError>;
         pub fn get_limits(
             &self,
-            sell_token: Address,
-            buy_token: Address,
+            sell_token: Bytes,
+            buy_token: Bytes,
         ) -> Result<(BigUint, BigUint), SimulationError>;
         pub fn delta_transition(
             &mut self,
@@ -229,8 +228,8 @@ impl ProtocolSim for MockProtocolSim {
 
     fn get_limits(
         &self,
-        sell_token: Address,
-        buy_token: Address,
+        sell_token: Bytes,
+        buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         self.get_limits(sell_token, buy_token)
     }

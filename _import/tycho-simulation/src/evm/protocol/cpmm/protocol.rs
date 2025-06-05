@@ -1,6 +1,6 @@
 use std::{any::Any, collections::HashMap};
 
-use alloy::primitives::{Address, U256};
+use alloy::primitives::U256;
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::Zero;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
@@ -140,8 +140,8 @@ impl<T: CPMMProtocol + Clone + 'static + std::fmt::Debug + Sync + Send> Protocol
 
     fn get_limits(
         &self,
-        token_in: Address,
-        token_out: Address,
+        token_in: Bytes,
+        token_out: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         let (reserve0, reserve1) = self.get_reserves();
         if reserve0 == U256::from(0u64) || reserve1 == U256::from(0u64) {
