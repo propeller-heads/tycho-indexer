@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use crate::encoding::{
     errors::EncodingError,
     evm::swap_encoder::swap_encoders::{
-        BalancerV2SwapEncoder, CurveSwapEncoder, EkuboSwapEncoder, MaverickV2SwapEncoder,
-        UniswapV2SwapEncoder, UniswapV3SwapEncoder, UniswapV4SwapEncoder,
+        BalancerV2SwapEncoder, BalancerV3SwapEncoder, CurveSwapEncoder, EkuboSwapEncoder,
+        MaverickV2SwapEncoder, UniswapV2SwapEncoder, UniswapV3SwapEncoder, UniswapV4SwapEncoder,
     },
     models::Chain,
     swap_encoder::SwapEncoder,
@@ -77,6 +77,11 @@ impl SwapEncoderBuilder {
                 Ok(Box::new(CurveSwapEncoder::new(self.executor_address, self.chain, self.config)?))
             }
             "vm:maverick_v2" => Ok(Box::new(MaverickV2SwapEncoder::new(
+                self.executor_address,
+                self.chain,
+                self.config,
+            )?)),
+            "vm:balancer_v3" => Ok(Box::new(BalancerV3SwapEncoder::new(
                 self.executor_address,
                 self.chain,
                 self.config,
