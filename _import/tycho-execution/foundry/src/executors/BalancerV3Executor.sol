@@ -12,42 +12,18 @@ import {
     VaultSwapParams
 } from "@balancer-labs/v3-interfaces/contracts/vault/VaultTypes.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
+import {ICallback} from "../../interfaces/ICallback.sol";
 
 error BalancerV3Executor__InvalidDataLength();
 error BalancerV3Executor__SenderIsNotVault(address sender);
 
-contract BalancerV3Executor is IExecutor, RestrictTransferFrom {
+contract BalancerV3Executor is IExecutor, RestrictTransferFrom, ICallback {
     using SafeERC20 for IERC20;
 
     IVault private constant VAULT =
         IVault(0xbA1333333333a1BA1108E8412f11850A5C319bA9);
 
-    /**
-     * @notice Data for the swap hook.
-     * @param pool Address of the liquidity pool
-     * @param tokenIn Token to be swapped from
-     * @param tokenOut Token to be swapped to
-     * @param amountGiven Amount given based on kind of the swap
-     * @param transferType Type of transfer to be used for the token in
-     * @param receiver Address to receive the output token
-     */
-    struct SwapHookParams {
-        address pool;
-        IERC20 tokenIn;
-        IERC20 tokenOut;
-        uint256 amountGiven;
-        TransferType transferType;
-        address receiver;
-    }
-
     constructor(address _permit2) RestrictTransferFrom(_permit2) {}
-
-    modifier onlyVault() {
-        if (msg.sender != address(VAULT)) {
-            revert BalancerV3Executor__SenderIsNotVault(msg.sender);
-        }
-        _;
-    }
 
     // slither-disable-next-line locked-ether
     function swap(uint256 givenAmount, bytes calldata data)
@@ -55,7 +31,28 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom {
         payable
         returns (uint256 calculatedAmount)
     {
+        bytes memory result = VAULT.unlock(
+            abi.encodeCall(
+                BalancerV3Executor.handleCallback,
+                abi.encodePacked(givenAmount, data)
+            )
+        );
+        calculatedAmount = abi.decode(abi.decode(result, (bytes)), (uint256));
+    }
+
+    function verifyCallback(bytes calldata /*data*/ ) public view {
+        if (msg.sender != address(VAULT)) {
+            revert BalancerV3Executor__SenderIsNotVault(msg.sender);
+        }
+    }
+
+    function handleCallback(bytes calldata data)
+        external
+        returns (bytes memory result)
+    {
+        verifyCallback(data);
         (
+            uint256 amountGiven,
             IERC20 tokenIn,
             IERC20 tokenOut,
             address poolId,
@@ -63,65 +60,33 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom {
             address receiver
         ) = _decodeData(data);
 
-        calculatedAmount = abi.decode(
-            VAULT.unlock(
-                abi.encodeCall(
-                    BalancerV3Executor.swapHook,
-                    SwapHookParams({
-                        pool: poolId,
-                        tokenIn: tokenIn,
-                        tokenOut: tokenOut,
-                        amountGiven: givenAmount,
-                        transferType: transferType,
-                        receiver: receiver
-                    })
-                )
-            ),
-            (uint256)
-        );
-    }
-
-    /**
-     * @notice Hook to be called by the Balancer Vault.
-     * @param params Parameters for the swap hook.
-     * @return amountCalculated The amount calculated after the swap.
-     */
-    function swapHook(SwapHookParams calldata params)
-        external
-        onlyVault
-        returns (uint256 amountCalculated)
-    {
+        uint256 amountCalculated;
         uint256 amountIn;
         uint256 amountOut;
         (amountCalculated, amountIn, amountOut) = VAULT.swap(
             VaultSwapParams({
                 kind: SwapKind.EXACT_IN,
-                pool: params.pool,
-                tokenIn: params.tokenIn,
-                tokenOut: params.tokenOut,
-                amountGivenRaw: params.amountGiven,
+                pool: poolId,
+                tokenIn: tokenIn,
+                tokenOut: tokenOut,
+                amountGivenRaw: amountGiven,
                 limitRaw: 0,
                 userData: ""
             })
         );
 
-        _transfer(
-            address(VAULT),
-            params.transferType,
-            address(params.tokenIn),
-            amountIn
-        );
+        _transfer(address(VAULT), transferType, address(tokenIn), amountIn);
         // slither-disable-next-line unused-return
-        VAULT.settle(params.tokenIn, amountIn);
-        VAULT.sendTo(params.tokenOut, params.receiver, amountOut);
-
-        return amountCalculated;
+        VAULT.settle(tokenIn, amountIn);
+        VAULT.sendTo(tokenOut, receiver, amountOut);
+        return abi.encode(amountCalculated);
     }
 
     function _decodeData(bytes calldata data)
         internal
         pure
         returns (
+            uint256 amountGiven,
             IERC20 tokenIn,
             IERC20 tokenOut,
             address poolId,
@@ -129,14 +94,15 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom {
             address receiver
         )
     {
-        if (data.length != 81) {
+        if (data.length != 113) {
             revert BalancerV3Executor__InvalidDataLength();
         }
 
-        tokenIn = IERC20(address(bytes20(data[0:20])));
-        tokenOut = IERC20(address(bytes20(data[20:40])));
-        poolId = address(bytes20(data[40:60]));
-        transferType = TransferType(uint8(data[60]));
-        receiver = address(bytes20(data[61:81]));
+        amountGiven = uint256(bytes32(data[0:32]));
+        tokenIn = IERC20(address(bytes20(data[32:52])));
+        tokenOut = IERC20(address(bytes20(data[52:72])));
+        poolId = address(bytes20(data[72:92]));
+        transferType = TransferType(uint8(data[92]));
+        receiver = address(bytes20(data[93:113]));
     }
 }

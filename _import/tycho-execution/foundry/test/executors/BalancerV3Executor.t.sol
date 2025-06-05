@@ -13,6 +13,7 @@ contract BalancerV3ExecutorExposed is BalancerV3Executor {
         external
         pure
         returns (
+            uint256 amountGiven,
             IERC20 tokenIn,
             IERC20 tokenOut,
             address poolId,
@@ -41,6 +42,7 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
 
     function testDecodeParams() public view {
         bytes memory params = abi.encodePacked(
+            uint256(1 ether),
             osETH_ADDR,
             waEthWETH_ADDR,
             WETH_osETH_pool,
@@ -49,6 +51,7 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
         );
 
         (
+            uint256 amountGiven,
             IERC20 tokenIn,
             IERC20 tokenOut,
             address poolId,
@@ -56,6 +59,7 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
             address receiver
         ) = balancerV3Exposed.decodeParams(params);
 
+        assertEq(amountGiven, 1 ether);
         assertEq(address(tokenIn), osETH_ADDR);
         assertEq(address(tokenOut), waEthWETH_ADDR);
         assertEq(poolId, WETH_osETH_pool);
