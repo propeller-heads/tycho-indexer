@@ -1,3 +1,10 @@
+## [0.99.0](https://github.com/propeller-heads/tycho-execution/compare/0.98.0...0.99.0) (2025-06-05)
+
+
+### Features
+
+* Extend Swap to hold user_data: Option<Bytes> ([eec50f8](https://github.com/propeller-heads/tycho-execution/commit/eec50f88222adb89154f127a98fd8da380025381))
+
 ## [0.98.0](https://github.com/propeller-heads/tycho-execution/compare/0.97.0...0.98.0) (2025-06-05)
 
 
