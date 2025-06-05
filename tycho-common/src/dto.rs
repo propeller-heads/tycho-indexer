@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 use crate::{
     models,
+    models::ComponentId,
     serde_primitives::{
         hex_bytes, hex_bytes_option, hex_hashmap_key, hex_hashmap_key_value, hex_hashmap_value,
     },
@@ -960,7 +961,7 @@ pub struct ProtocolComponentsRequestBody {
     pub protocol_system: String,
     /// Filter by component ids
     #[serde(alias = "componentAddresses")]
-    pub component_ids: Option<Vec<String>>,
+    pub component_ids: Option<Vec<ComponentId>>,
     /// The minimum TVL of the protocol components to return, denoted in the chain's
     /// native token.
     #[serde(default)]
@@ -1329,7 +1330,7 @@ impl ProtocolSystemsRequestResponse {
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
 pub struct DCIUpdate {
     /// Map of component id to the new entrypoints associated with the component
-    pub new_entrypoints: HashMap<String, HashSet<EntryPoint>>,
+    pub new_entrypoints: HashMap<ComponentId, HashSet<EntryPoint>>,
     /// Map of entrypoint id to the new entrypoint params associtated with it (and optionally the
     /// component linked to those params)
     pub new_entrypoint_params: HashMap<String, HashSet<(TracingParams, Option<String>)>>,
@@ -1392,7 +1393,7 @@ pub struct TracedEntryPointRequestBody {
     /// ReorgBuffers
     pub protocol_system: String,
     /// Filter by component ids
-    pub component_ids: Option<Vec<String>>,
+    pub component_ids: Option<Vec<ComponentId>>,
     /// Max page size supported is 100
     #[serde(default)]
     pub pagination: PaginationParams,
@@ -1486,7 +1487,8 @@ impl From<models::blockchain::TracingResult> for TracingResult {
 pub struct TracedEntryPointRequestResponse {
     /// Map of protocol component id to a list of a tuple containing each entry point with its
     /// tracing parameters and its corresponding tracing results.
-    pub traced_entry_points: HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
+    pub traced_entry_points:
+        HashMap<ComponentId, Vec<(EntryPointWithTracingParams, TracingResult)>>,
     pub pagination: PaginationResponse,
 }
 
@@ -1546,14 +1548,15 @@ pub struct AddEntryPointRequestBody {
     #[serde(default)]
     pub block_hash: Bytes,
     /// The map of component ids to their tracing params to insert
-    pub entry_points_with_tracing_data: Vec<(String, Vec<EntryPointWithTracingParams>)>,
+    pub entry_points_with_tracing_data: Vec<(ComponentId, Vec<EntryPointWithTracingParams>)>,
 }
 
 #[derive(Serialize, PartialEq, ToSchema, Eq, Clone, Debug, Deserialize)]
 pub struct AddEntryPointRequestResponse {
     /// Map of protocol component id to a list of a tuple containing each entry point with its
     /// tracing parameters and its corresponding tracing results.
-    pub traced_entry_points: HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
+    pub traced_entry_points:
+        HashMap<ComponentId, Vec<(EntryPointWithTracingParams, TracingResult)>>,
 }
 
 #[cfg(test)]
