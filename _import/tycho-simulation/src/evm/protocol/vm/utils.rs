@@ -1,14 +1,14 @@
 use std::{collections::HashMap, env, str::FromStr};
 
 use alloy::{
+    primitives::{Address, Bytes, U256},
     providers::{Provider, ProviderBuilder},
+    sol_types::SolValue,
     transports::{RpcError, TransportErrorKind},
 };
-use alloy_primitives::{Address, U256};
-use alloy_sol_types::SolValue;
 use hex::FromHex;
 use num_bigint::BigInt;
-use revm::primitives::{Bytecode, Bytes};
+use revm::state::Bytecode;
 use serde_json::Value;
 
 use crate::{
@@ -92,13 +92,13 @@ fn parse_solidity_error_message(data: &str) -> String {
         // Check for specific error selectors:
         // Solidity Error(string) signature: 0x08c379a0
         if data_bytes.starts_with(&[0x08, 0xc3, 0x79, 0xa0]) {
-            if let Ok(decoded) = String::abi_decode(&data_bytes[4..], true) {
+            if let Ok(decoded) = String::abi_decode(&data_bytes[4..]) {
                 return decoded;
             }
 
             // Solidity Panic(uint256) signature: 0x4e487b71
         } else if data_bytes.starts_with(&[0x4e, 0x48, 0x7b, 0x71]) {
-            if let Ok(decoded) = U256::abi_decode(&data_bytes[4..], true) {
+            if let Ok(decoded) = U256::abi_decode(&data_bytes[4..]) {
                 let panic_codes = get_solidity_panic_codes();
                 return panic_codes
                     .get(&decoded.as_limbs()[0])
@@ -108,12 +108,12 @@ fn parse_solidity_error_message(data: &str) -> String {
         }
 
         // Try decoding as a string (old Solidity revert case)
-        if let Ok(decoded) = String::abi_decode(&data_bytes, true) {
+        if let Ok(decoded) = String::abi_decode(&data_bytes) {
             return decoded;
         }
 
         // Custom error, try to decode string again with offset
-        if let Ok(decoded) = String::abi_decode(&data_bytes[4..], true) {
+        if let Ok(decoded) = String::abi_decode(&data_bytes[4..]) {
             return decoded;
         }
     }
@@ -143,7 +143,7 @@ fn parse_solidity_error_message(data: &str) -> String {
 /// a storage slot where balance of a given account is stored:
 ///
 /// ```
-/// use alloy_primitives::{U256, Address};
+/// use alloy::primitives::{U256, Address};
 /// use tycho_simulation::evm::ContractCompiler;
 /// use tycho_simulation::evm::protocol::vm::utils::get_storage_slot_index_at_key;
 /// let address: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
@@ -157,7 +157,7 @@ fn parse_solidity_error_message(data: &str) -> String {
 /// where an allowance of `address_spender` to spend `address_owner`'s money is stored:
 ///
 /// ```
-/// use alloy_primitives::{U256, Address};
+/// use alloy::primitives::{U256, Address};
 /// use tycho_simulation::evm::ContractCompiler;
 /// use tycho_simulation::evm::protocol::vm::utils::get_storage_slot_index_at_key;
 /// let address_spender: Address = "0xC63135E4bF73F637AF616DFd64cf701866BB2628".parse().expect("Invalid address");
@@ -264,7 +264,7 @@ fn sync_get_code(
         tokio::runtime::Handle::current().block_on(async {
             // Create a provider with the URL
             let provider = ProviderBuilder::new()
-                .on_builtin(connection_string)
+                .connect(connection_string)
                 .await
                 .unwrap();
 

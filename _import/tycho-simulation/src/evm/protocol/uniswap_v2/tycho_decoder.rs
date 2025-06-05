@@ -2,7 +2,7 @@
 mod tests {
     use std::collections::HashMap;
 
-    use alloy_primitives::U256;
+    use alloy::primitives::U256;
     use rstest::rstest;
     use tycho_client::feed::{synchronizer::ComponentWithState, Header};
     use tycho_common::{dto::ResponseProtocolState, Bytes};

@@ -1,6 +1,6 @@
 use std::{any::Any, collections::HashMap};
 
-use alloy_primitives::{Address, Sign, I256, U256};
+use alloy::primitives::{Sign, I256, U256};
 use num_bigint::BigUint;
 use num_traits::Zero;
 use tracing::trace;
@@ -269,8 +269,8 @@ impl ProtocolSim for UniswapV3State {
 
     fn get_limits(
         &self,
-        token_in: Address,
-        token_out: Address,
+        token_in: Bytes,
+        token_out: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         // If the pool has no liquidity, return zeros for both limits
         if self.liquidity == 0 {
@@ -482,7 +482,7 @@ mod tests {
     use tycho_common::hex_bytes::Bytes;
 
     use super::*;
-    use crate::{evm::protocol::utils::bytes_to_address, protocol::models::TryFromWithBlock};
+    use crate::protocol::models::TryFromWithBlock;
 
     #[test]
     fn test_get_amount_out_full_range_liquidity() {
@@ -773,10 +773,7 @@ mod tests {
         );
 
         let res = usv3_state
-            .get_limits(
-                bytes_to_address(&t0.address).unwrap(),
-                bytes_to_address(&t1.address).unwrap(),
-            )
+            .get_limits(t0.address.clone(), t1.address.clone())
             .unwrap();
 
         assert_eq!(&res.0, &BigUint::from_u128(20358481906554983980330155).unwrap()); // Crazy amount because of this tick: "ticks/-887272/net-liquidity": "0x10d73d"

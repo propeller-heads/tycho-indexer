@@ -10,7 +10,6 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use alloy_primitives::U256;
 use num_bigint::BigUint;
 use serde::Serialize;
 use thiserror::Error;
@@ -47,7 +46,7 @@ impl Token {
     /// - `address`: token address as string
     /// - `decimals`: token decimal as usize
     /// - `symbol`: token symbol as string
-    /// - `gas`: token gas as U256
+    /// - `gas`: token gas as BigUint
     ///
     /// ## Return
     /// Return a new Token struct
@@ -64,12 +63,12 @@ impl Token {
     }
 
     /// One
-    /// Get one token in U256 format
+    /// Get one token in BigUint format
     ///
     /// ## Return
-    /// Return one token as U256
-    pub fn one(&self) -> U256 {
-        U256::from(10).pow(U256::from(self.decimals))
+    /// Return one token as BigUint
+    pub fn one(&self) -> BigUint {
+        BigUint::from((1.0 * 10f64.powi(self.decimals as i32)) as u128)
     }
 }
 
@@ -181,6 +180,6 @@ mod tests {
             10000.to_biguint().unwrap(),
         );
 
-        assert_eq!(usdc.one(), U256::from(1000000));
+        assert_eq!(usdc.one(), BigUint::from(1000000u64));
     }
 }

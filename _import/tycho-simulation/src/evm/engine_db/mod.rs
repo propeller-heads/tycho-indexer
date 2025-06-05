@@ -1,11 +1,8 @@
 use std::{collections::HashMap, fmt::Debug};
 
-use alloy_primitives::Address;
+use alloy::primitives::Address;
 use lazy_static::lazy_static;
-use revm::{
-    primitives::{AccountInfo, KECCAK_EMPTY},
-    DatabaseRef,
-};
+use revm::{primitives::KECCAK_EMPTY, state::AccountInfo, DatabaseRef};
 
 use crate::{
     evm::{
@@ -22,6 +19,7 @@ use crate::{
 pub mod engine_db_interface;
 pub mod simulation_db;
 pub mod tycho_db;
+pub mod utils;
 
 lazy_static! {
     pub static ref SHARED_TYCHO_DB: PreCachedDB =

@@ -7,22 +7,19 @@ use std::{
 
 use alloy::{
     eips::BlockNumberOrTag,
-    network::{primitives::BlockTransactionsKind, Ethereum, EthereumWallet},
+    network::{Ethereum, EthereumWallet},
+    primitives::{Address, Bytes as AlloyBytes, Keccak256, Signature, TxKind, B256, U256},
     providers::{
         fillers::{FillProvider, JoinFill, WalletFiller},
-        Identity, Provider, ProviderBuilder, ReqwestProvider,
+        Identity, Provider, ProviderBuilder, RootProvider,
     },
     rpc::types::{
         simulate::{SimBlock, SimulatePayload},
         TransactionInput, TransactionRequest,
     },
     signers::{local::PrivateKeySigner, SignerSync},
-    transports::http::{Client, Http},
+    sol_types::{eip712_domain, SolStruct, SolValue},
 };
-use alloy_primitives::{
-    Address, Bytes as AlloyBytes, Keccak256, PrimitiveSignature, TxKind, B256, U256,
-};
-use alloy_sol_types::{eip712_domain, SolStruct, SolValue};
 use clap::Parser;
 use dialoguer::{theme::ColorfulTheme, Select};
 use foundry_config::NamedChain;
@@ -242,15 +239,12 @@ async fn main() {
     let tx_signer = EthereumWallet::from(wallet.clone());
     let named_chain =
         NamedChain::from_str(&cli.chain.replace("ethereum", "mainnet")).expect("Invalid chain");
-    let provider = ProviderBuilder::new()
+    let provider = ProviderBuilder::default()
         .with_chain(named_chain)
         .wallet(tx_signer.clone())
-        .on_http(
-            env::var("RPC_URL")
-                .expect("RPC_URL env var not set")
-                .parse()
-                .expect("Failed to parse RPC_URL"),
-        );
+        .connect(&env::var("RPC_URL").expect("RPC_URL env var not set"))
+        .await
+        .expect("Failed to connect provider");
 
     while let Some(message_result) = protocol_stream.next().await {
         let message = match message_result {
@@ -712,7 +706,7 @@ fn sign_permit(
     chain_id: u64,
     permit_single: &models::PermitSingle,
     signer: PrivateKeySigner,
-) -> Result<PrimitiveSignature, EncodingError> {
+) -> Result<Signature, EncodingError> {
     let permit2_address = Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
         .map_err(|_| EncodingError::FatalError("Permit2 address not valid".to_string()))?;
     let domain = eip712_domain! {
@@ -754,9 +748,7 @@ pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
 async fn get_tx_requests(
     provider: FillProvider<
         JoinFill<Identity, WalletFiller<EthereumWallet>>,
-        ReqwestProvider,
-        Http<Client>,
-        Ethereum,
+        RootProvider<Ethereum>,
     >,
     amount_in: U256,
     user_address: Address,
@@ -765,7 +757,7 @@ async fn get_tx_requests(
     chain_id: u64,
 ) -> (TransactionRequest, TransactionRequest) {
     let block = provider
-        .get_block_by_number(BlockNumberOrTag::Latest, BlockTransactionsKind::Hashes)
+        .get_block_by_number(BlockNumberOrTag::Latest)
         .await
         .expect("Failed to fetch latest block")
         .expect("Block not found");
@@ -845,9 +837,7 @@ fn format_price_ratios(
 async fn get_token_balance(
     provider: &FillProvider<
         JoinFill<Identity, WalletFiller<EthereumWallet>>,
-        ReqwestProvider,
-        Http<Client>,
-        Ethereum,
+        RootProvider<Ethereum>,
     >,
     token_address: Address,
     wallet_address: Address,
@@ -862,7 +852,7 @@ async fn get_token_balance(
         let data = encode_input(balance_of_signature, (wallet_address,).abi_encode());
 
         let result = provider
-            .call(&TransactionRequest {
+            .call(TransactionRequest {
                 to: Some(TxKind::Call(token_address)),
                 input: TransactionInput { input: Some(AlloyBytes::from(data)), data: None },
                 ..Default::default()
@@ -883,9 +873,7 @@ async fn get_token_balance(
 async fn execute_swap_transaction(
     provider: FillProvider<
         JoinFill<Identity, WalletFiller<EthereumWallet>>,
-        ReqwestProvider,
-        Http<Client>,
-        Ethereum,
+        RootProvider<Ethereum>,
     >,
     amount_in: &BigUint,
     wallet_address: Address,

@@ -1,12 +1,14 @@
 use std::{collections::HashMap, str::FromStr};
 
-use alloy::{providers::RootProvider, transports::BoxTransport};
 use num_bigint::BigUint;
 use pyo3::{prelude::*, types::PyType};
 use revm::primitives::{Address, U256 as rU256};
 use tycho_simulation::evm::{
     account_storage,
-    engine_db::{engine_db_interface::EngineDatabaseInterface, simulation_db, tycho_db},
+    engine_db::{
+        engine_db_interface::EngineDatabaseInterface, simulation_db, simulation_db::EVMProvider,
+        tycho_db,
+    },
     simulation,
 };
 
@@ -25,9 +27,7 @@ enum DatabaseType {
 /// Instead we use an enum to store the all possible simulation engines.
 /// and we keep them invisible to the Python user.
 enum SimulationEngineInner {
-    SimulationDB(
-        simulation::SimulationEngine<simulation_db::SimulationDB<RootProvider<BoxTransport>>>,
-    ),
+    SimulationDB(simulation::SimulationEngine<simulation_db::SimulationDB<EVMProvider>>),
     TychoDB(simulation::SimulationEngine<tycho_db::PreCachedDB>),
 }
 
@@ -45,7 +45,7 @@ impl SimulationEngineInner {
     fn init_account(
         &self,
         address: Address,
-        account: revm::primitives::AccountInfo,
+        account: revm::state::AccountInfo,
         permanent_storage: Option<HashMap<rU256, rU256>>,
         mocked: bool,
     ) {
@@ -170,7 +170,7 @@ impl SimulationEngine {
         permanent_storage: Option<HashMap<BigUint, BigUint>>,
     ) {
         let address = Address::from_str(&address).unwrap();
-        let account = revm::primitives::AccountInfo::from(account);
+        let account = revm::state::AccountInfo::from(account);
 
         let mut rust_slots: HashMap<rU256, rU256> = HashMap::new();
         if let Some(storage) = permanent_storage {

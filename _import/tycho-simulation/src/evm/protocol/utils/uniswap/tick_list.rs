@@ -1,6 +1,6 @@
 use std::cmp;
 
-use alloy_primitives::U256;
+use alloy::primitives::U256;
 
 use super::tick_math::{get_sqrt_ratio_at_tick, MAX_TICK, MIN_TICK};
 

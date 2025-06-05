@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
-use alloy_primitives::{Address, B256, U256};
+use alloy::primitives::{Address, B256, U256};
 use chrono::{NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 pub use tycho_common::{dto::ChangeType, models::Chain};

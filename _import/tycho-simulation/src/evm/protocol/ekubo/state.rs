@@ -1,6 +1,5 @@
 use std::{any::Any, collections::HashMap, fmt::Debug};
 
-use alloy_primitives::Address;
 use evm_ekubo_sdk::{
     math::uint::U256,
     quoting::types::{NodeKey, Tick, TokenAmount},
@@ -33,7 +32,7 @@ pub enum EkuboState {
 fn sqrt_price_q128_to_f64(x: U256, (token0_decimals, token1_decimals): (usize, usize)) -> f64 {
     let token_correction = 10f64.powi(token0_decimals as i32 - token1_decimals as i32);
 
-    let price = u256_to_f64(alloy_primitives::U256::from_limbs(x.0)) / 2.0f64.powi(128);
+    let price = u256_to_f64(alloy::primitives::U256::from_limbs(x.0)) / 2.0f64.powi(128);
     price.powi(2) * token_correction
 }
 
@@ -162,12 +161,12 @@ impl ProtocolSim for EkuboState {
 
     fn get_limits(
         &self,
-        sell_token: Address,
-        _buy_token: Address,
+        sell_token: Bytes,
+        _buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         // TODO Update once exact out is supported
         Ok((
-            self.get_limit(U256::from_big_endian(sell_token.as_slice()))?
+            self.get_limit(U256::from_big_endian(&sell_token))?
                 .into(),
             BigUint::ZERO,
         ))
@@ -239,8 +238,8 @@ mod tests {
 
         let max_amount_in = state
             .get_limits(
-                Address::from_word(POOL_KEY.token0.to_big_endian().into()),
-                Address::from_word(POOL_KEY.token1.to_big_endian().into()),
+                POOL_KEY.token0.to_big_endian().into(),
+                POOL_KEY.token1.to_big_endian().into(),
             )
             .unwrap()
             .0;

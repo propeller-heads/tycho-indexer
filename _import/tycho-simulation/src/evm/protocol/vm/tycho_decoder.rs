@@ -4,8 +4,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use alloy_primitives::{Address, B256, U256};
-use revm::primitives::Bytecode;
+use alloy::primitives::{Address, B256, U256};
+use revm::state::Bytecode;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_common::Bytes;
 
@@ -183,7 +183,7 @@ mod tests {
 
     use chrono::DateTime;
     use num_bigint::ToBigUint;
-    use revm::primitives::{AccountInfo, Address, KECCAK_EMPTY};
+    use revm::{primitives::KECCAK_EMPTY, state::AccountInfo};
     use serde_json::Value;
     use tycho_common::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
 

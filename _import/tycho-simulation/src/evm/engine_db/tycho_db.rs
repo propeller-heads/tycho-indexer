@@ -3,10 +3,11 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use alloy_primitives::{Address, B256, U256};
+use alloy::primitives::{Address, Bytes, B256, U256};
 use revm::{
-    db::DatabaseRef,
-    primitives::{AccountInfo, Bytecode, Bytes},
+    context::DBErrorMarker,
+    state::{AccountInfo, Bytecode},
+    DatabaseRef,
 };
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, warn};
@@ -16,16 +17,6 @@ use crate::evm::{
     engine_db::{engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader},
     tycho_models::{AccountUpdate, ChangeType},
 };
-
-/// Perform bytecode analysis on the code of an account.
-pub fn to_analysed(account_info: AccountInfo) -> AccountInfo {
-    AccountInfo {
-        code: account_info
-            .code
-            .map(revm::interpreter::analysis::to_analysed),
-        ..account_info
-    }
-}
 
 #[derive(Error, Debug)]
 pub enum TychoClientError {
@@ -48,6 +39,8 @@ pub enum PreCachedDBError {
     #[error("Tycho Client error: {0}")]
     TychoClientError(#[from] TychoClientError),
 }
+
+impl DBErrorMarker for PreCachedDBError {}
 
 #[derive(Clone, Debug)]
 pub struct PreCachedDBInner {
@@ -258,7 +251,7 @@ impl EngineDatabaseInterface for PreCachedDB {
             .write()
             .unwrap()
             .accounts
-            .init_account(address, to_analysed(account), permanent_storage, true)
+            .init_account(address, account, permanent_storage, true)
     }
 
     /// Deprecated in TychoDB

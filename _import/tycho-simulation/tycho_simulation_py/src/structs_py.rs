@@ -1,18 +1,19 @@
 #![allow(non_local_definitions)] //TODO: Update PYO3 to >= 0.21.2 (https://github.com/PyO3/pyo3/issues/4094#issuecomment-2064510190)
-use std::{collections::HashMap, fmt::Debug, str::FromStr, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, str::FromStr};
 
-use alloy::{
-    providers::{ProviderBuilder, RootProvider},
-    transports::BoxTransport,
-};
+use alloy::primitives::{Address, B256, U256};
 use num_bigint::BigUint;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
-use revm::primitives::{Address as RevmAddress, Bytecode, B256, U256};
-use tokio::runtime::Runtime;
+use revm::state::Bytecode;
 use tracing::info;
 use tycho_simulation::evm::{
     account_storage,
-    engine_db::{simulation_db, tycho_db},
+    engine_db::{
+        simulation_db,
+        simulation_db::EVMProvider,
+        tycho_db,
+        utils::{get_client, get_runtime},
+    },
     simulation, tycho_models,
 };
 
@@ -87,7 +88,7 @@ impl From<SimulationParameters> for simulation::SimulationParameters {
     fn from(params: SimulationParameters) -> Self {
         let overrides = match params.overrides {
             Some(py_overrides) => {
-                let mut rust_overrides: HashMap<RevmAddress, HashMap<U256, U256>> = HashMap::new();
+                let mut rust_overrides: HashMap<Address, HashMap<U256, U256>> = HashMap::new();
                 for (address, py_slots) in py_overrides {
                     let mut rust_slots: HashMap<U256, U256> = HashMap::new();
                     for (index, value) in py_slots {
@@ -97,7 +98,7 @@ impl From<SimulationParameters> for simulation::SimulationParameters {
                         );
                     }
                     rust_overrides.insert(
-                        RevmAddress::from_str(address.as_str()).expect("Wrong address format"),
+                        Address::from_str(address.as_str()).expect("Wrong address format"),
                         rust_slots,
                     );
                 }
@@ -106,8 +107,8 @@ impl From<SimulationParameters> for simulation::SimulationParameters {
             None => None,
         };
         simulation::SimulationParameters {
-            caller: RevmAddress::from_str(params.caller.as_str()).unwrap(),
-            to: RevmAddress::from_str(params.to.as_str()).unwrap(),
+            caller: Address::from_str(params.caller.as_str()).unwrap(),
+            to: Address::from_str(params.to.as_str()).unwrap(),
             data: params.data,
             value: U256::from_be_slice(params.value.to_bytes_be().as_slice()),
             overrides,
@@ -275,7 +276,7 @@ impl From<AccountUpdate> for tycho_models::AccountUpdate {
             .map(|b| U256::from_str(&b.to_string()).unwrap());
 
         tycho_models::AccountUpdate {
-            address: RevmAddress::from_str(py_update.address.as_str()).unwrap(),
+            address: Address::from_str(py_update.address.as_str()).unwrap(),
             chain: tycho_models::Chain::from_str(py_update.chain.as_str()).unwrap(),
             slots: rust_slots,
             balance: rust_balance,
@@ -360,7 +361,7 @@ impl AccountInfo {
     }
 }
 
-impl From<AccountInfo> for revm::primitives::AccountInfo {
+impl From<AccountInfo> for revm::state::AccountInfo {
     fn from(py_info: AccountInfo) -> Self {
         let code;
         if let Some(c) = py_info.code {
@@ -369,7 +370,7 @@ impl From<AccountInfo> for revm::primitives::AccountInfo {
             code = Bytecode::new()
         }
 
-        revm::primitives::AccountInfo::new(
+        revm::state::AccountInfo::new(
             U256::from_str(&py_info.balance.to_string()).unwrap(),
             py_info.nonce,
             code.hash_slow(),
@@ -460,36 +461,13 @@ impl From<simulation::SimulationEngineError> for SimulationErrorDetails {
     }
 }
 
-fn get_runtime() -> Option<Arc<Runtime>> {
-    let runtime = tokio::runtime::Handle::try_current()
-        .is_err()
-        .then(|| Runtime::new().unwrap())
-        .unwrap();
-
-    Some(Arc::new(runtime))
-}
-
-fn get_client(rpc_url: &str) -> Arc<RootProvider<BoxTransport>> {
-    let runtime = tokio::runtime::Handle::try_current()
-        .is_err()
-        .then(|| tokio::runtime::Runtime::new().unwrap())
-        .unwrap();
-    let client = runtime.block_on(async {
-        ProviderBuilder::new()
-            .on_builtin(rpc_url)
-            .await
-            .unwrap()
-    });
-    Arc::new(client)
-}
-
 /// A database using a real Ethereum node as a backend.
 ///
 /// Uses a local cache to speed up queries.
 #[pyclass]
 #[derive(Clone, Debug)]
 pub struct SimulationDB {
-    pub inner: simulation_db::SimulationDB<RootProvider<BoxTransport>>,
+    pub inner: simulation_db::SimulationDB<EVMProvider>,
 }
 
 #[pymethods]
@@ -499,7 +477,7 @@ impl SimulationDB {
     pub fn new(rpc_url: String, block: Option<BlockHeader>) -> Self {
         info!(?rpc_url, ?block, "Creating python SimulationDB wrapper instance");
         let db = simulation_db::SimulationDB::new(
-            get_client(&rpc_url),
+            get_client(Some(rpc_url)),
             get_runtime(),
             block.map(Into::into),
         );

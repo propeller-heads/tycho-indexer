@@ -1,4 +1,4 @@
-use alloy_primitives::{Address, U256};
+use alloy::primitives::{Address, U256};
 use lazy_static::lazy_static;
 
 use crate::protocol::errors::SimulationError;

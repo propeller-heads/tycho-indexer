@@ -3,8 +3,10 @@ use std::{
     fmt::Debug,
 };
 
-use alloy_primitives::{Address, U256};
-use alloy_sol_types::SolValue;
+use alloy::{
+    primitives::{Address, U256},
+    sol_types::SolValue,
+};
 use revm::DatabaseRef;
 
 use super::{
@@ -26,7 +28,7 @@ pub struct Trade {
     pub price: f64,
 }
 
-/// Type aliases are defined to ensure compatibility with `alloy_sol_types::abi_decode`,
+/// Type aliases are defined to ensure compatibility with `alloy::sol_types::abi_decode`,
 /// which requires explicit types matching the Solidity ABI. These aliases correspond
 /// directly to the outputs of the contract's functions.
 /// These types ensure correct decoding and alignment with the ABI.
@@ -70,7 +72,7 @@ where
             .call(selector, args, block, None, overwrites, None, U256::from(0u64))?
             .return_value;
 
-        let decoded: PriceReturn = PriceReturn::abi_decode(&res, true).map_err(|e| {
+        let decoded: PriceReturn = PriceReturn::abi_decode(&res).map_err(|e| {
             SimulationError::FatalError(format!("Failed to decode price return value: {e:?}"))
         })?;
 
@@ -94,7 +96,7 @@ where
 
         let res = self.call(selector, args, block, None, overwrites, None, U256::from(0u64))?;
 
-        let decoded: SwapReturn = SwapReturn::abi_decode(&res.return_value, true).map_err(|_| {
+        let decoded: SwapReturn = SwapReturn::abi_decode(&res.return_value).map_err(|_| {
             SimulationError::FatalError(format!(
                 "Adapter swap call failed: Failed to decode return value. Expected amount, gas, and price elements in the format (U256, U256, (U256, U256)). Found {:?}",
                         &res.return_value[..],
@@ -130,7 +132,7 @@ where
             .call(selector, args, block, None, overwrites, None, U256::from(0u64))?
             .return_value;
 
-        let decoded: LimitsReturn = LimitsReturn::abi_decode(&res, true).map_err(|e| {
+        let decoded: LimitsReturn = LimitsReturn::abi_decode(&res).map_err(|e| {
             SimulationError::FatalError(format!(
                 "Adapter get_limits call failed: Failed to decode return value: {e:?}"
             ))
@@ -150,12 +152,11 @@ where
         let res = self
             .call(selector, args, 1, None, None, None, U256::from(0u64))?
             .return_value;
-        let decoded: CapabilitiesReturn =
-            CapabilitiesReturn::abi_decode(&res, true).map_err(|e| {
-                SimulationError::FatalError(format!(
-                    "Adapter get_capabilities call failed: Failed to decode return value: {e:?}"
-                ))
-            })?;
+        let decoded: CapabilitiesReturn = CapabilitiesReturn::abi_decode(&res).map_err(|e| {
+            SimulationError::FatalError(format!(
+                "Adapter get_capabilities call failed: Failed to decode return value: {e:?}"
+            ))
+        })?;
 
         let capabilities: HashSet<Capability> = decoded
             .into_iter()
@@ -173,12 +174,11 @@ where
             .call(selector, args, 1, None, None, None, U256::from(0u64))?
             .return_value;
 
-        let decoded: MinGasUsageReturn =
-            MinGasUsageReturn::abi_decode(&res, true).map_err(|e| {
-                SimulationError::FatalError(format!(
-                    "Adapter min gas usage call failed: Failed to decode return value: {e:?}"
-                ))
-            })?;
+        let decoded: MinGasUsageReturn = MinGasUsageReturn::abi_decode(&res).map_err(|e| {
+            SimulationError::FatalError(format!(
+                "Adapter min gas usage call failed: Failed to decode return value: {e:?}"
+            ))
+        })?;
         decoded
             .try_into()
             .map_err(|_| SimulationError::FatalError("Decoded value exceeds u64 range".to_string()))

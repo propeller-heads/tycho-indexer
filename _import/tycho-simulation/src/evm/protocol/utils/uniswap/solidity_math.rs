@@ -1,4 +1,4 @@
-use alloy_primitives::{U256, U512};
+use alloy::primitives::{U256, U512};
 
 use crate::{
     evm::protocol::safe_math::{div_mod_u512, safe_div_u512, safe_mul_u512},

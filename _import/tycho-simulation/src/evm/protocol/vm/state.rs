@@ -6,7 +6,7 @@ use std::{
     str::FromStr,
 };
 
-use alloy_primitives::{Address, U256};
+use alloy::primitives::{Address, U256};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use revm::DatabaseRef;
@@ -611,9 +611,11 @@ where
 
     fn get_limits(
         &self,
-        sell_token: Address,
-        buy_token: Address,
+        sell_token: Bytes,
+        buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
+        let sell_token = bytes_to_address(&sell_token)?;
+        let buy_token = bytes_to_address(&buy_token)?;
         let overwrites =
             self.get_overwrites(vec![sell_token, buy_token], *MAX_BALANCE / U256::from(100))?;
         let limits = self.get_amount_limits(vec![sell_token, buy_token], Some(overwrites))?;
@@ -670,10 +672,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use alloy_primitives::B256;
+    use alloy::primitives::B256;
     use num_bigint::ToBigUint;
     use num_traits::One;
-    use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
+    use revm::{
+        primitives::KECCAK_EMPTY,
+        state::{AccountInfo, Bytecode},
+    };
     use serde_json::Value;
 
     use super::*;

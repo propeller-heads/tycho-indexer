@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy_primitives::Address;
+use alloy::primitives::Address;
 use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{debug, error, info, warn};
