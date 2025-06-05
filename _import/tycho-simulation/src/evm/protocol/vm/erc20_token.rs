@@ -155,7 +155,6 @@ where
             );
             overwrite_factory.set_balance(*MARKER_VALUE, *EXTERNAL_ACCOUNT);
 
-            // TODO what transient storage to pass?
             let res = token_contract
                 .call(
                     "balanceOf(address)",
@@ -198,7 +197,6 @@ where
         overwrite_factory.set_allowance(*MARKER_VALUE, *SPENDER, *EXTERNAL_ACCOUNT);
 
         let res = token_contract
-            // TODO what transient storage to pass?
             .call(
                 "allowance(address,address)",
                 (*EXTERNAL_ACCOUNT, *SPENDER),

@@ -68,7 +68,6 @@ where
         let args = (string_to_bytes32(pair_id)?, sell_token, buy_token, amounts);
         let selector = "price(bytes32,address,address,uint256[])";
 
-        // TODO what transient storage should be passed here?
         let res = self
             .call(selector, args, block, None, overwrites, None, U256::from(0u64), None)?
             .return_value;
@@ -95,7 +94,6 @@ where
         let args = (string_to_bytes32(pair_id)?, sell_token, buy_token, is_buy, amount);
         let selector = "swap(bytes32,address,address,uint8,uint256)";
 
-        // TODO what transient storage to pass?
         let res =
             self.call(selector, args, block, None, overwrites, None, U256::from(0u64), None)?;
 
@@ -132,7 +130,6 @@ where
         let args = (string_to_bytes32(pair_id)?, sell_token, buy_token);
         let selector = "getLimits(bytes32,address,address)";
 
-        // TODO what transient storage to pass?
         let res = self
             .call(selector, args, block, None, overwrites, None, U256::from(0u64), None)?
             .return_value;
@@ -154,7 +151,7 @@ where
     ) -> Result<HashSet<Capability>, SimulationError> {
         let args = (string_to_bytes32(pair_id)?, sell_token, buy_token);
         let selector = "getCapabilities(bytes32,address,address)";
-        // TODO what transient storage to pass?
+
         let res = self
             .call(selector, args, 1, None, None, None, U256::from(0u64), None)?
             .return_value;
@@ -176,8 +173,7 @@ where
     pub fn min_gas_usage(&self) -> Result<u64, SimulationError> {
         let args = ();
         let selector = "minGasUsage()";
-        // TODO should transient storage be None here? I assume so, since we are just getting min
-        //  gas usage?
+
         let res = self
             .call(selector, args, 1, None, None, None, U256::from(0u64), None)?
             .return_value;

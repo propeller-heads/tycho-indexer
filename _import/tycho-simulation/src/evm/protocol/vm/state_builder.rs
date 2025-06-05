@@ -449,7 +449,6 @@ where
             caller: *EXTERNAL_ACCOUNT,
             value: U256::from(0u64),
             gas_limit: None,
-            // TODO: Should this really be None here?
             transient_storage: None,
         };
 
