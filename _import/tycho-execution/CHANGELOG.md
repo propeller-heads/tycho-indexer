@@ -1,3 +1,10 @@
+## [0.97.0](https://github.com/propeller-heads/tycho-execution/compare/0.96.0...0.97.0) (2025-06-05)
+
+
+### Features
+
+* Upgrade alloy to "1.0.6" ([5fa97d0](https://github.com/propeller-heads/tycho-execution/commit/5fa97d08e593e5c7c6480c66e86305fef30e9747))
+
 ## [0.96.0](https://github.com/propeller-heads/tycho-execution/compare/0.95.1...0.96.0) (2025-05-27)
 
 
