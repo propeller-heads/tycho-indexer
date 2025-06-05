@@ -1,3 +1,17 @@
+## [0.105.0](https://github.com/propeller-heads/tycho-simulation/compare/0.104.0...0.105.0) (2025-06-05)
+
+
+### Features
+
+* Change get_limits interface in ProtocolSim ([aa4cb38](https://github.com/propeller-heads/tycho-simulation/commit/aa4cb38fc8a6226e0eeb6e8f47a1b3fe51f3c392))
+* Upgrade revm to 24.0.0 ([fd67011](https://github.com/propeller-heads/tycho-simulation/commit/fd6701197de968a383fa1aa666f9e4098ed584eb))
+* Upgrade tycho-execution ([114cccc](https://github.com/propeller-heads/tycho-simulation/commit/114ccccdfd3c905e16abc371bdd00906e3737a71))
+
+
+### Bug Fixes
+
+* Ignore nonce and add tracer properly in simulation ([6d8cbd5](https://github.com/propeller-heads/tycho-simulation/commit/6d8cbd596cfb04ae87237e0a7ccbf3a3ab8b9b8f))
+
 ## [0.104.0](https://github.com/propeller-heads/tycho-simulation/compare/0.103.2...0.104.0) (2025-06-04)
 
 
