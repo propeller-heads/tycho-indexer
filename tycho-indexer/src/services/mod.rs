@@ -95,12 +95,6 @@ where
         self
     }
 
-    /// Sets the api key for access control
-    pub fn api_key(mut self, v: String) -> Self {
-        self.api_key = v;
-        self
-    }
-
     /// Starts the Tycho server. Returns a tuple containing a handle for the server and a Tokio
     /// handle for the tasks. If no extractor tasks are registered, it starts the server without
     /// running the delta tasks.

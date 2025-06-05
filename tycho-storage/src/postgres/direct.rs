@@ -33,20 +33,11 @@ use tycho_common::{
 
 use super::{PostgresError, PostgresGateway};
 
+#[derive(Clone)]
 pub struct DirectGateway {
     pool: Pool<AsyncPgConnection>,
     state_gateway: PostgresGateway,
     chain: Chain,
-}
-
-impl Clone for DirectGateway {
-    fn clone(&self) -> Self {
-        Self {
-            pool: self.pool.clone(),
-            state_gateway: self.state_gateway.clone(),
-            chain: self.chain,
-        }
-    }
 }
 
 impl DirectGateway {
