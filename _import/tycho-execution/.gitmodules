@@ -22,3 +22,6 @@
 [submodule "foundry/lib/solady"]
 	path = foundry/lib/solady
 	url = https://github.com/vectorized/solady
+[submodule "foundry/lib/balancer-v3-monorepo"]
+	path = foundry/lib/balancer-v3-monorepo
+	url = https://github.com/balancer/balancer-v3-monorepo
