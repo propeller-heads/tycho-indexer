@@ -4,7 +4,7 @@ use tycho_common::{models::Chain, storage::StorageError};
 
 use crate::{
     postgres,
-    postgres::{cache::CachedGateway, PostgresGateway},
+    postgres::{cache::CachedGateway, direct::DirectGateway, PostgresGateway},
 };
 
 #[derive(Default)]
@@ -68,5 +68,21 @@ impl GatewayBuilder {
 
         let cached_gw = CachedGateway::new(tx, pool.clone(), inner_gw.clone());
         Ok(cached_gw)
+    }
+
+    pub async fn build_direct_gw(self) -> Result<DirectGateway, StorageError> {
+        let pool = postgres::connect(&self.database_url).await?;
+        postgres::ensure_chains(&self.chains, pool.clone()).await;
+        postgres::ensure_protocol_systems(&self.protocol_systems, pool.clone()).await;
+
+        let inner_gw = PostgresGateway::new(pool.clone(), self.retention_horizon).await?;
+
+        let chain = self
+            .chains
+            .first()
+            .expect("No chains provided"); //TODO: handle multichain?
+
+        let direct_gw = DirectGateway::new(pool.clone(), inner_gw.clone(), *chain);
+        Ok(direct_gw)
     }
 }

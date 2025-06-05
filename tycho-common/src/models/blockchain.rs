@@ -9,6 +9,7 @@ use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use tracing::warn;
 
 use crate::{
+    dto,
     models::{
         contract::{AccountBalance, AccountChangesWithTx, AccountDelta},
         protocol::{
@@ -386,6 +387,12 @@ impl EntryPoint {
     }
 }
 
+impl From<dto::EntryPoint> for EntryPoint {
+    fn from(value: dto::EntryPoint) -> Self {
+        Self { external_id: value.external_id, target: value.target, signature: value.signature }
+    }
+}
+
 /// A struct that combines an entry point with its associated tracing params.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EntryPointWithTracingParams {
@@ -393,6 +400,24 @@ pub struct EntryPointWithTracingParams {
     pub entry_point: EntryPoint,
     /// The tracing parameters for this entry point
     pub params: TracingParams,
+}
+
+impl From<dto::EntryPointWithTracingParams> for EntryPointWithTracingParams {
+    fn from(value: dto::EntryPointWithTracingParams) -> Self {
+        match value.params {
+            dto::TracingParams::RPCTracer(ref tracer_params) => Self {
+                entry_point: EntryPoint {
+                    external_id: value.entry_point.external_id,
+                    target: value.entry_point.target,
+                    signature: value.entry_point.signature,
+                },
+                params: TracingParams::RPCTracer(RPCTracerParams {
+                    caller: tracer_params.caller.clone(),
+                    calldata: tracer_params.calldata.clone(),
+                }),
+            },
+        }
+    }
 }
 
 impl EntryPointWithTracingParams {
@@ -409,6 +434,16 @@ pub enum TracingParams {
     RPCTracer(RPCTracerParams),
 }
 
+impl From<dto::TracingParams> for TracingParams {
+    fn from(value: dto::TracingParams) -> Self {
+        match value {
+            dto::TracingParams::RPCTracer(tracer_params) => {
+                TracingParams::RPCTracer(tracer_params.into())
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize, Eq, Hash)]
 pub struct RPCTracerParams {
     /// The caller address of the transaction, if not provided tracing will use the default value
@@ -416,6 +451,12 @@ pub struct RPCTracerParams {
     pub caller: Option<Address>,
     /// The call data used for the tracing call, this needs to include the function selector
     pub calldata: Bytes,
+}
+
+impl From<dto::RPCTracerParams> for RPCTracerParams {
+    fn from(value: dto::RPCTracerParams) -> Self {
+        Self { caller: value.caller, calldata: value.calldata }
+    }
 }
 
 impl RPCTracerParams {
