@@ -70,7 +70,13 @@ impl ComponentFilter {
     ///   will be tracked.
     #[allow(non_snake_case)] // for backwards compatibility
     pub fn Ids(ids: Vec<String>) -> ComponentFilter {
-        ComponentFilter { variant: ComponentFilterVariant::Ids(ids) }
+        ComponentFilter {
+            variant: ComponentFilterVariant::Ids(
+                ids.into_iter()
+                    .map(|id| id.to_lowercase())
+                    .collect(),
+            ),
+        }
     }
 }
 
