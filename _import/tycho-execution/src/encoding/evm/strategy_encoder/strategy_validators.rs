@@ -214,6 +214,7 @@ mod tests {
             token_in: weth.clone(),
             token_out: dai.clone(),
             split: 0f64,
+            user_data: None,
         }];
         let result = validator.validate_swap_path(&swaps, &weth, &dai, &None, &eth, &weth);
         assert_eq!(result, Ok(()));
@@ -236,6 +237,7 @@ mod tests {
                 token_in: weth.clone(),
                 token_out: dai.clone(),
                 split: 0.5f64,
+                user_data: None,
             },
             Swap {
                 component: ProtocolComponent {
@@ -246,6 +248,7 @@ mod tests {
                 token_in: dai.clone(),
                 token_out: usdc.clone(),
                 split: 0f64,
+                user_data: None,
             },
         ];
         let result = validator.validate_swap_path(&swaps, &weth, &usdc, &None, &eth, &weth);
@@ -271,6 +274,7 @@ mod tests {
                 token_in: weth.clone(),
                 token_out: dai.clone(),
                 split: 0.5,
+                user_data: None,
             },
             // This swap is disconnected from the WETH->DAI path
             Swap {
@@ -282,6 +286,7 @@ mod tests {
                 token_in: wbtc.clone(),
                 token_out: usdc.clone(),
                 split: 0.0,
+                user_data: None,
             },
         ];
         let result =
@@ -309,6 +314,7 @@ mod tests {
                 token_in: usdc.clone(),
                 token_out: weth.clone(),
                 split: 0f64,
+                user_data: None,
             },
             Swap {
                 component: ProtocolComponent {
@@ -319,6 +325,7 @@ mod tests {
                 token_in: weth.clone(),
                 token_out: usdc.clone(),
                 split: 0f64,
+                user_data: None,
             },
         ];
 
@@ -344,6 +351,7 @@ mod tests {
             token_in: weth.clone(),
             token_out: dai.clone(),
             split: 1.0,
+            user_data: None,
         }];
         let result =
             validator.validate_swap_path(&unreachable_swaps, &weth, &usdc, &None, &eth, &weth);
@@ -382,6 +390,7 @@ mod tests {
             token_in: weth.clone(),
             token_out: dai.clone(),
             split: 0f64,
+            user_data: None,
         }];
         let result = validator.validate_split_percentages(&swaps);
         assert_eq!(result, Ok(()));
@@ -404,6 +413,7 @@ mod tests {
                 token_in: weth.clone(),
                 token_out: dai.clone(),
                 split: 0.5,
+                user_data: None,
             },
             Swap {
                 component: ProtocolComponent {
@@ -414,6 +424,7 @@ mod tests {
                 token_in: weth.clone(),
                 token_out: dai.clone(),
                 split: 0.3,
+                user_data: None,
             },
             Swap {
                 component: ProtocolComponent {
@@ -424,6 +435,7 @@ mod tests {
                 token_in: weth.clone(),
                 token_out: dai.clone(),
                 split: 0.0, // Remainder (20%)
+                user_data: None,
             },
         ];
         assert!(validator
@@ -447,6 +459,7 @@ mod tests {
                 token_in: weth.clone(),
                 token_out: dai.clone(),
                 split: 0.7,
+                user_data: None,
             },
             Swap {
                 component: ProtocolComponent {
@@ -457,6 +470,7 @@ mod tests {
                 token_in: weth.clone(),
                 token_out: dai.clone(),
                 split: 0.3,
+                user_data: None,
             },
         ];
         assert!(matches!(
@@ -481,6 +495,7 @@ mod tests {
                 token_in: weth.clone(),
                 token_out: dai.clone(),
                 split: 0.0,
+                user_data: None,
             },
             Swap {
                 component: ProtocolComponent {
@@ -491,6 +506,7 @@ mod tests {
                 token_in: weth.clone(),
                 token_out: dai.clone(),
                 split: 0.5,
+                user_data: None,
             },
         ];
         assert!(matches!(
@@ -515,6 +531,7 @@ mod tests {
                 token_in: weth.clone(),
                 token_out: dai.clone(),
                 split: 0.6,
+                user_data: None,
             },
             Swap {
                 component: ProtocolComponent {
@@ -525,6 +542,7 @@ mod tests {
                 token_in: weth.clone(),
                 token_out: dai.clone(),
                 split: 0.5,
+                user_data: None,
             },
             Swap {
                 component: ProtocolComponent {
@@ -535,6 +553,7 @@ mod tests {
                 token_in: weth.clone(),
                 token_out: dai.clone(),
                 split: 0.0,
+                user_data: None,
             },
         ];
         assert!(matches!(
@@ -559,6 +578,7 @@ mod tests {
             token_in: weth.clone(),
             token_out: usdc.clone(),
             split: 0f64,
+            user_data: None,
         }];
 
         let result = validator.validate_swap_path(
@@ -588,6 +608,7 @@ mod tests {
             token_in: usdc.clone(),
             token_out: weth.clone(),
             split: 0f64,
+            user_data: None,
         }];
 
         let result = validator.validate_swap_path(

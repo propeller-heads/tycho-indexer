@@ -601,6 +601,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
             let encoding_context = EncodingContext {
                 receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
@@ -660,6 +661,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
             let encoding_context = EncodingContext {
                 receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
@@ -721,6 +723,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
@@ -793,6 +796,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
             let encoding_context = EncodingContext {
                 // The receiver is ALICE to match the solidity tests
@@ -865,6 +869,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
 
             let encoding_context = EncodingContext {
@@ -961,6 +966,7 @@ mod tests {
                 token_in: usde_address.clone(),
                 token_out: usdt_address.clone(),
                 split: 0f64,
+                user_data: None,
             };
 
             let second_swap = Swap {
@@ -968,6 +974,7 @@ mod tests {
                 token_in: usdt_address,
                 token_out: wbtc_address.clone(),
                 split: 0f64,
+                user_data: None,
             };
 
             let encoder = UniswapV4SwapEncoder::new(
@@ -1044,6 +1051,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
 
             let encoding_context = EncodingContext {
@@ -1116,6 +1124,7 @@ mod tests {
                 token_in: group_token_in.clone(),
                 token_out: intermediary_token.clone(),
                 split: 0f64,
+                user_data: None,
             };
 
             let second_swap = Swap {
@@ -1131,6 +1140,7 @@ mod tests {
                 token_in: intermediary_token.clone(),
                 token_out: group_token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
 
             let first_encoded_swap = encoder
@@ -1250,6 +1260,7 @@ mod tests {
                 token_in: Bytes::from(token_in),
                 token_out: Bytes::from(token_out),
                 split: 0f64,
+                user_data: None,
             };
             let encoder = CurveSwapEncoder::new(
                 String::default(),
@@ -1293,6 +1304,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
@@ -1364,6 +1376,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
@@ -1436,6 +1449,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
@@ -1507,6 +1521,7 @@ mod tests {
             token_in: token_in.clone(),
             token_out: token_out.clone(),
             split: 0f64,
+            user_data: None,
         };
         let encoding_context = EncodingContext {
             // The receiver was generated with `makeAddr("bob") using forge`

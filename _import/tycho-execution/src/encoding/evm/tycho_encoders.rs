@@ -435,6 +435,7 @@ mod tests {
             token_in: usdc().clone(),
             token_out: eth().clone(),
             split: 0f64,
+            user_data: None,
         }
     }
 
@@ -455,6 +456,7 @@ mod tests {
             token_in: eth().clone(),
             token_out: pepe().clone(),
             split: 0f64,
+            user_data: None,
         }
     }
 
@@ -502,6 +504,7 @@ mod tests {
                 token_in: weth(),
                 token_out: dai(),
                 split: 0f64,
+                user_data: None,
             };
 
             let solution = Solution {
@@ -566,6 +569,7 @@ mod tests {
                 token_in: weth(),
                 token_out: dai(),
                 split: 0f64,
+                user_data: None,
             };
 
             let swap_dai_usdc = Swap {
@@ -577,6 +581,7 @@ mod tests {
                 token_in: dai(),
                 token_out: usdc(),
                 split: 0f64,
+                user_data: None,
             };
 
             let solution = Solution {
@@ -630,6 +635,7 @@ mod tests {
                 token_in: weth(),
                 token_out: dai(),
                 split: 0f64,
+                user_data: None,
             };
 
             let solution = Solution {
@@ -658,6 +664,7 @@ mod tests {
                 token_in: weth(),
                 token_out: dai(),
                 split: 0f64,
+                user_data: None,
             };
 
             let solution = Solution {
@@ -691,6 +698,7 @@ mod tests {
                 token_in: eth(),
                 token_out: dai(),
                 split: 0f64,
+                user_data: None,
             };
 
             let solution = Solution {
@@ -744,6 +752,7 @@ mod tests {
                 token_in: dai(),
                 token_out: weth(),
                 split: 0f64,
+                user_data: None,
             };
 
             let solution = Solution {
@@ -771,6 +780,7 @@ mod tests {
                 token_in: dai(),
                 token_out: weth(),
                 split: 0f64,
+                user_data: None,
             };
 
             let solution = Solution {
@@ -805,6 +815,7 @@ mod tests {
                 token_in: dai(),
                 token_out: eth(),
                 split: 0f64,
+                user_data: None,
             };
 
             let solution = Solution {
@@ -844,6 +855,7 @@ mod tests {
                     token_in: dai(),
                     token_out: weth(),
                     split: 0.5f64,
+                    user_data: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -854,6 +866,7 @@ mod tests {
                     token_in: dai(),
                     token_out: weth(),
                     split: 0f64,
+                    user_data: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -864,6 +877,7 @@ mod tests {
                     token_in: weth(),
                     token_out: dai(),
                     split: 0f64,
+                    user_data: None,
                 },
             ];
 
@@ -896,6 +910,7 @@ mod tests {
                     token_in: dai(),
                     token_out: weth(),
                     split: 0f64,
+                    user_data: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -906,6 +921,7 @@ mod tests {
                     token_in: weth(),
                     token_out: usdc(),
                     split: 0f64,
+                    user_data: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -916,6 +932,7 @@ mod tests {
                     token_in: usdc(),
                     token_out: dai(),
                     split: 0f64,
+                    user_data: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -926,6 +943,7 @@ mod tests {
                     token_in: dai(),
                     token_out: wbtc(),
                     split: 0f64,
+                    user_data: None,
                 },
             ];
 
@@ -965,6 +983,7 @@ mod tests {
                     token_in: weth(),
                     token_out: dai(),
                     split: 0f64,
+                    user_data: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -975,6 +994,7 @@ mod tests {
                     token_in: dai(),
                     token_out: weth(),
                     split: 0.5f64,
+                    user_data: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -985,6 +1005,7 @@ mod tests {
                     token_in: dai(),
                     token_out: weth(),
                     split: 0f64,
+                    user_data: None,
                 },
             ];
 
@@ -1017,6 +1038,7 @@ mod tests {
                     token_in: weth(),
                     token_out: dai(),
                     split: 0f64,
+                    user_data: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -1027,6 +1049,7 @@ mod tests {
                     token_in: dai(),
                     token_out: weth(),
                     split: 0f64,
+                    user_data: None,
                 },
             ];
 
@@ -1080,6 +1103,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
 
             let solution = Solution {
@@ -1139,6 +1163,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
 
             let solution = Solution {
@@ -1262,6 +1287,7 @@ mod tests {
                     token_in: weth.clone(),
                     token_out: dai.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
 
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
@@ -1352,6 +1378,7 @@ mod tests {
                     token_in: weth.clone(),
                     token_out: dai.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -1436,6 +1463,7 @@ mod tests {
                     token_in: weth.clone(),
                     token_out: dai.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
                 let encoder = get_tycho_router_encoder(UserTransferType::None);
 
@@ -1517,6 +1545,7 @@ mod tests {
                     token_in: weth(),
                     token_out: dai.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
@@ -1572,6 +1601,7 @@ mod tests {
                     token_in: dai.clone(),
                     token_out: weth(),
                     split: 0f64,
+                    user_data: None,
                 };
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
@@ -1637,6 +1667,7 @@ mod tests {
                     token_in: weth.clone(),
                     token_out: wbtc.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
                 let swap_wbtc_usdc = Swap {
                     component: ProtocolComponent {
@@ -1647,6 +1678,7 @@ mod tests {
                     token_in: wbtc.clone(),
                     token_out: usdc.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
@@ -1705,6 +1737,7 @@ mod tests {
                     token_in: weth.clone(),
                     token_out: wbtc.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
                 let swap_wbtc_usdc = Swap {
                     component: ProtocolComponent {
@@ -1715,6 +1748,7 @@ mod tests {
                     token_in: wbtc.clone(),
                     token_out: usdc.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -1817,6 +1851,7 @@ mod tests {
                     token_in: usdc.clone(),
                     token_out: weth.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
 
                 // WETH -> USDC (Pool 2)
@@ -1838,6 +1873,7 @@ mod tests {
                     token_in: weth.clone(),
                     token_out: usdc.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
 
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
@@ -1954,6 +1990,7 @@ mod tests {
                         token_in: weth.clone(),
                         token_out: wbtc.clone(),
                         split: 0f64,
+                        user_data: None,
                     };
                     let swap_wbtc_usdc = Swap {
                         component: ProtocolComponent {
@@ -1964,6 +2001,7 @@ mod tests {
                         token_in: wbtc.clone(),
                         token_out: usdc.clone(),
                         split: 0f64,
+                        user_data: None,
                     };
                     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -2035,6 +2073,7 @@ mod tests {
                         token_in: weth.clone(),
                         token_out: wbtc.clone(),
                         split: 0f64,
+                        user_data: None,
                     };
                     let swap_wbtc_usdc = Swap {
                         component: ProtocolComponent {
@@ -2053,6 +2092,7 @@ mod tests {
                         token_in: wbtc.clone(),
                         token_out: usdc.clone(),
                         split: 0f64,
+                        user_data: None,
                     };
                     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -2123,6 +2163,7 @@ mod tests {
                         token_in: weth.clone(),
                         token_out: wbtc.clone(),
                         split: 0f64,
+                        user_data: None,
                     };
 
                     let swap_wbtc_usdt = Swap {
@@ -2151,6 +2192,7 @@ mod tests {
                         token_in: wbtc.clone(),
                         token_out: usdt.clone(),
                         split: 0f64,
+                        user_data: None,
                     };
                     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -2215,6 +2257,7 @@ mod tests {
                         token_in: weth.clone(),
                         token_out: wbtc.clone(),
                         split: 0f64,
+                        user_data: None,
                     };
 
                     let swap_wbtc_usdc = Swap {
@@ -2226,6 +2269,7 @@ mod tests {
                         token_in: wbtc.clone(),
                         token_out: usdc.clone(),
                         split: 0f64,
+                        user_data: None,
                     };
                     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -2293,6 +2337,7 @@ mod tests {
                         token_in: dai.clone(),
                         token_out: weth.clone(),
                         split: 0f64,
+                        user_data: None,
                     };
 
                     let balancer_swap_weth_wbtc = Swap {
@@ -2306,6 +2351,7 @@ mod tests {
                         token_in: weth.clone(),
                         token_out: wbtc.clone(),
                         split: 0f64,
+                        user_data: None,
                     };
 
                     let curve_swap_wbtc_usdt = Swap {
@@ -2334,6 +2380,7 @@ mod tests {
                         token_in: wbtc.clone(),
                         token_out: usdt.clone(),
                         split: 0f64,
+                        user_data: None,
                     };
 
                     // Ekubo
@@ -2355,6 +2402,7 @@ mod tests {
                         token_in: usdt.clone(),
                         token_out: usdc.clone(),
                         split: 0f64,
+                        user_data: None,
                     };
 
                     // USV4
@@ -2379,6 +2427,7 @@ mod tests {
                         token_in: usdc.clone(),
                         token_out: eth.clone(),
                         split: 0f64,
+                        user_data: None,
                     };
 
                     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
@@ -2455,6 +2504,7 @@ mod tests {
                     token_in: weth.clone(),
                     token_out: dai.clone(),
                     split: 0.5f64,
+                    user_data: None,
                 };
                 let swap_weth_wbtc = Swap {
                     component: ProtocolComponent {
@@ -2468,6 +2518,7 @@ mod tests {
                     // this to 0 to signify "the remainder of the WETH value".
                     // It should still be very close to 50%
                     split: 0f64,
+                    user_data: None,
                 };
                 let swap_dai_usdc = Swap {
                     component: ProtocolComponent {
@@ -2478,6 +2529,7 @@ mod tests {
                     token_in: dai.clone(),
                     token_out: usdc.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
                 let swap_wbtc_usdc = Swap {
                     component: ProtocolComponent {
@@ -2488,6 +2540,7 @@ mod tests {
                     token_in: wbtc.clone(),
                     token_out: usdc.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
@@ -2556,6 +2609,7 @@ mod tests {
                     token_in: usdc.clone(),
                     token_out: weth.clone(),
                     split: 0.6f64, // 60% of input
+                    user_data: None,
                 };
 
                 // USDC -> WETH (Pool 2) - 40% of input (remaining)
@@ -2576,7 +2630,8 @@ mod tests {
                     },
                     token_in: usdc.clone(),
                     token_out: weth.clone(),
-                    split: 0f64, // Remaining 40%
+                    split: 0f64,
+                    user_data: None, // Remaining 40%
                 };
 
                 // WETH -> USDC (Pool 2)
@@ -2598,6 +2653,7 @@ mod tests {
                     token_in: weth.clone(),
                     token_out: usdc.clone(),
                     split: 0.0f64,
+                    user_data: None,
                 };
 
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
@@ -2720,6 +2776,7 @@ mod tests {
                     token_in: usdc.clone(),
                     token_out: weth.clone(),
                     split: 0.0f64,
+                    user_data: None,
                 };
 
                 let swap_weth_usdc_v3_pool1 = Swap {
@@ -2740,6 +2797,7 @@ mod tests {
                     token_in: weth.clone(),
                     token_out: usdc.clone(),
                     split: 0.6f64,
+                    user_data: None,
                 };
 
                 let swap_weth_usdc_v3_pool2 = Swap {
@@ -2760,6 +2818,7 @@ mod tests {
                     token_in: weth.clone(),
                     token_out: usdc.clone(),
                     split: 0.0f64,
+                    user_data: None,
                 };
 
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
@@ -2893,6 +2952,7 @@ mod tests {
                     token_in: token_in.clone(),
                     token_out: token_out.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
 
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
@@ -2948,6 +3008,7 @@ mod tests {
                     token_in: token_in.clone(),
                     token_out: token_out.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
 
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
@@ -3016,6 +3077,7 @@ mod tests {
                     token_in: eth.clone(),
                     token_out: pepe.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
@@ -3086,6 +3148,7 @@ mod tests {
                     token_in: usdc.clone(),
                     token_out: eth.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
 
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
@@ -3164,6 +3227,7 @@ mod tests {
                     token_in: usdc.clone(),
                     token_out: eth.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
 
                 let swap_eth_pepe = Swap {
@@ -3177,6 +3241,7 @@ mod tests {
                     token_in: eth.clone(),
                     token_out: pepe.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
@@ -3285,6 +3350,7 @@ mod tests {
                     token_in: token_in.clone(),
                     token_out: token_out.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
 
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
@@ -3355,6 +3421,7 @@ mod tests {
                     token_in: token_in.clone(),
                     token_out: token_out.clone(),
                     split: 0f64,
+                    user_data: None,
                 };
 
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
