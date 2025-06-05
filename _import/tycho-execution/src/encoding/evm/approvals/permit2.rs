@@ -1,12 +1,12 @@
 use std::{str::FromStr, sync::Arc};
 
 use alloy::{
+    core::sol,
     primitives::{aliases::U48, Address, Bytes as AlloyBytes, TxKind, U160, U256},
-    providers::{Provider, RootProvider},
+    providers::Provider,
     rpc::types::{TransactionInput, TransactionRequest},
-    transports::BoxTransport,
+    sol_types::SolValue,
 };
-use alloy_sol_types::{sol, SolValue};
 use chrono::Utc;
 use num_bigint::BigUint;
 use tokio::{
@@ -19,7 +19,7 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         encoding_utils::encode_input,
-        utils::{biguint_to_u256, bytes_to_address, get_client, get_runtime},
+        utils::{biguint_to_u256, bytes_to_address, get_client, get_runtime, EVMProvider},
     },
     models,
 };
@@ -29,7 +29,7 @@ use crate::encoding::{
 #[derive(Clone)]
 pub struct Permit2 {
     address: Address,
-    client: Arc<RootProvider<BoxTransport>>,
+    client: EVMProvider,
     runtime_handle: Handle,
     // Store the runtime to prevent it from being dropped before use.
     // This is required since tycho-execution does not have a pre-existing runtime.
@@ -132,16 +132,15 @@ impl Permit2 {
 
         let output = block_in_place(|| {
             self.runtime_handle
-                .block_on(async { self.client.call(&tx).await })
+                .block_on(async { self.client.call(tx).await })
         });
         match output {
             Ok(response) => {
-                let allowance: Allowance =
-                    Allowance::abi_decode(&response, true).map_err(|_| {
-                        EncodingError::FatalError(
-                            "Failed to decode response for permit2 allowance".to_string(),
-                        )
-                    })?;
+                let allowance: Allowance = Allowance::abi_decode(&response).map_err(|_| {
+                    EncodingError::FatalError(
+                        "Failed to decode response for permit2 allowance".to_string(),
+                    )
+                })?;
                 Ok(allowance)
             }
             Err(err) => Err(EncodingError::RecoverableError(format!(
@@ -183,8 +182,10 @@ impl Permit2 {
 mod tests {
     use std::str::FromStr;
 
-    use alloy::signers::local::PrivateKeySigner;
-    use alloy_primitives::{Uint, B256};
+    use alloy::{
+        primitives::{Uint, B256},
+        signers::local::PrivateKeySigner,
+    };
     use num_bigint::BigUint;
     use tycho_common::models::Chain as TychoCommonChain;
 
