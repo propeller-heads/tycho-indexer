@@ -1,3 +1,12 @@
+## [0.98.0](https://github.com/propeller-heads/tycho-execution/compare/0.97.0...0.98.0) (2025-06-05)
+
+
+### Features
+
+* Add balancer-v3-monorepo lib ([f173f9b](https://github.com/propeller-heads/tycho-execution/commit/f173f9bed7e942102baba48e89b262206b7260fd))
+* Implement BalancerV3Executor ([f34db52](https://github.com/propeller-heads/tycho-execution/commit/f34db52f09ccbd85213cb08e65cedac56a2b5cf3))
+* Make BalancerV3Executor inherit from ICallback ([806ce4e](https://github.com/propeller-heads/tycho-execution/commit/806ce4e62cfb80c16e222358a9a04b6dd5ff5bc1))
+
 ## [0.97.0](https://github.com/propeller-heads/tycho-execution/compare/0.96.0...0.97.0) (2025-06-05)
 
 
