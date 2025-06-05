@@ -11,6 +11,7 @@ from typing import Optional, cast, TypeVar
 import eth_abi
 from eth_typing import HexStr
 from eth_utils import keccak
+from hexbytes import HexBytes
 
 from . import SimulationEngine, AccountInfo, SimulationParameters
 from . import token
@@ -19,6 +20,7 @@ from .constants import MAX_BALANCE, EXTERNAL_ACCOUNT
 from .utils import (
     ContractCompiler,
     ERC20Slots,
+    TokenProxyOverwriteFactory,
     create_engine,
     get_contract_bytecode,
     frac_to_decimal,
@@ -52,6 +54,8 @@ class ThirdPartyPool:
         trace: bool = False,
         involved_contracts=None,
         token_storage_slots=None,
+        token_initial_state: Optional[dict[HexBytes, dict[int, int]]] = None,
+        token_proxy_tokens: dict[HexBytes, HexBytes] = None,
     ):
         self.id_ = id_
         """The pools identifier."""
@@ -104,8 +108,11 @@ class ThirdPartyPool:
         """A set of all contract addresses involved in the simulation of this pool."""
 
         self.token_storage_slots: dict[Address, tuple[ERC20Slots, ContractCompiler]] = (
-                token_storage_slots or {}
+            token_storage_slots or {}
         )
+        self.token_initial_state = token_initial_state
+        self.token_proxy_tokens = token_proxy_tokens or dict()
+
         """Allows the specification of custom storage slots for token allowances and
         balances. This is particularly useful for token contracts involved in protocol
         logic that extends beyond simple transfer functionality.
@@ -117,7 +124,6 @@ class ThirdPartyPool:
         self._set_engine()
         self._adapter_contract = AdapterContract(ADAPTER_ADDRESS, self._engine)
         self._set_capabilities()
-        self._init_token_storage_slots()
         if len(self.marginal_prices) == 0:
             self._set_marginal_prices()
 
@@ -132,7 +138,11 @@ class ThirdPartyPool:
         if self._engine is not None:
             return
         else:
-            engine = create_engine([t.address for t in self.tokens], trace=self.trace)
+            engine = create_engine(
+                [t.address for t in self.tokens],
+                trace=self.trace,
+                token_initial_state=self.token_initial_state,
+            )
             engine.init_account(
                 address="0x0000000000000000000000000000000000000000",
                 account=AccountInfo(balance=0, nonce=0),
@@ -237,17 +247,6 @@ class ThirdPartyPool:
                 f"Pool {self.id_} hash different capabilities depending on the token pair!"
             )
 
-    def _init_token_storage_slots(self):
-        for t in self.tokens:
-            if (
-                t.address in self.involved_contracts
-                and t.address not in self.token_storage_slots
-            ):
-                self.token_storage_slots[t.address] = slots = token.brute_force_slots(
-                    t, self.block, self._engine
-                )
-                log.debug(f"Using custom storage slots for {t.address}: {slots}")
-
     def get_amount_out(
         self: TPoolState,
         sell_token: EthereumToken,
@@ -331,12 +330,9 @@ class ThirdPartyPool:
             max_amount = sell_token.to_onchain_amount(
                 self.get_sell_amount_limit(sell_token, buy_token)
             )
-        slots, compiler = self.token_storage_slots.get(sell_token.address, (ERC20Slots(0, 1), ContractCompiler.Solidity))
-        overwrites = ERC20OverwriteFactory(
-            sell_token,
-            token_slots=slots,
-            compiler=compiler
-        )
+
+        proxy_address = self.token_proxy_tokens.get(HexBytes(sell_token.address))
+        overwrites = TokenProxyOverwriteFactory(sell_token, proxy_address)
         overwrites.set_balance(max_amount, EXTERNAL_ACCOUNT)
         overwrites.set_allowance(
             allowance=max_amount, owner=EXTERNAL_ACCOUNT, spender=ADAPTER_ADDRESS
@@ -350,8 +346,6 @@ class ThirdPartyPool:
 
     def _get_balance_overwrites(self) -> dict[Address, dict[int, int]]:
         balance_overwrites = {}
-        slots = ERC20Slots(0, 1)
-        compiler = ContractCompiler.Solidity
         if self.contract_balances:
             # use contract balances for overrides
             balances_by_token = dict()
@@ -363,7 +357,9 @@ class ThirdPartyPool:
                             token = t
                             break
                     if token is None:
-                        log.warning("Found balance for token not in pool. Overwrite skipped")
+                        log.warning(
+                            "Found balance for token not in pool. Overwrite skipped"
+                        )
                         continue
                     amount = token.to_onchain_amount(amount)
                     if token in balances_by_token:
@@ -371,23 +367,19 @@ class ThirdPartyPool:
                     else:
                         balances_by_token[token] = [(contract, amount)]
             for token, bals in balances_by_token.items():
-                overwrites = ERC20OverwriteFactory(token, slots, compiler)
+                proxy_address = self.token_proxy_tokens.get(HexBytes(token.address))
+                overwrites = TokenProxyOverwriteFactory(token, proxy_address)
                 for contract, amount in bals:
-                    overwrites.set_balance(
-                        amount, contract
-                    )
+                    overwrites.set_balance(amount, contract)
                 balance_overwrites.update(overwrites.get_tycho_overwrites())
         else:
             # use component balances for overrides
             address = self.balance_owner or self.id_
             for t in self.tokens:
-                if t.address in self.involved_contracts:
-                    slots, compiler = self.token_storage_slots.get(t.address)
-                overwrites = ERC20OverwriteFactory(t, slots, compiler)
-                amount = t.to_onchain_amount(self.balances[t.address])
-                overwrites.set_balance(
-                    amount, address
-                )
+                proxy_address = self.token_proxy_tokens.get(HexBytes(t.address))
+                overwrites = TokenProxyOverwriteFactory(t, proxy_address)
+                amount = t.to_onchain_amount(self.balances.get(t.address, Decimal(0)))
+                overwrites.set_balance(amount, address)
                 balance_overwrites.update(overwrites.get_tycho_overwrites())
         return balance_overwrites
 
