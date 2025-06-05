@@ -15,6 +15,10 @@ use crate::{
     HttpRPCClient, WsDeltasClient,
 };
 
+/// Tycho Client CLI - A tool for indexing and tracking blockchain protocol data
+///
+/// This CLI tool connects to a Tycho server and tracks various blockchain protocols,
+/// providing real-time updates about their state.
 #[derive(Parser, Debug, Clone, PartialEq)]
 #[clap(version = env!("CARGO_PKG_VERSION"))]
 struct CliArgs {
@@ -32,11 +36,12 @@ struct CliArgs {
     no_tls: bool,
 
     /// The blockchain to index on
-    #[clap(long, default_value = "ethereum")]
+    #[clap(short = 'c', long, default_value = "ethereum")]
     pub chain: String,
 
-    /// Specifies exchanges and optionally a pool address in the format name:address
-    #[clap(long, number_of_values = 1)]
+    /// Specifies exchanges. Optionally also supply a pool address in the format
+    /// {exchange}-{pool_address}
+    #[clap(short = 'e', long, number_of_values = 1)]
     exchange: Vec<String>,
 
     /// Specifies the minimum TVL to filter the components. Denoted in the native token (e.g.
@@ -94,9 +99,14 @@ struct CliArgs {
 
     /// If set, the synchronizer will include TVL in the messages.
     /// Enabling this option will increase the number of network requests made during start-up,
-    //  which may result in increased start-up latency.
+    /// which may result in increased start-up latency.
     #[clap(long)]
     include_tvl: bool,
+
+    /// Enable verbose logging. This will show more detailed information about the
+    /// synchronization process and any errors that occur.
+    #[clap(long)]
+    verbose: bool,
 }
 
 impl CliArgs {
@@ -104,7 +114,13 @@ impl CliArgs {
         // TVL thresholds must be set together - either both or neither
         if self.remove_tvl_threshold.is_some() != self.add_tvl_threshold.is_some() {
             return Err("Both remove_tvl_threshold and add_tvl_threshold must be set.".to_string());
+        } else if self.remove_tvl_threshold.is_some() &&
+            self.add_tvl_threshold.is_some() &&
+            self.remove_tvl_threshold.unwrap() >= self.add_tvl_threshold.unwrap()
+        {
+            return Err("remove_tvl_threshold must be less than add_tvl_threshold".to_string());
         }
+
         Ok(())
     }
 }
@@ -115,14 +131,16 @@ pub async fn run_cli() -> Result<(), String> {
     args.validate()?;
 
     // Setup Logging
+    let log_level = if args.verbose { "debug" } else { "info" };
     let (non_blocking, _guard) =
         tracing_appender::non_blocking(rolling::never(&args.log_folder, "dev_logs.log"));
     let subscriber = tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level)),
         )
         .with_writer(non_blocking)
+        .with_ansi(false)
         .finish();
 
     tracing::subscriber::set_global_default(subscriber)
@@ -151,7 +169,7 @@ pub async fn run_cli() -> Result<(), String> {
         return Ok(());
     }
 
-    // Parse exchange name and addresses from name:address format.
+    // Parse exchange name and addresses from {exchange}-{pool_address} format.
     let exchanges: Vec<(String, Option<String>)> = args
         .exchange
         .iter()
@@ -159,7 +177,7 @@ pub async fn run_cli() -> Result<(), String> {
             if e.contains('-') {
                 let parts: Vec<&str> = e.split('-').collect();
                 if parts.len() == 2 {
-                    Some((parts[0].to_string(), Some(parts[1].to_string())))
+                    Some((parts[0].to_string(), Some(parts[1].to_string().to_lowercase())))
                 } else {
                     warn!("Ignoring invalid exchange format: {}", e);
                     None
