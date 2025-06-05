@@ -177,7 +177,7 @@ pub async fn run_cli() -> Result<(), String> {
             if e.contains('-') {
                 let parts: Vec<&str> = e.split('-').collect();
                 if parts.len() == 2 {
-                    Some((parts[0].to_string(), Some(parts[1].to_string().to_lowercase())))
+                    Some((parts[0].to_string(), Some(parts[1].to_string())))
                 } else {
                     warn!("Ignoring invalid exchange format: {}", e);
                     None
