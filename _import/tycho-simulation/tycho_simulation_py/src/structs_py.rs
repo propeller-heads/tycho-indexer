@@ -115,6 +115,7 @@ impl From<SimulationParameters> for simulation::SimulationParameters {
             gas_limit: params.gas_limit,
             block_number: params.block_number.unwrap_or(0),
             timestamp: params.timestamp.unwrap_or(0),
+            transient_storage: None,
         }
     }
 }

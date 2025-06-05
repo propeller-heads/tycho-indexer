@@ -155,6 +155,7 @@ where
             );
             overwrite_factory.set_balance(*MARKER_VALUE, *EXTERNAL_ACCOUNT);
 
+            // TODO what transient storage to pass?
             let res = token_contract
                 .call(
                     "balanceOf(address)",
@@ -164,6 +165,7 @@ where
                     Some(overwrite_factory.get_overwrites()),
                     Some(*EXTERNAL_ACCOUNT),
                     U256::from(0u64),
+                    None,
                 )?
                 .return_value;
             let decoded: U256Return = U256Return::abi_decode(&res).map_err(|e| {
@@ -189,13 +191,14 @@ where
         let mut overwrite_factory = ERC20OverwriteFactory::new(
             *token_addr,
             ERC20Slots::new(U256::from(0), U256::from(i)),
-            compiler, /* At this point we know the compiler becase we managed to find the
+            compiler, /* At this point we know the compiler because we managed to find the
                        * balance slot */
         );
 
         overwrite_factory.set_allowance(*MARKER_VALUE, *SPENDER, *EXTERNAL_ACCOUNT);
 
         let res = token_contract
+            // TODO what transient storage to pass?
             .call(
                 "allowance(address,address)",
                 (*EXTERNAL_ACCOUNT, *SPENDER),
@@ -204,6 +207,7 @@ where
                 Some(overwrite_factory.get_overwrites()),
                 Some(*EXTERNAL_ACCOUNT),
                 U256::from(0u64),
+                None,
             )?
             .return_value;
         let decoded: U256Return = U256Return::abi_decode(&res).map_err(|e| {
