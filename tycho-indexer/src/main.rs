@@ -262,10 +262,9 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
     let dci_plugin = run_args
         .dci_plugin
         .clone()
-        .map_or(Ok(None), |s| {
-            DCIType::from_str(&s)
-                .map_err(|e| ExtractionError::Setup(format!("Failed to parse DCI plugin: {e}")))
-                .map(Some)
+        .map_or(Ok(None), |s| match s.as_str() {
+            "rpc" => Ok(Some(DCIType::RPC(run_args.substreams_args.rpc_url.clone()))),
+            _ => Err(ExtractionError::Setup(format!("Unknown DCI plugin: {s}"))),
         })?;
 
     let config = ExtractorConfigs::new(HashMap::from([(

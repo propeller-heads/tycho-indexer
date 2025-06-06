@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::Path, str::FromStr, sync::Arc};
+use std::{collections::HashMap, env, path::Path, sync::Arc};
 
 use anyhow::{format_err, Context, Result};
 use async_trait::async_trait;
@@ -369,14 +369,6 @@ impl ExtractorConfig {
 pub enum DCIType {
     /// RPC DCI plugin - uses the RPC endpoint to fetch the account data
     RPC(String),
-}
-
-impl FromStr for DCIType {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(DCIType::RPC(s.to_string()))
-    }
 }
 
 pub struct ExtractorBuilder {
