@@ -71,7 +71,7 @@ where
     }
 
     // Creates a new instance with the ISwapAdapter ABI
-    pub fn new_swap_adapter(
+    pub fn new_contract(
         address: Address,
         adapter_contract_bytecode: Bytecode,
         engine: SimulationEngine<D>,
@@ -228,7 +228,7 @@ mod tests {
     fn create_contract() -> TychoSimulationContract<MockDatabase> {
         let address = Address::ZERO;
         let engine = create_mock_engine();
-        TychoSimulationContract::new_swap_adapter(
+        TychoSimulationContract::new_contract(
             address,
             Bytecode::new_raw(BALANCER_V2.into()),
             engine,
@@ -299,9 +299,8 @@ mod tests {
         // }
 
         let bytecode = Bytecode::new_raw(Bytes::from_str("0x6004361015600b575f80fd5b5f3560e01c63f8a8fd6d14601d575f80fd5b346054575f3660031901126054577fc090fc4683624cfc3884e9d8de5eca132f2d0ec062aff75d43c0465d5ceeab235c5f5260205ff35b5f80fdfea2646970667358221220f176684ab08659ff85817601a5398286c6029cf53bde9b1cce1a0c9bace67dad64736f6c634300081c0033").unwrap());
-        let contract =
-            TychoSimulationContract::new_swap_adapter(contract_address, bytecode, engine)
-                .expect("Failed to create GenericVMHookHandler");
+        let contract = TychoSimulationContract::new_contract(contract_address, bytecode, engine)
+            .expect("Failed to create GenericVMHookHandler");
 
         let transient_storage_params =
             HashMap::from([(contract_address, (storage_slot, storage_value))]);

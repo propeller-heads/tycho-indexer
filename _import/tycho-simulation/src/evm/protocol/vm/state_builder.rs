@@ -217,7 +217,7 @@ where
         };
 
         if self.adapter_contract.is_none() {
-            self.adapter_contract = Some(TychoSimulationContract::new_swap_adapter(
+            self.adapter_contract = Some(TychoSimulationContract::new_contract(
                 self.adapter_address,
                 self.adapter_contract_bytecode
                     .clone()
