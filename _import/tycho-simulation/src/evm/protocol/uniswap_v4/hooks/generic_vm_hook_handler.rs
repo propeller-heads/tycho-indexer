@@ -3,7 +3,7 @@
 use std::{any::Any, collections::HashMap, fmt::Debug, str::FromStr};
 
 use alloy::{
-    primitives::{keccak256, Address, Bytes as AlloyBytes, Signed, Uint, B256, U256},
+    primitives::{keccak256, Address, Signed, Uint, B256, U256},
     sol_types::SolType,
 };
 use revm::{
@@ -14,7 +14,7 @@ use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
     evm::{
-        engine_db::{create_engine, engine_db_interface::EngineDatabaseInterface},
+        engine_db::engine_db_interface::EngineDatabaseInterface,
         protocol::{
             uniswap_v4::{
                 hooks::{
@@ -206,6 +206,7 @@ mod tests {
     use super::*;
     use crate::evm::{
         engine_db::{
+            create_engine,
             simulation_db::{BlockHeader, SimulationDB},
             utils::{get_client, get_runtime},
         },
