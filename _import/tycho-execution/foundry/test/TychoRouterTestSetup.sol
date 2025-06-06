@@ -70,8 +70,12 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     BalancerV3Executor public balancerV3Executor;
     MockERC20[] tokens;
 
+    function getForkBlock() public view virtual returns (uint256) {
+        return 22082754;
+    }
+
     function setUp() public {
-        uint256 forkBlock = 22082754;
+        uint256 forkBlock = getForkBlock();
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
 
         vm.startPrank(ADMIN);

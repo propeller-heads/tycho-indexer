@@ -293,25 +293,4 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
 
         vm.stopPrank();
     }
-
-    function testSingleBalancerV3Integration() public {
-        address steakUSDTlite =
-            address(0x097FFEDb80d4b2Ca6105a07a4D90eB739C45A666);
-        address steakUSDR = address(0x30881Baa943777f92DC934d53D3bFdF33382cab3);
-        deal(steakUSDTlite, ALICE, 1 ether);
-        uint256 balanceBefore = IERC20(steakUSDTlite).balanceOf(ALICE);
-
-        vm.startPrank(ALICE);
-        IERC20(steakUSDTlite).approve(tychoRouterAddr, type(uint256).max);
-
-        bytes memory callData =
-            loadCallDataFromFile("test_single_encoding_strategy_balancer_v3");
-        (bool success,) = tychoRouterAddr.call(callData);
-
-        uint256 balanceAfter = IERC20(steakUSDR).balanceOf(ALICE);
-
-        assertTrue(success, "Call Failed");
-        assertGe(balanceAfter - balanceBefore, 999725);
-        assertEq(IERC20(steakUSDR).balanceOf(tychoRouterAddr), 0);
-    }
 }

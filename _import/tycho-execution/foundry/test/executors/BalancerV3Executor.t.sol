@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "../../src/executors/BalancerV3Executor.sol";
-import "../TestUtils.sol";
-import "@src/executors/BalancerV3Executor.sol";
-import {Constants} from "../Constants.sol";
+import "../TychoRouterTestSetup.sol";
+import {BalancerV3Executor__InvalidDataLength} from
+    "../../src/executors/BalancerV3Executor.sol";
 
 contract BalancerV3ExecutorExposed is BalancerV3Executor {
     constructor(address _permit2) BalancerV3Executor(_permit2) {}
@@ -119,5 +118,54 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
         uint256 balanceAfter = IERC20(aaveGHO_ADDR).balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
+    }
+}
+
+contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
+    function getForkBlock() public pure override returns (uint256) {
+        return 22644371;
+    }
+
+    function testSingleBalancerV3Integration() public {
+        address steakUSDTlite =
+            address(0x097FFEDb80d4b2Ca6105a07a4D90eB739C45A666);
+        address steakUSDR = address(0x30881Baa943777f92DC934d53D3bFdF33382cab3);
+        deal(steakUSDTlite, ALICE, 1 ether);
+        uint256 balanceBefore = IERC20(steakUSDTlite).balanceOf(ALICE);
+
+        vm.startPrank(ALICE);
+        IERC20(steakUSDTlite).approve(tychoRouterAddr, type(uint256).max);
+
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_balancer_v3");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        uint256 balanceAfter = IERC20(steakUSDR).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertGe(balanceAfter - balanceBefore, 999725);
+        assertEq(IERC20(steakUSDR).balanceOf(tychoRouterAddr), 0);
+    }
+
+    function testUSV3BalancerV3Integration() public {
+        // It tests if we can optimize the in transfer to balancer v3 (we can not)
+        //    WETH ───(USV3)──> WBTC ───(balancer v3)──> QNT
+        address QNT_ADDR = address(0x4a220E6096B25EADb88358cb44068A3248254675);
+        deal(WETH_ADDR, ALICE, 0.01 ether);
+        uint256 balanceBefore = IERC20(QNT_ADDR).balanceOf(ALICE);
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
+        bytes memory callData =
+            loadCallDataFromFile("test_uniswap_v3_balancer_v3");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = IERC20(QNT_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertEq(balanceAfter - balanceBefore, 219116541871727003);
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 }
