@@ -42,11 +42,11 @@ pub struct UniswapV4State {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UniswapV4Fees {
     // Protocol fees in the zero for one direction
-    zero_for_one: u32,
+    pub zero_for_one: u32,
     // Protocol fees in the one for zero direction
-    one_for_zero: u32,
+    pub one_for_zero: u32,
     // Liquidity providers fees
-    lp_fee: u32,
+    pub lp_fee: u32,
 }
 
 impl UniswapV4Fees {
