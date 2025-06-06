@@ -31,6 +31,9 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom, ICallback {
         payable
         returns (uint256 calculatedAmount)
     {
+        if (data.length != 81) {
+            revert BalancerV3Executor__InvalidDataLength();
+        }
         bytes memory result = VAULT.unlock(
             abi.encodeCall(
                 BalancerV3Executor.swapCallback,
@@ -113,10 +116,6 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom, ICallback {
             address receiver
         )
     {
-        if (data.length != 113) {
-            revert BalancerV3Executor__InvalidDataLength();
-        }
-
         amountGiven = uint256(bytes32(data[0:32]));
         tokenIn = IERC20(address(bytes20(data[32:52])));
         tokenOut = IERC20(address(bytes20(data[52:72])));

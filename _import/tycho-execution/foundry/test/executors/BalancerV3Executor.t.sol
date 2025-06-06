@@ -68,7 +68,7 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
         assertEq(receiver, BOB);
     }
 
-    function testDecodeParamsInvalidDataLength() public {
+    function testSwapInvalidDataLength() public {
         bytes memory invalidParams = abi.encodePacked(
             osETH_ADDR,
             waEthWETH_ADDR,
@@ -77,7 +77,7 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
         );
 
         vm.expectRevert(BalancerV3Executor__InvalidDataLength.selector);
-        balancerV3Exposed.decodeParams(invalidParams);
+        balancerV3Exposed.swap(1 ether, invalidParams);
     }
 
     function testSwap() public {
