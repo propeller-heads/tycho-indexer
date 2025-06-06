@@ -1,3 +1,10 @@
+## [0.106.0](https://github.com/propeller-heads/tycho-simulation/compare/0.105.0...0.106.0) (2025-06-06)
+
+
+### Features
+
+* Add HookHandler trait ([b829e8d](https://github.com/propeller-heads/tycho-simulation/commit/b829e8d4d0ca76c97dd3e42b532e23e930f562dc))
+
 ## [0.105.0](https://github.com/propeller-heads/tycho-simulation/compare/0.104.0...0.105.0) (2025-06-05)
 
 
