@@ -87,8 +87,9 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom, ICallback {
         returns (bytes memory result)
     {
         verifyCallback(data);
-        result = _swapCallback(data[68:]);
-        // Our general callback logic returns a not ABI encoded result.
+        // Remove the first 68 bytes 4 selector + 32 dataOffset + 32 dataLength and extra padding at the end
+        result = _swapCallback(data[68:181]);
+        // Our general callback logic returns a not ABI encoded result (see Dispatcher._callHandleCallbackOnExecutor).
         // However, the Vault expects the result to be ABI encoded. That is why we need to encode it here again.
         return abi.encode(result);
     }
@@ -112,7 +113,7 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom, ICallback {
             address receiver
         )
     {
-        if (data.length < 113) {
+        if (data.length != 113) {
             revert BalancerV3Executor__InvalidDataLength();
         }
 
