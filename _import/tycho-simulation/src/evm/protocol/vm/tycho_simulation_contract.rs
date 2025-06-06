@@ -279,8 +279,24 @@ mod tests {
                 .expect("Invalid storage slot");
         let storage_value: U256 = U256::from(42); // Example value to store
 
-        // Bytecode retrieved by running `forge inspect TLoadTest deployedBytecode`
-        // The TLoadTest file is stored in `assets/TLoadTest.tx`t (must be converted to solidity)
+        // Bytecode retrieved by running `forge inspect TLoadTest deployedBytecode` on the following
+        // contract (must be converted to a Solidity file):
+        //
+        // // SPDX-License-Identifier: UNLICENSED
+        // pragma solidity ^0.8.26;
+        //
+        // contract TLoadTest {
+        //    bytes32 constant SLOT =
+        // 0xc090fc4683624cfc3884e9d8de5eca132f2d0ec062aff75d43c0465d5ceeab23;
+        //
+        //    function test() public view returns (bool) {
+        //        assembly {
+        //            let x := tload(SLOT)
+        //            mstore(0x0, x)
+        //            return(0x0, 0x20)
+        //        }
+        //    }
+        // }
 
         let bytecode = Bytecode::new_raw(Bytes::from_str("0x6004361015600b575f80fd5b5f3560e01c63f8a8fd6d14601d575f80fd5b346054575f3660031901126054577fc090fc4683624cfc3884e9d8de5eca132f2d0ec062aff75d43c0465d5ceeab235c5f5260205ff35b5f80fdfea2646970667358221220f176684ab08659ff85817601a5398286c6029cf53bde9b1cce1a0c9bace67dad64736f6c634300081c0033").unwrap());
         let contract =
@@ -288,7 +304,7 @@ mod tests {
                 .expect("Failed to create GenericVMHookHandler");
 
         let transient_storage_params =
-            HashMap::from([(contract_address, (storage_slot, storage_value))]); // put some value here with the slot that the contract expects
+            HashMap::from([(contract_address, (storage_slot, storage_value))]);
         let args = ();
         let selector = "test()";
 
