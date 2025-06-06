@@ -81,7 +81,7 @@ impl SwapEncoderBuilder {
                 self.chain,
                 self.config,
             )?)),
-            "vm:bebop" => {
+            "rfq:bebop" => {
                 Ok(Box::new(BebopSwapEncoder::new(self.executor_address, self.chain, self.config)?))
             }
             _ => Err(EncodingError::FatalError(format!(

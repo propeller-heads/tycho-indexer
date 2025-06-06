@@ -96,6 +96,49 @@ contract MockBebopSettlement is Test, Constants {
         return filledMakerAmount;
     }
 
+    function swapSingleFromContract(
+        IBebopSettlement.Single calldata order,
+        IBebopSettlement.MakerSignature calldata, /* makerSignature */
+        uint256 filledTakerAmount
+    ) external payable returns (uint256 filledMakerAmount) {
+        // Basic validation
+        require(order.expiry >= block.timestamp, "Order expired");
+        require(filledTakerAmount <= order.taker_amount, "Exceeds order amount");
+
+        // For swapSingleFromContract, tokens should already be in this contract
+        if (order.taker_token == address(0)) {
+            // For ETH input, validate contract balance
+            require(address(this).balance >= filledTakerAmount, "Insufficient ETH in contract");
+        } else {
+            // For ERC20 input, validate contract balance
+            require(
+                IERC20(order.taker_token).balanceOf(address(this)) >= filledTakerAmount,
+                "Insufficient tokens in contract"
+            );
+        }
+
+        // Calculate proportional maker amount
+        filledMakerAmount =
+            (filledTakerAmount * order.maker_amount) / order.taker_amount;
+
+        address recipient = order.receiver;
+
+        if (order.maker_token == address(0)) {
+            // For ETH output, send ETH directly
+            vm.deal(recipient, recipient.balance + filledMakerAmount);
+        } else {
+            // For ERC20 output, mint tokens to recipient
+            deal(
+                order.maker_token,
+                recipient,
+                IERC20(order.maker_token).balanceOf(recipient)
+                    + filledMakerAmount
+            );
+        }
+
+        return filledMakerAmount;
+    }
+
     function swapMulti(
         IBebopSettlement.Multi calldata order,
         IBebopSettlement.MakerSignature calldata, /* makerSignature */
@@ -500,7 +543,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         WETH.transfer(address(bebopExecutor), amountIn);
 
         // Should revert due to expired order
-        vm.expectRevert(BebopExecutor.BebopExecutor__SettlementFailed.selector);
+        vm.expectRevert("Order expired");
         bebopExecutor.swap(amountIn, params);
     }
 

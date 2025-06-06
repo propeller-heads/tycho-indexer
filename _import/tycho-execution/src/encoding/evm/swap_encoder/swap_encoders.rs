@@ -1679,7 +1679,7 @@ mod tests {
 
             let bebop_component = ProtocolComponent {
                 id: String::from("bebop"),
-                protocol_system: String::from("vm:bebop"),
+                protocol_system: String::from("rfq:bebop"),
                 static_attributes,
                 ..Default::default()
             };
@@ -1760,7 +1760,7 @@ mod tests {
 
             let bebop_component = ProtocolComponent {
                 id: String::from("bebop"),
-                protocol_system: String::from("vm:bebop"),
+                protocol_system: String::from("rfq:bebop"),
                 static_attributes,
                 ..Default::default()
             };
@@ -1844,7 +1844,7 @@ mod tests {
 
             let bebop_component = ProtocolComponent {
                 id: String::from("bebop"),
-                protocol_system: String::from("vm:bebop"),
+                protocol_system: String::from("rfq:bebop"),
                 static_attributes,
                 ..Default::default()
             };

@@ -298,7 +298,7 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
 
     function testSingleBebopIntegration() public {
         deal(USDC_ADDR, ALICE, 1000 * 10 ** 6);
-        uint256 expAmountOut = 1; // Expected minimum WETH amount out
+        uint256 expAmountOut = 1; 
 
         vm.startPrank(ALICE);
         IERC20(USDC_ADDR).approve(tychoRouterAddr, type(uint256).max);
