@@ -1389,7 +1389,20 @@ impl ExtractorGateway for ExtractorPgGateway {
 
                     // Collect new account dynamic values for block-scoped batch insert (necessary
                     // for correct versioning)
-                    account_changes.push((tx_update.tx.hash.clone(), account_update.clone()));
+                    let mut account_delta_creation = account_update.clone();
+
+                    // Set default dynamic values for creation.
+                    account_delta_creation.balance = Some(
+                        account_delta_creation
+                            .balance
+                            .unwrap_or_default(),
+                    );
+                    account_delta_creation.code = Some(
+                        account_delta_creation
+                            .code
+                            .unwrap_or_default(),
+                    );
+                    account_changes.push((tx_update.tx.hash.clone(), account_delta_creation));
                 } else if account_update.is_update() {
                     account_changes.push((tx_update.tx.hash.clone(), account_update.clone()));
                 } else {
