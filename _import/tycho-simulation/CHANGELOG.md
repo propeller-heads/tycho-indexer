@@ -1,3 +1,10 @@
+## [0.107.0](https://github.com/propeller-heads/tycho-simulation/compare/0.106.0...0.107.0) (2025-06-06)
+
+
+### Features
+
+* Expose transient storage ([e47b584](https://github.com/propeller-heads/tycho-simulation/commit/e47b58423c4b6912678409b98b95cc5d6585b866))
+
 ## [0.106.0](https://github.com/propeller-heads/tycho-simulation/compare/0.105.0...0.106.0) (2025-06-06)
 
 
