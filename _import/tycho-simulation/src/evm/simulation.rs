@@ -114,23 +114,28 @@ where
             ..Default::default()
         };
 
-        let mut cfg_env: CfgEnv<SpecId> = CfgEnv::default();
+        let mut cfg_env: CfgEnv<SpecId> = CfgEnv::new_with_spec(SpecId::PRAGUE);
         cfg_env.disable_nonce_check = true;
-        cfg_env
-            .clone()
-            .with_spec(SpecId::CANCUN);
+        cfg_env.disable_eip3607 = true;
 
-        let default_builder = Context::mainnet()
+        let context = Context::mainnet()
             .with_cfg(cfg_env)
             .with_ref_db(db_ref)
             .with_block(block_env)
-            .with_tx(tx_env.clone());
+            .with_tx(tx_env.clone())
+            .modify_journal_chained(|journal| {
+                if let Some(transient_storage) = params.transient_storage.clone() {
+                    for (address, (slot, value)) in transient_storage {
+                        journal.tstore(address, slot, value);
+                    }
+                }
+            });
 
         let evm_result = if self.trace {
             let mut tracer = TracingInspector::new(TracingInspectorConfig::default());
 
             let res = {
-                let mut vm = default_builder.build_mainnet_with_inspector(&mut tracer);
+                let mut vm = context.build_mainnet_with_inspector(&mut tracer);
 
                 debug!(
                     "Starting simulation with tx parameters: {:#?} {:#?}",
@@ -143,7 +148,7 @@ where
 
             res
         } else {
-            let mut vm = default_builder.build_mainnet();
+            let mut vm = context.build_mainnet();
 
             debug!("Starting simulation with tx parameters: {:#?} {:#?}", vm.ctx.tx, vm.ctx.block);
 
@@ -346,6 +351,9 @@ pub struct SimulationParameters {
     pub block_number: u64,
     /// The timestamp to be used by the transaction
     pub timestamp: u64,
+    /// Map of the address whose transient storage will be overwritten, to a tuple of a storage
+    /// slot and value.
+    pub transient_storage: Option<HashMap<Address, (U256, U256)>>,
 }
 
 #[cfg(test)]
@@ -584,6 +592,7 @@ mod tests {
             gas_limit: None,
             block_number: 0,
             timestamp: 0,
+            transient_storage: None,
         };
         let eng = SimulationEngine::new(state, true);
 
@@ -713,6 +722,7 @@ mod tests {
             gas_limit: None,
             block_number: 0,
             timestamp: 0,
+            transient_storage: None,
         };
 
         let eng = SimulationEngine::new(state, false);

@@ -449,6 +449,7 @@ where
             caller: *EXTERNAL_ACCOUNT,
             value: U256::from(0u64),
             gas_limit: None,
+            transient_storage: None,
         };
 
         let sim_result = engine

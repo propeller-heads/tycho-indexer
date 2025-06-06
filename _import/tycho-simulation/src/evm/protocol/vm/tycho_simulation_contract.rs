@@ -127,6 +127,7 @@ where
         overrides: Option<HashMap<Address, HashMap<U256, U256>>>,
         caller: Option<Address>,
         value: U256,
+        transient_storage: Option<HashMap<Address, (U256, U256)>>,
     ) -> Result<TychoSimulationResponse, SimulationError> {
         let call_data = self.encode_input(selector, args);
         let params = SimulationParameters {
@@ -143,6 +144,7 @@ where
             caller: caller.unwrap_or(*EXTERNAL_ACCOUNT),
             value,
             gas_limit: None,
+            transient_storage,
         };
 
         let sim_result = self.simulate(params)?;
@@ -164,11 +166,17 @@ where
 mod tests {
     use std::str::FromStr;
 
-    use alloy::primitives::hex;
+    use alloy::primitives::{hex, Bytes};
 
     use super::*;
     use crate::evm::{
-        engine_db::{engine_db_interface::EngineDatabaseInterface, tycho_db::PreCachedDBError},
+        engine_db::{
+            create_engine,
+            engine_db_interface::EngineDatabaseInterface,
+            simulation_db::SimulationDB,
+            tycho_db::PreCachedDBError,
+            utils::{get_client, get_runtime},
+        },
         protocol::vm::{constants::BALANCER_V2, utils::string_to_bytes32},
     };
 
@@ -257,5 +265,68 @@ mod tests {
         assert_eq!(&encoded[4..36], &expected_pool_id); // 32 bytes for poolId
         assert_eq!(&encoded[36..68], &expected_sell_token); // 32 bytes for address (padded)
         assert_eq!(&encoded[68..100], &expected_buy_token); // 32 bytes for address (padded)
+    }
+
+    #[test]
+    fn test_transient_storage() {
+        let db = SimulationDB::new(get_client(None), get_runtime(), None);
+        let engine = create_engine(db, true).expect("Failed to create simulation engine");
+
+        let contract_address = Address::from_str("0x0010d0d5db05933fa0d9f7038d365e1541a41888") // Irrelevant address
+            .expect("Invalid address");
+        let storage_slot: U256 =
+            U256::from_str("0xc090fc4683624cfc3884e9d8de5eca132f2d0ec062aff75d43c0465d5ceeab23")
+                .expect("Invalid storage slot");
+        let storage_value: U256 = U256::from(42); // Example value to store
+
+        // Bytecode retrieved by running `forge inspect TLoadTest deployedBytecode` on the following
+        // contract (must be converted to a Solidity file):
+        //
+        // // SPDX-License-Identifier: UNLICENSED
+        // pragma solidity ^0.8.26;
+        //
+        // contract TLoadTest {
+        //    bytes32 constant SLOT =
+        // 0xc090fc4683624cfc3884e9d8de5eca132f2d0ec062aff75d43c0465d5ceeab23;
+        //
+        //    function test() public view returns (bool) {
+        //        assembly {
+        //            let x := tload(SLOT)
+        //            mstore(0x0, x)
+        //            return(0x0, 0x20)
+        //        }
+        //    }
+        // }
+
+        let bytecode = Bytecode::new_raw(Bytes::from_str("0x6004361015600b575f80fd5b5f3560e01c63f8a8fd6d14601d575f80fd5b346054575f3660031901126054577fc090fc4683624cfc3884e9d8de5eca132f2d0ec062aff75d43c0465d5ceeab235c5f5260205ff35b5f80fdfea2646970667358221220f176684ab08659ff85817601a5398286c6029cf53bde9b1cce1a0c9bace67dad64736f6c634300081c0033").unwrap());
+        let contract =
+            TychoSimulationContract::new_swap_adapter(contract_address, bytecode, engine)
+                .expect("Failed to create GenericVMHookHandler");
+
+        let transient_storage_params =
+            HashMap::from([(contract_address, (storage_slot, storage_value))]);
+        let args = ();
+        let selector = "test()";
+
+        let res = contract
+            .call(
+                selector,
+                args,
+                22578103, // blockHeader
+                None,
+                None,
+                None,
+                U256::from(0u64),
+                Some(transient_storage_params),
+            )
+            .unwrap();
+
+        let decoded: U256 = U256::abi_decode(&res.return_value)
+            .map_err(|e| {
+                SimulationError::FatalError(format!("Failed to decode test return value: {e:?}"))
+            })
+            .unwrap();
+
+        assert_eq!(decoded, storage_value);
     }
 }
