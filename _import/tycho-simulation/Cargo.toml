@@ -1,6 +1,6 @@
 [package]
 name = "tycho-simulation"
-version = "0.107.0"
+version = "0.108.0"
 edition = "2021"
 description = "Provides tools for interacting with protocol states, calculating spot prices, and quoting token swaps."
 repository = "https://github.com/propeller-heads/tycho-simulation"
