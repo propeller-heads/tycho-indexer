@@ -31,9 +31,12 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom, ICallback {
         payable
         returns (uint256 calculatedAmount)
     {
+        if (data.length != 81) {
+            revert BalancerV3Executor__InvalidDataLength();
+        }
         bytes memory result = VAULT.unlock(
             abi.encodeCall(
-                BalancerV3Executor.handleCallback,
+                BalancerV3Executor.swapCallback,
                 abi.encodePacked(givenAmount, data)
             )
         );
@@ -46,8 +49,8 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom, ICallback {
         }
     }
 
-    function handleCallback(bytes calldata data)
-        external
+    function _swapCallback(bytes calldata data)
+        internal
         returns (bytes memory result)
     {
         verifyCallback(data);
@@ -82,6 +85,25 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom, ICallback {
         return abi.encode(amountCalculated);
     }
 
+    function handleCallback(bytes calldata data)
+        external
+        returns (bytes memory result)
+    {
+        verifyCallback(data);
+        // Remove the first 68 bytes 4 selector + 32 dataOffset + 32 dataLength and extra padding at the end
+        result = _swapCallback(data[68:181]);
+        // Our general callback logic returns a not ABI encoded result (see Dispatcher._callHandleCallbackOnExecutor).
+        // However, the Vault expects the result to be ABI encoded. That is why we need to encode it here again.
+        return abi.encode(result);
+    }
+
+    function swapCallback(bytes calldata data)
+        external
+        returns (bytes memory result)
+    {
+        return _swapCallback(data);
+    }
+
     function _decodeData(bytes calldata data)
         internal
         pure
@@ -94,10 +116,6 @@ contract BalancerV3Executor is IExecutor, RestrictTransferFrom, ICallback {
             address receiver
         )
     {
-        if (data.length != 113) {
-            revert BalancerV3Executor__InvalidDataLength();
-        }
-
         amountGiven = uint256(bytes32(data[0:32]));
         tokenIn = IERC20(address(bytes20(data[32:52])));
         tokenOut = IERC20(address(bytes20(data[52:72])));

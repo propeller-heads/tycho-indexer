@@ -2472,6 +2472,85 @@ mod tests {
                     let hex_calldata = encode(&calldata);
                     write_calldata_to_file("test_multi_protocol", hex_calldata.as_str());
                 }
+
+                #[test]
+                fn test_uniswap_v3_balancer_v3() {
+                    // Note: This test does not assert anything. It is only used to obtain
+                    // integration test data for our router solidity test.
+                    //
+                    //   WETH ───(USV3)──> WBTC ───(balancer v3)──> QNT
+
+                    let weth = weth();
+                    let wbtc =
+                        Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
+                    let qnt =
+                        Bytes::from_str("0x4a220e6096b25eadb88358cb44068a3248254675").unwrap();
+
+                    let swap_weth_wbtc = Swap {
+                        component: ProtocolComponent {
+                            id: "0xCBCdF9626bC03E24f779434178A73a0B4bad62eD".to_string(),
+                            protocol_system: "uniswap_v3".to_string(),
+                            static_attributes: {
+                                let mut attrs = HashMap::new();
+                                attrs.insert(
+                                    "fee".to_string(),
+                                    Bytes::from(BigInt::from(3000).to_signed_bytes_be()),
+                                );
+                                attrs
+                            },
+                            ..Default::default()
+                        },
+                        token_in: weth.clone(),
+                        token_out: wbtc.clone(),
+                        split: 0f64,
+                        user_data: None,
+                    };
+                    let swap_wbtc_qnt = Swap {
+                        component: ProtocolComponent {
+                            id: "0x571bea0e99e139cd0b6b7d9352ca872dfe0d72dd".to_string(),
+                            protocol_system: "vm:balancer_v3".to_string(),
+                            ..Default::default()
+                        },
+                        token_in: wbtc.clone(),
+                        token_out: qnt.clone(),
+                        split: 0f64,
+                        user_data: None,
+                    };
+                    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+                    let solution = Solution {
+                        exact_out: false,
+                        given_token: weth,
+                        given_amount: BigUint::from_str("1_0000000000000000").unwrap(),
+                        checked_token: qnt,
+                        checked_amount: BigUint::from_str("26173932").unwrap(),
+                        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
+                            .unwrap(),
+                        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
+                            .unwrap(),
+                        swaps: vec![swap_weth_wbtc, swap_wbtc_qnt],
+                        ..Default::default()
+                    };
+
+                    let encoded_solution = encoder
+                        .encode_solutions(vec![solution.clone()])
+                        .unwrap()[0]
+                        .clone();
+
+                    let calldata = encode_tycho_router_call(
+                        eth_chain().id,
+                        encoded_solution,
+                        &solution,
+                        UserTransferType::TransferFrom,
+                        eth(),
+                        None,
+                    )
+                    .unwrap()
+                    .data;
+
+                    let hex_calldata = encode(&calldata);
+                    write_calldata_to_file("test_uniswap_v3_balancer_v3", hex_calldata.as_str());
+                }
             }
         }
 
@@ -3459,6 +3538,62 @@ mod tests {
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file(
                     "test_single_encoding_strategy_curve_st_eth",
+                    hex_calldata.as_str(),
+                );
+            }
+
+            #[test]
+            fn test_single_encoding_strategy_balancer_v3() {
+                // steakUSDTlite -> (balancer v3) -> steakUSDR
+                let balancer_pool = ProtocolComponent {
+                    id: String::from("0xf028ac624074d6793c36dc8a06ecec0f5a39a718"),
+                    protocol_system: String::from("vm:balancer_v3"),
+                    ..Default::default()
+                };
+                let token_in = Bytes::from("0x097ffedb80d4b2ca6105a07a4d90eb739c45a666");
+                let token_out = Bytes::from("0x30881baa943777f92dc934d53d3bfdf33382cab3");
+                let swap = Swap {
+                    component: balancer_pool,
+                    token_in: token_in.clone(),
+                    token_out: token_out.clone(),
+                    split: 0f64,
+                    user_data: None,
+                };
+
+                let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+                let solution = Solution {
+                    exact_out: false,
+                    given_token: token_in,
+                    given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+                    checked_token: token_out,
+                    checked_amount: BigUint::from_str("1000").unwrap(),
+                    // Alice
+                    sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                    receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
+                        .unwrap(),
+                    swaps: vec![swap],
+                    ..Default::default()
+                };
+
+                let encoded_solution = encoder
+                    .encode_solutions(vec![solution.clone()])
+                    .unwrap()[0]
+                    .clone();
+
+                let calldata = encode_tycho_router_call(
+                    eth_chain().id,
+                    encoded_solution,
+                    &solution,
+                    UserTransferType::TransferFrom,
+                    eth(),
+                    None,
+                )
+                .unwrap()
+                .data;
+                let hex_calldata = encode(&calldata);
+                write_calldata_to_file(
+                    "test_single_encoding_strategy_balancer_v3",
                     hex_calldata.as_str(),
                 );
             }

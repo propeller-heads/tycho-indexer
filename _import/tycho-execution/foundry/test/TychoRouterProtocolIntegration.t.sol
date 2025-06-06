@@ -198,8 +198,6 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
     }
 
     function testSingleMaverickIntegration() public {
-        vm.stopPrank();
-
         deal(GHO_ADDR, ALICE, 1 ether);
         uint256 balanceBefore = IERC20(USDC_ADDR).balanceOf(ALICE);
 
