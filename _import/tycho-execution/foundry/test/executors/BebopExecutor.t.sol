@@ -5,7 +5,7 @@ import "../TestUtils.sol";
 import "@src/executors/BebopExecutor.sol";
 import {Constants} from "../Constants.sol";
 import {Permit2TestHelper} from "../Permit2TestHelper.sol";
-import {Test, console2} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {StdCheats} from "forge-std/StdCheats.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from
@@ -85,11 +85,13 @@ contract MockBebopSettlement is Test, Constants {
             vm.deal(recipient, recipient.balance + filledMakerAmount);
         } else {
             // For ERC20 output, mint tokens to recipient
+            uint256 recipientBalanceBefore =
+                IERC20(order.maker_token).balanceOf(recipient);
+
             deal(
                 order.maker_token,
                 recipient,
-                IERC20(order.maker_token).balanceOf(recipient)
-                    + filledMakerAmount
+                recipientBalanceBefore + filledMakerAmount
             );
         }
 
@@ -108,11 +110,15 @@ contract MockBebopSettlement is Test, Constants {
         // For swapSingleFromContract, tokens should already be in this contract
         if (order.taker_token == address(0)) {
             // For ETH input, validate contract balance
-            require(address(this).balance >= filledTakerAmount, "Insufficient ETH in contract");
+            require(
+                address(this).balance >= filledTakerAmount,
+                "Insufficient ETH in contract"
+            );
         } else {
             // For ERC20 input, validate contract balance
             require(
-                IERC20(order.taker_token).balanceOf(address(this)) >= filledTakerAmount,
+                IERC20(order.taker_token).balanceOf(address(this))
+                    >= filledTakerAmount,
                 "Insufficient tokens in contract"
             );
         }
@@ -128,11 +134,13 @@ contract MockBebopSettlement is Test, Constants {
             vm.deal(recipient, recipient.balance + filledMakerAmount);
         } else {
             // For ERC20 output, mint tokens to recipient
+            uint256 recipientBalanceBefore =
+                IERC20(order.maker_token).balanceOf(recipient);
+
             deal(
                 order.maker_token,
                 recipient,
-                IERC20(order.maker_token).balanceOf(recipient)
-                    + filledMakerAmount
+                recipientBalanceBefore + filledMakerAmount
             );
         }
 

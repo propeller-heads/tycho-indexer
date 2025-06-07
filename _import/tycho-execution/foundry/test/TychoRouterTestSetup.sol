@@ -17,6 +17,7 @@ import {WETH} from "../lib/permit2/lib/solmate/src/tokens/WETH.sol";
 import {Permit2TestHelper} from "./Permit2TestHelper.sol";
 import "./TestUtils.sol";
 import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
+import {MockBebopSettlement} from "./executors/BebopExecutor.t.sol";
 
 contract TychoRouterExposed is TychoRouter {
     constructor(address _permit2, address weth) TychoRouter(_permit2, weth) {}
@@ -127,7 +128,11 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, PERMIT2_ADDRESS);
         maverickv2Executor =
             new MaverickV2Executor(MAVERICK_V2_FACTORY, PERMIT2_ADDRESS);
-        bebopExecutor = new BebopExecutor(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+
+        // Deploy mock Bebop settlement for testing
+        MockBebopSettlement mockBebopSettlement = new MockBebopSettlement();
+        bebopExecutor =
+            new BebopExecutor(address(mockBebopSettlement), PERMIT2_ADDRESS);
 
         address[] memory executors = new address[](9);
         executors[0] = address(usv2Executor);

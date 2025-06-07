@@ -298,11 +298,12 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
 
     function testSingleBebopIntegration() public {
         deal(USDC_ADDR, ALICE, 1000 * 10 ** 6);
-        uint256 expAmountOut = 1; 
+        uint256 expAmountOut = 400000000000000000; // 0.4 WETH
 
         vm.startPrank(ALICE);
         IERC20(USDC_ADDR).approve(tychoRouterAddr, type(uint256).max);
-        bytes memory callData = loadCallDataFromFile("test_encode_bebop_single");
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_bebop");
         (bool success,) = tychoRouterAddr.call(callData);
 
         uint256 finalBalance = IERC20(WETH_ADDR).balanceOf(ALICE);

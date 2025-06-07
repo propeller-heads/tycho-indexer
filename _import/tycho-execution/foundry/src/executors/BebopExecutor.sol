@@ -71,6 +71,13 @@ interface IBebopSettlement {
         uint256 filledTakerAmount
     ) external payable;
 
+    /// @notice Executes a single RFQ order using tokens from contract balance
+    function swapSingleFromContract(
+        Single calldata order,
+        MakerSignature calldata makerSignature,
+        uint256 filledTakerAmount
+    ) external payable;
+
     /// @notice Executes a multi-token RFQ order
     function swapMulti(
         Multi calldata order,
@@ -102,7 +109,6 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
     }
 
     /// @notice Bebop-specific errors
-    error BebopExecutor__SettlementFailed();
     error BebopExecutor__InvalidDataLength();
 
     /// @notice The Bebop settlement contract address
@@ -136,11 +142,17 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             bool approvalNeeded
         ) = _decodeData(data);
 
-        _transfer(address(this), transferType, tokenIn, givenAmount);
+        // For Single orders, transfer directly to settlement and use swapSingleFromContract
+        // For Multi/Aggregate orders, transfer to executor and approve settlement
+        if (orderType == OrderType.Single) {
+            _transfer(bebopSettlement, transferType, tokenIn, givenAmount);
+        } else {
+            _transfer(address(this), transferType, tokenIn, givenAmount);
 
-        if (approvalNeeded) {
-            // slither-disable-next-line unused-return
-            IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
+            if (approvalNeeded) {
+                // slither-disable-next-line unused-return
+                IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
+            }
         }
 
         // Execute RFQ swap based on order type
@@ -194,26 +206,13 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             ? order.receiver.balance
             : IERC20(tokenOut).balanceOf(order.receiver);
 
-        // Handle ETH vs ERC20 execution
-        if (tokenIn == address(0)) {
-            // For ETH input, use msg.value
-            try IBebopSettlement(bebopSettlement).swapSingle{value: amountIn}(
-                order, sig, amountIn
-            ) {
-                // Success, calculate amountOut from balance difference
-            } catch {
-                revert BebopExecutor__SettlementFailed();
-            }
-        } else {
-            // For ERC20 input, call settlement
-            try IBebopSettlement(bebopSettlement).swapSingle(
-                order, sig, amountIn
-            ) {
-                // Success, calculate amountOut from balance difference
-            } catch {
-                revert BebopExecutor__SettlementFailed();
-            }
-        }
+        // Execute the swap with ETH value if needed
+        uint256 ethValue = tokenIn == address(0) ? amountIn : 0;
+
+        // Use swapSingleFromContract since tokens are already in the settlement contract
+        IBebopSettlement(bebopSettlement).swapSingleFromContract{
+            value: ethValue
+        }(order, sig, amountIn);
 
         // Calculate actual amount received
         uint256 balanceAfter = tokenOut == address(0)
@@ -221,6 +220,11 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             : IERC20(tokenOut).balanceOf(order.receiver);
 
         amountOut = balanceAfter - balanceBefore;
+
+        // Note: We don't validate amountOut against order.maker_amount because:
+        // 1. The settlement contract already validates the quote and amounts
+        // 2. For partial fills, output is proportional to input
+        // 3. The router validates against minAmountOut for slippage protection
     }
 
     /// @dev Executes a Multi RFQ swap through Bebop settlement
@@ -274,13 +278,10 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         // Execute the swap
         uint256 ethValue = tokenIn == address(0) ? amountIn : 0;
 
-        try IBebopSettlement(bebopSettlement).swapMulti{value: ethValue}(
+        // Execute the swap (tokens are in executor, approved to settlement)
+        IBebopSettlement(bebopSettlement).swapMulti{value: ethValue}(
             order, sig, filledTakerAmounts
-        ) {
-            // Success
-        } catch {
-            revert BebopExecutor__SettlementFailed();
-        }
+        );
 
         // Calculate actual amount received
         uint256 balanceAfter = tokenOut == address(0)
@@ -328,13 +329,10 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         // Execute the swap
         uint256 ethValue = tokenIn == address(0) ? amountIn : 0;
 
-        try IBebopSettlement(bebopSettlement).swapAggregate{value: ethValue}(
+        // Execute the swap (tokens are in executor, approved to settlement)
+        IBebopSettlement(bebopSettlement).swapAggregate{value: ethValue}(
             order, signatures, filledTakerAmounts
-        ) {
-            // Success
-        } catch {
-            revert BebopExecutor__SettlementFailed();
-        }
+        );
 
         // Calculate actual amount received
         uint256 balanceAfter = tokenOut == address(0)

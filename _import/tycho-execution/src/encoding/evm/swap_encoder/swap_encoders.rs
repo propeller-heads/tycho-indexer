@@ -606,7 +606,7 @@ impl SwapEncoder for BebopSwapEncoder {
             "Missing bebop specific addresses in config".to_string(),
         ))?;
         let settlement_address = config
-            .get("settlement_address")
+            .get("bebop_settlement_address")
             .ok_or(EncodingError::FatalError(
                 "Missing bebop settlement address in config".to_string(),
             ))?
@@ -1706,7 +1706,7 @@ mod tests {
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 TychoCoreChain::Ethereum.into(),
                 Some(HashMap::from([(
-                    "settlement_address".to_string(),
+                    "bebop_settlement_address".to_string(),
                     "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F".to_string(),
                 )])),
             )
@@ -1787,7 +1787,7 @@ mod tests {
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 TychoCoreChain::Ethereum.into(),
                 Some(HashMap::from([(
-                    "settlement_address".to_string(),
+                    "bebop_settlement_address".to_string(),
                     "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F".to_string(),
                 )])),
             )
@@ -1871,7 +1871,7 @@ mod tests {
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 TychoCoreChain::Ethereum.into(),
                 Some(HashMap::from([(
-                    "settlement_address".to_string(),
+                    "bebop_settlement_address".to_string(),
                     "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F".to_string(),
                 )])),
             )
