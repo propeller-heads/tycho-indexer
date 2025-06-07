@@ -585,11 +585,11 @@ pub struct BebopSwapEncoder {
 
 impl BebopSwapEncoder {
     /// Validates the component ID format
-    /// Component format: "bebop"
+    /// Component format: "bebop-rfq"
     fn validate_component_id(component_id: &str) -> Result<(), EncodingError> {
-        if component_id != "bebop" {
+        if component_id != "bebop-rfq" {
             return Err(EncodingError::FatalError(
-                "Invalid Bebop component ID format. Expected 'bebop'".to_string(),
+                "Invalid Bebop component ID format. Expected 'bebop-rfq'".to_string(),
             ));
         }
         Ok(())
@@ -1678,7 +1678,7 @@ mod tests {
                 .insert("signature".into(), Bytes::from(hex::decode("aabbccdd").unwrap()));
 
             let bebop_component = ProtocolComponent {
-                id: String::from("bebop"),
+                id: String::from("bebop-rfq"),
                 protocol_system: String::from("rfq:bebop"),
                 static_attributes,
                 ..Default::default()
@@ -1759,7 +1759,7 @@ mod tests {
             static_attributes.insert("order_type".into(), Bytes::from(vec![1u8])); // Multi order
 
             let bebop_component = ProtocolComponent {
-                id: String::from("bebop"),
+                id: String::from("bebop-rfq"),
                 protocol_system: String::from("rfq:bebop"),
                 static_attributes,
                 ..Default::default()
@@ -1843,7 +1843,7 @@ mod tests {
             static_attributes.insert("order_type".into(), Bytes::from(vec![2u8])); // Aggregate order
 
             let bebop_component = ProtocolComponent {
-                id: String::from("bebop"),
+                id: String::from("bebop-rfq"),
                 protocol_system: String::from("rfq:bebop"),
                 static_attributes,
                 ..Default::default()

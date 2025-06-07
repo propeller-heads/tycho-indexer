@@ -1917,6 +1917,7 @@ mod tests {
                 // In this module we test the ability to chain swaps or not. Different protocols are
                 // tested. The encoded data is used for solidity tests as well
                 use super::*;
+                use std::time::{SystemTime, UNIX_EPOCH};
 
                 #[test]
                 fn test_uniswap_v3_uniswap_v2() {
@@ -2258,6 +2259,131 @@ mod tests {
 
                     let hex_calldata = encode(&calldata);
                     write_calldata_to_file("test_balancer_v2_uniswap_v2", hex_calldata.as_str());
+                }
+
+                #[test]
+                fn test_uniswap_v3_bebop() {
+                    // Note: This test does not assert anything. It is only used to obtain
+                    // integration test data for our router solidity test.
+                    //
+                    // Performs a sequential swap from WETH to DAI through USDC using USV3 and Bebop RFQ
+                    //
+                    //   WETH ───(USV3)──> USDC ───(Bebop RFQ)──> DAI
+
+                    let weth = weth();
+                    let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+                    let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
+                    // First swap: WETH -> USDC via UniswapV3
+                    let swap_weth_usdc = Swap {
+                        component: ProtocolComponent {
+                            id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), // WETH-USDC USV3 Pool 0.05%
+                            protocol_system: "uniswap_v3".to_string(),
+                            static_attributes: {
+                                let mut attrs = HashMap::new();
+                                attrs.insert(
+                                    "fee".to_string(),
+                                    Bytes::from(BigInt::from(500).to_signed_bytes_be()),
+                                );
+                                attrs
+                            },
+                            ..Default::default()
+                        },
+                        token_in: weth.clone(),
+                        token_out: usdc.clone(),
+                        split: 0f64,
+                    };
+
+                    // Second swap: USDC -> DAI via Bebop RFQ
+                    // Create a valid Bebop Single order struct
+                    let expiry = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs() + 3600; // Current time + 1 hour
+                    let taker_address = Address::ZERO;
+                    let maker_address =
+                        Address::from_str("0xbbbbbBB520d69a9775E85b458C58c648259FAD5F").unwrap();
+                    let maker_nonce = 1u64;
+                    let taker_token = Address::from_str(&usdc.to_string()).unwrap();
+                    let maker_token = Address::from_str(&dai.to_string()).unwrap();
+                    // For ~2021.75 USDC input (what 1 ETH gives us via USV3), expecting ~2021.75 DAI output
+                    let taker_amount = U256::from_str("2021750881").unwrap(); // 2021.75 USDC (6 decimals)
+                    let maker_amount = U256::from_str("2021750881000000000000").unwrap(); // 2021.75 DAI (18 decimals)
+                    let receiver =
+                        Address::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(); // Alice's address
+                    let packed_commands = U256::ZERO;
+
+                    // Encode using standard ABI encoding (not packed)
+                    let quote_data = (
+                        expiry,
+                        taker_address,
+                        maker_address,
+                        maker_nonce,
+                        taker_token,
+                        maker_token,
+                        taker_amount,
+                        maker_amount,
+                        receiver,
+                        packed_commands,
+                        U256::from(0u64), // flags as uint256
+                    )
+                        .abi_encode();
+
+                    let quote_data = Bytes::from(quote_data);
+                    let signature = Bytes::from(hex::decode("aabbccdd").unwrap());
+
+                    // Create static attributes for the Bebop component
+                    let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
+                    static_attributes.insert("quote_data".into(), quote_data);
+                    static_attributes.insert("signature".into(), signature);
+
+                    let bebop_component = ProtocolComponent {
+                        id: String::from("bebop-rfq"),
+                        protocol_system: String::from("rfq:bebop"),
+                        static_attributes,
+                        ..Default::default()
+                    };
+
+                    let swap_usdc_dai = Swap {
+                        component: bebop_component,
+                        token_in: usdc.clone(),
+                        token_out: dai.clone(),
+                        split: 0f64,
+                    };
+
+                    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+                    let solution = Solution {
+                        exact_out: false,
+                        given_token: weth,
+                        given_amount: BigUint::from_str("1_000000000000000000").unwrap(), // 1 WETH
+                        checked_token: dai,
+                        checked_amount: BigUint::from_str("2021750881000000000000").unwrap(), // Expected ~2021.75 DAI
+                        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
+                            .unwrap(),
+                        swaps: vec![swap_weth_usdc, swap_usdc_dai],
+                        ..Default::default()
+                    };
+
+                    let encoded_solution = encoder
+                        .encode_solutions(vec![solution.clone()])
+                        .unwrap()[0]
+                        .clone();
+
+                    let calldata = encode_tycho_router_call(
+                        eth_chain().id,
+                        encoded_solution,
+                        &solution,
+                        UserTransferType::TransferFrom,
+                        eth(),
+                        None,
+                    )
+                    .unwrap()
+                    .data;
+
+                    let hex_calldata = encode(&calldata);
+                    write_calldata_to_file("test_uniswapv3_bebop", hex_calldata.as_str());
                 }
 
                 #[test]
@@ -3397,7 +3523,7 @@ mod tests {
 
             #[test]
             fn test_single_encoding_strategy_bebop() {
-                // USDC -> (bebop) -> WETH
+                // USDC -> (Bebop RFQ) -> WETH
                 let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
                 let token_out = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"); // WETH
                 let amount_in = BigUint::from_str("1000_000000").unwrap(); // 1000 USDC
@@ -3447,7 +3573,7 @@ mod tests {
                 static_attributes.insert("signature".into(), signature);
 
                 let bebop_component = ProtocolComponent {
-                    id: String::from("bebop"),
+                    id: String::from("bebop-rfq"),
                     protocol_system: String::from("rfq:bebop"),
                     static_attributes,
                     ..Default::default()

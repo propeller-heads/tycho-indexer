@@ -495,25 +495,26 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
-    // function testBebopUSV2Integration() public {
-    //     // Performs a sequential swap from USDC to WETH though Bebop and USV2 pools
-    //     //
-    //     //   USDC ──(bebop)──> WETH ───(USV2)──> USDC
-    //     deal(USDC_ADDR, ALICE, 1000 * 10 ** 6);
-    //     uint256 balanceBefore = IERC20(USDC_ADDR).balanceOf(ALICE);
+    function testUSV3BebopIntegration() public {
+        // Performs a sequential swap from WETH to DAI through USDC using USV3 and Bebop RFQ
+        //
+        //   WETH ──(USV3)──> USDC ───(Bebop RFQ)──> DAI
+        deal(WETH_ADDR, ALICE, 1 ether);
+        uint256 balanceBefore = IERC20(DAI_ADDR).balanceOf(ALICE);
 
-    //     // Approve permit2
-    //     vm.startPrank(ALICE);
-    //     IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
-    //     bytes memory callData = loadCallDataFromFile("test_encode_bebop_single");
-    //     (bool success,) = tychoRouterAddr.call(callData);
+        // Approve router
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
+        bytes memory callData = loadCallDataFromFile("test_uniswapv3_bebop");
+        (bool success,) = tychoRouterAddr.call(callData);
 
-    //     vm.stopPrank();
+        vm.stopPrank();
 
-    //     uint256 balanceAfter = IERC20(USDC_ADDR).balanceOf(ALICE);
+        uint256 balanceAfter = IERC20(DAI_ADDR).balanceOf(ALICE);
 
-    //     assertTrue(success, "Call Failed");
-    //     assertGt(balanceAfter, balanceBefore, "Should receive some tokens");
-    //     assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 0);
-    // }
+        assertTrue(success, "Call Failed");
+        // Expecting ~2021.75 DAI from 1 WETH through USDC
+        assertEq(balanceAfter - balanceBefore, 2021750881000000000000);
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+    }
 }
