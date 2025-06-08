@@ -210,6 +210,27 @@ pub enum TransferType {
     None = 2,
 }
 
+/// Bebop order types
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BebopOrderType {
+    Single = 0,
+    Multi = 1,
+    Aggregate = 2,
+}
+
+impl TryFrom<u8> for BebopOrderType {
+    type Error = EncodingError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(BebopOrderType::Single),
+            1 => Ok(BebopOrderType::Multi),
+            2 => Ok(BebopOrderType::Aggregate),
+            _ => Err(EncodingError::InvalidInput(format!("Invalid Bebop order type: {}", value))),
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Chain {
     pub id: u64,

@@ -505,7 +505,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         // Approve router
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
-        bytes memory callData = loadCallDataFromFile("test_uniswapv3_bebop");
+        bytes memory callData = loadCallDataFromFile("test_uniswap_v3_bebop");
         (bool success,) = tychoRouterAddr.call(callData);
 
         vm.stopPrank();

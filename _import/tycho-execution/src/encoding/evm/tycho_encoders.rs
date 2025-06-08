@@ -1256,9 +1256,9 @@ mod tests {
         use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
         use super::*;
-        use crate::encoding::evm::{
-            swap_encoder::BebopOrderType,
-            utils::{biguint_to_u256, write_calldata_to_file},
+        use crate::encoding::{
+            evm::utils::{biguint_to_u256, write_calldata_to_file},
+            models::BebopOrderType,
         };
 
         /// Helper function to build Bebop user_data
@@ -2461,7 +2461,7 @@ mod tests {
                     .data;
 
                     let hex_calldata = encode(&calldata);
-                    write_calldata_to_file("test_uniswapv3_bebop", hex_calldata.as_str());
+                    write_calldata_to_file("test_uniswap_v3_bebop", hex_calldata.as_str());
                 }
 
                 #[test]

@@ -13,7 +13,7 @@ use crate::encoding::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
         utils::{bytes_to_address, get_static_attribute, pad_to_fixed_size},
     },
-    models::{Chain, EncodingContext, Swap},
+    models::{BebopOrderType, Chain, EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
 
@@ -617,26 +617,6 @@ impl SwapEncoder for BalancerV3SwapEncoder {
     }
 }
 
-/// Bebop order types
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum BebopOrderType {
-    Single = 0,
-    Multi = 1,
-    Aggregate = 2,
-}
-
-impl TryFrom<u8> for BebopOrderType {
-    type Error = EncodingError;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(BebopOrderType::Single),
-            1 => Ok(BebopOrderType::Multi),
-            2 => Ok(BebopOrderType::Aggregate),
-            _ => Err(EncodingError::InvalidInput(format!("Invalid Bebop order type: {}", value))),
-        }
-    }
-}
 
 /// Encodes a swap on Bebop (PMM RFQ) through the given executor address.
 ///
