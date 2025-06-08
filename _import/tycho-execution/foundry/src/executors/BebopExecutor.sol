@@ -110,6 +110,9 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
 
     /// @notice Bebop-specific errors
     error BebopExecutor__InvalidDataLength();
+    error BebopExecutor__InvalidInput();
+    error BebopExecutor__InvalidSignatureLength();
+    error BebopExecutor__InvalidSignatureType();
 
     /// @notice The Bebop settlement contract address
     address public immutable bebopSettlement;
@@ -247,10 +250,8 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             signatureBytes: signature
         });
 
-        // Find which token index we're swapping
+        // Find which token we're swapping from (input)
         uint256 tokenInIndex = type(uint256).max;
-        uint256 tokenOutIndex = type(uint256).max;
-
         for (uint256 i = 0; i < order.taker_tokens.length; i++) {
             if (order.taker_tokens[i] == tokenIn) {
                 tokenInIndex = i;
@@ -258,14 +259,26 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             }
         }
 
+        // Ensure input token was found
+        if (tokenInIndex == type(uint256).max) {
+            revert BebopExecutor__InvalidInput();
+        }
+
+        // Verify output token exists in maker_tokens
+        // Note: For multi-output orders, we just need to ensure tokenOut is one of the outputs
+        bool foundOutput = false;
         for (uint256 i = 0; i < order.maker_tokens.length; i++) {
             if (order.maker_tokens[i] == tokenOut) {
-                tokenOutIndex = i;
+                foundOutput = true;
                 break;
             }
         }
 
-        // Prepare filled amounts array (only fill the token we're swapping)
+        if (!foundOutput) {
+            revert BebopExecutor__InvalidInput();
+        }
+
+        // Prepare filled amounts array matching taker_tokens length
         uint256[] memory filledTakerAmounts =
             new uint256[](order.taker_tokens.length);
         filledTakerAmounts[tokenInIndex] = amountIn;
@@ -316,6 +329,11 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             }
         }
 
+        // Ensure token was found
+        if (tokenInIndex == type(uint256).max) {
+            revert BebopExecutor__InvalidInput();
+        }
+
         // Prepare filled amounts array
         uint256[] memory filledTakerAmounts =
             new uint256[](order.taker_tokens.length);
@@ -357,46 +375,92 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
     {
         order = abi.decode(quoteData, (IBebopSettlement.Aggregate));
 
-        // Decode multiple signatures
-        // First 4 bytes contain the number of signatures
-        uint32 numSignatures;
-        assembly {
-            numSignatures := mload(add(signatureData, 0x20))
-            numSignatures := and(numSignatures, 0xffffffff)
+        // Validate signature type (1: EIP712, 2: EIP1271, 3: ETHSIGN)
+        if (signatureType < 1 || signatureType > 3) {
+            revert BebopExecutor__InvalidSignatureType();
         }
-        signatures = new IBebopSettlement.MakerSignature[](numSignatures);
 
-        uint256 offset = 4;
-        for (uint256 i = 0; i < numSignatures; i++) {
-            // Each signature is prefixed with its length
-            uint32 sigLength;
-            assembly {
-                let data := add(signatureData, add(0x20, offset))
-                sigLength := mload(data)
-                sigLength := and(sigLength, 0xffffffff)
-            }
-            offset += 4;
+        uint256 signatureLength = signatureData.length;
 
-            // Extract signature bytes
-            bytes memory sigBytes = new bytes(sigLength);
-            assembly {
-                let src := add(signatureData, add(0x20, offset))
-                let dst := add(sigBytes, 0x20)
-
-                // Copy sigLength bytes from src to dst
-                let end := add(dst, sigLength)
-                for {} lt(dst, end) {
-                    dst := add(dst, 0x20)
-                    src := add(src, 0x20)
-                } { mstore(dst, mload(src)) }
+        // For EIP712 and ETHSIGN, signatures are 65 bytes each
+        if (signatureType == 1 || signatureType == 3) {
+            if (signatureLength % 65 != 0) {
+                revert BebopExecutor__InvalidSignatureLength();
             }
 
-            signatures[i] = IBebopSettlement.MakerSignature({
-                signatureType: signatureType,
-                signatureBytes: sigBytes
-            });
+            uint256 numSignatures = signatureLength / 65;
+            signatures = new IBebopSettlement.MakerSignature[](numSignatures);
 
-            offset += sigLength;
+            for (uint256 i = 0; i < numSignatures; i++) {
+                bytes memory sigBytes = new bytes(65);
+                uint256 offset = i * 65;
+
+                assembly {
+                    let src := add(signatureData, add(0x20, offset))
+                    let dst := add(sigBytes, 0x20)
+
+                    // Copy 65 bytes (2 full words + 1 byte)
+                    mstore(dst, mload(src)) // First 32 bytes
+                    mstore(add(dst, 0x20), mload(add(src, 0x20))) // Second 32 bytes
+                    mstore8(add(dst, 0x40), byte(0, mload(add(src, 0x40)))) // Last byte
+                }
+
+                signatures[i] = IBebopSettlement.MakerSignature({
+                    signatureType: signatureType,
+                    signatureBytes: sigBytes
+                });
+            }
+        } else {
+            // For EIP1271 (smart contract signatures), use length-prefixed format
+            // since these can be variable length
+            uint32 numSigs;
+            assembly {
+                let data := add(signatureData, 0x20)
+                numSigs := shr(224, mload(data))
+            }
+            uint256 numSignatures = uint256(numSigs);
+            signatures = new IBebopSettlement.MakerSignature[](numSignatures);
+
+            uint256 offset = 4;
+            for (uint256 i = 0; i < numSignatures; i++) {
+                uint32 sigLength;
+                assembly {
+                    let data := add(signatureData, add(0x20, offset))
+                    sigLength := shr(224, mload(data))
+                }
+                offset += 4;
+
+                bytes memory sigBytes = new bytes(sigLength);
+                assembly {
+                    let src := add(signatureData, add(0x20, offset))
+                    let dst := add(sigBytes, 0x20)
+
+                    let words := div(sigLength, 0x20)
+                    let remainder := mod(sigLength, 0x20)
+
+                    for { let w := 0 } lt(w, words) { w := add(w, 1) } {
+                        mstore(
+                            add(dst, mul(w, 0x20)),
+                            mload(add(src, mul(w, 0x20)))
+                        )
+                    }
+
+                    if remainder {
+                        let lastWordSrc := add(src, mul(words, 0x20))
+                        let lastWordDst := add(dst, mul(words, 0x20))
+                        let mask := sub(shl(mul(remainder, 8), 1), 1)
+                        let lastWord := and(mload(lastWordSrc), not(mask))
+                        mstore(lastWordDst, lastWord)
+                    }
+                }
+
+                signatures[i] = IBebopSettlement.MakerSignature({
+                    signatureType: signatureType,
+                    signatureBytes: sigBytes
+                });
+
+                offset += sigLength;
+            }
         }
     }
 
@@ -415,6 +479,11 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
     {
         // Decode the order from quoteData
         order = abi.decode(quoteData, (IBebopSettlement.Single));
+
+        // Validate signature type (1: EIP712, 2: EIP1271, 3: ETHSIGN)
+        if (signatureType < 1 || signatureType > 3) {
+            revert BebopExecutor__InvalidSignatureType();
+        }
 
         // Create signature struct with configurable type
         signature = IBebopSettlement.MakerSignature({

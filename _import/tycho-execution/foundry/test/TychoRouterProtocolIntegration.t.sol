@@ -311,4 +311,50 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
 
         vm.stopPrank();
     }
+
+    function testBebopMultiIntegration() public {
+        // Setup: Alice has WETH, wants USDC and WBTC
+        deal(WETH_ADDR, ALICE, 1e18); // 1 WETH
+        uint256 expUSDCOut = 3000e6; // 3000 USDC
+        uint256 expWBTCOut = 0.1e8; // 0.1 WBTC
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
+
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_bebop_multi");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        uint256 finalUSDCBalance = IERC20(USDC_ADDR).balanceOf(ALICE);
+        uint256 finalWBTCBalance = IERC20(WBTC_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertGe(finalUSDCBalance, expUSDCOut);
+        assertGe(finalWBTCBalance, expWBTCOut);
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+
+        vm.stopPrank();
+    }
+
+    function testBebopAggregateIntegration() public {
+        // Setup: Alice has USDC, wants WETH (through multiple makers)
+        deal(USDC_ADDR, ALICE, 1000 * 10 ** 6);
+        uint256 expAmountOut = 400000000000000000; // 0.4 WETH
+
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, type(uint256).max);
+
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_bebop_aggregate"
+        );
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        uint256 finalBalance = IERC20(WETH_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertGe(finalBalance, expAmountOut);
+        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 0);
+
+        vm.stopPrank();
+    }
 }

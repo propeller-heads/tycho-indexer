@@ -187,11 +187,16 @@ contract MockBebopSettlement is Test, Constants {
 
         // Calculate and distribute maker amounts
         for (uint256 i = 0; i < order.maker_tokens.length; i++) {
-            // Find corresponding taker amount (assuming 1:1 token mapping for simplicity)
-            if (i < order.taker_tokens.length && filledTakerAmounts[i] > 0) {
+            // For single-input, multi-output orders, use the first taker amount
+            uint256 takerIndex = i < order.taker_tokens.length ? i : 0;
+            if (
+                takerIndex < filledTakerAmounts.length
+                    && filledTakerAmounts[takerIndex] > 0
+            ) {
+                // Calculate proportional maker amount based on the filled ratio
                 filledMakerAmounts[i] = (
-                    filledTakerAmounts[i] * order.maker_amounts[i]
-                ) / order.taker_amounts[i];
+                    filledTakerAmounts[takerIndex] * order.maker_amounts[i]
+                ) / order.taker_amounts[takerIndex];
 
                 if (order.maker_tokens[i] == address(0)) {
                     // For ETH output
@@ -253,31 +258,42 @@ contract MockBebopSettlement is Test, Constants {
 
         require(msg.value >= totalEthRequired, "Insufficient ETH sent");
 
-        // Distribute to makers (simplified: assumes first taker token goes to all makers proportionally)
+        // Find the first filled taker amount
+        uint256 filledTakerIndex = 0;
+        uint256 filledAmount = 0;
+        for (uint256 i = 0; i < filledTakerAmounts.length; i++) {
+            if (filledTakerAmounts[i] > 0) {
+                filledTakerIndex = i;
+                filledAmount = filledTakerAmounts[i];
+                break;
+            }
+        }
+
+        require(filledAmount > 0, "No taker amount filled");
+
+        // Distribute to makers proportionally
         for (uint256 i = 0; i < order.maker_addresses.length; i++) {
             filledMakerAmounts[i] = new uint256[](order.maker_tokens[i].length);
 
             for (uint256 j = 0; j < order.maker_tokens[i].length; j++) {
-                if (filledTakerAmounts[0] > 0) {
-                    // Simplified logic
-                    filledMakerAmounts[i][j] = (
-                        filledTakerAmounts[0] * order.maker_amounts[i][j]
-                    ) / order.taker_amounts[0];
+                // Calculate proportional maker amount
+                filledMakerAmounts[i][j] = (
+                    filledAmount * order.maker_amounts[i][j]
+                ) / order.taker_amounts[filledTakerIndex];
 
-                    if (order.maker_tokens[i][j] == address(0)) {
-                        vm.deal(
-                            order.receiver,
-                            order.receiver.balance + filledMakerAmounts[i][j]
-                        );
-                    } else {
-                        deal(
-                            order.maker_tokens[i][j],
-                            order.receiver,
-                            IERC20(order.maker_tokens[i][j]).balanceOf(
-                                order.receiver
-                            ) + filledMakerAmounts[i][j]
-                        );
-                    }
+                if (order.maker_tokens[i][j] == address(0)) {
+                    vm.deal(
+                        order.receiver,
+                        order.receiver.balance + filledMakerAmounts[i][j]
+                    );
+                } else {
+                    deal(
+                        order.maker_tokens[i][j],
+                        order.receiver,
+                        IERC20(order.maker_tokens[i][j]).balanceOf(
+                            order.receiver
+                        ) + filledMakerAmounts[i][j]
+                    );
                 }
             }
         }
@@ -336,7 +352,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(0), // OrderType.Single
             uint32(quoteData.length),
             quoteData,
-            uint8(0), // signatureType: ECDSA
+            uint8(1), // signatureType: EIP712
             uint32(signature.length),
             signature,
             uint8(1) // approvalNeeded: true
@@ -361,7 +377,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         );
         assertEq(uint8(orderType), uint8(BebopExecutor.OrderType.Single));
         assertEq(keccak256(decodedQuoteData), keccak256(quoteData));
-        assertEq(decodedSignatureType, 0); // ECDSA signature type
+        assertEq(decodedSignatureType, 1); // EIP712 signature type
         assertEq(keccak256(decodedSignature), keccak256(signature));
         assertTrue(decodedApprovalNeeded); // Approval needed should be true
     }
@@ -396,7 +412,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(0), // OrderType.Single
             uint32(quoteData.length),
             quoteData,
-            uint8(0), // signatureType: ECDSA
+            uint8(1), // signatureType: EIP712
             uint32(signature.length),
             signature,
             uint8(1) // approvalNeeded: true
@@ -445,7 +461,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(0), // OrderType.Single
             uint32(quoteData.length),
             quoteData,
-            uint8(0), // signatureType: ECDSA
+            uint8(1), // signatureType: EIP712
             uint32(signature.length),
             signature,
             uint8(0) // approvalNeeded: false for ETH
@@ -494,7 +510,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(0), // OrderType.Single
             uint32(quoteData.length),
             quoteData,
-            uint8(0), // signatureType: ECDSA
+            uint8(1), // signatureType: EIP712
             uint32(signature.length),
             signature,
             uint8(1) // approvalNeeded: true for USDC
@@ -541,7 +557,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(0), // OrderType.Single
             uint32(quoteData.length),
             quoteData,
-            uint8(0), // signatureType: ECDSA
+            uint8(1), // signatureType: EIP712
             uint32(signature.length),
             signature,
             uint8(1) // approvalNeeded: true
@@ -567,7 +583,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(0), // OrderType.Single
             uint32(quoteData.length),
             quoteData,
-            uint8(0), // signatureType: ECDSA
+            uint8(1), // signatureType: EIP712
             uint32(signature.length),
             signature,
             uint8(1) // approvalNeeded: true
@@ -641,7 +657,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(1), // OrderType.Multi
             uint32(quoteData.length),
             quoteData,
-            uint8(0), // signatureType: ECDSA
+            uint8(1), // signatureType: EIP712
             uint32(signature.length),
             signature,
             uint8(1) // approvalNeeded: true
@@ -659,6 +675,72 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         assertGt(amountOut, 0);
         assertEq(amountOut, expectedAmountOut);
         assertEq(executorBalanceAfter - executorBalanceBefore, amountOut);
+    }
+
+    function testInvalidSignatureType() public {
+        uint256 amountIn = 1e18;
+        uint256 expectedAmountOut = 3000e6;
+
+        // Create a valid order but with invalid signature type
+        IBebopSettlement.Single memory order = IBebopSettlement.Single({
+            expiry: block.timestamp + 3600,
+            taker_address: address(0),
+            maker_address: address(mockBebopSettlement),
+            maker_nonce: 1,
+            taker_token: WETH_ADDR,
+            maker_token: USDC_ADDR,
+            taker_amount: amountIn,
+            maker_amount: expectedAmountOut,
+            receiver: address(bebopExecutor),
+            packed_commands: 0,
+            flags: 0
+        });
+
+        bytes memory quoteData = abi.encode(order);
+        bytes memory signature = hex"aabbccdd";
+
+        // Test with signatureType 0 (invalid)
+        bytes memory params = abi.encodePacked(
+            WETH_ADDR,
+            USDC_ADDR,
+            uint8(RestrictTransferFrom.TransferType.Transfer),
+            uint8(0), // OrderType.Single
+            uint32(quoteData.length),
+            quoteData,
+            uint8(0), // signatureType: 0 (invalid!)
+            uint32(signature.length),
+            signature,
+            uint8(1) // approvalNeeded: true
+        );
+
+        // Transfer WETH to executor
+        WETH.transfer(address(bebopExecutor), amountIn);
+
+        // Should revert with invalid signature type when executing
+        vm.expectRevert(
+            BebopExecutor.BebopExecutor__InvalidSignatureType.selector
+        );
+        bebopExecutor.swap(amountIn, params);
+
+        // Test with signatureType 4 (invalid)
+        params = abi.encodePacked(
+            WETH_ADDR,
+            USDC_ADDR,
+            uint8(RestrictTransferFrom.TransferType.Transfer),
+            uint8(0), // OrderType.Single
+            uint32(quoteData.length),
+            quoteData,
+            uint8(4), // signatureType: 4 (invalid!)
+            uint32(signature.length),
+            signature,
+            uint8(1) // approvalNeeded: true
+        );
+
+        // Should also revert
+        vm.expectRevert(
+            BebopExecutor.BebopExecutor__InvalidSignatureType.selector
+        );
+        bebopExecutor.swap(amountIn, params);
     }
 
     function testAggregateRFQSwap() public {
@@ -706,16 +788,12 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         // Encode order as quote data
         bytes memory quoteData = abi.encode(order);
 
-        // Encode multiple signatures (2 makers)
-        bytes memory sig1 = hex"aabbccdd";
-        bytes memory sig2 = hex"eeff0011";
-        bytes memory signatures = abi.encodePacked(
-            uint32(2), // number of signatures
-            uint32(sig1.length),
-            sig1,
-            uint32(sig2.length),
-            sig2
-        );
+        // Encode multiple signatures (2 makers) - for EIP712, use concatenated 65-byte signatures
+        bytes memory sig1 =
+            hex"0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001";
+        bytes memory sig2 =
+            hex"1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111101";
+        bytes memory signatures = abi.encodePacked(sig1, sig2);
 
         bytes memory params = abi.encodePacked(
             WETH_ADDR,
@@ -724,7 +802,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(2), // OrderType.Aggregate
             uint32(quoteData.length),
             quoteData,
-            uint8(0), // signatureType: ECDSA
+            uint8(1), // signatureType: EIP712
             uint32(signatures.length),
             signatures,
             uint8(1) // approvalNeeded: true

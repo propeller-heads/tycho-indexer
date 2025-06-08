@@ -617,11 +617,14 @@ impl SwapEncoder for BalancerV3SwapEncoder {
     }
 }
 
-
 /// Encodes a swap on Bebop (PMM RFQ) through the given executor address.
 ///
 /// Bebop uses a Request-for-Quote model where quotes are obtained off-chain
 /// and settled on-chain. This encoder supports PMM RFQ execution.
+///
+/// # Signature Encoding
+/// Bebop aggregate orders use concatenated 65-byte ECDSA signatures without length prefixes.
+/// Each signature is exactly 65 bytes: r (32) + s (32) + v (1).
 ///
 /// # Fields
 /// * `executor_address` - The address of the executor contract that will perform the swap.
@@ -1831,7 +1834,7 @@ mod tests {
 
             // Create user_data with quote and signature
             let order_type = BebopOrderType::Single as u8;
-            let signature_type = 0u8; // ECDSA
+            let signature_type = 1u8; // EIP712
             let quote_data = hex::decode("1234567890abcdef").unwrap();
             let signature = hex::decode("aabbccdd").unwrap();
 
@@ -1899,8 +1902,8 @@ mod tests {
                     "00000008",
                     // quote data
                     "1234567890abcdef",
-                    // signature type ECDSA (0)
-                    "00",
+                    // signature type EIP712 (1)
+                    "01",
                     // signature length (4 bytes = 0x00000004)
                     "00000004",
                     // signature
@@ -1919,7 +1922,7 @@ mod tests {
 
             // Create user_data for a Bebop Multi RFQ quote
             let order_type = BebopOrderType::Multi as u8;
-            let signature_type = 0u8; // ECDSA
+            let signature_type = 1u8; // EIP712
             let quote_data = hex::decode("abcdef1234567890").unwrap();
             let signature = hex::decode("11223344").unwrap();
 
@@ -1987,8 +1990,8 @@ mod tests {
                     "00000008",
                     // quote data
                     "abcdef1234567890",
-                    // signature type ECDSA (0)
-                    "00",
+                    // signature type EIP712 (1)
+                    "01",
                     // signature length (4 bytes = 0x00000004)
                     "00000004",
                     // signature
@@ -2007,10 +2010,12 @@ mod tests {
 
             // Create user_data for a Bebop Aggregate RFQ quote
             let order_type = BebopOrderType::Aggregate as u8;
-            let signature_type = 0u8; // ECDSA
+            let signature_type = 1u8; // EIP712
             let quote_data = hex::decode("deadbeef").unwrap();
-            // For aggregate, signature contains multiple signatures encoded
-            let signature = hex::decode("0000000200000004aabbccdd00000004eeff0011").unwrap();
+            // For aggregate orders with ECDSA, use concatenated 65-byte signatures (2 makers)
+            let sig1 = hex::decode("0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001").unwrap();
+            let sig2 = hex::decode("1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111101").unwrap();
+            let signature = [sig1, sig2].concat();
 
             let mut user_data = Vec::new();
             user_data.push(order_type);
@@ -2076,12 +2081,13 @@ mod tests {
                     "00000004",
                     // quote data
                     "deadbeef",
-                    // signature type ECDSA (0)
-                    "00",
-                    // signature length (20 bytes for encoded signatures)
-                    "00000014",
-                    // encoded signatures (2 signatures)
-                    "0000000200000004aabbccdd00000004eeff0011",
+                    // signature type EIP712 (1)
+                    "01",
+                    // signature length (130 bytes = 2 * 65-byte EIP712 signatures)
+                    "00000082",
+                    // concatenated EIP712 signatures (2 * 65 bytes)
+                    "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
+                    "1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111101",
                     // approval needed
                     "01"
                 ))

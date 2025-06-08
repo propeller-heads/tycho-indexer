@@ -2408,7 +2408,7 @@ mod tests {
                     // Build user_data with the quote and signature
                     let user_data = build_bebop_user_data(
                         BebopOrderType::Single,
-                        0, // ECDSA signature type
+                        1, // EIP712 signature type
                         &quote_data,
                         &signature,
                     );
@@ -3805,7 +3805,7 @@ mod tests {
                 // Build user_data with the quote and signature
                 let user_data = build_bebop_user_data(
                     BebopOrderType::Single,
-                    0, // ECDSA signature type
+                    1, // EIP712 signature type
                     &quote_data,
                     &signature,
                 );
@@ -3859,6 +3859,248 @@ mod tests {
                 let hex_calldata = hex::encode(&calldata);
                 write_calldata_to_file(
                     "test_single_encoding_strategy_bebop",
+                    hex_calldata.as_str(),
+                );
+            }
+
+            #[test]
+            fn test_single_encoding_strategy_bebop_multi() {
+                // For Multi orders, we'll demonstrate a single-token-in, multi-token-out scenario
+                // WETH -> USDC + WBTC
+                let token_in = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"); // WETH
+                let token_out_1 = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+                let token_out_2 = Bytes::from("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"); // WBTC
+
+                let amount_in = BigUint::from_str("1000000000000000000").unwrap(); // 1 WETH
+                let amount_out = BigUint::from_str("3000000000").unwrap(); // 3000 USDC (primary output)
+
+                // Create a valid Bebop Multi order struct
+                let expiry = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() +
+                    3600;
+                let taker_address = Address::ZERO;
+                let maker_address =
+                    Address::from_str("0xbbbbbBB520d69a9775E85b458C58c648259FAD5F").unwrap();
+                let maker_nonce = 2u64;
+
+                // Multi order: single taker token, multiple maker tokens
+                let taker_tokens = vec![Address::from_str(&token_in.to_string()).unwrap()];
+                let maker_tokens = vec![
+                    Address::from_str(&token_out_1.to_string()).unwrap(),
+                    Address::from_str(&token_out_2.to_string()).unwrap(),
+                ];
+                let taker_amounts = vec![U256::from_str(&amount_in.to_string()).unwrap()];
+                let maker_amounts = vec![
+                    U256::from_str(&amount_out.to_string()).unwrap(),
+                    U256::from_str("10000000").unwrap(), // 0.1 WBTC
+                ];
+                let receiver =
+                    Address::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(); // Alice
+                let packed_commands = U256::ZERO;
+
+                // Encode Multi order
+                let quote_data = (
+                    expiry,
+                    taker_address,
+                    maker_address,
+                    maker_nonce,
+                    taker_tokens,
+                    maker_tokens,
+                    taker_amounts,
+                    maker_amounts,
+                    receiver,
+                    packed_commands,
+                    U256::from(0u64), // flags
+                )
+                    .abi_encode();
+
+                let signature = hex::decode("11223344").unwrap();
+
+                let user_data = build_bebop_user_data(
+                    BebopOrderType::Multi,
+                    1, // EIP712 signature type
+                    &quote_data,
+                    &signature,
+                );
+
+                let bebop_component = ProtocolComponent {
+                    id: String::from("bebop-rfq"),
+                    protocol_system: String::from("rfq:bebop"),
+                    static_attributes: HashMap::new(),
+                    ..Default::default()
+                };
+
+                let swap = Swap {
+                    component: bebop_component,
+                    token_in: token_in.clone(),
+                    token_out: token_out_1.clone(), // Primary output token
+                    split: 0f64,
+                    user_data: Some(user_data),
+                };
+
+                let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+                let solution = Solution {
+                    exact_out: false,
+                    given_token: token_in,
+                    given_amount: amount_in,
+                    checked_token: token_out_1,
+                    checked_amount: amount_out,
+                    // Alice
+                    sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                    receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
+                        .unwrap(),
+                    swaps: vec![swap],
+                    ..Default::default()
+                };
+
+                let encoded_solution = encoder
+                    .encode_solutions(vec![solution.clone()])
+                    .unwrap()[0]
+                    .clone();
+
+                let calldata = encode_tycho_router_call(
+                    eth_chain().id,
+                    encoded_solution,
+                    &solution,
+                    UserTransferType::TransferFrom,
+                    eth(),
+                    None,
+                )
+                .unwrap()
+                .data;
+                let hex_calldata = hex::encode(&calldata);
+
+                write_calldata_to_file(
+                    "test_single_encoding_strategy_bebop_multi",
+                    hex_calldata.as_str(),
+                );
+            }
+
+            #[test]
+            fn test_single_encoding_strategy_bebop_aggregate() {
+                // For simplicity, let's use the same tokens as the Single test but with Aggregate
+                // order
+                let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+                let token_out = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"); // WETH
+                let amount_in = BigUint::from_str("1000_000000").unwrap(); // 1000 USDC
+                let amount_out = BigUint::from_str("400000000000000000").unwrap(); // 0.4 WETH
+
+                // Create a valid Bebop Aggregate order struct
+                let expiry = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() +
+                    3600;
+                let taker_address = Address::ZERO;
+
+                // Aggregate order has multiple makers
+                let maker_addresses = vec![
+                    Address::from_str("0x1111111111111111111111111111111111111111").unwrap(),
+                    Address::from_str("0x2222222222222222222222222222222222222222").unwrap(),
+                ];
+                let taker_nonce = U256::from(1u64); // Single taker nonce, not array
+                let taker_tokens = vec![Address::from_slice(&token_in)];
+                let taker_amounts = vec![U256::from_str(&amount_in.to_string()).unwrap()];
+
+                // Each maker provides different tokens
+                let maker_tokens = vec![
+                    vec![Address::from_slice(&token_out)],
+                    vec![Address::from_slice(&token_out)],
+                ];
+                let maker_amounts = vec![
+                    vec![U256::from_str("240000000000000000").unwrap()], // 0.24 WETH from maker 1
+                    vec![U256::from_str("160000000000000000").unwrap()], // 0.16 WETH from maker 2
+                ];
+
+                let receiver =
+                    Address::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(); // Alice
+                let packed_commands = U256::ZERO;
+                let flags = U256::ZERO;
+
+                // Encode Aggregate order - must match IBebopSettlement.Aggregate struct exactly
+                let quote_data = (
+                    U256::from(expiry), // expiry as U256
+                    taker_address,
+                    taker_nonce, // Single taker_nonce, not array
+                    taker_tokens,
+                    taker_amounts,
+                    maker_addresses,
+                    maker_tokens,
+                    maker_amounts,
+                    receiver,
+                    packed_commands,
+                    flags,
+                )
+                    .abi_encode();
+
+                // For aggregate orders with ECDSA signatures, use concatenated 65-byte signatures
+                // This example has 2 makers, so 2x 65-byte signatures = 130 bytes
+                let sig1 = hex::decode("1b47a665f9a5e14b5208015d11f9143e27b93dc5a0d8c892ec5326eda1e5df3c42a987d0b2ea5b8be8f0e5c326bd4ec0321b10c6e9b4e5f8a0b8d5e6f7c8a9b01b").unwrap();
+                let sig2 = hex::decode("2c58b665f9a5e14b5208015d11f9143e27b93dc5a0d8c892ec5326eda1e5df3c53b987d0b2ea5b8be8f0e5c326bd4ec0321b10c6e9b4e5f8a0b8d5e6f7c8a9b01c").unwrap();
+                let mut signature = Vec::new();
+                signature.extend_from_slice(&sig1);
+                signature.extend_from_slice(&sig2);
+
+                let user_data = build_bebop_user_data(
+                    BebopOrderType::Aggregate,
+                    1, // EIP712 signature type
+                    &quote_data,
+                    &signature,
+                );
+
+                let bebop_component = ProtocolComponent {
+                    id: String::from("bebop-rfq"),
+                    protocol_system: String::from("rfq:bebop"),
+                    static_attributes: HashMap::new(),
+                    ..Default::default()
+                };
+
+                let swap = Swap {
+                    component: bebop_component,
+                    token_in: token_in.clone(),
+                    token_out: token_out.clone(),
+                    split: 0f64,
+                    user_data: Some(user_data),
+                };
+
+                let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+                let solution = Solution {
+                    exact_out: false,
+                    given_token: token_in,
+                    given_amount: amount_in,
+                    checked_token: token_out,
+                    checked_amount: amount_out,
+                    // Alice
+                    sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                    receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
+                        .unwrap(),
+                    swaps: vec![swap],
+                    ..Default::default()
+                };
+
+                let encoded_solution = encoder
+                    .encode_solutions(vec![solution.clone()])
+                    .unwrap()[0]
+                    .clone();
+
+                let calldata = encode_tycho_router_call(
+                    eth_chain().id,
+                    encoded_solution,
+                    &solution,
+                    UserTransferType::TransferFrom,
+                    eth(),
+                    None,
+                )
+                .unwrap()
+                .data;
+                let hex_calldata = hex::encode(&calldata);
+
+                write_calldata_to_file(
+                    "test_single_encoding_strategy_bebop_aggregate",
                     hex_calldata.as_str(),
                 );
             }
