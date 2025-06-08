@@ -73,7 +73,7 @@ pub fn group_swaps(swaps: Vec<Swap>) -> Vec<SwapGroup> {
 mod tests {
     use std::str::FromStr;
 
-    use alloy_primitives::hex;
+    use alloy::primitives::hex;
     use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
@@ -105,6 +105,7 @@ mod tests {
             // This represents the remaining 50%, but to avoid any rounding errors we set this to
             // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
             split: 0f64,
+            user_data: None,
         };
         let swap_wbtc_usdc = Swap {
             component: ProtocolComponent {
@@ -114,6 +115,7 @@ mod tests {
             token_in: wbtc.clone(),
             token_out: usdc.clone(),
             split: 0f64,
+            user_data: None,
         };
         let swap_usdc_dai = Swap {
             component: ProtocolComponent {
@@ -123,6 +125,7 @@ mod tests {
             token_in: usdc.clone(),
             token_out: dai.clone(),
             split: 0f64,
+            user_data: None,
         };
         let grouped_swaps = group_swaps(vec![
             swap_weth_wbtc.clone(),
@@ -174,6 +177,7 @@ mod tests {
             token_in: wbtc.clone(),
             token_out: weth.clone(),
             split: 0f64,
+            user_data: None,
         };
         let swap_weth_usdc = Swap {
             component: ProtocolComponent {
@@ -183,6 +187,7 @@ mod tests {
             token_in: weth.clone(),
             token_out: usdc.clone(),
             split: 0.5f64,
+            user_data: None,
         };
         let swap_weth_dai = Swap {
             component: ProtocolComponent {
@@ -194,6 +199,7 @@ mod tests {
             // This represents the remaining 50%, but to avoid any rounding errors we set this to
             // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
             split: 0f64,
+            user_data: None,
         };
         let swap_dai_usdc = Swap {
             component: ProtocolComponent {
@@ -203,6 +209,7 @@ mod tests {
             token_in: dai.clone(),
             token_out: usdc.clone(),
             split: 0f64,
+            user_data: None,
         };
         let grouped_swaps = group_swaps(vec![
             swap_wbtc_weth.clone(),
@@ -261,6 +268,7 @@ mod tests {
             token_in: weth.clone(),
             token_out: wbtc.clone(),
             split: 0.5f64,
+            user_data: None,
         };
         let swap_wbtc_usdc = Swap {
             component: ProtocolComponent {
@@ -270,6 +278,7 @@ mod tests {
             token_in: wbtc.clone(),
             token_out: usdc.clone(),
             split: 0f64,
+            user_data: None,
         };
         let swap_weth_dai = Swap {
             component: ProtocolComponent {
@@ -281,6 +290,7 @@ mod tests {
             // This represents the remaining 50%, but to avoid any rounding errors we set this to
             // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
             split: 0f64,
+            user_data: None,
         };
         let swap_dai_usdc = Swap {
             component: ProtocolComponent {
@@ -290,6 +300,7 @@ mod tests {
             token_in: dai.clone(),
             token_out: usdc.clone(),
             split: 0f64,
+            user_data: None,
         };
 
         let grouped_swaps = group_swaps(vec![

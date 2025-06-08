@@ -1,3 +1,5 @@
 mod builder;
 pub mod swap_encoder_registry;
 mod swap_encoders;
+
+pub use swap_encoders::BebopOrderType;

@@ -1,3 +1,41 @@
+## [0.100.0](https://github.com/propeller-heads/tycho-execution/compare/0.99.0...0.100.0) (2025-06-06)
+
+
+### Features
+
+* Add balancer v3 to transfer optimization constants ([c03df8a](https://github.com/propeller-heads/tycho-execution/commit/c03df8aa1eae137f1ac4bb8f28c6cb96fdd86246))
+* Add BalancerV3Encoder ([06ce28c](https://github.com/propeller-heads/tycho-execution/commit/06ce28c8fd580a981192941000c473841c79d8f7))
+* Add integration tests for balancer v3 ([269e328](https://github.com/propeller-heads/tycho-execution/commit/269e328b5f9897714cfe533bf7b98444248cd62a))
+
+
+### Bug Fixes
+
+* **BalancerV3Executor:** Do data.length check at the beginning of swap ([4f58977](https://github.com/propeller-heads/tycho-execution/commit/4f5897700790a0eaeb88a78c909fb3835527acfb))
+* **BalancerV3Executor:** Slice callback data nicely ([941879d](https://github.com/propeller-heads/tycho-execution/commit/941879d5d6657c1a3b5e7f77b2b8a4ab76e2f574))
+
+## [0.99.0](https://github.com/propeller-heads/tycho-execution/compare/0.98.0...0.99.0) (2025-06-05)
+
+
+### Features
+
+* Extend Swap to hold user_data: Option<Bytes> ([eec50f8](https://github.com/propeller-heads/tycho-execution/commit/eec50f88222adb89154f127a98fd8da380025381))
+
+## [0.98.0](https://github.com/propeller-heads/tycho-execution/compare/0.97.0...0.98.0) (2025-06-05)
+
+
+### Features
+
+* Add balancer-v3-monorepo lib ([f173f9b](https://github.com/propeller-heads/tycho-execution/commit/f173f9bed7e942102baba48e89b262206b7260fd))
+* Implement BalancerV3Executor ([f34db52](https://github.com/propeller-heads/tycho-execution/commit/f34db52f09ccbd85213cb08e65cedac56a2b5cf3))
+* Make BalancerV3Executor inherit from ICallback ([806ce4e](https://github.com/propeller-heads/tycho-execution/commit/806ce4e62cfb80c16e222358a9a04b6dd5ff5bc1))
+
+## [0.97.0](https://github.com/propeller-heads/tycho-execution/compare/0.96.0...0.97.0) (2025-06-05)
+
+
+### Features
+
+* Upgrade alloy to "1.0.6" ([5fa97d0](https://github.com/propeller-heads/tycho-execution/commit/5fa97d08e593e5c7c6480c66e86305fef30e9747))
+
 ## [0.96.0](https://github.com/propeller-heads/tycho-execution/compare/0.95.1...0.96.0) (2025-05-27)
 
 

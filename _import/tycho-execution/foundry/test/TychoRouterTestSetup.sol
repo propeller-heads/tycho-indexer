@@ -17,6 +17,7 @@ import {WETH} from "../lib/permit2/lib/solmate/src/tokens/WETH.sol";
 import {Permit2TestHelper} from "./Permit2TestHelper.sol";
 import "./TestUtils.sol";
 import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
+import {BalancerV3Executor} from "../src/executors/BalancerV3Executor.sol";
 import {MockBebopSettlement} from "./executors/BebopExecutor.t.sol";
 
 contract TychoRouterExposed is TychoRouter {
@@ -68,11 +69,16 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     EkuboExecutor public ekuboExecutor;
     CurveExecutor public curveExecutor;
     MaverickV2Executor public maverickv2Executor;
+    BalancerV3Executor public balancerV3Executor;
     BebopExecutor public bebopExecutor;
     MockERC20[] tokens;
 
+    function getForkBlock() public view virtual returns (uint256) {
+        return 22082754;
+    }
+
     function setUp() public {
-        uint256 forkBlock = 22082754;
+        uint256 forkBlock = getForkBlock();
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
 
         vm.startPrank(ADMIN);
@@ -128,13 +134,14 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, PERMIT2_ADDRESS);
         maverickv2Executor =
             new MaverickV2Executor(MAVERICK_V2_FACTORY, PERMIT2_ADDRESS);
+        balancerV3Executor = new BalancerV3Executor(PERMIT2_ADDRESS);
 
         // Deploy mock Bebop settlement for testing
         MockBebopSettlement mockBebopSettlement = new MockBebopSettlement();
         bebopExecutor =
             new BebopExecutor(address(mockBebopSettlement), PERMIT2_ADDRESS);
 
-        address[] memory executors = new address[](9);
+        address[] memory executors = new address[](10);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
         executors[2] = address(pancakev3Executor);
@@ -143,7 +150,9 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         executors[5] = address(ekuboExecutor);
         executors[6] = address(curveExecutor);
         executors[7] = address(maverickv2Executor);
-        executors[8] = address(bebopExecutor);
+        executors[8] = address(balancerV3Executor);
+        executors[9] = address(bebopExecutor);
+
         return executors;
     }
 

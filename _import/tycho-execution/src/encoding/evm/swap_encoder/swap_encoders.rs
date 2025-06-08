@@ -1,7 +1,9 @@
 use std::{collections::HashMap, str::FromStr};
 
-use alloy_primitives::{Address, Bytes as AlloyBytes, U8};
-use alloy_sol_types::SolValue;
+use alloy::{
+    primitives::{Address, Bytes as AlloyBytes, U8},
+    sol_types::SolValue,
+};
 use serde_json::from_str;
 use tycho_common::Bytes;
 
@@ -230,12 +232,12 @@ impl SwapEncoder for BalancerV2SwapEncoder {
         config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
         let config = config.ok_or(EncodingError::FatalError(
-            "Missing balancer specific addresses in config".to_string(),
+            "Missing balancer v2 specific addresses in config".to_string(),
         ))?;
         let vault_address = config
             .get("vault_address")
             .ok_or(EncodingError::FatalError(
-                "Missing balancer vault address in config".to_string(),
+                "Missing balancer v2 vault address in config".to_string(),
             ))?
             .to_string();
         Ok(Self { executor_address, vault_address })
@@ -569,6 +571,73 @@ impl SwapEncoder for MaverickV2SwapEncoder {
     }
 }
 
+/// Encodes a swap on a Balancer V3 pool through the given executor address.
+///
+/// # Fields
+/// * `executor_address` - The address of the executor contract that will perform the swap.
+#[derive(Clone)]
+pub struct BalancerV3SwapEncoder {
+    executor_address: String,
+}
+
+impl SwapEncoder for BalancerV3SwapEncoder {
+    fn new(
+        executor_address: String,
+        _chain: Chain,
+        _config: Option<HashMap<String, String>>,
+    ) -> Result<Self, EncodingError> {
+        Ok(Self { executor_address })
+    }
+
+    fn encode_swap(
+        &self,
+        swap: Swap,
+        encoding_context: EncodingContext,
+    ) -> Result<Vec<u8>, EncodingError> {
+        let pool = Address::from_str(&swap.component.id).map_err(|_| {
+            EncodingError::FatalError("Invalid pool address for Balancer v3".to_string())
+        })?;
+
+        let args = (
+            bytes_to_address(&swap.token_in)?,
+            bytes_to_address(&swap.token_out)?,
+            pool,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
+            bytes_to_address(&encoding_context.receiver)?,
+        );
+        Ok(args.abi_encode_packed())
+    }
+
+    fn executor_address(&self) -> &str {
+        &self.executor_address
+    }
+
+    fn clone_box(&self) -> Box<dyn SwapEncoder> {
+        Box::new(self.clone())
+    }
+}
+
+/// Bebop order types
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BebopOrderType {
+    Single = 0,
+    Multi = 1,
+    Aggregate = 2,
+}
+
+impl TryFrom<u8> for BebopOrderType {
+    type Error = EncodingError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(BebopOrderType::Single),
+            1 => Ok(BebopOrderType::Multi),
+            2 => Ok(BebopOrderType::Aggregate),
+            _ => Err(EncodingError::InvalidInput(format!("Invalid Bebop order type: {}", value))),
+        }
+    }
+}
+
 /// Encodes a swap on Bebop (PMM RFQ) through the given executor address.
 ///
 /// Bebop uses a Request-for-Quote model where quotes are obtained off-chain
@@ -643,19 +712,54 @@ impl SwapEncoder for BebopSwapEncoder {
         // Validate component ID
         Self::validate_component_id(&swap.component.id)?;
 
-        // Get quote data and signature from static attributes
-        let quote_data = get_static_attribute(&swap, "quote_data")?;
-        let signature = get_static_attribute(&swap, "signature")?;
+        // Extract data from user_data (required for Bebop)
+        let user_data = swap.user_data.ok_or_else(|| {
+            EncodingError::InvalidInput(
+                "Bebop swaps require user_data with quote and signature".to_string(),
+            )
+        })?;
 
-        // Get order type (default to Single if not specified)
-        let order_type = get_static_attribute(&swap, "order_type")
-            .map(|bytes| bytes[0])
-            .unwrap_or(0u8); // Default to Single (0)
+        // Parse user_data format:
+        // order_type (1 byte) | signature_type (1 byte) | quote_data_length (4 bytes) | quote_data
+        // | signature_length (4 bytes) | signature
+        if user_data.len() < 10 {
+            return Err(EncodingError::InvalidInput(
+                "User data too short to contain Bebop RFQ data".to_string(),
+            ));
+        }
 
-        // Get signature type (default to 0 = ECDSA if not specified)
-        let signature_type = get_static_attribute(&swap, "signature_type")
-            .map(|bytes| bytes[0])
-            .unwrap_or(0u8); // Default to ECDSA (0)
+        let order_type = BebopOrderType::try_from(user_data[0])?;
+        let signature_type = user_data[1];
+
+        let quote_data_len =
+            u32::from_be_bytes([user_data[2], user_data[3], user_data[4], user_data[5]]) as usize;
+        if user_data.len() < 10 + quote_data_len {
+            return Err(EncodingError::InvalidInput(
+                "User data too short to contain quote data".to_string(),
+            ));
+        }
+
+        let quote_data = user_data[6..6 + quote_data_len].to_vec();
+
+        let sig_len_start = 6 + quote_data_len;
+        if user_data.len() < sig_len_start + 4 {
+            return Err(EncodingError::InvalidInput(
+                "User data too short to contain signature length".to_string(),
+            ));
+        }
+
+        let signature_len = u32::from_be_bytes([
+            user_data[sig_len_start],
+            user_data[sig_len_start + 1],
+            user_data[sig_len_start + 2],
+            user_data[sig_len_start + 3],
+        ]) as usize;
+
+        if user_data.len() != sig_len_start + 4 + signature_len {
+            return Err(EncodingError::InvalidInput("User data length mismatch".to_string()));
+        }
+
+        let signature = user_data[sig_len_start + 4..].to_vec();
 
         // Encode packed data for the executor
         // Format: token_in | token_out | transfer_type | order_type |
@@ -665,7 +769,7 @@ impl SwapEncoder for BebopSwapEncoder {
             token_in,
             token_out,
             (encoding_context.transfer_type as u8).to_be_bytes(),
-            order_type.to_be_bytes(),
+            (order_type as u8).to_be_bytes(),
             (quote_data.len() as u32).to_be_bytes(),
             &quote_data[..],
             signature_type.to_be_bytes(),
@@ -716,6 +820,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
             let encoding_context = EncodingContext {
                 receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
@@ -775,6 +880,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
             let encoding_context = EncodingContext {
                 receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
@@ -818,7 +924,6 @@ mod tests {
 
     mod balancer_v2 {
         use super::*;
-        use crate::encoding::evm::utils::write_calldata_to_file;
 
         #[test]
         fn test_encode_balancer_v2() {
@@ -836,6 +941,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
@@ -908,6 +1014,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
             let encoding_context = EncodingContext {
                 // The receiver is ALICE to match the solidity tests
@@ -980,6 +1087,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
 
             let encoding_context = EncodingContext {
@@ -1076,6 +1184,7 @@ mod tests {
                 token_in: usde_address.clone(),
                 token_out: usdt_address.clone(),
                 split: 0f64,
+                user_data: None,
             };
 
             let second_swap = Swap {
@@ -1083,6 +1192,7 @@ mod tests {
                 token_in: usdt_address,
                 token_out: wbtc_address.clone(),
                 split: 0f64,
+                user_data: None,
             };
 
             let encoder = UniswapV4SwapEncoder::new(
@@ -1159,6 +1269,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
 
             let encoding_context = EncodingContext {
@@ -1231,6 +1342,7 @@ mod tests {
                 token_in: group_token_in.clone(),
                 token_out: intermediary_token.clone(),
                 split: 0f64,
+                user_data: None,
             };
 
             let second_swap = Swap {
@@ -1246,6 +1358,7 @@ mod tests {
                 token_in: intermediary_token.clone(),
                 token_out: group_token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
 
             let first_encoded_swap = encoder
@@ -1365,6 +1478,7 @@ mod tests {
                 token_in: Bytes::from(token_in),
                 token_out: Bytes::from(token_out),
                 split: 0f64,
+                user_data: None,
             };
             let encoder = CurveSwapEncoder::new(
                 String::default(),
@@ -1408,6 +1522,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
@@ -1479,6 +1594,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
@@ -1551,6 +1667,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: None,
             };
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
@@ -1607,59 +1724,121 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_encode_maverick_v2() {
-        // GHO -> (maverick) -> USDC
-        let maverick_pool = ProtocolComponent {
-            id: String::from("0x14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67"),
-            protocol_system: String::from("vm:maverick_v2"),
-            ..Default::default()
-        };
-        let token_in = Bytes::from("0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f");
-        let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
-        let swap = Swap {
-            component: maverick_pool,
-            token_in: token_in.clone(),
-            token_out: token_out.clone(),
-            split: 0f64,
-        };
-        let encoding_context = EncodingContext {
-            // The receiver was generated with `makeAddr("bob") using forge`
-            receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
-            exact_out: false,
-            router_address: Some(Bytes::default()),
-            group_token_in: token_in.clone(),
-            group_token_out: token_out.clone(),
-            transfer_type: TransferType::Transfer,
-        };
-        let encoder = MaverickV2SwapEncoder::new(
-            String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
-            TychoCoreChain::Ethereum.into(),
-            None,
-        )
-        .unwrap();
+    mod balancer_v3 {
+        use super::*;
 
-        let encoded_swap = encoder
-            .encode_swap(swap, encoding_context)
+        #[test]
+        fn test_encode_balancer_v3() {
+            let balancer_pool = ProtocolComponent {
+                id: String::from("0x85b2b559bc2d21104c4defdd6efca8a20343361d"),
+                protocol_system: String::from("vm:balancer_v3"),
+                ..Default::default()
+            };
+            let token_in = Bytes::from("0x7bc3485026ac48b6cf9baf0a377477fff5703af8");
+            let token_out = Bytes::from("0xc71ea051a5f82c67adcf634c36ffe6334793d24c");
+            let swap = Swap {
+                component: balancer_pool,
+                token_in: token_in.clone(),
+                token_out: token_out.clone(),
+                split: 0f64,
+                user_data: None,
+            };
+            let encoding_context = EncodingContext {
+                // The receiver was generated with `makeAddr("bob") using forge`
+                receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::Transfer,
+            };
+            let encoder = BalancerV3SwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                TychoCoreChain::Ethereum.into(),
+                None,
+            )
             .unwrap();
-        let hex_swap = encode(&encoded_swap);
+            let encoded_swap = encoder
+                .encode_swap(swap, encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
 
-        assert_eq!(
-            hex_swap,
-            String::from(concat!(
-                // token in
-                "40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f",
-                // pool
-                "14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67",
-                // receiver
-                "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
-                // transfer true
-                "01",
-            ))
-            .to_lowercase()
-        );
+            assert_eq!(
+                hex_swap,
+                String::from(concat!(
+                    // token in
+                    "7bc3485026ac48b6cf9baf0a377477fff5703af8",
+                    // token out
+                    "c71ea051a5f82c67adcf634c36ffe6334793d24c",
+                    // pool id
+                    "85b2b559bc2d21104c4defdd6efca8a20343361d",
+                    // transfer type None
+                    "01",
+                    // receiver
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                ))
+            );
+            write_calldata_to_file("test_encode_balancer_v3", hex_swap.as_str());
+        }
+    }
 
-        write_calldata_to_file("test_encode_maverick_v2", hex_swap.as_str());
+    mod maverick_v2 {
+        use super::*;
+        #[test]
+        fn test_encode_maverick_v2() {
+            // GHO -> (maverick) -> USDC
+            let maverick_pool = ProtocolComponent {
+                id: String::from("0x14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67"),
+                protocol_system: String::from("vm:maverick_v2"),
+                ..Default::default()
+            };
+            let token_in = Bytes::from("0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f");
+            let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+            let swap = Swap {
+                component: maverick_pool,
+                token_in: token_in.clone(),
+                token_out: token_out.clone(),
+                split: 0f64,
+                user_data: None,
+            };
+            let encoding_context = EncodingContext {
+                // The receiver was generated with `makeAddr("bob") using forge`
+                receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
+                exact_out: false,
+                router_address: Some(Bytes::default()),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::Transfer,
+            };
+            let encoder = MaverickV2SwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                TychoCoreChain::Ethereum.into(),
+                None,
+            )
+            .unwrap();
+
+            let encoded_swap = encoder
+                .encode_swap(swap, encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
+
+            assert_eq!(
+                hex_swap,
+                String::from(concat!(
+                    // token in
+                    "40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f",
+                    // pool
+                    "14Cf6D2Fe3E1B326114b07d22A6F6bb59e346c67",
+                    // receiver
+                    "1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e",
+                    // transfer true
+                    "01",
+                ))
+                .to_lowercase()
+            );
+
+            write_calldata_to_file("test_encode_maverick_v2", hex_swap.as_str());
+        }
     }
 
     mod bebop {
@@ -1670,17 +1849,24 @@ mod tests {
         fn test_encode_bebop_single() {
             use alloy::hex;
 
-            // Create static attributes for a Bebop RFQ quote
-            let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-            static_attributes
-                .insert("quote_data".into(), Bytes::from(hex::decode("1234567890abcdef").unwrap()));
-            static_attributes
-                .insert("signature".into(), Bytes::from(hex::decode("aabbccdd").unwrap()));
+            // Create user_data with quote and signature
+            let order_type = BebopOrderType::Single as u8;
+            let signature_type = 0u8; // ECDSA
+            let quote_data = hex::decode("1234567890abcdef").unwrap();
+            let signature = hex::decode("aabbccdd").unwrap();
+
+            let mut user_data = Vec::new();
+            user_data.push(order_type);
+            user_data.push(signature_type);
+            user_data.extend_from_slice(&(quote_data.len() as u32).to_be_bytes());
+            user_data.extend_from_slice(&quote_data);
+            user_data.extend_from_slice(&(signature.len() as u32).to_be_bytes());
+            user_data.extend_from_slice(&signature);
 
             let bebop_component = ProtocolComponent {
                 id: String::from("bebop-rfq"),
                 protocol_system: String::from("rfq:bebop"),
-                static_attributes,
+                static_attributes: HashMap::new(),
                 ..Default::default()
             };
 
@@ -1691,6 +1877,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: Some(Bytes::from(user_data)),
             };
 
             let encoding_context = EncodingContext {
@@ -1726,13 +1913,13 @@ mod tests {
                     "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                     // transfer type Transfer
                     "01",
-                    // order type Single (default 0)
+                    // order type Single (0)
                     "00",
                     // quote data length (8 bytes = 0x00000008)
                     "00000008",
                     // quote data
                     "1234567890abcdef",
-                    // signature type ECDSA (default 0)
+                    // signature type ECDSA (0)
                     "00",
                     // signature length (4 bytes = 0x00000004)
                     "00000004",
@@ -1750,18 +1937,24 @@ mod tests {
         fn test_encode_bebop_multi() {
             use alloy::hex;
 
-            // Create static attributes for a Bebop Multi RFQ quote
-            let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-            static_attributes
-                .insert("quote_data".into(), Bytes::from(hex::decode("abcdef1234567890").unwrap()));
-            static_attributes
-                .insert("signature".into(), Bytes::from(hex::decode("11223344").unwrap()));
-            static_attributes.insert("order_type".into(), Bytes::from(vec![1u8])); // Multi order
+            // Create user_data for a Bebop Multi RFQ quote
+            let order_type = BebopOrderType::Multi as u8;
+            let signature_type = 0u8; // ECDSA
+            let quote_data = hex::decode("abcdef1234567890").unwrap();
+            let signature = hex::decode("11223344").unwrap();
+
+            let mut user_data = Vec::new();
+            user_data.push(order_type);
+            user_data.push(signature_type);
+            user_data.extend_from_slice(&(quote_data.len() as u32).to_be_bytes());
+            user_data.extend_from_slice(&quote_data);
+            user_data.extend_from_slice(&(signature.len() as u32).to_be_bytes());
+            user_data.extend_from_slice(&signature);
 
             let bebop_component = ProtocolComponent {
                 id: String::from("bebop-rfq"),
                 protocol_system: String::from("rfq:bebop"),
-                static_attributes,
+                static_attributes: HashMap::new(),
                 ..Default::default()
             };
 
@@ -1772,6 +1965,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: Some(Bytes::from(user_data)),
             };
 
             let encoding_context = EncodingContext {
@@ -1807,13 +2001,13 @@ mod tests {
                     "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
                     // transfer type Transfer
                     "01",
-                    // order type Multi
+                    // order type Multi (1)
                     "01",
                     // quote data length (8 bytes = 0x00000008)
                     "00000008",
                     // quote data
                     "abcdef1234567890",
-                    // signature type ECDSA (default 0)
+                    // signature type ECDSA (0)
                     "00",
                     // signature length (4 bytes = 0x00000004)
                     "00000004",
@@ -1831,21 +2025,25 @@ mod tests {
         fn test_encode_bebop_aggregate() {
             use alloy::hex;
 
-            // Create static attributes for a Bebop Aggregate RFQ quote
-            let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-            static_attributes
-                .insert("quote_data".into(), Bytes::from(hex::decode("deadbeef").unwrap()));
+            // Create user_data for a Bebop Aggregate RFQ quote
+            let order_type = BebopOrderType::Aggregate as u8;
+            let signature_type = 0u8; // ECDSA
+            let quote_data = hex::decode("deadbeef").unwrap();
             // For aggregate, signature contains multiple signatures encoded
-            static_attributes.insert(
-                "signature".into(),
-                Bytes::from(hex::decode("0000000200000004aabbccdd00000004eeff0011").unwrap()),
-            );
-            static_attributes.insert("order_type".into(), Bytes::from(vec![2u8])); // Aggregate order
+            let signature = hex::decode("0000000200000004aabbccdd00000004eeff0011").unwrap();
+
+            let mut user_data = Vec::new();
+            user_data.push(order_type);
+            user_data.push(signature_type);
+            user_data.extend_from_slice(&(quote_data.len() as u32).to_be_bytes());
+            user_data.extend_from_slice(&quote_data);
+            user_data.extend_from_slice(&(signature.len() as u32).to_be_bytes());
+            user_data.extend_from_slice(&signature);
 
             let bebop_component = ProtocolComponent {
                 id: String::from("bebop-rfq"),
                 protocol_system: String::from("rfq:bebop"),
-                static_attributes,
+                static_attributes: HashMap::new(),
                 ..Default::default()
             };
 
@@ -1856,6 +2054,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
+                user_data: Some(Bytes::from(user_data)),
             };
 
             let encoding_context = EncodingContext {
@@ -1891,13 +2090,13 @@ mod tests {
                     "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
                     // transfer type TransferFrom
                     "00",
-                    // order type Aggregate
+                    // order type Aggregate (2)
                     "02",
                     // quote data length (4 bytes = 0x00000004)
                     "00000004",
                     // quote data
                     "deadbeef",
-                    // signature type ECDSA (default 0)
+                    // signature type ECDSA (0)
                     "00",
                     // signature length (20 bytes for encoded signatures)
                     "00000014",

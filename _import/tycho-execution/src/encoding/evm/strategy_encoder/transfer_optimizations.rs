@@ -111,7 +111,7 @@ impl TransferOptimization {
 
 #[cfg(test)]
 mod tests {
-    use alloy_primitives::hex;
+    use alloy::primitives::hex;
     use rstest::rstest;
     use tycho_common::models::protocol::ProtocolComponent;
 
@@ -178,6 +178,7 @@ mod tests {
             token_in: swap_token_in.clone(),
             token_out: dai(),
             split: 0f64,
+            user_data: None,
         }];
         let swap = SwapGroup {
             protocol_system: protocol,
@@ -243,6 +244,7 @@ mod tests {
                     token_in: usdc(),
                     token_out: dai(),
                     split: 0f64,
+                    user_data: None,
                 }],
             })
         };

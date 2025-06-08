@@ -1,11 +1,10 @@
 use std::str::FromStr;
 
 use alloy::{
-    primitives::U256,
+    primitives::{Address, Keccak256, U256},
     signers::{local::PrivateKeySigner, Signature, SignerSync},
+    sol_types::{eip712_domain, SolStruct, SolValue},
 };
-use alloy_primitives::{Address, Keccak256};
-use alloy_sol_types::{eip712_domain, SolStruct, SolValue};
 use num_bigint::BigUint;
 use tycho_common::Bytes;
 

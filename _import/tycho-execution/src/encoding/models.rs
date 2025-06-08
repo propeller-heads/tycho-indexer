@@ -86,6 +86,8 @@ pub struct Swap {
     /// Decimal of the amount to be swapped in this operation (for example, 0.5 means 50%)
     #[serde(default)]
     pub split: f64,
+    /// Optional user data to be passed to encoding.
+    pub user_data: Option<Bytes>,
 }
 
 impl Swap {
@@ -94,8 +96,9 @@ impl Swap {
         token_in: Bytes,
         token_out: Bytes,
         split: f64,
+        user_data: Option<Bytes>,
     ) -> Self {
-        Self { component: component.into(), token_in, token_out, split }
+        Self { component: component.into(), token_in, token_out, split, user_data }
     }
 }
 
@@ -295,10 +298,14 @@ mod tests {
             id: "i-am-an-id".to_string(),
             protocol_system: "uniswap_v2".to_string(),
         };
-        let swap = Swap::new(component, Bytes::from("0x12"), Bytes::from("34"), 0.5);
+        let user_data = Some(Bytes::from("0x1234"));
+        let swap =
+            Swap::new(component, Bytes::from("0x12"), Bytes::from("34"), 0.5, user_data.clone());
         assert_eq!(swap.token_in, Bytes::from("0x12"));
         assert_eq!(swap.token_out, Bytes::from("0x34"));
         assert_eq!(swap.component.protocol_system, "uniswap_v2");
         assert_eq!(swap.component.id, "i-am-an-id");
+        assert_eq!(swap.split, 0.5);
+        assert_eq!(swap.user_data, user_data);
     }
 }
