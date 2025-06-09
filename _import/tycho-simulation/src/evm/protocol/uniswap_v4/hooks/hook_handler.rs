@@ -14,6 +14,7 @@ use crate::{
     protocol::errors::{SimulationError, TransitionError},
 };
 
+#[derive(Debug, Clone)]
 pub struct StateContext {
     pub currency_0: Address,
     pub currency_1: Address,
@@ -21,6 +22,7 @@ pub struct StateContext {
     pub tick: i32,
 }
 
+#[derive(Debug, Clone)]
 pub struct SwapParams {
     pub zero_for_one: bool,
     pub amount_specified: I256,
@@ -42,14 +44,20 @@ sol! {
         int256 amountDelta;
         uint24 fee;
     }
+
+    #[derive(Debug)]
+    struct AfterSwapReturn {
+        bytes4 selector;
+        int128 delta;
+   }
 }
 
 pub struct AfterSwapParameters {
-    context: StateContext,
-    sender: Address,
-    swap_params: SwapParams,
-    delta: BeforeSwapDelta,
-    hook_data: Bytes,
+    pub context: StateContext,
+    pub sender: Address,
+    pub swap_params: SwapParams,
+    pub delta: BeforeSwapDelta,
+    pub hook_data: Bytes,
 }
 
 #[derive(Debug, Clone)]
@@ -81,6 +89,7 @@ pub trait HookHandler: Debug + Send + Sync + 'static {
     fn after_swap(
         &self,
         params: AfterSwapParameters,
+        block: u64,
     ) -> Result<WithGasEstimate<BeforeSwapDelta>, SimulationError>;
 
     // Currently fee is not accessible on v4 pools, this is for future use
