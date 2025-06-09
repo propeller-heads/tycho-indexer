@@ -8,7 +8,7 @@ use tycho_common::Bytes;
 use crate::{
     evm::protocol::uniswap_v4::{hooks::hook_handler::HookHandler, state::UniswapV4State},
     models::Token,
-    protocol::errors::InvalidSnapshotError,
+    protocol::errors::{InvalidSnapshotError, SimulationError},
 };
 
 /// Parameters for creating a HookHandler.
@@ -48,4 +48,15 @@ pub trait HookHandlerCreator: Send + Sync {
 lazy_static! {
     static ref HANDLER_FACTORY: RwLock<HashMap<Address, Box<dyn HookHandlerCreator>>> =
         RwLock::new(HashMap::new());
+}
+
+pub fn register_hook_handler(
+    hook: Address,
+    handler: Box<dyn HookHandlerCreator>,
+) -> Result<(), SimulationError> {
+    HANDLER_FACTORY
+        .write()
+        .map_err(|e| SimulationError::FatalError(e.to_string()))?
+        .insert(hook, handler);
+    Ok(())
 }
