@@ -217,7 +217,7 @@ mod tests {
     };
 
     #[test]
-    fn test_hook_simulation() {
+    fn test_before_swap() {
         let block = BlockHeader {
             number: 22578103,
             hash: B256::from_str(
