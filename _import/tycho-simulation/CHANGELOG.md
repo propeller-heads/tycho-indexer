@@ -1,3 +1,10 @@
+## [0.109.0](https://github.com/propeller-heads/tycho-simulation/compare/0.108.0...0.109.0) (2025-06-09)
+
+
+### Features
+
+* GenericVMHookHandler.before_swap ([4363fc9](https://github.com/propeller-heads/tycho-simulation/commit/4363fc974627829361134d47a951203864e5ad97))
+
 ## [0.108.0](https://github.com/propeller-heads/tycho-simulation/compare/0.107.0...0.108.0) (2025-06-06)
 
 
