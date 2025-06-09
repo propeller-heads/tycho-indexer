@@ -1,3 +1,10 @@
+## [0.108.0](https://github.com/propeller-heads/tycho-simulation/compare/0.107.0...0.108.0) (2025-06-06)
+
+
+### Features
+
+* Add skeleton of GenericVMHookHandler ([6ee6746](https://github.com/propeller-heads/tycho-simulation/commit/6ee67466524d787fd982197dd237d90e9f2f5872))
+
 ## [0.107.0](https://github.com/propeller-heads/tycho-simulation/compare/0.106.0...0.107.0) (2025-06-06)
 
 
