@@ -279,10 +279,14 @@ class ThirdPartyPoolTychoDecoder(TychoDecoder):
         balances = {}
         for addr, balance in balances_msg.items():
             checksum_addr = to_checksum_address(addr)
-            token = next(t for t in tokens if t.address == checksum_addr)
-            balances[token.address] = token.from_onchain_amount(
-                int(balance)  # balances are big endian encoded
-            )
+            try:
+                token = next(t for t in tokens if t.address == checksum_addr)
+                balances[token.address] = token.from_onchain_amount(
+                    int(balance)  # balances are big endian encoded
+                )
+            except StopIteration:
+                # Skip this balance if no matching token is found
+                continue
         return balances
 
     def apply_deltas(
