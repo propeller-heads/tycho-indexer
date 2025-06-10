@@ -2015,12 +2015,12 @@ impl EntryPointTracingParams {
         Ok(id_)
     }
 
-    // Retrieves the database ids of entry point tracing params from a list of entry points ids and
-    // tracing params.
+    // Retrieves the database ids of an entry point tracing params (linked to the entrypoint id)
+    // from a list of entry points ids and tracing params.
     pub(crate) async fn ids_by_entry_point_with_tracing_params(
         entry_points_with_tracing_params: &[(EntryPointId, EntryPointTracingParamsCommon)],
         conn: &mut AsyncPgConnection,
-    ) -> Result<HashMap<EntryPointTracingParamsCommon, i64>, StorageError> {
+    ) -> Result<HashMap<(EntryPointId, EntryPointTracingParamsCommon), i64>, StorageError> {
         if entry_points_with_tracing_params.is_empty() {
             return Ok(HashMap::new());
         }
@@ -2048,13 +2048,15 @@ impl EntryPointTracingParams {
             .map(|(ep_id, params)| (ep_id, EntryPointTracingType::from(params), params))
             .collect::<Vec<_>>();
 
+        // Stores the tuple of (entry point id, tracing type, tracing params) to the tuple of (entry
+        // point id, tracing params) This is used below for application side filtering.
         let tuples_to_tracing_params: HashMap<
             (&EntryPointId, &EntryPointTracingType, &EntryPointTracingParamsCommon),
-            &EntryPointTracingParamsCommon,
+            &(EntryPointId, EntryPointTracingParamsCommon),
         > = tuples
             .iter()
             .zip(entry_points_with_tracing_params)
-            .map(|((ep_id, tracing_type, params), ep)| ((*ep_id, tracing_type, *params), &ep.1))
+            .map(|((ep_id, tracing_type, params), ep)| ((*ep_id, tracing_type, *params), ep))
             .collect();
 
         let res = entry_point_tracing_params::table
