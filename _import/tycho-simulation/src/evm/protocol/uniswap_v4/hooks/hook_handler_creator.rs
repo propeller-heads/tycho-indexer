@@ -86,3 +86,20 @@ pub fn set_default_hook_handler(
         .map_err(|e| SimulationError::FatalError(e.to_string()))? = handler;
     Ok(())
 }
+
+pub fn instantiate_hook_handler(
+    hook_address: &Address,
+    params: HookCreationParams<'_>,
+) -> Result<Box<dyn HookHandler>, InvalidSnapshotError> {
+    let factory = HANDLER_FACTORY
+        .read()
+        .map_err(|e| InvalidSnapshotError::VMError(SimulationError::FatalError(e.to_string())))?;
+    if let Some(creator) = factory.get(hook_address) {
+        creator.instantiate_hook_handler(params)
+    } else {
+        let default_creator = DEFAULT_HANDLER.read().map_err(|e| {
+            InvalidSnapshotError::VMError(SimulationError::FatalError(e.to_string()))
+        })?;
+        default_creator.instantiate_hook_handler(params)
+    }
+}
