@@ -1,12 +1,30 @@
 #![allow(dead_code)]
 use std::{collections::HashMap, sync::RwLock};
 
-use alloy::{primitives::Address, rpc::types::Header};
+use alloy::{
+    primitives::{keccak256, Address, B256, U256},
+    rpc::types::Header,
+};
 use lazy_static::lazy_static;
+use revm::state::{AccountInfo, Bytecode};
 use tycho_common::Bytes;
 
 use crate::{
-    evm::protocol::uniswap_v4::{hooks::hook_handler::HookHandler, state::UniswapV4State},
+    evm::{
+        engine_db::{
+            create_engine,
+            engine_db_interface::EngineDatabaseInterface,
+            simulation_db::{BlockHeader, SimulationDB},
+            utils::{get_client, get_runtime},
+        },
+        protocol::{
+            uniswap_v4::{
+                hooks::{generic_vm_hook_handler::GenericVMHookHandler, hook_handler::HookHandler},
+                state::UniswapV4State,
+            },
+            vm::constants::ERC20_BYTECODE,
+        },
+    },
     models::Token,
     protocol::errors::{InvalidSnapshotError, SimulationError},
 };
@@ -18,9 +36,10 @@ pub struct HookCreationParams<'a> {
     all_tokens: &'a HashMap<Bytes, Token>,
     state: UniswapV4State,
     /// Attributes of the component. If an attribute's value is a `bigint`,
-    /// it will be encoded as a big endian signed hex string.
+    /// it will be encoded as a big endian signed hex string. See ResponseProtocolState for more
+    /// details.
     pub(crate) attributes: &'a HashMap<String, Bytes>,
-    /// Sum aggregated balances of the component.
+    /// Sum aggregated balances of the component. See ResponseProtocolState for more details.
     balances: &'a HashMap<Bytes, Bytes>,
 }
 
@@ -49,9 +68,82 @@ pub struct GenericVMHookHandlerCreator;
 impl HookHandlerCreator for GenericVMHookHandlerCreator {
     fn instantiate_hook_handler(
         &self,
-        _params: HookCreationParams,
+        params: HookCreationParams<'_>,
     ) -> Result<Box<dyn HookHandler>, InvalidSnapshotError> {
-        todo!()
+        // TODO double check how the hook address and bytecode attributes are actually called
+        let hook_address_bytes = params
+            .attributes
+            .get("hook_address")
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("hook_address".to_string()))?;
+
+        let hook_address = Address::from_slice(&hook_address_bytes.0);
+
+        let hook_bytecode_bytes = params
+            .attributes
+            .get("hook_bytecode")
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("hook_bytecode".to_string()))?;
+
+        let bytecode =
+            Bytecode::new_raw(alloy::primitives::Bytes::from(hook_bytecode_bytes.0.clone()));
+
+        let block_header = BlockHeader {
+            number: params.block.number,
+            hash: params.block.hash,
+            timestamp: params.block.timestamp,
+        };
+
+        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block_header));
+
+        let engine = create_engine(db, true).map_err(|e| {
+            InvalidSnapshotError::VMError(SimulationError::FatalError(format!(
+                "Failed to create engine: {e:?}"
+            )))
+        })?;
+
+        // TODO what is the difference between params.account_balances and params.balances?
+        for account_bytes in params.account_balances.keys() {
+            let account_address = Address::from_slice(&account_bytes.0);
+
+            let account_balance = U256::from(1000000000000000000u64); // 1 ETH default
+
+            engine.state.init_account(
+                account_address,
+                AccountInfo {
+                    balance: account_balance,
+                    nonce: 0,
+                    code_hash: B256::ZERO,
+                    code: None, // No code for regular accounts
+                },
+                None,
+                false,
+            );
+        }
+
+        // Initialize all token contracts
+        for token_address_bytes in params.all_tokens.keys() {
+            let token_address = Address::from_slice(&token_address_bytes.0);
+
+            // Deploy ERC20 contract for this token
+            let erc20_bytecode = Bytecode::new_raw(alloy::primitives::Bytes::from(ERC20_BYTECODE));
+            let code_hash = B256::from(keccak256(erc20_bytecode.clone().bytes()));
+
+            engine.state.init_account(
+                token_address,
+                AccountInfo {
+                    balance: U256::ZERO, // Token contracts have zero ETH balance
+                    nonce: 1,
+                    code_hash,
+                    code: Some(erc20_bytecode),
+                },
+                None,
+                false,
+            );
+        }
+
+        let hook_handler = GenericVMHookHandler::new(hook_address, bytecode, engine)
+            .map_err(|e| InvalidSnapshotError::VMError(e))?;
+
+        Ok(Box::new(hook_handler))
     }
 }
 

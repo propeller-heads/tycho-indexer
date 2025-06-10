@@ -36,7 +36,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-struct GenericVMHookHandler<D: EngineDatabaseInterface + Clone + Debug>
+pub struct GenericVMHookHandler<D: EngineDatabaseInterface + Clone + Debug>
 where
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
