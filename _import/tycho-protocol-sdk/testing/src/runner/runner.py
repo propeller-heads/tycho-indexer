@@ -90,11 +90,15 @@ class TestRunner:
 
     def run_tests(self) -> None:
         """Run all tests specified in the configuration."""
-        print(f"Running tests ...")
+        print(f"Running {len(self.config.tests)} tests ...\n")
+        print("--------------------------------\n")
 
         failed_tests = []
+        count = 1
 
         for test in self.config.tests:
+            print(f"TEST {count}: {test.name}")
+
             self.tycho_runner.empty_database(self.db_url)
 
             spkg_path = self.build_spkg(
@@ -119,16 +123,21 @@ class TestRunner:
             if result.success:
                 print(f"\n✅ {test.name} passed.\n")
             else:
+                failed_tests.append(test.name)
                 print(f"\n❗️ {test.name} failed on {result.step}: {result.message}\n")
 
+            print("--------------------------------\n")
+            count += 1
+
         print(
-            "\nTest finished! \n"
-            f"Passed: {len(self.config.tests) - len(failed_tests)}/{len(self.config.tests)}\n"
+            "\nTests finished! \n"
+            f"RESULTS: {len(self.config.tests) - len(failed_tests)}/{len(self.config.tests)} passed.\n"
         )
         if failed_tests:
             print("Failed tests:")
             for failed_test in failed_tests:
-                print(failed_test)
+                print(f"- {failed_test}")
+        print("\n")
 
     def validate_state(
         self,
@@ -147,9 +156,10 @@ class TestRunner:
             component.id: component for component in protocol_components
         }
 
-        step = "Protocol component validation"
         try:
             # Step 1: Validate the protocol components
+            step = "Protocol component validation"
+
             for expected_component in expected_components:
                 comp_id = expected_component.id.lower()
                 if comp_id not in components_by_id:
@@ -167,27 +177,27 @@ class TestRunner:
 
             print(f"\n✅ {step} passed.\n")
 
+            # Step 2: Validate the token balances
             step = "Token balance validation"
-            token_balances: dict[str, dict[HexBytes, int]] = defaultdict(dict)
-            for component in protocol_components:
-                comp_id = component.id.lower()
-                for token in component.tokens:
-                    state = next(
-                        (
-                            s
-                            for s in protocol_states
-                            if s.component_id.lower() == comp_id
-                        ),
-                        None,
-                    )
-                    if state:
-                        balance_hex = state.balances.get(token, HexBytes("0x00"))
-                    else:
-                        balance_hex = HexBytes("0x00")
-                    tycho_balance = int(balance_hex)
-                    token_balances[comp_id][token] = tycho_balance
 
-                    if not self.config.skip_balance_check:
+            if not self.config.skip_balance_check:
+                for component in protocol_components:
+                    comp_id = component.id.lower()
+                    for token in component.tokens:
+                        state = next(
+                            (
+                                s
+                                for s in protocol_states
+                                if s.component_id.lower() == comp_id
+                            ),
+                            None,
+                        )
+                        if state:
+                            balance_hex = state.balances.get(token, HexBytes("0x00"))
+                        else:
+                            balance_hex = HexBytes("0x00")
+                        tycho_balance = int(balance_hex)
+
                         node_balance = get_token_balance(token, comp_id, stop_block)
                         if node_balance != tycho_balance:
                             return TestResult.Failed(
@@ -195,12 +205,12 @@ class TestRunner:
                                 message=f"Balance mismatch for {comp_id}:{token} at block {stop_block}: got {node_balance} "
                                 f"from rpc call and {tycho_balance} from Substreams",
                             )
-
-            if not self.config.skip_balance_check:
                 print(f"\n✅ {step} passed.\n")
-            else:
-                print(f"\nℹ️ {step} skipped")
 
+            else:
+                print(f"\nℹ️  {step} skipped. \n")
+
+            # Step 3: Validate the simulation
             step = "Simulation validation"
 
             # Loads from Tycho-Indexer the state of all the contracts that are related to the protocol components.
@@ -225,11 +235,6 @@ class TestRunner:
 
             # Check if any of the initialized contracts are not listed as component contract dependencies
             unspecified_contracts = related_contracts - component_related_contracts
-            if len(unspecified_contracts):
-                print(
-                    f"⚠️ The following initialized contracts are not listed as component contract dependencies: {unspecified_contracts}. "
-                    f"Please ensure that, if they are required for this component's simulation, they are specified under the Protocol Component's contract field."
-                )
 
             related_contracts.update(component_related_contracts)
             related_contracts = [a.hex() for a in related_contracts]
@@ -238,6 +243,13 @@ class TestRunner:
                 ContractStateParams(contract_ids=related_contracts)
             )
             if len(filtered_components):
+
+                if len(unspecified_contracts):
+                    print(
+                        f"⚠️ The following initialized contracts are not listed as component contract dependencies: {unspecified_contracts}. "
+                        f"Please ensure that, if they are required for this component's simulation, they are specified under the Protocol Component's contract field."
+                    )
+
                 simulation_failures = self.simulate_get_amount_out(
                     stop_block, protocol_states, filtered_components, contract_states
                 )
@@ -254,7 +266,7 @@ class TestRunner:
                     return TestResult.Failed(step=step, message="/n".join(error_msgs))
                 print(f"\n✅ {step} passed.\n")
             else:
-                print(f"\nℹ️ {step} skipped")
+                print(f"\nℹ️  {step} skipped.\n")
             return TestResult.Passed()
         except Exception as e:
             error_message = f"An error occurred: {str(e)}\n" + traceback.format_exc()
