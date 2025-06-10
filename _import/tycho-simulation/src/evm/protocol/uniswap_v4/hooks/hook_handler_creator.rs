@@ -44,10 +44,27 @@ pub trait HookHandlerCreator: Send + Sync {
     ) -> Result<Box<dyn HookHandler>, InvalidSnapshotError>;
 }
 
+pub struct GenericVMHookHandlerCreator;
+
+impl HookHandlerCreator for GenericVMHookHandlerCreator {
+    fn instantiate_hook_handler(
+        &self,
+        _params: HookCreationParams,
+    ) -> Result<Box<dyn HookHandler>, InvalidSnapshotError> {
+        todo!()
+    }
+}
+
 // Workaround for stateless decoder trait.
+// Mapping from hook address to the handler creator.
 lazy_static! {
     static ref HANDLER_FACTORY: RwLock<HashMap<Address, Box<dyn HookHandlerCreator>>> =
         RwLock::new(HashMap::new());
+}
+
+lazy_static! {
+    static ref DEFAULT_HANDLER: RwLock<Box<dyn HookHandlerCreator>> =
+        RwLock::new(Box::new(GenericVMHookHandlerCreator {}));
 }
 
 pub fn register_hook_handler(
@@ -58,5 +75,14 @@ pub fn register_hook_handler(
         .write()
         .map_err(|e| SimulationError::FatalError(e.to_string()))?
         .insert(hook, handler);
+    Ok(())
+}
+
+pub fn set_default_hook_handler(
+    handler: Box<dyn HookHandlerCreator>,
+) -> Result<(), SimulationError> {
+    *DEFAULT_HANDLER
+        .write()
+        .map_err(|e| SimulationError::FatalError(e.to_string()))? = handler;
     Ok(())
 }
