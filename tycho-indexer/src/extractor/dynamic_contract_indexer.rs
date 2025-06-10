@@ -166,7 +166,7 @@ where
                 .await
                 .map_err(|e| ExtractionError::TracingError(format!("{e:?}")))?;
 
-            let mut tx_to_traced_entry_point: HashMap<&Transaction, &TracedEntryPoint> =
+            let mut tx_to_traced_entry_point: HashMap<&Transaction, Vec<&TracedEntryPoint>> =
                 HashMap::new();
             for traced_entry_point in traced_entry_points.iter() {
                 let tx = entrypoints_to_analyze
@@ -177,40 +177,45 @@ where
                             Every traced entrypoint should be in the entrypoints_to_analyze map"
                         ))
                     })?;
-                tx_to_traced_entry_point.insert(tx, traced_entry_point);
+                tx_to_traced_entry_point
+                    .entry(tx)
+                    .or_default()
+                    .push(traced_entry_point);
             }
 
             let mut new_account_addr_to_slots: HashMap<Address, HashSet<StoreKey>> = HashMap::new();
             let mut new_account_addr_to_tx: HashMap<Address, &Transaction> = HashMap::new();
 
-            for (tx, traced_entry_point) in tx_to_traced_entry_point {
-                for (account, slots) in traced_entry_point
-                    .tracing_result
-                    .accessed_slots
-                    .iter()
-                {
-                    // Update slots for all accounts
-                    new_account_addr_to_slots
-                        .entry(account.clone())
-                        .or_default()
-                        .extend(slots.iter().cloned());
-
-                    // Update transaction mapping only for untracked accounts
-                    if !self
-                        .cache
-                        .tracked_contracts
-                        .contains_key(account)
+            for (tx, traced_entry_points) in tx_to_traced_entry_point {
+                for traced_entry_point in traced_entry_points.iter() {
+                    for (account, slots) in traced_entry_point
+                        .tracing_result
+                        .accessed_slots
+                        .iter()
                     {
-                        // Keep track of the first transaction that pushed the entrypoint that calls
-                        // this account.
-                        new_account_addr_to_tx
+                        // Update slots for all accounts
+                        new_account_addr_to_slots
                             .entry(account.clone())
-                            .and_modify(|existing_tx| {
-                                if existing_tx.index > tx.index {
-                                    *existing_tx = tx;
-                                }
-                            })
-                            .or_insert(tx);
+                            .or_default()
+                            .extend(slots.iter().cloned());
+
+                        // Update transaction mapping only for untracked accounts
+                        if !self
+                            .cache
+                            .tracked_contracts
+                            .contains_key(account)
+                        {
+                            // Keep track of the first transaction that pushed the entrypoint that
+                            // calls this account.
+                            new_account_addr_to_tx
+                                .entry(account.clone())
+                                .and_modify(|existing_tx| {
+                                    if existing_tx.index > tx.index {
+                                        *existing_tx = tx;
+                                    }
+                                })
+                                .or_insert(tx);
+                        }
                     }
                 }
             }
