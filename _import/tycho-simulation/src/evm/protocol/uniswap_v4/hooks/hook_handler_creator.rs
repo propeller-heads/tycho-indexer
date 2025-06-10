@@ -141,7 +141,7 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
         }
 
         let hook_handler = GenericVMHookHandler::new(hook_address, bytecode, engine)
-            .map_err(|e| InvalidSnapshotError::VMError(e))?;
+            .map_err(InvalidSnapshotError::VMError)?;
 
         Ok(Box::new(hook_handler))
     }
