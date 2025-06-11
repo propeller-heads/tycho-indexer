@@ -84,7 +84,7 @@ impl EntryPointTracer for EVMEntrypointService {
             match &entry_point.params {
                 TracingParams::RPCTracer(ref rpc_entry_point) => {
                     // First call to get the list of called addresses
-                    // TODO: Can we only use one call to get the retriggers and called addresses?
+                    // Perf: Can we only use one call to get the retriggers and called addresses?
                     // Maybe we can implement a custom tracer that can return both? (not supported
                     // by chainstack though) or maybe we can batch the calls?
                     let call_trace = self
