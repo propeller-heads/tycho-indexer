@@ -8,7 +8,7 @@ use tycho_common::Bytes;
 use crate::{
     evm::protocol::uniswap_v4::{hooks::hook_handler::HookHandler, state::UniswapV4State},
     models::Token,
-    protocol::errors::InvalidSnapshotError,
+    protocol::errors::{InvalidSnapshotError, SimulationError},
 };
 
 /// Parameters for creating a HookHandler.
@@ -44,8 +44,50 @@ pub trait HookHandlerCreator: Send + Sync {
     ) -> Result<Box<dyn HookHandler>, InvalidSnapshotError>;
 }
 
+pub struct GenericVMHookHandlerCreator;
+
+impl HookHandlerCreator for GenericVMHookHandlerCreator {
+    fn instantiate_hook_handler(
+        &self,
+        _params: HookCreationParams,
+    ) -> Result<Box<dyn HookHandler>, InvalidSnapshotError> {
+        todo!()
+    }
+}
+
 // Workaround for stateless decoder trait.
+// Mapping from hook address to the handler creator.
 lazy_static! {
     static ref HANDLER_FACTORY: RwLock<HashMap<Address, Box<dyn HookHandlerCreator>>> =
         RwLock::new(HashMap::new());
+}
+
+lazy_static! {
+    static ref DEFAULT_HANDLER: Box<dyn HookHandlerCreator> =
+        Box::new(GenericVMHookHandlerCreator {});
+}
+
+pub fn register_hook_handler(
+    hook: Address,
+    handler: Box<dyn HookHandlerCreator>,
+) -> Result<(), SimulationError> {
+    HANDLER_FACTORY
+        .write()
+        .map_err(|e| SimulationError::FatalError(e.to_string()))?
+        .insert(hook, handler);
+    Ok(())
+}
+
+pub fn instantiate_hook_handler(
+    hook_address: &Address,
+    params: HookCreationParams<'_>,
+) -> Result<Box<dyn HookHandler>, InvalidSnapshotError> {
+    let factory = HANDLER_FACTORY
+        .read()
+        .map_err(|e| InvalidSnapshotError::VMError(SimulationError::FatalError(e.to_string())))?;
+    if let Some(creator) = factory.get(hook_address) {
+        creator.instantiate_hook_handler(params)
+    } else {
+        DEFAULT_HANDLER.instantiate_hook_handler(params)
+    }
 }
