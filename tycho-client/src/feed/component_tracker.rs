@@ -273,7 +273,7 @@ where
                 .entry(entrypoint.clone())
                 .or_default()
                 .contracts
-                .extend(traces.called_addresses.iter().cloned());
+                .extend(traces.accessed_slots.keys().cloned());
         }
 
         // Update linked components for entrypoints

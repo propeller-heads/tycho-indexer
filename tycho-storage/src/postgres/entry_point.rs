@@ -551,11 +551,7 @@ impl PostgresGateway {
 
         let all_called_addresses: HashSet<_> = traced_entry_points
             .iter()
-            .flat_map(|tep| {
-                tep.tracing_result
-                    .called_addresses
-                    .iter()
-            })
+            .flat_map(|tep| tep.tracing_result.accessed_slots.keys())
             .cloned()
             .collect();
 
@@ -573,7 +569,7 @@ impl PostgresGateway {
             .iter()
             .zip(params_ids.values())
         {
-            for address in &tep.tracing_result.called_addresses {
+            for address in tep.tracing_result.accessed_slots.keys() {
                 let acc_id = account_id_map
                     .get(address)
                     .ok_or_else(|| {
@@ -815,9 +811,13 @@ mod test {
                 )]
                 .into_iter()
                 .collect(),
-                vec![Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap()]
-                    .into_iter()
-                    .collect(),
+                HashMap::from([(
+                    Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
+                    HashSet::from([Bytes::from_str(
+                        "0x0000000000000000000000000000000000000000000000000000000000000001",
+                    )
+                    .unwrap()]),
+                )]),
             ),
         )
     }
