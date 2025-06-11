@@ -1620,7 +1620,7 @@ pub struct NewContract {
 }
 
 impl NewContract {
-    pub fn new_account(&self) -> NewAccount {
+    pub fn new_account(&self) -> NewAccount<'_> {
         NewAccount {
             title: &self.title,
             address: &self.address,
