@@ -200,11 +200,15 @@ where
     }
 
     fn fee(&self, _context: &UniswapV4State, _params: SwapParams) -> Result<f64, SimulationError> {
-        todo!()
+        Err(SimulationError::RecoverableError(
+            "fee is not implemented for GenericVMHookHandler".to_string(),
+        ))
     }
 
     fn spot_price(&self, _base: &Token, _quote: &Token) -> Result<f64, SimulationError> {
-        todo!()
+        Err(SimulationError::RecoverableError(
+            "spot_price is not implemented for GenericVMHookHandler".to_string(),
+        ))
     }
 
     fn get_amount_ranges(
@@ -212,7 +216,9 @@ where
         _token_in: Address,
         _token_out: Address,
     ) -> Result<AmountRanges, SimulationError> {
-        todo!()
+        Err(SimulationError::RecoverableError(
+            "get_amount_ranges is not implemented for GenericVMHookHandler".to_string(),
+        ))
     }
 
     fn delta_transition(
@@ -221,7 +227,9 @@ where
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
-        todo!()
+        Err(TransitionError::SimulationError(SimulationError::RecoverableError(
+            "delta_transition is not implemented for GenericVMHookHandler".to_string(),
+        )))
     }
 
     fn clone_box(&self) -> Box<dyn HookHandler> {
