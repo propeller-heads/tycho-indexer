@@ -63,8 +63,8 @@ lazy_static! {
 }
 
 lazy_static! {
-    static ref DEFAULT_HANDLER: RwLock<Box<dyn HookHandlerCreator>> =
-        RwLock::new(Box::new(GenericVMHookHandlerCreator {}));
+    static ref DEFAULT_HANDLER: Box<dyn HookHandlerCreator> =
+        Box::new(GenericVMHookHandlerCreator {});
 }
 
 pub fn register_hook_handler(
@@ -78,15 +78,6 @@ pub fn register_hook_handler(
     Ok(())
 }
 
-pub fn set_default_hook_handler(
-    handler: Box<dyn HookHandlerCreator>,
-) -> Result<(), SimulationError> {
-    *DEFAULT_HANDLER
-        .write()
-        .map_err(|e| SimulationError::FatalError(e.to_string()))? = handler;
-    Ok(())
-}
-
 pub fn instantiate_hook_handler(
     hook_address: &Address,
     params: HookCreationParams<'_>,
@@ -97,9 +88,6 @@ pub fn instantiate_hook_handler(
     if let Some(creator) = factory.get(hook_address) {
         creator.instantiate_hook_handler(params)
     } else {
-        let default_creator = DEFAULT_HANDLER.read().map_err(|e| {
-            InvalidSnapshotError::VMError(SimulationError::FatalError(e.to_string()))
-        })?;
-        default_creator.instantiate_hook_handler(params)
+        DEFAULT_HANDLER.instantiate_hook_handler(params)
     }
 }
