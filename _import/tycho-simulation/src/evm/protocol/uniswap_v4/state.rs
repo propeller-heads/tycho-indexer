@@ -1,16 +1,19 @@
 use std::{any::Any, collections::HashMap};
 
-use alloy::primitives::{Sign, I256, U256};
+use alloy::primitives::{Address, Sign, I256, U256};
 use num_bigint::BigUint;
 use num_traits::Zero;
 use tracing::trace;
 use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
+use super::hooks::utils::{has_permission, HookOptions};
 use crate::{
     evm::protocol::{
         safe_math::{safe_add_u256, safe_sub_u256},
         u256_num::u256_to_biguint,
-        uniswap_v4::hooks::hook_handler::HookHandler,
+        uniswap_v4::hooks::hook_handler::{
+            AfterSwapParameters, BeforeSwapParameters, HookHandler, StateContext, SwapParams,
+        },
         utils::uniswap::{
             i24_be_bytes_to_i32, liquidity_math,
             sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
@@ -68,9 +71,9 @@ impl UniswapV4Fees {
         Self { zero_for_one, one_for_zero, lp_fee }
     }
 
-    fn calculate_swap_fees_pips(&self, zero_for_one: bool) -> u32 {
+    fn calculate_swap_fees_pips(&self, zero_for_one: bool, lp_fee_override: Option<u32>) -> u32 {
         let protocol_fees = if zero_for_one { self.zero_for_one } else { self.one_for_zero };
-        protocol_fees + self.lp_fee
+        protocol_fees + lp_fee_override.unwrap_or(self.lp_fee)
     }
 }
 
@@ -100,6 +103,7 @@ impl UniswapV4State {
         zero_for_one: bool,
         amount_specified: I256,
         sqrt_price_limit: Option<U256>,
+        lp_fee_override: Option<u32>,
     ) -> Result<SwapResults, SimulationError> {
         if self.liquidity == 0 {
             return Err(SimulationError::RecoverableError("No liquidity".to_string()));
@@ -167,7 +171,7 @@ impl UniswapV4State {
                 state.liquidity,
                 state.amount_remaining,
                 self.fees
-                    .calculate_swap_fees_pips(zero_for_one),
+                    .calculate_swap_fees_pips(zero_for_one, lp_fee_override),
             )?;
             state.sqrt_price = sqrt_price;
 
@@ -281,7 +285,97 @@ impl ProtocolSim for UniswapV4State {
             SimulationError::InvalidInput("I256 overflow: amount_in".to_string(), None)
         })?;
 
-        let result = self.swap(zero_for_one, amount_specified, None)?;
+        let mut amount_to_swap = amount_specified;
+        let mut lp_fee_override: Option<u32> = None;
+        let mut before_swap_gas = 0u64;
+        let mut after_swap_gas = 0u64;
+
+        let token_in_address = Address::from_slice(&token_in.address);
+        let token_out_address = Address::from_slice(&token_out.address);
+
+        let state_context = StateContext {
+            currency_0: if zero_for_one { token_in_address } else { token_out_address },
+            currency_1: if zero_for_one { token_out_address } else { token_in_address },
+            fees: self.fees.clone(),
+            tick: self.tick,
+        };
+
+        let swap_params = SwapParams {
+            zero_for_one,
+            amount_specified,
+            sqrt_price_limit: U256::ZERO, // Will be set to appropriate limit in swap
+        };
+
+        // Check if hook is set and has before_swap permissions
+        if let Some(ref hook) = self.hook {
+            if has_permission(hook.address(), HookOptions::BeforeSwap) {
+                let before_swap_params = BeforeSwapParameters {
+                    context: state_context.clone(),
+                    // TODO is this the right sender? Does this matter?
+                    sender: Address::ZERO,
+                    swap_params: swap_params.clone(),
+                    // TODO what is the hook data?
+                    hook_data: Bytes::new(),
+                };
+
+                // TODO use block 0 for now - not sure where to get the actual block number
+                let before_swap_result = hook
+                    .before_swap(before_swap_params, 0)
+                    .map_err(|e| {
+                        SimulationError::FatalError(format!("BeforeSwap hook failed: {e:?}"))
+                    })?;
+
+                before_swap_gas = before_swap_result.gas_estimate;
+                let before_swap_amount_delta = before_swap_result.result.amountDelta;
+
+                // Convert amountDelta to amountToSwap as per Uniswap V4 spec
+                // See: https://github.com/Uniswap/v4-core/blob/main/src/libraries/Hooks.sol#L270
+                if before_swap_amount_delta != I256::ZERO {
+                    amount_to_swap = amount_specified + before_swap_amount_delta;
+                    // TODO in the USV4 code they check if it's exact input or output, and makes
+                    // sure this doesn't change (returns an error if it does). Is that necessary in
+                    // our case, or do we just support exact input so this doesn't matter?
+                }
+
+                // Set LP fee override if provided by hook
+                if before_swap_result
+                    .result
+                    .fee
+                    .to::<u32>() !=
+                    0
+                {
+                    lp_fee_override = Some(
+                        before_swap_result
+                            .result
+                            .fee
+                            .to::<u32>(),
+                    );
+                }
+            }
+        }
+
+        // Perform the swap with potential hook modifications
+        let result = self.swap(zero_for_one, amount_to_swap, None, lp_fee_override)?;
+
+        if let Some(ref hook) = self.hook {
+            if has_permission(hook.address(), HookOptions::AfterSwap) {
+                let after_swap_params = AfterSwapParameters {
+                    context: state_context,
+                    sender: Address::ZERO,
+                    swap_params,
+                    delta: result.amount_calculated,
+                    hook_data: Bytes::new(),
+                };
+
+                // TODO again, where to get block number?
+                let after_swap_result = hook
+                    .after_swap(after_swap_params, 0)
+                    .map_err(|e| {
+                        SimulationError::FatalError(format!("AfterSwap hook failed: {e:?}"))
+                    })?;
+                after_swap_gas = after_swap_result.gas_estimate;
+            }
+        }
 
         trace!(?amount_in, ?token_in, ?token_out, ?zero_for_one, ?result, "V4 SWAP");
         let mut new_state = self.clone();
@@ -289,14 +383,19 @@ impl ProtocolSim for UniswapV4State {
         new_state.tick = result.tick;
         new_state.sqrt_price = result.sqrt_price;
 
+        // Add hook gas costs to baseline swap cost
+        let total_gas_used = result.gas_used + U256::from(before_swap_gas + after_swap_gas);
+
         Ok(GetAmountOutResult::new(
             u256_to_biguint(
+                // TODO need to add the after swap delta here to this too. Figure out how to get
+                // that.
                 result
                     .amount_calculated
                     .abs()
                     .into_raw(),
             ),
-            u256_to_biguint(result.gas_used),
+            u256_to_biguint(total_gas_used),
             Box::new(new_state),
         ))
     }
