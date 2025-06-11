@@ -1,3 +1,10 @@
+## [0.112.0](https://github.com/propeller-heads/tycho-simulation/compare/0.111.0...0.112.0) (2025-06-11)
+
+
+### Features
+
+* HookHandlerCreator struct + traits ([0a3b68b](https://github.com/propeller-heads/tycho-simulation/commit/0a3b68b555b8fd140b8784b02b3b700458efb2ca))
+
 ## [0.111.0](https://github.com/propeller-heads/tycho-simulation/compare/0.110.0...0.111.0) (2025-06-11)
 
 
