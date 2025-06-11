@@ -1,3 +1,10 @@
+## [0.110.0](https://github.com/propeller-heads/tycho-simulation/compare/0.109.0...0.110.0) (2025-06-11)
+
+
+### Features
+
+* Implement after_swap in generic_vm_hook_handler ([8d8d89e](https://github.com/propeller-heads/tycho-simulation/commit/8d8d89ece8034847981d16fbe23661a619cd3b20))
+
 ## [0.109.0](https://github.com/propeller-heads/tycho-simulation/compare/0.108.0...0.109.0) (2025-06-09)
 
 
