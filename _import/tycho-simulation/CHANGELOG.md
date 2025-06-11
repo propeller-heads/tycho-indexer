@@ -1,3 +1,12 @@
+## [0.113.0](https://github.com/propeller-heads/tycho-simulation/compare/0.112.0...0.113.0) (2025-06-11)
+
+
+### Features
+
+* instantiate_hook_handler ([d73d929](https://github.com/propeller-heads/tycho-simulation/commit/d73d929d85a2ebe99f8d6e76787d6ab470a58c41))
+* register_hook_handler ([594e247](https://github.com/propeller-heads/tycho-simulation/commit/594e247dd02917163975fdfd6d4523837efe6be7))
+* set_default_hook_handler ([6caedfb](https://github.com/propeller-heads/tycho-simulation/commit/6caedfbb9fa0db15f365d46871ca873c9b8d6869))
+
 ## [0.112.0](https://github.com/propeller-heads/tycho-simulation/compare/0.111.0...0.112.0) (2025-06-11)
 
 
