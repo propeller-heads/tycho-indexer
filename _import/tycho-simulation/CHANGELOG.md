@@ -1,3 +1,24 @@
+## [0.112.0](https://github.com/propeller-heads/tycho-simulation/compare/0.111.0...0.112.0) (2025-06-11)
+
+
+### Features
+
+* HookHandlerCreator struct + traits ([0a3b68b](https://github.com/propeller-heads/tycho-simulation/commit/0a3b68b555b8fd140b8784b02b3b700458efb2ca))
+
+## [0.111.0](https://github.com/propeller-heads/tycho-simulation/compare/0.110.0...0.111.0) (2025-06-11)
+
+
+### Features
+
+* **GenericVMHookHandler:** Return errors for unimplemented methods ([8c179d6](https://github.com/propeller-heads/tycho-simulation/commit/8c179d65773bc12ee57f24c3a2bfc81eab4b5e04))
+
+## [0.110.0](https://github.com/propeller-heads/tycho-simulation/compare/0.109.0...0.110.0) (2025-06-11)
+
+
+### Features
+
+* Implement after_swap in generic_vm_hook_handler ([8d8d89e](https://github.com/propeller-heads/tycho-simulation/commit/8d8d89ece8034847981d16fbe23661a619cd3b20))
+
 ## [0.109.0](https://github.com/propeller-heads/tycho-simulation/compare/0.108.0...0.109.0) (2025-06-09)
 
 
