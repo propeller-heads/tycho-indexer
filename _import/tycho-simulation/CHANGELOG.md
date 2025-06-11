@@ -1,3 +1,10 @@
+## [0.111.0](https://github.com/propeller-heads/tycho-simulation/compare/0.110.0...0.111.0) (2025-06-11)
+
+
+### Features
+
+* **GenericVMHookHandler:** Return errors for unimplemented methods ([8c179d6](https://github.com/propeller-heads/tycho-simulation/commit/8c179d65773bc12ee57f24c3a2bfc81eab4b5e04))
+
 ## [0.110.0](https://github.com/propeller-heads/tycho-simulation/compare/0.109.0...0.110.0) (2025-06-11)
 
 
