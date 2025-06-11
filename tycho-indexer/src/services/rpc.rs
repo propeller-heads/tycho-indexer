@@ -2,7 +2,7 @@
 #![allow(deprecated)]
 use std::{collections::HashSet, sync::Arc};
 
-use actix_web::{web, HttpResponse, ResponseError};
+use actix_web::{web, HttpRequest, HttpResponse, ResponseError};
 use anyhow::Error;
 use chrono::{Duration, Utc};
 use diesel_async::pooled_connection::deadpool;
@@ -25,6 +25,7 @@ use crate::{
     services::{
         cache::RpcCache,
         deltas_buffer::{PendingDeltasBuffer, PendingDeltasError},
+        extract_header_value,
     },
 };
 
@@ -784,18 +785,22 @@ where
 pub async fn contract_state<G: Gateway>(
     body: web::Json<dto::StateRequestBody>,
     handler: web::Data<RpcHandler<G>>,
+    req: HttpRequest,
 ) -> HttpResponse {
-    // Note - filtering by protocol system is not supported on this endpoint. This is due to the
-    // complexity of paginating this endpoint with the current design.
+    // Get user identity from header
+    let user_identity =
+        extract_header_value(&req, "user-identity").unwrap_or("unknown".to_string());
 
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page.size", body.pagination.page_size);
     tracing::Span::current().record("protocol.system", &body.protocol_system);
-    counter!("rpc_requests", "endpoint" => "contract_state").increment(1);
+    tracing::Span::current().record("user.identity", &user_identity);
+    counter!("rpc_requests", "endpoint" => "contract_state", "user_identity" => user_identity.clone())
+        .increment(1);
 
     if body.pagination.page_size > 100 {
-        counter!("rpc_requests_failed", "endpoint" => "contract_state", "status" => "400")
+        counter!("rpc_requests_failed", "endpoint" => "contract_state", "status" => "400", "user_identity" => user_identity)
             .increment(1);
         return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
     }
@@ -811,7 +816,7 @@ pub async fn contract_state<G: Gateway>(
         Err(err) => {
             error!(error = %err, ?body, "Error while getting contract state.");
             let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "contract_state", "status" => status)
+            counter!("rpc_requests_failed", "endpoint" => "contract_state", "status" => status, "user_identity" => user_identity)
                 .increment(1);
             HttpResponse::from_error(err)
         }
@@ -836,14 +841,21 @@ pub async fn contract_state<G: Gateway>(
 pub async fn tokens<G: Gateway>(
     body: web::Json<dto::TokensRequestBody>,
     handler: web::Data<RpcHandler<G>>,
+    req: HttpRequest,
 ) -> HttpResponse {
+    // Get user identity from header
+    let user_identity =
+        extract_header_value(&req, "user-identity").unwrap_or("unknown".to_string());
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page.size", body.pagination.page_size);
-    counter!("rpc_requests", "endpoint" => "tokens").increment(1);
+    tracing::Span::current().record("user.identity", &user_identity);
+    counter!("rpc_requests", "endpoint" => "tokens", "user_identity" => user_identity.clone())
+        .increment(1);
 
     if body.pagination.page_size > 3000 {
-        counter!("rpc_requests_failed", "endpoint" => "tokens", "status" => "400").increment(1);
+        counter!("rpc_requests_failed", "endpoint" => "tokens", "status" => "400", "user_identity" => user_identity).increment(1);
         return HttpResponse::BadRequest().body("Page size must be less than or equal to 3000.");
     }
 
@@ -858,7 +870,7 @@ pub async fn tokens<G: Gateway>(
         Err(err) => {
             error!(error = %err, ?body, "Error while getting tokens.");
             let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "tokens", "status" => status)
+            counter!("rpc_requests_failed", "endpoint" => "tokens", "status" => status, "user_identity" => user_identity)
                 .increment(1);
             HttpResponse::from_error(err)
         }
@@ -883,15 +895,22 @@ pub async fn tokens<G: Gateway>(
 pub async fn protocol_components<G: Gateway>(
     body: web::Json<dto::ProtocolComponentsRequestBody>,
     handler: web::Data<RpcHandler<G>>,
+    req: HttpRequest,
 ) -> HttpResponse {
+    // Get user identity from header
+    let user_identity =
+        extract_header_value(&req, "user-identity").unwrap_or("unknown".to_string());
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page.size", body.pagination.page_size);
     tracing::Span::current().record("protocol.system", &body.protocol_system);
-    counter!("rpc_requests", "endpoint" => "protocol_components").increment(1);
+    tracing::Span::current().record("user.identity", &user_identity);
+    counter!("rpc_requests", "endpoint" => "protocol_components", "user_identity" => user_identity.clone())
+        .increment(1);
 
     if body.pagination.page_size > 500 {
-        counter!("rpc_requests_failed", "endpoint" => "protocol_components", "status" => "400")
+        counter!("rpc_requests_failed", "endpoint" => "protocol_components", "status" => "400", "user_identity" => user_identity)
             .increment(1);
         return HttpResponse::BadRequest().body("Page size must be less than or equal to 500.");
     }
@@ -907,7 +926,7 @@ pub async fn protocol_components<G: Gateway>(
         Err(err) => {
             error!(error = %err, ?body, "Error while getting tokens.");
             let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "protocol_components", "status" => status).increment(1);
+            counter!("rpc_requests_failed", "endpoint" => "protocol_components", "status" => status, "user_identity" => user_identity).increment(1);
             HttpResponse::from_error(err)
         }
     }
@@ -930,15 +949,22 @@ pub async fn protocol_components<G: Gateway>(
 pub async fn protocol_state<G: Gateway>(
     body: web::Json<dto::ProtocolStateRequestBody>,
     handler: web::Data<RpcHandler<G>>,
+    req: HttpRequest,
 ) -> HttpResponse {
+    // Get user identity from header
+    let user_identity =
+        extract_header_value(&req, "user-identity").unwrap_or("unknown".to_string());
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page.size", body.pagination.page_size);
     tracing::Span::current().record("protocol.system", &body.protocol_system);
-    counter!("rpc_requests", "endpoint" => "protocol_state").increment(1);
+    tracing::Span::current().record("user.identity", &user_identity);
+    counter!("rpc_requests", "endpoint" => "protocol_state", "user_identity" => user_identity.clone())
+        .increment(1);
 
     if body.pagination.page_size > 100 {
-        counter!("rpc_requests_failed", "endpoint" => "protocol_state", "status" => "400")
+        counter!("rpc_requests_failed", "endpoint" => "protocol_state", "status" => "400", "user_identity" => user_identity)
             .increment(1);
         return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
     }
@@ -954,7 +980,7 @@ pub async fn protocol_state<G: Gateway>(
         Err(err) => {
             error!(error = %err, ?body, "Error while getting protocol states.");
             let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "protocol_state", "status" => status)
+            counter!("rpc_requests_failed", "endpoint" => "protocol_state", "status" => status, "user_identity" => user_identity)
                 .increment(1);
             HttpResponse::from_error(err)
         }
@@ -978,14 +1004,21 @@ pub async fn protocol_state<G: Gateway>(
 pub async fn protocol_systems<G: Gateway>(
     body: web::Json<dto::ProtocolSystemsRequestBody>,
     handler: web::Data<RpcHandler<G>>,
+    req: HttpRequest,
 ) -> HttpResponse {
+    // Get user identity from header
+    let user_identity =
+        extract_header_value(&req, "user-identity").unwrap_or("unknown".to_string());
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page.size", body.pagination.page_size);
-    counter!("rpc_requests", "endpoint" => "protocol_systems").increment(1);
+    tracing::Span::current().record("user.identity", &user_identity);
+    counter!("rpc_requests", "endpoint" => "protocol_systems", "user_identity" => user_identity.clone())
+        .increment(1);
 
     if body.pagination.page_size > 100 {
-        counter!("rpc_requests_failed", "endpoint" => "protocol_systems", "status" => "400")
+        counter!("rpc_requests_failed", "endpoint" => "protocol_systems", "status" => "400", "user_identity" => user_identity)
             .increment(1);
         return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
     }
@@ -1001,7 +1034,7 @@ pub async fn protocol_systems<G: Gateway>(
         Err(err) => {
             error!(error = %err, ?body, "Error while getting protocol systems.");
             let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "protocol_systems", "status" => status)
+            counter!("rpc_requests_failed", "endpoint" => "protocol_systems", "status" => status, "user_identity" => user_identity)
                 .increment(1);
             HttpResponse::from_error(err)
         }
@@ -1025,11 +1058,24 @@ pub async fn protocol_systems<G: Gateway>(
 pub async fn component_tvl<G: Gateway>(
     body: web::Json<dto::ComponentTvlRequestBody>,
     handler: web::Data<RpcHandler<G>>,
+    req: HttpRequest,
 ) -> HttpResponse {
+    // Get user identity from header
+    let user_identity =
+        extract_header_value(&req, "user-identity").unwrap_or("unknown".to_string());
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
     tracing::Span::current().record("page.size", body.pagination.page_size);
-    counter!("rpc_requests", "endpoint" => "component_tvl").increment(1);
+    tracing::Span::current().record("user.identity", &user_identity);
+    counter!("rpc_requests", "endpoint" => "component_tvl", "user_identity" => user_identity.clone())
+        .increment(1);
+
+    if body.pagination.page_size > 500 {
+        counter!("rpc_requests_failed", "endpoint" => "component_tvl", "status" => "400", "user_identity" => user_identity)
+            .increment(1);
+        return HttpResponse::BadRequest().body("Page size must be less than or equal to 500.");
+    }
 
     // Call the handler to get component tvl
     let response = handler
@@ -1042,7 +1088,7 @@ pub async fn component_tvl<G: Gateway>(
         Err(err) => {
             error!(error = %err, ?body, "Error while getting component tvl.");
             let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "component_tvl", "status" => status)
+            counter!("rpc_requests_failed", "endpoint" => "component_tvl", "status" => status, "user_identity" => user_identity)
                 .increment(1);
             HttpResponse::from_error(err)
         }
@@ -1062,8 +1108,12 @@ pub async fn component_tvl<G: Gateway>(
          ("apiKey" = [])
     )
 )]
-pub async fn health() -> HttpResponse {
-    counter!("rpc_requests", "endpoint" => "health").increment(1);
+pub async fn health(req: HttpRequest) -> HttpResponse {
+    // Get user identity from header
+    let user_identity =
+        extract_header_value(&req, "user-identity").unwrap_or("unknown".to_string());
+
+    counter!("rpc_requests", "endpoint" => "health", "user_identity" => user_identity).increment(1);
     HttpResponse::Ok().json(dto::Health::Ready)
 }
 
