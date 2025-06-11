@@ -84,7 +84,7 @@ where
         );
 
         Ok(GenericVMHookHandler {
-            contract: TychoSimulationContract::new_swap_adapter(address, bytecode, engine)?,
+            contract: TychoSimulationContract::new_contract(address, bytecode, engine)?,
             address,
             pool_manager,
         })
