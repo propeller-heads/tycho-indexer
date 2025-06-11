@@ -14,8 +14,8 @@ use crate::{
         engine_db::{
             create_engine,
             engine_db_interface::EngineDatabaseInterface,
-            simulation_db::{BlockHeader, SimulationDB},
-            utils::{get_client, get_runtime},
+            simulation_db::BlockHeader,
+            SHARED_TYCHO_DB,
         },
         protocol::{
             uniswap_v4::{
@@ -86,38 +86,17 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
         let bytecode =
             Bytecode::new_raw(alloy::primitives::Bytes::from(hook_bytecode_bytes.0.clone()));
 
-        let block_header = BlockHeader {
+        let _block_header = BlockHeader {
             number: params.block.number,
             hash: params.block.hash,
             timestamp: params.block.timestamp,
         };
-
-        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block_header));
-
-        let engine = create_engine(db, true).map_err(|e| {
+        
+        let engine = create_engine(SHARED_TYCHO_DB.clone(), true).map_err(|e| {
             InvalidSnapshotError::VMError(SimulationError::FatalError(format!(
                 "Failed to create engine: {e:?}"
             )))
         })?;
-
-        // TODO what is the difference between params.account_balances and params.balances?
-        for account_bytes in params.account_balances.keys() {
-            let account_address = Address::from_slice(&account_bytes.0);
-
-            let account_balance = U256::from(1000000000000000000u64); // 1 ETH default
-
-            engine.state.init_account(
-                account_address,
-                AccountInfo {
-                    balance: account_balance,
-                    nonce: 0,
-                    code_hash: B256::ZERO,
-                    code: None, // No code for regular accounts
-                },
-                None,
-                false,
-            );
-        }
 
         // Initialize all token contracts
         for token_address_bytes in params.all_tokens.keys() {
