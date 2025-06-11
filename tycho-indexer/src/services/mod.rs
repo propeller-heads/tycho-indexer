@@ -4,7 +4,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use actix_cors::Cors;
-use actix_web::{dev::ServerHandle, http, web, App, HttpServer};
+use actix_web::{dev::ServerHandle, http, web, App, HttpRequest, HttpServer};
 use actix_web_opentelemetry::RequestTracing;
 use deltas_buffer::PendingDeltasBuffer;
 use futures03::future::try_join_all;
@@ -38,6 +38,14 @@ mod deltas_buffer;
 mod rpc;
 mod ws;
 
+/// Helper function to extract and validate a header value
+fn extract_header_value(req: &HttpRequest, header_name: &str) -> Option<String> {
+    req.headers()
+        .get(header_name)
+        .and_then(|value| value.to_str().ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
 /// Helper struct to build Tycho services such as HTTP and WS server.
 pub struct ServicesBuilder<G> {
     prefix: String,
