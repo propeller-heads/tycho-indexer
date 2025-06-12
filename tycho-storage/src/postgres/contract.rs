@@ -1040,8 +1040,8 @@ impl PostgresGateway {
 
         diesel::insert_into(schema::account::table)
             .values(new_contract.new_account())
-            .returning(schema::account::id)
-            .get_result::<i64>(db)
+            .on_conflict_do_nothing()
+            .execute(db)
             .await
             .map_err(|err| {
                 error!("Failed inserting account");
