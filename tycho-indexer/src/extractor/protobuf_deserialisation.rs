@@ -891,7 +891,7 @@ mod test {
     #[rstest]
     #[case::rpc_trace_data(
         substreams::entry_point_params::TraceData::Rpc(
-                substreams::RpcTraceData {
+            substreams::RpcTraceData{
                     caller: Some(Bytes::from_str("0x1234567890123456789012345678901234567890")
                         .unwrap()
                         .to_vec()),
@@ -899,13 +899,14 @@ mod test {
                         .unwrap()
                         .to_vec(),
                 },
-            ),
-            TracingParams::RPCTracer(
-                RPCTracerParams {
+        ),
+        TracingParams::RPCTracer(
+            RPCTracerParams{
                     caller: Some(Address::from_str("0x1234567890123456789012345678901234567890").unwrap()),
                     calldata: Bytes::from_str("0xabcdef").unwrap(),
+                    state_overrides: None,
                 }
-            )
+        )
     )]
     fn test_parse_entrypoint_params(
         #[case] trace_data: substreams::entry_point_params::TraceData,
