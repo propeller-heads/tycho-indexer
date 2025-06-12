@@ -1,3 +1,15 @@
+## [0.114.0](https://github.com/propeller-heads/tycho-simulation/compare/0.113.0...0.114.0) (2025-06-11)
+
+
+### Features
+
+* rename new_swap_adapter -> new_contract ([ccd364c](https://github.com/propeller-heads/tycho-simulation/commit/ccd364c754dfe830994a5fb899cd4a23e217321b))
+
+
+### Bug Fixes
+
+* fix after merging main ([918794b](https://github.com/propeller-heads/tycho-simulation/commit/918794b4b061136c2b595241452faec9b0ea7377))
+
 ## [0.113.0](https://github.com/propeller-heads/tycho-simulation/compare/0.112.0...0.113.0) (2025-06-11)
 
 

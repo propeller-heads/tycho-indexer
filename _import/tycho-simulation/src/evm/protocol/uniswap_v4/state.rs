@@ -10,6 +10,7 @@ use crate::{
     evm::protocol::{
         safe_math::{safe_add_u256, safe_sub_u256},
         u256_num::u256_to_biguint,
+        uniswap_v4::hooks::hook_handler::HookHandler,
         utils::uniswap::{
             i24_be_bytes_to_i32, liquidity_math,
             sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
@@ -30,14 +31,27 @@ use crate::{
     },
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct UniswapV4State {
     liquidity: u128,
     sqrt_price: U256,
     fees: UniswapV4Fees,
     tick: i32,
     ticks: TickList,
+    pub hook: Option<Box<dyn HookHandler>>,
 }
+
+impl PartialEq for UniswapV4State {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.hook, &other.hook) {
+            (Some(a), Some(b)) => a.is_equal(&**b),
+            (None, None) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for UniswapV4State {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UniswapV4Fees {
@@ -78,7 +92,7 @@ impl UniswapV4State {
                 .expect("tick_spacing should always be positive"),
             ticks,
         );
-        UniswapV4State { liquidity, sqrt_price, fees, tick, ticks: tick_list }
+        UniswapV4State { liquidity, sqrt_price, fees, tick, ticks: tick_list, hook: None }
     }
 
     fn swap(
@@ -207,6 +221,10 @@ impl UniswapV4State {
             tick: state.tick,
             gas_used,
         })
+    }
+
+    pub fn set_hook_handler(&mut self, handler: Box<dyn HookHandler>) {
+        self.hook = Some(handler);
     }
 
     fn get_sqrt_ratio_target(
