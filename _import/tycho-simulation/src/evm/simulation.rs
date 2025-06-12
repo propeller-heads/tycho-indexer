@@ -125,8 +125,10 @@ where
             .with_tx(tx_env.clone())
             .modify_journal_chained(|journal| {
                 if let Some(transient_storage) = params.transient_storage.clone() {
-                    for (address, (slot, value)) in transient_storage {
-                        journal.tstore(address, slot, value);
+                    for (address, slots) in transient_storage {
+                        for (slot, value) in slots {
+                            journal.tstore(address, slot, value);
+                        }
                     }
                 }
             });
@@ -351,9 +353,9 @@ pub struct SimulationParameters {
     pub block_number: u64,
     /// The timestamp to be used by the transaction
     pub timestamp: u64,
-    /// Map of the address whose transient storage will be overwritten, to a tuple of a storage
-    /// slot and value.
-    pub transient_storage: Option<HashMap<Address, (U256, U256)>>,
+    /// Map of the address whose transient storage will be overwritten, to a map of storage slot
+    /// and value.
+    pub transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
 }
 
 #[cfg(test)]

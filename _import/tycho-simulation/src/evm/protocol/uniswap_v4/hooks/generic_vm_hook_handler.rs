@@ -93,9 +93,9 @@ where
         })
     }
 
-    pub fn unlock_pool_manager(&self) -> HashMap<Address, (U256, U256)> {
+    pub fn unlock_pool_manager(&self) -> HashMap<Address, HashMap<U256, U256>> {
         let is_unlocked_slot = U256::from_be_bytes(keccak256("Unlocked").0) - U256::from(1);
-        HashMap::from([(self.pool_manager, (is_unlocked_slot, U256::from(1u64)))])
+        HashMap::from([(self.pool_manager, HashMap::from([(is_unlocked_slot, U256::from(1u64))]))])
         // the slot is here https://github.com/Uniswap/v4-core/blob/main/src/libraries/Lock.sol#L8C5-L8C117
     }
 }
@@ -399,6 +399,7 @@ mod tests {
         let result = hook_handler.after_swap(after_swap_params, block.number);
 
         let res = result.unwrap().result;
+        // This hook does not return any delta, so we expect it to be zero.
         assert_eq!(res, I256::from_raw(U256::from_str("0").unwrap()));
     }
 }

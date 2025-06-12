@@ -127,7 +127,7 @@ where
         overrides: Option<HashMap<Address, HashMap<U256, U256>>>,
         caller: Option<Address>,
         value: U256,
-        transient_storage: Option<HashMap<Address, (U256, U256)>>,
+        transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<TychoSimulationResponse, SimulationError> {
         let call_data = self.encode_input(selector, args);
         let params = SimulationParameters {
@@ -303,7 +303,7 @@ mod tests {
             .expect("Failed to create GenericVMHookHandler");
 
         let transient_storage_params =
-            HashMap::from([(contract_address, (storage_slot, storage_value))]);
+            HashMap::from([(contract_address, HashMap::from([(storage_slot, storage_value)]))]);
         let args = ();
         let selector = "test()";
 
