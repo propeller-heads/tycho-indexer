@@ -70,7 +70,15 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
             .get("hook_address")
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("hook_address".to_string()))?;
 
+        let pool_manager_address_bytes = params
+            .attributes
+            .get("pool_manager_address")
+            .ok_or_else(|| {
+                InvalidSnapshotError::MissingAttribute("pool_manager_address".to_string())
+            })?;
+
         let hook_address = Address::from_slice(&hook_address_bytes.0);
+        let pool_manager_address = Address::from_slice(&pool_manager_address_bytes.0);
 
         let engine = create_engine(SHARED_TYCHO_DB.clone(), true).map_err(|e| {
             InvalidSnapshotError::VMError(SimulationError::FatalError(format!(
@@ -99,7 +107,7 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
             );
         }
 
-        let hook_handler = GenericVMHookHandler::new(hook_address, engine)
+        let hook_handler = GenericVMHookHandler::new(hook_address, engine, pool_manager_address)
             .map_err(InvalidSnapshotError::VMError)?;
 
         Ok(Box::new(hook_handler))

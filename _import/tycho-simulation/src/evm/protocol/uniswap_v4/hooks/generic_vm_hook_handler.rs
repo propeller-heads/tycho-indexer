@@ -344,7 +344,19 @@ mod tests {
         let bytecode =
             Bytecode::new_raw(include_bytes!("assets/after_swap_test_hook_bytecode.bin").into());
 
-        let hook_handler = GenericVMHookHandler::new(hook_address, bytecode, engine, pool_manager)
+        engine.state.init_account(
+            hook_address,
+            AccountInfo {
+                balance: *MAX_BALANCE,
+                nonce: 0,
+                code_hash: B256::from(keccak256(bytecode.clone().bytes())),
+                code: Some(bytecode),
+            },
+            None,
+            true,
+        );
+
+        let hook_handler = GenericVMHookHandler::new(hook_address, engine, pool_manager)
             .expect("Failed to create GenericVMHookHandler");
 
         let context = StateContext {
