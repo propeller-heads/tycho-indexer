@@ -38,7 +38,6 @@ pub struct UniswapV4State {
     fees: UniswapV4Fees,
     tick: i32,
     ticks: TickList,
-    // Hook handler for the pool
     pub hook: Option<Box<dyn HookHandler>>,
 }
 
