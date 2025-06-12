@@ -65,7 +65,13 @@ where
         address: Address,
         engine: SimulationEngine<D>,
         pool_manager: Address,
+        // TODO are all of these necessary?
+        _all_tokens: HashMap<Bytes, Token>,
+        _account_balances: HashMap<Bytes, HashMap<Bytes, Bytes>>,
+        _balances: HashMap<Bytes, Bytes>,
     ) -> Result<Self, SimulationError> {
+        // TODO overwrite token balances (see how it's done in USV4 Pool State)
+
         // Init pool manager
         // For now we use saved bytecode, but tycho-indexer should be able to provide this
         let pool_manager_bytecode = Bytecode::new_raw(POOL_MANAGER_BYTECODE.into());
@@ -279,8 +285,15 @@ mod tests {
         let pool_manager = Address::from_str("0x000000000004444c5dc75cb358380d2e3de08a90")
             .expect("Invalid pool manager address");
 
-        let hook_handler = GenericVMHookHandler::new(hook_address, engine, pool_manager)
-            .expect("Failed to create GenericVMHookHandler");
+        let hook_handler = GenericVMHookHandler::new(
+            hook_address,
+            engine,
+            pool_manager,
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+        )
+        .expect("Failed to create GenericVMHookHandler");
 
         // simulating this tx: 0x6eef1c491d72edf73efd007b152b18d5f7814c5f3bd1c7d9be465fb9b4920f17
         let params = BeforeSwapParameters {
@@ -356,8 +369,15 @@ mod tests {
             true,
         );
 
-        let hook_handler = GenericVMHookHandler::new(hook_address, engine, pool_manager)
-            .expect("Failed to create GenericVMHookHandler");
+        let hook_handler = GenericVMHookHandler::new(
+            hook_address,
+            engine,
+            pool_manager,
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+        )
+        .expect("Failed to create GenericVMHookHandler");
 
         let context = StateContext {
             currency_0: Address::from_str("0x0000000000000000000000000000000000000000").unwrap(),

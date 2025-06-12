@@ -1,23 +1,16 @@
 #![allow(dead_code)]
 use std::{collections::HashMap, sync::RwLock};
 
-use alloy::{
-    primitives::{keccak256, Address, B256, U256},
-    rpc::types::Header,
-};
+use alloy::{primitives::Address, rpc::types::Header};
 use lazy_static::lazy_static;
-use revm::state::{AccountInfo, Bytecode};
 use tycho_common::Bytes;
 
 use crate::{
     evm::{
-        engine_db::{create_engine, engine_db_interface::EngineDatabaseInterface, SHARED_TYCHO_DB},
-        protocol::{
-            uniswap_v4::{
-                hooks::{generic_vm_hook_handler::GenericVMHookHandler, hook_handler::HookHandler},
-                state::UniswapV4State,
-            },
-            vm::constants::ERC20_BYTECODE,
+        engine_db::{create_engine, SHARED_TYCHO_DB},
+        protocol::uniswap_v4::{
+            hooks::{generic_vm_hook_handler::GenericVMHookHandler, hook_handler::HookHandler},
+            state::UniswapV4State,
         },
     },
     models::Token,
@@ -34,6 +27,8 @@ pub struct HookCreationParams<'a> {
     /// it will be encoded as a big endian signed hex string. See ResponseProtocolState for more
     /// details.
     pub(crate) attributes: &'a HashMap<String, Bytes>,
+    // TODO are these balances a mapping from storage slot to value? I can't find an example in
+    //  any test - it's always an empty HashMap.
     /// Sum aggregated balances of the component. See ResponseProtocolState for more details.
     balances: &'a HashMap<Bytes, Bytes>,
 }
@@ -86,29 +81,15 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
             )))
         })?;
 
-        // Initialize all token contracts
-        for token_address_bytes in params.all_tokens.keys() {
-            let token_address = Address::from_slice(&token_address_bytes.0);
-
-            // Deploy ERC20 contract for this token
-            let erc20_bytecode = Bytecode::new_raw(alloy::primitives::Bytes::from(ERC20_BYTECODE));
-            let code_hash = B256::from(keccak256(erc20_bytecode.clone().bytes()));
-
-            engine.state.init_account(
-                token_address,
-                AccountInfo {
-                    balance: U256::ZERO, // Token contracts have zero ETH balance
-                    nonce: 1,
-                    code_hash,
-                    code: Some(erc20_bytecode),
-                },
-                None,
-                false,
-            );
-        }
-
-        let hook_handler = GenericVMHookHandler::new(hook_address, engine, pool_manager_address)
-            .map_err(InvalidSnapshotError::VMError)?;
+        let hook_handler = GenericVMHookHandler::new(
+            hook_address,
+            engine,
+            pool_manager_address,
+            params.all_tokens.clone(),
+            params.account_balances.clone(),
+            params.balances.clone(),
+        )
+        .map_err(InvalidSnapshotError::VMError)?;
 
         Ok(Box::new(hook_handler))
     }
