@@ -1,6 +1,6 @@
 use std::{
     any::Any,
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::{hash_map::Entry, BTreeMap, HashMap, HashSet},
     sync::Arc,
 };
 
@@ -16,8 +16,8 @@ use crate::{
             ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
         },
         token::Token,
-        Address, BlockHash, Chain, ComponentId, EntryPointId, ExtractorIdentity, MergeError,
-        NormalisedMessage, StoreKey,
+        Address, Balance, BlockHash, Chain, Code, ComponentId, EntryPointId, ExtractorIdentity,
+        MergeError, NormalisedMessage, StoreKey, StoreVal,
     },
     Bytes,
 };
@@ -414,6 +414,14 @@ impl From<dto::EntryPointWithTracingParams> for EntryPointWithTracingParams {
                 params: TracingParams::RPCTracer(RPCTracerParams {
                     caller: tracer_params.caller.clone(),
                     calldata: tracer_params.calldata.clone(),
+                    state_overrides: tracer_params
+                        .state_overrides
+                        .clone()
+                        .map(|s| {
+                            s.into_iter()
+                                .map(|(k, v)| (k, v.into()))
+                                .collect()
+                        }),
                 }),
             },
         }
@@ -444,6 +452,38 @@ impl From<dto::TracingParams> for TracingParams {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
+pub enum Storage {
+    Diff(BTreeMap<StoreKey, StoreVal>),
+    Replace(BTreeMap<StoreKey, StoreVal>),
+}
+
+impl From<dto::Storage> for Storage {
+    fn from(value: dto::Storage) -> Self {
+        match value {
+            dto::Storage::Diff(diff) => Storage::Diff(diff),
+            dto::Storage::Replace(replace) => Storage::Replace(replace),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
+pub struct AccountOverrides {
+    pub slots: Option<Storage>,
+    pub native_balance: Option<Balance>,
+    pub code: Option<Code>,
+}
+
+impl From<dto::AccountOverrides> for AccountOverrides {
+    fn from(value: dto::AccountOverrides) -> Self {
+        Self {
+            slots: value.slots.map(|s| s.into()),
+            native_balance: value.native_balance,
+            code: value.code,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Deserialize, Eq, Hash)]
 pub struct RPCTracerParams {
     /// The caller address of the transaction, if not provided tracing will use the default value
@@ -451,17 +491,33 @@ pub struct RPCTracerParams {
     pub caller: Option<Address>,
     /// The call data used for the tracing call, this needs to include the function selector
     pub calldata: Bytes,
+    /// Optionally allow for state overrides so that the call works as expected
+    pub state_overrides: Option<BTreeMap<Address, AccountOverrides>>,
 }
 
 impl From<dto::RPCTracerParams> for RPCTracerParams {
     fn from(value: dto::RPCTracerParams) -> Self {
-        Self { caller: value.caller, calldata: value.calldata }
+        Self {
+            caller: value.caller,
+            calldata: value.calldata,
+            state_overrides: value.state_overrides.map(|overrides| {
+                overrides
+                    .into_iter()
+                    .map(|(address, account_overrides)| (address, account_overrides.into()))
+                    .collect()
+            }),
+        }
     }
 }
 
 impl RPCTracerParams {
     pub fn new(caller: Option<Address>, calldata: Bytes) -> Self {
-        Self { caller, calldata }
+        Self { caller, calldata, state_overrides: None }
+    }
+
+    pub fn with_state_overrides(mut self, state: BTreeMap<Address, AccountOverrides>) -> Self {
+        self.state_overrides = Some(state);
+        self
     }
 }
 
