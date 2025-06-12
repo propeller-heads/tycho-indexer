@@ -11,12 +11,7 @@ use tycho_common::Bytes;
 
 use crate::{
     evm::{
-        engine_db::{
-            create_engine,
-            engine_db_interface::EngineDatabaseInterface,
-            simulation_db::BlockHeader,
-            SHARED_TYCHO_DB,
-        },
+        engine_db::{create_engine, engine_db_interface::EngineDatabaseInterface, SHARED_TYCHO_DB},
         protocol::{
             uniswap_v4::{
                 hooks::{generic_vm_hook_handler::GenericVMHookHandler, hook_handler::HookHandler},
@@ -70,7 +65,6 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
         &self,
         params: HookCreationParams<'_>,
     ) -> Result<Box<dyn HookHandler>, InvalidSnapshotError> {
-        // TODO double check how the hook address and bytecode attributes are actually called
         let hook_address_bytes = params
             .attributes
             .get("hook_address")
@@ -78,20 +72,6 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
 
         let hook_address = Address::from_slice(&hook_address_bytes.0);
 
-        let hook_bytecode_bytes = params
-            .attributes
-            .get("hook_bytecode")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("hook_bytecode".to_string()))?;
-
-        let bytecode =
-            Bytecode::new_raw(alloy::primitives::Bytes::from(hook_bytecode_bytes.0.clone()));
-
-        let _block_header = BlockHeader {
-            number: params.block.number,
-            hash: params.block.hash,
-            timestamp: params.block.timestamp,
-        };
-        
         let engine = create_engine(SHARED_TYCHO_DB.clone(), true).map_err(|e| {
             InvalidSnapshotError::VMError(SimulationError::FatalError(format!(
                 "Failed to create engine: {e:?}"
@@ -119,7 +99,7 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
             );
         }
 
-        let hook_handler = GenericVMHookHandler::new(hook_address, bytecode, engine)
+        let hook_handler = GenericVMHookHandler::new(hook_address, engine)
             .map_err(InvalidSnapshotError::VMError)?;
 
         Ok(Box::new(hook_handler))

@@ -63,7 +63,6 @@ where
 {
     pub fn new(
         address: Address,
-        bytecode: Bytecode,
         engine: SimulationEngine<D>,
         pool_manager: Address,
     ) -> Result<Self, SimulationError> {
@@ -84,7 +83,7 @@ where
         );
 
         Ok(GenericVMHookHandler {
-            contract: TychoSimulationContract::new_contract(address, bytecode, engine)?,
+            contract: TychoSimulationContract::new(address, engine)?,
             address,
             pool_manager,
         })
@@ -277,13 +276,10 @@ mod tests {
         let hook_address = Address::from_str("0x0010d0d5db05933fa0d9f7038d365e1541a41888")
             .expect("Invalid hook address");
 
-        // BunniHook bytecode obtained from blockchain explorer.
-        let bytecode = Bytecode::new_raw(include_bytes!("assets/bunni_hook_bytecode.bin").into());
-
         let pool_manager = Address::from_str("0x000000000004444c5dc75cb358380d2e3de08a90")
             .expect("Invalid pool manager address");
 
-        let hook_handler = GenericVMHookHandler::new(hook_address, bytecode, engine, pool_manager)
+        let hook_handler = GenericVMHookHandler::new(hook_address, engine, pool_manager)
             .expect("Failed to create GenericVMHookHandler");
 
         // simulating this tx: 0x6eef1c491d72edf73efd007b152b18d5f7814c5f3bd1c7d9be465fb9b4920f17
