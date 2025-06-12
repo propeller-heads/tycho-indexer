@@ -1,25 +1,27 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     str::FromStr,
 };
 
 use async_trait::async_trait;
 use ethcontract::{H160, H256};
 use ethers::{
-    prelude::Middleware,
+    prelude::{spoof, Middleware},
     providers::{Http, Provider},
     types::{
         Address as EthersAddress, BlockId, Bytes as EthersBytes, CallFrame,
         GethDebugBuiltInTracerType, GethDebugTracerType, GethDebugTracingCallOptions,
         GethDebugTracingOptions, GethTrace, GethTraceFrame, NameOrAddress, PreStateFrame,
-        PreStateMode, TransactionRequest,
+        PreStateMode, TransactionRequest, U256,
     },
 };
-use thiserror::Error;
 use tycho_common::{
     keccak256,
     models::{
-        blockchain::{EntryPointWithTracingParams, TracedEntryPoint, TracingParams, TracingResult},
+        blockchain::{
+            EntryPointWithTracingParams, RPCTracerParams, Storage, TracedEntryPoint, TracingParams,
+            TracingResult,
+        },
         Address, BlockHash,
     },
     traits::EntryPointTracer,
@@ -43,17 +45,20 @@ impl EVMEntrypointService {
     async fn trace_call(
         &self,
         target: &Address,
-        caller: &Address,
-        data: &Bytes,
+        params: &RPCTracerParams,
         block_hash: &BlockHash,
         tracer_type: GethDebugBuiltInTracerType,
     ) -> Result<GethTrace, RPCError> {
+        let caller = params
+            .caller
+            .as_ref()
+            .map(H160::from_bytes);
         self.provider
             .debug_trace_call(
                 TransactionRequest {
                     to: Some(NameOrAddress::Address(H160::from_bytes(target))),
-                    from: Some(H160::from_bytes(caller)),
-                    data: Some(EthersBytes::from(data.to_vec())),
+                    from: caller,
+                    data: Some(EthersBytes::from(params.calldata.to_vec())),
                     ..Default::default()
                 },
                 Some(BlockId::Hash(H256::from_bytes(block_hash))),
@@ -62,12 +67,47 @@ impl EVMEntrypointService {
                         tracer: Some(GethDebugTracerType::BuiltInTracer(tracer_type)),
                         ..Default::default()
                     },
+                    state_overrides: params
+                        .state_overrides
+                        .as_ref()
+                        .map(|s| {
+                            let mut state = spoof::state();
+                            s.iter()
+                                .for_each(|(address, overrides)| {
+                                    let account = state.account(H160::from_slice(address.as_ref()));
+                                    account.storage = match overrides.slots.as_ref() {
+                                        Some(Storage::Diff(slots)) => {
+                                            Some(spoof::Storage::Diff(convert_storage(slots)))
+                                        }
+                                        Some(Storage::Replace(slots)) => {
+                                            Some(spoof::Storage::Diff(convert_storage(slots)))
+                                        }
+                                        _ => None,
+                                    };
+                                    account.balance = overrides
+                                        .native_balance
+                                        .as_ref()
+                                        .map(|b| U256::from_big_endian(b.as_ref()));
+                                    account.code = overrides
+                                        .code
+                                        .as_ref()
+                                        .map(|c| ethers::types::Bytes::from(c.to_vec()));
+                                });
+                            state
+                        }),
                     ..Default::default()
                 },
             )
             .await
             .map_err(RPCError::RequestError)
     }
+}
+
+fn convert_storage(slots: &BTreeMap<Bytes, Bytes>) -> HashMap<H256, H256> {
+    slots
+        .iter()
+        .map(|(k, v)| (H256::from_slice(k.as_ref()), H256::from_slice(v.as_ref())))
+        .collect()
 }
 
 #[async_trait]
@@ -90,11 +130,7 @@ impl EntryPointTracer for EVMEntrypointService {
                     let call_trace = self
                         .trace_call(
                             &entry_point.entry_point.target,
-                            rpc_entry_point
-                                .caller
-                                .as_ref()
-                                .unwrap_or(&EthersAddress::zero().to_bytes()),
-                            &rpc_entry_point.calldata,
+                            rpc_entry_point,
                             &block_hash,
                             GethDebugBuiltInTracerType::CallTracer,
                         )
@@ -113,11 +149,7 @@ impl EntryPointTracer for EVMEntrypointService {
                     let pre_state_trace = self
                         .trace_call(
                             &entry_point.entry_point.target,
-                            rpc_entry_point
-                                .caller
-                                .as_ref()
-                                .unwrap_or(&EthersAddress::zero().to_bytes()),
-                            &rpc_entry_point.calldata,
+                            rpc_entry_point,
                             &block_hash,
                             GethDebugBuiltInTracerType::PreStateTracer,
                         )
