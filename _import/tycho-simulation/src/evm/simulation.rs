@@ -8,10 +8,14 @@ use revm::{
         result::{EVMError, ExecutionResult, Output, ResultAndState},
         BlockEnv, CfgEnv, Context, TxEnv,
     },
-    interpreter::{return_ok, InstructionResult},
+    database::WrapDatabaseRef,
+    interpreter::{
+        return_ok, CallInputs, CallOutcome, CreateInputs, CreateOutcome, InstructionResult,
+        Interpreter,
+    },
     primitives::{hardfork::SpecId, TxKind},
     state::EvmState,
-    DatabaseRef, ExecuteEvm, InspectEvm, MainBuilder, MainContext,
+    DatabaseRef, InspectEvm, Inspector, Journal, MainBuilder, MainContext,
 };
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use strum_macros::Display;
@@ -48,6 +52,147 @@ pub struct SimulationResult {
     pub state_updates: HashMap<Address, StateUpdate>,
     /// Gas used by the transaction (already reduced by the refunded gas)
     pub gas_used: u64,
+    /// Transient storage changes captured during the simulation
+    pub transient_storage: HashMap<Address, HashMap<U256, U256>>,
+}
+
+/// An inspector that combines transient storage tracking with optional EVM tracing.
+///
+/// `CombinedInspector` captures `transient_storage` writes during EVM execution and,
+/// if enabled, delegates full tracing to `TracingInspector`. This is useful when simulating
+/// or analyzing smart contract behavior, especially in contexts like Uniswap v4 hooks where
+/// transient storage is used for ephemeral state.
+///
+/// Use `new_with_tracing()` to enable both tracing and transient tracking, or
+/// `new_transient_only()` to record transient storage changes without overhead from tracing.
+#[derive(Debug)]
+pub struct CombinedInspector {
+    pub transient_changes: HashMap<Address, HashMap<U256, U256>>,
+    pub tracer: Option<TracingInspector>,
+}
+
+impl CombinedInspector {
+    pub fn new_with_tracing() -> Self {
+        Self {
+            transient_changes: HashMap::new(),
+            tracer: Some(TracingInspector::new(TracingInspectorConfig::default())),
+        }
+    }
+
+    pub fn new_transient_only() -> Self {
+        Self { transient_changes: HashMap::new(), tracer: None }
+    }
+}
+impl<DB: DatabaseRef>
+    Inspector<Context<BlockEnv, TxEnv, CfgEnv, WrapDatabaseRef<DB>, Journal<WrapDatabaseRef<DB>>>>
+    for CombinedInspector
+{
+    fn initialize_interp(
+        &mut self,
+        interp: &mut Interpreter,
+        context: &mut Context<
+            BlockEnv,
+            TxEnv,
+            CfgEnv,
+            WrapDatabaseRef<DB>,
+            Journal<WrapDatabaseRef<DB>>,
+        >,
+    ) {
+        if let Some(ref mut tracer) = self.tracer {
+            tracer.initialize_interp(interp, context);
+        }
+    }
+
+    fn step(
+        &mut self,
+        interp: &mut Interpreter,
+        context: &mut Context<
+            BlockEnv,
+            TxEnv,
+            CfgEnv,
+            WrapDatabaseRef<DB>,
+            Journal<WrapDatabaseRef<DB>>,
+        >,
+    ) {
+        if let Some(ref mut tracer) = self.tracer {
+            tracer.step(interp, context)
+        }
+    }
+
+    fn call(
+        &mut self,
+        context: &mut Context<
+            BlockEnv,
+            TxEnv,
+            CfgEnv,
+            WrapDatabaseRef<DB>,
+            Journal<WrapDatabaseRef<DB>>,
+        >,
+        inputs: &mut CallInputs,
+    ) -> Option<CallOutcome> {
+        if let Some(ref mut tracer) = self.tracer {
+            return tracer.call(context, inputs);
+        }
+        None
+    }
+
+    fn call_end(
+        &mut self,
+        context: &mut Context<BlockEnv, TxEnv, CfgEnv, WrapDatabaseRef<DB>>,
+        inputs: &CallInputs,
+        outcome: &mut CallOutcome,
+    ) {
+        for ((address, key), value) in context
+            .journaled_state
+            .transient_storage
+            .iter()
+        {
+            if !value.is_zero() {
+                self.transient_changes
+                    .entry(*address)
+                    .or_default()
+                    .insert(*key, *value);
+            }
+        }
+
+        if let Some(ref mut tracer) = self.tracer {
+            tracer.call_end(context, inputs, outcome);
+        }
+    }
+
+    fn create(
+        &mut self,
+        context: &mut Context<
+            BlockEnv,
+            TxEnv,
+            CfgEnv,
+            WrapDatabaseRef<DB>,
+            Journal<WrapDatabaseRef<DB>>,
+        >,
+        inputs: &mut CreateInputs,
+    ) -> Option<CreateOutcome> {
+        if let Some(ref mut tracer) = self.tracer {
+            return tracer.create(context, inputs);
+        }
+        None
+    }
+
+    fn create_end(
+        &mut self,
+        context: &mut Context<
+            BlockEnv,
+            TxEnv,
+            CfgEnv,
+            WrapDatabaseRef<DB>,
+            Journal<WrapDatabaseRef<DB>>,
+        >,
+        inputs: &CreateInputs,
+        outcome: &mut CreateOutcome,
+    ) {
+        if let Some(ref mut tracer) = self.tracer {
+            tracer.create_end(context, inputs, outcome);
+        }
+    }
 }
 
 /// Simulation engine
@@ -133,31 +278,23 @@ where
                 }
             });
 
-        let evm_result = if self.trace {
-            let mut tracer = TracingInspector::new(TracingInspectorConfig::default());
-
-            let res = {
-                let mut vm = context.build_mainnet_with_inspector(&mut tracer);
-
-                debug!(
-                    "Starting simulation with tx parameters: {:#?} {:#?}",
-                    vm.ctx.tx, vm.ctx.block
-                );
-                vm.inspect_replay()
-            };
-
-            Self::print_traces(tracer, res.as_ref().ok());
-
-            res
+        let mut inspector: CombinedInspector = if self.trace {
+            CombinedInspector::new_with_tracing()
         } else {
-            let mut vm = context.build_mainnet();
+            CombinedInspector::new_transient_only()
+        };
+        let evm_result = {
+            let mut vm = context.build_mainnet_with_inspector(&mut inspector);
 
             debug!("Starting simulation with tx parameters: {:#?} {:#?}", vm.ctx.tx, vm.ctx.block);
+            let res = vm.inspect_replay();
 
-            vm.replay()
+            if let Some(tracer) = inspector.tracer {
+                Self::print_traces(tracer, res.as_ref().ok());
+            }
+            res
         };
-
-        interpret_evm_result(evm_result)
+        interpret_evm_result(evm_result, inspector.transient_changes)
     }
 
     pub fn clear_temp_storage(&mut self) {
@@ -242,11 +379,18 @@ where
 /// * `SimulationError` - simulation wasn't successful for any reason. See variants for details.
 fn interpret_evm_result<DBError: Debug>(
     evm_result: Result<ResultAndState, EVMError<DBError>>,
+    transient_storage: HashMap<Address, HashMap<U256, U256>>,
 ) -> Result<SimulationResult, SimulationEngineError> {
     match evm_result {
         Ok(result_and_state) => match result_and_state.result {
             ExecutionResult::Success { gas_used, gas_refunded, output, .. } => {
-                Ok(interpret_evm_success(gas_used, gas_refunded, output, result_and_state.state))
+                Ok(interpret_evm_success(
+                    gas_used,
+                    gas_refunded,
+                    output,
+                    result_and_state.state,
+                    transient_storage,
+                ))
             }
             ExecutionResult::Revert { output, gas_used } => {
                 Err(SimulationEngineError::TransactionError {
@@ -287,6 +431,7 @@ fn interpret_evm_success(
     gas_refunded: u64,
     output: Output,
     state: EvmState,
+    transient_storage: HashMap<Address, HashMap<U256, U256>>,
 ) -> SimulationResult {
     SimulationResult {
         result: output.into_data(),
@@ -330,6 +475,7 @@ fn interpret_evm_success(
             account_updates
         },
         gas_used: gas_used - gas_refunded,
+        transient_storage,
     }
 }
 
@@ -435,7 +581,11 @@ mod tests {
             .collect(),
         });
 
-        let result = interpret_evm_result(evm_result);
+        let transient_storage = HashMap::from([(
+            Address::from_str("0x1f98400000000000000000000000000000000004").unwrap(),
+            HashMap::from([(U256::from(0), U256::from(1))]),
+        )]);
+        let result = interpret_evm_result(evm_result, transient_storage.clone());
         let simulation_result = result.unwrap();
 
         assert_eq!(simulation_result.result, Bytes::from_static(b"output"));
@@ -456,6 +606,7 @@ mod tests {
         .collect();
         assert_eq!(simulation_result.state_updates, expected_state_updates);
         assert_eq!(simulation_result.gas_used, 90);
+        assert_eq!(simulation_result.transient_storage, transient_storage);
     }
 
     #[test]
@@ -468,7 +619,7 @@ mod tests {
             state: rState::default(),
         });
 
-        let result = interpret_evm_result(evm_result);
+        let result = interpret_evm_result(evm_result, HashMap::new());
 
         assert!(result.is_err());
         let err = result.err().unwrap();
@@ -494,7 +645,7 @@ mod tests {
             state: rState::default(),
         });
 
-        let result = interpret_evm_result(evm_result);
+        let result = interpret_evm_result(evm_result, HashMap::new());
 
         assert!(result.is_err());
         let err = result.err().unwrap();
@@ -512,7 +663,7 @@ mod tests {
         let evm_result: Result<ResultAndState, EVMError<TransportError>> =
             Err(EVMError::Transaction(InvalidTransaction::PriorityFeeGreaterThanMaxFee));
 
-        let result = interpret_evm_result(evm_result);
+        let result = interpret_evm_result(evm_result, HashMap::new());
 
         assert!(result.is_err());
         let err = result.err().unwrap();
@@ -531,7 +682,7 @@ mod tests {
             RpcError::Transport(TransportErrorKind::Custom(Box::from("boo".to_string()))),
         ));
 
-        let result = interpret_evm_result(evm_result);
+        let result = interpret_evm_result(evm_result, HashMap::new());
 
         assert!(result.is_err());
         let err = result.err().unwrap();
