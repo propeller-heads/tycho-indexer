@@ -325,6 +325,10 @@ where
             .txs_with_update
             .extend(new_transactions);
 
+        block_changes
+            .txs_with_update
+            .sort_by_key(|tx| tx.tx.index);
+
         Ok(())
     }
 
