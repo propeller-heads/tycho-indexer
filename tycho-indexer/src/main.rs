@@ -258,7 +258,7 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
         .dci_plugin
         .clone()
         .map_or(Ok(None), |s| match s.as_str() {
-            "rpc" => Ok(Some(DCIType::RPC(run_args.substreams_args.rpc_url.clone()))),
+            "rpc" => Ok(Some(DCIType::RPC(global_args.rpc_url.clone()))),
             _ => Err(ExtractionError::Setup(format!("Unknown DCI plugin: {s}"))),
         })?;
 
