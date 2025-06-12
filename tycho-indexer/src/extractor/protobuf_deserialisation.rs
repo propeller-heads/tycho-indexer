@@ -465,7 +465,6 @@ impl TryFromMessage for TxWithChanges {
             account_balance_changes,
             entrypoints,
             entrypoint_params,
-            ..Default::default()
         })
     }
 }
