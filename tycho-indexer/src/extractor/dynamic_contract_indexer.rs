@@ -97,6 +97,14 @@ where
             }
         }
 
+        if !new_entrypoints.is_empty() {
+            tracing::debug!(entrypoints = ?new_entrypoints, "DCI: Entrypoints");
+        }
+
+        if !new_entrypoint_params.is_empty() {
+            tracing::debug!(entrypoints_params = ?new_entrypoint_params, "DCI: Entrypoints params");
+        }
+
         // Select for analysis the newly detected EntryPointsWithData that haven't been analyzed
         // yet. This filter prevents us from re-analyzing entrypoints that have already been
         // analyzed, which can be a case if all the components have the same entrypoint. This is
@@ -150,10 +158,13 @@ where
 
         // Update the entrypoint results with the retriggered entrypoints
         entrypoints_to_analyze.extend(retriggered_entrypoints);
+
         debug!("DCI: Will analyze {:?} entrypoints", entrypoints_to_analyze.len());
         trace!("DCI: Entrypoints to analyze: {:?}", entrypoints_to_analyze);
 
         if !entrypoints_to_analyze.is_empty() {
+            tracing::debug!(entrypoints_to_analyze = ?entrypoints_to_analyze, "DCI: Entrypoints to analyze");
+
             let traced_entry_points = self
                 .tracer
                 .trace(
@@ -165,6 +176,8 @@ where
                 )
                 .await
                 .map_err(|e| ExtractionError::TracingError(format!("{e:?}")))?;
+
+            tracing::debug!(traced_entry_points = ?traced_entry_points, "DCI: Traced entrypoints");
 
             let mut tx_to_traced_entry_point: HashMap<&Transaction, Vec<&TracedEntryPoint>> =
                 HashMap::new();
@@ -240,6 +253,8 @@ where
                     Ok(StorageSnapshotRequest { address: address.clone(), slots: Some(slots) })
                 })
                 .collect::<Result<Vec<_>, ExtractionError>>()?;
+
+            tracing::debug!(storage_request = ?storage_request, "DCI: Storage request");
 
             let mut new_accounts = self
                 .storage_source
@@ -491,6 +506,10 @@ where
             }
         }
 
+        if !retriggered_entrypoints.is_empty() {
+            tracing::info!("DCI: Retriggered entrypoints: {:?}", retriggered_entrypoints);
+        }
+
         retriggered_entrypoints
     }
 
@@ -626,6 +645,10 @@ where
                     }
                 }
             }
+        }
+
+        if !tracked_updates.is_empty() {
+            tracing::trace!("DCI: Tracked updates: {:?}", tracked_updates);
         }
 
         Ok(tracked_updates)
