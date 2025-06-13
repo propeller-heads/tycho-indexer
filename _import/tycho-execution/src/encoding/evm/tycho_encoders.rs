@@ -96,10 +96,14 @@ impl TychoRouterEncoder {
             .collect();
 
         let mut encoded_solution = if (solution.swaps.len() == 1) ||
-            (protocols.len() == 1 &&
+            ((protocols.len() == 1 &&
                 protocols
                     .iter()
-                    .any(|p| GROUPABLE_PROTOCOLS.contains(&p.as_str())))
+                    .any(|p| GROUPABLE_PROTOCOLS.contains(&p.as_str()))) &&
+                solution
+                    .swaps
+                    .iter()
+                    .all(|swap| swap.split == 0.0))
         {
             self.single_swap_strategy
                 .encode_strategy(solution.clone())?
@@ -603,6 +607,32 @@ mod tests {
             assert_eq!(transactions[0].value, eth_amount_in);
             // sequential swap selector
             assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "e21dd0d3");
+        }
+
+        #[test]
+        fn test_encode_router_calldata_split_swap_group() {
+            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let mut swap_usdc_eth = swap_usdc_eth_univ4();
+            swap_usdc_eth.split = 0.5; // Set split to 50%
+            let solution = Solution {
+                exact_out: false,
+                given_token: usdc(),
+                given_amount: BigUint::from_str("1000_000000").unwrap(),
+                checked_token: eth(),
+                checked_amount: BigUint::from_str("105_152_000000000000000000").unwrap(),
+                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                swaps: vec![swap_usdc_eth, swap_usdc_eth_univ4()],
+                ..Default::default()
+            };
+
+            let encoded_solution_res = encoder.encode_solution(&solution);
+            assert!(encoded_solution_res.is_ok());
+
+            let encoded_solution = encoded_solution_res.unwrap();
+            assert!(encoded_solution
+                .function_signature
+                .contains("splitSwap"));
         }
 
         #[test]
