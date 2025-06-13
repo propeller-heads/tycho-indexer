@@ -14,15 +14,15 @@ use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
     evm::{
-        engine_db::engine_db_interface::EngineDatabaseInterface,
+        engine_db::{engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader},
         protocol::{
             uniswap_v4::{
                 hooks::{
                     constants::POOL_MANAGER_BYTECODE,
                     hook_handler::{
-                        AfterSwapParameters, AfterSwapReturn, AmountRanges, BeforeSwapDelta,
-                        BeforeSwapParameters, BeforeSwapReturn, HookHandler, SwapParams,
-                        WithGasEstimate,
+                        AfterSwapParameters, AfterSwapSolReturn, AmountRanges, BeforeSwapDelta,
+                        BeforeSwapOutput, BeforeSwapParameters, BeforeSwapSolOutput, HookHandler,
+                        SwapParams, WithGasEstimate,
                     },
                 },
                 state::UniswapV4State,
@@ -93,9 +93,9 @@ where
         })
     }
 
-    pub fn unlock_pool_manager(&self) -> HashMap<Address, (U256, U256)> {
+    pub fn unlock_pool_manager(&self) -> HashMap<Address, HashMap<U256, U256>> {
         let is_unlocked_slot = U256::from_be_bytes(keccak256("Unlocked").0) - U256::from(1);
-        HashMap::from([(self.pool_manager, (is_unlocked_slot, U256::from(1u64)))])
+        HashMap::from([(self.pool_manager, HashMap::from([(is_unlocked_slot, U256::from(1u64))]))])
         // the slot is here https://github.com/Uniswap/v4-core/blob/main/src/libraries/Lock.sol#L8C5-L8C117
     }
 }
@@ -112,9 +112,14 @@ where
     fn before_swap(
         &self,
         params: BeforeSwapParameters,
-        block: u64,
-    ) -> Result<WithGasEstimate<BeforeSwapReturn>, SimulationError> {
-        let transient_storage_params = self.unlock_pool_manager();
+        block: BlockHeader,
+        overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
+        transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
+    ) -> Result<WithGasEstimate<BeforeSwapOutput>, SimulationError> {
+        let mut transient_storage_params = self.unlock_pool_manager();
+        if let Some(input_params) = transient_storage {
+            transient_storage_params.extend(input_params);
+        }
         let args = (
             params.sender,
             (
@@ -138,27 +143,47 @@ where
         let res = self.contract.call(
             selector,
             args,
-            block,
-            None,
-            None,
+            block.number,
+            Some(block.timestamp),
+            overwrites,
             Some(self.pool_manager),
             U256::from(0u64),
             Some(transient_storage_params),
         )?;
 
-        let decoded = BeforeSwapReturn::abi_decode(&res.return_value).map_err(|e| {
+        let decoded = BeforeSwapSolOutput::abi_decode(&res.return_value).map_err(|e| {
             SimulationError::FatalError(format!("Failed to decode before swap return value: {e:?}"))
         })?;
-        Ok(WithGasEstimate { gas_estimate: res.simulation_result.gas_used, result: decoded })
+        let state_updates = res.simulation_result.state_updates;
+        let overwrites: HashMap<Address, HashMap<U256, U256>> = state_updates
+            .into_iter()
+            .filter_map(|(address, update)| {
+                update
+                    .storage
+                    .map(|storage| (address, storage))
+            })
+            .collect();
+        Ok(WithGasEstimate {
+            gas_estimate: res.simulation_result.gas_used,
+            result: BeforeSwapOutput::new(
+                decoded,
+                overwrites,
+                res.simulation_result.transient_storage,
+            ),
+        })
     }
 
     fn after_swap(
         &self,
         params: AfterSwapParameters,
-        block: u64,
+        block: BlockHeader,
+        overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
+        transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<WithGasEstimate<BeforeSwapDelta>, SimulationError> {
-        let transient_storage_params = self.unlock_pool_manager();
-
+        let mut transient_storage_params = self.unlock_pool_manager();
+        if let Some(input_params) = transient_storage {
+            transient_storage_params.extend(input_params);
+        }
         let args = (
             params.sender,
             (
@@ -183,15 +208,15 @@ where
         let res = self.contract.call(
             selector,
             args,
-            block,
-            None,
-            None,
+            block.number,
+            Some(block.timestamp),
+            overwrites,
             Some(self.pool_manager),
             U256::from(0u64),
             Some(transient_storage_params),
         )?;
 
-        let decoded = AfterSwapReturn::abi_decode(&res.return_value).map_err(|e| {
+        let decoded = AfterSwapSolReturn::abi_decode(&res.return_value).map_err(|e| {
             SimulationError::FatalError(format!("Failed to decode before swap return value: {e:?}"))
         })?;
         Ok(WithGasEstimate {
@@ -311,17 +336,43 @@ mod tests {
             hook_data: Default::default(),
         };
 
-        let result = hook_handler.before_swap(params, block.number);
+        let result = hook_handler.before_swap(params, block, None, None);
 
         let res = result.unwrap().result;
-        assert_eq!(res.selector.to_string(), "0x575e24b4");
         assert_eq!(
-            res.amountDelta,
+            res.amount_delta,
             I256::from_raw(
                 U256::from_str("68056473384187693032957288407292048885944984507633924869").unwrap()
             )
         );
         assert_eq!(res.fee, U24::from(0));
+
+        let expected_pool_manager_overwrites =            HashMap::from([
+            (U256::from_str("79713336399215462747684527778665522702705876308670869673494720303103901230619").unwrap(), U256::from_str("78844352340497850335").unwrap()),
+            (U256::from_str("108879414307233709404675130083871591294970341372768375199199972515051197806561").unwrap(), U256::from_str("21221083610867514702322193").unwrap()),
+            (U256::from_str("66040010302484169318109846669699282294419705743047365478864291677462571000427").unwrap(), U256::from_str("6979725958049348898386").unwrap()),
+            (U256::from_str("102130606322871718988206911149349113780831816677661791942959449920066266765719").unwrap(), U256::from_str("8016423715570101954005").unwrap()),
+        ]);
+        assert_eq!(
+            *res.overwrites
+                .get(&pool_manager)
+                .unwrap(),
+            expected_pool_manager_overwrites
+        );
+
+        // TODO: once transient storage is retrieved in the simulation, uncomment this
+        // let expected_pool_manager_transient_storage =            HashMap::from([
+        //         (U256::from_str("55705082733434384960622358509877205174921948415007105780397939750626106833531").unwrap(), U256::from_str("56868629622924134286587").unwrap()),
+        //         (U256::from_str("72349358219047000942299849320276948455843849691036087799430587987856838543874").unwrap(), U256::from_str("115792089237316195423570985008687907853269984665640564039457384007913129639936").unwrap()),
+        //         (U256::from_str("87100234046427240614499661373387320107015461065347489303548037305558901893923").unwrap(), U256::from_str("1").unwrap()),
+        //         (U256::from_str("56671960505278111519104690822132496699113179860588238901689140059013086026251").unwrap(), U256::from_str("2").unwrap()),
+        //     ]);
+        // assert_eq!(
+        //     *res.transient_storage
+        //         .get(&pool_manager)
+        //         .unwrap(),
+        //     expected_pool_manager_transient_storage
+        // );
     }
 
     #[test]
@@ -396,9 +447,100 @@ mod tests {
             hook_data: Bytes::new(),
         };
 
-        let result = hook_handler.after_swap(after_swap_params, block.number);
+        let result = hook_handler.after_swap(after_swap_params, block, None, None);
 
         let res = result.unwrap().result;
+        // This hook does not return any delta, so we expect it to be zero.
+        assert_eq!(res, I256::from_raw(U256::from_str("0").unwrap()));
+    }
+
+    #[test]
+    fn test_before_and_after_swap() {
+        let block = BlockHeader {
+            number: 15797251,
+            hash: B256::from_str(
+                "0x7032b93c5b0d419f2001f7c77c19ade6da92d2df147712eac1a27c7ffedfe410",
+            )
+            .unwrap(),
+            timestamp: 1746562410,
+        };
+        let db = SimulationDB::new(
+            get_client(Some("https://unichain.drpc.org".into())),
+            get_runtime(),
+            Some(block),
+        );
+        let engine = create_engine(db, true).expect("Failed to create simulation engine");
+
+        let hook_address = Address::from_str("0x7f7d7e4a9d4da8997730997983c5ca64846868c0")
+            .expect("Invalid hook address");
+
+        let pool_manager = Address::from_str("0x1F98400000000000000000000000000000000004")
+            .expect("Invalid pool manager address");
+
+        let hook_handler = GenericVMHookHandler::new(
+            hook_address,
+            engine,
+            pool_manager,
+            HashMap::new(),
+            HashMap::new(),
+        )
+        .expect("Failed to create GenericVMHookHandler");
+
+        let universal_router =
+            Address::from_str("0xef740bf23acae26f6492b10de645d6b98dc8eaf3").unwrap();
+
+        // simulating this tx: 0x6f471e490570c89482e44edd286db35b2dd93c52307bfe6f28dbe8ed3326470d on
+        // unichain
+        let context = StateContext {
+            currency_0: Address::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+            currency_1: Address::from_str("0x7edc481366a345d7f9fcecb207408b5f2887ff99").unwrap(),
+            fees: UniswapV4Fees { zero_for_one: 0, one_for_zero: 0, lp_fee: 100 },
+            tick: 1,
+        };
+        let swap_params = SwapParams {
+            zero_for_one: true,
+            amount_specified: I256::from_dec_str("-11100000000000000").unwrap(),
+            sqrt_price_limit: U256::from_str("4295128740").unwrap(),
+        };
+        let params = BeforeSwapParameters {
+            context: context.clone(),
+            sender: universal_router,
+            swap_params: swap_params.clone(),
+            hook_data: Default::default(),
+        };
+        // Setting the sender in UniversalRouter transient storage
+        let sender = Address::from_str("0xceeb96f4733ba07ca56d0052fb132ffa1e0d7b16").unwrap();
+        let is_unlocked_slot = U256::from_be_bytes(keccak256("Locker").0) - U256::from(1);
+        let mut transient_storage = HashMap::from([(
+            universal_router,
+            HashMap::from([(is_unlocked_slot, U256::from_be_slice(sender.as_slice()))]),
+        )]);
+
+        let result = hook_handler
+            .before_swap(params, block, None, Some(transient_storage.clone()))
+            .unwrap();
+
+        assert_eq!(result.result.amount_delta, I256::from_dec_str("0").unwrap());
+
+        let after_swap_params = AfterSwapParameters {
+            context,
+            sender: universal_router,
+            swap_params,
+            delta: I256::from_dec_str("-3777134272822416944443458142492627143113384069767150805")
+                .unwrap(),
+            hook_data: Bytes::new(),
+        };
+
+        transient_storage.extend(result.result.transient_storage);
+        let result = hook_handler.after_swap(
+            after_swap_params,
+            block,
+            Some(result.result.overwrites),
+            Some(transient_storage),
+        );
+
+        let res = result.unwrap().result;
+        // This hook does not return any delta, so we expect it to be zero.
         assert_eq!(res, I256::from_raw(U256::from_str("0").unwrap()));
     }
 }

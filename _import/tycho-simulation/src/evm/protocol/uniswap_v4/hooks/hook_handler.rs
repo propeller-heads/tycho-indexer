@@ -3,13 +3,16 @@
 use std::{collections::HashMap, fmt::Debug};
 
 use alloy::{
-    primitives::{Address, I256, U256},
+    primitives::{aliases::U24, Address, I256, U256},
     sol,
 };
 use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
-    evm::protocol::uniswap_v4::state::{UniswapV4Fees, UniswapV4State},
+    evm::{
+        engine_db::simulation_db::BlockHeader,
+        protocol::uniswap_v4::state::{UniswapV4Fees, UniswapV4State},
+    },
     models::{Balances, Token},
     protocol::errors::{SimulationError, TransitionError},
 };
@@ -39,17 +42,39 @@ pub type BeforeSwapDelta = I256;
 
 sol! {
     #[derive(Debug)]
-    struct BeforeSwapReturn {
+    struct BeforeSwapSolOutput {
         bytes4 selector;
         int256 amountDelta;
         uint24 fee;
     }
 
     #[derive(Debug)]
-    struct AfterSwapReturn {
+    struct AfterSwapSolReturn {
         bytes4 selector;
         int128 delta;
    }
+}
+
+pub struct BeforeSwapOutput {
+    pub amount_delta: I256,
+    pub fee: U24,
+    pub overwrites: HashMap<Address, HashMap<U256, U256>>,
+    pub transient_storage: HashMap<Address, HashMap<U256, U256>>,
+}
+
+impl BeforeSwapOutput {
+    pub fn new(
+        before_swap_output: BeforeSwapSolOutput,
+        overwrites: HashMap<Address, HashMap<U256, U256>>,
+        transient_storage: HashMap<Address, HashMap<U256, U256>>,
+    ) -> Self {
+        Self {
+            amount_delta: before_swap_output.amountDelta,
+            fee: before_swap_output.fee,
+            overwrites,
+            transient_storage,
+        }
+    }
 }
 
 pub struct AfterSwapParameters {
@@ -82,14 +107,18 @@ pub trait HookHandler: Debug + Send + Sync + 'static {
     fn before_swap(
         &self,
         params: BeforeSwapParameters,
-        block: u64,
-    ) -> Result<WithGasEstimate<BeforeSwapReturn>, SimulationError>;
+        block: BlockHeader,
+        overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
+        transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
+    ) -> Result<WithGasEstimate<BeforeSwapOutput>, SimulationError>;
 
     /// Simulates the afterSwap Solidity behaviour
     fn after_swap(
         &self,
         params: AfterSwapParameters,
-        block: u64,
+        block: BlockHeader,
+        overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
+        transient_storage_params: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<WithGasEstimate<BeforeSwapDelta>, SimulationError>;
 
     // Currently fee is not accessible on v4 pools, this is for future use
