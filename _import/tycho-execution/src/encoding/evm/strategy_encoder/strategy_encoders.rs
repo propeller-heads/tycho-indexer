@@ -76,7 +76,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
         let number_of_groups = grouped_swaps.len();
         if number_of_groups != 1 {
             return Err(EncodingError::InvalidInput(format!(
-                "Executor strategy only supports exactly one swap for non-groupable protocols. Found {number_of_groups}",
+                "Single strategy only supports exactly one swap for non-groupable protocols. Found {number_of_groups}",
             )))
         }
 
