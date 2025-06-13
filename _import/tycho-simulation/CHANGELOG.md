@@ -1,3 +1,17 @@
+## [0.116.0](https://github.com/propeller-heads/tycho-simulation/compare/0.115.0...0.116.0) (2025-06-13)
+
+
+### Features
+
+* Set storage and transient storage from before swap to after swap ([d1dfd0d](https://github.com/propeller-heads/tycho-simulation/commit/d1dfd0da622d7f5460b87c004c14d6b049ee4b98))
+
+
+### Bug Fixes
+
+* Change transient storage to HashMap<Address, HashMap<U256, U256>> ([82927a4](https://github.com/propeller-heads/tycho-simulation/commit/82927a4a6549d73df9860839a2c88fd82ab19fda))
+* Only pass storage values (not transient storage) ([16a72db](https://github.com/propeller-heads/tycho-simulation/commit/16a72db1f6b118a9ae9d74cce7aabfcdc4e20acf))
+* Remove unnecessary bytecode of unimon hook ([390a1c1](https://github.com/propeller-heads/tycho-simulation/commit/390a1c10a0ed42f6166b229d56e4e0b0f388cb05))
+
 ## [0.115.0](https://github.com/propeller-heads/tycho-simulation/compare/0.114.0...0.115.0) (2025-06-13)
 
 
