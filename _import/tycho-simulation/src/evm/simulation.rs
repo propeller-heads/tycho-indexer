@@ -8,14 +8,10 @@ use revm::{
         result::{EVMError, ExecutionResult, Output, ResultAndState},
         BlockEnv, CfgEnv, Context, TxEnv,
     },
-    database::WrapDatabaseRef,
-    interpreter::{
-        return_ok, CallInputs, CallOutcome, CreateInputs, CreateOutcome, InstructionResult,
-        Interpreter,
-    },
+    interpreter::{return_ok, InstructionResult},
     primitives::{hardfork::SpecId, TxKind},
     state::EvmState,
-    DatabaseRef, InspectEvm, Inspector, Journal, MainBuilder, MainContext,
+    DatabaseRef, ExecuteEvm, InspectEvm, MainBuilder, MainContext,
 };
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use strum_macros::Display;
@@ -54,145 +50,6 @@ pub struct SimulationResult {
     pub gas_used: u64,
     /// Transient storage changes captured during the simulation
     pub transient_storage: HashMap<Address, HashMap<U256, U256>>,
-}
-
-/// An inspector that combines transient storage tracking with optional EVM tracing.
-///
-/// `CombinedInspector` captures `transient_storage` writes during EVM execution and,
-/// if enabled, delegates full tracing to `TracingInspector`. This is useful when simulating
-/// or analyzing smart contract behavior, especially in contexts like Uniswap v4 hooks where
-/// transient storage is used for ephemeral state.
-///
-/// Use `new_with_tracing()` to enable both tracing and transient tracking, or
-/// `new_transient_only()` to record transient storage changes without overhead from tracing.
-#[derive(Debug)]
-pub struct CombinedInspector {
-    pub transient_changes: HashMap<Address, HashMap<U256, U256>>,
-    pub tracer: Option<TracingInspector>,
-}
-
-impl CombinedInspector {
-    pub fn new_with_tracing() -> Self {
-        Self {
-            transient_changes: HashMap::new(),
-            tracer: Some(TracingInspector::new(TracingInspectorConfig::default())),
-        }
-    }
-
-    pub fn new_transient_only() -> Self {
-        Self { transient_changes: HashMap::new(), tracer: None }
-    }
-}
-impl<DB: DatabaseRef>
-    Inspector<Context<BlockEnv, TxEnv, CfgEnv, WrapDatabaseRef<DB>, Journal<WrapDatabaseRef<DB>>>>
-    for CombinedInspector
-{
-    fn initialize_interp(
-        &mut self,
-        interp: &mut Interpreter,
-        context: &mut Context<
-            BlockEnv,
-            TxEnv,
-            CfgEnv,
-            WrapDatabaseRef<DB>,
-            Journal<WrapDatabaseRef<DB>>,
-        >,
-    ) {
-        if let Some(ref mut tracer) = self.tracer {
-            tracer.initialize_interp(interp, context);
-        }
-    }
-
-    fn step(
-        &mut self,
-        interp: &mut Interpreter,
-        context: &mut Context<
-            BlockEnv,
-            TxEnv,
-            CfgEnv,
-            WrapDatabaseRef<DB>,
-            Journal<WrapDatabaseRef<DB>>,
-        >,
-    ) {
-        if let Some(ref mut tracer) = self.tracer {
-            tracer.step(interp, context)
-        }
-    }
-
-    fn call(
-        &mut self,
-        context: &mut Context<
-            BlockEnv,
-            TxEnv,
-            CfgEnv,
-            WrapDatabaseRef<DB>,
-            Journal<WrapDatabaseRef<DB>>,
-        >,
-        inputs: &mut CallInputs,
-    ) -> Option<CallOutcome> {
-        if let Some(ref mut tracer) = self.tracer {
-            return tracer.call(context, inputs);
-        }
-        None
-    }
-
-    fn call_end(
-        &mut self,
-        context: &mut Context<BlockEnv, TxEnv, CfgEnv, WrapDatabaseRef<DB>>,
-        inputs: &CallInputs,
-        outcome: &mut CallOutcome,
-    ) {
-        for ((address, key), value) in context
-            .journaled_state
-            .transient_storage
-            .iter()
-        {
-            if !value.is_zero() {
-                self.transient_changes
-                    .entry(*address)
-                    .or_default()
-                    .insert(*key, *value);
-            }
-        }
-
-        if let Some(ref mut tracer) = self.tracer {
-            tracer.call_end(context, inputs, outcome);
-        }
-    }
-
-    fn create(
-        &mut self,
-        context: &mut Context<
-            BlockEnv,
-            TxEnv,
-            CfgEnv,
-            WrapDatabaseRef<DB>,
-            Journal<WrapDatabaseRef<DB>>,
-        >,
-        inputs: &mut CreateInputs,
-    ) -> Option<CreateOutcome> {
-        if let Some(ref mut tracer) = self.tracer {
-            return tracer.create(context, inputs);
-        }
-        None
-    }
-
-    fn create_end(
-        &mut self,
-        context: &mut Context<
-            BlockEnv,
-            TxEnv,
-            CfgEnv,
-            WrapDatabaseRef<DB>,
-            Journal<WrapDatabaseRef<DB>>,
-        >,
-        inputs: &CreateInputs,
-        outcome: &mut CreateOutcome,
-    ) {
-        if let Some(ref mut tracer) = self.tracer {
-            tracer.create_end(context, inputs, outcome);
-        }
-    }
 }
 
 /// Simulation engine
@@ -278,23 +135,32 @@ where
                 }
             });
 
-        let mut inspector: CombinedInspector = if self.trace {
-            CombinedInspector::new_with_tracing()
+        let evm_result = if self.trace {
+            let mut tracer = TracingInspector::new(TracingInspectorConfig::default());
+
+            let res = {
+                let mut vm = context.build_mainnet_with_inspector(&mut tracer);
+
+                debug!(
+                    "Starting simulation with tx parameters: {:#?} {:#?}",
+                    vm.ctx.tx, vm.ctx.block
+                );
+                vm.inspect_replay()
+            };
+
+            Self::print_traces(tracer, res.as_ref().ok());
+
+            res
         } else {
-            CombinedInspector::new_transient_only()
-        };
-        let evm_result = {
-            let mut vm = context.build_mainnet_with_inspector(&mut inspector);
+            let mut vm = context.build_mainnet();
 
             debug!("Starting simulation with tx parameters: {:#?} {:#?}", vm.ctx.tx, vm.ctx.block);
-            let res = vm.inspect_replay();
 
-            if let Some(tracer) = inspector.tracer {
-                Self::print_traces(tracer, res.as_ref().ok());
-            }
-            res
+            vm.replay()
         };
-        interpret_evm_result(evm_result, inspector.transient_changes)
+
+        // TODO: update revm to 25.0.0 and get transient storage from the journaled state
+        interpret_evm_result(evm_result, HashMap::new())
     }
 
     pub fn clear_temp_storage(&mut self) {
