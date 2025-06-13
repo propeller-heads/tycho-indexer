@@ -1,3 +1,14 @@
+## [0.115.0](https://github.com/propeller-heads/tycho-simulation/compare/0.114.0...0.115.0) (2025-06-13)
+
+
+### Features
+
+* Don't overwrite tokens in hook handler creator ([e497dcb](https://github.com/propeller-heads/tycho-simulation/commit/e497dcbce87675590d62671e0b33f9eec65c22a3))
+* GenericVMHookHandlerCreator ([4cf908a](https://github.com/propeller-heads/tycho-simulation/commit/4cf908a6dd69799fd35a21006e3f3748081a2023))
+* Properly mock bytecode in after_swap test ([0340ebb](https://github.com/propeller-heads/tycho-simulation/commit/0340ebbee8737e7793defd1f60316bf101a58ac5))
+* Remove bytecode from hook handler input ([2265874](https://github.com/propeller-heads/tycho-simulation/commit/22658745982a8a7eb3227c9ab0e0476586abed0d))
+* Use SHARED_TYCHO_DB, remove balance inits ([7497116](https://github.com/propeller-heads/tycho-simulation/commit/7497116930e4983b8d79471fe285a4114b44788b))
+
 ## [0.114.0](https://github.com/propeller-heads/tycho-simulation/compare/0.113.0...0.114.0) (2025-06-11)
 
 
