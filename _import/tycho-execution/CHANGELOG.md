@@ -1,3 +1,11 @@
+## [0.100.1](https://github.com/propeller-heads/tycho-execution/compare/0.100.0...0.100.1) (2025-06-13)
+
+
+### Bug Fixes
+
+* Correct misleading error message ([a6cf215](https://github.com/propeller-heads/tycho-execution/commit/a6cf2159d0811e7bbc01dcf61537a797c7934a1b))
+* When choosing strategy, check if the grouped solution has any split ([9599425](https://github.com/propeller-heads/tycho-execution/commit/95994250b1516285372f94aa814177b5a250d014))
+
 ## [0.100.0](https://github.com/propeller-heads/tycho-execution/compare/0.99.0...0.100.0) (2025-06-06)
 
 
