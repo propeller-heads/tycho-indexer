@@ -36,7 +36,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-struct GenericVMHookHandler<D: EngineDatabaseInterface + Clone + Debug>
+pub struct GenericVMHookHandler<D: EngineDatabaseInterface + Clone + Debug>
 where
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
@@ -63,10 +63,13 @@ where
 {
     pub fn new(
         address: Address,
-        bytecode: Bytecode,
         engine: SimulationEngine<D>,
         pool_manager: Address,
+        _all_tokens: HashMap<Bytes, Token>,
+        _account_balances: HashMap<Bytes, HashMap<Bytes, Bytes>>,
     ) -> Result<Self, SimulationError> {
+        // TODO overwrite token balances (see how it's done in EVMPoolState)
+
         // Init pool manager
         // For now we use saved bytecode, but tycho-indexer should be able to provide this
         let pool_manager_bytecode = Bytecode::new_raw(POOL_MANAGER_BYTECODE.into());
@@ -84,7 +87,7 @@ where
         );
 
         Ok(GenericVMHookHandler {
-            contract: TychoSimulationContract::new_contract(address, bytecode, engine)?,
+            contract: TychoSimulationContract::new(address, engine)?,
             address,
             pool_manager,
         })
@@ -277,14 +280,17 @@ mod tests {
         let hook_address = Address::from_str("0x0010d0d5db05933fa0d9f7038d365e1541a41888")
             .expect("Invalid hook address");
 
-        // BunniHook bytecode obtained from blockchain explorer.
-        let bytecode = Bytecode::new_raw(include_bytes!("assets/bunni_hook_bytecode.bin").into());
-
         let pool_manager = Address::from_str("0x000000000004444c5dc75cb358380d2e3de08a90")
             .expect("Invalid pool manager address");
 
-        let hook_handler = GenericVMHookHandler::new(hook_address, bytecode, engine, pool_manager)
-            .expect("Failed to create GenericVMHookHandler");
+        let hook_handler = GenericVMHookHandler::new(
+            hook_address,
+            engine,
+            pool_manager,
+            HashMap::new(),
+            HashMap::new(),
+        )
+        .expect("Failed to create GenericVMHookHandler");
 
         // simulating this tx: 0x6eef1c491d72edf73efd007b152b18d5f7814c5f3bd1c7d9be465fb9b4920f17
         let params = BeforeSwapParameters {
@@ -348,8 +354,26 @@ mod tests {
         let bytecode =
             Bytecode::new_raw(include_bytes!("assets/after_swap_test_hook_bytecode.bin").into());
 
-        let hook_handler = GenericVMHookHandler::new(hook_address, bytecode, engine, pool_manager)
-            .expect("Failed to create GenericVMHookHandler");
+        engine.state.init_account(
+            hook_address,
+            AccountInfo {
+                balance: *MAX_BALANCE,
+                nonce: 0,
+                code_hash: B256::from(keccak256(bytecode.clone().bytes())),
+                code: Some(bytecode),
+            },
+            None,
+            true,
+        );
+
+        let hook_handler = GenericVMHookHandler::new(
+            hook_address,
+            engine,
+            pool_manager,
+            HashMap::new(),
+            HashMap::new(),
+        )
+        .expect("Failed to create GenericVMHookHandler");
 
         let context = StateContext {
             currency_0: Address::from_str("0x0000000000000000000000000000000000000000").unwrap(),

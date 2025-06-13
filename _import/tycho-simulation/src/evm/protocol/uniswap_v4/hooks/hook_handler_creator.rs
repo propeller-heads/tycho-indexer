@@ -6,7 +6,13 @@ use lazy_static::lazy_static;
 use tycho_common::Bytes;
 
 use crate::{
-    evm::protocol::uniswap_v4::{hooks::hook_handler::HookHandler, state::UniswapV4State},
+    evm::{
+        engine_db::{create_engine, SHARED_TYCHO_DB},
+        protocol::uniswap_v4::{
+            hooks::{generic_vm_hook_handler::GenericVMHookHandler, hook_handler::HookHandler},
+            state::UniswapV4State,
+        },
+    },
     models::Token,
     protocol::errors::{InvalidSnapshotError, SimulationError},
 };
@@ -18,9 +24,10 @@ pub struct HookCreationParams<'a> {
     all_tokens: &'a HashMap<Bytes, Token>,
     state: UniswapV4State,
     /// Attributes of the component. If an attribute's value is a `bigint`,
-    /// it will be encoded as a big endian signed hex string.
+    /// it will be encoded as a big endian signed hex string. See ResponseProtocolState for more
+    /// details.
     pub(crate) attributes: &'a HashMap<String, Bytes>,
-    /// Sum aggregated balances of the component.
+    /// Mapping from token address to big-endian encoded balance for this component.
     balances: &'a HashMap<Bytes, Bytes>,
 }
 
@@ -49,9 +56,39 @@ pub struct GenericVMHookHandlerCreator;
 impl HookHandlerCreator for GenericVMHookHandlerCreator {
     fn instantiate_hook_handler(
         &self,
-        _params: HookCreationParams,
+        params: HookCreationParams<'_>,
     ) -> Result<Box<dyn HookHandler>, InvalidSnapshotError> {
-        todo!()
+        let hook_address_bytes = params
+            .attributes
+            .get("hook_address")
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("hook_address".to_string()))?;
+
+        let pool_manager_address_bytes = params
+            .attributes
+            .get("pool_manager_address")
+            .ok_or_else(|| {
+                InvalidSnapshotError::MissingAttribute("pool_manager_address".to_string())
+            })?;
+
+        let hook_address = Address::from_slice(&hook_address_bytes.0);
+        let pool_manager_address = Address::from_slice(&pool_manager_address_bytes.0);
+
+        let engine = create_engine(SHARED_TYCHO_DB.clone(), true).map_err(|e| {
+            InvalidSnapshotError::VMError(SimulationError::FatalError(format!(
+                "Failed to create engine: {e:?}"
+            )))
+        })?;
+
+        let hook_handler = GenericVMHookHandler::new(
+            hook_address,
+            engine,
+            pool_manager_address,
+            params.all_tokens.clone(),
+            params.account_balances.clone(),
+        )
+        .map_err(InvalidSnapshotError::VMError)?;
+
+        Ok(Box::new(hook_handler))
     }
 }
 
