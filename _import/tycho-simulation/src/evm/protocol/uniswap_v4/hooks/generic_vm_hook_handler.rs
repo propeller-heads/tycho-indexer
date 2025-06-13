@@ -65,12 +65,10 @@ where
         address: Address,
         engine: SimulationEngine<D>,
         pool_manager: Address,
-        // TODO are all of these necessary?
         _all_tokens: HashMap<Bytes, Token>,
         _account_balances: HashMap<Bytes, HashMap<Bytes, Bytes>>,
-        _balances: HashMap<Bytes, Bytes>,
     ) -> Result<Self, SimulationError> {
-        // TODO overwrite token balances (see how it's done in USV4 Pool State)
+        // TODO overwrite token balances (see how it's done in EVMPoolState)
 
         // Init pool manager
         // For now we use saved bytecode, but tycho-indexer should be able to provide this
@@ -291,7 +289,6 @@ mod tests {
             pool_manager,
             HashMap::new(),
             HashMap::new(),
-            HashMap::new(),
         )
         .expect("Failed to create GenericVMHookHandler");
 
@@ -373,7 +370,6 @@ mod tests {
             hook_address,
             engine,
             pool_manager,
-            HashMap::new(),
             HashMap::new(),
             HashMap::new(),
         )

@@ -27,9 +27,7 @@ pub struct HookCreationParams<'a> {
     /// it will be encoded as a big endian signed hex string. See ResponseProtocolState for more
     /// details.
     pub(crate) attributes: &'a HashMap<String, Bytes>,
-    // TODO are these balances a mapping from storage slot to value? I can't find an example in
-    //  any test - it's always an empty HashMap.
-    /// Sum aggregated balances of the component. See ResponseProtocolState for more details.
+    /// Mapping from token address to big-endian encoded balance for this component.
     balances: &'a HashMap<Bytes, Bytes>,
 }
 
@@ -87,7 +85,6 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
             pool_manager_address,
             params.all_tokens.clone(),
             params.account_balances.clone(),
-            params.balances.clone(),
         )
         .map_err(InvalidSnapshotError::VMError)?;
 
