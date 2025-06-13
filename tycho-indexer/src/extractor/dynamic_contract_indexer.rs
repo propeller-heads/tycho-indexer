@@ -97,6 +97,14 @@ where
             }
         }
 
+        if !new_entrypoints.is_empty() {
+            tracing::debug!(entrypoints = ?new_entrypoints, "DCI: Entrypoints");
+        }
+
+        if !new_entrypoint_params.is_empty() {
+            tracing::debug!(entrypoints_params = ?new_entrypoint_params, "DCI: Entrypoints params");
+        }
+
         // Select for analysis the newly detected EntryPointsWithData that haven't been analyzed
         // yet. This filter prevents us from re-analyzing entrypoints that have already been
         // analyzed, which can be a case if all the components have the same entrypoint. This is
@@ -150,10 +158,13 @@ where
 
         // Update the entrypoint results with the retriggered entrypoints
         entrypoints_to_analyze.extend(retriggered_entrypoints);
+
         debug!("DCI: Will analyze {:?} entrypoints", entrypoints_to_analyze.len());
         trace!("DCI: Entrypoints to analyze: {:?}", entrypoints_to_analyze);
 
         if !entrypoints_to_analyze.is_empty() {
+            tracing::debug!(entrypoints_to_analyze = ?entrypoints_to_analyze, "DCI: Entrypoints to analyze");
+
             let traced_entry_points = self
                 .tracer
                 .trace(
@@ -166,7 +177,9 @@ where
                 .await
                 .map_err(|e| ExtractionError::TracingError(format!("{e:?}")))?;
 
-            let mut tx_to_traced_entry_point: HashMap<&Transaction, &TracedEntryPoint> =
+            tracing::debug!(traced_entry_points = ?traced_entry_points, "DCI: Traced entrypoints");
+
+            let mut tx_to_traced_entry_point: HashMap<&Transaction, Vec<&TracedEntryPoint>> =
                 HashMap::new();
             for traced_entry_point in traced_entry_points.iter() {
                 let tx = entrypoints_to_analyze
@@ -177,40 +190,45 @@ where
                             Every traced entrypoint should be in the entrypoints_to_analyze map"
                         ))
                     })?;
-                tx_to_traced_entry_point.insert(tx, traced_entry_point);
+                tx_to_traced_entry_point
+                    .entry(tx)
+                    .or_default()
+                    .push(traced_entry_point);
             }
 
             let mut new_account_addr_to_slots: HashMap<Address, HashSet<StoreKey>> = HashMap::new();
             let mut new_account_addr_to_tx: HashMap<Address, &Transaction> = HashMap::new();
 
-            for (tx, traced_entry_point) in tx_to_traced_entry_point {
-                for (account, slots) in traced_entry_point
-                    .tracing_result
-                    .accessed_slots
-                    .iter()
-                {
-                    // Update slots for all accounts
-                    new_account_addr_to_slots
-                        .entry(account.clone())
-                        .or_default()
-                        .extend(slots.iter().cloned());
-
-                    // Update transaction mapping only for untracked accounts
-                    if !self
-                        .cache
-                        .tracked_contracts
-                        .contains_key(account)
+            for (tx, traced_entry_points) in tx_to_traced_entry_point {
+                for traced_entry_point in traced_entry_points.iter() {
+                    for (account, slots) in traced_entry_point
+                        .tracing_result
+                        .accessed_slots
+                        .iter()
                     {
-                        // Keep track of the first transaction that pushed the entrypoint that calls
-                        // this account.
-                        new_account_addr_to_tx
+                        // Update slots for all accounts
+                        new_account_addr_to_slots
                             .entry(account.clone())
-                            .and_modify(|existing_tx| {
-                                if existing_tx.index > tx.index {
-                                    *existing_tx = tx;
-                                }
-                            })
-                            .or_insert(tx);
+                            .or_default()
+                            .extend(slots.iter().cloned());
+
+                        // Update transaction mapping only for untracked accounts
+                        if !self
+                            .cache
+                            .tracked_contracts
+                            .contains_key(account)
+                        {
+                            // Keep track of the first transaction that pushed the entrypoint that
+                            // calls this account.
+                            new_account_addr_to_tx
+                                .entry(account.clone())
+                                .and_modify(|existing_tx| {
+                                    if existing_tx.index > tx.index {
+                                        *existing_tx = tx;
+                                    }
+                                })
+                                .or_insert(tx);
+                        }
                     }
                 }
             }
@@ -235,6 +253,8 @@ where
                     Ok(StorageSnapshotRequest { address: address.clone(), slots: Some(slots) })
                 })
                 .collect::<Result<Vec<_>, ExtractionError>>()?;
+
+            tracing::debug!(storage_request = ?storage_request, "DCI: Storage request");
 
             let mut new_accounts = self
                 .storage_source
@@ -319,6 +339,10 @@ where
         block_changes
             .txs_with_update
             .extend(new_transactions);
+
+        block_changes
+            .txs_with_update
+            .sort_by_key(|tx| tx.tx.index);
 
         Ok(())
     }
@@ -482,6 +506,10 @@ where
             }
         }
 
+        if !retriggered_entrypoints.is_empty() {
+            tracing::info!("DCI: Retriggered entrypoints: {:?}", retriggered_entrypoints);
+        }
+
         retriggered_entrypoints
     }
 
@@ -617,6 +645,10 @@ where
                     }
                 }
             }
+        }
+
+        if !tracked_updates.is_empty() {
+            tracing::trace!("DCI: Tracked updates: {:?}", tracked_updates);
         }
 
         Ok(tracked_updates)

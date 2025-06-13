@@ -196,17 +196,17 @@ impl PostgresGateway {
                 storage_error_from_diesel(e, "EntryPointTracingParams", "Batch upsert", None)
             })?;
 
-        let new_links: &Vec<(&TracingParams, &String)> = &new_data
-            .values()
-            .flat_map(|ep| {
+        let new_links: Vec<((&EntryPointId, &TracingParams), &String)> = new_data
+            .iter()
+            .flat_map(|(ep_id, ep)| {
                 ep.iter()
-                    .filter_map(|(params, pc_ext_id)| {
+                    .filter_map(move |(params, pc_ext_id)| {
                         pc_ext_id
                             .as_ref()
-                            .map(|pc_ext_id| (params, pc_ext_id))
+                            .map(|pc_ext_id| ((ep_id, params), pc_ext_id))
                     })
             })
-            .collect::<Vec<_>>();
+            .collect();
 
         // Insert links between protocol components and tracing params
         if !new_links.is_empty() {
@@ -241,8 +241,8 @@ impl PostgresGateway {
             .collect::<HashMap<_, _>>();
 
             let mut pc_tracing_params_links = Vec::new();
-            for (ep, pc_ext_id) in new_links.iter() {
-                let pc_id = match pc_ids.get(*pc_ext_id) {
+            for ((ep_id, params), pc_ext_id) in new_links.into_iter() {
+                let pc_id = match pc_ids.get(pc_ext_id) {
                     Some(_id) => _id,
                     None => {
                         return Err(StorageError::NotFound(
@@ -252,12 +252,12 @@ impl PostgresGateway {
                     }
                 };
 
-                let params_id = match params_ids.get(ep) {
+                let params_id = match params_ids.get(&(ep_id.clone(), params.clone())) {
                     Some(_id) => _id,
                     None => {
                         return Err(StorageError::NotFound(
                             "EntryPointTracingParams".to_string(),
-                            format!("{ep:?}"),
+                            format!("{ep_id:?}, {params:?}"),
                         ));
                     }
                 };
@@ -502,7 +502,15 @@ impl PostgresGateway {
         let mut values = Vec::with_capacity(traced_entry_points.len());
         for tep in traced_entry_points {
             let params_id = params_ids
-                .get(&tep.entry_point_with_params.params)
+                .get(&(
+                    tep.entry_point_with_params
+                        .entry_point
+                        .external_id
+                        .clone(),
+                    tep.entry_point_with_params
+                        .params
+                        .clone(),
+                ))
                 .ok_or_else(|| {
                     StorageError::NotFound(
                         "EntryPointTracingParams".to_string(),

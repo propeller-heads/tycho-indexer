@@ -257,10 +257,9 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
     let dci_plugin = run_args
         .dci_plugin
         .clone()
-        .map_or(Ok(None), |s| {
-            DCIType::from_str(&s)
-                .map_err(|e| ExtractionError::Setup(format!("Failed to parse DCI plugin: {e}")))
-                .map(Some)
+        .map_or(Ok(None), |s| match s.as_str() {
+            "rpc" => Ok(Some(DCIType::RPC(global_args.rpc_url.clone()))),
+            _ => Err(ExtractionError::Setup(format!("Unknown DCI plugin: {s}"))),
         })?;
 
     let config = ExtractorConfigs::new(HashMap::from([(
@@ -448,6 +447,20 @@ async fn build_all_extractors(
     Ok(extractor_handles)
 }
 
+async fn with_transaction<F, Fut, R>(gw: &CachedGateway, block: &Block, f: F) -> R
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = R>,
+{
+    gw.start_transaction(block, Some("accountExtractor"))
+        .await;
+    let result = f().await;
+    gw.commit_transaction(0)
+        .await
+        .expect("Failed to commit transaction");
+    result
+}
+
 #[instrument(skip_all, fields(n_accounts = %accounts.len(), block_id = block_id))]
 async fn initialize_accounts(
     accounts: Vec<Address>,
@@ -471,52 +484,54 @@ async fn initialize_accounts(
         index: 0,
     };
 
-    cached_gw
-        .start_transaction(&block, Some("accountExtractor"))
-        .await;
+    // First transaction
+    with_transaction(cached_gw, &block, || async {
+        cached_gw
+            .upsert_block(slice::from_ref(&block))
+            .await
+            .expect("Failed to insert block");
 
-    cached_gw
-        .upsert_block(slice::from_ref(&block))
-        .await
-        .expect("Failed to insert block");
+        cached_gw
+            .upsert_tx(slice::from_ref(&tx))
+            .await
+            .expect("Failed to insert tx");
+    })
+    .await;
 
-    cached_gw
-        .upsert_tx(slice::from_ref(&tx))
-        .await
-        .expect("Failed to insert tx");
-
+    // Process account updates
     for account_update in extracted_accounts.into_values() {
-        let new_account = account_update.ref_into_account(&tx);
-        info!(block_number = block.number, contract_address = ?new_account.address, "NewContract");
+        with_transaction(cached_gw, &block, || async {
+            let new_account = account_update.ref_into_account(&tx);
+            info!(block_number = block.number, contract_address = ?new_account.address, "NewContract");
 
-        // Insert new accounts
-        cached_gw
-            .insert_contract(&new_account)
-            .await
-            .expect("Failed to insert contract");
-        cached_gw
-            .update_contracts(&[(tx.hash.clone(), account_update)])
-            .await
-            .expect("Failed to update contract");
+            // Insert new accounts
+            cached_gw
+                .insert_contract(&new_account)
+                .await
+                .expect("Failed to insert contract");
+            cached_gw
+                .update_contracts(&[(tx.hash.clone(), account_update)])
+                .await
+                .expect("Failed to update contract");
+        })
+        .await;
     }
 
-    let state = ExtractionState::new(
-        "accountExtractor".to_string(),
-        chain,
-        None,
-        "account_cursor".as_bytes(),
-        block.hash,
-    );
+    with_transaction(cached_gw, &block, || async {
+        let state = ExtractionState::new(
+            "accountExtractor".to_string(),
+            chain,
+            None,
+            "account_cursor".as_bytes(),
+            block.hash.clone(),
+        );
 
-    cached_gw
-        .save_state(&state)
-        .await
-        .expect("Failed to save cursor");
-
-    cached_gw
-        .commit_transaction(0)
-        .await
-        .expect("Failed to commit transaction");
+        cached_gw
+            .save_state(&state)
+            .await
+            .expect("Failed to save cursor");
+    })
+    .await;
 }
 
 async fn get_accounts_data(
