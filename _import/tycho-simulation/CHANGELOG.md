@@ -1,3 +1,28 @@
+## [0.116.0](https://github.com/propeller-heads/tycho-simulation/compare/0.115.0...0.116.0) (2025-06-13)
+
+
+### Features
+
+* Set storage and transient storage from before swap to after swap ([d1dfd0d](https://github.com/propeller-heads/tycho-simulation/commit/d1dfd0da622d7f5460b87c004c14d6b049ee4b98))
+
+
+### Bug Fixes
+
+* Change transient storage to HashMap<Address, HashMap<U256, U256>> ([82927a4](https://github.com/propeller-heads/tycho-simulation/commit/82927a4a6549d73df9860839a2c88fd82ab19fda))
+* Only pass storage values (not transient storage) ([16a72db](https://github.com/propeller-heads/tycho-simulation/commit/16a72db1f6b118a9ae9d74cce7aabfcdc4e20acf))
+* Remove unnecessary bytecode of unimon hook ([390a1c1](https://github.com/propeller-heads/tycho-simulation/commit/390a1c10a0ed42f6166b229d56e4e0b0f388cb05))
+
+## [0.115.0](https://github.com/propeller-heads/tycho-simulation/compare/0.114.0...0.115.0) (2025-06-13)
+
+
+### Features
+
+* Don't overwrite tokens in hook handler creator ([e497dcb](https://github.com/propeller-heads/tycho-simulation/commit/e497dcbce87675590d62671e0b33f9eec65c22a3))
+* GenericVMHookHandlerCreator ([4cf908a](https://github.com/propeller-heads/tycho-simulation/commit/4cf908a6dd69799fd35a21006e3f3748081a2023))
+* Properly mock bytecode in after_swap test ([0340ebb](https://github.com/propeller-heads/tycho-simulation/commit/0340ebbee8737e7793defd1f60316bf101a58ac5))
+* Remove bytecode from hook handler input ([2265874](https://github.com/propeller-heads/tycho-simulation/commit/22658745982a8a7eb3227c9ab0e0476586abed0d))
+* Use SHARED_TYCHO_DB, remove balance inits ([7497116](https://github.com/propeller-heads/tycho-simulation/commit/7497116930e4983b8d79471fe285a4114b44788b))
+
 ## [0.114.0](https://github.com/propeller-heads/tycho-simulation/compare/0.113.0...0.114.0) (2025-06-11)
 
 

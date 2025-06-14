@@ -48,6 +48,8 @@ pub struct SimulationResult {
     pub state_updates: HashMap<Address, StateUpdate>,
     /// Gas used by the transaction (already reduced by the refunded gas)
     pub gas_used: u64,
+    /// Transient storage changes captured during the simulation
+    pub transient_storage: HashMap<Address, HashMap<U256, U256>>,
 }
 
 /// Simulation engine
@@ -125,8 +127,10 @@ where
             .with_tx(tx_env.clone())
             .modify_journal_chained(|journal| {
                 if let Some(transient_storage) = params.transient_storage.clone() {
-                    for (address, (slot, value)) in transient_storage {
-                        journal.tstore(address, slot, value);
+                    for (address, slots) in transient_storage {
+                        for (slot, value) in slots {
+                            journal.tstore(address, slot, value);
+                        }
                     }
                 }
             });
@@ -155,7 +159,8 @@ where
             vm.replay()
         };
 
-        interpret_evm_result(evm_result)
+        // TODO: update revm to 25.0.0 and get transient storage from the journaled state
+        interpret_evm_result(evm_result, HashMap::new())
     }
 
     pub fn clear_temp_storage(&mut self) {
@@ -240,11 +245,18 @@ where
 /// * `SimulationError` - simulation wasn't successful for any reason. See variants for details.
 fn interpret_evm_result<DBError: Debug>(
     evm_result: Result<ResultAndState, EVMError<DBError>>,
+    transient_storage: HashMap<Address, HashMap<U256, U256>>,
 ) -> Result<SimulationResult, SimulationEngineError> {
     match evm_result {
         Ok(result_and_state) => match result_and_state.result {
             ExecutionResult::Success { gas_used, gas_refunded, output, .. } => {
-                Ok(interpret_evm_success(gas_used, gas_refunded, output, result_and_state.state))
+                Ok(interpret_evm_success(
+                    gas_used,
+                    gas_refunded,
+                    output,
+                    result_and_state.state,
+                    transient_storage,
+                ))
             }
             ExecutionResult::Revert { output, gas_used } => {
                 Err(SimulationEngineError::TransactionError {
@@ -285,6 +297,7 @@ fn interpret_evm_success(
     gas_refunded: u64,
     output: Output,
     state: EvmState,
+    transient_storage: HashMap<Address, HashMap<U256, U256>>,
 ) -> SimulationResult {
     SimulationResult {
         result: output.into_data(),
@@ -328,6 +341,7 @@ fn interpret_evm_success(
             account_updates
         },
         gas_used: gas_used - gas_refunded,
+        transient_storage,
     }
 }
 
@@ -351,9 +365,9 @@ pub struct SimulationParameters {
     pub block_number: u64,
     /// The timestamp to be used by the transaction
     pub timestamp: u64,
-    /// Map of the address whose transient storage will be overwritten, to a tuple of a storage
-    /// slot and value.
-    pub transient_storage: Option<HashMap<Address, (U256, U256)>>,
+    /// Map of the address whose transient storage will be overwritten, to a map of storage slot
+    /// and value.
+    pub transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
 }
 
 #[cfg(test)]
@@ -433,7 +447,11 @@ mod tests {
             .collect(),
         });
 
-        let result = interpret_evm_result(evm_result);
+        let transient_storage = HashMap::from([(
+            Address::from_str("0x1f98400000000000000000000000000000000004").unwrap(),
+            HashMap::from([(U256::from(0), U256::from(1))]),
+        )]);
+        let result = interpret_evm_result(evm_result, transient_storage.clone());
         let simulation_result = result.unwrap();
 
         assert_eq!(simulation_result.result, Bytes::from_static(b"output"));
@@ -454,6 +472,7 @@ mod tests {
         .collect();
         assert_eq!(simulation_result.state_updates, expected_state_updates);
         assert_eq!(simulation_result.gas_used, 90);
+        assert_eq!(simulation_result.transient_storage, transient_storage);
     }
 
     #[test]
@@ -466,7 +485,7 @@ mod tests {
             state: rState::default(),
         });
 
-        let result = interpret_evm_result(evm_result);
+        let result = interpret_evm_result(evm_result, HashMap::new());
 
         assert!(result.is_err());
         let err = result.err().unwrap();
@@ -492,7 +511,7 @@ mod tests {
             state: rState::default(),
         });
 
-        let result = interpret_evm_result(evm_result);
+        let result = interpret_evm_result(evm_result, HashMap::new());
 
         assert!(result.is_err());
         let err = result.err().unwrap();
@@ -510,7 +529,7 @@ mod tests {
         let evm_result: Result<ResultAndState, EVMError<TransportError>> =
             Err(EVMError::Transaction(InvalidTransaction::PriorityFeeGreaterThanMaxFee));
 
-        let result = interpret_evm_result(evm_result);
+        let result = interpret_evm_result(evm_result, HashMap::new());
 
         assert!(result.is_err());
         let err = result.err().unwrap();
@@ -529,7 +548,7 @@ mod tests {
             RpcError::Transport(TransportErrorKind::Custom(Box::from("boo".to_string()))),
         ));
 
-        let result = interpret_evm_result(evm_result);
+        let result = interpret_evm_result(evm_result, HashMap::new());
 
         assert!(result.is_err());
         let err = result.err().unwrap();
