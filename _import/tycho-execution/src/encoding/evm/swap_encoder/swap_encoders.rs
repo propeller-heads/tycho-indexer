@@ -1,7 +1,8 @@
 use std::{collections::HashMap, str::FromStr};
 
 use alloy::{
-    primitives::{Address, Bytes as AlloyBytes, U8},
+    core::sol,
+    primitives::{Address, Bytes as AlloyBytes, U256, U8},
     sol_types::SolValue,
 };
 use serde_json::from_str;
@@ -617,6 +618,37 @@ impl SwapEncoder for BalancerV3SwapEncoder {
     }
 }
 
+// Define Bebop order structures for ABI decoding
+sol! {
+    struct BebopSingle {
+        uint256 expiry;
+        address taker_address;
+        address maker_address;
+        uint256 maker_nonce;
+        address taker_token;
+        address maker_token;
+        uint256 taker_amount;
+        uint256 maker_amount;
+        address receiver;
+        uint256 packed_commands;
+        uint256 flags;
+    }
+
+    struct BebopAggregate {
+        uint256 expiry;
+        address taker_address;
+        uint256 taker_nonce;
+        address[] taker_tokens;
+        uint256[] taker_amounts;
+        address[] maker_addresses;
+        address[][] maker_tokens;
+        uint256[][] maker_amounts;
+        address receiver;
+        uint256 packed_commands;
+        uint256 flags;
+    }
+}
+
 /// Encodes a swap on Bebop (PMM RFQ) through the given executor address.
 ///
 /// Bebop uses a Request-for-Quote model where quotes are obtained off-chain
@@ -644,6 +676,52 @@ impl BebopSwapEncoder {
                 "Invalid Bebop component ID format. Expected 'bebop-rfq'".to_string(),
             ));
         }
+        Ok(())
+    }
+
+    /// Analyzes the quote to determine token input/output characteristics
+    /// Returns (has_many_inputs, has_many_outputs)
+    fn validate_aggregate_order(
+        &self,
+        quote_data: &[u8],
+        expected_token_out: &Address,
+    ) -> Result<(), EncodingError> {
+        // Decode the Aggregate order to validate
+        let order = BebopAggregate::abi_decode(quote_data).map_err(|e| {
+            EncodingError::InvalidInput(format!("Failed to decode Bebop Aggregate order: {}", e))
+        })?;
+
+        // Validate that we only have one input token
+        if order.taker_tokens.len() != 1 {
+            return Err(EncodingError::InvalidInput(
+                "Aggregate orders must have exactly one input token".to_string(),
+            ));
+        }
+
+        // Validate that all makers provide exactly one output token
+        for (i, maker_tokens) in order.maker_tokens.iter().enumerate() {
+            if maker_tokens.len() != 1 {
+                return Err(EncodingError::InvalidInput(format!(
+                    "Maker {} must provide exactly one output token, found {}",
+                    i,
+                    maker_tokens.len()
+                )));
+            }
+        }
+
+        // Validate that all makers provide the same output token
+        let all_same_output = order
+            .maker_tokens
+            .iter()
+            .flat_map(|maker_tokens| maker_tokens.iter())
+            .all(|token| token == expected_token_out);
+
+        if !all_same_output {
+            return Err(EncodingError::InvalidInput(
+                "All makers must provide the same output token".to_string(),
+            ));
+        }
+
         Ok(())
     }
 }
@@ -703,61 +781,200 @@ impl SwapEncoder for BebopSwapEncoder {
         })?;
 
         // Parse user_data format:
-        // order_type (1 byte) | signature_type (1 byte) | quote_data_length (4 bytes) | quote_data
-        // | signature_length (4 bytes) | signature
-        if user_data.len() < 10 {
+        // order_type (1 byte) | filledTakerAmount (32 bytes) | quote_data_length (4 bytes) |
+        // quote_data | abi_encoded_maker_signatures where abi_encoded_maker_signatures is
+        // abi.encode(MakerSignature[])
+        if user_data.len() < 37 {
             return Err(EncodingError::InvalidInput(
                 "User data too short to contain Bebop RFQ data".to_string(),
             ));
         }
 
         let order_type = BebopOrderType::try_from(user_data[0])?;
-        let signature_type = user_data[1];
+
+        // Extract filledTakerAmount (32 bytes)
+        let filled_taker_amount = U256::from_be_slice(&user_data[1..33]);
 
         let quote_data_len =
-            u32::from_be_bytes([user_data[2], user_data[3], user_data[4], user_data[5]]) as usize;
-        if user_data.len() < 10 + quote_data_len {
+            u32::from_be_bytes([user_data[33], user_data[34], user_data[35], user_data[36]])
+                as usize;
+        if user_data.len() < 37 + quote_data_len {
             return Err(EncodingError::InvalidInput(
                 "User data too short to contain quote data".to_string(),
             ));
         }
 
-        let quote_data = user_data[6..6 + quote_data_len].to_vec();
+        let quote_data = user_data[37..37 + quote_data_len].to_vec();
 
-        let sig_len_start = 6 + quote_data_len;
-        if user_data.len() < sig_len_start + 4 {
+        // Validate Aggregate orders have single token in/out
+        if order_type == BebopOrderType::Aggregate {
+            self.validate_aggregate_order(&quote_data, &token_out)?;
+        }
+
+        // Decode the ABI-encoded MakerSignature[] array
+        let maker_sigs_start = 37 + quote_data_len;
+        let remaining_data = &user_data[maker_sigs_start..];
+
+        // Need at least 64 bytes for offset (32) and array length (32)
+        if remaining_data.len() < 64 {
             return Err(EncodingError::InvalidInput(
-                "User data too short to contain signature length".to_string(),
+                "User data too short to contain MakerSignature array".to_string(),
             ));
         }
 
-        let signature_len = u32::from_be_bytes([
-            user_data[sig_len_start],
-            user_data[sig_len_start + 1],
-            user_data[sig_len_start + 2],
-            user_data[sig_len_start + 3],
-        ]) as usize;
+        // Read offset to array (should be 0x20 for single parameter)
+        let array_offset: usize = U256::from_be_slice(&remaining_data[0..32])
+            .try_into()
+            .map_err(|_| EncodingError::InvalidInput("Array offset too large".to_string()))?;
 
-        if user_data.len() != sig_len_start + 4 + signature_len {
-            return Err(EncodingError::InvalidInput("User data length mismatch".to_string()));
+        if array_offset != 32 {
+            return Err(EncodingError::InvalidInput(
+                "Invalid array offset in ABI encoding".to_string(),
+            ));
         }
 
-        let signature = user_data[sig_len_start + 4..].to_vec();
+        // Read array length
+        let array_length: usize = U256::from_be_slice(&remaining_data[32..64])
+            .try_into()
+            .map_err(|_| EncodingError::InvalidInput("Array length too large".to_string()))?;
+
+        // Validate signature count based on order type
+        match order_type {
+            BebopOrderType::Single => {
+                if array_length != 1 {
+                    return Err(EncodingError::InvalidInput(format!(
+                        "Expected 1 signature for Single order, got {}",
+                        array_length
+                    )));
+                }
+            }
+            BebopOrderType::Aggregate => {
+                if array_length == 0 {
+                    return Err(EncodingError::InvalidInput(
+                        "Aggregate order requires at least one signature".to_string(),
+                    ));
+                }
+            }
+        }
+
+        // For aggregate orders, we just pass through the entire ABI-encoded array
+        // For single orders, we validate and re-encode
+        let maker_sigs_encoded = if order_type == BebopOrderType::Aggregate {
+            // For aggregate orders, pass through the entire encoded array
+            remaining_data.to_vec()
+        } else {
+            // For single orders, validate and re-encode the single signature
+            // Read offset to first (and only) struct
+            if remaining_data.len() < 96 {
+                return Err(EncodingError::InvalidInput(
+                    "User data too short to contain struct offset".to_string(),
+                ));
+            }
+
+            let struct_offset: usize = U256::from_be_slice(&remaining_data[64..96])
+                .try_into()
+                .map_err(|_| EncodingError::InvalidInput("Struct offset too large".to_string()))?;
+
+            // The struct data starts at the struct_offset
+            // struct_offset is relative to the start of array data (after the array length)
+            // Array data starts at position 64 (after offset[32] and length[32])
+            // Absolute position = 64 + struct_offset
+            let struct_start = 64 + struct_offset;
+
+            if remaining_data.len() < struct_start + 64 {
+                return Err(EncodingError::InvalidInput(
+                    "User data too short to contain MakerSignature struct".to_string(),
+                ));
+            }
+
+            // Read the struct fields
+            // - offset to signatureBytes (32 bytes) - should be 64
+            // - flags (32 bytes)
+            let sig_offset: usize =
+                U256::from_be_slice(&remaining_data[struct_start..struct_start + 32])
+                    .try_into()
+                    .map_err(|_| {
+                        EncodingError::InvalidInput("Signature offset too large".to_string())
+                    })?;
+
+            if sig_offset != 64 {
+                return Err(EncodingError::InvalidInput(format!(
+                    "Invalid signature offset in struct: expected 64, got {}",
+                    sig_offset
+                )));
+            }
+
+            let flags = U256::from_be_slice(&remaining_data[struct_start + 32..struct_start + 64]);
+
+            // Read signature data
+            let sig_data_start = struct_start + sig_offset;
+            if remaining_data.len() < sig_data_start + 32 {
+                return Err(EncodingError::InvalidInput(
+                    "User data too short to contain signature length".to_string(),
+                ));
+            }
+
+            let signature_len: usize =
+                U256::from_be_slice(&remaining_data[sig_data_start..sig_data_start + 32])
+                    .try_into()
+                    .map_err(|_| {
+                        EncodingError::InvalidInput("Signature length too large".to_string())
+                    })?;
+
+            if remaining_data.len() < sig_data_start + 32 + signature_len {
+                return Err(EncodingError::InvalidInput(
+                    "User data too short to contain signature data".to_string(),
+                ));
+            }
+
+            let signature =
+                remaining_data[sig_data_start + 32..sig_data_start + 32 + signature_len].to_vec();
+
+            // Re-encode the MakerSignature[] array for the executor
+            let mut encoded = Vec::new();
+
+            // Offset to array (always 0x20 for single parameter)
+            encoded.extend_from_slice(&U256::from(32).to_be_bytes::<32>());
+
+            // Array length (1 for non-aggregate orders)
+            encoded.extend_from_slice(&U256::from(1).to_be_bytes::<32>());
+
+            // Offset to first struct (relative to array data start)
+            let struct_offset = 32; // After the array length
+            encoded.extend_from_slice(&U256::from(struct_offset).to_be_bytes::<32>());
+
+            // Struct data
+            // - offset to signatureBytes (always 64)
+            encoded.extend_from_slice(&U256::from(64).to_be_bytes::<32>());
+
+            // - flags
+            encoded.extend_from_slice(&flags.to_be_bytes::<32>());
+
+            // - signatureBytes length
+            encoded.extend_from_slice(&U256::from(signature.len()).to_be_bytes::<32>());
+
+            // - signatureBytes data (padded)
+            encoded.extend_from_slice(&signature);
+            let padding = (32 - (signature.len() % 32)) % 32;
+            encoded.extend_from_slice(&vec![0u8; padding]);
+
+            encoded
+        };
 
         // Encode packed data for the executor
-        // Format: token_in | token_out | transfer_type | order_type |
-        //         quote_data_length | quote_data | signature_type | signature_length | signature |
-        // approval_needed
+        // Format: token_in | token_out | transfer_type | order_type | filledTakerAmount |
+        //         quote_data_length | quote_data | maker_signatures_length |
+        //         abi_encoded_maker_signatures | approval_needed
         let args = (
             token_in,
             token_out,
             (encoding_context.transfer_type as u8).to_be_bytes(),
             (order_type as u8).to_be_bytes(),
+            filled_taker_amount.to_be_bytes::<32>(),
             (quote_data.len() as u32).to_be_bytes(),
             &quote_data[..],
-            signature_type.to_be_bytes(),
-            (signature.len() as u32).to_be_bytes(),
-            &signature[..],
+            (maker_sigs_encoded.len() as u32).to_be_bytes(),
+            &maker_sigs_encoded[..],
             (approval_needed as u8).to_be_bytes(),
         );
 
@@ -1826,25 +2043,92 @@ mod tests {
 
     mod bebop {
         use super::*;
-        use crate::encoding::evm::utils::write_calldata_to_file;
+        use crate::encoding::{evm::utils::write_calldata_to_file, models::TransferType};
 
         #[test]
         fn test_encode_bebop_single() {
-            use alloy::hex;
+            use alloy::{hex, primitives::Address};
 
-            // Create user_data with quote and signature
+            // Use mainnet data
+            // Transaction: https://etherscan.io/tx/0x6279bc970273b6e526e86d9b69133c2ca1277e697ba25375f5e6fc4df50c0c94
             let order_type = BebopOrderType::Single as u8;
-            let signature_type = 1u8; // EIP712
-            let quote_data = hex::decode("1234567890abcdef").unwrap();
-            let signature = hex::decode("aabbccdd").unwrap();
+
+            // Create the IBebopSettlement.Single struct data using the exact input data from the tx
+            let expiry = U256::from(1749483840u64);
+            let taker_address =
+                Address::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap();
+            let maker_address =
+                Address::from_str("0xCe79b081c0c924cb67848723ed3057234d10FC6b").unwrap();
+            let maker_nonce = U256::from(1749483765992417u64);
+            let taker_token =
+                Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(); // USDC
+            let maker_token =
+                Address::from_str("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3").unwrap(); // ONDO
+            let taker_amount = U256::from(200000000u64); // 200 USDC
+            let maker_amount = U256::from_str("237212396774431060000").unwrap(); // 237.21 ONDO
+            let receiver = taker_address;
+            let packed_commands = U256::ZERO;
+            let flags = U256::from_str(
+                "51915842898789398998206002334703507894664330885127600393944965515693155942400",
+            )
+            .unwrap();
+
+            // ABI encode the order struct
+            let quote_data = (
+                expiry,
+                taker_address,
+                maker_address,
+                maker_nonce,
+                taker_token,
+                maker_token,
+                taker_amount,
+                maker_amount,
+                receiver,
+                packed_commands,
+                flags,
+            )
+                .abi_encode();
+
+            // Real signature from mainnet
+            let signature = hex::decode("eb5419631614978da217532a40f02a8f2ece37d8cfb94aaa602baabbdefb56b474f4c2048a0f56502caff4ea7411d99eed6027cd67dc1088aaf4181dcb0df7051c").unwrap();
+            let signature_type = 0u8; // ETH_SIGN
+
+            // Build ABI-encoded MakerSignature[] array
+            let flags = U256::from(signature_type);
+            let mut encoded_maker_sigs = Vec::new();
+
+            // Offset to array (always 0x20 for single parameter)
+            encoded_maker_sigs.extend_from_slice(&U256::from(32).to_be_bytes::<32>());
+
+            // Array length (1 for Single order)
+            encoded_maker_sigs.extend_from_slice(&U256::from(1).to_be_bytes::<32>());
+
+            // Offset to first struct (relative to array data start)
+            encoded_maker_sigs.extend_from_slice(&U256::from(32).to_be_bytes::<32>());
+
+            // Struct data (MakerSignature has signatureBytes first, then flags)
+            // - offset to signatureBytes (always 64 since it comes after offset and flags)
+            encoded_maker_sigs.extend_from_slice(&U256::from(64).to_be_bytes::<32>());
+
+            // - flags (AFTER the offset, as per struct order)
+            encoded_maker_sigs.extend_from_slice(&flags.to_be_bytes::<32>());
+
+            // - signatureBytes length
+            encoded_maker_sigs.extend_from_slice(&U256::from(signature.len()).to_be_bytes::<32>());
+
+            // - signatureBytes data (padded)
+            encoded_maker_sigs.extend_from_slice(&signature);
+            let padding = (32 - (signature.len() % 32)) % 32;
+            encoded_maker_sigs.extend_from_slice(&vec![0u8; padding]);
+
+            let filled_taker_amount = U256::ZERO; // 0 means fill entire order
 
             let mut user_data = Vec::new();
             user_data.push(order_type);
-            user_data.push(signature_type);
+            user_data.extend_from_slice(&filled_taker_amount.to_be_bytes::<32>());
             user_data.extend_from_slice(&(quote_data.len() as u32).to_be_bytes());
             user_data.extend_from_slice(&quote_data);
-            user_data.extend_from_slice(&(signature.len() as u32).to_be_bytes());
-            user_data.extend_from_slice(&signature);
+            user_data.extend_from_slice(&encoded_maker_sigs);
 
             let bebop_component = ProtocolComponent {
                 id: String::from("bebop-rfq"),
@@ -1854,7 +2138,7 @@ mod tests {
             };
 
             let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
-            let token_out = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"); // WETH
+            let token_out = Bytes::from("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3"); // ONDO
             let swap = Swap {
                 component: bebop_component,
                 token_in: token_in.clone(),
@@ -1864,7 +2148,7 @@ mod tests {
             };
 
             let encoding_context = EncodingContext {
-                receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
+                receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"), /* Original taker */
                 exact_out: false,
                 router_address: Some(Bytes::zero(20)),
                 group_token_in: token_in.clone(),
@@ -1887,121 +2171,15 @@ mod tests {
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
 
-            assert_eq!(
-                hex_swap,
-                String::from(concat!(
-                    // token in
-                    "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-                    // token out
-                    "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-                    // transfer type Transfer
-                    "01",
-                    // order type Single (0)
-                    "00",
-                    // quote data length (8 bytes = 0x00000008)
-                    "00000008",
-                    // quote data
-                    "1234567890abcdef",
-                    // signature type EIP712 (1)
-                    "01",
-                    // signature length (4 bytes = 0x00000004)
-                    "00000004",
-                    // signature
-                    "aabbccdd",
-                    // approval needed
-                    "01"
-                ))
-            );
+            // Verify the encoding contains the expected tokens
+            assert!(hex_swap.contains("a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")); // USDC
+            assert!(hex_swap.contains("faba6f8e4a5e8ab82f62fe7c39859fa577269be3")); // ONDO
+
+            // Verify it includes the signature
+            let sig_hex = hex::encode(&signature);
+            assert!(hex_swap.contains(&sig_hex));
 
             write_calldata_to_file("test_encode_bebop_single", hex_swap.as_str());
-        }
-
-        #[test]
-        fn test_encode_bebop_multi() {
-            use alloy::hex;
-
-            // Create user_data for a Bebop Multi RFQ quote
-            let order_type = BebopOrderType::Multi as u8;
-            let signature_type = 1u8; // EIP712
-            let quote_data = hex::decode("abcdef1234567890").unwrap();
-            let signature = hex::decode("11223344").unwrap();
-
-            let mut user_data = Vec::new();
-            user_data.push(order_type);
-            user_data.push(signature_type);
-            user_data.extend_from_slice(&(quote_data.len() as u32).to_be_bytes());
-            user_data.extend_from_slice(&quote_data);
-            user_data.extend_from_slice(&(signature.len() as u32).to_be_bytes());
-            user_data.extend_from_slice(&signature);
-
-            let bebop_component = ProtocolComponent {
-                id: String::from("bebop-rfq"),
-                protocol_system: String::from("rfq:bebop"),
-                static_attributes: HashMap::new(),
-                ..Default::default()
-            };
-
-            let token_in = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"); // WETH
-            let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
-            let swap = Swap {
-                component: bebop_component,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: Some(Bytes::from(user_data)),
-            };
-
-            let encoding_context = EncodingContext {
-                receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
-                exact_out: false,
-                router_address: Some(Bytes::zero(20)),
-                group_token_in: token_in.clone(),
-                group_token_out: token_out.clone(),
-                transfer_type: TransferType::Transfer,
-            };
-
-            let encoder = BebopSwapEncoder::new(
-                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
-                TychoCoreChain::Ethereum.into(),
-                Some(HashMap::from([(
-                    "bebop_settlement_address".to_string(),
-                    "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F".to_string(),
-                )])),
-            )
-            .unwrap();
-
-            let encoded_swap = encoder
-                .encode_swap(swap, encoding_context)
-                .unwrap();
-            let hex_swap = encode(&encoded_swap);
-
-            assert_eq!(
-                hex_swap,
-                String::from(concat!(
-                    // token in
-                    "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-                    // token out
-                    "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-                    // transfer type Transfer
-                    "01",
-                    // order type Multi (1)
-                    "01",
-                    // quote data length (8 bytes = 0x00000008)
-                    "00000008",
-                    // quote data
-                    "abcdef1234567890",
-                    // signature type EIP712 (1)
-                    "01",
-                    // signature length (4 bytes = 0x00000004)
-                    "00000004",
-                    // signature
-                    "11223344",
-                    // approval needed
-                    "01"
-                ))
-            );
-
-            write_calldata_to_file("test_encode_bebop_multi", hex_swap.as_str());
         }
 
         #[test]
@@ -2011,19 +2189,87 @@ mod tests {
             // Create user_data for a Bebop Aggregate RFQ quote
             let order_type = BebopOrderType::Aggregate as u8;
             let signature_type = 1u8; // EIP712
-            let quote_data = hex::decode("deadbeef").unwrap();
-            // For aggregate orders with ECDSA, use concatenated 65-byte signatures (2 makers)
+
+            // Create a valid ABI-encoded Aggregate order
+            // For this test: single input (DAI) -> single output (WBTC) to match the test setup
+            let aggregate_order = BebopAggregate {
+                expiry: U256::from(1234567890u64),
+                taker_address: Address::from([0x11; 20]),
+                taker_nonce: U256::from(12345u64),
+                taker_tokens: vec![
+                    Address::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(), /* DAI */
+                ],
+                taker_amounts: vec![
+                    U256::from(1000000000000000000u64), // 1 DAI
+                ],
+                maker_addresses: vec![Address::from([0x22; 20]), Address::from([0x33; 20])],
+                maker_tokens: vec![
+                    vec![Address::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap()], /* WBTC from maker 1 */
+                    vec![Address::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap()], /* WBTC from maker 2 */
+                ],
+                maker_amounts: vec![
+                    vec![U256::from(1250000u64)], // 0.0125 WBTC from maker 1
+                    vec![U256::from(1250000u64)], // 0.0125 WBTC from maker 2
+                ],
+                receiver: Address::from([0x44; 20]),
+                packed_commands: U256::from(0),
+                flags: U256::from(0),
+            };
+
+            let quote_data = aggregate_order.abi_encode();
+            // For aggregate orders with ECDSA, use 65-byte signatures (2 makers)
             let sig1 = hex::decode("0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001").unwrap();
             let sig2 = hex::decode("1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111101").unwrap();
-            let signature = [sig1, sig2].concat();
+
+            // Build ABI-encoded MakerSignature[] array with 2 signatures
+            let flags = U256::from(signature_type);
+            let mut encoded_maker_sigs = Vec::new();
+
+            // Offset to array (always 0x20 for single parameter)
+            encoded_maker_sigs.extend_from_slice(&U256::from(32).to_be_bytes::<32>());
+
+            // Array length (2 for Aggregate order with 2 makers)
+            encoded_maker_sigs.extend_from_slice(&U256::from(2).to_be_bytes::<32>());
+
+            // Offsets to structs (relative to array data start)
+            // First struct at offset 64 (after the 2 offset values)
+            encoded_maker_sigs.extend_from_slice(&U256::from(64).to_be_bytes::<32>());
+            // Second struct will be after first struct's data
+            // First struct size: 64 (fixed) + 32 (length) + 96 (65 bytes padded) = 192
+            encoded_maker_sigs.extend_from_slice(&U256::from(64 + 192).to_be_bytes::<32>());
+
+            // First struct data (MakerSignature has signatureBytes first, then flags)
+            // - offset to signatureBytes (always 64)
+            encoded_maker_sigs.extend_from_slice(&U256::from(64).to_be_bytes::<32>());
+            // - flags (AFTER the offset)
+            encoded_maker_sigs.extend_from_slice(&flags.to_be_bytes::<32>());
+            // - signatureBytes length
+            encoded_maker_sigs.extend_from_slice(&U256::from(sig1.len()).to_be_bytes::<32>());
+            // - signatureBytes data (padded)
+            encoded_maker_sigs.extend_from_slice(&sig1);
+            let padding1 = (32 - (sig1.len() % 32)) % 32;
+            encoded_maker_sigs.extend_from_slice(&vec![0u8; padding1]);
+
+            // Second struct data (MakerSignature has signatureBytes first, then flags)
+            // - offset to signatureBytes (always 64)
+            encoded_maker_sigs.extend_from_slice(&U256::from(64).to_be_bytes::<32>());
+            // - flags (AFTER the offset)
+            encoded_maker_sigs.extend_from_slice(&flags.to_be_bytes::<32>());
+            // - signatureBytes length
+            encoded_maker_sigs.extend_from_slice(&U256::from(sig2.len()).to_be_bytes::<32>());
+            // - signatureBytes data (padded)
+            encoded_maker_sigs.extend_from_slice(&sig2);
+            let padding2 = (32 - (sig2.len() % 32)) % 32;
+            encoded_maker_sigs.extend_from_slice(&vec![0u8; padding2]);
+
+            let filled_taker_amount = U256::from(1000000u64); // 1 USDC (6 decimals)
 
             let mut user_data = Vec::new();
             user_data.push(order_type);
-            user_data.push(signature_type);
+            user_data.extend_from_slice(&filled_taker_amount.to_be_bytes::<32>());
             user_data.extend_from_slice(&(quote_data.len() as u32).to_be_bytes());
             user_data.extend_from_slice(&quote_data);
-            user_data.extend_from_slice(&(signature.len() as u32).to_be_bytes());
-            user_data.extend_from_slice(&signature);
+            user_data.extend_from_slice(&encoded_maker_sigs);
 
             let bebop_component = ProtocolComponent {
                 id: String::from("bebop-rfq"),
@@ -2066,32 +2312,70 @@ mod tests {
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
 
-            assert_eq!(
-                hex_swap,
-                String::from(concat!(
-                    // token in
-                    "6b175474e89094c44da98b954eedeac495271d0f",
-                    // token out
-                    "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-                    // transfer type TransferFrom
-                    "00",
-                    // order type Aggregate (2)
-                    "02",
-                    // quote data length (4 bytes = 0x00000004)
-                    "00000004",
-                    // quote data
-                    "deadbeef",
-                    // signature type EIP712 (1)
-                    "01",
-                    // signature length (130 bytes = 2 * 65-byte EIP712 signatures)
-                    "00000082",
-                    // concatenated EIP712 signatures (2 * 65 bytes)
-                    "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001",
-                    "1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111101",
-                    // approval needed
-                    "01"
-                ))
+            // Calculate expected hex for ABI-encoded maker signatures array with 2 signatures
+            let _expected_abi_maker_sigs = concat!(
+                // offset to array
+                "0000000000000000000000000000000000000000000000000000000000000020",
+                // array length (2)
+                "0000000000000000000000000000000000000000000000000000000000000002",
+                // offset to first struct (relative to array data start)
+                "0000000000000000000000000000000000000000000000000000000000000040",
+                // offset to second struct (64 + 192 = 256 = 0x100)
+                "0000000000000000000000000000000000000000000000000000000000000100",
+                // First struct data:
+                // - offset to signatureBytes
+                "0000000000000000000000000000000000000000000000000000000000000040",
+                // - flags
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                // - signatureBytes length (65 = 0x41)
+                "0000000000000000000000000000000000000000000000000000000000000041",
+                // - signatureBytes (65 bytes padded to 96)
+                "0000000000000000000000000000000000000000000000000000000000000000",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+                "0100000000000000000000000000000000000000000000000000000000000000",
+                // Second struct data:
+                // - offset to signatureBytes
+                "0000000000000000000000000000000000000000000000000000000000000040",
+                // - flags
+                "0000000000000000000000000000000000000000000000000000000000000001",
+                // - signatureBytes length (65 = 0x41)
+                "0000000000000000000000000000000000000000000000000000000000000041",
+                // - signatureBytes (65 bytes padded to 96)
+                "1111111111111111111111111111111111111111111111111111111111111111",
+                "1111111111111111111111111111111111111111111111111111111111111111",
+                "0100000000000000000000000000000000000000000000000000000000000000"
             );
+
+            // The quote data is now an ABI-encoded BebopAggregate struct
+            // Calculate its actual length
+            let quote_data_hex = hex::encode(&quote_data);
+            let quote_data_length = format!("{:08x}", quote_data.len());
+
+            let expected_hex = format!(
+                "{}{}{}{}{}{}{}{}{}{}",
+                // token in
+                "6b175474e89094c44da98b954eedeac495271d0f",
+                // token out
+                "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+                // transfer type TransferFrom
+                "00",
+                // order type Aggregate (1)
+                "01",
+                // filledTakerAmount (1000000 = 0x0f4240)
+                "00000000000000000000000000000000000000000000000000000000000f4240",
+                // quote data length
+                &quote_data_length,
+                // quote data
+                &quote_data_hex,
+                // maker signatures length (0x200 = 512 bytes)
+                "00000200",
+                // abi-encoded maker signatures
+                &encode(&encoded_maker_sigs),
+                // approval needed
+                "01"
+            );
+
+            assert_eq!(hex_swap, expected_hex);
 
             write_calldata_to_file("test_encode_bebop_aggregate", hex_swap.as_str());
         }

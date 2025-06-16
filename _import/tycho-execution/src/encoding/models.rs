@@ -214,8 +214,7 @@ pub enum TransferType {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BebopOrderType {
     Single = 0,
-    Multi = 1,
-    Aggregate = 2,
+    Aggregate = 1,
 }
 
 impl TryFrom<u8> for BebopOrderType {
@@ -224,8 +223,7 @@ impl TryFrom<u8> for BebopOrderType {
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(BebopOrderType::Single),
-            1 => Ok(BebopOrderType::Multi),
-            2 => Ok(BebopOrderType::Aggregate),
+            1 => Ok(BebopOrderType::Aggregate),
             _ => Err(EncodingError::InvalidInput(format!("Invalid Bebop order type: {}", value))),
         }
     }
