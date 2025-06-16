@@ -179,7 +179,7 @@ message EntryPointParams {
 // RPC tracing strategy with its data
 message RPCTraceData {
   // [optional] The caller to be used for the trace. If none is provided a chain default will be used.
-  bytes caller = 1;
+  optional bytes caller = 1;
   // The calldata to be used for the trace
   bytes calldata = 2;
 }

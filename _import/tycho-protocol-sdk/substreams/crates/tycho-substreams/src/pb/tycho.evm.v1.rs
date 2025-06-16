@@ -226,8 +226,8 @@ pub mod entry_point_params {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RpcTraceData {
     /// \[optional\] The caller to be used for the trace. If none is provided a chain default will be used.
-    #[prost(bytes="vec", tag="1")]
-    pub caller: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes="vec", optional, tag="1")]
+    pub caller: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     /// The calldata to be used for the trace
     #[prost(bytes="vec", tag="2")]
     pub calldata: ::prost::alloc::vec::Vec<u8>,

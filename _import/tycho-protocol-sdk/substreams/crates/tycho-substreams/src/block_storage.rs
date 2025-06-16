@@ -23,7 +23,7 @@ use crate::{
 /// ## Warning
 /// ⚠️ This function *only* works if the **extended block model** is available,
 /// more [here](https://streamingfastio.medium.com/new-block-model-to-accelerate-chain-integration-9f65126e5425)
-fn get_block_storage_changes(block: &eth::v2::Block) -> Vec<TransactionStorageChanges> {
+pub fn get_block_storage_changes(block: &eth::v2::Block) -> Vec<TransactionStorageChanges> {
     if block.detail_level != Into::<i32>::into(DetailLevel::DetaillevelExtended) {
         panic!("Only extended blocks are supported");
     }
