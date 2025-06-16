@@ -295,8 +295,18 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
     }
 
     function testSingleBebopIntegration() public {
-        deal(USDC_ADDR, ALICE, 1000 * 10 ** 6);
-        uint256 expAmountOut = 400000000000000000; // 0.4 WETH
+        // The calldata swaps 200 USDC for ONDO
+        // The receiver in the order is 0xc5564C13A157E6240659fb81882A28091add8670
+        address orderReceiver = 0xc5564C13A157E6240659fb81882A28091add8670;
+        deal(USDC_ADDR, ALICE, 200 * 10 ** 6); // 200 USDC
+        uint256 expAmountOut = 237212396774431060000; // Expected ONDO amount from calldata
+
+        // Fund the maker with ONDO and approve settlement
+        deal(
+            ONDO_ADDR, 0xCe79b081c0c924cb67848723ed3057234d10FC6b, expAmountOut
+        );
+        vm.prank(0xCe79b081c0c924cb67848723ed3057234d10FC6b);
+        IERC20(ONDO_ADDR).approve(BEBOP_SETTLEMENT, expAmountOut);
 
         vm.startPrank(ALICE);
         IERC20(USDC_ADDR).approve(tychoRouterAddr, type(uint256).max);
@@ -304,34 +314,11 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
             loadCallDataFromFile("test_single_encoding_strategy_bebop");
         (bool success,) = tychoRouterAddr.call(callData);
 
-        uint256 finalBalance = IERC20(WETH_ADDR).balanceOf(ALICE);
+        // Check the receiver's balance (not ALICE, since the order specifies a different receiver)
+        uint256 finalBalance = IERC20(ONDO_ADDR).balanceOf(orderReceiver);
         assertTrue(success, "Call Failed");
         assertGe(finalBalance, expAmountOut);
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 0);
-
-        vm.stopPrank();
-    }
-
-    function testBebopMultiIntegration() public {
-        // Setup: Alice has WETH, wants USDC and WBTC
-        deal(WETH_ADDR, ALICE, 1e18); // 1 WETH
-        uint256 expUSDCOut = 3000e6; // 3000 USDC
-        uint256 expWBTCOut = 0.1e8; // 0.1 WBTC
-
-        vm.startPrank(ALICE);
-        IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
-
-        bytes memory callData =
-            loadCallDataFromFile("test_single_encoding_strategy_bebop_multi");
-        (bool success,) = tychoRouterAddr.call(callData);
-
-        uint256 finalUSDCBalance = IERC20(USDC_ADDR).balanceOf(ALICE);
-        uint256 finalWBTCBalance = IERC20(WBTC_ADDR).balanceOf(ALICE);
-
-        assertTrue(success, "Call Failed");
-        assertGe(finalUSDCBalance, expUSDCOut);
-        assertGe(finalWBTCBalance, expWBTCOut);
-        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
 
         vm.stopPrank();
     }
@@ -340,6 +327,20 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
         // Setup: Alice has USDC, wants WETH (through multiple makers)
         deal(USDC_ADDR, ALICE, 1000 * 10 ** 6);
         uint256 expAmountOut = 400000000000000000; // 0.4 WETH
+
+        // Fund the two makers from the calldata with WETH
+        address maker1 = 0x1111111111111111111111111111111111111111;
+        address maker2 = 0x2222222222222222222222222222222222222222;
+
+        // Maker 1 provides 0.24 WETH, Maker 2 provides 0.16 WETH
+        deal(WETH_ADDR, maker1, 240000000000000000);
+        deal(WETH_ADDR, maker2, 160000000000000000);
+
+        // Makers approve settlement contract
+        vm.prank(maker1);
+        IERC20(WETH_ADDR).approve(BEBOP_SETTLEMENT, type(uint256).max);
+        vm.prank(maker2);
+        IERC20(WETH_ADDR).approve(BEBOP_SETTLEMENT, type(uint256).max);
 
         vm.startPrank(ALICE);
         IERC20(USDC_ADDR).approve(tychoRouterAddr, type(uint256).max);

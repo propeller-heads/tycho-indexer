@@ -502,9 +502,19 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         deal(WETH_ADDR, ALICE, 1 ether);
         uint256 balanceBefore = IERC20(DAI_ADDR).balanceOf(ALICE);
 
+        // Set up the Bebop maker with the address from our updated rust test
+        address bebopMaker = address(0x1234567890123456789012345678901234567890);
+        uint256 expectedDaiAmount = 2021750881000000000000; // ~2021.75 DAI
+
+        // Fund the maker with DAI and approve settlement contract
+        deal(DAI_ADDR, bebopMaker, expectedDaiAmount);
+        vm.prank(bebopMaker);
+        IERC20(DAI_ADDR).approve(BEBOP_SETTLEMENT, expectedDaiAmount);
+
         // Approve router
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
+
         bytes memory callData = loadCallDataFromFile("test_uniswap_v3_bebop");
         (bool success,) = tychoRouterAddr.call(callData);
 
@@ -514,7 +524,7 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
 
         assertTrue(success, "Call Failed");
         // Expecting ~2021.75 DAI from 1 WETH through USDC
-        assertEq(balanceAfter - balanceBefore, 2021750881000000000000);
+        assertEq(balanceAfter - balanceBefore, expectedDaiAmount);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 }
