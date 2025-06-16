@@ -22,17 +22,18 @@ fn get_pool_registered(
         .clone()
 }
 
-fn get_token_registered(
-    tx: &TransactionTrace,
-    pool_id: &[u8],
-) -> abi::vault::events::TokensRegistered {
-    tx.logs_with_calls()
-        .filter(|(log, _)| log.address == VAULT_ADDRESS)
-        .filter_map(|(log, _)| abi::vault::events::TokensRegistered::match_and_decode(log))
-        .find(|ev| ev.pool_id == pool_id)
-        .unwrap()
-        .clone()
-}
+// TODO: add this back if we need to track BPT
+// fn get_token_registered(
+//     tx: &TransactionTrace,
+//     pool_id: &[u8],
+// ) -> abi::vault::events::TokensRegistered {
+//     tx.logs_with_calls()
+//         .filter(|(log, _)| log.address == VAULT_ADDRESS)
+//         .filter_map(|(log, _)| abi::vault::events::TokensRegistered::match_and_decode(log))
+//         .find(|ev| ev.pool_id == pool_id)
+//         .unwrap()
+//         .clone()
+// }
 
 // This is the main function that handles the creation of `ProtocolComponent`s with `Attribute`s
 //  based on the specific factory address. There's 3 factory groups that are represented here:
@@ -179,12 +180,14 @@ pub fn address_map(
             let pool_created =
                 abi::composable_stable_pool_factory::events::PoolCreated::match_and_decode(log)?;
             let pool_registered = get_pool_registered(tx, &pool_created.pool);
-            let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
+            // let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
 
             Some(
                 ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
                     .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
-                    .with_tokens(&tokens_registered.tokens)
+                    // .with_tokens(&tokens_registered.tokens) // TODO: add this back if we need to
+                    // track BPT
+                    .with_tokens(&create_call.tokens)
                     .with_attributes(&[
                         ("pool_type", "ComposableStablePoolFactory".as_bytes()),
                         ("bpt", &pool_created.pool),
@@ -209,164 +212,19 @@ pub fn address_map(
             let pool_created =
                 abi::erc_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
             let pool_registered = get_pool_registered(tx, &pool_created.pool);
-            let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
+            // let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
 
             Some(
                 ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
                     .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
-                    .with_tokens(&tokens_registered.tokens)
+                    // .with_tokens(&tokens_registered.tokens) //TODO: does it make sense to include
+                    // BPT token here?
+                    .with_tokens(&[
+                        create_call.main_token.clone(),
+                        create_call.wrapped_token.clone(),
+                    ])
                     .with_attributes(&[
                         ("pool_type", "ERC4626LinearPoolFactory".as_bytes()),
-                        (
-                            "upper_target",
-                            &create_call
-                                .upper_target
-                                .to_signed_bytes_be(),
-                        ),
-                        ("manual_updates", &[1u8]),
-                        ("bpt", &pool_created.pool),
-                        ("main_token", &create_call.main_token),
-                        ("wrapped_token", &create_call.wrapped_token),
-                        (
-                            "fee",
-                            &create_call
-                                .swap_fee_percentage
-                                .to_signed_bytes_be(),
-                        ),
-                    ])
-                    .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
-            )
-        }
-        hex!("5F43FBa61f63Fa6bFF101a0A0458cEA917f6B347") => {
-            let create_call =
-                abi::euler_linear_pool_factory::functions::Create::match_and_decode(call)?;
-            let pool_created =
-                abi::euler_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
-            let pool_registered = get_pool_registered(tx, &pool_created.pool);
-            let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
-
-            Some(
-                ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
-                    .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
-                    .with_tokens(&tokens_registered.tokens)
-                    .with_attributes(&[
-                        ("pool_type", "EulerLinearPoolFactory".as_bytes()),
-                        (
-                            "upper_target",
-                            &create_call
-                                .upper_target
-                                .to_signed_bytes_be(),
-                        ),
-                        ("manual_updates", &[1u8]),
-                        ("bpt", &pool_created.pool),
-                        ("main_token", &create_call.main_token),
-                        ("wrapped_token", &create_call.wrapped_token),
-                        (
-                            "fee",
-                            &create_call
-                                .swap_fee_percentage
-                                .to_signed_bytes_be(),
-                        ),
-                    ])
-                    .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
-            )
-        }
-        // ❌ Reading the deployed factory for Gearbox showcases that it's currently disabled
-        // hex!("39A79EB449Fc05C92c39aA6f0e9BfaC03BE8dE5B") => {
-        //     let create_call =
-        //         abi::gearbox_linear_pool_factory::functions::Create::match_and_decode(call)?;
-        //     let pool_created =
-        //         abi::gearbox_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
-
-        //     Some(tycho::ProtocolComponent {
-        //         id: hex::encode(&pool_created.pool),
-        //         tokens: vec![create_call.main_token, create_call.wrapped_token],
-        //         contracts: vec![pool_addr.into(), pool_created.pool],
-        //         static_att: vec![
-        //             tycho::Attribute {
-        //                 name: "pool_type".into(),
-        //                 value: "GearboxLinearPoolFactory".into(),
-        //                 change: tycho::ChangeType::Creation.into(),
-        //             },
-        //             tycho::Attribute {
-        //                 name: "upper_target".into(),
-        //                 value: create_call.upper_target.to_signed_bytes_be(),
-        //                 change: tycho::ChangeType::Creation.into(),
-        //             },
-        //         ],
-        //         change: tycho::ChangeType::Creation.into(),
-        //     })
-        // }
-        // ❌ The `ManagedPoolFactory` is a bit ✨ unique ✨, so we'll leave it commented out for
-        // now Take a look at it's `Create` call to see how the params are structured.
-        // hex!("BF904F9F340745B4f0c4702c7B6Ab1e808eA6b93") => {
-        //     let create_call =
-        // abi::managed_pool_factory::functions::Create::match_and_decode(call)?;
-        //     let pool_created =
-        //         abi::managed_pool_factory::events::PoolCreated::match_and_decode(log)?;
-
-        //     Some(tycho::ProtocolComponent {
-        //         id: hex::encode(&pool_created.pool),
-        //         tokens: create_call.tokens,
-        //         contracts: vec![pool_addr.into(), pool_created.pool],
-        //         static_att: vec![
-        //             tycho::Attribute {
-        //                 name: "pool_type".into(),
-        //                 value: "ManagedPoolFactory".into(),
-        //                 change: tycho::ChangeType::Creation.into(),
-        //             },
-        //         ],
-        //         change: tycho::ChangeType::Creation.into(),
-        //     })
-        // }
-        hex!("4E11AEec21baF1660b1a46472963cB3DA7811C89") => {
-            let create_call =
-                abi::silo_linear_pool_factory::functions::Create::match_and_decode(call)?;
-            let pool_created =
-                abi::silo_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
-            let pool_registered = get_pool_registered(tx, &pool_created.pool);
-            let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
-
-            Some(
-                ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
-                    .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
-                    .with_tokens(&tokens_registered.tokens)
-                    .with_attributes(&[
-                        ("pool_type", "SiloLinearPoolFactory".as_bytes()),
-                        (
-                            "upper_target",
-                            &create_call
-                                .upper_target
-                                .to_signed_bytes_be(),
-                        ),
-                        ("manual_updates", &[1u8]),
-                        ("bpt", &pool_created.pool),
-                        ("main_token", &create_call.main_token),
-                        ("wrapped_token", &create_call.wrapped_token),
-                        (
-                            "fee",
-                            &create_call
-                                .swap_fee_percentage
-                                .to_signed_bytes_be(),
-                        ),
-                    ])
-                    .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
-            )
-        }
-        hex!("5F5222Ffa40F2AEd6380D022184D6ea67C776eE0") => {
-            let create_call =
-                abi::yearn_linear_pool_factory::functions::Create::match_and_decode(call)?;
-            let pool_created =
-                abi::yearn_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
-            let pool_registered = get_pool_registered(tx, &pool_created.pool);
-            let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
-
-            Some(
-                ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
-                    .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
-                    .with_tokens(&tokens_registered.tokens)
-                    .with_attributes(&[
-                        ("pool_type", "YearnLinearPoolFactory".as_bytes()),
                         (
                             "upper_target",
                             &create_call
@@ -414,6 +272,168 @@ pub fn address_map(
                     .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
             )
         }
+
+        // ❌ EulerLinearPoolFactory: factory is disabled and no existing pools have relevant
+        // liquidity hex!("5F43FBa61f63Fa6bFF101a0A0458cEA917f6B347") => {
+        //     let create_call =
+        //         abi::euler_linear_pool_factory::functions::Create::match_and_decode(call)?;
+        //     let pool_created =
+        //         abi::euler_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
+        //     let pool_registered = get_pool_registered(tx, &pool_created.pool);
+        //     let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
+
+        //     Some(
+        //         ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
+        //             .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
+        //             // .with_tokens(&tokens_registered.tokens)
+        //             .with_tokens(&[
+        //                 create_call.main_token.clone(),
+        //                 create_call.wrapped_token.clone(),
+        //             ])
+        //             .with_attributes(&[
+        //                 ("pool_type", "EulerLinearPoolFactory".as_bytes()),
+        //                 (
+        //                     "upper_target",
+        //                     &create_call
+        //                         .upper_target
+        //                         .to_signed_bytes_be(),
+        //                 ),
+        //                 ("manual_updates", &[1u8]),
+        //                 ("bpt", &pool_created.pool),
+        //                 ("main_token", &create_call.main_token),
+        //                 ("wrapped_token", &create_call.wrapped_token),
+        //                 (
+        //                     "fee",
+        //                     &create_call
+        //                         .swap_fee_percentage
+        //                         .to_signed_bytes_be(),
+        //                 ),
+        //             ])
+        //             .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
+        //     )
+        // }
+
+        // ❌ Reading the deployed factory for Gearbox showcases that it's currently disabled
+        // hex!("39A79EB449Fc05C92c39aA6f0e9BfaC03BE8dE5B") => {
+        //     let create_call =
+        //         abi::gearbox_linear_pool_factory::functions::Create::match_and_decode(call)?;
+        //     let pool_created =
+        //         abi::gearbox_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
+
+        //     Some(tycho::ProtocolComponent {
+        //         id: hex::encode(&pool_created.pool),
+        //         tokens: vec![create_call.main_token, create_call.wrapped_token],
+        //         contracts: vec![pool_addr.into(), pool_created.pool],
+        //         static_att: vec![
+        //             tycho::Attribute {
+        //                 name: "pool_type".into(),
+        //                 value: "GearboxLinearPoolFactory".into(),
+        //                 change: tycho::ChangeType::Creation.into(),
+        //             },
+        //             tycho::Attribute {
+        //                 name: "upper_target".into(),
+        //                 value: create_call.upper_target.to_signed_bytes_be(),
+        //                 change: tycho::ChangeType::Creation.into(),
+        //             },
+        //         ],
+        //         change: tycho::ChangeType::Creation.into(),
+        //     })
+        // }
+
+        // ❌ The `ManagedPoolFactory` is a bit ✨ unique ✨, so we'll leave it commented out for
+        // now. Take a look at it's `Create` call to see how the params are structured.
+        // hex!("BF904F9F340745B4f0c4702c7B6Ab1e808eA6b93") => {
+        //     let create_call =
+        // abi::managed_pool_factory::functions::Create::match_and_decode(call)?;
+        //     let pool_created =
+        //         abi::managed_pool_factory::events::PoolCreated::match_and_decode(log)?;
+
+        //     Some(tycho::ProtocolComponent {
+        //         id: hex::encode(&pool_created.pool),
+        //         tokens: create_call.tokens,
+        //         contracts: vec![pool_addr.into(), pool_created.pool],
+        //         static_att: vec![
+        //             tycho::Attribute {
+        //                 name: "pool_type".into(),
+        //                 value: "ManagedPoolFactory".into(),
+        //                 change: tycho::ChangeType::Creation.into(),
+        //             },
+        //         ],
+        //         change: tycho::ChangeType::Creation.into(),
+        //     })
+        // }
+
+        // ❌ SiloLinearPoolFactory: factory is disabled and no existing pools have relevant
+        // liquidity hex!("4E11AEec21baF1660b1a46472963cB3DA7811C89") => {
+        //     let create_call =
+        //         abi::silo_linear_pool_factory::functions::Create::match_and_decode(call)?;
+        //     let pool_created =
+        //         abi::silo_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
+        //     let pool_registered = get_pool_registered(tx, &pool_created.pool);
+        //     let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
+
+        //     Some(
+        //         ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
+        //             .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
+        //             .with_tokens(&tokens_registered.tokens)
+        //             .with_attributes(&[
+        //                 ("pool_type", "SiloLinearPoolFactory".as_bytes()),
+        //                 (
+        //                     "upper_target",
+        //                     &create_call
+        //                         .upper_target
+        //                         .to_signed_bytes_be(),
+        //                 ),
+        //                 ("manual_updates", &[1u8]),
+        //                 ("bpt", &pool_created.pool),
+        //                 ("main_token", &create_call.main_token),
+        //                 ("wrapped_token", &create_call.wrapped_token),
+        //                 (
+        //                     "fee",
+        //                     &create_call
+        //                         .swap_fee_percentage
+        //                         .to_signed_bytes_be(),
+        //                 ),
+        //             ])
+        //             .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
+        //     )
+        // }
+
+        // ❌ YearnLinearPoolFactory: factory is disabled and no existing pools have relevant
+        // liquidity hex!("5F5222Ffa40F2AEd6380D022184D6ea67C776eE0") => {
+        //     let create_call =
+        //         abi::yearn_linear_pool_factory::functions::Create::match_and_decode(call)?;
+        //     let pool_created =
+        //         abi::yearn_linear_pool_factory::events::PoolCreated::match_and_decode(log)?;
+        //     let pool_registered = get_pool_registered(tx, &pool_created.pool);
+        //     let tokens_registered = get_token_registered(tx, &pool_registered.pool_id);
+
+        //     Some(
+        //         ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
+        //             .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
+        //             .with_tokens(&tokens_registered.tokens)
+        //             .with_attributes(&[
+        //                 ("pool_type", "YearnLinearPoolFactory".as_bytes()),
+        //                 (
+        //                     "upper_target",
+        //                     &create_call
+        //                         .upper_target
+        //                         .to_signed_bytes_be(),
+        //                 ),
+        //                 ("manual_updates", &[1u8]),
+        //                 ("bpt", &pool_created.pool),
+        //                 ("main_token", &create_call.main_token),
+        //                 ("wrapped_token", &create_call.wrapped_token),
+        //                 (
+        //                     "fee",
+        //                     &create_call
+        //                         .swap_fee_percentage
+        //                         .to_signed_bytes_be(),
+        //                 ),
+        //             ])
+        //             .as_swap_type("balancer_v2_pool", ImplementationType::Vm),
+        //     )
+        // }
         _ => None,
     }
 }
