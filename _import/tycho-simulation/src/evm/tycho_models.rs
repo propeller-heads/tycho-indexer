@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
-use alloy_primitives::{Address, B256, U256};
+use alloy::primitives::{Address, B256, U256};
 use chrono::{NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
 pub use tycho_common::{dto::ChangeType, models::Chain};
@@ -340,14 +340,14 @@ impl StateRequestParameters {
     pub fn to_query_string(&self) -> String {
         let mut parts = vec![];
 
-        parts.push(format!("chain={}", self.chain));
+        parts.push(format!("chain={chain}", chain = self.chain));
 
         if let Some(tvl_gt) = self.tvl_gt {
-            parts.push(format!("tvl_gt={}", tvl_gt));
+            parts.push(format!("tvl_gt={tvl_gt}"));
         }
 
         if let Some(inertia) = self.inertia_min_gt {
-            parts.push(format!("inertia_min_gt={}", inertia));
+            parts.push(format!("inertia_min_gt={inertia}"));
         }
 
         parts.join("&")

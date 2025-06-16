@@ -1,4 +1,4 @@
-use alloy_primitives::U256;
+use alloy::primitives::U256;
 use tycho_common::keccak256;
 
 pub mod account_storage;

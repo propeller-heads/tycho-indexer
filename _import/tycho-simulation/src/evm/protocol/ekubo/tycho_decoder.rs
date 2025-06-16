@@ -201,6 +201,7 @@ mod tests {
                 ..Default::default()
             },
             component: case.component,
+            component_tvl: None,
         };
 
         let result = EkuboState::try_from_with_block(
@@ -234,6 +235,7 @@ mod tests {
                     balances: Default::default(),
                 },
                 component,
+                component_tvl: None,
             };
 
             let result = EkuboState::try_from_with_block(

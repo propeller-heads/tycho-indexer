@@ -122,6 +122,7 @@ jobs:
       - name: Setup rustfmt toolchain - nightly
         uses: dtolnay/rust-toolchain@a02741459ec5e501b9843ed30b535ca0a0376ae4
         with:
+          toolchain: nightly
           components: rustfmt
 
       - run: cargo +nightly fmt --all --check

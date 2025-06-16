@@ -1,7 +1,9 @@
 use std::{collections::HashMap, fmt::Debug};
 
-use alloy_primitives::{Address, U256};
-use alloy_sol_types::SolValue;
+use alloy::{
+    primitives::{Address, U256},
+    sol_types::SolValue,
+};
 use lazy_static::lazy_static;
 use revm::DatabaseRef;
 
@@ -136,8 +138,8 @@ pub(crate) fn brute_force_slots<D: EngineDatabaseInterface + Clone + Debug>(
     engine: &SimulationEngine<D>,
 ) -> Result<(ERC20Slots, ContractCompiler), SimulationError>
 where
-    <D as DatabaseRef>::Error: std::fmt::Debug,
-    <D as EngineDatabaseInterface>::Error: std::fmt::Debug,
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
 {
     let token_contract = TychoSimulationContract::new(*token_addr, engine.clone()).unwrap();
 
@@ -162,10 +164,11 @@ where
                     Some(overwrite_factory.get_overwrites()),
                     Some(*EXTERNAL_ACCOUNT),
                     U256::from(0u64),
+                    None,
                 )?
                 .return_value;
-            let decoded: U256Return = U256Return::abi_decode(&res, true).map_err(|e| {
-                SimulationError::FatalError(format!("Failed to decode swap return value: {:?}", e))
+            let decoded: U256Return = U256Return::abi_decode(&res).map_err(|e| {
+                SimulationError::FatalError(format!("Failed to decode swap return value: {e:?}"))
             })?;
             if decoded == *MARKER_VALUE {
                 balance_slot = Some(i);
@@ -187,7 +190,7 @@ where
         let mut overwrite_factory = ERC20OverwriteFactory::new(
             *token_addr,
             ERC20Slots::new(U256::from(0), U256::from(i)),
-            compiler, /* At this point we know the compiler becase we managed to find the
+            compiler, /* At this point we know the compiler because we managed to find the
                        * balance slot */
         );
 
@@ -202,10 +205,11 @@ where
                 Some(overwrite_factory.get_overwrites()),
                 Some(*EXTERNAL_ACCOUNT),
                 U256::from(0u64),
+                None,
             )?
             .return_value;
-        let decoded: U256Return = U256Return::abi_decode(&res, true).map_err(|e| {
-            SimulationError::FatalError(format!("Failed to decode swap return value: {:?}", e))
+        let decoded: U256Return = U256Return::abi_decode(&res).map_err(|e| {
+            SimulationError::FatalError(format!("Failed to decode swap return value: {e:?}"))
         })?;
         if decoded == *MARKER_VALUE {
             allowance_slot = Some(i);
@@ -228,17 +232,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{env, str::FromStr, sync::Arc};
+    use std::str::FromStr;
 
-    use alloy::{
-        providers::{ProviderBuilder, RootProvider},
-        transports::BoxTransport,
-    };
     use chrono::NaiveDateTime;
-    use dotenv::dotenv;
 
     use super::*;
-    use crate::evm::engine_db::simulation_db::SimulationDB;
+    use crate::evm::engine_db::{
+        simulation_db::{EVMProvider, SimulationDB},
+        utils::{get_client, get_runtime},
+    };
 
     fn setup_factory() -> ERC20OverwriteFactory {
         let token_address: Address = Address::from_slice(
@@ -308,20 +310,10 @@ mod tests {
         assert_eq!(overwrites[&factory.token_address][&total_supply_slot], supply);
     }
 
-    fn new_state() -> SimulationDB<RootProvider<BoxTransport>> {
-        dotenv().ok();
-        let eth_rpc_url = env::var("RPC_URL").expect("Missing RPC_URL in environment");
-        let runtime = tokio::runtime::Handle::try_current()
-            .is_err()
-            .then(|| tokio::runtime::Runtime::new().unwrap())
-            .unwrap();
-        let client = runtime.block_on(async {
-            ProviderBuilder::new()
-                .on_builtin(&eth_rpc_url)
-                .await
-                .unwrap()
-        });
-        SimulationDB::new(Arc::new(client), Some(Arc::new(runtime)), None)
+    fn new_state() -> SimulationDB<EVMProvider> {
+        let runtime = get_runtime();
+        let client = get_client(None);
+        SimulationDB::new(client, runtime, None)
     }
 
     #[test]

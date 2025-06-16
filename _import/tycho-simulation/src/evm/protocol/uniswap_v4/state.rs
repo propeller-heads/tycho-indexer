@@ -1,6 +1,6 @@
 use std::{any::Any, collections::HashMap};
 
-use alloy_primitives::{Address, Sign, I256, U256};
+use alloy::primitives::{Sign, I256, U256};
 use num_bigint::BigUint;
 use num_traits::Zero;
 use tracing::trace;
@@ -42,11 +42,11 @@ pub struct UniswapV4State {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UniswapV4Fees {
     // Protocol fees in the zero for one direction
-    zero_for_one: u32,
+    pub zero_for_one: u32,
     // Protocol fees in the one for zero direction
-    one_for_zero: u32,
+    pub one_for_zero: u32,
     // Liquidity providers fees
-    lp_fee: u32,
+    pub lp_fee: u32,
 }
 
 impl UniswapV4Fees {
@@ -192,7 +192,7 @@ impl UniswapV4State {
                         .net_liquidity;
                     let liquidity_net = if zero_for_one { -liquidity_raw } else { liquidity_raw };
                     state.liquidity =
-                        liquidity_math::add_liquidity_delta(state.liquidity, liquidity_net);
+                        liquidity_math::add_liquidity_delta(state.liquidity, liquidity_net)?;
                 }
                 state.tick = if zero_for_one { step.tick_next - 1 } else { step.tick_next };
             } else if state.sqrt_price != step.sqrt_price_start {
@@ -285,8 +285,8 @@ impl ProtocolSim for UniswapV4State {
 
     fn get_limits(
         &self,
-        token_in: Address,
-        token_out: Address,
+        token_in: Bytes,
+        token_out: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         // If the pool has no liquidity, return zeros for both limits
         if self.liquidity == 0 {
@@ -360,7 +360,7 @@ impl ProtocolSim for UniswapV4State {
                     .net_liquidity;
                 let liquidity_delta = if zero_for_one { -liquidity_raw } else { liquidity_raw };
                 current_liquidity =
-                    liquidity_math::add_liquidity_delta(current_liquidity, liquidity_delta);
+                    liquidity_math::add_liquidity_delta(current_liquidity, liquidity_delta)?;
             }
 
             // Move to the next tick position
@@ -477,7 +477,7 @@ mod tests {
     use tycho_client::feed::synchronizer::ComponentWithState;
 
     use super::*;
-    use crate::{evm::protocol::utils::bytes_to_address, protocol::models::TryFromWithBlock};
+    use crate::protocol::models::TryFromWithBlock;
 
     #[test]
     fn test_delta_transition() {
@@ -634,13 +634,10 @@ mod tests {
         );
 
         let res = usv4_state
-            .get_limits(
-                bytes_to_address(&t0.address).unwrap(),
-                bytes_to_address(&t1.address).unwrap(),
-            )
+            .get_limits(t0.address.clone(), t1.address.clone())
             .unwrap();
 
-        assert_eq!(&res.0, &BigUint::from_u128(71698353688830259750744466707).unwrap()); // Crazy amount because of this tick: "ticks/-887220/net-liquidity": "0x00e8481d98"
+        assert_eq!(&res.0, &BigUint::from_u128(71698353688830259750744466706).unwrap()); // Crazy amount because of this tick: "ticks/-887220/net-liquidity": "0x00e8481d98"
 
         let out = usv4_state
             .get_amount_out(res.0, &t0, &t1)

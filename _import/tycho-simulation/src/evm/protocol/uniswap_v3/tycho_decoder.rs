@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use alloy_primitives::U256;
+use alloy::primitives::U256;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_common::Bytes;
 
@@ -38,8 +38,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
                 Bytes::from([0; 16])
             } else {
                 return Err(InvalidSnapshotError::ValueError(format!(
-                    "Liquidity bytes too long for {}, expected 16",
-                    liq
+                    "Liquidity bytes too long for {liq}, expected 16"
                 )));
             }
         } else {
@@ -83,8 +82,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
                 Bytes::from([0; 4])
             } else {
                 return Err(InvalidSnapshotError::ValueError(format!(
-                    "Tick bytes too long for {}, expected 4",
-                    tick
+                    "Tick bytes too long for {tick}, expected 4"
                 )));
             }
         } else {
@@ -187,6 +185,7 @@ mod tests {
                 balances: HashMap::new(),
             },
             component: usv3_component(),
+            component_tvl: None,
         };
 
         let result = UniswapV3State::try_from_with_block(
@@ -242,6 +241,7 @@ mod tests {
                 balances: HashMap::new(),
             },
             component,
+            component_tvl: None,
         };
 
         let result = UniswapV3State::try_from_with_block(
@@ -274,6 +274,7 @@ mod tests {
                 balances: HashMap::new(),
             },
             component,
+            component_tvl: None,
         };
 
         let result = UniswapV3State::try_from_with_block(

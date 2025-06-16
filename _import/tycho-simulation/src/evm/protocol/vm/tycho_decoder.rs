@@ -4,8 +4,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use alloy_primitives::{Address, B256, U256};
-use revm::primitives::Bytecode;
+use alloy::primitives::{Address, B256, U256};
+use revm::state::Bytecode;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_common::Bytes;
 
@@ -62,7 +62,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
         let mut index = 0;
 
         loop {
-            let address_key = format!("stateless_contract_addr_{}", index);
+            let address_key = format!("stateless_contract_addr_{index}");
             if let Some(encoded_address_bytes) = snapshot
                 .state
                 .attributes
@@ -82,7 +82,7 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
                     Err(_) => continue,
                 };
 
-                let code_key = format!("stateless_contract_code_{}", index);
+                let code_key = format!("stateless_contract_code_{index}");
                 let code = snapshot
                     .state
                     .attributes
@@ -143,12 +143,15 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
                     .as_str()
             });
         let adapter_bytecode = Bytecode::new_raw(get_adapter_file(protocol_name)?.into());
-        let adapter_contract_address =
-            Address::from_str(&format!("{:0>40}", hex::encode(protocol_name))).map_err(|_| {
-                InvalidSnapshotError::ValueError(
-                    "Error converting protocol name to address".to_string(),
-                )
-            })?;
+        let adapter_contract_address = Address::from_str(&format!(
+            "{hex_protocol_name:0>40}",
+            hex_protocol_name = hex::encode(protocol_name)
+        ))
+        .map_err(|_| {
+            InvalidSnapshotError::ValueError(
+                "Error converting protocol name to address".to_string(),
+            )
+        })?;
 
         let mut pool_state_builder =
             EVMPoolStateBuilder::new(id.clone(), tokens.clone(), block, adapter_contract_address)
@@ -180,7 +183,7 @@ mod tests {
 
     use chrono::DateTime;
     use num_bigint::ToBigUint;
-    use revm::primitives::{AccountInfo, Address, KECCAK_EMPTY};
+    use revm::{primitives::KECCAK_EMPTY, state::AccountInfo};
     use serde_json::Value;
     use tycho_common::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
 
@@ -283,6 +286,7 @@ mod tests {
                 balances: HashMap::new(),
             },
             component: vm_component(),
+            component_tvl: None,
         };
         // Initialize engine with balancer storage
         let block = header();

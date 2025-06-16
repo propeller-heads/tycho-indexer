@@ -5,7 +5,7 @@ from decimal import Decimal
 from fractions import Fraction
 from functools import lru_cache
 from logging import getLogger
-from typing import Final, Any, NamedTuple
+from typing import Final, Any, NamedTuple, Optional
 
 import eth_abi
 import eth_utils
@@ -29,7 +29,9 @@ def decode_tycho_exchange(exchange: str) -> str:
 
 
 def create_engine(
-        mocked_tokens: list[Address], trace: bool = False
+    mocked_tokens: list[Address],
+    trace: bool = False,
+    token_initial_state: Optional[dict[HexBytes, dict[int, int]]] = None,
 ) -> SimulationEngine:
     """Create a simulation engine with a mocked ERC20 contract at given addresses.
 
@@ -48,10 +50,20 @@ def create_engine(
 
     for t in mocked_tokens:
         info = AccountInfo(
-            balance=0, nonce=0, code=get_contract_bytecode(ASSETS_FOLDER / "ERC20.bin")
+            balance=0,
+            nonce=0,
+            code=get_contract_bytecode(ASSETS_FOLDER / "TokenProxy.bin"),
         )
+        storage = None
+        if token_initial_state is not None:
+            storage = token_initial_state.get(HexBytes(t))
+            if storage is not None:
+                # TODO: move this to the TokenProxyOverwriteFactory
+                storage[
+                    0x6677C72CDEB41ACAF2B17EC8A6E275C4205F27DBFE4DE34EBAF2E928A7E610DB
+                ] = int(t, 16)
         engine.init_account(
-            address=t, account=info, mocked=True, permanent_storage=None
+            address=t, account=info, mocked=True, permanent_storage=storage
         )
     engine.init_account(
         address=EXTERNAL_ACCOUNT,
@@ -62,26 +74,34 @@ def create_engine(
 
     return engine
 
+
 class ContractCompiler(enum.Enum):
     Solidity = enum.auto()
     Vyper = enum.auto()
-    
+
     def compute_map_slot(self, map_base_slot: bytes, key: bytes) -> bytes:
         if self == ContractCompiler.Solidity:
             return eth_utils.keccak(key + map_base_slot)
         elif self == ContractCompiler.Vyper:
             return eth_utils.keccak(map_base_slot + key)
         else:
-            raise NotImplementedError(f"compute_map_slot not implemented for {self.name}")
-    
-    
+            raise NotImplementedError(
+                f"compute_map_slot not implemented for {self.name}"
+            )
+
+
 class ERC20Slots(NamedTuple):
     balance_map: int
     allowance_map: int
 
 
 class ERC20OverwriteFactory:
-    def __init__(self, token: EthereumToken, token_slots: ERC20Slots = ERC20Slots(0, 1), compiler: ContractCompiler = ContractCompiler.Solidity):
+    def __init__(
+        self,
+        token: EthereumToken,
+        token_slots: ERC20Slots = ERC20Slots(0, 1),
+        compiler: ContractCompiler = ContractCompiler.Solidity,
+    ):
         """
         Initialize the ERC20OverwriteFactory.
 
@@ -103,7 +123,9 @@ class ERC20OverwriteFactory:
             balance: The balance value.
             owner: The owner's address.
         """
-        storage_index = get_storage_slot_at_key(HexStr(owner), self._balance_slot, self._contract_compiler)
+        storage_index = get_storage_slot_at_key(
+            HexStr(owner), self._balance_slot, self._contract_compiler
+        )
         self._overwrites[storage_index] = balance
         log.log(
             5,
@@ -122,8 +144,11 @@ class ERC20OverwriteFactory:
         """
         storage_index = get_storage_slot_at_key(
             HexStr(spender),
-            get_storage_slot_at_key(HexStr(owner), self._allowance_slot, self._contract_compiler),
-            self._contract_compiler)
+            get_storage_slot_at_key(
+                HexStr(owner), self._allowance_slot, self._contract_compiler
+            ),
+            self._contract_compiler,
+        )
         self._overwrites[storage_index] = allowance
         log.log(
             5,
@@ -172,7 +197,230 @@ class ERC20OverwriteFactory:
         return {self._token.address: {"stateDiff": formatted_overwrites, "code": code}}
 
 
-def get_storage_slot_at_key(key: Address, mapping_slot: int, compiler = ContractCompiler.Solidity) -> int:
+class TokenProxyOverwriteFactory:
+    """Factory for creating storage overwrites for the TokenProxy contract."""
+
+    # Storage slots from TokenProxy.sol
+    IMPLEMENTATION_SLOT = int(
+        0x6677C72CDEB41ACAF2B17EC8A6E275C4205F27DBFE4DE34EBAF2E928A7E610DB
+    )
+    BALANCES_MAPPING_POSITION = int(
+        0x474F5FD57EE674F7B6851BC6F07E751B49076DFB356356985B9DAF10E9ABC941
+    )
+    HAS_CUSTOM_BALANCE_POSITION = int(
+        0x7EAD8EDE9DBB385B0664952C7462C9938A5821E6F78E859DA2E683216E99411B
+    )
+    CUSTOM_APPROVAL_MAPPING_POSITION = int(
+        0x71A54E125991077003BEF7E7CA57369C919DAC6D2458895F1EAB4D03960F4AEB
+    )
+    HAS_CUSTOM_APPROVAL_MAPPING_POSITION = int(
+        0x9F0C1BC0E9C3078F9AD5FC59C8606416B3FABCBD4C8353FED22937C66C866CE3
+    )
+    CUSTOM_NAME_POSITION = int(
+        0xCC1E513FB5BDA80DC466AD9D44DF38805A8DEE4C82B3C6DF3D9B25D3D5355D1C
+    )
+    CUSTOM_SYMBOL_POSITION = int(
+        0xDC17DD3380A9A034A702A2B2B1C6C25D39EBF0E89796E0D15E1E04D23E3BB221
+    )
+    CUSTOM_DECIMALS_POSITION = int(
+        0xADD486B234562DE9AC745F036F538CDA2547EF6DBB4DA3FA1C017625F888A8E8
+    )
+    CUSTOM_TOTAL_SUPPLY_POSITION = int(
+        0x6014AF1E8E9BB2844581B2FA9E5E3620181C3192EEFD3258319AEC23538DA9F5
+    )
+    HAS_CUSTOM_METADATA_POSITION = int(
+        0x9F37243DE61714BE9CC00628D4B9BF9897AE670218AF52ADE6D192B4339D7616
+    )
+
+    def __init__(self, token: EthereumToken, proxy_address: HexBytes = None):
+        """
+        Initialize the TokenProxyOverwriteFactory.
+
+        Parameters:
+            token: The token object.
+            proxy_address: The address of the original token contract. If None, it will not
+            set the implementation address.
+        """
+        self._token = token
+        self._overwrites = dict()
+        if proxy_address is not None:
+            self.set_implementation(proxy_address.hex())
+
+    def set_implementation(self, implementation_addr: Address):
+        """
+        Set the implementation address for the proxy.
+
+        Parameters:
+            implementation_addr: The address of the implementation contract.
+        """
+        self._overwrites[self.IMPLEMENTATION_SLOT] = int(implementation_addr, 16)
+        log.log(
+            5,
+            f"Set implementation: token={self._token.address} implementation={implementation_addr}",
+        )
+
+    def set_balance(self, balance: int, owner: Address):
+        """
+        Set the balance for a given owner.
+
+        Parameters:
+            balance: The balance value.
+            owner: The owner's address.
+        """
+        # Set the balance in the custom storage slot
+        storage_index = get_storage_slot_at_key(
+            HexStr(owner), self.BALANCES_MAPPING_POSITION, ContractCompiler.Solidity
+        )
+        self._overwrites[storage_index] = balance
+
+        # Set the has_custom_balance flag to true
+        has_balance_index = get_storage_slot_at_key(
+            HexStr(owner), self.HAS_CUSTOM_BALANCE_POSITION, ContractCompiler.Solidity
+        )
+        self._overwrites[has_balance_index] = 1  # true in Solidity
+
+        log.log(
+            5,
+            f"Override balance: token={self._token.address} owner={owner}"
+            f"value={balance} slot={storage_index}",
+        )
+
+    def set_allowance(self, allowance: int, spender: Address, owner: Address):
+        """
+        Set the allowance for a given spender and owner.
+
+        Parameters:
+            allowance: The allowance value.
+            spender: The spender's address.
+            owner: The owner's address.
+        """
+        # Set the allowance in the custom storage slot
+        storage_index = get_storage_slot_at_key(
+            HexStr(spender),
+            get_storage_slot_at_key(
+                HexStr(owner),
+                self.CUSTOM_APPROVAL_MAPPING_POSITION,
+                ContractCompiler.Solidity,
+            ),
+            ContractCompiler.Solidity,
+        )
+        self._overwrites[storage_index] = allowance
+
+        # Set the has_custom_approval flag to true
+        has_approval_index = get_storage_slot_at_key(
+            HexStr(owner),
+            self.HAS_CUSTOM_APPROVAL_MAPPING_POSITION,
+            ContractCompiler.Solidity,
+        )
+        self._overwrites[has_approval_index] = 1  # true in Solidity
+
+        log.log(
+            5,
+            f"Override allowance: token={self._token.address} owner={owner}"
+            f"spender={spender} value={allowance} slot={storage_index}",
+        )
+
+    def set_total_supply(self, supply: int):
+        """
+        Set the total supply of the token.
+
+        Parameters:
+            supply: The total supply value.
+        """
+        self._overwrites[self.CUSTOM_TOTAL_SUPPLY_POSITION] = supply
+        log.log(
+            5, f"Override total supply: token={self._token.address} supply={supply}"
+        )
+
+    def set_name(self, name: str):
+        """
+        Set the token name.
+
+        Parameters:
+            name: The token name.
+        """
+        # Store the name in the custom storage slot
+        self._overwrites[self.CUSTOM_NAME_POSITION] = int.from_bytes(
+            name.encode(), "big"
+        )
+
+        # Set the has_custom_metadata flag for name to true
+        has_metadata_index = get_storage_slot_at_key(
+            "name", self.HAS_CUSTOM_METADATA_POSITION, ContractCompiler.Solidity
+        )
+        self._overwrites[has_metadata_index] = 1  # true in Solidity
+
+        log.log(5, f"Override name: token={self._token.address} name={name}")
+
+    def set_symbol(self, symbol: str):
+        """
+        Set the token symbol.
+
+        Parameters:
+            symbol: The token symbol.
+        """
+        # Store the symbol in the custom storage slot
+        self._overwrites[self.CUSTOM_SYMBOL_POSITION] = int.from_bytes(
+            symbol.encode(), "big"
+        )
+
+        # Set the has_custom_metadata flag for symbol to true
+        has_metadata_index = get_storage_slot_at_key(
+            "symbol", self.HAS_CUSTOM_METADATA_POSITION, ContractCompiler.Solidity
+        )
+        self._overwrites[has_metadata_index] = 1  # true in Solidity
+
+        log.log(5, f"Override symbol: token={self._token.address} symbol={symbol}")
+
+    def set_decimals(self, decimals: int):
+        """
+        Set the token decimals.
+
+        Parameters:
+            decimals: The number of decimals.
+        """
+        self._overwrites[self.CUSTOM_DECIMALS_POSITION] = decimals
+
+        # Set the has_custom_metadata flag for decimals to true
+        has_metadata_index = get_storage_slot_at_key(
+            "decimals", self.HAS_CUSTOM_METADATA_POSITION, ContractCompiler.Solidity
+        )
+        self._overwrites[has_metadata_index] = 1  # true in Solidity
+
+        log.log(
+            5, f"Override decimals: token={self._token.address} decimals={decimals}"
+        )
+
+    def get_tycho_overwrites(self) -> dict[Address, dict[int, int]]:
+        """
+        Get the overwrites dictionary of previously collected values.
+
+        Returns:
+            dict[Address, dict]: A dictionary containing the token's address
+            and the overwrites.
+        """
+        return {self._token.address.lower(): self._overwrites}
+
+    def get_geth_overwrites(self) -> dict[Address, dict[int, int]]:
+        """
+        Get the overwrites dictionary in Geth format.
+
+        Returns:
+            dict[Address, dict]: A dictionary containing the token's address
+            and the overwrites in Geth format.
+        """
+        formatted_overwrites = {
+            HexBytes(key).hex(): "0x" + HexBytes(val).hex().lstrip("0x").zfill(64)
+            for key, val in self._overwrites.items()
+        }
+
+        code = "0x" + get_contract_bytecode(ASSETS_FOLDER / "TokenProxy.bin").hex()
+        return {self._token.address: {"stateDiff": formatted_overwrites, "code": code}}
+
+
+def get_storage_slot_at_key(
+    key: Address, mapping_slot: int, compiler=ContractCompiler.Solidity
+) -> int:
     """Get storage slot index of a value stored at a certain key in a mapping
 
     Parameters
@@ -183,10 +431,10 @@ def get_storage_slot_at_key(key: Address, mapping_slot: int, compiler = Contract
     mapping_slot
         Storage slot at which the mapping itself is stored. See the examples for more
         explanation.
-        
+
     compiler
-        The compiler with which the target contract was compiled. Solidity and Vyper handle 
-        maps differently. This defaults to Solidity because it's the most used. 
+        The compiler with which the target contract was compiled. Solidity and Vyper handle
+        maps differently. This defaults to Solidity because it's the most used.
 
     Returns
     -------
@@ -306,7 +554,7 @@ def parse_solidity_error_message(data) -> str:
 
 
 def maybe_coerce_error(
-        err: RuntimeError, pool_state: Any, gas_limit: int = None
+    err: RuntimeError, pool_state: Any, gas_limit: int = None
 ) -> Exception:
     details = err.args[0]
     # we got bytes as data, so this was a revert

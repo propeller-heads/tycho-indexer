@@ -1,23 +1,8 @@
-use std::{any::Any, collections::HashMap};
+use alloy::primitives::U256;
 
-use alloy_primitives::{Address, U256};
-use num_bigint::{BigUint, ToBigUint};
-use num_traits::Zero;
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
+use crate::evm::protocol::cpmm::protocol::CPMMProtocol;
 
-use super::reserve_price::spot_price_from_reserves;
-use crate::{
-    evm::protocol::{
-        safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
-        u256_num::{biguint_to_u256, u256_to_biguint},
-    },
-    models::{Balances, Token},
-    protocol::{
-        errors::{SimulationError, TransitionError},
-        models::GetAmountOutResult,
-        state::ProtocolSim,
-    },
-};
+const UNISWAP_V2_FEE_BPS: u32 = 30; // 0.3% fee
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UniswapV2State {
@@ -37,153 +22,21 @@ impl UniswapV2State {
     }
 }
 
-impl ProtocolSim for UniswapV2State {
-    fn fee(&self) -> f64 {
-        0.003
+impl CPMMProtocol for UniswapV2State {
+    fn get_fee_bps(&self) -> u32 {
+        UNISWAP_V2_FEE_BPS
     }
 
-    fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
-        if base < quote {
-            Ok(spot_price_from_reserves(
-                self.reserve0,
-                self.reserve1,
-                base.decimals as u32,
-                quote.decimals as u32,
-            ))
-        } else {
-            Ok(spot_price_from_reserves(
-                self.reserve1,
-                self.reserve0,
-                base.decimals as u32,
-                quote.decimals as u32,
-            ))
-        }
+    fn get_reserves(&self) -> (U256, U256) {
+        (self.reserve0, self.reserve1)
     }
 
-    fn get_amount_out(
-        &self,
-        amount_in: BigUint,
-        token_in: &Token,
-        token_out: &Token,
-    ) -> Result<GetAmountOutResult, SimulationError> {
-        let amount_in = biguint_to_u256(&amount_in);
-        if amount_in == U256::from(0u64) {
-            return Err(SimulationError::InvalidInput("Amount in cannot be zero".to_string(), None));
-        }
-        let zero2one = token_in.address < token_out.address;
-        let reserve_sell = if zero2one { self.reserve0 } else { self.reserve1 };
-        let reserve_buy = if zero2one { self.reserve1 } else { self.reserve0 };
-
-        if reserve_sell == U256::from(0u64) || reserve_buy == U256::from(0u64) {
-            return Err(SimulationError::RecoverableError("No liquidity".to_string()));
-        }
-
-        let amount_in_with_fee = safe_mul_u256(amount_in, U256::from(997))?;
-        let numerator = safe_mul_u256(amount_in_with_fee, reserve_buy)?;
-        let denominator =
-            safe_add_u256(safe_mul_u256(reserve_sell, U256::from(1000))?, amount_in_with_fee)?;
-
-        let amount_out = safe_div_u256(numerator, denominator)?;
-        let mut new_state = self.clone();
-        if zero2one {
-            new_state.reserve0 = safe_add_u256(self.reserve0, amount_in)?;
-            new_state.reserve1 = safe_sub_u256(self.reserve1, amount_out)?;
-        } else {
-            new_state.reserve0 = safe_sub_u256(self.reserve0, amount_out)?;
-            new_state.reserve1 = safe_add_u256(self.reserve1, amount_in)?;
-        };
-        Ok(GetAmountOutResult::new(
-            u256_to_biguint(amount_out),
-            120_000
-                .to_biguint()
-                .expect("Expected an unsigned integer as gas value"),
-            Box::new(new_state),
-        ))
+    fn get_reserves_mut(&mut self) -> (&mut U256, &mut U256) {
+        (&mut self.reserve0, &mut self.reserve1)
     }
 
-    fn get_limits(
-        &self,
-        token_in: Address,
-        token_out: Address,
-    ) -> Result<(BigUint, BigUint), SimulationError> {
-        if self.reserve0 == U256::from(0u64) || self.reserve1 == U256::from(0u64) {
-            return Ok((BigUint::zero(), BigUint::zero()));
-        }
-
-        let zero_for_one = token_in < token_out;
-        let (reserve_in, reserve_out) = if zero_for_one {
-            (self.reserve0, self.reserve1)
-        } else {
-            (self.reserve1, self.reserve0)
-        };
-
-        // Soft limit for amount in is the amount to get a 90% price impact.
-        // The two equations to resolve are:
-        // - 90% price impact: (reserve1 - y)/(reserve0 + x) = 0.1 × (reserve1/reserve0)
-        // - Maintain constant product: (reserve0 + x) × (reserve1 - y) = reserve0 * reserve1
-        //
-        // This resolves into x = (√10 - 1) × reserve0 = 2.16 × reserve0
-        let amount_in =
-            safe_div_u256(safe_mul_u256(reserve_in, U256::from(216))?, U256::from(100))?;
-
-        // Calculate amount_out using the constant product formula
-        // The constant product formula requires:
-        // (reserve_in + amount_in) × (reserve_out - amount_out) = reserve_in * reserve_out
-        // Solving for amount_out:
-        // amount_out = reserve_out - (reserve_in * reserve_out) (reserve_in + amount_in)
-        // which simplifies to:
-        // amount_out = (reserve_out * amount_in) / (reserve_in + amount_in)
-        let amount_out = safe_div_u256(
-            safe_mul_u256(reserve_out, amount_in)?,
-            safe_add_u256(reserve_in, amount_in)?,
-        )?;
-
-        Ok((u256_to_biguint(amount_in), u256_to_biguint(amount_out)))
-    }
-
-    fn delta_transition(
-        &mut self,
-        delta: ProtocolStateDelta,
-        _tokens: &HashMap<Bytes, Token>,
-        _balances: &Balances,
-    ) -> Result<(), TransitionError<String>> {
-        // reserve0 and reserve1 are considered required attributes and are expected in every delta
-        // we process
-        self.reserve0 = U256::from_be_slice(
-            delta
-                .updated_attributes
-                .get("reserve0")
-                .ok_or(TransitionError::MissingAttribute("reserve0".to_string()))?,
-        );
-        self.reserve1 = U256::from_be_slice(
-            delta
-                .updated_attributes
-                .get("reserve1")
-                .ok_or(TransitionError::MissingAttribute("reserve1".to_string()))?,
-        );
-        Ok(())
-    }
-
-    fn clone_box(&self) -> Box<dyn ProtocolSim> {
-        Box::new(self.clone())
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
-    fn eq(&self, other: &dyn ProtocolSim) -> bool {
-        if let Some(other_state) = other
-            .as_any()
-            .downcast_ref::<UniswapV2State>()
-        {
-            self.reserve0 == other_state.reserve0 && self.reserve1 == other_state.reserve1
-        } else {
-            false
-        }
+    fn new(reserve0: U256, reserve1: U256) -> Self {
+        Self::new(reserve0, reserve1)
     }
 }
 
@@ -195,11 +48,20 @@ mod tests {
     };
 
     use approx::assert_ulps_eq;
+    use num_bigint::{BigUint, ToBigUint};
     use num_traits::One;
     use rstest::rstest;
-    use tycho_common::hex_bytes::Bytes;
+    use tycho_common::{dto::ProtocolStateDelta, hex_bytes::Bytes};
 
     use super::*;
+    use crate::{
+        evm::protocol::u256_num::biguint_to_u256,
+        models::{Balances, Token},
+        protocol::{
+            errors::{SimulationError, TransitionError},
+            state::ProtocolSim,
+        },
+    };
 
     #[rstest]
     #[case::same_dec(
@@ -382,8 +244,8 @@ mod tests {
 
         let (amount_in, _) = state
             .get_limits(
-                Address::from_str("0x0000000000000000000000000000000000000000").unwrap(),
-                Address::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+                Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+                Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
             )
             .unwrap();
 

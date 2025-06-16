@@ -1,7 +1,7 @@
 use std::collections::{hash_map::Entry::Vacant, HashMap};
 
-use alloy_primitives::{Address, U256};
-use revm::primitives::AccountInfo;
+use alloy::primitives::{Address, U256};
+use revm::state::AccountInfo;
 use tracing::{debug, warn};
 
 /// Represents an account in the account storage.
@@ -231,7 +231,7 @@ impl AccountStorage {
 mod tests {
     use std::{error::Error, str::FromStr};
 
-    use revm::primitives::{AccountInfo, KECCAK_EMPTY};
+    use revm::primitives::KECCAK_EMPTY;
 
     use super::*;
     use crate::evm::account_storage::{Account, AccountStorage};

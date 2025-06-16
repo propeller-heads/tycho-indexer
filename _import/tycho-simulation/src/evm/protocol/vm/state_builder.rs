@@ -3,13 +3,15 @@ use std::{
     fmt::Debug,
 };
 
-use alloy_primitives::{Address, U256};
-use alloy_sol_types::SolValue;
+use alloy::{
+    primitives::{Address, Bytes, Keccak256, U256},
+    sol_types::SolValue,
+};
 use chrono::Utc;
 use itertools::Itertools;
 use revm::{
-    precompile::Bytes,
-    primitives::{alloy_primitives::Keccak256, AccountInfo, Bytecode, KECCAK_EMPTY},
+    primitives::KECCAK_EMPTY,
+    state::{AccountInfo, Bytecode},
     DatabaseRef,
 };
 use tracing::warn;
@@ -45,7 +47,7 @@ use crate::{
 /// # Example
 /// Constructing a `EVMPoolState` with only the required parameters:
 /// ```rust
-/// use alloy_primitives::Address;
+/// use alloy::primitives::Address;
 /// use std::path::PathBuf;
 /// use tycho_common::Bytes;
 /// use tycho_simulation::evm::engine_db::simulation_db::BlockHeader;
@@ -56,7 +58,7 @@ use crate::{
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), SimulationError> {
-///     use revm::primitives::Bytecode;
+///     use revm::state::Bytecode;
 /// let pool_id: String = "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
 ///
 ///     let tokens = vec![
@@ -215,7 +217,7 @@ where
         };
 
         if self.adapter_contract.is_none() {
-            self.adapter_contract = Some(TychoSimulationContract::new_swap_adapter(
+            self.adapter_contract = Some(TychoSimulationContract::new_contract(
                 self.adapter_address,
                 self.adapter_contract_bytecode
                     .clone()
@@ -301,12 +303,11 @@ where
                 };
                 let account_address: Address = addr_str.parse().map_err(|_| {
                     SimulationError::FatalError(format!(
-                        "Failed to get default engine: Couldn't parse address string {}",
-                        address
+                        "Failed to get default engine: Couldn't parse address string {address}"
                     ))
                 })?;
                 engine.state.init_account(
-                    alloy_primitives::Address(*account_address),
+                    alloy::primitives::Address(*account_address),
                     AccountInfo { balance: Default::default(), nonce: 0, code_hash, code },
                     None,
                     false,
@@ -435,8 +436,7 @@ where
 
         let parsed_address: Address = to_address.parse().map_err(|_| {
             SimulationError::FatalError(format!(
-                "Failed to get address from call: Invalid address format: {}",
-                to_address
+                "Failed to get address from call: Invalid address format: {to_address}"
             ))
         })?;
 
@@ -449,14 +449,15 @@ where
             caller: *EXTERNAL_ACCOUNT,
             value: U256::from(0u64),
             gas_limit: None,
+            transient_storage: None,
         };
 
         let sim_result = engine
             .simulate(&sim_params)
             .map_err(|err| SimulationError::FatalError(err.to_string()))?;
 
-        let address: Address = Address::abi_decode(&sim_result.result, true).map_err(|e| {
-            SimulationError::FatalError(format!("Failed to get address from call: Failed to decode address list from simulation result {:?}", e))
+        let address: Address = Address::abi_decode(&sim_result.result).map_err(|e| {
+            SimulationError::FatalError(format!("Failed to get address from call: Failed to decode address list from simulation result {e:?}"))
         })?;
 
         Ok(address)
@@ -467,7 +468,7 @@ where
 mod tests {
     use std::str::FromStr;
 
-    use alloy_primitives::B256;
+    use alloy::primitives::B256;
 
     use super::*;
     use crate::evm::engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB};

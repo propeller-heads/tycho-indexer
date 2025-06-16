@@ -1,7 +1,7 @@
 //! Numeric methods for the U256 type
 use std::{cmp::max, collections::HashMap, panic};
 
-use alloy_primitives::{bytes::Bytes, U256};
+use alloy::primitives::{bytes::Bytes, U256};
 use num_bigint::BigUint;
 
 /// Converts a U256 integer into it's closest floating point representation

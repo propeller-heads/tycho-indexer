@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy_primitives::Address;
+use alloy::primitives::Address;
 use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{debug, error, info, warn};
@@ -360,7 +360,6 @@ impl TychoStreamDecoder {
                 // Update engine with account changes
                 let account_update_by_address: HashMap<Address, AccountUpdate> = deltas
                     .account_updates
-                    .clone()
                     .iter()
                     .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
                     .collect();
@@ -534,7 +533,7 @@ mod tests {
             ]
             .iter()
             .map(|addr| {
-                let addr_str = format!("{:x}", addr);
+                let addr_str = format!("{addr:x}");
                 (addr.clone(), Token::new(&addr_str, 18, &addr_str, 100_000.to_biguint().unwrap()))
             })
             .collect();
@@ -545,8 +544,7 @@ mod tests {
 
     fn load_test_msg(name: &str) -> FeedMessage {
         let project_root = env!("CARGO_MANIFEST_DIR");
-        let asset_path =
-            Path::new(project_root).join(format!("tests/assets/decoder/{}.json", name));
+        let asset_path = Path::new(project_root).join(format!("tests/assets/decoder/{name}.json"));
         let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
         serde_json::from_str(&json_data).expect("Failed to deserialize FeedMsg json!")
     }
@@ -576,7 +574,7 @@ mod tests {
         let tokens = [Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").lpad(20, 0)]
             .iter()
             .map(|addr| {
-                let addr_str = format!("{:x}", addr);
+                let addr_str = format!("{addr:x}");
                 (addr.clone(), Token::new(&addr_str, 18, &addr_str, 100_000.to_biguint().unwrap()))
             })
             .collect();
@@ -608,7 +606,7 @@ mod tests {
                         "Failed to parse bytes: Invalid hex: Invalid character 'Z' at position 0"
                     );
                 } else {
-                    panic!("Expected failures to be ignored. Err: {}", msg)
+                    panic!("Expected failures to be ignored. Err: {msg}")
                 }
             }
             Ok(res) => {
@@ -635,7 +633,7 @@ mod tests {
                 if !skip_failures {
                     assert_eq!(msg, "Missing attributes reserve0");
                 } else {
-                    panic!("Expected failures to be ignored. Err: {}", msg)
+                    panic!("Expected failures to be ignored. Err: {msg}")
                 }
             }
             Ok(res) => {

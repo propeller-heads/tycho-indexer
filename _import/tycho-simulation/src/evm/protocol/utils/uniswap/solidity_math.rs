@@ -1,4 +1,4 @@
-use alloy_primitives::{U256, U512};
+use alloy::primitives::{U256, U512};
 
 use crate::{
     evm::protocol::safe_math::{div_mod_u512, safe_div_u512, safe_mul_u512},
@@ -10,8 +10,10 @@ pub(super) fn mul_div_rounding_up(a: U256, b: U256, denom: U256) -> Result<U256,
     let b_big = U512::from(b);
     let product = safe_mul_u512(a_big, b_big)?;
     let (mut result, rest) = div_mod_u512(product, U512::from(denom))?;
-    if rest >= U512::from(0u64) {
-        result += U512::from(1u64);
+    if !rest.is_zero() {
+        result = result
+            .checked_add(U512::from(1u64))
+            .ok_or_else(|| SimulationError::FatalError("Overflow when rounding up".to_string()))?;
     }
     truncate_to_u256(result)
 }

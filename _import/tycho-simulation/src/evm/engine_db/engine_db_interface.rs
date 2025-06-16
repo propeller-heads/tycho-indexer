@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use alloy_primitives::U256;
-use revm::{precompile::Address, primitives::AccountInfo, DatabaseRef};
+use alloy::primitives::{Address, U256};
+use revm::{state::AccountInfo, DatabaseRef};
 
 pub trait EngineDatabaseInterface: DatabaseRef + Send + Sync {
     type Error;

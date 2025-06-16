@@ -6,7 +6,7 @@ use std::{
     str::FromStr,
 };
 
-use alloy_primitives::{Address, U256};
+use alloy::primitives::{Address, U256};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use revm::DatabaseRef;
@@ -308,8 +308,7 @@ where
                 for (token, bal) in bals {
                     let addr = bytes_to_address(token).map_err(|_| {
                         SimulationError::FatalError(format!(
-                            "Invalid token address in balance update: {:?}",
-                            token
+                            "Invalid token address in balance update: {token:?}"
                         ))
                     })?;
                     self.balances
@@ -330,8 +329,7 @@ where
                     for (token, bal) in bals {
                         let addr = bytes_to_address(token).map_err(|_| {
                             SimulationError::FatalError(format!(
-                                "Invalid token address in balance update: {:?}",
-                                token
+                                "Invalid token address in balance update: {token:?}"
                             ))
                         })?;
                         contract_entry.insert(addr, U256::from_be_slice(bal));
@@ -515,8 +513,7 @@ where
             .get(&(base_address, quote_address))
             .cloned()
             .ok_or(SimulationError::FatalError(format!(
-                "Spot price not found for base token {} and quote token {}",
-                base_address, quote_address
+                "Spot price not found for base token {base_address} and quote token {quote_address}"
             )))
     }
 
@@ -597,7 +594,7 @@ where
 
         if sell_amount_exceeds_limit {
             return Err(SimulationError::InvalidInput(
-                format!("Sell amount exceeds limit {}", sell_amount_limit),
+                format!("Sell amount exceeds limit {sell_amount_limit}"),
                 Some(GetAmountOutResult::new(
                     u256_to_biguint(buy_amount),
                     u256_to_biguint(trade.gas_used),
@@ -614,9 +611,11 @@ where
 
     fn get_limits(
         &self,
-        sell_token: Address,
-        buy_token: Address,
+        sell_token: Bytes,
+        buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
+        let sell_token = bytes_to_address(&sell_token)?;
+        let buy_token = bytes_to_address(&buy_token)?;
         let overwrites =
             self.get_overwrites(vec![sell_token, buy_token], *MAX_BALANCE / U256::from(100))?;
         let limits = self.get_amount_limits(vec![sell_token, buy_token], Some(overwrites))?;
@@ -673,10 +672,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use alloy_primitives::B256;
+    use alloy::primitives::B256;
     use num_bigint::ToBigUint;
     use num_traits::One;
-    use revm::primitives::{AccountInfo, Bytecode, KECCAK_EMPTY};
+    use revm::{
+        primitives::KECCAK_EMPTY,
+        state::{AccountInfo, Bytecode},
+    };
     use serde_json::Value;
 
     use super::*;

@@ -20,10 +20,7 @@ pub async fn handle_traces(
     decode_internal: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut decoder = CallTraceDecoderBuilder::new()
-        .with_signature_identifier(SignaturesIdentifier::new(
-            Config::foundry_cache_dir(),
-            config.offline,
-        )?)
+        .with_signature_identifier(SignaturesIdentifier::new(config.offline)?)
         .build();
 
     let mut etherscan_identifier = EtherscanIdentifier::new(config, chain)?;
@@ -64,12 +61,12 @@ pub async fn print_traces(
 
     let mut traces_strings = Vec::new();
     for (_, arena) in traces {
-        decode_trace_arena(arena, decoder).await?;
+        decode_trace_arena(arena, decoder).await;
         traces_strings.push(render_trace_arena(arena));
     }
     println!("Traces:");
     for t in traces_strings {
-        println!("{}", t);
+        println!("{t}");
     }
     println!();
 
@@ -79,6 +76,6 @@ pub async fn print_traces(
         println!("Transaction failed.");
     }
 
-    println!("Gas used: {}", result.gas_used);
+    println!("Gas used: {gas}", gas = result.gas_used);
     Ok(())
 }

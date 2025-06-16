@@ -1,4 +1,4 @@
-use alloy_primitives::U256;
+use alloy::primitives::U256;
 use strum_macros::Display;
 
 use crate::protocol::errors::SimulationError;
@@ -49,9 +49,7 @@ impl Capability {
             7 => Ok(Capability::ScaledPrice),
             8 => Ok(Capability::HardLimits),
             9 => Ok(Capability::MarginalPrice),
-            _ => {
-                Err(SimulationError::FatalError(format!("Unexpected Capability value: {}", value)))
-            }
+            _ => Err(SimulationError::FatalError(format!("Unexpected Capability value: {value}"))),
         }
     }
 }

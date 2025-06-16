@@ -10,8 +10,8 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use alloy_primitives::U256;
 use num_bigint::BigUint;
+use serde::Serialize;
 use thiserror::Error;
 use tycho_common::{dto::ResponseToken, Bytes};
 
@@ -25,7 +25,7 @@ pub enum ModelError {
     MissingData(String),
 }
 
-#[derive(Clone, Debug, Eq)]
+#[derive(Clone, Debug, Eq, Serialize)]
 pub struct Token {
     /// The address of the token on the blockchain network
     pub address: Bytes,
@@ -46,7 +46,7 @@ impl Token {
     /// - `address`: token address as string
     /// - `decimals`: token decimal as usize
     /// - `symbol`: token symbol as string
-    /// - `gas`: token gas as U256
+    /// - `gas`: token gas as BigUint
     ///
     /// ## Return
     /// Return a new Token struct
@@ -56,19 +56,19 @@ impl Token {
     pub fn new(address: &str, decimals: usize, symbol: &str, gas: BigUint) -> Self {
         let addr = Bytes::from(
             hexstring_to_vec(address)
-                .unwrap_or_else(|_| panic!("Invalid token address: {:?}", address)),
+                .unwrap_or_else(|_| panic!("Invalid token address: {address:?}")),
         );
         let sym = symbol.to_string();
         Token { address: addr, decimals, symbol: sym, gas }
     }
 
     /// One
-    /// Get one token in U256 format
+    /// Get one token in BigUint format
     ///
     /// ## Return
-    /// Return one token as U256
-    pub fn one(&self) -> U256 {
-        U256::from(10).pow(U256::from(self.decimals))
+    /// Return one token as BigUint
+    pub fn one(&self) -> BigUint {
+        BigUint::from((1.0 * 10f64.powi(self.decimals as i32)) as u128)
     }
 }
 
@@ -97,7 +97,7 @@ impl TryFrom<ResponseToken> for Token {
         Ok(Self {
             address: value.address,
             decimals: value.decimals.try_into().map_err(|e| {
-                ModelError::ConversionError(format!("Failed to convert decimals: {}", e))
+                ModelError::ConversionError(format!("Failed to convert decimals: {e}"))
             })?,
             symbol: value.symbol.to_string(),
             gas: BigUint::from(
@@ -140,7 +140,10 @@ mod tests {
 
         assert_eq!(token.symbol, "USDC");
         assert_eq!(token.decimals, 6);
-        assert_eq!(format!("{:#x}", token.address), "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
+        assert_eq!(
+            format!("{token_address:#x}", token_address = token.address),
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        );
     }
 
     #[test]
@@ -177,6 +180,6 @@ mod tests {
             10000.to_biguint().unwrap(),
         );
 
-        assert_eq!(usdc.one(), U256::from(1000000));
+        assert_eq!(usdc.one(), BigUint::from(1000000u64));
     }
 }

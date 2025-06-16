@@ -1,8 +1,8 @@
 use std::cmp;
 
-use alloy_primitives::U256;
+use alloy::primitives::U256;
 
-use super::tick_math::{self, MAX_TICK, MIN_TICK};
+use super::tick_math::{get_sqrt_ratio_at_tick, MAX_TICK, MIN_TICK};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TickInfo {
@@ -15,7 +15,7 @@ impl TickInfo {
     pub fn new(index: i32, net_liquidity: i128) -> Self {
         // Note: using this method here returns slightly different values
         //  compared to the Python implementation, likely more correct
-        let sqrt_price = tick_math::get_sqrt_ratio_at_tick(index).unwrap();
+        let sqrt_price = get_sqrt_ratio_at_tick(index).unwrap();
         TickInfo { index, net_liquidity, sqrt_price }
     }
 }
@@ -78,7 +78,7 @@ impl TickList {
             for i in 0..self.ticks.len() - 1 {
                 let t = self.ticks.get(i).unwrap();
                 if i != self.ticks.len() && t > self.ticks.get(i + 1).unwrap() {
-                    let msg = format!("Ticks are not ordered at position {}", t.index);
+                    let msg = format!("Ticks are not ordered at position {index}", index = t.index);
                     return Err(msg);
                 }
             }
@@ -315,29 +315,29 @@ mod tests {
     #[test]
     fn test_next_initialized_tick() {
         let tick_infos = vec![
-            create_tick_info(tick_math::MIN_TICK + 1, 10),
+            create_tick_info(MIN_TICK + 1, 10),
             create_tick_info(0, -5),
-            create_tick_info(tick_math::MAX_TICK - 1, -5),
+            create_tick_info(MAX_TICK - 1, -5),
         ];
         let tick_list = TickList::from(1, tick_infos.clone());
         let cases = vec![
             TestCaseNextInitializedTick {
-                args: (tick_math::MIN_TICK + 1, true),
+                args: (MIN_TICK + 1, true),
                 exp: 0,
                 id: "low: idx = MIN + 1, lte = true",
             },
             TestCaseNextInitializedTick {
-                args: (tick_math::MIN_TICK + 2, true),
+                args: (MIN_TICK + 2, true),
                 exp: 0,
                 id: "low: idx = MIN + 2, lte = true",
             },
             TestCaseNextInitializedTick {
-                args: (tick_math::MIN_TICK, false),
+                args: (MIN_TICK, false),
                 exp: 0,
                 id: "low: idx = MIN, lte = false",
             },
             TestCaseNextInitializedTick {
-                args: (tick_math::MIN_TICK + 1, false),
+                args: (MIN_TICK + 1, false),
                 exp: 1,
                 id: "low: = MIN + 1, lte = false",
             },
@@ -354,22 +354,22 @@ mod tests {
                 id: "mid: idx = 1, lte = false",
             },
             TestCaseNextInitializedTick {
-                args: (tick_math::MAX_TICK - 1, true),
+                args: (MAX_TICK - 1, true),
                 exp: 2,
                 id: "high: idx = MAX - 1, lte = true",
             },
             TestCaseNextInitializedTick {
-                args: (tick_math::MAX_TICK, true),
+                args: (MAX_TICK, true),
                 exp: 2,
                 id: "high: idx = MAX, lte = true",
             },
             TestCaseNextInitializedTick {
-                args: (tick_math::MAX_TICK - 2, false),
+                args: (MAX_TICK - 2, false),
                 exp: 2,
                 id: "high: idx = MAX - 2, lte = false",
             },
             TestCaseNextInitializedTick {
-                args: (tick_math::MAX_TICK - 3, false),
+                args: (MAX_TICK - 3, false),
                 exp: 2,
                 id: "high: idx = MAX - 3, lte = false",
             },
@@ -396,9 +396,9 @@ mod tests {
     #[test]
     fn test_next_initialized_tick_within_one_word() {
         let tick_infos = vec![
-            create_tick_info(tick_math::MIN_TICK + 1, 10),
+            create_tick_info(MIN_TICK + 1, 10),
             create_tick_info(0, -5),
-            create_tick_info(tick_math::MAX_TICK - 1, -5),
+            create_tick_info(MAX_TICK - 1, -5),
         ];
         let tick_list = TickList::from(1, tick_infos);
         let cases = vec![
