@@ -18,7 +18,7 @@ import {Permit2TestHelper} from "./Permit2TestHelper.sol";
 import "./TestUtils.sol";
 import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
 import {BalancerV3Executor} from "../src/executors/BalancerV3Executor.sol";
-import {MockBebopSettlement} from "./executors/BebopExecutor.t.sol";
+import {BebopSettlementMock} from "./mock/BebopSettlementMock.sol";
 
 contract TychoRouterExposed is TychoRouter {
     constructor(address _permit2, address weth) TychoRouter(_permit2, weth) {}
@@ -91,6 +91,13 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         tychoRouter.setExecutors(executors);
         vm.stopPrank();
 
+        // Deploy our mock Bebop settlement and use vm.etch to replace the real one
+        // This avoids InvalidSender errors since the mock doesn't validate taker addresses
+        // Do this AFTER deploying executors to preserve deterministic addresses
+        BebopSettlementMock mockSettlement = new BebopSettlementMock();
+        bytes memory mockCode = address(mockSettlement).code;
+        vm.etch(BEBOP_SETTLEMENT, mockCode);
+
         vm.startPrank(BOB);
         tokens.push(new MockERC20("Token A", "A"));
         tokens.push(new MockERC20("Token B", "B"));
@@ -135,11 +142,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         maverickv2Executor =
             new MaverickV2Executor(MAVERICK_V2_FACTORY, PERMIT2_ADDRESS);
         balancerV3Executor = new BalancerV3Executor(PERMIT2_ADDRESS);
-
-        // Deploy mock Bebop settlement for testing
-        MockBebopSettlement mockBebopSettlement = new MockBebopSettlement();
-        bebopExecutor =
-            new BebopExecutor(address(mockBebopSettlement), PERMIT2_ADDRESS);
+        bebopExecutor = new BebopExecutor(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
 
         address[] memory executors = new address[](10);
         executors[0] = address(usv2Executor);
