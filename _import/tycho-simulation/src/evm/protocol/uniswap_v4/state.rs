@@ -426,6 +426,7 @@ impl ProtocolSim for UniswapV4State {
             } else {
                 BalanceDelta::new(hook_delta_unspecified, hook_delta_specified)
             };
+            // This is a BalanceDelta subtraction
             swap_delta = swap_delta - hook_delta
         }
         let amount_out = if (amount_specified < I256::ZERO) == zero_for_one {

@@ -55,10 +55,9 @@ impl BeforeSwapDelta {
     }
 }
 
+/// Replicating https://github.com/Uniswap/v4-core/blob/main/src/types/BalanceDelta.sol#L8
 /// Two `I128` values packed into a single `I256` where the upper 128 bits represent the amount0
 /// and the lower 128 bits represent the amount1.
-/// Replicating
-/// https://github.com/Uniswap/v4-core/blob/main/src/types/BalanceDelta.sol#L8
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BalanceDelta(pub I256);
 
