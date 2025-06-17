@@ -1,13 +1,10 @@
 use std::{any::Any, collections::HashMap, fmt::Debug};
 
 use alloy::{
-    primitives::{keccak256, Address, Signed, Uint, B256, I128, U256},
+    primitives::{keccak256, Address, Signed, Uint, B256, I128, I256, U256},
     sol_types::SolType,
 };
-use revm::{
-    state::{AccountInfo, Bytecode},
-    DatabaseRef,
-};
+use revm::DatabaseRef;
 use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
 use crate::{
@@ -15,18 +12,15 @@ use crate::{
         engine_db::{engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader},
         protocol::{
             uniswap_v4::{
-                hooks::{
-                    constants::POOL_MANAGER_BYTECODE,
-                    hook_handler::HookHandler,
+                hooks::hook_handler::HookHandler,
                     models::{
                         AfterSwapDelta, AfterSwapParameters, AfterSwapSolReturn, AmountRanges,
-                        BeforeSwapOutput, BeforeSwapParameters, BeforeSwapSolOutput, SwapParams,
-                        WithGasEstimate,
-                    },
+                    BeforeSwapOutput, BeforeSwapParameters, BeforeSwapSolOutput, SwapParams,
+                     WithGasEstimate,
                 },
                 state::UniswapV4State,
             },
-            vm::{constants::MAX_BALANCE, tycho_simulation_contract::TychoSimulationContract},
+            vm::tycho_simulation_contract::TychoSimulationContract,
         },
         simulation::SimulationEngine,
     },
@@ -67,24 +61,6 @@ where
         _all_tokens: HashMap<Bytes, Token>,
         _account_balances: HashMap<Bytes, HashMap<Bytes, Bytes>>,
     ) -> Result<Self, SimulationError> {
-        // TODO overwrite token balances (see how it's done in EVMPoolState)
-
-        // Init pool manager
-        // For now we use saved bytecode, but tycho-indexer should be able to provide this
-        let pool_manager_bytecode = Bytecode::new_raw(POOL_MANAGER_BYTECODE.into());
-
-        engine.state.init_account(
-            pool_manager,
-            AccountInfo {
-                balance: *MAX_BALANCE,
-                nonce: 0,
-                code_hash: B256::from(keccak256(pool_manager_bytecode.clone().bytes())),
-                code: Some(pool_manager_bytecode),
-            },
-            None,
-            false,
-        );
-
         Ok(GenericVMHookHandler {
             contract: TychoSimulationContract::new(address, engine)?,
             address,
@@ -277,6 +253,7 @@ mod tests {
     use std::str::FromStr;
 
     use alloy::primitives::{aliases::U24, B256, I256, U256};
+    use revm::state::{AccountInfo, Bytecode};
 
     use super::*;
     use crate::evm::{
@@ -393,6 +370,20 @@ mod tests {
         // pool manager on ethereum
         let pool_manager = Address::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90")
             .expect("Invalid pool manager address");
+
+        let pool_manager_bytecode = Bytecode::new_raw(POOL_MANAGER_BYTECODE.into());
+
+        engine.state.init_account(
+            pool_manager,
+            AccountInfo {
+                balance: *MAX_BALANCE,
+                nonce: 0,
+                code_hash: B256::from(keccak256(pool_manager_bytecode.clone().bytes())),
+                code: Some(pool_manager_bytecode),
+            },
+            None,
+            false,
+        );
 
         let hook_address = Address::from_str("0x0010d0d5db05933fa0d9f7038d365e1541a41888")
             .expect("Invalid hook address");
