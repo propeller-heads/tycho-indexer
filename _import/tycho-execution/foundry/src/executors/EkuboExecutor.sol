@@ -21,6 +21,7 @@ contract EkuboExecutor is
     ICallback,
     RestrictTransferFrom
 {
+    error EkuboExecutor__AddressZero();
     error EkuboExecutor__InvalidDataLength();
     error EkuboExecutor__CoreOnly();
     error EkuboExecutor__UnknownCallback();
@@ -44,6 +45,10 @@ contract EkuboExecutor is
         address _permit2
     ) RestrictTransferFrom(_permit2) {
         core = ICore(_core);
+
+        if (_mevResist == address(0)) {
+            revert EkuboExecutor__AddressZero();
+        }
         mevResist = _mevResist;
     }
 
@@ -175,6 +180,7 @@ contract EkuboExecutor is
                     (int128, int128)
                 );
             } else {
+                // slither-disable-next-line calls-loop
                 (delta0, delta1) = core.swap_611415377(
                     pk,
                     nextAmountIn,
@@ -201,6 +207,7 @@ contract EkuboExecutor is
     ) internal returns (bytes memory result) {
         address target = address(core);
 
+        // slither-disable-next-line assembly
         assembly ("memory-safe") {
             // We will store result where the free memory pointer is now, ...
             result := mload(0x40)

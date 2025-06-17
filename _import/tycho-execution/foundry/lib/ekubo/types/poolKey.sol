@@ -14,6 +14,7 @@ struct PoolKey {
 }
 
 function extension(Config config) pure returns (address e) {
+    // slither-disable-next-line assembly
     assembly ("memory-safe") {
         e := shr(96, config)
     }
