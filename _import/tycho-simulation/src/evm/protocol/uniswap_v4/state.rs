@@ -156,20 +156,18 @@ impl UniswapV4State {
             assert!(price_limit > self.sqrt_price);
         }
 
-        let exact_input = amount_specified > I256::ZERO;
+        let exact_input = amount_specified < I256::ZERO;
 
         let mut state = SwapState {
             amount_remaining: amount_specified,
-            amount_calculated: I256::from_raw(U256::from(0u64)),
+            amount_calculated: I256::ZERO,
             sqrt_price: self.sqrt_price,
             tick: self.tick,
             liquidity: self.liquidity,
         };
         let mut gas_used = U256::from(130_000);
 
-        while state.amount_remaining != I256::from_raw(U256::from(0u64)) &&
-            state.sqrt_price != price_limit
-        {
+        while state.amount_remaining != I256::ZERO && state.sqrt_price != price_limit {
             let (mut next_tick, initialized) = match self
                 .ticks
                 .next_initialized_tick_within_one_word(state.tick, zero_for_one)
@@ -201,7 +199,10 @@ impl UniswapV4State {
                 state.sqrt_price,
                 UniswapV4State::get_sqrt_ratio_target(sqrt_price_next, price_limit, zero_for_one),
                 state.liquidity,
-                state.amount_remaining,
+                // The core univ4 swap logic assumes that if the amount is > 0 it's exact in, and
+                // if it's < 0 it's exact out. The compute_swap_step assumes the
+                // opposite (it's like that for univ3).
+                -state.amount_remaining,
                 self.fees
                     .calculate_swap_fees_pips(zero_for_one, lp_fee_override),
             )?;
@@ -217,17 +218,17 @@ impl UniswapV4State {
                 fee_amount,
             };
             if exact_input {
-                state.amount_remaining -= I256::checked_from_sign_and_abs(
+                state.amount_remaining += I256::checked_from_sign_and_abs(
                     Sign::Positive,
                     safe_add_u256(step.amount_in, step.fee_amount)?,
                 )
                 .unwrap();
-                state.amount_calculated -=
+                state.amount_calculated +=
                     I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
             } else {
-                state.amount_remaining +=
+                state.amount_remaining -=
                     I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
-                state.amount_calculated += I256::checked_from_sign_and_abs(
+                state.amount_calculated -= I256::checked_from_sign_and_abs(
                     Sign::Positive,
                     safe_add_u256(step.amount_in, step.fee_amount)?,
                 )
@@ -391,10 +392,7 @@ impl ProtocolSim for UniswapV4State {
         }
 
         // Perform the swap with potential hook modifications
-        // The core univ4 swap logic assumes that if the amount is >0 it's exact in, and if it's <0
-        // it's exact out. This is the opposite of what is done in the solidity contracts
-        // (used for hook simulation)
-        let result = self.swap(zero_for_one, -amount_to_swap, None, lp_fee_override)?;
+        let result = self.swap(zero_for_one, amount_to_swap, None, lp_fee_override)?;
 
         let mut swap_delta = BalanceDelta(result.amount_calculated);
         let hook_delta_specified = before_swap_delta.get_specified_delta();
@@ -445,7 +443,7 @@ impl ProtocolSim for UniswapV4State {
         // Add hook gas costs to baseline swap cost
         let total_gas_used = result.gas_used + U256::from(before_swap_gas + after_swap_gas);
         Ok(GetAmountOutResult::new(
-            u256_to_biguint(U256::from(amount_out)),
+            u256_to_biguint(U256::from(amount_out.abs())),
             u256_to_biguint(total_gas_used),
             Box::new(new_state),
         ))
@@ -465,8 +463,8 @@ impl ProtocolSim for UniswapV4State {
         let mut current_tick = self.tick;
         let mut current_sqrt_price = self.sqrt_price;
         let mut current_liquidity = self.liquidity;
-        let mut total_amount_in = U256::from(0u64);
-        let mut total_amount_out = U256::from(0u64);
+        let mut total_amount_in = U256::ZERO;
+        let mut total_amount_out = U256::ZERO;
 
         // Iterate through all ticks in the direction of the swap
         // Continues until there is no more liquidity in the pool or no more ticks to process
