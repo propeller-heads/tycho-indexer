@@ -176,6 +176,11 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             EncodingError::FatalError("Failed to pad tick spacing bytes".to_string())
         })?;
 
+        let hook_address = match get_static_attribute(&swap, "hook") {
+            Ok(hook) => Address::from_slice(&hook),
+            Err(_) => Address::ZERO,
+        };
+
         // Early check if this is not the first swap
         if encoding_context.group_token_in != swap.token_in {
             return Ok((bytes_to_address(&swap.token_out)?, pool_fee_u24, pool_tick_spacing_u24)
@@ -199,6 +204,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             zero_to_one,
             (encoding_context.transfer_type as u8).to_be_bytes(),
             bytes_to_address(&encoding_context.receiver)?,
+            hook_address,
             pool_params,
         );
 
@@ -897,6 +903,8 @@ mod tests {
                     "01",
                     // receiver
                     "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
+                    // hook address (not set, so zero)
+                    "0000000000000000000000000000000000000000",
                     // pool params:
                     // - intermediary token
                     "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -1070,6 +1078,8 @@ mod tests {
                     "01",
                     // receiver
                     "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
+                    // hook address (not set, so zero)
+                    "0000000000000000000000000000000000000000",
                     // pool params:
                     // - intermediary token USDT
                     "dac17f958d2ee523a2206206994597c13d831ec7",

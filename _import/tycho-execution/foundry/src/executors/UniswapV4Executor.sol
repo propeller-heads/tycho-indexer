@@ -85,6 +85,7 @@ contract UniswapV4Executor is
             bool zeroForOne,
             TransferType transferType,
             address receiver,
+            address hook,
             UniswapV4Executor.UniswapV4Pool[] memory pools
         ) = _decodeData(data);
         bytes memory swapData;
@@ -94,7 +95,7 @@ contract UniswapV4Executor is
                 currency1: Currency.wrap(zeroForOne ? tokenOut : tokenIn),
                 fee: pools[0].fee,
                 tickSpacing: pools[0].tickSpacing,
-                hooks: IHooks(address(0))
+                hooks: IHooks(hook)
             });
             swapData = abi.encodeWithSelector(
                 this.swapExactInputSingle.selector,
@@ -112,7 +113,7 @@ contract UniswapV4Executor is
                     intermediateCurrency: Currency.wrap(pools[i].intermediaryToken),
                     fee: pools[i].fee,
                     tickSpacing: pools[i].tickSpacing,
-                    hooks: IHooks(address(0)),
+                    hooks: IHooks(hook),
                     hookData: bytes("")
                 });
             }
@@ -143,10 +144,11 @@ contract UniswapV4Executor is
             bool zeroForOne,
             TransferType transferType,
             address receiver,
+            address hook,
             UniswapV4Pool[] memory pools
         )
     {
-        if (data.length < 88) {
+        if (data.length < 108) {
             revert UniswapV4Executor__InvalidDataLength();
         }
 
@@ -155,10 +157,11 @@ contract UniswapV4Executor is
         zeroForOne = data[40] != 0;
         transferType = TransferType(uint8(data[41]));
         receiver = address(bytes20(data[42:62]));
+        hook = address(bytes20(data[62:82]));
 
-        uint256 poolsLength = (data.length - 62) / 26; // 26 bytes per pool object
+        uint256 poolsLength = (data.length - 82) / 26; // 26 bytes per pool object
         pools = new UniswapV4Pool[](poolsLength);
-        bytes memory poolsData = data[62:];
+        bytes memory poolsData = data[82:];
         uint256 offset = 0;
         for (uint256 i = 0; i < poolsLength; i++) {
             address intermediaryToken;

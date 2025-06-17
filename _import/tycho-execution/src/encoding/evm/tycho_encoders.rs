@@ -1253,6 +1253,8 @@ mod tests {
                     "01",
                     // receiver
                     "cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2",
+                    // hook address (not set, so zero)
+                    "0000000000000000000000000000000000000000",
                     // first pool intermediary token (ETH)
                     "0000000000000000000000000000000000000000",
                     // fee
