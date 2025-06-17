@@ -1,4 +1,5 @@
-use std::{any::Any, collections::HashMap, fmt::Debug};
+use std::collections::{HashMap, HashSet};
+use std::{any::Any, fmt::Debug};
 
 use evm_ekubo_sdk::{
     math::uint::U256,
@@ -7,14 +8,11 @@ use evm_ekubo_sdk::{
 use num_bigint::BigUint;
 use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
-use super::{
-    attributes::{sale_rate_deltas_from_attributes, ticks_from_attributes},
-    pool::{
-        base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool, EkuboPool,
-    },
+use super::pool::{
+    base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool, EkuboPool,
 };
 use crate::{
-    evm::protocol::u256_num::u256_to_f64,
+    evm::protocol::{ekubo::pool::mev_resist::MevResistPool, u256_num::u256_to_f64},
     models::{Balances, Token},
     protocol::{
         errors::{SimulationError, TransitionError},
@@ -30,6 +28,7 @@ pub enum EkuboState {
     FullRange(FullRangePool),
     Oracle(OraclePool),
     Twamm(TwammPool),
+    MevResist(MevResistPool),
 }
 
 fn sqrt_price_q128_to_f64(x: U256, (token0_decimals, token1_decimals): (usize, usize)) -> f64 {
@@ -70,10 +69,14 @@ impl ProtocolSim for EkuboState {
 
         let quote = self.quote(token_amount)?;
 
+        if quote.calculated_amount == u128::MAX {
+            return Err(SimulationError::RecoverableError(
+                "calculated amount exceeds i128::MAX".to_string(),
+            ));
+        }
+
         let res = GetAmountOutResult {
-            amount: BigUint::try_from(quote.calculated_amount).map_err(|_| {
-                SimulationError::FatalError("output amount must be non-negative".to_string())
-            })?,
+            amount: BigUint::from(quote.calculated_amount),
             gas: quote.gas.into(),
             new_state: Box::new(quote.new_state),
         };
@@ -108,75 +111,7 @@ impl ProtocolSim for EkuboState {
             self.set_sqrt_ratio(U256::from_big_endian(sqrt_price));
         }
 
-        match self {
-            Self::Base(p) => {
-                // The exact tick is only required for CL pools
-                if let Some(tick) = delta.updated_attributes.get("tick") {
-                    p.set_active_tick(tick.clone().into());
-                }
-
-                ticks_from_attributes(
-                    delta
-                        .updated_attributes
-                        .into_iter()
-                        .chain(
-                            delta
-                                .deleted_attributes
-                                .into_iter()
-                                .map(|key| (key, Bytes::new())),
-                        ),
-                )
-                .map_err(TransitionError::DecodeError)?
-                .into_iter()
-                .for_each(|changed_tick| {
-                    p.set_tick(changed_tick);
-                });
-            }
-            Self::FullRange(_) | Self::Oracle(_) => {}
-            Self::Twamm(p) => {
-                if let Some(token0_sale_rate) = delta
-                    .updated_attributes
-                    .get("token0_sale_rate")
-                {
-                    p.set_token0_sale_rate(token0_sale_rate.clone().into());
-                }
-
-                if let Some(token1_sale_rate) = delta
-                    .updated_attributes
-                    .get("token1_sale_rate")
-                {
-                    p.set_token1_sale_rate(token1_sale_rate.clone().into());
-                }
-
-                if let Some(last_execution_time) = delta
-                    .updated_attributes
-                    .get("last_execution_time")
-                {
-                    p.set_last_execution_time(last_execution_time.clone().into());
-                }
-
-                let last_execution_time = p.last_execution_time();
-
-                sale_rate_deltas_from_attributes(
-                    delta
-                        .updated_attributes
-                        .into_iter()
-                        .chain(
-                            delta
-                                .deleted_attributes
-                                .into_iter()
-                                .map(|key| (key, Bytes::new())),
-                        ),
-                    last_execution_time,
-                )
-                .map_err(TransitionError::DecodeError)?
-                .for_each(|changed_delta| {
-                    p.set_sale_rate_delta(changed_delta);
-                });
-            }
-        }
-
-        self.finish_transition()
+        self.finish_transition(delta.updated_attributes, delta.deleted_attributes)
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
@@ -203,12 +138,10 @@ impl ProtocolSim for EkuboState {
         sell_token: Bytes,
         _buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
+        let consumed_amount = self.get_limit(U256::from_big_endian(&sell_token))?;
+
         // TODO Update once exact out is supported
-        Ok((
-            self.get_limit(U256::from_big_endian(&sell_token))?
-                .into(),
-            BigUint::ZERO,
-        ))
+        Ok((BigUint::try_from(consumed_amount).unwrap_or_default(), BigUint::ZERO))
     }
 }
 

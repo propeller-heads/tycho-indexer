@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use evm_ekubo_sdk::{
     math::uint::U256,
     quoting::{
@@ -6,6 +8,7 @@ use evm_ekubo_sdk::{
         types::{NodeKey, Pool, QuoteParams, TokenAmount},
     },
 };
+use tycho_common::Bytes;
 
 use super::{full_range::FullRangePool, EkuboPool, EkuboPoolQuote};
 use crate::protocol::errors::{InvalidSnapshotError, SimulationError, TransitionError};
@@ -90,11 +93,12 @@ impl EkuboPool for OraclePool {
         Ok(EkuboPoolQuote {
             consumed_amount: quote.consumed_amount,
             calculated_amount: quote.calculated_amount,
-            gas: FullRangePool::gas_costs() +
-                quote
-                    .execution_resources
-                    .snapshots_written as u64 *
-                    Self::GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT,
+            gas: FullRangePool::gas_costs()
+                + u64::from(
+                    quote
+                        .execution_resources
+                        .snapshots_written,
+                ) * Self::GAS_COST_OF_UPDATING_ORACLE_SNAPSHOT,
             new_state: Self {
                 imp: self.imp.clone(),
                 state: quote.state_after,
@@ -104,25 +108,24 @@ impl EkuboPool for OraclePool {
         })
     }
 
-    fn get_limit(&self, token_in: U256) -> Result<u128, SimulationError> {
-        let max_in_token_amount = TokenAmount { amount: i128::MAX, token: token_in };
-
-        let quote = self
+    fn get_limit(&self, token_in: U256) -> Result<i128, SimulationError> {
+        Ok(self
             .imp
             .quote(QuoteParams {
-                token_amount: max_in_token_amount,
+                token_amount: TokenAmount { amount: i128::MAX, token: token_in },
                 sqrt_ratio_limit: None,
                 override_state: Some(self.state),
                 meta: 0,
             })
-            .map_err(|err| SimulationError::RecoverableError(format!("quoting error: {err:?}")))?;
-
-        u128::try_from(quote.consumed_amount).map_err(|_| {
-            SimulationError::FatalError("consumed amount should be non-negative".to_string())
-        })
+            .map_err(|err| SimulationError::RecoverableError(format!("quoting error: {err:?}")))?
+            .consumed_amount)
     }
 
-    fn finish_transition(&mut self) -> Result<(), TransitionError<String>> {
+    fn finish_transition(
+        &mut self,
+        _updated_attributes: HashMap<String, Bytes>,
+        _deleted_attributes: HashSet<String>,
+    ) -> Result<(), TransitionError<String>> {
         self.swapped_this_block = false;
 
         Ok(())

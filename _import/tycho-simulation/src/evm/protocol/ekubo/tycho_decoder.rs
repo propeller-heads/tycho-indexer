@@ -3,12 +3,10 @@ use std::collections::HashMap;
 use evm_ekubo_sdk::{
     math::uint::U256,
     quoting::{
-        base_pool::BasePoolState,
         full_range_pool::FullRangePoolState,
         oracle_pool::OraclePoolState,
         twamm_pool::TwammPoolState,
         types::{Config, NodeKey},
-        util::find_nearest_initialized_tick_index,
     },
 };
 use itertools::Itertools;
@@ -22,6 +20,7 @@ use super::{
     state::EkuboState,
 };
 use crate::{
+    evm::protocol::ekubo::pool::mev_resist::MevResistPool,
     models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
@@ -30,6 +29,7 @@ enum EkuboExtension {
     Base,
     Oracle,
     Twamm,
+    MevResist,
 }
 
 impl TryFrom<Bytes> for EkuboExtension {
@@ -42,6 +42,7 @@ impl TryFrom<Bytes> for EkuboExtension {
             1 => Ok(Self::Base),
             2 => Ok(Self::Oracle),
             3 => Ok(Self::Twamm),
+            4 => Ok(Self::MevResist),
             discriminant => Err(InvalidSnapshotError::ValueError(format!(
                 "unknown discriminant {discriminant}"
             ))),
@@ -119,16 +120,7 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
 
                     ticks.sort_unstable_by_key(|tick| tick.index);
 
-                    Self::Base(BasePool::new(
-                        key,
-                        BasePoolState {
-                            sqrt_ratio,
-                            liquidity,
-                            active_tick_index: find_nearest_initialized_tick_index(&ticks, tick),
-                        },
-                        ticks,
-                        tick,
-                    )?)
+                    Self::Base(BasePool::new(key, ticks, sqrt_ratio, liquidity, tick)?)
                 }
             }
             EkuboExtension::Oracle => Self::Oracle(OraclePool::new(
@@ -170,6 +162,18 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
                     },
                     virtual_order_deltas,
                 )?)
+            }
+            EkuboExtension::MevResist => {
+                let tick = attribute(&state_attrs, "tick")?
+                    .clone()
+                    .into();
+
+                let mut ticks =
+                    ticks_from_attributes(state_attrs).map_err(InvalidSnapshotError::ValueError)?;
+
+                ticks.sort_unstable_by_key(|tick| tick.index);
+
+                Self::MevResist(MevResistPool::new(key, ticks, sqrt_ratio, liquidity, tick)?)
             }
         })
     }
