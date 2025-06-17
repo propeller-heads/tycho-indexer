@@ -291,6 +291,16 @@ impl ProtocolSim for UniswapV4State {
     }
 
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
+        if let Some(hook) = &self.hook {
+            match hook.spot_price(base, quote) {
+                Ok(price) => return Ok(price),
+                Err(SimulationError::RecoverableError(msg)) if msg.contains("not implemented") => {
+                    // Fall back to default implementation
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
         if base < quote {
             Ok(sqrt_price_q96_to_f64(self.sqrt_price, base.decimals as u32, quote.decimals as u32))
         } else {
@@ -455,6 +465,21 @@ impl ProtocolSim for UniswapV4State {
         token_in: Bytes,
         token_out: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
+        if let Some(hook) = &self.hook {
+            match hook.get_amount_ranges(token_in.clone(), token_out.clone()) {
+                Ok(amount_ranges) => {
+                    return Ok((
+                        u256_to_biguint(amount_ranges.amount_in_range.1),
+                        u256_to_biguint(amount_ranges.amount_out_range.1),
+                    ))
+                }
+                Err(SimulationError::RecoverableError(msg)) if msg.contains("not implemented") => {
+                    // Fall back to default implementation
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
         // If the pool has no liquidity, return zeros for both limits
         if self.liquidity == 0 {
             return Ok((BigUint::zero(), BigUint::zero()));
@@ -541,9 +566,21 @@ impl ProtocolSim for UniswapV4State {
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
-        _tokens: &HashMap<Bytes, Token>,
-        _balances: &Balances,
+        tokens: &HashMap<Bytes, Token>,
+        balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
+        if let Some(mut hook) = self.hook.clone() {
+            match hook.delta_transition(delta.clone(), tokens, balances) {
+                Ok(()) => self.set_hook_handler(hook),
+                Err(TransitionError::SimulationError(SimulationError::RecoverableError(msg)))
+                    if msg.contains("not implemented") =>
+                {
+                    // Fall back to default implementation
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
         // Apply attribute changes
         if let Some(liquidity) = delta
             .updated_attributes

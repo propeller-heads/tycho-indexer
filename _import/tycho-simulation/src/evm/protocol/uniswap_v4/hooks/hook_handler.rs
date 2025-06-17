@@ -55,8 +55,8 @@ pub trait HookHandler: Debug + Send + Sync + 'static {
     // with updated ProtocolSim interface
     fn get_amount_ranges(
         &self,
-        token_in: Address,
-        token_out: Address,
+        token_in: Bytes,
+        token_out: Bytes,
     ) -> Result<AmountRanges, SimulationError>;
 
     // Called on each state update to update the internal state of the HookHandler

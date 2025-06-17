@@ -240,8 +240,8 @@ where
 
     fn get_amount_ranges(
         &self,
-        _token_in: Address,
-        _token_out: Address,
+        _token_in: Bytes,
+        _token_out: Bytes,
     ) -> Result<AmountRanges, SimulationError> {
         Err(SimulationError::RecoverableError(
             "get_amount_ranges is not implemented for GenericVMHookHandler".to_string(),
