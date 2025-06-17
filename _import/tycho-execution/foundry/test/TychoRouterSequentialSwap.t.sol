@@ -496,35 +496,49 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
     }
 
     function testUSV3BebopIntegration() public {
-        // Performs a sequential swap from WETH to DAI through USDC using USV3 and Bebop RFQ
+        // Performs a sequential swap from WETH to ONDO through USDC using USV3 and Bebop RFQ
         //
-        //   WETH ──(USV3)──> USDC ───(Bebop RFQ)──> DAI
-        deal(WETH_ADDR, ALICE, 1 ether);
-        uint256 balanceBefore = IERC20(DAI_ADDR).balanceOf(ALICE);
+        //   WETH ──(USV3)──> USDC ───(Bebop RFQ)──> ONDO
 
-        // Set up the Bebop maker with the address from our updated rust test
-        address bebopMaker = address(0x1234567890123456789012345678901234567890);
-        uint256 expectedDaiAmount = 2021750881000000000000; // ~2021.75 DAI
+        // The Bebop order expects:
+        // - 200 USDC input -> 237.21 ONDO output
+        // - Receiver: 0xc5564C13A157E6240659fb81882A28091add8670
+        // - Maker: 0xCe79b081c0c924cb67848723ed3057234d10FC6b
 
-        // Fund the maker with DAI and approve settlement contract
-        deal(DAI_ADDR, bebopMaker, expectedDaiAmount);
-        vm.prank(bebopMaker);
-        IERC20(DAI_ADDR).approve(BEBOP_SETTLEMENT, expectedDaiAmount);
+        // Now using 0.099 WETH to get approximately 200 USDC from UniswapV3
+        uint256 wethAmount = 99000000000000000; // 0.099 WETH
+        deal(WETH_ADDR, ALICE, wethAmount);
+        uint256 balanceBefore = IERC20(ONDO_ADDR).balanceOf(
+            0xc5564C13A157E6240659fb81882A28091add8670
+        );
+
+        // Fund the Bebop maker with ONDO and approve settlement
+        uint256 ondoAmount = 237212396774431060000; // From the real order
+        deal(ONDO_ADDR, 0xCe79b081c0c924cb67848723ed3057234d10FC6b, ondoAmount);
+        vm.prank(0xCe79b081c0c924cb67848723ed3057234d10FC6b);
+        IERC20(ONDO_ADDR).approve(BEBOP_SETTLEMENT, ondoAmount);
 
         // Approve router
         vm.startPrank(ALICE);
         IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
-
         bytes memory callData = loadCallDataFromFile("test_uniswap_v3_bebop");
         (bool success,) = tychoRouterAddr.call(callData);
 
         vm.stopPrank();
 
-        uint256 balanceAfter = IERC20(DAI_ADDR).balanceOf(ALICE);
+        uint256 balanceAfter = IERC20(ONDO_ADDR).balanceOf(
+            0xc5564C13A157E6240659fb81882A28091add8670
+        );
 
         assertTrue(success, "Call Failed");
-        // Expecting ~2021.75 DAI from 1 WETH through USDC
-        assertEq(balanceAfter - balanceBefore, expectedDaiAmount);
+        assertEq(balanceAfter - balanceBefore, ondoAmount);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+
+        // With 0.099 WETH input, UniswapV3 produces ~200.15 USDC
+        // Bebop order consumes exactly 200 USDC, leaving only dust amount
+        uint256 expectedLeftoverUsdc = 153845; // ~0.153845 USDC dust
+        assertEq(
+            IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), expectedLeftoverUsdc
+        );
     }
 }

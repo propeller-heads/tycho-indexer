@@ -1,4 +1,7 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
 
 use alloy::{
     core::sol,
@@ -637,14 +640,14 @@ sol! {
     struct BebopAggregate {
         uint256 expiry;
         address taker_address;
-        uint256 taker_nonce;
-        address[] taker_tokens;
-        uint256[] taker_amounts;
         address[] maker_addresses;
+        uint256[] maker_nonces;
+        address[][] taker_tokens;
         address[][] maker_tokens;
+        uint256[][] taker_amounts;
         uint256[][] maker_amounts;
         address receiver;
-        uint256 packed_commands;
+        bytes commands;
         uint256 flags;
     }
 }
@@ -691,10 +694,17 @@ impl BebopSwapEncoder {
             EncodingError::InvalidInput(format!("Failed to decode Bebop Aggregate order: {}", e))
         })?;
 
-        // Validate that we only have one input token
-        if order.taker_tokens.len() != 1 {
+        // Validate that we only have one unique input token across all makers
+        let unique_taker_tokens: HashSet<_> = order
+            .taker_tokens
+            .iter()
+            .flat_map(|tokens| tokens.iter())
+            .collect();
+
+        if unique_taker_tokens.len() != 1 {
             return Err(EncodingError::InvalidInput(
-                "Aggregate orders must have exactly one input token".to_string(),
+                "Aggregate orders must have exactly one unique input token across all makers"
+                    .to_string(),
             ));
         }
 
@@ -2195,24 +2205,26 @@ mod tests {
             let aggregate_order = BebopAggregate {
                 expiry: U256::from(1234567890u64),
                 taker_address: Address::from([0x11; 20]),
-                taker_nonce: U256::from(12345u64),
-                taker_tokens: vec![
-                    Address::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(), /* DAI */
-                ],
-                taker_amounts: vec![
-                    U256::from(1000000000000000000u64), // 1 DAI
-                ],
                 maker_addresses: vec![Address::from([0x22; 20]), Address::from([0x33; 20])],
+                maker_nonces: vec![U256::from(12345u64), U256::from(12346u64)],
+                taker_tokens: vec![
+                    vec![Address::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap()], /* DAI for maker 1 */
+                    vec![Address::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap()], /* DAI for maker 2 */
+                ],
                 maker_tokens: vec![
                     vec![Address::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap()], /* WBTC from maker 1 */
                     vec![Address::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap()], /* WBTC from maker 2 */
+                ],
+                taker_amounts: vec![
+                    vec![U256::from(500000000000000000u64)], // 0.5 DAI for maker 1
+                    vec![U256::from(500000000000000000u64)], // 0.5 DAI for maker 2
                 ],
                 maker_amounts: vec![
                     vec![U256::from(1250000u64)], // 0.0125 WBTC from maker 1
                     vec![U256::from(1250000u64)], // 0.0125 WBTC from maker 2
                 ],
                 receiver: Address::from([0x44; 20]),
-                packed_commands: U256::from(0),
+                commands: hex::decode("00040004").unwrap().into(),
                 flags: U256::from(0),
             };
 

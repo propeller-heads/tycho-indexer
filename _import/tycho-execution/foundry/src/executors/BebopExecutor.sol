@@ -29,15 +29,15 @@ interface IBebopSettlement {
     struct Aggregate {
         uint256 expiry;
         address taker_address;
-        uint256 taker_nonce;
-        address[] taker_tokens;
-        uint256[] taker_amounts;
         address[] maker_addresses;
+        uint256[] maker_nonces;
+        address[][] taker_tokens;
         address[][] maker_tokens;
+        uint256[][] taker_amounts;
         uint256[][] maker_amounts;
         address receiver;
-        uint256 packed_commands;
-        uint256 flags;
+        bytes commands;
+        uint256 flags; // `hashAggregateOrder` doesn't use this field for AggregateOrder hash
     }
 
     struct MakerSignature {
@@ -156,9 +156,9 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         uint256 givenAmount,
         uint256 orderTakerAmount,
         uint256 filledTakerAmount
-    ) private pure returns (uint256 actualFilledTakerAmount) {
+    ) internal pure returns (uint256 actualFilledTakerAmount) {
         actualFilledTakerAmount = filledTakerAmount == 0
-            ? (orderTakerAmount > givenAmount ? givenAmount : 0)
+            ? (givenAmount >= orderTakerAmount ? orderTakerAmount : 0)
             : (filledTakerAmount > givenAmount ? givenAmount : filledTakerAmount);
     }
 
@@ -172,7 +172,7 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         bytes memory quoteData,
         bytes memory makerSignaturesData,
         bool approvalNeeded
-    ) private returns (uint256 amountOut) {
+    ) internal virtual returns (uint256 amountOut) {
         // Decode the order from quoteData
         IBebopSettlement.Single memory order =
             abi.decode(quoteData, (IBebopSettlement.Single));
@@ -234,7 +234,7 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         bytes memory quoteData,
         bytes memory makerSignaturesData,
         bool approvalNeeded
-    ) private returns (uint256 amountOut) {
+    ) internal virtual returns (uint256 amountOut) {
         // Decode the Aggregate order
         IBebopSettlement.Aggregate memory order =
             abi.decode(quoteData, (IBebopSettlement.Aggregate));
@@ -248,14 +248,15 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             revert BebopExecutor__InvalidInput();
         }
 
-        uint256 actualFilledTakerAmount;
-
-        // If the filledTakerAmount is not 0, it means we're executing a partial fill
-        if (filledTakerAmount != 0) {
-            actualFilledTakerAmount = _getActualFilledTakerAmount(
-                givenAmount, order.taker_amounts[0], filledTakerAmount
-            );
+        // For aggregate orders, calculate total taker amount across all makers
+        uint256 totalTakerAmount = 0;
+        for (uint256 i = 0; i < order.taker_amounts.length; i++) {
+            totalTakerAmount += order.taker_amounts[i][0];
         }
+
+        uint256 actualFilledTakerAmount = _getActualFilledTakerAmount(
+            givenAmount, totalTakerAmount, filledTakerAmount
+        );
 
         // Transfer single input token
         _transfer(address(this), transferType, tokenIn, givenAmount);

@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 import "../src/executors/BalancerV2Executor.sol";
-import "../src/executors/BebopExecutor.sol";
 import "../src/executors/CurveExecutor.sol";
 import "../src/executors/EkuboExecutor.sol";
 import "../src/executors/UniswapV2Executor.sol";
@@ -18,7 +17,7 @@ import {Permit2TestHelper} from "./Permit2TestHelper.sol";
 import "./TestUtils.sol";
 import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
 import {BalancerV3Executor} from "../src/executors/BalancerV3Executor.sol";
-import {BebopSettlementMock} from "./mock/BebopSettlementMock.sol";
+import {BebopExecutorHarness} from "./executors/BebopExecutor.t.sol";
 
 contract TychoRouterExposed is TychoRouter {
     constructor(address _permit2, address weth) TychoRouter(_permit2, weth) {}
@@ -70,7 +69,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     CurveExecutor public curveExecutor;
     MaverickV2Executor public maverickv2Executor;
     BalancerV3Executor public balancerV3Executor;
-    BebopExecutor public bebopExecutor;
+    BebopExecutorHarness public bebopExecutor;
     MockERC20[] tokens;
 
     function getForkBlock() public view virtual returns (uint256) {
@@ -90,13 +89,6 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         vm.startPrank(EXECUTOR_SETTER);
         tychoRouter.setExecutors(executors);
         vm.stopPrank();
-
-        // Deploy our mock Bebop settlement and use vm.etch to replace the real one
-        // This avoids InvalidSender errors since the mock doesn't validate taker addresses
-        // Do this AFTER deploying executors to preserve deterministic addresses
-        BebopSettlementMock mockSettlement = new BebopSettlementMock();
-        bytes memory mockCode = address(mockSettlement).code;
-        vm.etch(BEBOP_SETTLEMENT, mockCode);
 
         vm.startPrank(BOB);
         tokens.push(new MockERC20("Token A", "A"));
@@ -142,7 +134,8 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         maverickv2Executor =
             new MaverickV2Executor(MAVERICK_V2_FACTORY, PERMIT2_ADDRESS);
         balancerV3Executor = new BalancerV3Executor(PERMIT2_ADDRESS);
-        bebopExecutor = new BebopExecutor(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+        bebopExecutor =
+            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
 
         address[] memory executors = new address[](10);
         executors[0] = address(usv2Executor);
@@ -216,7 +209,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address tokenIn,
         address tokenOut,
         RestrictTransferFrom.TransferType transferType,
-        BebopExecutor.OrderType orderType,
+        BebopExecutorHarness.OrderType orderType,
         bytes memory quoteData,
         uint8 signatureType,
         bytes memory signature,

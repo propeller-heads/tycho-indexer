@@ -2046,7 +2046,6 @@ mod tests {
             mod optimized_transfers {
                 // In this module we test the ability to chain swaps or not. Different protocols are
                 // tested. The encoded data is used for solidity tests as well
-                use std::time::{SystemTime, UNIX_EPOCH};
 
                 use super::*;
 
@@ -2405,16 +2404,16 @@ mod tests {
                     // Note: This test does not assert anything. It is only used to obtain
                     // integration test data for our router solidity test.
                     //
-                    // Performs a sequential swap from WETH to DAI through USDC using USV3 and Bebop
-                    // RFQ
+                    // Performs a sequential swap from WETH to ONDO through USDC using USV3 and
+                    // Bebop RFQ
                     //
-                    //   WETH ───(USV3)──> USDC ───(Bebop RFQ)──> DAI
+                    //   WETH ───(USV3)──> USDC ───(Bebop RFQ)──> ONDO
 
                     let weth = weth();
                     let usdc =
                         Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
-                    let dai =
-                        Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+                    let ondo =
+                        Bytes::from_str("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3").unwrap();
 
                     // First swap: WETH -> USDC via UniswapV3
                     let swap_weth_usdc = Swap {
@@ -2437,26 +2436,23 @@ mod tests {
                         user_data: None,
                     };
 
-                    // Second swap: USDC -> DAI via Bebop RFQ
-                    // Create a valid Bebop Single order struct
-                    let expiry = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs() +
-                        3600; // Current time + 1 hour
-                    let taker_address = Address::ZERO;
+                    // Second swap: USDC -> ONDO via Bebop RFQ using real order data
+                    // Using the same real order from the mainnet transaction at block 22667985
+                    let expiry = 1749483840u64; // Real expiry from the order
+                    let taker_address =
+                        Address::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(); // Real taker
                     let maker_address =
-                        Address::from_str("0x1234567890123456789012345678901234567890").unwrap(); // Use a proper maker address
-                    let maker_nonce = 1u64;
+                        Address::from_str("0xCe79b081c0c924cb67848723ed3057234d10FC6b").unwrap(); // Real maker
+                    let maker_nonce = 1749483765992417u64; // Real nonce
                     let taker_token = Address::from_str(&usdc.to_string()).unwrap();
-                    let maker_token = Address::from_str(&dai.to_string()).unwrap();
-                    // For ~2021.75 USDC input (what 1 ETH gives us via USV3), expecting ~2021.75
-                    // DAI output
-                    let taker_amount = U256::from_str("2021750881").unwrap(); // 2021.75 USDC (6 decimals)
-                    let maker_amount = U256::from_str("2021750881000000000000").unwrap(); // 2021.75 DAI (18 decimals)
+                    let maker_token = Address::from_str(&ondo.to_string()).unwrap();
+                    // Using the real order amounts
+                    let taker_amount = U256::from_str("200000000").unwrap(); // 200 USDC (6 decimals)
+                    let maker_amount = U256::from_str("237212396774431060000").unwrap(); // 237.21 ONDO (18 decimals)
                     let receiver =
-                        Address::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(); // Alice's address
+                        Address::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(); // Real receiver
                     let packed_commands = U256::ZERO;
+                    let flags = U256::from_str("51915842898789398998206002334703507894664330885127600393944965515693155942400").unwrap(); // Real flags
 
                     // Encode using standard ABI encoding (not packed)
                     let quote_data = (
@@ -2470,18 +2466,19 @@ mod tests {
                         maker_amount,
                         receiver,
                         packed_commands,
-                        U256::from(0u64), // flags as uint256
+                        flags,
                     )
                         .abi_encode();
 
-                    let signature = hex::decode("aabbccdd").unwrap();
+                    // Real signature from the order
+                    let signature = hex::decode("eb5419631614978da217532a40f02a8f2ece37d8cfb94aaa602baabbdefb56b474f4c2048a0f56502caff4ea7411d99eed6027cd67dc1088aaf4181dcb0df7051c").unwrap();
 
                     // Build user_data with the quote and signature
                     let user_data = build_bebop_user_data(
                         BebopOrderType::Single,
                         U256::from(0), // 0 means fill entire order
                         &quote_data,
-                        vec![(signature, 1)], // EIP712 signature type
+                        vec![(signature, 0)], // ETH_SIGN signature type (0)
                     );
 
                     let bebop_component = ProtocolComponent {
@@ -2491,10 +2488,10 @@ mod tests {
                         ..Default::default()
                     };
 
-                    let swap_usdc_dai = Swap {
+                    let swap_usdc_ondo = Swap {
                         component: bebop_component,
                         token_in: usdc.clone(),
-                        token_out: dai.clone(),
+                        token_out: ondo.clone(),
                         split: 0f64,
                         user_data: Some(user_data),
                     };
@@ -2504,14 +2501,17 @@ mod tests {
                     let solution = Solution {
                         exact_out: false,
                         given_token: weth,
-                        given_amount: BigUint::from_str("1_000000000000000000").unwrap(), // 1 WETH
-                        checked_token: dai,
-                        checked_amount: BigUint::from_str("2021750881000000000000").unwrap(), /* Expected ~2021.75 DAI */
+                        // Use ~0.099 WETH to get approximately 200 USDC from UniswapV3
+                        // This should leave only dust amount in the router after Bebop consumes 200
+                        // USDC
+                        given_amount: BigUint::from_str("99000000000000000").unwrap(), // 0.099 WETH
+                        checked_token: ondo,
+                        checked_amount: BigUint::from_str("237212396774431060000").unwrap(), /* Expected ONDO from Bebop order */
                         sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
                             .unwrap(),
-                        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
-                            .unwrap(),
-                        swaps: vec![swap_weth_usdc, swap_usdc_dai],
+                        receiver: Bytes::from_str("0xc5564C13A157E6240659fb81882A28091add8670")
+                            .unwrap(), // Using the real order receiver
+                        swaps: vec![swap_weth_usdc, swap_usdc_ondo],
                         ..Default::default()
                     };
 
@@ -3228,8 +3228,6 @@ mod tests {
         mod protocol_integration {
             // in this module we test protocol specific logic by creating the calldata that then is
             // used in the solidity tests
-            use std::time::{SystemTime, UNIX_EPOCH};
-
             use super::*;
 
             #[test]
@@ -3840,7 +3838,7 @@ mod tests {
                 // Create the exact same order from mainnet
                 let expiry = 1749483840u64;
                 let taker_address =
-                    Address::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap();
+                    Address::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(); // Order receiver from mainnet
                 let maker_address =
                     Address::from_str("0xCe79b081c0c924cb67848723ed3057234d10FC6b").unwrap();
                 let maker_nonce = 1749483765992417u64;
@@ -3848,7 +3846,7 @@ mod tests {
                 let maker_token = Address::from_str(&token_out.to_string()).unwrap();
                 let taker_amount = U256::from_str(&amount_in.to_string()).unwrap();
                 let maker_amount = U256::from_str(&amount_out.to_string()).unwrap();
-                let receiver = taker_address;
+                let receiver = taker_address; // Same as taker_address in this order
                 let packed_commands = U256::ZERO;
                 let flags = U256::from_str(
                     "51915842898789398998206002334703507894664330885127600393944965515693155942400",
@@ -3905,10 +3903,10 @@ mod tests {
                     given_amount: amount_in,
                     checked_token: token_out,
                     checked_amount: amount_out, // Expected output amount
-                    // Use the original taker address
-                    sender: Bytes::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(),
+                    // Use ALICE as sender but order receiver as receiver
+                    sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                     receiver: Bytes::from_str("0xc5564C13A157E6240659fb81882A28091add8670")
-                        .unwrap(),
+                        .unwrap(), // Order receiver from mainnet
                     swaps: vec![swap],
                     ..Default::default()
                 };
@@ -3945,6 +3943,7 @@ mod tests {
                 let amount_out = BigUint::from_str("400000000000000000").unwrap(); // 0.4 WETH
 
                 // Create a valid Bebop Aggregate order struct
+                use std::time::{SystemTime, UNIX_EPOCH};
                 let expiry = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .unwrap()
@@ -3957,11 +3956,21 @@ mod tests {
                     Address::from_str("0x1111111111111111111111111111111111111111").unwrap(),
                     Address::from_str("0x2222222222222222222222222222222222222222").unwrap(),
                 ];
-                let taker_nonce = U256::from(1u64); // Single taker nonce, not array
-                let taker_tokens = vec![Address::from_slice(&token_in)];
-                let taker_amounts = vec![U256::from_str(&amount_in.to_string()).unwrap()];
+                let maker_nonces = vec![U256::from(1u64), U256::from(2u64)]; // Array of nonces
 
-                // Each maker provides different tokens
+                // Each maker accepts the same taker token (USDC)
+                let taker_tokens = vec![
+                    vec![Address::from_slice(&token_in)], // USDC for maker 1
+                    vec![Address::from_slice(&token_in)], // USDC for maker 2
+                ];
+
+                // Each maker gets a portion of the input
+                let taker_amounts = vec![
+                    vec![U256::from_str("600000000").unwrap()], // 600 USDC for maker 1
+                    vec![U256::from_str("400000000").unwrap()], // 400 USDC for maker 2
+                ];
+
+                // Each maker provides WETH
                 let maker_tokens = vec![
                     vec![Address::from_slice(&token_out)],
                     vec![Address::from_slice(&token_out)],
@@ -3973,21 +3982,21 @@ mod tests {
 
                 let receiver =
                     Address::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(); // Alice
-                let packed_commands = U256::ZERO;
+                let commands = hex!("00040004").to_vec();
                 let flags = U256::ZERO;
 
                 // Encode Aggregate order - must match IBebopSettlement.Aggregate struct exactly
                 let quote_data = (
                     U256::from(expiry), // expiry as U256
                     taker_address,
-                    taker_nonce, // Single taker_nonce, not array
-                    taker_tokens,
-                    taker_amounts,
                     maker_addresses,
+                    maker_nonces, // Array of maker nonces
+                    taker_tokens, // 2D array
                     maker_tokens,
+                    taker_amounts, // 2D array
                     maker_amounts,
                     receiver,
-                    packed_commands,
+                    commands,
                     flags,
                 )
                     .abi_encode();
