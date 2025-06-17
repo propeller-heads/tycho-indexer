@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import "../src/executors/BalancerV2Executor.sol";
 import "../src/executors/CurveExecutor.sol";
-import "../src/executors/EkuboExecutor.sol";
+import {EkuboExecutor} from "../src/executors/EkuboExecutor.sol";
 import "../src/executors/UniswapV2Executor.sol";
 import "../src/executors/UniswapV3Executor.sol";
 import "../src/executors/UniswapV4Executor.sol";
@@ -116,6 +116,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         bytes32 initCodePancakeV3 = PANCAKEV3_POOL_CODE_INIT_HASH;
         address poolManagerAddress = 0x000000000004444c5dc75cB358380D2e3dE08A90;
         address ekuboCore = 0xe0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444;
+        address ekuboMevResist = 0x553a2EFc570c9e104942cEC6aC1c18118e54C091;
 
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
         usv2Executor =
@@ -127,7 +128,11 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
             factoryPancakeV3, initCodePancakeV3, PERMIT2_ADDRESS
         );
         balancerv2Executor = new BalancerV2Executor(PERMIT2_ADDRESS);
-        ekuboExecutor = new EkuboExecutor(ekuboCore, PERMIT2_ADDRESS);
+        ekuboExecutor = new EkuboExecutor(
+            ekuboCore,
+            ekuboMevResist,
+            PERMIT2_ADDRESS
+        );
         curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, PERMIT2_ADDRESS);
         maverickv2Executor =
             new MaverickV2Executor(MAVERICK_V2_FACTORY, PERMIT2_ADDRESS);
