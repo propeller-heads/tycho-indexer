@@ -1,6 +1,4 @@
-#![allow(dead_code)]
-
-use alloy::primitives::Address;
+use alloy::primitives::{Address, I128, I256};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -26,6 +24,28 @@ pub const fn has_permission(address: Address, hook_option: HookOptions) -> bool 
     let mask = ((address.0 .0[18] as u64) << 8) | (address.0 .0[19] as u64);
     let hook_flag_index = hook_option as u64;
     mask & (1 << hook_flag_index) != 0
+}
+
+/// Extracts I128 from the upper 128 bits of a 256 value.
+pub fn get_upper_i128(value: I256) -> I128 {
+    // Arithmetic right shift by 128 bits to get the upper 128 bits
+    let shifted: I256 = value >> 128;
+    // Convert back to I128 by extracting the lower 128 bits
+    let bytes = shifted.to_be_bytes::<32>();
+    I128::from_be_bytes([
+        bytes[16], bytes[17], bytes[18], bytes[19], bytes[20], bytes[21], bytes[22], bytes[23],
+        bytes[24], bytes[25], bytes[26], bytes[27], bytes[28], bytes[29], bytes[30], bytes[31],
+    ])
+}
+
+/// Extracts I128 from the lower 128 bits of a 256 value.
+pub fn get_lower_i128(value: I256) -> I128 {
+    // Get the lower 128 bits and sign extend
+    let bytes = value.to_be_bytes::<32>();
+    I128::from_be_bytes([
+        bytes[16], bytes[17], bytes[18], bytes[19], bytes[20], bytes[21], bytes[22], bytes[23],
+        bytes[24], bytes[25], bytes[26], bytes[27], bytes[28], bytes[29], bytes[30], bytes[31],
+    ])
 }
 
 #[cfg(test)]
