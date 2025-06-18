@@ -771,11 +771,16 @@ impl SwapEncoder for BebopSwapEncoder {
             let settlement_address = Address::from_str(&self.settlement_address)
                 .map_err(|_| EncodingError::FatalError("Invalid settlement address".to_string()))?;
 
-            approval_needed = token_approvals_manager.approval_needed(
-                token_to_approve,
-                tycho_router_address,
-                settlement_address,
-            )?;
+            // Native ETH doesn't need approval, only ERC20 tokens do
+            if token_to_approve == Address::ZERO {
+                approval_needed = false;
+            } else {
+                approval_needed = token_approvals_manager.approval_needed(
+                    token_to_approve,
+                    tycho_router_address,
+                    settlement_address,
+                )?;
+            }
         } else {
             approval_needed = true;
         }
@@ -2158,7 +2163,7 @@ mod tests {
             };
 
             let encoding_context = EncodingContext {
-                receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"), /* Original taker */
+                receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"), // Taker address from tx
                 exact_out: false,
                 router_address: Some(Bytes::zero(20)),
                 group_token_in: token_in.clone(),
@@ -2198,40 +2203,43 @@ mod tests {
 
             // Create user_data for a Bebop Aggregate RFQ quote
             let order_type = BebopOrderType::Aggregate as u8;
-            let signature_type = 1u8; // EIP712
+            let signature_type = 0u8; // ETH_SIGN
 
-            // Create a valid ABI-encoded Aggregate order
-            // For this test: single input (DAI) -> single output (WBTC) to match the test setup
+            // Use real mainnet data from https://etherscan.io/tx/0xec88410136c287280da87d0a37c1cb745f320406ca3ae55c678dec11996c1b1c
+            // Swap: 0.00985 ETH → 17.969561 USDC
             let aggregate_order = BebopAggregate {
-                expiry: U256::from(1234567890u64),
-                taker_address: Address::from([0x11; 20]),
-                maker_addresses: vec![Address::from([0x22; 20]), Address::from([0x33; 20])],
-                maker_nonces: vec![U256::from(12345u64), U256::from(12346u64)],
+                expiry: U256::from(1746367285u64),
+                taker_address: Address::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap(),
+                maker_addresses: vec![
+                    Address::from_str("0x67336Cec42645F55059EfF241Cb02eA5cC52fF86").unwrap(),
+                    Address::from_str("0xBF19CbF0256f19f39A016a86Ff3551ecC6f2aAFE").unwrap(),
+                ],
+                maker_nonces: vec![U256::from(1746367197308u64), U256::from(15460096u64)],
                 taker_tokens: vec![
-                    vec![Address::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap()], /* DAI for maker 1 */
-                    vec![Address::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap()], /* DAI for maker 2 */
+                    vec![Address::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap()], // WETH for maker 1
+                    vec![Address::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap()], // WETH for maker 2
                 ],
                 maker_tokens: vec![
-                    vec![Address::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap()], /* WBTC from maker 1 */
-                    vec![Address::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap()], /* WBTC from maker 2 */
+                    vec![Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap()], // USDC from maker 1
+                    vec![Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap()], // USDC from maker 2
                 ],
                 taker_amounts: vec![
-                    vec![U256::from(500000000000000000u64)], // 0.5 DAI for maker 1
-                    vec![U256::from(500000000000000000u64)], // 0.5 DAI for maker 2
+                    vec![U256::from(5812106401997138u64)], // First maker takes ~0.0058 ETH
+                    vec![U256::from(4037893598002862u64)], // Second maker takes ~0.0040 ETH
                 ],
                 maker_amounts: vec![
-                    vec![U256::from(1250000u64)], // 0.0125 WBTC from maker 1
-                    vec![U256::from(1250000u64)], // 0.0125 WBTC from maker 2
+                    vec![U256::from(10607211u64)], // First maker gives ~10.6 USDC
+                    vec![U256::from(7362350u64)], // Second maker gives ~7.36 USDC
                 ],
-                receiver: Address::from([0x44; 20]),
+                receiver: Address::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap(),
                 commands: hex::decode("00040004").unwrap().into(),
-                flags: U256::from(0),
+                flags: U256::from_str("95769172144825922628485191511070792431742484643425438763224908097896054784000").unwrap(),
             };
 
             let quote_data = aggregate_order.abi_encode();
-            // For aggregate orders with ECDSA, use 65-byte signatures (2 makers)
-            let sig1 = hex::decode("0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001").unwrap();
-            let sig2 = hex::decode("1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111101").unwrap();
+            // Real signatures from mainnet transaction
+            let sig1 = hex::decode("d5abb425f9bac1f44d48705f41a8ab9cae207517be8553d2c03b06a88995f2f351ab8ce7627a87048178d539dd64fd2380245531a0c8e43fdc614652b1f32fc71c").unwrap();
+            let sig2 = hex::decode("f38c698e48a3eac48f184bc324fef0b135ee13705ab38cc0bbf5a792f21002f051e445b9e7d57cf24c35e17629ea35b3263591c4abf8ca87ffa44b41301b89c41b").unwrap();
 
             // Build ABI-encoded MakerSignature[] array with 2 signatures
             let flags = U256::from(signature_type);
@@ -2274,7 +2282,7 @@ mod tests {
             let padding2 = (32 - (sig2.len() % 32)) % 32;
             encoded_maker_sigs.extend_from_slice(&vec![0u8; padding2]);
 
-            let filled_taker_amount = U256::from(1000000u64); // 1 USDC (6 decimals)
+            let filled_taker_amount = U256::from(0u64); // 0 means fill entire order
 
             let mut user_data = Vec::new();
             user_data.push(order_type);
@@ -2290,8 +2298,8 @@ mod tests {
                 ..Default::default()
             };
 
-            let token_in = Bytes::from("0x6B175474E89094C44Da98b954EedeAC495271d0F"); // DAI
-            let token_out = Bytes::from("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"); // WBTC
+            let token_in = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"); // WETH
+            let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
             let swap = Swap {
                 component: bebop_component,
                 token_in: token_in.clone(),
@@ -2301,12 +2309,12 @@ mod tests {
             };
 
             let encoding_context = EncodingContext {
-                receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
+                receiver: Bytes::from("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6"), // Taker address from tx
                 exact_out: false,
                 router_address: Some(Bytes::zero(20)),
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
-                transfer_type: TransferType::TransferFrom,
+                transfer_type: TransferType::Transfer,
             };
 
             let encoder = BebopSwapEncoder::new(
@@ -2338,24 +2346,24 @@ mod tests {
                 // - offset to signatureBytes
                 "0000000000000000000000000000000000000000000000000000000000000040",
                 // - flags
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                // - signatureBytes length (65 = 0x41)
-                "0000000000000000000000000000000000000000000000000000000000000041",
-                // - signatureBytes (65 bytes padded to 96)
                 "0000000000000000000000000000000000000000000000000000000000000000",
-                "0000000000000000000000000000000000000000000000000000000000000000",
-                "0100000000000000000000000000000000000000000000000000000000000000",
+                // - signatureBytes length (66 = 0x42, actual length of signatures)
+                "0000000000000000000000000000000000000000000000000000000000000042",
+                // - signatureBytes (66 bytes padded to 96)
+                "d5abb425f9bac1f44d48705f41a8ab9cae207517be8553d2c03b06a88995f2f3",
+                "51ab8ce7627a87048178d539dd64fd2380245531a0c8e43fdc614652b1f32fc7",
+                "1c00000000000000000000000000000000000000000000000000000000000000",
                 // Second struct data:
                 // - offset to signatureBytes
                 "0000000000000000000000000000000000000000000000000000000000000040",
                 // - flags
-                "0000000000000000000000000000000000000000000000000000000000000001",
-                // - signatureBytes length (65 = 0x41)
-                "0000000000000000000000000000000000000000000000000000000000000041",
-                // - signatureBytes (65 bytes padded to 96)
-                "1111111111111111111111111111111111111111111111111111111111111111",
-                "1111111111111111111111111111111111111111111111111111111111111111",
-                "0100000000000000000000000000000000000000000000000000000000000000"
+                "0000000000000000000000000000000000000000000000000000000000000000",
+                // - signatureBytes length (66 = 0x42)
+                "0000000000000000000000000000000000000000000000000000000000000042",
+                // - signatureBytes (66 bytes padded to 96)
+                "f38c698e48a3eac48f184bc324fef0b135ee13705ab38cc0bbf5a792f21002f0",
+                "51e445b9e7d57cf24c35e17629ea35b3263591c4abf8ca87ffa44b41301b89c4",
+                "1b00000000000000000000000000000000000000000000000000000000000000"
             );
 
             // The quote data is now an ABI-encoded BebopAggregate struct
@@ -2366,15 +2374,15 @@ mod tests {
             let expected_hex = format!(
                 "{}{}{}{}{}{}{}{}{}{}",
                 // token in
-                "6b175474e89094c44da98b954eedeac495271d0f",
+                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                 // token out
-                "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-                // transfer type TransferFrom
-                "00",
+                "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                // transfer type Transfer
+                "01",
                 // order type Aggregate (1)
                 "01",
-                // filledTakerAmount (1000000 = 0x0f4240)
-                "00000000000000000000000000000000000000000000000000000000000f4240",
+                // filledTakerAmount (0 for full fill)
+                "0000000000000000000000000000000000000000000000000000000000000000",
                 // quote data length
                 &quote_data_length,
                 // quote data

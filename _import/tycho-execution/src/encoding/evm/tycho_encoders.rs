@@ -415,6 +415,10 @@ mod tests {
         Bytes::from_str("0x6982508145454Ce325dDbE47a25d4ec3d2311933").unwrap()
     }
 
+    fn ondo() -> Bytes {
+        Bytes::from_str("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3").unwrap()
+    }
+
     // Fee and tick spacing information for this test is obtained by querying the
     // USV4 Position Manager contract: 0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e
     // Using the poolKeys function with the first 25 bytes of the pool id
@@ -2410,10 +2414,8 @@ mod tests {
                     //   WETH ───(USV3)──> USDC ───(Bebop RFQ)──> ONDO
 
                     let weth = weth();
-                    let usdc =
-                        Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
-                    let ondo =
-                        Bytes::from_str("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3").unwrap();
+                    let usdc = usdc();
+                    let ondo = ondo();
 
                     // First swap: WETH -> USDC via UniswapV3
                     let swap_weth_usdc = Swap {
@@ -3830,8 +3832,8 @@ mod tests {
             fn test_single_encoding_strategy_bebop() {
                 // Use the same mainnet data from Solidity tests
                 // Transaction: https://etherscan.io/tx/0x6279bc970273b6e526e86d9b69133c2ca1277e697ba25375f5e6fc4df50c0c94
-                let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
-                let token_out = Bytes::from("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3"); // ONDO
+                let token_in = usdc();
+                let token_out = ondo();
                 let amount_in = BigUint::from_str("200000000").unwrap(); // 200 USDC
                 let amount_out = BigUint::from_str("237212396774431060000").unwrap(); // 237.21 ONDO
 
@@ -3935,55 +3937,55 @@ mod tests {
 
             #[test]
             fn test_single_encoding_strategy_bebop_aggregate() {
-                // For simplicity, let's use the same tokens as the Single test but with Aggregate
-                // order
-                let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
-                let token_out = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"); // WETH
-                let amount_in = BigUint::from_str("1000_000000").unwrap(); // 1000 USDC
-                let amount_out = BigUint::from_str("400000000000000000").unwrap(); // 0.4 WETH
+                // Use real mainnet aggregate order data from CLAUDE.md
+                // Transaction: https://etherscan.io/tx/0xec88410136c287280da87d0a37c1cb745f320406ca3ae55c678dec11996c1b1c
+                // For testing, use WETH directly to avoid delegatecall + native ETH complexities
+                let token_in = eth();
+                let token_out = usdc();
+                let amount_in = BigUint::from_str("9850000000000000").unwrap(); // 0.00985 WETH
+                let amount_out = BigUint::from_str("17969561").unwrap(); // 17.969561 USDC
 
-                // Create a valid Bebop Aggregate order struct
-                use std::time::{SystemTime, UNIX_EPOCH};
-                let expiry = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs() +
-                    3600;
-                let taker_address = Address::ZERO;
+                // Create the exact aggregate order from mainnet
+                let expiry = 1746367285u64;
+                let taker_address =
+                    Address::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap();
+                let receiver =
+                    Address::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap();
 
-                // Aggregate order has multiple makers
+                // Set up makers
                 let maker_addresses = vec![
-                    Address::from_str("0x1111111111111111111111111111111111111111").unwrap(),
-                    Address::from_str("0x2222222222222222222222222222222222222222").unwrap(),
+                    Address::from_str("0x67336Cec42645F55059EfF241Cb02eA5cC52fF86").unwrap(),
+                    Address::from_str("0xBF19CbF0256f19f39A016a86Ff3551ecC6f2aAFE").unwrap(),
                 ];
-                let maker_nonces = vec![U256::from(1u64), U256::from(2u64)]; // Array of nonces
+                let maker_nonces = vec![U256::from(1746367197308u64), U256::from(15460096u64)];
 
-                // Each maker accepts the same taker token (USDC)
+                // 2D arrays for tokens 
+                // We use WETH as a taker token even when handling native ETH
                 let taker_tokens = vec![
-                    vec![Address::from_slice(&token_in)], // USDC for maker 1
-                    vec![Address::from_slice(&token_in)], // USDC for maker 2
+                    vec![Address::from_slice(&weth())],
+                    vec![Address::from_slice(&weth())],
                 ];
-
-                // Each maker gets a portion of the input
-                let taker_amounts = vec![
-                    vec![U256::from_str("600000000").unwrap()], // 600 USDC for maker 1
-                    vec![U256::from_str("400000000").unwrap()], // 400 USDC for maker 2
-                ];
-
-                // Each maker provides WETH
                 let maker_tokens = vec![
                     vec![Address::from_slice(&token_out)],
                     vec![Address::from_slice(&token_out)],
                 ];
+
+                // 2D arrays for amounts
+                let taker_amounts = vec![
+                    vec![U256::from_str("5812106401997138").unwrap()],
+                    vec![U256::from_str("4037893598002862").unwrap()],
+                ];
                 let maker_amounts = vec![
-                    vec![U256::from_str("240000000000000000").unwrap()], // 0.24 WETH from maker 1
-                    vec![U256::from_str("160000000000000000").unwrap()], // 0.16 WETH from maker 2
+                    vec![U256::from_str("10607211").unwrap()],
+                    vec![U256::from_str("7362350").unwrap()],
                 ];
 
-                let receiver =
-                    Address::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(); // Alice
+                // Commands and flags from the real transaction
                 let commands = hex!("00040004").to_vec();
-                let flags = U256::ZERO;
+                let flags = U256::from_str(
+                    "95769172144825922628485191511070792431742484643425438763224908097896054784000",
+                )
+                .unwrap();
 
                 // Encode Aggregate order - must match IBebopSettlement.Aggregate struct exactly
                 let quote_data = (
@@ -4001,15 +4003,14 @@ mod tests {
                 )
                     .abi_encode();
 
-                // For aggregate orders with multiple makers, we need multiple signatures
-                // This example has 2 makers, so 2 separate 65-byte signatures
-                let sig1 = hex::decode("1b47a665f9a5e14b5208015d11f9143e27b93dc5a0d8c892ec5326eda1e5df3c42a987d0b2ea5b8be8f0e5c326bd4ec0321b10c6e9b4e5f8a0b8d5e6f7c8a9b01b").unwrap();
-                let sig2 = hex::decode("2c58b665f9a5e14b5208015d11f9143e27b93dc5a0d8c892ec5326eda1e5df3c53b987d0b2ea5b8be8f0e5c326bd4ec0321b10c6e9b4e5f8a0b8d5e6f7c8a9b01c").unwrap();
+                // Use real signatures from the mainnet transaction
+                let sig1 = hex::decode("d5abb425f9bac1f44d48705f41a8ab9cae207517be8553d2c03b06a88995f2f351ab8ce7627a87048178d539dd64fd2380245531a0c8e43fdc614652b1f32fc71c").unwrap();
+                let sig2 = hex::decode("f38c698e48a3eac48f184bc324fef0b135ee13705ab38cc0bbf5a792f21002f051e445b9e7d57cf24c35e17629ea35b3263591c4abf8ca87ffa44b41301b89c41b").unwrap();
 
-                // Build user_data with multiple signatures for the aggregate order
+                // Build user_data with ETH_SIGN flag (0) for both signatures
                 let signatures = vec![
-                    (sig1, 1u8), // EIP712 signature type for maker 1
-                    (sig2, 1u8), // EIP712 signature type for maker 2
+                    (sig1, 0u8), // ETH_SIGN for maker 1
+                    (sig2, 0u8), // ETH_SIGN for maker 2
                 ];
 
                 let user_data = build_bebop_user_data(
@@ -4034,18 +4035,19 @@ mod tests {
                     user_data: Some(user_data),
                 };
 
+                // Use TransferFrom for WETH token transfer
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
                 let solution = Solution {
                     exact_out: false,
-                    given_token: token_in,
+                    given_token: token_in.clone(),
                     given_amount: amount_in,
                     checked_token: token_out,
                     checked_amount: amount_out,
-                    // Alice
-                    sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                    receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
-                        .unwrap(),
+                    // Use ALICE as sender but order receiver as receiver
+                    sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(), /* ALICE */
+                    receiver: Bytes::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6")
+                        .unwrap(), /* Order receiver */
                     swaps: vec![swap],
                     ..Default::default()
                 };
@@ -4059,7 +4061,7 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFrom,
+                    UserTransferType::None,
                     eth(),
                     None,
                 )
