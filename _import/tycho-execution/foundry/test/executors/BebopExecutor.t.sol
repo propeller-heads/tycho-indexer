@@ -54,6 +54,19 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         return _decodeData(data);
     }
 
+    // Expose the internal getActualFilledTakerAmount function for testing
+    function exposed_getActualFilledTakerAmount(
+        uint256 givenAmount,
+        uint256 orderTakerAmount,
+        uint256 filledTakerAmount
+    ) external pure returns (uint256 actualFilledTakerAmount) {
+        return _getActualFilledTakerAmount(
+            givenAmount,
+            orderTakerAmount,
+            filledTakerAmount
+        );
+    }
+
     // Override to prank the taker address before calling the real settlement
     function _executeSingleRFQ(
         address tokenIn,

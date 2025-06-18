@@ -144,7 +144,7 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
      * @dev Determines the actual taker amount to be filled for a Bebop order
      * @notice This function handles two scenarios:
      *         1. When filledTakerAmount is 0: Uses the full order amount if givenAmount is sufficient,
-     *            otherwise returns 0 to indicate the order cannot be filled
+     *            otherwise returns givenAmount to partially fill the order
      *         2. When filledTakerAmount > 0: Caps the fill at the minimum of filledTakerAmount and givenAmount
      *            to ensure we don't attempt to fill more than available
      * @param givenAmount The amount of tokens available from the router for this swap
@@ -158,7 +158,7 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         uint256 filledTakerAmount
     ) internal pure returns (uint256 actualFilledTakerAmount) {
         actualFilledTakerAmount = filledTakerAmount == 0
-            ? (givenAmount >= orderTakerAmount ? orderTakerAmount : 0)
+            ? (givenAmount >= orderTakerAmount ? orderTakerAmount : givenAmount)
             : (filledTakerAmount > givenAmount ? givenAmount : filledTakerAmount);
     }
 
