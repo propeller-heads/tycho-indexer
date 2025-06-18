@@ -31,9 +31,9 @@ pub struct TwammPool {
 
 impl PartialEq for TwammPool {
     fn eq(&self, other: &Self) -> bool {
-        self.key() == other.key()
-            && self.imp.get_sale_rate_deltas() == other.imp.get_sale_rate_deltas()
-            && self.state == other.state
+        self.key() == other.key() &&
+            self.imp.get_sale_rate_deltas() == other.imp.get_sale_rate_deltas() &&
+            self.state == other.state
     }
 }
 
@@ -123,13 +123,13 @@ impl EkuboPool for TwammPool {
         Ok(EkuboPoolQuote {
             consumed_amount: quote.consumed_amount,
             calculated_amount: quote.calculated_amount,
-            gas: FullRangePool::gas_costs()
-                + u64::from(
+            gas: FullRangePool::gas_costs() +
+                u64::from(
                     quote
                         .execution_resources
                         .virtual_orders_executed,
-                ) * Self::BASE_GAS_COST_OF_EXECUTING_VIRTUAL_ORDERS
-                + u64::from(
+                ) * Self::BASE_GAS_COST_OF_EXECUTING_VIRTUAL_ORDERS +
+                u64::from(
                     quote
                         .execution_resources
                         .virtual_order_delta_times_crossed,
@@ -167,12 +167,11 @@ impl EkuboPool for TwammPool {
         let moved_to_unfavorable_price = (virtual_order_quote
             .state_after
             .full_range_pool_state
-            .sqrt_ratio
-            < self
-                .state
+            .sqrt_ratio <
+            self.state
                 .full_range_pool_state
-                .sqrt_ratio)
-            == (token_in == key.token0);
+                .sqrt_ratio) ==
+            (token_in == key.token0);
 
         let (override_state, meta) = if moved_to_unfavorable_price {
             (
@@ -238,8 +237,8 @@ impl EkuboPool for TwammPool {
                     Ok(idx) => {
                         if virtual_order_delta
                             .sale_rate_delta0
-                            .is_zero()
-                            && virtual_order_delta
+                            .is_zero() &&
+                            virtual_order_delta
                                 .sale_rate_delta1
                                 .is_zero()
                         {

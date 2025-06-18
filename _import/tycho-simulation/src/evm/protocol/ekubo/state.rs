@@ -1,5 +1,8 @@
-use std::collections::{HashMap, HashSet};
-use std::{any::Any, fmt::Debug};
+use std::{
+    any::Any,
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+};
 
 use evm_ekubo_sdk::{
     math::uint::U256,
@@ -192,16 +195,7 @@ mod tests {
         let state = case.state;
 
         let max_amount_in = state
-            .get_limits(
-                token0
-                    .address
-                    .deref()
-                    .into(),
-                token1
-                    .address
-                    .deref()
-                    .into(),
-            )
+            .get_limits(token0.address.deref().into(), token1.address.deref().into())
             .expect("computing limits for token0")
             .0;
 

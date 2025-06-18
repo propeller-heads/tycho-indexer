@@ -93,8 +93,8 @@ impl EkuboPool for OraclePool {
         Ok(EkuboPoolQuote {
             consumed_amount: quote.consumed_amount,
             calculated_amount: quote.calculated_amount,
-            gas: FullRangePool::gas_costs()
-                + u64::from(
+            gas: FullRangePool::gas_costs() +
+                u64::from(
                     quote
                         .execution_resources
                         .snapshots_written,

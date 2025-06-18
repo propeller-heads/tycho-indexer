@@ -35,10 +35,10 @@ pub struct MevResistPool {
 
 impl PartialEq for MevResistPool {
     fn eq(&self, other: &Self) -> bool {
-        self.key() == other.key()
-            && self.base_pool_state == other.base_pool_state
-            && self.ticks == other.ticks
-            && self.last_tick == other.last_tick
+        self.key() == other.key() &&
+            self.base_pool_state == other.base_pool_state &&
+            self.ticks == other.ticks &&
+            self.last_tick == other.last_tick
     }
 }
 
@@ -122,13 +122,13 @@ impl EkuboPool for MevResistPool {
         Ok(EkuboPoolQuote {
             consumed_amount: quote.consumed_amount,
             calculated_amount: quote.calculated_amount,
-            gas: Self::BASE_GAS_COST
-                + u64::from(
+            gas: Self::BASE_GAS_COST +
+                u64::from(
                     quote
                         .execution_resources
                         .state_update_count,
-                ) * Self::GAS_COST_OF_ONE_STATE_UPDATE
-                + BasePool::gas_costs(
+                ) * Self::GAS_COST_OF_ONE_STATE_UPDATE +
+                BasePool::gas_costs(
                     quote
                         .execution_resources
                         .base_pool_resources,
