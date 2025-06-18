@@ -61,9 +61,7 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         uint256 filledTakerAmount
     ) external pure returns (uint256 actualFilledTakerAmount) {
         return _getActualFilledTakerAmount(
-            givenAmount,
-            orderTakerAmount,
-            filledTakerAmount
+            givenAmount, orderTakerAmount, filledTakerAmount
         );
     }
 
@@ -1034,5 +1032,337 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             "ETH left in executor should match initial dust amount"
         );
         vm.stopPrank();
+    }
+
+    // Test exposed_getActualFilledTakerAmount function
+    function testGetActualFilledTakerAmount_FullFillWithZeroFilledTakerAmount()
+        public
+    {
+        // No need to fork, we're testing the internal function
+
+        // Deploy Bebop executor harness
+        bebopExecutor =
+            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+
+        // When filledTakerAmount is 0 and givenAmount >= orderTakerAmount
+        // Should return orderTakerAmount (full fill)
+        uint256 givenAmount = 1000e18;
+        uint256 orderTakerAmount = 500e18;
+        uint256 filledTakerAmount = 0;
+
+        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
+            givenAmount, orderTakerAmount, filledTakerAmount
+        );
+
+        assertEq(
+            result,
+            orderTakerAmount,
+            "Should return orderTakerAmount for full fill"
+        );
+    }
+
+    function testGetActualFilledTakerAmount_PartialFillWithZeroFilledTakerAmount(
+    ) public {
+        // No need to fork, we're testing the internal function
+
+        // Deploy Bebop executor harness
+        bebopExecutor =
+            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+
+        // When filledTakerAmount is 0 and givenAmount < orderTakerAmount
+        // Should return givenAmount (partial fill)
+        uint256 givenAmount = 300e18;
+        uint256 orderTakerAmount = 500e18;
+        uint256 filledTakerAmount = 0;
+
+        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
+            givenAmount, orderTakerAmount, filledTakerAmount
+        );
+
+        assertEq(
+            result,
+            givenAmount,
+            "Should return givenAmount when less than orderTakerAmount"
+        );
+    }
+
+    function testGetActualFilledTakerAmount_ExactMatchWithZeroFilledTakerAmount(
+    ) public {
+        // No need to fork, we're testing the internal function
+
+        // Deploy Bebop executor harness
+        bebopExecutor =
+            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+
+        // When filledTakerAmount is 0 and givenAmount == orderTakerAmount
+        // Should return orderTakerAmount
+        uint256 givenAmount = 500e18;
+        uint256 orderTakerAmount = 500e18;
+        uint256 filledTakerAmount = 0;
+
+        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
+            givenAmount, orderTakerAmount, filledTakerAmount
+        );
+
+        assertEq(
+            result,
+            orderTakerAmount,
+            "Should return orderTakerAmount when equal to givenAmount"
+        );
+    }
+
+    function testGetActualFilledTakerAmount_FilledTakerAmountLessThanGivenAmount(
+    ) public {
+        // No need to fork, we're testing the internal function
+
+        // Deploy Bebop executor harness
+        bebopExecutor =
+            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+
+        // When filledTakerAmount > 0 and filledTakerAmount < givenAmount
+        // Should return filledTakerAmount
+        uint256 givenAmount = 1000e18;
+        uint256 orderTakerAmount = 1500e18;
+        uint256 filledTakerAmount = 700e18;
+
+        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
+            givenAmount, orderTakerAmount, filledTakerAmount
+        );
+
+        assertEq(
+            result,
+            filledTakerAmount,
+            "Should return filledTakerAmount when less than givenAmount"
+        );
+    }
+
+    function testGetActualFilledTakerAmount_FilledTakerAmountGreaterThanGivenAmount(
+    ) public {
+        // No need to fork, we're testing the internal function
+
+        // Deploy Bebop executor harness
+        bebopExecutor =
+            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+
+        // When filledTakerAmount > 0 and filledTakerAmount > givenAmount
+        // Should return givenAmount (capped)
+        uint256 givenAmount = 500e18;
+        uint256 orderTakerAmount = 1500e18;
+        uint256 filledTakerAmount = 700e18;
+
+        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
+            givenAmount, orderTakerAmount, filledTakerAmount
+        );
+
+        assertEq(
+            result,
+            givenAmount,
+            "Should return givenAmount when filledTakerAmount exceeds it"
+        );
+    }
+
+    function testGetActualFilledTakerAmount_FilledTakerAmountEqualsGivenAmount()
+        public
+    {
+        // Fork to ensure consistent setup
+        vm.createSelectFork(vm.rpcUrl("mainnet"), 22667985);
+
+        // Deploy Bebop executor harness
+        bebopExecutor =
+            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+
+        // When filledTakerAmount > 0 and filledTakerAmount == givenAmount
+        // Should return filledTakerAmount
+        uint256 givenAmount = 700e18;
+        uint256 orderTakerAmount = 1500e18;
+        uint256 filledTakerAmount = 700e18;
+
+        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
+            givenAmount, orderTakerAmount, filledTakerAmount
+        );
+
+        assertEq(
+            result,
+            filledTakerAmount,
+            "Should return filledTakerAmount when equal to givenAmount"
+        );
+    }
+
+    function testGetActualFilledTakerAmount_ZeroGivenAmount() public {
+        // No need to fork, we're testing the internal function
+
+        // Deploy Bebop executor harness
+        bebopExecutor =
+            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+
+        // When givenAmount is 0
+        // Should always return 0 regardless of other parameters
+        uint256 givenAmount = 0;
+        uint256 orderTakerAmount = 500e18;
+        uint256 filledTakerAmount = 0;
+
+        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
+            givenAmount, orderTakerAmount, filledTakerAmount
+        );
+
+        assertEq(result, 0, "Should return 0 when givenAmount is 0");
+
+        // Also test with non-zero filledTakerAmount
+        filledTakerAmount = 100e18;
+        result = bebopExecutor.exposed_getActualFilledTakerAmount(
+            givenAmount, orderTakerAmount, filledTakerAmount
+        );
+
+        assertEq(
+            result,
+            0,
+            "Should return 0 when givenAmount is 0 even with filledTakerAmount"
+        );
+    }
+
+    function testGetActualFilledTakerAmount_ZeroOrderTakerAmount() public {
+        // No need to fork, we're testing the internal function
+
+        // Deploy Bebop executor harness
+        bebopExecutor =
+            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+
+        // When orderTakerAmount is 0 (edge case - malformed order)
+        // With filledTakerAmount = 0, should return 0
+        uint256 givenAmount = 1000e18;
+        uint256 orderTakerAmount = 0;
+        uint256 filledTakerAmount = 0;
+
+        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
+            givenAmount, orderTakerAmount, filledTakerAmount
+        );
+
+        assertEq(result, 0, "Should return 0 when orderTakerAmount is 0");
+    }
+
+    function testGetActualFilledTakerAmount_SmallAmounts() public {
+        // No need to fork, we're testing the internal function
+
+        // Deploy Bebop executor harness
+        bebopExecutor =
+            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+
+        // Test with small amounts (e.g., for tokens with low decimals)
+        uint256 givenAmount = 100; // 100 units
+        uint256 orderTakerAmount = 50; // 50 units
+        uint256 filledTakerAmount = 0;
+
+        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
+            givenAmount, orderTakerAmount, filledTakerAmount
+        );
+
+        assertEq(
+            result, orderTakerAmount, "Should handle small amounts correctly"
+        );
+
+        // Test with filledTakerAmount
+        filledTakerAmount = 75;
+        result = bebopExecutor.exposed_getActualFilledTakerAmount(
+            givenAmount, orderTakerAmount, filledTakerAmount
+        );
+
+        assertEq(
+            result,
+            filledTakerAmount,
+            "Should handle small filledTakerAmount correctly"
+        );
+    }
+
+    function testGetActualFilledTakerAmount_MaxUint256Values() public {
+        // No need to fork, we're testing the internal function
+        // No need to fork, we're testing the internal function
+        // Deploy Bebop executor harness
+        bebopExecutor =
+            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+
+        // Test with max uint256 values (edge case)
+        uint256 givenAmount = type(uint256).max;
+        uint256 orderTakerAmount = type(uint256).max - 1;
+        uint256 filledTakerAmount = 0;
+
+        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
+            givenAmount, orderTakerAmount, filledTakerAmount
+        );
+
+        assertEq(result, orderTakerAmount, "Should handle max values correctly");
+
+        // Test with max filledTakerAmount
+        filledTakerAmount = type(uint256).max;
+        givenAmount = type(uint256).max - 100;
+        result = bebopExecutor.exposed_getActualFilledTakerAmount(
+            givenAmount, orderTakerAmount, filledTakerAmount
+        );
+
+        assertEq(
+            result,
+            givenAmount,
+            "Should cap at givenAmount even with max filledTakerAmount"
+        );
+    }
+
+    function testFuzzGetActualFilledTakerAmount(
+        uint256 givenAmount,
+        uint256 orderTakerAmount,
+        uint256 filledTakerAmount
+    ) public {
+        // No need to fork, we're testing the internal function
+
+        // Deploy Bebop executor harness
+        bebopExecutor =
+            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+
+        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
+            givenAmount, orderTakerAmount, filledTakerAmount
+        );
+
+        // Verify the invariants
+        if (filledTakerAmount == 0) {
+            // When filledTakerAmount is 0, result should be min(givenAmount, orderTakerAmount)
+            if (givenAmount >= orderTakerAmount) {
+                assertEq(
+                    result,
+                    orderTakerAmount,
+                    "Should return orderTakerAmount when givenAmount >= orderTakerAmount"
+                );
+            } else {
+                assertEq(
+                    result,
+                    givenAmount,
+                    "Should return givenAmount when givenAmount < orderTakerAmount"
+                );
+            }
+        } else {
+            // When filledTakerAmount > 0, result should be min(givenAmount, filledTakerAmount)
+            if (filledTakerAmount > givenAmount) {
+                assertEq(
+                    result,
+                    givenAmount,
+                    "Should return givenAmount when filledTakerAmount > givenAmount"
+                );
+            } else {
+                assertEq(
+                    result,
+                    filledTakerAmount,
+                    "Should return filledTakerAmount when filledTakerAmount <= givenAmount"
+                );
+            }
+        }
+
+        // Result should never exceed givenAmount
+        assertLe(result, givenAmount, "Result should never exceed givenAmount");
+
+        // When filledTakerAmount is 0, result should not exceed orderTakerAmount
+        if (filledTakerAmount == 0) {
+            assertLe(
+                result,
+                orderTakerAmount,
+                "Result should not exceed orderTakerAmount when filledTakerAmount is 0"
+            );
+        }
     }
 }
