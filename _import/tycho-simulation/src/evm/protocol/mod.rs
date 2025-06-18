@@ -1,4 +1,5 @@
 pub mod aerodrome_slipstreams;
+pub mod cowamm;
 mod clmm;
 mod cpmm;
 pub mod ekubo;

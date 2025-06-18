@@ -22,7 +22,6 @@ pub const U256_2: U256 = U256::from_limbs([2, 0, 0, 0]);
 pub const U256_1: U256 = U256::from_limbs([1, 0, 0, 0]);
 
 
-// Balancer V2 specific
 pub const BONE: U256 = U256::from_limbs([0xDE0B6B3A7640000, 0, 0, 0]);
 
 // Others
@@ -37,4 +36,3 @@ pub const U256_0XFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF: U256 =
     U256::from_limbs([18446744073709551615, 18446744073709551615, 0, 0]);
 
 pub const DECIMAL_RADIX: i32 = 10;
-pub const MPFR_T_PRECISION: u32 = 70;

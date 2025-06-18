@@ -1,7 +1,7 @@
-
+use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum BalancerError {
+pub enum CowAMMError {
     #[error("Token in does not exist")]
     TokenInDoesNotExist,
     #[error("Token out does not exist")]

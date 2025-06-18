@@ -26,7 +26,7 @@ mod tests {
                 component_id: "State1".to_owned(),
                 attributes: HashMap::from([
                     ("normalized_weight_a".to_string(), Bytes::from(vec![0; 32])),
-                    ("normalized_weight_a".to_string(), Bytes::from(vec![0; 32])),
+                    ("normalized_weight_b".to_string(), Bytes::from(vec![0; 32])),
                 ]),
                 balances: HashMap::new(),
             },
@@ -50,7 +50,7 @@ mod tests {
     #[rstest]
     #[case::missing_normalized_weight_a("normalized_weight_a")]
     #[case::missing_normalized_weight_b("normalized_weight_b")]
-    async fn test_pancakeswap_v2_try_from_missing_attribute(#[case] missing_attribute: &str) {
+    async fn test_cowamm_try_from_missing_attribute(#[case] missing_attribute: &str) {
         let mut attributes = HashMap::from([
             ("normalized_weight_a".to_string(), Bytes::from(vec![0; 32])),
             ("normalized_weight_b".to_string(), Bytes::from(vec![0; 32])),

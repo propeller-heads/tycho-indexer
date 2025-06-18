@@ -1,6 +1,6 @@
 use alloy::primitives::U256;
-use bmath::{BONE, U256_1, U256_10E_10, U256_2};
-use error::BalancerError;
+use super::constants::{BONE, U256_1, U256_10E_10, U256_2};
+use super::error::CowAMMError;
 
 // https://github.com/darkforestry/amms-rs/blob/main/src/amms/balancer/bmath.rs
 pub fn btoi(a: U256) -> U256 {
@@ -8,16 +8,16 @@ pub fn btoi(a: U256) -> U256 {
 }
 
 #[inline]
-pub fn badd(a: U256, b: U256) -> Result<U256, BalancerError> {
+pub fn badd(a: U256, b: U256) -> Result<U256, CowAMMError> {
     let c = a + b;
     if c < a {
-        return Err(BalancerError::AddOverflow);
+        return Err(CowAMMError::AddOverflow);
     }
     Ok(c)
 }
 
 #[inline]
-pub fn bpowi(a: U256, n: U256) -> Result<U256, BalancerError> {
+pub fn bpowi(a: U256, n: U256) -> Result<U256, CowAMMError> {
     let mut z = if n % U256_2 != U256::ZERO { a } else { BONE };
 
     let mut a = a;
@@ -33,7 +33,7 @@ pub fn bpowi(a: U256, n: U256) -> Result<U256, BalancerError> {
 }
 
 #[inline]
-pub fn bpow(base: U256, exp: U256) -> Result<U256, BalancerError> {
+pub fn bpow(base: U256, exp: U256) -> Result<U256, CowAMMError> {
     let whole = bfloor(exp);
     let remain = bsub(exp, whole)?;
     let whole_pow = bpowi(base, btoi(whole))?;
@@ -46,7 +46,7 @@ pub fn bpow(base: U256, exp: U256) -> Result<U256, BalancerError> {
 }
 
 #[inline]
-pub fn bpow_approx(base: U256, exp: U256, precision: U256) -> Result<U256, BalancerError> {
+pub fn bpow_approx(base: U256, exp: U256, precision: U256) -> Result<U256, CowAMMError> {
     let a = exp;
     let (x, xneg) = bsub_sign(base, BONE);
     let mut term = BONE;
@@ -80,17 +80,17 @@ pub fn bfloor(a: U256) -> U256 {
 // Reference:
 // https://github.com/balancer/balancer-core/blob/f4ed5d65362a8d6cec21662fb6eae233b0babc1f/contracts/BNum.sol#L75
 #[inline]
-pub fn bdiv(a: U256, b: U256) -> Result<U256, BalancerError> {
+pub fn bdiv(a: U256, b: U256) -> Result<U256, CowAMMError> {
     if b == U256::ZERO {
-        return Err(BalancerError::DivZero);
+        return Err(CowAMMError::DivZero);
     }
     let c0 = a * BONE;
     if a != U256::ZERO && c0 / a != BONE {
-        return Err(BalancerError::DivInternal);
+        return Err(CowAMMError::DivInternal);
     }
     let c1 = c0 + (b / U256_2);
     if c1 < c0 {
-        return Err(BalancerError::DivInternal);
+        return Err(CowAMMError::DivInternal);
     }
     Ok(c1 / b)
 }
@@ -98,10 +98,10 @@ pub fn bdiv(a: U256, b: U256) -> Result<U256, BalancerError> {
 // Reference:
 // https://github.com/balancer/balancer-core/blob/f4ed5d65362a8d6cec21662fb6eae233b0babc1f/contracts/BNum.sol#L43
 #[inline]
-pub fn bsub(a: U256, b: U256) -> Result<U256, BalancerError> {
+pub fn bsub(a: U256, b: U256) -> Result<U256, CowAMMError> {
     let (c, flag) = bsub_sign(a, b);
     if flag {
-        return Err(BalancerError::SubUnderflow);
+        return Err(CowAMMError::SubUnderflow);
     }
     Ok(c)
 }
@@ -115,19 +115,19 @@ pub fn bsub_sign(a: U256, b: U256) -> (U256, bool) {
     } else {
         (b - a, true)
     }
-}
+} 
 
 // Reference:
 // https://github.com/balancer/balancer-core/blob/f4ed5d65362a8d6cec21662fb6eae233b0babc1f/contracts/BNum.sol#L63C4-L73C6
 #[inline]
-pub fn bmul(a: U256, b: U256) -> Result<U256, BalancerError> {
+pub fn bmul(a: U256, b: U256) -> Result<U256, CowAMMError> {
     let c0 = a * b;
     if a != U256::ZERO && c0 / a != b {
-        return Err(BalancerError::MulOverflow);
+        return Err(CowAMMError::MulOverflow);
     }
     let c1 = c0 + (BONE / U256_2);
     if c1 < c0 {
-        return Err(BalancerError::MulOverflow);
+        return Err(CowAMMError::MulOverflow);
     }
     Ok(c1 / BONE)
 }
@@ -147,7 +147,7 @@ pub fn calculate_price(
     b_o: U256,
     w_o: U256,
     s_f: U256,
-) -> Result<U256, BalancerError> {
+) -> Result<U256, CowAMMError> {
     let numer = bdiv(b_i, w_i)?;
     let denom = bdiv(b_o, w_o)?;
     let ratio = bdiv(numer, denom)?;
@@ -172,7 +172,7 @@ pub fn calculate_out_given_in(
     token_weight_out: U256,
     token_amount_in: U256,
     swap_fee: U256,
-) -> Result<U256, BalancerError> {
+) -> Result<U256, CowAMMError> {
     let weight_ratio = bdiv(token_weight_in, token_weight_out)?;
     let adjusted_in = bsub(BONE, swap_fee)?;
     let adjusted_in = bmul(token_amount_in, adjusted_in)?;
