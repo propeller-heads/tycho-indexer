@@ -2298,7 +2298,7 @@ mod tests {
                 ..Default::default()
             };
 
-            let token_in = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"); // WETH
+            let token_in = Bytes::from(Address::ZERO.as_slice()); // Native ETH
             let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
             let swap = Swap {
                 component: bebop_component,
@@ -2374,7 +2374,7 @@ mod tests {
             let expected_hex = format!(
                 "{}{}{}{}{}{}{}{}{}{}",
                 // token in
-                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "0000000000000000000000000000000000000000",
                 // token out
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
                 // transfer type Transfer
@@ -2392,7 +2392,7 @@ mod tests {
                 // abi-encoded maker signatures
                 &encode(&encoded_maker_sigs),
                 // approval needed
-                "01"
+                "00"
             );
 
             assert_eq!(hex_swap, expected_hex);

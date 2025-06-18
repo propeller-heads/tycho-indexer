@@ -299,14 +299,13 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
         // The calldata swaps 200 USDC for ONDO
         // The receiver in the order is 0xc5564C13A157E6240659fb81882A28091add8670
         address orderReceiver = 0xc5564C13A157E6240659fb81882A28091add8670;
+        address maker = 0xCe79b081c0c924cb67848723ed3057234d10FC6b;
         deal(USDC_ADDR, ALICE, 200 * 10 ** 6); // 200 USDC
         uint256 expAmountOut = 237212396774431060000; // Expected ONDO amount from calldata
 
         // Fund the maker with ONDO and approve settlement
-        deal(
-            ONDO_ADDR, 0xCe79b081c0c924cb67848723ed3057234d10FC6b, expAmountOut
-        );
-        vm.prank(0xCe79b081c0c924cb67848723ed3057234d10FC6b);
+        deal(ONDO_ADDR, maker, expAmountOut);
+        vm.prank(maker);
         IERC20(ONDO_ADDR).approve(BEBOP_SETTLEMENT, expAmountOut);
 
         vm.startPrank(ALICE);
@@ -322,47 +321,51 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
         uint256 finalBalance = IERC20(ONDO_ADDR).balanceOf(orderReceiver);
         assertTrue(success, "Call Failed");
         assertGe(finalBalance, expAmountOut);
-        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 0);
+        assertEq(
+            IERC20(USDC_ADDR).balanceOf(tychoRouterAddr),
+            0,
+            "USDC left in router"
+        );
 
         vm.stopPrank();
     }
 
     function testBebopAggregateIntegration() public {
-        // // Setup: Alice has USDC, wants WETH (through multiple makers)
-        // deal(USDC_ADDR, ALICE, 1000 * 10 ** 6);
-        // uint256 expAmountOut = 400000000000000000; // 0.4 WETH
+        // Based on real transaction: https://etherscan.io/tx/0xec88410136c287280da87d0a37c1cb745f320406ca3ae55c678dec11996c1b1c
+        address orderTaker = 0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6; // This is both taker and receiver in the order
+        uint256 ethAmount = 9850000000000000; // 0.00985 WETH
+        uint256 expAmountOut = 17969561; // 17.969561 USDC expected output
 
-        // // Fund the two makers from the calldata with WETH
-        // address maker1 = 0x1111111111111111111111111111111111111111;
-        // address maker2 = 0x2222222222222222222222222222222222222222;
+        // Fund the two makers from the real transaction with USDC
+        address maker1 = 0x67336Cec42645F55059EfF241Cb02eA5cC52fF86;
+        address maker2 = 0xBF19CbF0256f19f39A016a86Ff3551ecC6f2aAFE;
 
-        // // Maker 1 provides 0.24 WETH, Maker 2 provides 0.16 WETH
-        // deal(WETH_ADDR, maker1, 240000000000000000);
-        // deal(WETH_ADDR, maker2, 160000000000000000);
+        deal(USDC_ADDR, maker1, 10607211); // Maker 1 provides 10.607211 USDC
+        deal(USDC_ADDR, maker2, 7362350); // Maker 2 provides 7.362350 USDC
 
-        // // Makers approve settlement contract
-        // vm.prank(maker1);
-        // IERC20(WETH_ADDR).approve(BEBOP_SETTLEMENT, type(uint256).max);
-        // vm.prank(maker2);
-        // IERC20(WETH_ADDR).approve(BEBOP_SETTLEMENT, type(uint256).max);
+        // Makers approve settlement contract
+        vm.prank(maker1);
+        IERC20(USDC_ADDR).approve(BEBOP_SETTLEMENT, type(uint256).max);
+        vm.prank(maker2);
+        IERC20(USDC_ADDR).approve(BEBOP_SETTLEMENT, type(uint256).max);
 
-        // vm.startPrank(ALICE);
-        // IERC20(USDC_ADDR).approve(tychoRouterAddr, type(uint256).max);
+        // Fund ALICE with ETH as it will send the transaction
+        vm.deal(ALICE, ethAmount);
+        vm.startPrank(ALICE);
 
-        // bytes memory callData = loadCallDataFromFile(
-        //     "test_single_encoding_strategy_bebop_aggregate"
-        // );
+        // Load calldata from file
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_bebop_aggregate"
+        );
 
-        // (bool success,) = tychoRouterAddr.call(callData);
+        // Execute the swap
+        (bool success,) = tychoRouterAddr.call{value: ethAmount}(callData);
+        uint256 finalBalance = IERC20(USDC_ADDR).balanceOf(orderTaker);
 
-        // uint256 finalBalance = IERC20(WETH_ADDR).balanceOf(ALICE);
+        assertTrue(success, "Call Failed");
+        assertGe(finalBalance, expAmountOut);
+        assertEq(address(tychoRouterAddr).balance, 0, "ETH left in router");
 
-        // assertTrue(success, "Call Failed");
-        // assertGe(finalBalance, expAmountOut);
-        // assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 0);
-
-        // vm.stopPrank();
-
-        vm.skip(true);
+        vm.stopPrank();
     }
 }

@@ -193,8 +193,10 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             givenAmount, order.taker_amount, filledTakerAmount
         );
 
-        // Transfer tokens to executor
-        _transfer(address(this), transferType, tokenIn, givenAmount);
+        if (tokenIn != address(0)) {
+            // Transfer tokens to executor
+            _transfer(address(this), transferType, tokenIn, givenAmount);
+        }
 
         // Approve Bebop settlement to spend tokens if needed
         if (approvalNeeded) {
@@ -248,20 +250,24 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             revert BebopExecutor__InvalidInput();
         }
 
-        // For aggregate orders, calculate total taker amount across all makers
-        uint256 totalTakerAmount = 0;
+        // For aggregate orders, calculate total taker amount across all amounts of the 2D array
+        uint256 totalTakerAmount;
         for (uint256 i = 0; i < order.taker_amounts.length; i++) {
-            totalTakerAmount += order.taker_amounts[i][0];
+            for (uint256 j = 0; j < order.taker_amounts[i].length; j++) {
+                totalTakerAmount += order.taker_amounts[i][j];
+            }
         }
 
         uint256 actualFilledTakerAmount = _getActualFilledTakerAmount(
             givenAmount, totalTakerAmount, filledTakerAmount
         );
 
-        // Transfer single input token
-        _transfer(address(this), transferType, tokenIn, givenAmount);
+        if (tokenIn != address(0)) {
+            // Transfer tokens to executor
+            _transfer(address(this), transferType, tokenIn, givenAmount);
+        }
 
-        // Approve if needed
+        // Approve Bebop settlement to spend tokens if needed
         if (approvalNeeded) {
             // slither-disable-next-line unused-return
             IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
