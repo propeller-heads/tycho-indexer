@@ -251,7 +251,7 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         }
 
         // For aggregate orders, calculate total taker amount across all amounts of the 2D array
-        uint256 totalTakerAmount;
+        uint256 totalTakerAmount = 0;
         for (uint256 i = 0; i < order.taker_amounts.length; i++) {
             for (uint256 j = 0; j < order.taker_amounts[i].length; j++) {
                 totalTakerAmount += order.taker_amounts[i][j];
