@@ -69,7 +69,7 @@ impl ProtocolSim for EkuboState {
 
         let quote = self.quote(token_amount)?;
 
-        if quote.calculated_amount == u128::MAX {
+        if quote.calculated_amount > i128::MAX as u128 {
             return Err(SimulationError::RecoverableError(
                 "calculated amount exceeds i128::MAX".to_string(),
             ));
