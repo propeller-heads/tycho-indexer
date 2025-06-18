@@ -24,6 +24,7 @@ import {TransientStateLibrary} from
     "@uniswap/v4-core/src/libraries/TransientStateLibrary.sol";
 import "../RestrictTransferFrom.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import "../../lib/bytes/LibPrefixLengthEncodedByteArray.sol";
 
 error UniswapV4Executor__InvalidDataLength();
 error UniswapV4Executor__NotPoolManager();
@@ -44,6 +45,7 @@ contract UniswapV4Executor is
     using CurrencyLibrary for Currency;
     using SafeCast for *;
     using TransientStateLibrary for IPoolManager;
+    using LibPrefixLengthEncodedByteArray for bytes;
 
     IPoolManager public immutable poolManager;
     address private immutable _self;
@@ -86,6 +88,7 @@ contract UniswapV4Executor is
             TransferType transferType,
             address receiver,
             address hook,
+            bytes memory hookData,
             UniswapV4Executor.UniswapV4Pool[] memory pools
         ) = _decodeData(data);
         bytes memory swapData;
@@ -104,7 +107,7 @@ contract UniswapV4Executor is
                 amountIn,
                 transferType,
                 receiver,
-                bytes("")
+                hookData
             );
         } else {
             PathKey[] memory path = new PathKey[](pools.length);
@@ -114,7 +117,7 @@ contract UniswapV4Executor is
                     fee: pools[i].fee,
                     tickSpacing: pools[i].tickSpacing,
                     hooks: IHooks(hook),
-                    hookData: bytes("")
+                    hookData: hookData
                 });
             }
 
@@ -145,6 +148,7 @@ contract UniswapV4Executor is
             TransferType transferType,
             address receiver,
             address hook,
+            bytes memory hookData,
             UniswapV4Pool[] memory pools
         )
     {
@@ -159,24 +163,40 @@ contract UniswapV4Executor is
         receiver = address(bytes20(data[42:62]));
         hook = address(bytes20(data[62:82]));
 
-        uint256 poolsLength = (data.length - 82) / 26; // 26 bytes per pool object
-        pools = new UniswapV4Pool[](poolsLength);
-        bytes memory poolsData = data[82:];
-        uint256 offset = 0;
-        for (uint256 i = 0; i < poolsLength; i++) {
+        bytes calldata remaining = data[82:];
+        address firstToken = address(bytes20(remaining[0:20]));
+        uint24 firstFee = uint24(bytes3(remaining[20:23]));
+        int24 firstTickSpacing = int24(uint24(bytes3(remaining[23:26])));
+        UniswapV4Pool memory firstPool =
+            UniswapV4Pool(firstToken, firstFee, firstTickSpacing);
+
+        // Remaining after first pool are ple encoded
+        bytes[] memory encodedPools =
+            LibPrefixLengthEncodedByteArray.toArray(remaining[26:]);
+
+        pools = new UniswapV4Pool[](1 + encodedPools.length);
+        pools[0] = firstPool;
+
+        uint256 encodedPoolsLength = 26;
+        uint256 plePoolsTotalLength;
+
+        for (uint256 i = 0; i < encodedPools.length; i++) {
+            bytes memory poolsData = encodedPools[i];
             address intermediaryToken;
             uint24 fee;
             int24 tickSpacing;
 
             // slither-disable-next-line assembly
             assembly {
-                intermediaryToken := mload(add(poolsData, add(offset, 20)))
-                fee := shr(232, mload(add(poolsData, add(offset, 52))))
-                tickSpacing := shr(232, mload(add(poolsData, add(offset, 55))))
+                intermediaryToken := mload(add(poolsData, add(0, 20)))
+                fee := shr(232, mload(add(poolsData, add(0, 52))))
+                tickSpacing := shr(232, mload(add(poolsData, add(0, 55))))
             }
-            pools[i] = UniswapV4Pool(intermediaryToken, fee, tickSpacing);
-            offset += 26;
+            pools[i + 1] = UniswapV4Pool(intermediaryToken, fee, tickSpacing);
+            plePoolsTotalLength += 2 + encodedPoolsLength; // 2 bytes prefix + data
         }
+
+        hookData = remaining[26 + plePoolsTotalLength:];
     }
 
     /**

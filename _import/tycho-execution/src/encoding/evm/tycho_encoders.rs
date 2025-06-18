@@ -14,6 +14,7 @@ use crate::encoding::{
             SequentialSwapStrategyEncoder, SingleSwapStrategyEncoder, SplitSwapStrategyEncoder,
         },
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
+        utils::ple_encode,
     },
     models::{
         Chain, EncodedSolution, EncodingContext, NativeAction, Solution, Transaction, TransferType,
@@ -310,32 +311,44 @@ impl TychoExecutorEncoder {
                 ))
             })?;
 
-        let mut grouped_protocol_data: Vec<u8> = vec![];
+        let transfer = if IN_TRANSFER_REQUIRED_PROTOCOLS.contains(
+            &grouped_swap.swaps[0]
+                .component
+                .protocol_system
+                .as_str(),
+        ) {
+            TransferType::Transfer
+        } else {
+            TransferType::None
+        };
+        let encoding_context = EncodingContext {
+            receiver: solution.receiver.clone(),
+            exact_out: solution.exact_out,
+            router_address: None,
+            group_token_in: grouped_swap.token_in.clone(),
+            group_token_out: grouped_swap.token_out.clone(),
+            transfer_type: transfer,
+        };
+        let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
+        let mut initial_protocol_data: Vec<u8> = vec![];
         for swap in grouped_swap.swaps.iter() {
-            let transfer = if IN_TRANSFER_REQUIRED_PROTOCOLS
-                .contains(&swap.component.protocol_system.as_str())
-            {
-                TransferType::Transfer
-            } else {
-                TransferType::None
-            };
-            let encoding_context = EncodingContext {
-                receiver: solution.receiver.clone(),
-                exact_out: solution.exact_out,
-                router_address: None,
-                group_token_in: grouped_swap.token_in.clone(),
-                group_token_out: grouped_swap.token_out.clone(),
-                transfer_type: transfer,
-            };
             let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
-            grouped_protocol_data.extend(protocol_data);
+            if encoding_context.group_token_in == swap.token_in {
+                initial_protocol_data = protocol_data;
+            } else {
+                grouped_protocol_data.push(protocol_data);
+            }
+        }
+
+        if !grouped_protocol_data.is_empty() {
+            initial_protocol_data.extend(ple_encode(grouped_protocol_data));
         }
 
         let executor_address = Bytes::from_str(swap_encoder.executor_address())
             .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?;
 
         Ok(EncodedSolution {
-            swaps: grouped_protocol_data,
+            swaps: initial_protocol_data,
             interacting_with: executor_address,
             permit: None,
             function_signature: "".to_string(),
@@ -1261,6 +1274,8 @@ mod tests {
                     "000bb8",
                     // tick spacing
                     "00003c",
+                    // ple encoding
+                    "001a",
                     // second pool intermediary token (PEPE)
                     "6982508145454ce325ddbe47a25d4ec3d2311933",
                     // fee

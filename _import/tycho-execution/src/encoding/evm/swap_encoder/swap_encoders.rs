@@ -180,10 +180,23 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             Ok(hook) => Address::from_slice(&hook),
             Err(_) => Address::ZERO,
         };
-
+        let mut hook_data = AlloyBytes::new();
+        if encoding_context.group_token_out == swap.token_out {
+            // Add hook data if it's only the last swap
+            hook_data = AlloyBytes::from(
+                swap.user_data
+                    .unwrap_or_default()
+                    .to_vec(),
+            );
+        }
         // Early check if this is not the first swap
         if encoding_context.group_token_in != swap.token_in {
-            return Ok((bytes_to_address(&swap.token_out)?, pool_fee_u24, pool_tick_spacing_u24)
+            return Ok((
+                bytes_to_address(&swap.token_out)?,
+                pool_fee_u24,
+                pool_tick_spacing_u24,
+                hook_data,
+            )
                 .abi_encode_packed());
         }
 
@@ -206,6 +219,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             bytes_to_address(&encoding_context.receiver)?,
             hook_address,
             pool_params,
+            hook_data,
         );
 
         Ok(args.abi_encode_packed())
@@ -841,7 +855,7 @@ mod tests {
 
     mod uniswap_v4 {
         use super::*;
-        use crate::encoding::evm::utils::write_calldata_to_file;
+        use crate::encoding::evm::utils::{ple_encode, write_calldata_to_file};
 
         #[test]
         fn test_encode_uniswap_v4_simple_swap() {
@@ -1062,8 +1076,11 @@ mod tests {
                 .encode_swap(&second_swap, &context)
                 .unwrap();
 
-            let combined_hex =
-                format!("{}{}", encode(&initial_encoded_swap), encode(&second_encoded_swap));
+            let combined_hex = format!(
+                "{}{}",
+                encode(&initial_encoded_swap),
+                encode(ple_encode(vec![second_encoded_swap]))
+            );
 
             assert_eq!(
                 combined_hex,
@@ -1087,6 +1104,9 @@ mod tests {
                     "000064",
                     // - tick spacing
                     "000001",
+                    // Second swap
+                    // ple encoding
+                    "001a",
                     // - intermediary token WBTC
                     "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
                     // - fee

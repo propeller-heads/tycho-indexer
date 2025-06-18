@@ -25,6 +25,7 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
             RestrictTransferFrom.TransferType transferType,
             address receiver,
             address hook,
+            bytes memory hookData,
             UniswapV4Pool[] memory pools
         )
     {
@@ -77,6 +78,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             RestrictTransferFrom.TransferType.Transfer,
             ALICE,
             address(0),
+            bytes(""),
             pools
         );
 
@@ -87,6 +89,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             RestrictTransferFrom.TransferType transferType,
             address receiver,
             address hook,
+            bytes memory hookData,
             UniswapV4Executor.UniswapV4Pool[] memory decodedPools
         ) = uniswapV4Exposed.decodeData(data);
 
@@ -130,6 +133,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             RestrictTransferFrom.TransferType.Transfer,
             ALICE,
             address(0),
+            bytes(""),
             pools
         );
 
@@ -188,6 +192,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             RestrictTransferFrom.TransferType.Transfer,
             ALICE,
             address(0),
+            bytes(""),
             pools
         );
 
@@ -244,6 +249,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             RestrictTransferFrom.TransferType.Transfer,
             ALICE,
             hook,
+            bytes(""),
             pools
         );
 

@@ -121,16 +121,25 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
             transfer_type: transfer,
         };
 
-        let mut grouped_protocol_data: Vec<u8> = vec![];
+        let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
+        let mut initial_protocol_data: Vec<u8> = vec![];
         for swap in grouped_swap.swaps.iter() {
             let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
-            grouped_protocol_data.extend(protocol_data);
+            if encoding_context.group_token_in == swap.token_in {
+                initial_protocol_data = protocol_data;
+            } else {
+                grouped_protocol_data.push(protocol_data);
+            }
+        }
+
+        if !grouped_protocol_data.is_empty() {
+            initial_protocol_data.extend(ple_encode(grouped_protocol_data));
         }
 
         let swap_data = self.encode_swap_header(
             Bytes::from_str(swap_encoder.executor_address())
                 .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?,
-            grouped_protocol_data,
+            initial_protocol_data,
         );
         Ok(EncodedSolution {
             function_signature: self.function_signature.clone(),
@@ -269,17 +278,26 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 transfer_type: transfer,
             };
 
-            let mut grouped_protocol_data: Vec<u8> = vec![];
+            let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
+            let mut initial_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
                 let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
-                grouped_protocol_data.extend(protocol_data);
+                if encoding_context.group_token_in == swap.token_in {
+                    initial_protocol_data = protocol_data;
+                } else {
+                    grouped_protocol_data.push(protocol_data);
+                }
+            }
+
+            if !grouped_protocol_data.is_empty() {
+                initial_protocol_data.extend(ple_encode(grouped_protocol_data));
             }
 
             let swap_data = self.encode_swap_header(
                 Bytes::from_str(swap_encoder.executor_address()).map_err(|_| {
                     EncodingError::FatalError("Invalid executor address".to_string())
                 })?,
-                grouped_protocol_data,
+                initial_protocol_data,
             );
             swaps.push(swap_data);
         }
@@ -458,10 +476,19 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 transfer_type: transfer,
             };
 
-            let mut grouped_protocol_data: Vec<u8> = vec![];
+            let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
+            let mut initial_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
                 let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
-                grouped_protocol_data.extend(protocol_data);
+                if encoding_context.group_token_in == swap.token_in {
+                    initial_protocol_data = protocol_data;
+                } else {
+                    grouped_protocol_data.push(protocol_data);
+                }
+            }
+
+            if !grouped_protocol_data.is_empty() {
+                initial_protocol_data.extend(ple_encode(grouped_protocol_data));
             }
 
             let swap_data = self.encode_swap_header(
@@ -471,7 +498,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 Bytes::from_str(swap_encoder.executor_address()).map_err(|_| {
                     EncodingError::FatalError("Invalid executor address".to_string())
                 })?,
-                grouped_protocol_data,
+                initial_protocol_data,
             );
             swaps.push(swap_data);
         }
