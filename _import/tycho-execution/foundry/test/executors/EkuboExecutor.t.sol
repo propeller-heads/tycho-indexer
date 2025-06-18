@@ -66,14 +66,10 @@ contract EkuboExecutorTest is Constants, TestUtils {
         console.log(amountOut);
 
         assertEq(CORE_ADDRESS.balance, ethBalanceBeforeCore + amountIn);
-        assertEq(
-            address(executor).balance,
-            ethBalanceBeforeExecutor - amountIn
-        );
+        assertEq(address(executor).balance, ethBalanceBeforeExecutor - amountIn);
 
         assertEq(
-            USDC.balanceOf(CORE_ADDRESS),
-            usdcBalanceBeforeCore - amountOut
+            USDC.balanceOf(CORE_ADDRESS), usdcBalanceBeforeCore - amountOut
         );
         assertEq(
             USDC.balanceOf(address(executor)),
@@ -106,10 +102,7 @@ contract EkuboExecutorTest is Constants, TestUtils {
 
         console.log(amountOut);
 
-        assertEq(
-            USDC.balanceOf(CORE_ADDRESS),
-            usdcBalanceBeforeCore + amountIn
-        );
+        assertEq(USDC.balanceOf(CORE_ADDRESS), usdcBalanceBeforeCore + amountIn);
         assertEq(
             USDC.balanceOf(address(executor)),
             usdcBalanceBeforeExecutor - amountIn
@@ -117,8 +110,7 @@ contract EkuboExecutorTest is Constants, TestUtils {
 
         assertEq(CORE_ADDRESS.balance, ethBalanceBeforeCore - amountOut);
         assertEq(
-            address(executor).balance,
-            ethBalanceBeforeExecutor + amountOut
+            address(executor).balance, ethBalanceBeforeExecutor + amountOut
         );
     }
 
@@ -147,10 +139,7 @@ contract EkuboExecutorTest is Constants, TestUtils {
 
         console.log(amountOut);
 
-        assertEq(
-            USDC.balanceOf(CORE_ADDRESS),
-            usdcBalanceBeforeCore + amountIn
-        );
+        assertEq(USDC.balanceOf(CORE_ADDRESS), usdcBalanceBeforeCore + amountIn);
         assertEq(
             USDC.balanceOf(address(executor)),
             usdcBalanceBeforeExecutor - amountIn
@@ -158,8 +147,7 @@ contract EkuboExecutorTest is Constants, TestUtils {
 
         assertEq(CORE_ADDRESS.balance, ethBalanceBeforeCore - amountOut);
         assertEq(
-            address(executor).balance,
-            ethBalanceBeforeExecutor + amountOut
+            address(executor).balance, ethBalanceBeforeExecutor + amountOut
         );
     }
 
@@ -182,14 +170,10 @@ contract EkuboExecutorTest is Constants, TestUtils {
         console.log(amountOut);
 
         assertEq(CORE_ADDRESS.balance, ethBalanceBeforeCore + amountIn);
-        assertEq(
-            address(executor).balance,
-            ethBalanceBeforeExecutor - amountIn
-        );
+        assertEq(address(executor).balance, ethBalanceBeforeExecutor - amountIn);
 
         assertEq(
-            USDT.balanceOf(CORE_ADDRESS),
-            usdtBalanceBeforeCore - amountOut
+            USDT.balanceOf(CORE_ADDRESS), usdtBalanceBeforeCore - amountOut
         );
         assertEq(
             USDT.balanceOf(address(executor)),

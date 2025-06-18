@@ -128,11 +128,8 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
             factoryPancakeV3, initCodePancakeV3, PERMIT2_ADDRESS
         );
         balancerv2Executor = new BalancerV2Executor(PERMIT2_ADDRESS);
-        ekuboExecutor = new EkuboExecutor(
-            ekuboCore,
-            ekuboMevResist,
-            PERMIT2_ADDRESS
-        );
+        ekuboExecutor =
+            new EkuboExecutor(ekuboCore, ekuboMevResist, PERMIT2_ADDRESS);
         curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, PERMIT2_ADDRESS);
         maverickv2Executor =
             new MaverickV2Executor(MAVERICK_V2_FACTORY, PERMIT2_ADDRESS);
