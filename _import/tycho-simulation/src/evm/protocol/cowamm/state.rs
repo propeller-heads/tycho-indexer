@@ -59,39 +59,6 @@ impl ProtocolSim for CowAMMPoolState {
     /// sF = swapFee                                                                              //
     ///**********************************************************************************************/
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
-        //could have used the rug implementation but it causes a build error that'll most likely be not too relevant to fuck up the CI
-        // and give other people issues 
-        // let bone = u256_to_f64(BONE);
-        // let norm_base = if base.decimals < 18 {
-        //     Float::with_val(
-        //         MPFR_T_PRECISION,
-        //         10_u64.pow(18 - base.decimals as u32),
-        //     )
-        // } else {
-        //     Float::with_val(MPFR_T_PRECISION, 1)
-        // };
-        // let norm_quote = if quote.decimals < 18 {
-        //     Float::with_val(
-        //         MPFR_T_PRECISION,
-        //         10_u64.pow(18 - quote.decimals as u32),
-        //     )
-        // } else {
-        //     Float::with_val(MPFR_T_PRECISION, 1)
-        // };
-
-        // let base_token = self.state.get(&base.address).ok_or(CowAMMError::TokenInDoesNotExist);
-        // let quote_token = self.state.get(&quote.address).ok_or(CowAMMError::TokenOutDoesNotExist);
-         
-        // let norm_weight_base = u256_to_f64(base_token.weight) / norm_base;
-        // let norm_weight_quote = u256_to_f64(quote_token.weight) / norm_quote;
-        // let balance_base = u256_to_f64(base_token.liquidity); // how to get liquidity ? 
-        // let balance_quote = u256_to_f64(quote_token.liquidity);
-
-        // let dividend = (balance_quote / norm_weight_quote) * bone.clone();
-        // let divisor = (balance_base / norm_weight_base)
-        //     * (bone - Float::with_val(MPFR_T_PRECISION, self.fee));
-        // let ratio = dividend / divisor;
-        // Ok(ratio.to_f64_round(Round::Nearest))
         let bone = u256_to_f64(BONE);
         // Normalize for token decimals to 18
         let norm_base = 10_f64.powi((18i32 - base.decimals as i32).max(0));
@@ -179,7 +146,6 @@ impl ProtocolSim for CowAMMPoolState {
             .ok_or(CowAMMError::TokenOutDoesNotExist)
             .map_err(|err| SimulationError::FatalError(format!("token not found: {err:?}")))?
             .liquidity;
-        // let  = new_state.get_state_mut();
 
         liq1_mut = safe_add_u256(bal1, amount_in)?;
         liq2_mut = safe_sub_u256(bal2, amount_out)?;
