@@ -2163,7 +2163,7 @@ mod tests {
             };
 
             let encoding_context = EncodingContext {
-                receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"), // Taker address from tx
+                receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"), /* Taker address from tx */
                 exact_out: false,
                 router_address: Some(Bytes::zero(20)),
                 group_token_in: token_in.clone(),
@@ -2209,19 +2209,20 @@ mod tests {
             // Swap: 0.00985 ETH → 17.969561 USDC
             let aggregate_order = BebopAggregate {
                 expiry: U256::from(1746367285u64),
-                taker_address: Address::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap(),
+                taker_address: Address::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6")
+                    .unwrap(),
                 maker_addresses: vec![
                     Address::from_str("0x67336Cec42645F55059EfF241Cb02eA5cC52fF86").unwrap(),
                     Address::from_str("0xBF19CbF0256f19f39A016a86Ff3551ecC6f2aAFE").unwrap(),
                 ],
                 maker_nonces: vec![U256::from(1746367197308u64), U256::from(15460096u64)],
                 taker_tokens: vec![
-                    vec![Address::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap()], // WETH for maker 1
-                    vec![Address::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap()], // WETH for maker 2
+                    vec![Address::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap()], /* WETH for maker 1 */
+                    vec![Address::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap()], /* WETH for maker 2 */
                 ],
                 maker_tokens: vec![
-                    vec![Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap()], // USDC from maker 1
-                    vec![Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap()], // USDC from maker 2
+                    vec![Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap()], /* USDC from maker 1 */
+                    vec![Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap()], /* USDC from maker 2 */
                 ],
                 taker_amounts: vec![
                     vec![U256::from(5812106401997138u64)], // First maker takes ~0.0058 ETH
@@ -2229,11 +2230,14 @@ mod tests {
                 ],
                 maker_amounts: vec![
                     vec![U256::from(10607211u64)], // First maker gives ~10.6 USDC
-                    vec![U256::from(7362350u64)], // Second maker gives ~7.36 USDC
+                    vec![U256::from(7362350u64)],  // Second maker gives ~7.36 USDC
                 ],
                 receiver: Address::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap(),
                 commands: hex::decode("00040004").unwrap().into(),
-                flags: U256::from_str("95769172144825922628485191511070792431742484643425438763224908097896054784000").unwrap(),
+                flags: U256::from_str(
+                    "95769172144825922628485191511070792431742484643425438763224908097896054784000",
+                )
+                .unwrap(),
             };
 
             let quote_data = aggregate_order.abi_encode();
@@ -2309,7 +2313,7 @@ mod tests {
             };
 
             let encoding_context = EncodingContext {
-                receiver: Bytes::from("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6"), // Taker address from tx
+                receiver: Bytes::from("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6"), /* Taker address from tx */
                 exact_out: false,
                 router_address: Some(Bytes::zero(20)),
                 group_token_in: token_in.clone(),

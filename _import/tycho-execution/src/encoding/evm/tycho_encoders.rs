@@ -3959,12 +3959,10 @@ mod tests {
                 ];
                 let maker_nonces = vec![U256::from(1746367197308u64), U256::from(15460096u64)];
 
-                // 2D arrays for tokens 
+                // 2D arrays for tokens
                 // We use WETH as a taker token even when handling native ETH
-                let taker_tokens = vec![
-                    vec![Address::from_slice(&weth())],
-                    vec![Address::from_slice(&weth())],
-                ];
+                let taker_tokens =
+                    vec![vec![Address::from_slice(&weth())], vec![Address::from_slice(&weth())]];
                 let maker_tokens = vec![
                     vec![Address::from_slice(&token_out)],
                     vec![Address::from_slice(&token_out)],
