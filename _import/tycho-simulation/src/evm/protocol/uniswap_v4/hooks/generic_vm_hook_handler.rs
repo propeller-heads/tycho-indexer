@@ -1,7 +1,7 @@
 use std::{any::Any, collections::HashMap, fmt::Debug};
 
 use alloy::{
-    primitives::{keccak256, Address, Signed, Uint, B256, I128, I256, U256},
+    primitives::{keccak256, Address, Signed, Uint, I128, U256},
     sol_types::SolType,
 };
 use revm::DatabaseRef;
@@ -12,11 +12,13 @@ use crate::{
         engine_db::{engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader},
         protocol::{
             uniswap_v4::{
-                hooks::hook_handler::HookHandler,
+                hooks::{
+                    hook_handler::HookHandler,
                     models::{
                         AfterSwapDelta, AfterSwapParameters, AfterSwapSolReturn, AmountRanges,
-                    BeforeSwapOutput, BeforeSwapParameters, BeforeSwapSolOutput, SwapParams,
-                     WithGasEstimate,
+                        BeforeSwapOutput, BeforeSwapParameters, BeforeSwapSolOutput, SwapParams,
+                        WithGasEstimate,
+                    },
                 },
                 state::UniswapV4State,
             },
@@ -262,9 +264,15 @@ mod tests {
             simulation_db::{BlockHeader, SimulationDB},
             utils::{get_client, get_runtime},
         },
-        protocol::uniswap_v4::{
-            hooks::models::{BalanceDelta, BeforeSwapDelta, StateContext},
-            state::UniswapV4Fees,
+        protocol::{
+            uniswap_v4::{
+                hooks::{
+                    constants::POOL_MANAGER_BYTECODE,
+                    models::{BalanceDelta, BeforeSwapDelta, StateContext},
+                },
+                state::UniswapV4Fees,
+            },
+            vm::constants::MAX_BALANCE,
         },
     };
 

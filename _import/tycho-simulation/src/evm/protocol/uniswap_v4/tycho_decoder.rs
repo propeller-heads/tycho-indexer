@@ -131,7 +131,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
             tick,
             tick_spacing,
             ticks,
-            block.into(),
+            block.clone().into(),
         );
 
         let hook_address = snapshot
