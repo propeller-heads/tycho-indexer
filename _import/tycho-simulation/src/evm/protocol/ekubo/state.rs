@@ -196,13 +196,11 @@ mod tests {
                 token0
                     .address
                     .deref()
-                    .try_into()
-                    .unwrap(),
+                    .into(),
                 token1
                     .address
                     .deref()
-                    .try_into()
-                    .unwrap(),
+                    .into(),
             )
             .expect("computing limits for token0")
             .0;

@@ -48,13 +48,13 @@ fn impl_from_state(
     ticks: Vec<Tick>,
     tick: i32,
 ) -> Result<quoting::mev_resist_pool::MEVResistPool, String> {
-    Ok(quoting::mev_resist_pool::MEVResistPool::new(
+    quoting::mev_resist_pool::MEVResistPool::new(
         base::impl_from_state(key, base_pool_state, ticks)
             .map_err(|err| format!("creating base pool: {err:?}"))?,
         0,
         tick,
     )
-    .map_err(|err| format!("creating MEV-resist pool: {err:?}"))?)
+    .map_err(|err| format!("creating MEV-resist pool: {err:?}"))
 }
 
 impl MevResistPool {
