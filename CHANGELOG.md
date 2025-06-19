@@ -1,3 +1,11 @@
+## [0.71.2](https://github.com/propeller-heads/tycho-indexer/compare/0.71.1...0.71.2) (2025-06-19)
+
+
+### Bug Fixes
+
+* fix build for python wheel and crates.io ([#597](https://github.com/propeller-heads/tycho-indexer/issues/597)) ([b0e99ae](https://github.com/propeller-heads/tycho-indexer/commit/b0e99aee906cd4d70912f42d72e79747ef7225bc))
+* fix python wheel build ([20ae4bf](https://github.com/propeller-heads/tycho-indexer/commit/20ae4bfe1652359f17c2fa9a87dd9f4903080f2b))
+
 ## [0.71.1](https://github.com/propeller-heads/tycho-indexer/compare/0.71.0...0.71.1) (2025-06-19)
 
 
