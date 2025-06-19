@@ -159,10 +159,9 @@ where
         // Update the entrypoint results with the retriggered entrypoints
         entrypoints_to_analyze.extend(retriggered_entrypoints);
 
-        debug!("DCI: Will analyze {:?} entrypoints", entrypoints_to_analyze.len());
-        trace!("DCI: Entrypoints to analyze: {:?}", entrypoints_to_analyze);
-
         if !entrypoints_to_analyze.is_empty() {
+            debug!("DCI: Will analyze {:?} entrypoints", entrypoints_to_analyze.len());
+            trace!("DCI: Entrypoints to analyze: {:?}", entrypoints_to_analyze);
             tracing::debug!(entrypoints_to_analyze = ?entrypoints_to_analyze, "DCI: Entrypoints to analyze");
 
             let traced_entry_points = self
