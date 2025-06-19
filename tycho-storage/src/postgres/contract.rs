@@ -15,8 +15,8 @@ use tycho_common::{
     keccak256,
     models::{
         contract::{Account, AccountBalance, AccountDelta},
-        AccountToContractStore, Address, Balance, Chain, ChangeType, Code, ContractId,
-        ContractStore, PaginationParams, StoreKey, StoreVal, TxHash,
+        AccountToContractStoreDeltas, Address, Balance, Chain, ChangeType, Code, ContractId,
+        ContractStoreDeltas, PaginationParams, StoreKey, StoreVal, TxHash,
     },
     storage::{BlockOrTimestamp, StorageError, Version, WithTotal},
     Bytes,
@@ -228,7 +228,7 @@ impl PostgresGateway {
         start_version_ts: &NaiveDateTime,
         target_version_ts: &NaiveDateTime,
         conn: &mut AsyncPgConnection,
-    ) -> Result<HashMap<i64, ContractStore>, StorageError> {
+    ) -> Result<HashMap<i64, ContractStoreDeltas>, StorageError> {
         let changed_values = if start_version_ts <= target_version_ts {
             // Going forward
             //                  ]     changes to forward   ]
@@ -292,7 +292,7 @@ impl PostgresGateway {
                 .map_err(PostgresError::from)?
         };
 
-        let mut result: HashMap<i64, ContractStore> = HashMap::new();
+        let mut result: HashMap<i64, ContractStoreDeltas> = HashMap::new();
         for (cid, raw_key, raw_val) in changed_values.into_iter() {
             match result.entry(cid) {
                 Entry::Occupied(mut e) => {
@@ -499,7 +499,7 @@ impl PostgresGateway {
     #[instrument(level = Level::DEBUG, skip_all)]
     async fn upsert_slots(
         &self,
-        slots: HashMap<i64, AccountToContractStore>,
+        slots: HashMap<i64, AccountToContractStoreDeltas>,
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
         let txns: HashSet<_> = slots.keys().copied().collect();
@@ -634,7 +634,7 @@ impl PostgresGateway {
         contracts: Option<&[Address]>,
         at: Option<&Version>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<HashMap<Address, ContractStore>, StorageError> {
+    ) -> Result<HashMap<Address, ContractStoreDeltas>, StorageError> {
         let version_ts = match &at {
             Some(version) => maybe_lookup_version_ts(version, conn).await?,
             None => Utc::now().naive_utc(),
@@ -677,8 +677,8 @@ impl PostgresGateway {
     fn construct_account_to_contract_store(
         slot_values: impl Iterator<Item = (i64, Bytes, Option<Bytes>)>,
         addresses: HashMap<i64, Bytes>,
-    ) -> Result<AccountToContractStore, StorageError> {
-        let mut result: AccountToContractStore = HashMap::with_capacity(addresses.len());
+    ) -> Result<AccountToContractStoreDeltas, StorageError> {
+        let mut result: AccountToContractStoreDeltas = HashMap::with_capacity(addresses.len());
         for (cid, raw_key, raw_val) in slot_values.into_iter() {
             // note this can theoretically happen (only if there is some really
             // bad database inconsistency) because the call above simply filters
@@ -997,12 +997,11 @@ impl PostgresGateway {
         Ok(WithTotal { entity: res, total: Some(total_count) })
     }
 
-    /// Upsert contract
+    /// Insert contract
     ///
-    /// Inserts a contract or updates it if it already exists. It will not update
-    /// contract balance or contract code if they already exist though. Since a separate
+    /// Inserts a contract. It will not insert contract code, slots or balance since a separate
     /// method exists for updating these related components.
-    pub async fn upsert_contract(
+    pub async fn insert_contract(
         &self,
         new: &Account,
         db: &mut AsyncPgConnection,
@@ -1036,70 +1035,19 @@ impl PostgresGateway {
             creation_tx: creation_tx_id,
             created_at: Some(created_ts),
             deleted_at: None,
-            balance: new.native_balance.clone(),
-            code: new.code.clone(),
-            code_hash: new.code_hash.clone(),
         };
         let hex_addr = hex::encode(&new.address);
 
-        let account_id = {
-            use schema::account::dsl;
-            diesel::insert_into(schema::account::table)
-                .values(new_contract.new_account())
-                .on_conflict(on_constraint("account_chain_id_address_key"))
-                .do_update()
-                .set((
-                    dsl::title.eq(excluded(dsl::title)),
-                    dsl::creation_tx.eq(excluded(dsl::creation_tx)),
-                    dsl::created_at.eq(excluded(dsl::created_at)),
-                ))
-                .returning(schema::account::id)
-                .get_result::<i64>(db)
-                .await
-                .map_err(|err| {
-                    error!("Failed inserting account");
-                    storage_error_from_diesel(err, "Account", &hex_addr, None)
-                })?
-        };
+        diesel::insert_into(schema::account::table)
+            .values(new_contract.new_account())
+            .on_conflict_do_nothing()
+            .execute(db)
+            .await
+            .map_err(|err| {
+                error!("Failed inserting account");
+                storage_error_from_diesel(err, "Account", &hex_addr, None)
+            })?;
 
-        // we can only insert balance and contract_code if we have a creation transaction.
-        if let Some(tx_id) = creation_tx_id {
-            diesel::insert_into(schema::account_balance::table)
-                .values(new_contract.new_balance(
-                    account_id,
-                    self.get_native_token_id(&new.chain)?,
-                    tx_id,
-                    created_ts,
-                ))
-                .on_conflict_do_nothing()
-                .execute(db)
-                .await
-                .map_err(|err| storage_error_from_diesel(err, "AccountBalance", &hex_addr, None))?;
-            diesel::insert_into(schema::contract_code::table)
-                .values(new_contract.new_code(account_id, tx_id, created_ts))
-                .on_conflict_do_nothing()
-                .execute(db)
-                .await
-                .map_err(|err| storage_error_from_diesel(err, "ContractCode", &hex_addr, None))?;
-            self.upsert_slots(
-                [(
-                    tx_id,
-                    [(
-                        new.address.clone(),
-                        new.slots
-                            .iter()
-                            .map(|(k, v)| (k.clone(), Some(v.clone())))
-                            .collect(),
-                    )]
-                    .into_iter()
-                    .collect(),
-                )]
-                .into_iter()
-                .collect(),
-                db,
-            )
-            .await?;
-        }
         Ok(())
     }
 
@@ -1155,7 +1103,7 @@ impl PostgresGateway {
 
         let mut balance_data = Vec::new();
         let mut code_data = Vec::new();
-        let mut slot_data: HashMap<i64, AccountToContractStore> = HashMap::new();
+        let mut slot_data: HashMap<i64, AccountToContractStoreDeltas> = HashMap::new();
 
         for delta in new.iter() {
             let contract_id = delta.contract_id();
@@ -1661,10 +1609,7 @@ mod test {
     };
 
     use super::*;
-    use crate::postgres::{
-        db_fixtures,
-        db_fixtures::{yesterday_midnight, yesterday_one_am},
-    };
+    use crate::postgres::db_fixtures;
 
     type EVMGateway = PostgresGateway;
     type MaybeTS = Option<NaiveDateTime>;
@@ -1690,8 +1635,30 @@ mod test {
     async fn setup_data(conn: &mut AsyncPgConnection) -> i64 {
         let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
         let blk = db_fixtures::insert_blocks(conn, chain_id).await;
+        // add block 3 with no linked data (to be used to test updates)
+        diesel::insert_into(schema::block::table)
+            .values((
+                schema::block::hash.eq(Vec::from(
+                    Bytes::from_str(
+                        "f2d7c8b6e3a1905f4c8d26b7e9513a0d7f8e2c9b1a6d5e4f3c2b1a0e9d8c7f61",
+                    )
+                    .unwrap(),
+                )),
+                schema::block::parent_hash.eq(Vec::from(
+                    Bytes::from_str(
+                        "b495a1d7e6663152ae92708da4843337b958146015a2802f4193a410044698c9",
+                    )
+                    .unwrap(),
+                )),
+                schema::block::number.eq(3),
+                schema::block::ts.eq(db_fixtures::yesterday_one_am()),
+                schema::block::chain_id.eq(chain_id),
+            ))
+            .execute(conn)
+            .await
+            .unwrap();
         let ts = db_fixtures::yesterday_midnight();
-        let ts_p1 = db_fixtures::yesterday_one_am();
+        let ts_p1 = db_fixtures::yesterday_half_past_midnight();
         let tx_hashes = [
             "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945".to_string(),
             "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54".to_string(),
@@ -2267,7 +2234,16 @@ mod test {
             ),
         );
         gateway
-            .upsert_contract(&expected, &mut conn)
+            .insert_contract(&expected, &mut conn)
+            .await
+            .unwrap();
+        let update: AccountDelta = expected.clone().into();
+        gateway
+            .update_contracts(
+                &expected.chain,
+                &[(expected.code_modify_tx.clone(), &update)],
+                &mut conn,
+            )
             .await
             .unwrap();
 
@@ -2289,7 +2265,7 @@ mod test {
         let gw = EVMGateway::from_connection(&mut conn).await;
         let modify_txhash = "62f4d4f29d10db8722cb66a2adb0049478b11988c8b43cd446b755afb8954678";
         let tx_hash_bytes = Bytes::from(modify_txhash);
-        let block = orm::Block::by_number(Chain::Ethereum, 2, &mut conn)
+        let block = orm::Block::by_number(Chain::Ethereum, 3, &mut conn)
             .await
             .expect("block found");
         db_fixtures::insert_txns(&mut conn, &[(block.id, 100, modify_txhash)]).await;
@@ -2462,7 +2438,7 @@ mod test {
     async fn test_get_slots(
         #[case] version: Option<Version>,
         #[case] addresses: Option<Vec<Address>>,
-        #[case] exp: AccountToContractStore,
+        #[case] exp: AccountToContractStoreDeltas,
     ) {
         let mut conn = setup_db().await;
         setup_data(&mut conn).await;
@@ -2515,20 +2491,20 @@ mod test {
             Some(txn[0]),
         )
         .await;
-        let slot_data_tx_0: ContractStore = vec![
+        let slot_data_tx_0 = vec![
             (vec![1u8].into(), Some(vec![10u8].into())),
             (vec![2u8].into(), Some(vec![20u8].into())),
             (vec![3u8].into(), Some(vec![30u8].into())),
         ]
         .into_iter()
-        .collect();
-        let slot_data_tx_1: ContractStore = vec![
+        .collect::<ContractStoreDeltas>();
+        let slot_data_tx_1 = vec![
             (vec![1u8].into(), Some(vec![11u8].into())),
             (vec![2u8].into(), Some(vec![21u8].into())),
             (vec![3u8].into(), Some(vec![31u8].into())),
         ]
         .into_iter()
-        .collect();
+        .collect::<ContractStoreDeltas>();
         let input_slots = [
             (
                 txn[0],
@@ -2558,14 +2534,14 @@ mod test {
             .unwrap();
 
         // Query the stored slots from the database
-        let fetched_slot_data: ContractStore = schema::contract_storage::table
+        let fetched_slot_data = schema::contract_storage::table
             .select((schema::contract_storage::slot, schema::contract_storage::value))
             .filter(schema::contract_storage::valid_to.eq(MAX_TS))
             .get_results(&mut conn)
             .await
             .unwrap()
             .into_iter()
-            .collect();
+            .collect::<ContractStoreDeltas>();
         assert_eq!(fetched_slot_data, slot_data_tx_1);
     }
 
@@ -2618,10 +2594,10 @@ mod test {
         )
         .await;
 
-        let slot_data_tx_1: ContractStore = vec![(1, 11), (2, 12), (3, 13)]
+        let slot_data_tx_1 = vec![(1, 11), (2, 12), (3, 13)]
             .into_iter()
             .map(|(s, v)| (int_to_b256(s), Some(int_to_b256(v))))
-            .collect();
+            .collect::<ContractStoreDeltas>();
         let input_slots = [(
             txn[1],
             vec![(Bytes::from("6B175474E89094C44Da98b954EedeAC495271d0F"), slot_data_tx_1.clone())]
@@ -2637,14 +2613,14 @@ mod test {
             .unwrap();
 
         // Query the stored slots from the database
-        let fetched_slot_data: ContractStore = schema::contract_storage::table
+        let fetched_slot_data = schema::contract_storage::table
             .select((schema::contract_storage::slot, schema::contract_storage::value))
             .filter(schema::contract_storage::valid_to.eq(MAX_TS))
             .get_results(&mut conn)
             .await
             .unwrap()
             .into_iter()
-            .collect();
+            .collect::<ContractStoreDeltas>();
         assert_eq!(fetched_slot_data, slot_data_tx_1);
     }
 
@@ -2731,18 +2707,18 @@ mod test {
         let chain_id = gw
             .get_chain_id(&Chain::Ethereum)
             .unwrap();
-        let storage: ContractStore = vec![(0u8, 2u8), (1u8, 3u8), (5u8, 25u8), (6u8, 30u8)]
+        let storage = vec![(0u8, 2u8), (1u8, 3u8), (5u8, 25u8), (6u8, 30u8)]
             .into_iter()
             .map(|(k, v)| if v > 0 { (bytes32(k), Some(bytes32(v))) } else { (bytes32(k), None) })
-            .collect();
+            .collect::<ContractStoreDeltas>();
         let mut exp = HashMap::new();
         let addr = Bytes::from("6B175474E89094C44Da98b954EedeAC495271d0F");
         let account_id = get_account(&addr, &mut conn)
             .await
             .unwrap();
         exp.insert(account_id, storage);
-        let end_ts = yesterday_one_am() + Duration::from_secs(3600);
-        let start_ts = yesterday_midnight();
+        let end_ts = db_fixtures::yesterday_one_am() + Duration::from_secs(3600);
+        let start_ts = db_fixtures::yesterday_midnight();
 
         let res = gw
             .get_slots_delta(chain_id, &start_ts, &end_ts, &mut conn)
@@ -2760,18 +2736,18 @@ mod test {
         let chain_id = gw
             .get_chain_id(&Chain::Ethereum)
             .unwrap();
-        let storage: ContractStore = vec![(0u8, 1u8), (1u8, 5u8), (5u8, 0u8), (6u8, 0u8)]
+        let storage = vec![(0u8, 1u8), (1u8, 5u8), (5u8, 0u8), (6u8, 0u8)]
             .into_iter()
             .map(|(k, v)| if v > 0 { (bytes32(k), Some(bytes32(v))) } else { (bytes32(k), None) })
-            .collect();
+            .collect::<ContractStoreDeltas>();
         let mut exp = HashMap::new();
         let addr = Bytes::from("6B175474E89094C44Da98b954EedeAC495271d0F");
         let account_id = get_account(&addr, &mut conn)
             .await
             .unwrap();
         exp.insert(account_id, storage);
-        let start_ts = yesterday_one_am() + Duration::from_secs(3600);
-        let end_ts = yesterday_midnight();
+        let start_ts = db_fixtures::yesterday_one_am() + Duration::from_secs(3600);
+        let end_ts = db_fixtures::yesterday_midnight();
 
         let res = gw
             .get_slots_delta(chain_id, &start_ts, &end_ts, &mut conn)

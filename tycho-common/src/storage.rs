@@ -1,5 +1,8 @@
 //! Storage traits used by Tycho
-use std::{collections::HashMap, fmt::Display};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
@@ -8,15 +11,18 @@ use thiserror::Error;
 use crate::{
     dto,
     models::{
-        blockchain::{Block, Transaction},
+        blockchain::{
+            Block, EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingParams,
+            TracingResult, Transaction,
+        },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta, QualityRange,
         },
         token::CurrencyToken,
-        Address, BlockHash, Chain, ComponentId, ContractId, ExtractionState, PaginationParams,
-        ProtocolType, TxHash,
+        Address, BlockHash, Chain, ComponentId, ContractId, EntryPointId, ExtractionState,
+        PaginationParams, ProtocolSystem, ProtocolType, TxHash,
     },
     Bytes,
 };
@@ -50,7 +56,7 @@ impl Display for BlockIdentifier {
     }
 }
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug, PartialEq, Clone)]
 pub enum StorageError {
     #[error("Could not find {0} with id `{1}`!")]
     NotFound(String, String),
@@ -270,7 +276,9 @@ pub trait ProtocolGateway {
     /// # Parameters
     /// - `chain` The chain of the component
     /// - `system` Allows to optionally filter by system.
-    /// - `id` Allows to optionally filter by id.
+    /// - `ids` Allows to optionally filter by id.
+    /// - `min_tvl` Allows to optionally filter by min tvl.
+    /// - `pagination_params` Optional pagination parameters to control the number of results.
     ///
     /// # Returns
     /// Ok, if found else Err
@@ -313,7 +321,7 @@ pub trait ProtocolGateway {
     /// Stores new found ProtocolTypes.
     ///
     /// # Parameters
-    /// - `new`  The new protocol types.
+    /// - `new_protocol_types`  The new protocol types.
     ///
     /// # Returns
     /// Ok if stored successfully.
@@ -335,9 +343,11 @@ pub trait ProtocolGateway {
     ///
     /// # Parameters
     /// - `chain` The chain of the component
+    /// - `at` The version at which the state is valid at.
     /// - `system` The protocol system this component belongs to
     /// - `ids` The external ids of the components e.g. addresses, or the pairs
-    /// - `at` The version at which the state is valid at.
+    /// - `retrieve_balances` Whether to retrieve the balances for the components.
+    /// - `pagination_params` Optional pagination parameters to control the number of results.
     async fn get_protocol_states(
         &self,
         chain: &Chain,
@@ -358,6 +368,9 @@ pub trait ProtocolGateway {
     /// # Parameters
     /// - `chain` The chain this token is implemented on.
     /// - `address` The address for the token within the chain.
+    /// - `quality` The quality of the token.
+    /// - `traded_n_days_ago` The number of days ago the token was traded.
+    /// - `pagination_params` Optional pagination parameters to control the number of results.
     ///
     /// # Returns
     /// Ok if the results could be retrieved from the storage, else errors.
@@ -374,8 +387,6 @@ pub trait ProtocolGateway {
     ///
     /// # Parameters
     /// - `component_balances` The component balances to insert.
-    /// - `chain` The chain of the component balances to be inserted.
-    /// - `block_ts` The timestamp of the block that the balances are associated with.
     ///
     /// # Return
     /// Ok if all component balances could be inserted, Err if at least one token failed to
@@ -391,7 +402,7 @@ pub trait ProtocolGateway {
     /// be immutable.
     ///
     /// # Parameters
-    /// - `token` The tokens to insert.
+    /// - `tokens` The tokens to insert.
     ///
     /// # Return
     /// Ok if all tokens could be inserted, Err if at least one token failed to
@@ -402,10 +413,9 @@ pub trait ProtocolGateway {
     ///
     /// Updates token in storage. Will warn if one of the tokens does not exist in the
     /// database. Currently assumes that token addresses are unique across chains.
-    /// -
     ///
     /// # Parameters
-    /// - `token` The tokens to update.
+    /// - `tokens` The tokens to update.
     ///
     /// # Return
     /// Ok if all tokens could be inserted, Err if at least one token failed to
@@ -498,6 +508,104 @@ pub trait ProtocolGateway {
     ) -> Result<WithTotal<HashMap<String, f64>>, StorageError>;
 }
 
+/// Filters for entry points queries in the database.
+// Shalow but can be used to add more filters without breaking backwards compatibility in the future
+pub struct EntryPointFilter {
+    pub protocol_system: ProtocolSystem,
+    pub component_ids: Option<Vec<ComponentId>>,
+}
+
+impl EntryPointFilter {
+    pub fn new(protocol: ProtocolSystem) -> Self {
+        Self { protocol_system: protocol, component_ids: None }
+    }
+
+    pub fn with_component_ids(mut self, component_ids: Vec<ComponentId>) -> Self {
+        self.component_ids = Some(component_ids);
+        self
+    }
+}
+
+// Trait for entry point gateway operations.
+#[async_trait]
+pub trait EntryPointGateway {
+    /// Inserts a list of entry points into the database.
+    ///
+    /// # Arguments
+    /// * `entry_points` - The map of component ids to their entry points to insert.
+    ///
+    /// Note: This function ignores conflicts on inserts.
+    async fn insert_entry_points(
+        &self,
+        entry_points: &HashMap<ComponentId, HashSet<EntryPoint>>,
+    ) -> Result<(), StorageError>;
+
+    /// Inserts a list of entry points with their tracing params into the database.
+    ///
+    /// # Arguments
+    /// * `entry_points_params` - The map of entry points to their tracing params to insert and
+    ///   optionally a component id used for debugging only.
+    ///
+    /// Note: This function ignores conflicts on inserts.
+    async fn insert_entry_point_tracing_params(
+        &self,
+        entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+    ) -> Result<(), StorageError>;
+
+    /// Retrieves a map of component ids to a set of entry points from the database.
+    ///
+    /// # Arguments
+    /// * `filter` - The EntryPointFilter to apply to the query.
+    /// * `pagination_params` - The pagination parameters to apply to the query, if None, all
+    ///   results are returned.
+    ///
+    /// # Returns
+    /// A map of component ids to a set of entry points.
+    async fn get_entry_points(
+        &self,
+        filter: EntryPointFilter,
+        pagination_params: Option<&PaginationParams>,
+    ) -> Result<WithTotal<HashMap<ComponentId, HashSet<EntryPoint>>>, StorageError>;
+
+    /// Retrieves a map of component ids to a set of entry points with their tracing data from the
+    /// database.
+    ///
+    /// # Arguments
+    /// * `filter` - The EntryPointFilter to apply to the query.
+    /// * `pagination_params` - The pagination parameters to apply to the query, if None, all
+    ///   results are returned.
+    ///
+    /// # Returns
+    /// A map of component ids to a set of entry points with their tracing params.
+    async fn get_entry_points_tracing_params(
+        &self,
+        filter: EntryPointFilter,
+        pagination_params: Option<&PaginationParams>,
+    ) -> Result<WithTotal<HashMap<ComponentId, HashSet<EntryPointWithTracingParams>>>, StorageError>;
+
+    /// Upserts a list of traced entry points into the database. Updates the result if it already
+    /// exists for the same entry point and tracing params.
+    ///
+    /// # Arguments
+    /// * `traced_entry_points` - The list of traced entry points to upsert.
+    async fn upsert_traced_entry_points(
+        &self,
+        traced_entry_points: &[TracedEntryPoint],
+    ) -> Result<(), StorageError>;
+
+    /// Retrieves all tracing results for a set of entry points from the database.
+    ///
+    /// # Arguments
+    /// * `entry_points` - The set of entry points to retrieve tracing results for.
+    ///
+    /// # Returns
+    /// A map of entry point ids to a map of tracing params to tracing results.
+    async fn get_traced_entry_points(
+        &self,
+        entry_points: &HashSet<EntryPointId>,
+    ) -> Result<HashMap<EntryPointId, HashMap<TracingParams, TracingResult>>, StorageError>;
+}
+
 /// Manage contracts and their state in storage.
 ///
 /// Specifies how to retrieve, add and update contracts in storage.
@@ -512,7 +620,6 @@ pub trait ContractStateGateway {
     /// - `version` Version at which to retrieve state for. None retrieves the latest state.
     /// - `include_slots`: Flag to determine whether to include slot changes. If set to `true`, it
     ///   includes storage slot.
-    /// - `db`: Database session reference.
     async fn get_contract(
         &self,
         id: &ContractId,
@@ -534,7 +641,7 @@ pub trait ContractStateGateway {
     ///   latest state.
     /// - `include_slots`: Flag to determine whether to include slot changes. If set to `true`, it
     ///   includes storage slot.
-    /// - `db`: Database session reference.
+    /// - `pagination_params`: Optional pagination parameters to control the number of results.
     ///
     /// # Returns:
     /// A `Result` with a list of contract states if the operation is
@@ -550,18 +657,17 @@ pub trait ContractStateGateway {
 
     /// Inserts a new contract into the database.
     ///
-    /// If it the creation transaction is known, the contract will have slots, balance and code
-    /// inserted alongside with the new account else it won't.
+    /// Inserts only the static values of the contract. To insert the contract slots, balance and
+    /// code please use the `update_contracts` method.
     ///
     /// # Arguments
     /// - `new`: A reference to the new contract state to be inserted.
-    /// - `db`: Database session reference.
     ///
     /// # Returns
     /// - A Result with Ok if the operation was successful, and an Err containing `StorageError` if
     ///   there was an issue inserting the contract into the database. E.g. if the contract already
     ///   existed.
-    async fn upsert_contract(&self, new: &Account) -> Result<(), StorageError>;
+    async fn insert_contract(&self, new: &Account) -> Result<(), StorageError>;
 
     /// Update multiple contracts
     ///
@@ -573,11 +679,8 @@ pub trait ContractStateGateway {
     ///
     /// # Arguments
     ///
-    /// - `chain`: The blockchain which the contracts belong to.
     /// - `new`: A reference to a slice of tuples where each tuple has a transaction hash (`TxHash`)
     ///   and a reference to the state delta (`&Self::Delta`) for that transaction.
-    /// - `db`: A mutable reference to the connected database where the updated contracts will be
-    ///   stored.
     ///
     /// # Returns
     ///
@@ -595,7 +698,6 @@ pub trait ContractStateGateway {
     /// - `id` The identifier for the contract.
     /// - `at_tx` The transaction hash which deleted the contract. This transaction is assumed to be
     ///   in storage already. None retrieves the latest state.
-    /// - `db` The database handle or connection.
     ///
     /// # Returns
     /// Ok if the deletion was successful, might Err if:
@@ -653,8 +755,6 @@ pub trait ContractStateGateway {
     ///
     /// # Parameters
     /// - `account_balances` The account balances to insert.
-    /// - `chain` The chain of the account balances to be inserted.
-    /// - `block_ts` The timestamp of the block that the balances are associated with.
     ///
     /// # Return
     /// Ok if all account balances could be inserted, Err if at least one token failed to insert.
@@ -686,6 +786,7 @@ pub trait Gateway:
     + ExtractionStateGateway
     + ProtocolGateway
     + ContractStateGateway
+    + EntryPointGateway
     + Send
     + Sync
 {

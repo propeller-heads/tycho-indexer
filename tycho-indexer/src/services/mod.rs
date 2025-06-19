@@ -18,10 +18,12 @@ use tycho_common::{
         ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody, ProtocolStateRequestResponse,
         ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, ResponseAccount,
         ResponseProtocolState, ResponseToken, StateRequestBody, StateRequestResponse,
-        TokensRequestBody, TokensRequestResponse, VersionParam,
+        TokensRequestBody, TokensRequestResponse, TracedEntryPointRequestBody,
+        TracedEntryPointRequestResponse, VersionParam,
     },
     storage::Gateway,
 };
+use tycho_ethereum::entrypoint_tracer::tracer::EVMEntrypointService;
 use utoipa::{
     openapi::security::{ApiKey, ApiKeyValue, SecurityScheme},
     Modify, OpenApi,
@@ -33,6 +35,7 @@ use crate::{
     services::deltas_buffer::PendingDeltas,
 };
 
+mod access_control;
 mod cache;
 mod deltas_buffer;
 mod rpc;
@@ -43,6 +46,8 @@ pub struct ServicesBuilder<G> {
     prefix: String,
     port: u16,
     bind: String,
+    rpc_url: String,
+    api_key: String,
     extractor_handles: ws::MessageSenderMap,
     db_gateway: G,
 }
@@ -51,11 +56,13 @@ impl<G> ServicesBuilder<G>
 where
     G: Gateway + Send + Sync + 'static,
 {
-    pub fn new(db_gateway: G) -> Self {
+    pub fn new(db_gateway: G, rpc_url: String, api_key: String) -> Self {
         Self {
             prefix: "v1".to_owned(),
             port: 4242,
             bind: "0.0.0.0".to_owned(),
+            rpc_url,
+            api_key,
             extractor_handles: HashMap::new(),
             db_gateway,
         }
@@ -103,6 +110,7 @@ where
                 rpc::protocol_systems,
                 rpc::tokens,
                 rpc::protocol_components,
+                rpc::traced_entry_points,
                 rpc::protocol_state,
                 rpc::contract_state,
                 rpc::component_tvl,
@@ -124,6 +132,8 @@ where
                 schemas(ProtocolComponentRequestResponse),
                 schemas(ProtocolComponent),
                 schemas(ProtocolStateRequestBody),
+                schemas(TracedEntryPointRequestBody),
+                schemas(TracedEntryPointRequestResponse),
                 schemas(ProtocolStateRequestResponse),
                 schemas(AccountUpdate),
                 schemas(ProtocolId),
@@ -210,7 +220,11 @@ where
         openapi: utoipa::openapi::OpenApi,
         pending_deltas: Option<Arc<dyn PendingDeltasBuffer + Send + Sync>>,
     ) -> Result<(ServerHandle, JoinHandle<Result<(), ExtractionError>>), ExtractionError> {
-        let rpc_data = web::Data::new(rpc::RpcHandler::new(self.db_gateway, pending_deltas));
+        let tracer = EVMEntrypointService::try_from_url(&self.rpc_url)
+            .map_err(|err| ExtractionError::Setup(format!("Failed to create tracer: {err}")))?;
+
+        let rpc_data =
+            web::Data::new(rpc::RpcHandler::new(self.db_gateway, pending_deltas, tracer));
 
         let server = HttpServer::new(move || {
             let cors = Cors::default()
@@ -234,19 +248,29 @@ where
                 .app_data(rpc_data.clone())
                 .service(
                     web::resource(format!("/{}/contract_state", self.prefix))
-                        .route(web::post().to(rpc::contract_state::<G>)),
+                        .route(web::post().to(rpc::contract_state::<G, EVMEntrypointService>)),
                 )
                 .service(
                     web::resource(format!("/{}/protocol_state", self.prefix))
-                        .route(web::post().to(rpc::protocol_state::<G>)),
+                        .route(web::post().to(rpc::protocol_state::<G, EVMEntrypointService>)),
                 )
                 .service(
                     web::resource(format!("/{}/tokens", self.prefix))
-                        .route(web::post().to(rpc::tokens::<G>)),
+                        .route(web::post().to(rpc::tokens::<G, EVMEntrypointService>)),
                 )
                 .service(
                     web::resource(format!("/{}/protocol_components", self.prefix))
-                        .route(web::post().to(rpc::protocol_components::<G>)),
+                        .route(web::post().to(rpc::protocol_components::<G, EVMEntrypointService>)),
+                )
+                .service(
+                    web::resource(format!("/{}/traced_entry_points", self.prefix))
+                        .route(web::post().to(rpc::traced_entry_points::<G, EVMEntrypointService>)),
+                )
+                .service(
+                    web::resource(format!("/{}/add_entry_points", self.prefix))
+                        // TODO: add swagger service for internal endpoints
+                        .wrap(access_control::AccessControl::new(&self.api_key))
+                        .route(web::post().to(rpc::add_entry_points::<G, EVMEntrypointService>)),
                 )
                 .service(
                     web::resource(format!("/{}/health", self.prefix))
@@ -254,11 +278,11 @@ where
                 )
                 .service(
                     web::resource(format!("/{}/protocol_systems", self.prefix))
-                        .route(web::post().to(rpc::protocol_systems::<G>)),
+                        .route(web::post().to(rpc::protocol_systems::<G, EVMEntrypointService>)),
                 )
                 .service(
                     web::resource(format!("/{}/component_tvl", self.prefix))
-                        .route(web::post().to(rpc::component_tvl::<G>)),
+                        .route(web::post().to(rpc::component_tvl::<G, EVMEntrypointService>)),
                 )
                 .wrap(RequestTracing::new())
                 .service(

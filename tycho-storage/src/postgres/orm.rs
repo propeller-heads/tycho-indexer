@@ -13,10 +13,14 @@ use diesel::{
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use diesel_derive_enum::DbEnum;
 use tycho_common::{
-    models,
     models::{
+        self,
+        blockchain::{
+            EntryPointWithTracingParams as EntryPointWithTracingParamsCommon,
+            TracingParams as EntryPointTracingParamsCommon,
+        },
         Address, AttrStoreKey, Balance, BlockHash, Code, CodeHash, ComponentId, ContractId,
-        PaginationParams, StoreVal, TxHash,
+        EntryPointId, PaginationParams, StoreVal, TxHash,
     },
     storage::{BlockIdentifier, StorageError, WithTotal},
     Bytes,
@@ -25,9 +29,13 @@ use tycho_common::{
 use super::{
     schema::{
         account, account_balance, block, chain, component_balance, component_balance_default,
-        component_tvl, contract_code, contract_storage, contract_storage_default, extraction_state,
-        protocol_component, protocol_component_holds_contract, protocol_component_holds_token,
-        protocol_state, protocol_state_default, protocol_system, protocol_type, token, transaction,
+        component_tvl, contract_code, contract_storage, contract_storage_default,
+        debug_protocol_component_has_entry_point_tracing_params, entry_point,
+        entry_point_tracing_params, entry_point_tracing_params_calls_account,
+        entry_point_tracing_result, extraction_state, protocol_component,
+        protocol_component_holds_contract, protocol_component_holds_token,
+        protocol_component_uses_entry_point, protocol_state, protocol_state_default,
+        protocol_system, protocol_type, token, transaction,
     },
     versioning::{StoredVersionedRow, VersionedRow},
     PostgresError, MAX_TS, MAX_VERSION_TS,
@@ -245,14 +253,13 @@ impl Transaction {
     ) -> Result<HashMap<TxHash, i64>, StorageError> {
         use super::schema::transaction::dsl::*;
 
-        let results = transaction
+        transaction
             .filter(hash.eq_any(hashes))
             .select((hash, id))
             .load::<(TxHash, i64)>(conn)
             .await
-            .map_err(PostgresError::from)?;
-
-        Ok(results.into_iter().collect())
+            .map_err(|e| StorageError::from(PostgresError::from(e)))
+            .map(|results| results.into_iter().collect())
     }
 
     // fetches the transaction id, hash, index and block timestamp for a given set of hashes
@@ -426,6 +433,10 @@ impl PartitionedVersionedRow for NewComponentBalance {
         self.valid_to
     }
 
+    fn get_valid_from(&self) -> NaiveDateTime {
+        self.valid_from
+    }
+
     fn archive(&mut self, next_version: &mut Self) {
         next_version.previous_value = self.new_balance.clone();
         self.valid_to = next_version.valid_from;
@@ -449,7 +460,7 @@ impl PartitionedVersionedRow for NewComponentBalance {
             .zip(token_ids.iter())
             .collect::<HashSet<_>>();
 
-        Ok(component_balance::table
+        let mut results: Vec<ComponentBalance> = component_balance::table
             .select(ComponentBalance::as_select())
             .into_boxed()
             .filter(
@@ -460,9 +471,48 @@ impl PartitionedVersionedRow for NewComponentBalance {
             )
             .get_results(conn)
             .await
-            .map_err(PostgresError::from)?
+            .map_err(PostgresError::from)?;
+
+        let found_ids: HashSet<_> = results
+            .iter()
+            .map(|cb| (&cb.protocol_component_id, &cb.token_id))
+            .collect();
+
+        let missing_ids: Vec<_> = tuple_ids
+            .clone()
             .into_iter()
-            .filter(|cs| tuple_ids.contains(&(&cs.protocol_component_id, &cs.token_id)))
+            .filter(|id| !found_ids.contains(id))
+            .collect();
+
+        // If we have missing ids, we need to query the archived tables as well. This is necessary
+        // when entries are deleted
+        if !missing_ids.is_empty() {
+            let (missing_component_ids, missing_token_ids): (Vec<&i64>, Vec<&i64>) =
+                missing_ids.into_iter().unzip();
+            let deleted_results = component_balance::table
+                .select(ComponentBalance::as_select())
+                .filter(
+                    component_balance::protocol_component_id
+                        .eq_any(&missing_component_ids)
+                        .and(component_balance::token_id.eq_any(&missing_token_ids)),
+                )
+                .distinct_on((
+                    component_balance::protocol_component_id,
+                    component_balance::token_id,
+                ))
+                .order_by((
+                    component_balance::protocol_component_id,
+                    component_balance::token_id,
+                    component_balance::valid_to.desc(),
+                ))
+                .get_results(conn)
+                .await
+                .map_err(PostgresError::from)?;
+            results.extend(deleted_results);
+        }
+        Ok(results
+            .into_iter()
+            .filter(|cb| tuple_ids.contains(&(&cb.protocol_component_id, &cb.token_id)))
             .map(NewComponentBalance::from)
             .collect())
     }
@@ -587,6 +637,19 @@ impl ProtocolComponent {
             .filter(protocol_component::chain_id.eq(chain_db_id))
             .select((protocol_component::id, protocol_component::external_id))
             .get_results::<(i64, String)>(conn)
+            .await
+    }
+
+    pub async fn id_by_external_id(
+        external_id: &str,
+        chain_db_id: i64,
+        conn: &mut AsyncPgConnection,
+    ) -> QueryResult<i64> {
+        protocol_component::table
+            .filter(protocol_component::external_id.eq(external_id))
+            .filter(protocol_component::chain_id.eq(chain_db_id))
+            .select(protocol_component::id)
+            .first::<i64>(conn)
             .await
     }
 }
@@ -1056,6 +1119,10 @@ impl PartitionedVersionedRow for NewProtocolState {
         self.valid_to
     }
 
+    fn get_valid_from(&self) -> NaiveDateTime {
+        self.valid_from
+    }
+
     fn archive(&mut self, next_version: &mut Self) {
         next_version.previous_value = Some(self.attribute_value.clone());
         self.valid_to = next_version.valid_from;
@@ -1077,7 +1144,8 @@ impl PartitionedVersionedRow for NewProtocolState {
             .iter()
             .zip(attr_name.iter())
             .collect::<HashSet<_>>();
-        Ok(protocol_state::table
+
+        let mut results: Vec<ProtocolState> = protocol_state::table
             .select(ProtocolState::as_select())
             .into_boxed()
             .filter(
@@ -1088,9 +1156,51 @@ impl PartitionedVersionedRow for NewProtocolState {
             )
             .get_results(conn)
             .await
-            .map_err(PostgresError::from)?
+            .map_err(PostgresError::from)?;
+
+        let found_ids: HashSet<_> = results
+            .iter()
+            .map(|ps| (&ps.protocol_component_id, &ps.attribute_name))
+            .collect();
+
+        let missing_ids: Vec<_> = tuple_ids
+            .clone()
             .into_iter()
-            .filter(|cs| tuple_ids.contains(&(&cs.protocol_component_id, &cs.attribute_name)))
+            .filter(|id| !found_ids.contains(id))
+            .collect();
+
+        // If we have missing ids, we need to query the archived tables as well. This is necessary
+        // when entries are deleted
+        if !missing_ids.is_empty() {
+            let (missing_protocol_component_ids, missing_attribute_names): (
+                Vec<&i64>,
+                Vec<&String>,
+            ) = missing_ids.into_iter().unzip();
+            let deleted_results: Vec<ProtocolState> = protocol_state::table
+                .select(ProtocolState::as_select())
+                .filter(
+                    protocol_state::protocol_component_id
+                        .eq_any(&missing_protocol_component_ids)
+                        .and(protocol_state::attribute_name.eq_any(&missing_attribute_names)),
+                )
+                .distinct_on((
+                    protocol_state::protocol_component_id,
+                    protocol_state::attribute_name,
+                ))
+                .order_by((
+                    protocol_state::protocol_component_id,
+                    protocol_state::attribute_name,
+                    protocol_state::valid_to.desc(),
+                ))
+                .get_results(conn)
+                .await
+                .map_err(PostgresError::from)?;
+            results.extend(deleted_results);
+        }
+
+        Ok(results
+            .into_iter()
+            .filter(|ps| tuple_ids.contains(&(&ps.protocol_component_id, &ps.attribute_name)))
             .map(NewProtocolState::from)
             .collect())
     }
@@ -1325,6 +1435,10 @@ impl StoredVersionedRow for AccountBalance {
         (self.account_id, self.token_id)
     }
 
+    fn get_valid_from(&self) -> NaiveDateTime {
+        self.valid_from
+    }
+
     async fn latest_versions_by_ids<I: IntoIterator<Item = Self::EntityId> + Send + Sync>(
         ids: I,
         conn: &mut AsyncPgConnection,
@@ -1357,7 +1471,7 @@ impl StoredVersionedRow for AccountBalance {
     }
 }
 
-#[derive(Insertable, Debug)]
+#[derive(Insertable, Debug, PartialEq, Clone)]
 #[diesel(table_name = account_balance)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewAccountBalance {
@@ -1432,6 +1546,10 @@ impl StoredVersionedRow for ContractCode {
         self.account_id
     }
 
+    fn get_valid_from(&self) -> NaiveDateTime {
+        self.valid_from
+    }
+
     async fn latest_versions_by_ids<I: IntoIterator<Item = Self::EntityId> + Send + Sync>(
         ids: I,
         conn: &mut AsyncPgConnection,
@@ -1499,13 +1617,10 @@ pub struct NewContract {
     pub created_at: Option<NaiveDateTime>,
     #[allow(dead_code)]
     pub deleted_at: Option<NaiveDateTime>,
-    pub balance: Balance,
-    pub code: Code,
-    pub code_hash: CodeHash,
 }
 
 impl NewContract {
-    pub fn new_account(&self) -> NewAccount {
+    pub fn new_account(&self) -> NewAccount<'_> {
         NewAccount {
             title: &self.title,
             address: &self.address,
@@ -1513,39 +1628,6 @@ impl NewContract {
             creation_tx: self.creation_tx,
             created_at: self.created_at,
             deleted_at: None,
-        }
-    }
-
-    pub fn new_balance(
-        &self,
-        account_id: i64,
-        token_id: i64,
-        modify_tx: i64,
-        modify_ts: NaiveDateTime,
-    ) -> NewAccountBalance {
-        NewAccountBalance {
-            balance: self.balance.clone(),
-            account_id,
-            token_id,
-            modify_tx,
-            valid_from: modify_ts,
-            valid_to: None,
-        }
-    }
-
-    pub fn new_code(
-        &self,
-        account_id: i64,
-        modify_tx: i64,
-        modify_ts: NaiveDateTime,
-    ) -> NewContractCode {
-        NewContractCode {
-            code: &self.code,
-            hash: self.code_hash.clone(),
-            account_id,
-            modify_tx,
-            valid_from: modify_ts,
-            valid_to: None,
         }
     }
 }
@@ -1593,6 +1675,10 @@ impl PartitionedVersionedRow for NewSlot {
         self.valid_to
     }
 
+    fn get_valid_from(&self) -> NaiveDateTime {
+        self.valid_from
+    }
+
     fn archive(&mut self, next_version: &mut Self) {
         next_version
             .previous_value
@@ -1618,7 +1704,11 @@ impl PartitionedVersionedRow for NewSlot {
             .zip(slots.iter())
             .collect::<HashSet<_>>();
 
-        Ok(contract_storage::table
+        // PERF: The removal of the filter 'valid_to = MAX_TS' means we now search in archived
+        // tables as well. A possible optimisation would be to add the valid_to filter back
+        // and then use a second query for storage still missing that will access the
+        // archived tables. Therefore, performance is not impacted in the common case.
+        let mut results: Vec<ContractStorage> = contract_storage::table
             .select(ContractStorage::as_select())
             .into_boxed()
             .filter(
@@ -1629,7 +1719,44 @@ impl PartitionedVersionedRow for NewSlot {
             )
             .get_results(conn)
             .await
-            .map_err(PostgresError::from)?
+            .map_err(PostgresError::from)?;
+
+        let found_ids: HashSet<_> = results
+            .iter()
+            .map(|cs| (&cs.account_id, &cs.slot))
+            .collect();
+
+        let missing_ids: Vec<_> = tuple_ids
+            .clone()
+            .into_iter()
+            .filter(|id| !found_ids.contains(id))
+            .collect();
+
+        // If we have missing ids, we need to query the archived tables as well. This is necessary
+        // when entries are deleted
+        if !missing_ids.is_empty() {
+            let (missing_accounts, missing_slots): (Vec<&i64>, Vec<&Bytes>) =
+                missing_ids.into_iter().unzip();
+            let deleted_results: Vec<ContractStorage> = contract_storage::table
+                .select(ContractStorage::as_select())
+                .filter(
+                    contract_storage::account_id
+                        .eq_any(&missing_accounts)
+                        .and(contract_storage::slot.eq_any(&missing_slots)),
+                )
+                .distinct_on((contract_storage::account_id, contract_storage::slot))
+                .order_by((
+                    contract_storage::account_id,
+                    contract_storage::slot,
+                    contract_storage::valid_to.desc(),
+                ))
+                .get_results(conn)
+                .await
+                .map_err(PostgresError::from)?;
+            results.extend(deleted_results);
+        }
+
+        Ok(results
             .into_iter()
             .filter(|cs| tuple_ids.contains(&(&cs.account_id, &cs.slot)))
             .map(NewSlot::from)
@@ -1738,4 +1865,329 @@ impl ComponentTVL {
         }
         q
     }
+}
+
+#[derive(Debug, DbEnum, Clone, PartialEq, Eq, Hash)]
+#[ExistingTypePath = "crate::postgres::schema::sql_types::EntryPointTracingType"]
+pub enum EntryPointTracingType {
+    RpcTracer,
+}
+
+impl From<&models::blockchain::TracingParams> for EntryPointTracingType {
+    fn from(value: &models::blockchain::TracingParams) -> Self {
+        match value {
+            models::blockchain::TracingParams::RPCTracer(_) => Self::RpcTracer,
+        }
+    }
+}
+
+#[derive(Identifiable, Queryable, Selectable)]
+#[diesel(table_name = entry_point)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct EntryPoint {
+    pub id: i64,
+    pub external_id: String,
+    pub target: Bytes,
+    pub signature: String,
+    pub inserted_ts: NaiveDateTime,
+    pub modified_ts: NaiveDateTime,
+}
+
+impl From<EntryPoint> for models::blockchain::EntryPoint {
+    fn from(value: EntryPoint) -> Self {
+        Self {
+            external_id: value.external_id.clone(),
+            target: value.target.clone(),
+            signature: value.signature.clone(),
+        }
+    }
+}
+
+impl EntryPoint {
+    /// Retrieves the database ids of entry points from a list of external ids.
+    pub(crate) async fn ids_by_external_ids(
+        external_ids: &[String],
+        conn: &mut AsyncPgConnection,
+    ) -> Result<HashMap<String, i64>, StorageError> {
+        use crate::postgres::schema::entry_point::dsl::*;
+
+        let existing_entries = entry_point
+            .filter(external_id.eq_any(external_ids))
+            .select((id, external_id))
+            .load::<(i64, String)>(conn)
+            .await
+            .map_err(PostgresError::from)?;
+
+        Ok(existing_entries
+            .into_iter()
+            .map(|(ep_id, ext_id)| (ext_id, ep_id))
+            .collect::<HashMap<_, _>>())
+    }
+
+    /// Retrieves the database id of an entry point from a target address and function signature.
+    #[allow(dead_code)]
+    pub(crate) async fn id_by_target_and_signature(
+        target_: &Bytes,
+        signature_: &String,
+        conn: &mut AsyncPgConnection,
+    ) -> Result<i64, StorageError> {
+        use crate::postgres::schema::entry_point::dsl::*;
+
+        Ok(entry_point
+            .select(id)
+            .filter(target.eq(target_))
+            .filter(signature.eq(signature_))
+            .first::<i64>(conn)
+            .await
+            .map_err(PostgresError::from)?)
+    }
+}
+
+#[derive(Insertable, AsChangeset, Eq, Hash, PartialEq)]
+#[diesel(table_name = entry_point)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewEntryPoint {
+    pub external_id: String,
+    pub target: Bytes,
+    pub signature: String,
+}
+
+#[derive(Identifiable, Queryable, Associations, Selectable)]
+#[diesel(belongs_to(EntryPoint))]
+#[diesel(table_name = entry_point_tracing_params)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct EntryPointTracingParams {
+    pub id: i64,
+    pub entry_point_id: i64,
+    pub tracing_type: EntryPointTracingType,
+    pub data: Option<serde_json::Value>,
+    pub inserted_ts: NaiveDateTime,
+    pub modified_ts: NaiveDateTime,
+}
+
+impl From<&EntryPointTracingParams> for models::blockchain::TracingParams {
+    fn from(value: &EntryPointTracingParams) -> Self {
+        match value.tracing_type {
+            EntryPointTracingType::RpcTracer => {
+                let rpc_tracer: models::blockchain::RPCTracerParams =
+                    serde_json::from_value(value.data.clone().unwrap()).unwrap();
+                models::blockchain::TracingParams::RPCTracer(rpc_tracer)
+            }
+        }
+    }
+}
+
+impl EntryPointTracingParams {
+    /// Retrieves the database id of an entry point tracing params from an
+    /// `EntryPointWithTracingParams`.
+    #[allow(dead_code)]
+    pub(crate) async fn id_from_entry_point_with_tracing_params(
+        entry_point: &EntryPointWithTracingParamsCommon,
+        conn: &mut AsyncPgConnection,
+    ) -> Result<i64, StorageError> {
+        let tracing_type = EntryPointTracingType::from(&entry_point.params);
+        let data = match &entry_point.params {
+            EntryPointTracingParamsCommon::RPCTracer(rpc_tracer) => {
+                serde_json::to_value(rpc_tracer).map_err(|e| {
+                    StorageError::Unexpected(format!(
+                        "Failed to serialize RPCTracerEntryPoint: {e}"
+                    ))
+                })?
+            }
+        };
+
+        let id_ = super::schema::entry_point_tracing_params::table
+            .inner_join(super::schema::entry_point::table)
+            .filter(super::schema::entry_point::target.eq(entry_point.entry_point.target.clone()))
+            .filter(
+                super::schema::entry_point::signature.eq(entry_point
+                    .entry_point
+                    .signature
+                    .clone()),
+            )
+            .filter(super::schema::entry_point_tracing_params::tracing_type.eq(tracing_type))
+            .filter(super::schema::entry_point_tracing_params::data.eq(data))
+            .select(super::schema::entry_point_tracing_params::id)
+            .first::<i64>(conn)
+            .await
+            .map_err(PostgresError::from)?;
+
+        Ok(id_)
+    }
+
+    // Retrieves the database ids of an entry point tracing params (linked to the entrypoint id)
+    // from a list of entry points ids and tracing params.
+    pub(crate) async fn ids_by_entry_point_with_tracing_params(
+        entry_points_with_tracing_params: &[(EntryPointId, EntryPointTracingParamsCommon)],
+        conn: &mut AsyncPgConnection,
+    ) -> Result<HashMap<(EntryPointId, EntryPointTracingParamsCommon), i64>, StorageError> {
+        if entry_points_with_tracing_params.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let (external_ids, params): (HashSet<_>, HashSet<_>) = entry_points_with_tracing_params
+            .iter()
+            .map(|(ep_id, params)| {
+                let params = match params {
+                    EntryPointTracingParamsCommon::RPCTracer(rpc_tracer) => {
+                        serde_json::to_value(rpc_tracer).map_err(|e| {
+                            StorageError::Unexpected(format!(
+                                "Failed to serialize RPCTracerEntryPoint: {e}"
+                            ))
+                        })?
+                    }
+                };
+                Ok((ep_id, params))
+            })
+            .collect::<Result<Vec<_>, StorageError>>()?
+            .into_iter()
+            .unzip();
+
+        let tuples = entry_points_with_tracing_params
+            .iter()
+            .map(|(ep_id, params)| (ep_id, EntryPointTracingType::from(params), params))
+            .collect::<Vec<_>>();
+
+        // Stores the tuple of (entry point id, tracing type, tracing params) to the tuple of (entry
+        // point id, tracing params) This is used below for application side filtering.
+        let tuples_to_tracing_params: HashMap<
+            (&EntryPointId, &EntryPointTracingType, &EntryPointTracingParamsCommon),
+            &(EntryPointId, EntryPointTracingParamsCommon),
+        > = tuples
+            .iter()
+            .zip(entry_points_with_tracing_params)
+            .map(|((ep_id, tracing_type, params), ep)| ((*ep_id, tracing_type, *params), ep))
+            .collect();
+
+        let res = entry_point_tracing_params::table
+            .inner_join(entry_point::table)
+            .filter(
+                // Not filtered by tracing type eq_any because of a diesel bug with OID, shouldn't
+                // affect results much because of data filtering and the application side filtering
+                // below.
+                entry_point::external_id
+                    .eq_any(external_ids)
+                    .and(entry_point_tracing_params::data.eq_any(params)),
+            )
+            .select((
+                entry_point::external_id,
+                entry_point_tracing_params::tracing_type,
+                entry_point_tracing_params::data,
+                entry_point_tracing_params::id,
+            ))
+            .load::<(EntryPointId, EntryPointTracingType, Option<serde_json::Value>, i64)>(conn)
+            .await
+            .map_err(PostgresError::from)?
+            .into_iter()
+            .filter_map(|(ext_id, tracing_type, params, id)| {
+                let tracing_params = match tracing_type {
+                    EntryPointTracingType::RpcTracer => {
+                        let params_value = match params {
+                            Some(params) => params,
+                            None => {
+                                return Some(Err(StorageError::Unexpected(
+                                    "Data should be Some for RpcTracer".to_string(),
+                                )));
+                            }
+                        };
+
+                        match serde_json::from_value(params_value) {
+                            Ok(p) => EntryPointTracingParamsCommon::RPCTracer(p),
+                            Err(e) => {
+                                return Some(Err(StorageError::Unexpected(format!(
+                                    "Failed to deserialize RPCTracerEntryPoint: {e}"
+                                ))))
+                            }
+                        }
+                    }
+                };
+
+                tuples_to_tracing_params
+                    .get(&(&ext_id, &tracing_type, &tracing_params))
+                    .map(|ep| Ok(((*ep).clone(), id)))
+            })
+            .collect::<Result<HashMap<_, _>, StorageError>>()?;
+
+        Ok(res)
+    }
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = entry_point_tracing_params)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewEntryPointTracingParams {
+    pub entry_point_id: i64,
+    pub tracing_type: EntryPointTracingType,
+    pub data: Option<serde_json::Value>,
+}
+
+#[derive(Queryable, Selectable)]
+#[diesel(table_name = entry_point_tracing_result)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct EntryPointTracingResult {
+    #[allow(dead_code)]
+    entry_point_tracing_params_id: i64,
+    #[allow(dead_code)]
+    detection_block: i64,
+    #[allow(dead_code)]
+    detection_data: serde_json::Value,
+    #[allow(dead_code)]
+    inserted_ts: NaiveDateTime,
+    #[allow(dead_code)]
+    modified_ts: NaiveDateTime,
+}
+
+#[derive(Insertable, AsChangeset)]
+#[diesel(table_name = entry_point_tracing_result)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewEntryPointTracingResult {
+    pub entry_point_tracing_params_id: i64,
+    pub detection_block: i64,
+    pub detection_data: serde_json::Value,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = debug_protocol_component_has_entry_point_tracing_params)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewProtocolComponentHasEntryPointTracingParams {
+    pub protocol_component_id: i64,
+    pub entry_point_tracing_params_id: i64,
+}
+
+#[derive(Identifiable, Queryable, Associations, Selectable)]
+#[diesel(belongs_to(ProtocolComponent))]
+#[diesel(belongs_to(EntryPoint))]
+#[diesel(table_name = protocol_component_uses_entry_point)]
+#[diesel(primary_key(protocol_component_id, entry_point_id))]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct ProtocolComponentUsesEntryPoint {
+    pub protocol_component_id: i64,
+    pub entry_point_id: i64,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = protocol_component_uses_entry_point)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewProtocolComponentUsesEntryPoint {
+    pub protocol_component_id: i64,
+    pub entry_point_id: i64,
+}
+
+#[derive(Identifiable, Queryable, Associations, Selectable)]
+#[diesel(belongs_to(EntryPointTracingParams))]
+#[diesel(belongs_to(Account))]
+#[diesel(table_name = entry_point_tracing_params_calls_account)]
+#[diesel(primary_key(entry_point_tracing_params_id, account_id))]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct EntryPointTracingParamsCallsAccount {
+    pub entry_point_tracing_params_id: i64,
+    pub account_id: i64,
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = entry_point_tracing_params_calls_account)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewEntryPointTracingParamsCallsAccount {
+    pub entry_point_tracing_params_id: i64,
+    pub account_id: i64,
 }

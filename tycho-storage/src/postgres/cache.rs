@@ -1,4 +1,8 @@
-use std::{collections::HashMap, num::NonZeroUsize, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    num::NonZeroUsize,
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
@@ -15,19 +19,23 @@ use tracing::{debug, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
     models::{
         self,
-        blockchain::{Block, Transaction},
+        blockchain::{
+            Block, EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingParams,
+            TracingResult, Transaction,
+        },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta, QualityRange,
         },
         token::CurrencyToken,
-        Address, Chain, ComponentId, ContractId, ExtractionState, PaginationParams, ProtocolType,
-        TxHash,
+        Address, Chain, ComponentId, ContractId, EntryPointId, ExtractionState, PaginationParams,
+        ProtocolType, TxHash,
     },
     storage::{
-        BlockIdentifier, BlockOrTimestamp, ChainGateway, ContractStateGateway,
-        ExtractionStateGateway, Gateway, ProtocolGateway, StorageError, Version, WithTotal,
+        BlockIdentifier, BlockOrTimestamp, ChainGateway, ContractStateGateway, EntryPointFilter,
+        EntryPointGateway, ExtractionStateGateway, Gateway, ProtocolGateway, StorageError, Version,
+        WithTotal,
     },
     Bytes,
 };
@@ -44,7 +52,7 @@ pub(crate) enum WriteOp {
     // Simply keep last
     SaveExtractionState(ExtractionState),
     // Support saving a batch
-    UpsertContract(Vec<models::contract::Account>),
+    InsertContract(Vec<models::contract::Account>),
     // Simply merge
     UpdateContracts(Vec<(TxHash, models::contract::AccountDelta)>),
     // Simply merge
@@ -60,6 +68,14 @@ pub(crate) enum WriteOp {
     InsertComponentBalances(Vec<models::protocol::ComponentBalance>),
     // Simply merge
     UpsertProtocolState(Vec<(TxHash, models::protocol::ProtocolComponentStateDelta)>),
+    // Simply merge
+    InsertEntryPoints(HashMap<models::ComponentId, HashSet<models::blockchain::EntryPoint>>),
+    // Simply merge
+    InsertEntryPointTracingParams(
+        HashMap<models::EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+    ),
+    // Simply merge
+    UpsertTracedEntryPoints(Vec<models::blockchain::TracedEntryPoint>),
 }
 
 impl WriteOp {
@@ -68,7 +84,7 @@ impl WriteOp {
             WriteOp::UpsertBlock(_) => "UpsertBlock",
             WriteOp::UpsertTx(_) => "UpsertTx",
             WriteOp::SaveExtractionState(_) => "SaveExtractionState",
-            WriteOp::UpsertContract(_) => "UpsertContract",
+            WriteOp::InsertContract(_) => "InsertContract",
             WriteOp::UpdateContracts(_) => "UpdateContracts",
             WriteOp::InsertAccountBalances(_) => "InsertAccountBalances",
             WriteOp::InsertProtocolComponents(_) => "InsertProtocolComponents",
@@ -76,6 +92,9 @@ impl WriteOp {
             WriteOp::UpdateTokens(_) => "UpdateTokens",
             WriteOp::InsertComponentBalances(_) => "InsertComponentBalances",
             WriteOp::UpsertProtocolState(_) => "UpsertProtocolState",
+            WriteOp::InsertEntryPoints(_) => "InsertEntryPoints",
+            WriteOp::InsertEntryPointTracingParams(_) => "InsertEntryPointTracingParams",
+            WriteOp::UpsertTracedEntryPoints(_) => "UpsertTracedEntryPoints",
         }
     }
 
@@ -83,7 +102,7 @@ impl WriteOp {
         match self {
             WriteOp::UpsertBlock(_) => 0,
             WriteOp::UpsertTx(_) => 1,
-            WriteOp::UpsertContract(_) => 2,
+            WriteOp::InsertContract(_) => 2,
             WriteOp::UpdateContracts(_) => 3,
             WriteOp::InsertTokens(_) => 4,
             WriteOp::UpdateTokens(_) => 5,
@@ -91,7 +110,10 @@ impl WriteOp {
             WriteOp::InsertProtocolComponents(_) => 7,
             WriteOp::InsertComponentBalances(_) => 8,
             WriteOp::UpsertProtocolState(_) => 9,
-            WriteOp::SaveExtractionState(_) => 10,
+            WriteOp::InsertEntryPoints(_) => 10,
+            WriteOp::InsertEntryPointTracingParams(_) => 11,
+            WriteOp::UpsertTracedEntryPoints(_) => 12,
+            WriteOp::SaveExtractionState(_) => 13,
         }
     }
 }
@@ -153,7 +175,7 @@ impl DBTransaction {
                     l.clone_from(r);
                     return Ok(());
                 }
-                (WriteOp::UpsertContract(l), WriteOp::UpsertContract(r)) => {
+                (WriteOp::InsertContract(l), WriteOp::InsertContract(r)) => {
                     self.size += r.len();
                     l.extend(r.iter().cloned());
                     return Ok(());
@@ -189,6 +211,36 @@ impl DBTransaction {
                     return Ok(());
                 }
                 (WriteOp::UpsertProtocolState(l), WriteOp::UpsertProtocolState(r)) => {
+                    self.size += r.len();
+                    l.extend(r.iter().cloned());
+                    return Ok(());
+                }
+                (WriteOp::InsertEntryPoints(l), WriteOp::InsertEntryPoints(r)) => {
+                    for (component_id, entry_points) in r.iter() {
+                        let entry = l
+                            .entry(component_id.clone())
+                            .or_insert_with(HashSet::new);
+                        let len_before = entry.len();
+                        entry.extend(entry_points.iter().cloned());
+                        self.size += entry.len() - len_before;
+                    }
+                    return Ok(());
+                }
+                (
+                    WriteOp::InsertEntryPointTracingParams(l),
+                    WriteOp::InsertEntryPointTracingParams(r),
+                ) => {
+                    for (entry_point_id, params) in r.iter() {
+                        let entry = l
+                            .entry(entry_point_id.clone())
+                            .or_insert_with(HashSet::new);
+                        let len_before = entry.len();
+                        entry.extend(params.iter().cloned());
+                        self.size += entry.len() - len_before;
+                    }
+                    return Ok(());
+                }
+                (WriteOp::UpsertTracedEntryPoints(l), WriteOp::UpsertTracedEntryPoints(r)) => {
                     self.size += r.len();
                     l.extend(r.iter().cloned());
                     return Ok(());
@@ -413,10 +465,10 @@ impl DBCacheWriteExecutor {
                     .save_state(state, conn)
                     .await?
             }
-            WriteOp::UpsertContract(contracts) => {
+            WriteOp::InsertContract(contracts) => {
                 for contract in contracts.iter() {
                     self.state_gateway
-                        .upsert_contract(contract, conn)
+                        .insert_contract(contract, conn)
                         .await?
                 }
             }
@@ -466,6 +518,25 @@ impl DBCacheWriteExecutor {
                 let changes_slice = collected_changes.as_slice();
                 self.state_gateway
                     .update_protocol_states(&self.chain, changes_slice, conn)
+                    .await?
+            }
+            WriteOp::UpsertTracedEntryPoints(traced_entry_points) => {
+                self.state_gateway
+                    .upsert_traced_entry_points(traced_entry_points.as_slice(), conn)
+                    .await?
+            }
+            WriteOp::InsertEntryPoints(new_entry_points) => {
+                self.state_gateway
+                    .insert_entry_points(new_entry_points, &self.chain, conn)
+                    .await?
+            }
+            WriteOp::InsertEntryPointTracingParams(new_entry_point_tracing_params) => {
+                self.state_gateway
+                    .insert_entry_point_tracing_params(
+                        new_entry_point_tracing_params,
+                        &self.chain,
+                        conn,
+                    )
                     .await?
             }
         };
@@ -769,8 +840,8 @@ impl ContractStateGateway for CachedGateway {
     }
 
     #[instrument(skip_all)]
-    async fn upsert_contract(&self, new: &Account) -> Result<(), StorageError> {
-        self.add_op(WriteOp::UpsertContract(vec![new.clone()]))
+    async fn insert_contract(&self, new: &Account) -> Result<(), StorageError> {
+        self.add_op(WriteOp::InsertContract(vec![new.clone()]))
             .await?;
         Ok(())
     }
@@ -1109,6 +1180,84 @@ impl ProtocolGateway for CachedGateway {
             })?;
         self.state_gateway
             .get_component_tvls(chain, system, ids, pagination_params, &mut conn)
+            .await
+    }
+}
+
+#[async_trait]
+impl EntryPointGateway for CachedGateway {
+    #[instrument(skip_all)]
+    async fn insert_entry_points(
+        &self,
+        entry_points: &HashMap<models::ComponentId, HashSet<models::blockchain::EntryPoint>>,
+    ) -> Result<(), StorageError> {
+        self.add_op(WriteOp::InsertEntryPoints(entry_points.clone()))
+            .await?;
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
+    async fn insert_entry_point_tracing_params(
+        &self,
+        entry_points_params: &HashMap<EntryPointId, HashSet<(TracingParams, Option<ComponentId>)>>,
+    ) -> Result<(), StorageError> {
+        self.add_op(WriteOp::InsertEntryPointTracingParams(entry_points_params.clone()))
+            .await?;
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
+    async fn get_entry_points(
+        &self,
+        filter: EntryPointFilter,
+        pagination_params: Option<&PaginationParams>,
+    ) -> Result<WithTotal<HashMap<ComponentId, HashSet<EntryPoint>>>, StorageError> {
+        let mut conn =
+            self.pool.get().await.map_err(|e| {
+                StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
+            })?;
+        self.state_gateway
+            .get_entry_points(filter, pagination_params, &mut conn)
+            .await
+    }
+
+    #[instrument(skip_all)]
+    async fn get_entry_points_tracing_params(
+        &self,
+        filter: EntryPointFilter,
+        pagination_params: Option<&PaginationParams>,
+    ) -> Result<WithTotal<HashMap<ComponentId, HashSet<EntryPointWithTracingParams>>>, StorageError>
+    {
+        let mut conn =
+            self.pool.get().await.map_err(|e| {
+                StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
+            })?;
+        self.state_gateway
+            .get_entry_points_tracing_params(filter, pagination_params, &mut conn)
+            .await
+    }
+
+    #[instrument(skip_all)]
+    async fn upsert_traced_entry_points(
+        &self,
+        traced_entry_points: &[TracedEntryPoint],
+    ) -> Result<(), StorageError> {
+        self.add_op(WriteOp::UpsertTracedEntryPoints(traced_entry_points.to_vec()))
+            .await?;
+        Ok(())
+    }
+
+    #[instrument(skip_all)]
+    async fn get_traced_entry_points(
+        &self,
+        entry_points: &HashSet<EntryPointId>,
+    ) -> Result<HashMap<EntryPointId, HashMap<TracingParams, TracingResult>>, StorageError> {
+        let mut conn =
+            self.pool.get().await.map_err(|e| {
+                StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
+            })?;
+        self.state_gateway
+            .get_tracing_results(entry_points, &mut conn)
             .await
     }
 }

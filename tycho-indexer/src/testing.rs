@@ -1,23 +1,30 @@
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use mockall::mock;
 use tycho_common::{
     models::{
-        blockchain::{Block, Transaction},
+        blockchain::{
+            Block, EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingParams,
+            TracingResult, Transaction,
+        },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta, QualityRange,
         },
         token::CurrencyToken,
-        Address, Chain, ComponentId, ContractId, ExtractionState, PaginationParams, ProtocolType,
-        TxHash,
+        Address, Chain, ComponentId, ContractId, EntryPointId, ExtractionState, PaginationParams,
+        ProtocolType, TxHash,
     },
     storage::{
-        BlockIdentifier, BlockOrTimestamp, ChainGateway, ContractStateGateway,
-        ExtractionStateGateway, Gateway, ProtocolGateway, StorageError, Version, WithTotal,
+        BlockIdentifier, BlockOrTimestamp, ChainGateway, ContractStateGateway, EntryPointFilter,
+        EntryPointGateway, ExtractionStateGateway, Gateway, ProtocolGateway, StorageError, Version,
+        WithTotal,
     },
     Bytes,
 };
@@ -37,6 +44,121 @@ mock! {
         async fn upsert_tx(&self, new: &[Transaction]) -> Result<(), StorageError>;
         async fn get_tx(&self, hash: &TxHash) -> Result<Transaction, StorageError>;
         async fn revert_state(&self, to: &BlockIdentifier) -> Result<(), StorageError>;
+    }
+
+    impl EntryPointGateway for Gateway {
+        #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
+        fn insert_entry_points<'life0, 'life1, 'async_trait>(
+            &'life0 self,
+            entry_points: &'life1 HashMap<ComponentId, HashSet<EntryPoint>>,
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<Output = Result<(), StorageError>>
+                    + ::core::marker::Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            Self: 'async_trait;
+
+        #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
+        fn insert_entry_point_tracing_params<'life0, 'life1, 'async_trait>(
+            &'life0 self,
+            entry_points_params: &'life1 HashMap<
+                EntryPointId,
+                HashSet<(TracingParams, Option<ComponentId>)>,
+            >,
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<Output = Result<(), StorageError>>
+                    + ::core::marker::Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            Self: 'async_trait;
+
+        #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
+        fn get_entry_points<'life0, 'life1, 'async_trait>(
+            &'life0 self,
+            filter: EntryPointFilter,
+            pagination_params: Option<&'life1 PaginationParams>,
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<
+                        Output = Result<
+                            WithTotal<HashMap<ComponentId, HashSet<EntryPoint>>>,
+                            StorageError,
+                        >,
+                    > + ::core::marker::Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            Self: 'async_trait;
+
+        #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
+        fn get_entry_points_tracing_params<'life0, 'life1, 'async_trait>(
+            &'life0 self,
+            filter: EntryPointFilter,
+            pagination_params: Option<&'life1 PaginationParams>,
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<
+                        Output = Result<
+                            WithTotal<HashMap<ComponentId, HashSet<EntryPointWithTracingParams>>>,
+                            StorageError,
+                        >,
+                    > + ::core::marker::Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            Self: 'async_trait;
+
+        #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
+        fn upsert_traced_entry_points<'life0, 'life1, 'async_trait>(
+            &'life0 self,
+            traced_entry_points: &'life1 [TracedEntryPoint],
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<Output = Result<(), StorageError>>
+                    + ::core::marker::Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            Self: 'async_trait;
+
+        #[allow(clippy::type_complexity, clippy::type_repetition_in_bounds)]
+        fn get_traced_entry_points<'life0, 'life1, 'async_trait>(
+            &'life0 self,
+            entry_points: &'life1 HashSet<EntryPointId>,
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<
+                        Output = Result<
+                            HashMap<EntryPointId, HashMap<TracingParams, TracingResult>>,
+                            StorageError,
+                        >,
+                    > + ::core::marker::Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            Self: 'async_trait;
     }
 
     impl ContractStateGateway for Gateway {
@@ -81,7 +203,7 @@ mock! {
             'life4: 'async_trait,
             Self: 'async_trait;
 
-        fn upsert_contract<'life0, 'life1, 'async_trait>(
+        fn insert_contract<'life0, 'life1, 'async_trait>(
             &'life0 self,
             new: &'life1 Account,
         ) -> ::core::pin::Pin<
@@ -528,6 +650,21 @@ mock! {
 
     impl Gateway for Gateway {}
 }
+
+// mock! {
+//     pub AccountExtractor {}
+
+//     #[async_trait]
+//     impl tycho_common::traits::AccountExtractor for AccountExtractor {
+//         type Error = String;
+
+//         async fn get_accounts_at_block(
+//         &self,
+//         block: &Block,
+//         requests: &[StorageSnapshotRequest],
+//     ) -> Result<HashMap<Bytes, AccountDelta>, Self::Error>;
+//     }
+// }
 
 #[cfg(test)]
 pub fn evm_contract_slots(data: impl IntoIterator<Item = (i32, i32)>) -> HashMap<Bytes, Bytes> {
@@ -1566,7 +1703,6 @@ pub mod fixtures {
                     number: 1,
                     ts: 1000,
                 }),
-
                 changes: vec![
                     TransactionChanges {
                         tx: Some(Transaction {
@@ -1595,7 +1731,6 @@ pub mod fixtures {
                                 balance: 50000000.encode_to_vec(),
                             }],
                         }],
-                        entity_changes: vec![],
                         component_changes: vec![ProtocolComponent {
                             id: "d417ff54652c09bd9f31f216b1a2e5d1e28c1dce1ba840c40d16f2b4d09b5902"
                                 .to_owned(),
@@ -1635,6 +1770,7 @@ pub mod fixtures {
                                     .as_bytes()
                                     .to_vec(),
                         }],
+                        ..Default::default()
                     },
                     TransactionChanges {
                         tx: Some(Transaction {
@@ -1667,8 +1803,6 @@ pub mod fixtures {
                                 balance: 10.encode_to_vec(),
                             }],
                         }],
-                        entity_changes: vec![],
-                        component_changes: vec![],
                         balance_changes: vec![BalanceChange {
                             token: address_from_str(WETH_ADDRESS),
                             balance: 10.encode_to_vec(),
@@ -1678,8 +1812,10 @@ pub mod fixtures {
                                     .as_bytes()
                                     .to_vec(),
                         }],
+                        ..Default::default()
                     },
                 ],
+                storage_changes: vec![],
             },
             1 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
@@ -1705,7 +1841,6 @@ pub mod fixtures {
                             },
                         ],
                     }],
-                    entity_changes: vec![],
                     component_changes: vec![ProtocolComponent {
                         id: "pc_1".to_owned(),
                         tokens: vec![
@@ -1734,7 +1869,9 @@ pub mod fixtures {
                             component_id: "pc_1".into(),
                         },
                     ],
+                    ..Default::default()
                 }],
+                storage_changes: vec![],
             },
             2 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
@@ -1782,7 +1919,6 @@ pub mod fixtures {
                             }],
                         },
                     ],
-                    entity_changes: vec![],
                     component_changes: vec![ProtocolComponent {
                         id: "pc_2".to_owned(),
                         tokens: vec![
@@ -1818,7 +1954,9 @@ pub mod fixtures {
                             component_id: "pc_1".into(),
                         },
                     ],
+                    ..Default::default()
                 }],
+                storage_changes: vec![],
             },
             3 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
@@ -1856,13 +1994,12 @@ pub mod fixtures {
                                 }],
                             },
                         ],
-                        entity_changes: vec![],
-                        component_changes: vec![],
                         balance_changes: vec![BalanceChange {
                             token: address_from_str(USDC_ADDRESS),
                             balance: 1_i32.to_be_bytes().to_vec(),
                             component_id: "pc_2".into(),
                         }],
+                        ..Default::default()
                     },
                     TransactionChanges {
                         tx: Some(pb_transactions(3, 2)),
@@ -1880,8 +2017,6 @@ pub mod fixtures {
                                 balance: 100_i32.to_be_bytes().to_vec(),
                             }],
                         }],
-                        entity_changes: vec![],
-                        component_changes: vec![],
                         balance_changes: vec![
                             BalanceChange {
                                 token: address_from_str(USDC_ADDRESS),
@@ -1894,8 +2029,10 @@ pub mod fixtures {
                                 component_id: "pc_2".into(),
                             },
                         ],
+                        ..Default::default()
                     },
                 ],
+                storage_changes: vec![],
             },
             4 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
@@ -1912,7 +2049,6 @@ pub mod fixtures {
                         change: ChangeType::Update.into(),
                         token_balances: vec![],
                     }],
-                    entity_changes: vec![],
                     component_changes: vec![ProtocolComponent {
                         id: "pc_3".to_owned(),
                         tokens: vec![address_from_str(DAI_ADDRESS), address_from_str(USDC_ADDRESS)],
@@ -1928,8 +2064,9 @@ pub mod fixtures {
                             implementation_type: 0,
                         }),
                     }],
-                    balance_changes: vec![],
+                    ..Default::default()
                 }],
+                storage_changes: vec![],
             },
             5 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
@@ -1971,8 +2108,6 @@ pub mod fixtures {
                             }],
                         },
                     ],
-                    entity_changes: vec![],
-                    component_changes: vec![],
                     balance_changes: vec![
                         BalanceChange {
                             token: address_from_str(USDC_ADDRESS),
@@ -1990,7 +2125,9 @@ pub mod fixtures {
                             component_id: "pc_1".into(),
                         },
                     ],
+                    ..Default::default()
                 }],
+                storage_changes: vec![],
             },
             _ => panic!("Requested BlockChanges version doesn't exist"),
         }
@@ -2013,7 +2150,6 @@ pub mod fixtures {
                             to: vec![0x0, 0x0, 0x0, 0x0],
                             index: 10,
                         }),
-                        contract_changes: vec![],
                         entity_changes: vec![
                             EntityChanges {
                                 component_id: "State1".to_owned(),
@@ -2050,8 +2186,7 @@ pub mod fixtures {
                                 ],
                             },
                         ],
-                        component_changes: vec![],
-                        balance_changes: vec![],
+                        ..Default::default()
                     },
                     TransactionChanges {
                         tx: Some(Transaction {
@@ -2060,7 +2195,6 @@ pub mod fixtures {
                             to: vec![0x51, 0x52, 0x53, 0x54],
                             index: 11,
                         }),
-                        contract_changes: vec![],
                         entity_changes: vec![EntityChanges {
                             component_id: "State1".to_owned(),
                             attributes: vec![
@@ -2101,14 +2235,15 @@ pub mod fixtures {
                             balance: 1_i32.to_be_bytes().to_vec(),
                             component_id: "Balance1".into(),
                         }],
+                        ..Default::default()
                     },
                 ],
+                storage_changes: vec![],
             },
             1 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
                 changes: vec![TransactionChanges {
                     tx: Some(pb_transactions(1, 1)),
-                    contract_changes: vec![],
                     entity_changes: vec![EntityChanges {
                         component_id: "pc_1".to_owned(),
                         attributes: vec![
@@ -2149,13 +2284,14 @@ pub mod fixtures {
                         balance: 1_i32.to_be_bytes().to_vec(),
                         component_id: "pc_1".into(),
                     }],
+                    ..Default::default()
                 }],
+                storage_changes: vec![],
             },
             2 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
                 changes: vec![TransactionChanges {
                     tx: Some(pb_transactions(2, 1)),
-                    contract_changes: vec![],
                     entity_changes: vec![EntityChanges {
                         component_id: "pc_1".to_owned(),
                         attributes: vec![Attribute {
@@ -2197,14 +2333,15 @@ pub mod fixtures {
                             component_id: "pc_1".into(),
                         },
                     ],
+                    ..Default::default()
                 }],
+                storage_changes: vec![],
             },
             3 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
                 changes: vec![
                     TransactionChanges {
                         tx: Some(pb_transactions(3, 2)),
-                        contract_changes: vec![],
                         entity_changes: vec![EntityChanges {
                             component_id: "pc_1".to_owned(),
                             attributes: vec![Attribute {
@@ -2215,16 +2352,15 @@ pub mod fixtures {
                                 change: ChangeType::Update.into(),
                             }],
                         }],
-                        component_changes: vec![],
                         balance_changes: vec![BalanceChange {
                             token: address_from_str(USDC_ADDRESS),
                             balance: 3_i32.to_be_bytes().to_vec(),
                             component_id: "pc_2".into(),
                         }],
+                        ..Default::default()
                     },
                     TransactionChanges {
                         tx: Some(pb_transactions(3, 1)),
-                        contract_changes: vec![],
                         entity_changes: vec![EntityChanges {
                             component_id: "pc_1".to_owned(),
                             attributes: vec![Attribute {
@@ -2235,7 +2371,6 @@ pub mod fixtures {
                                 change: ChangeType::Update.into(),
                             }],
                         }],
-                        component_changes: vec![],
                         balance_changes: vec![
                             BalanceChange {
                                 token: address_from_str(USDC_ADDRESS),
@@ -2248,15 +2383,16 @@ pub mod fixtures {
                                 component_id: "pc_1".into(),
                             },
                         ],
+                        ..Default::default()
                     },
                 ],
+                storage_changes: vec![],
             },
             4 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
                 changes: vec![
                     TransactionChanges {
                         tx: Some(pb_transactions(4, 1)),
-                        contract_changes: vec![],
                         entity_changes: vec![
                             EntityChanges {
                                 component_id: "pc_1".to_owned(),
@@ -2293,11 +2429,10 @@ pub mod fixtures {
                                 implementation_type: 0,
                             }),
                         }],
-                        balance_changes: vec![],
+                        ..Default::default()
                     },
                     TransactionChanges {
                         tx: Some(pb_transactions(4, 2)),
-                        contract_changes: vec![],
                         entity_changes: vec![
                             EntityChanges {
                                 component_id: "pc_3".to_owned(),
@@ -2318,7 +2453,6 @@ pub mod fixtures {
                                 }],
                             },
                         ],
-                        component_changes: vec![],
                         balance_changes: vec![
                             BalanceChange {
                                 token: address_from_str(USDC_ADDRESS),
@@ -2331,14 +2465,15 @@ pub mod fixtures {
                                 component_id: "pc_1".into(),
                             },
                         ],
+                        ..Default::default()
                     },
                 ],
+                storage_changes: vec![],
             },
             5 => BlockChanges {
                 block: Some(pb_blocks(version as u64)),
                 changes: vec![TransactionChanges {
                     tx: Some(pb_transactions(5, 1)),
-                    contract_changes: vec![],
                     entity_changes: vec![EntityChanges {
                         component_id: "pc_1".to_owned(),
                         attributes: vec![Attribute {
@@ -2370,9 +2505,61 @@ pub mod fixtures {
                         balance: 1000_i32.to_be_bytes().to_vec(),
                         component_id: "pc_1".into(),
                     }],
+                    ..Default::default()
                 }],
+                storage_changes: vec![],
             },
             _ => panic!("Requested unknown version of block entity changes"),
+        }
+    }
+
+    pub fn pb_transaction_storage_changes(version: u8) -> TransactionStorageChanges {
+        match version {
+            0 => TransactionStorageChanges {
+                tx: Some(pb_transactions(0, 1)),
+                storage_changes: vec![
+                    StorageChanges {
+                        address: address_from_str("0000000000000000000000000000000000000001"),
+                        slots: vec![
+                            ContractSlot {
+                                slot: Bytes::from("0x01").into(),
+                                value: Bytes::from("0x01").into(),
+                            },
+                            ContractSlot {
+                                slot: Bytes::from("0x02").into(),
+                                value: Bytes::from("0x02").into(),
+                            },
+                        ],
+                    },
+                    StorageChanges {
+                        address: address_from_str("0000000000000000000000000000000000000002"),
+                        slots: vec![ContractSlot {
+                            slot: Bytes::from("0x03").into(),
+                            value: Bytes::from("0x03").into(),
+                        }],
+                    },
+                ],
+            },
+            1 => TransactionStorageChanges {
+                tx: Some(pb_transactions(1, 2)),
+                storage_changes: vec![
+                    StorageChanges {
+                        address: address_from_str("0000000000000000000000000000000000000001"),
+                        slots: vec![ContractSlot {
+                            slot: Bytes::from("0x01").into(),
+                            value: Bytes::from("0x04").into(),
+                        }],
+                    },
+                    StorageChanges {
+                        address: address_from_str("0000000000000000000000000000000000000002"),
+                        slots: vec![ContractSlot {
+                            slot: Bytes::from("0x05").into(),
+                            value: Bytes::from("0x05").into(),
+                        }],
+                    },
+                ],
+            },
+            _ => panic!("Requested TransactionStorageChanges version doesn't exist"),
         }
     }
 }

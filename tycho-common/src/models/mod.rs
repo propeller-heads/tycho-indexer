@@ -42,14 +42,22 @@ pub type AttrStoreKey = String;
 /// Value literal type of the contract store.
 pub type StoreVal = Bytes;
 
-/// A binary key value store for an account.
-pub type ContractStore = HashMap<StoreKey, Option<StoreVal>>;
+/// A binary key-value store for an account.
+pub type ContractStore = HashMap<StoreKey, StoreVal>;
+pub type ContractStoreDeltas = HashMap<StoreKey, Option<StoreVal>>;
 
-/// Multiple key values stores grouped by account address.
+/// Multiple binary key-value stores grouped by account address.
 pub type AccountToContractStore = HashMap<Address, ContractStore>;
+pub type AccountToContractStoreDeltas = HashMap<Address, ContractStoreDeltas>;
 
 /// Component id literal type to uniquely identify a component.
 pub type ComponentId = String;
+
+/// Protocol system literal type to uniquely identify a protocol system.
+pub type ProtocolSystem = String;
+
+/// Entry point id literal type to uniquely identify an entry point.
+pub type EntryPointId = String;
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumString, Display, Default,
@@ -253,7 +261,13 @@ impl From<&dto::PaginationParams> for PaginationParams {
 }
 
 #[derive(Error, Debug, PartialEq)]
-pub enum DeltaError {
-    #[error("Id mismatch: {0} vs {1}")]
-    IdMismatch(String, String),
+pub enum MergeError {
+    #[error("Can't merge {0} from differring idendities: Expected {1}, got {2}")]
+    IdMismatch(String, String, String),
+    #[error("Can't merge {0} from different blocks: 0x{1:x} != 0x{2:x}")]
+    BlockMismatch(String, Bytes, Bytes),
+    #[error("Can't merge {0} from the same transaction: 0x{1:x}")]
+    SameTransaction(String, Bytes),
+    #[error("Can't merge {0} with lower transaction index: {1} > {2}")]
+    TransactionOrderError(String, u64, u64),
 }

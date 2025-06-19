@@ -544,6 +544,7 @@ mod test {
                         tx,
                         ..Default::default()
                     }],
+                    Vec::new(),
                 )
             }
             2 => {
@@ -615,6 +616,7 @@ mod test {
                         tx,
                         ..Default::default()
                     }],
+                    Vec::new(),
                 )
             }
             3 => {
@@ -661,6 +663,7 @@ mod test {
                         account_balance_changes: account_balances,
                         ..Default::default()
                     }],
+                    Vec::new(),
                 )
             }
             _ => panic!("block entity version not implemented"),

@@ -14,19 +14,21 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     models::{
-        blockchain::{Block, BlockAggregatedChanges, BlockTag},
+        blockchain::{
+            Block, BlockAggregatedChanges, BlockTag, DCIUpdate, EntryPoint, TracingParams,
+        },
         contract::{Account, AccountBalance, AccountDelta},
         protocol::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta,
         },
         token::{CurrencyToken, TokenOwnerStore},
-        Address, Balance, BlockHash, Chain, ChangeType, ExtractionState, ExtractorIdentity,
-        ProtocolType, TxHash,
+        Address, Balance, BlockHash, Chain, ChangeType, ComponentId, EntryPointId, ExtractionState,
+        ExtractorIdentity, ProtocolType, TxHash,
     },
     storage::{
-        BlockIdentifier, ChainGateway, ContractStateGateway, ExtractionStateGateway,
-        ProtocolGateway, StorageError,
+        BlockIdentifier, ChainGateway, ContractStateGateway, EntryPointGateway,
+        ExtractionStateGateway, ProtocolGateway, StorageError,
     },
     traits::TokenPreProcessor,
     Bytes,
@@ -42,7 +44,7 @@ use crate::{
         protobuf_deserialisation::TryFromMessage,
         protocol_cache::{ProtocolDataCache, ProtocolMemoryCache},
         reorg_buffer::ReorgBuffer,
-        BlockUpdateWithCursor, ExtractionError, Extractor, ExtractorMsg,
+        BlockUpdateWithCursor, ExtractionError, Extractor, ExtractorExtension, ExtractorMsg,
     },
     pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
 };
@@ -56,7 +58,7 @@ pub struct Inner {
     first_message_processed: bool,
 }
 
-pub struct ProtocolExtractor<G, T> {
+pub struct ProtocolExtractor<G, T, E> {
     gateway: G,
     name: String,
     chain: Chain,
@@ -69,12 +71,14 @@ pub struct ProtocolExtractor<G, T> {
     /// Allows to attach some custom logic, e.g. to fix encoding bugs without resync.
     post_processor: Option<fn(BlockChanges) -> BlockChanges>,
     reorg_buffer: Mutex<ReorgBuffer<BlockUpdateWithCursor<BlockChanges>>>,
+    dci_plugin: Option<Arc<Mutex<E>>>,
 }
 
-impl<G, T> ProtocolExtractor<G, T>
+impl<G, T, E> ProtocolExtractor<G, T, E>
 where
     G: ExtractorGateway,
     T: TokenPreProcessor,
+    E: ExtractorExtension,
 {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
@@ -87,7 +91,10 @@ where
         protocol_types: HashMap<String, ProtocolType>,
         token_pre_processor: T,
         post_processor: Option<fn(BlockChanges) -> BlockChanges>,
+        dci_plugin: Option<E>,
     ) -> Result<Self, ExtractionError> {
+        let dci_plugin = dci_plugin.map(|plugin| Arc::new(Mutex::new(plugin)));
+
         // check if this extractor has state
         let res = match gateway.get_cursor().await {
             Err(StorageError::NotFound(_, _)) => {
@@ -110,6 +117,7 @@ where
                     protocol_types,
                     post_processor,
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
+                    dci_plugin,
                 }
             }
             Ok((cursor, block_hash)) => {
@@ -145,6 +153,7 @@ where
                     protocol_types,
                     post_processor,
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
+                    dci_plugin,
                 }
             }
             Err(err) => return Err(ExtractionError::Setup(err.to_string())),
@@ -578,10 +587,11 @@ where
 }
 
 #[async_trait]
-impl<G, T> Extractor for ProtocolExtractor<G, T>
+impl<G, T, E> Extractor for ProtocolExtractor<G, T, E>
 where
     G: ExtractorGateway,
     T: TokenPreProcessor,
+    E: ExtractorExtension,
 {
     fn get_id(&self) -> ExtractorIdentity {
         ExtractorIdentity::new(self.chain, &self.name)
@@ -702,6 +712,15 @@ where
             }
         }
 
+        // Send message to DCI plugin
+        if let Some(dci_plugin) = &self.dci_plugin {
+            dci_plugin
+                .lock()
+                .await
+                .process_block_update(&mut msg)
+                .await?;
+        }
+
         msg.new_tokens = self
             .construct_currency_tokens(&msg)
             .await?;
@@ -810,6 +829,15 @@ where
             self.update_cursor(inp.last_valid_cursor)
                 .await;
             return Ok(None);
+        }
+
+        // Send revert to DCI plugin
+        if let Some(dci_plugin) = &self.dci_plugin {
+            dci_plugin
+                .lock()
+                .await
+                .process_revert(&block_hash)
+                .await?;
         }
 
         let mut reorg_buffer = self.reorg_buffer.lock().await;
@@ -1172,6 +1200,7 @@ where
             component_balances: combined_component_balances,
             account_balances: combined_account_balances,
             component_tvl: HashMap::new(),
+            dci_update: DCIUpdate::default(), // TODO: get reverted entrypoint info?
         };
 
         debug!("Successfully retrieved all previous states during revert!");
@@ -1299,6 +1328,8 @@ impl ExtractorGateway for ExtractorPgGateway {
         self.state_gateway
             .start_transaction(&changes.block, Some(self.name.as_str()))
             .await;
+
+        // Insert new tokens
         if !changes.new_tokens.is_empty() {
             let new_tokens = changes
                 .new_tokens
@@ -1310,16 +1341,24 @@ impl ExtractorGateway for ExtractorPgGateway {
                 .add_tokens(&new_tokens)
                 .await?;
         }
+
+        // Insert block
         self.state_gateway
             .upsert_block(slice::from_ref(&changes.block))
             .await?;
 
+        // Collect transaction aggregated changes
         let mut new_protocol_components: Vec<ProtocolComponent> = vec![];
         let mut state_updates: Vec<(TxHash, ProtocolComponentStateDelta)> = vec![];
         let mut account_changes: Vec<(Bytes, AccountDelta)> = vec![];
         let mut component_balance_changes: Vec<ComponentBalance> = vec![];
         let mut account_balance_changes: Vec<AccountBalance> = vec![];
         let mut protocol_tokens: HashSet<Bytes> = HashSet::new();
+        let mut new_entrypoints: HashMap<ComponentId, HashSet<EntryPoint>> = HashMap::new();
+        let mut new_entrypoint_params: HashMap<
+            EntryPointId,
+            HashSet<(TracingParams, Option<ComponentId>)>,
+        > = HashMap::new();
 
         for tx_update in changes.txs_with_update.iter() {
             trace!(tx_hash = ?tx_update.tx.hash, "Processing tx");
@@ -1343,10 +1382,27 @@ impl ExtractorGateway for ExtractorPgGateway {
                     let new: Account = account_update.ref_into_account(&tx_update.tx);
                     info!(block_number = ?changes.block.number, contract_address = ?new.address, "NewContract");
 
-                    // Insert new accounts
+                    // Insert new account static values
                     self.state_gateway
-                        .upsert_contract(&new)
+                        .insert_contract(&new)
                         .await?;
+
+                    // Collect new account dynamic values for block-scoped batch insert (necessary
+                    // for correct versioning)
+                    let mut account_delta_creation = account_update.clone();
+
+                    // Set default dynamic values for creation.
+                    account_delta_creation.balance = Some(
+                        account_delta_creation
+                            .balance
+                            .unwrap_or_default(),
+                    );
+                    account_delta_creation.code = Some(
+                        account_delta_creation
+                            .code
+                            .unwrap_or_default(),
+                    );
+                    account_changes.push((tx_update.tx.hash.clone(), account_delta_creation));
                 } else if account_update.is_update() {
                     account_changes.push((tx_update.tx.hash.clone(), account_update.clone()));
                 } else {
@@ -1379,7 +1435,31 @@ impl ExtractorGateway for ExtractorPgGateway {
                     .clone()
                     .into_iter()
                     .flat_map(|(_, tokens_balances)| tokens_balances.into_values()),
-            )
+            );
+
+            // Map new entrypoints
+            for (component_id, entrypoints) in tx_update
+                .entrypoints
+                .clone()
+                .into_iter()
+            {
+                new_entrypoints
+                    .entry(component_id)
+                    .or_default()
+                    .extend(entrypoints);
+            }
+
+            // Map new entrypoint params
+            for (entrypoint_id, params) in tx_update
+                .clone()
+                .entrypoint_params
+                .into_iter()
+            {
+                new_entrypoint_params
+                    .entry(entrypoint_id)
+                    .or_default()
+                    .extend(params);
+            }
         }
 
         // Insert new protocol components
@@ -1421,6 +1501,27 @@ impl ExtractorGateway for ExtractorPgGateway {
         if !account_balance_changes.is_empty() {
             self.state_gateway
                 .add_account_balances(account_balance_changes.as_slice())
+                .await?;
+        }
+
+        // Insert new entrypoints
+        if !new_entrypoints.is_empty() {
+            self.state_gateway
+                .insert_entry_points(&new_entrypoints)
+                .await?;
+        }
+
+        // Insert new entrypoint params
+        if !new_entrypoint_params.is_empty() {
+            self.state_gateway
+                .insert_entry_point_tracing_params(&new_entrypoint_params)
+                .await?;
+        }
+
+        // Insert trace results
+        if !changes.trace_results.is_empty() {
+            self.state_gateway
+                .upsert_traced_entry_points(changes.trace_results.as_slice())
                 .await?;
         }
 
@@ -1473,13 +1574,13 @@ impl ExtractorGateway for ExtractorPgGateway {
 mod test {
     use float_eq::assert_float_eq;
     use mockall::mock;
-    use tycho_common::{
-        models::blockchain::{Transaction, TxWithChanges},
-        traits::TokenOwnerFinding,
-    };
+    use tycho_common::{models::blockchain::TxWithChanges, traits::TokenOwnerFinding};
 
     use super::*;
-    use crate::testing::{fixtures as pb_fixtures, MockGateway};
+    use crate::{
+        extractor::MockExtractorExtension,
+        testing::{fixtures as pb_fixtures, MockGateway},
+    };
 
     mock! {
         pub TokenPreProcessor {}
@@ -1499,7 +1600,8 @@ mod test {
     const TEST_PROTOCOL: &str = "TestProtocol";
     async fn create_extractor(
         gw: MockExtractorGateway,
-    ) -> ProtocolExtractor<MockExtractorGateway, MockTokenPreProcessor> {
+    ) -> ProtocolExtractor<MockExtractorGateway, MockTokenPreProcessor, MockExtractorExtension>
+    {
         let protocol_types = HashMap::from([("pt_1".to_string(), ProtocolType::default())]);
         let protocol_cache = ProtocolMemoryCache::new(
             Chain::Ethereum,
@@ -1519,6 +1621,7 @@ mod test {
             protocol_cache,
             protocol_types,
             preprocessor,
+            None,
             None,
         )
         .await
@@ -1566,7 +1669,7 @@ mod test {
             .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
                 tycho_substreams::BlockChanges {
                     block: Some(pb_fixtures::pb_blocks(1)),
-                    changes: vec![],
+                    ..Default::default()
                 },
                 Some(format!("cursor@{}", 1).as_str()),
                 Some(1),
@@ -1580,7 +1683,7 @@ mod test {
             .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
                 tycho_substreams::BlockChanges {
                     block: Some(pb_fixtures::pb_blocks(2)),
-                    changes: vec![],
+                    ..Default::default()
                 },
                 Some(format!("cursor@{}", 2).as_str()),
                 Some(2),
@@ -1771,7 +1874,7 @@ mod test {
 
         extractor
             .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
-                tycho_substreams::BlockChanges { block: Some(block_1), changes: vec![] },
+                tycho_substreams::BlockChanges { block: Some(block_1), ..Default::default() },
                 Some(format!("cursor@{}", 1).as_str()),
                 Some(1),
             ))
@@ -1782,7 +1885,7 @@ mod test {
 
         extractor
             .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
-                tycho_substreams::BlockChanges { block: Some(block_2), changes: vec![] },
+                tycho_substreams::BlockChanges { block: Some(block_2), ..Default::default() },
                 Some(format!("cursor@{}", 2).as_str()),
                 Some(2),
             ))
@@ -1804,7 +1907,7 @@ mod test {
 
         extractor
             .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
-                tycho_substreams::BlockChanges { block: Some(block_3), changes: vec![] },
+                tycho_substreams::BlockChanges { block: Some(block_3), ..Default::default() },
                 Some(format!("cursor@{}", 3).as_str()),
                 Some(2),
             ))
@@ -1860,7 +1963,6 @@ mod test {
                         ..Default::default()
                     },
                 )]),
-                account_deltas: HashMap::new(),
                 state_updates: HashMap::from([(
                     "TestComponent".to_string(),
                     ProtocolComponentStateDelta::new(
@@ -1899,9 +2001,9 @@ mod test {
                         ),
                     ]),
                 )]),
-                account_balance_changes: HashMap::new(),
-                tx: Transaction::default(),
+                ..Default::default()
             }],
+            Vec::new(),
         );
 
         let protocol_gw = MockGateway::new();
@@ -1991,7 +2093,11 @@ mod test {
             .times(1)
             .returning(|_| Ok(Block::default()));
 
-        let extractor = ProtocolExtractor::new(
+        let extractor = ProtocolExtractor::<
+            MockExtractorGateway,
+            MockTokenPreProcessor,
+            MockExtractorExtension,
+        >::new(
             extractor_gw,
             EXTRACTOR_NAME,
             Chain::Ethereum,
@@ -2000,6 +2106,7 @@ mod test {
             protocol_cache,
             HashMap::from([("pt_1".to_string(), ProtocolType::default())]),
             preprocessor,
+            None,
             None,
         )
         .await
@@ -2119,7 +2226,11 @@ mod test {
             .times(1)
             .returning(|_| Ok(Block::default()));
 
-        let extractor = ProtocolExtractor::new(
+        let extractor = ProtocolExtractor::<
+            MockExtractorGateway,
+            MockTokenPreProcessor,
+            MockExtractorExtension,
+        >::new(
             extractor_gw,
             "vm_name",
             Chain::Ethereum,
@@ -2128,6 +2239,7 @@ mod test {
             protocol_cache,
             HashMap::from([("pt_1".to_string(), ProtocolType::default())]),
             preprocessor,
+            None,
             None,
         )
         .await
@@ -2163,7 +2275,6 @@ mod test {
 #[cfg(test)]
 mod test_serial_db {
     use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection};
-    use futures03::{stream, StreamExt};
     use mockall::mock;
     use tycho_common::{
         models::{
@@ -2173,14 +2284,12 @@ mod test_serial_db {
         storage::BlockOrTimestamp,
         traits::TokenOwnerFinding,
     };
-    use tycho_storage::postgres::{
-        builder::GatewayBuilder, db_fixtures, db_fixtures::yesterday_midnight,
-        testing::run_against_db,
-    };
+    use tycho_storage::postgres::{builder::GatewayBuilder, db_fixtures, testing::run_against_db};
 
     use super::*;
     use crate::{
-        extractor::models::fixtures, pb::sf::substreams::v1::BlockRef,
+        extractor::{models::fixtures, MockExtractorExtension},
+        pb::sf::substreams::v1::BlockRef,
         testing::fixtures as pb_fixtures,
     };
 
@@ -2341,7 +2450,7 @@ mod test_serial_db {
                     )
                     .unwrap(),
                     parent_hash: Bytes::default(),
-                    ts: db_fixtures::yesterday_one_am(),
+                    ts: db_fixtures::yesterday_half_past_midnight(),
                 }])
                 .await
                 .expect("block insertion succeeded");
@@ -2405,8 +2514,6 @@ mod test_serial_db {
             ]),
             vec![TxWithChanges {
                 tx: fixtures::create_transaction(fixtures::HASH_256_0, NATIVE_BLOCK_HASH_0, 10),
-                state_updates: HashMap::new(),
-                balance_changes: HashMap::new(),
                 protocol_components: HashMap::from([(
                     "pool".to_string(),
                     ProtocolComponent {
@@ -2425,8 +2532,7 @@ mod test_serial_db {
                         change: Default::default(),
                     },
                 )]),
-                account_deltas: HashMap::new(),
-                account_balance_changes: HashMap::new(),
+                ..Default::default()
             }],
         )
     }
@@ -2477,8 +2583,9 @@ mod test_serial_db {
             0,
             false,
             vec![
-                TxWithChanges::new(
-                    HashMap::from([(
+                TxWithChanges {
+                    tx: fixtures::create_transaction(VM_TX_HASH_0, fixtures::HASH_256_0, 1),
+                    protocol_components: HashMap::from([(
                         component_id.clone(),
                         ProtocolComponent {
                             id: component_id.clone(),
@@ -2493,7 +2600,7 @@ mod test_serial_db {
                             created_at: Default::default(),
                         },
                     )]),
-                    [(
+                    account_deltas: HashMap::from([(
                         VM_CONTRACT.into(),
                         AccountDelta::new(
                             Chain::Ethereum,
@@ -2503,11 +2610,8 @@ mod test_serial_db {
                             Some(vec![0, 0, 0, 0].into()),
                             ChangeType::Creation,
                         ),
-                    )]
-                    .into_iter()
-                    .collect(),
-                    HashMap::new(),
-                    HashMap::from([(
+                    )]),
+                    balance_changes: HashMap::from([(
                         component_id.clone(),
                         HashMap::from([(
                             base_token.clone(),
@@ -2520,7 +2624,7 @@ mod test_serial_db {
                             },
                         )]),
                     )]),
-                    HashMap::from([(
+                    account_balance_changes: HashMap::from([(
                         VM_CONTRACT.into(),
                         HashMap::from([(
                             base_token.clone(),
@@ -2532,11 +2636,11 @@ mod test_serial_db {
                             },
                         )]),
                     )]),
-                    fixtures::create_transaction(VM_TX_HASH_0, fixtures::HASH_256_0, 1),
-                ),
-                TxWithChanges::new(
-                    HashMap::new(),
-                    [(
+                    ..Default::default()
+                },
+                TxWithChanges {
+                    tx: fixtures::create_transaction(VM_TX_HASH_1, fixtures::HASH_256_0, 2),
+                    account_deltas: HashMap::from([(
                         VM_CONTRACT.into(),
                         AccountDelta::new(
                             Chain::Ethereum,
@@ -2546,11 +2650,8 @@ mod test_serial_db {
                             None,
                             ChangeType::Update,
                         ),
-                    )]
-                    .into_iter()
-                    .collect(),
-                    HashMap::new(),
-                    HashMap::from([(
+                    )]),
+                    balance_changes: HashMap::from([(
                         component_id.clone(),
                         HashMap::from([(
                             base_token.clone(),
@@ -2563,7 +2664,7 @@ mod test_serial_db {
                             },
                         )]),
                     )]),
-                    HashMap::from([(
+                    account_balance_changes: HashMap::from([(
                         VM_CONTRACT.into(),
                         HashMap::from([(
                             base_token.clone(),
@@ -2575,15 +2676,14 @@ mod test_serial_db {
                             },
                         )]),
                     )]),
-                    fixtures::create_transaction(VM_TX_HASH_1, fixtures::HASH_256_0, 2),
-                ),
+                    ..Default::default()
+                },
             ],
+            Vec::new(),
         )
     }
 
     // Tests a forward call with a native contract creation and an account update
-    // TODO: Fix this test. It was already disabled for native extractors, because of
-    // protocol_type_name mismatch
     #[ignore]
     #[tokio::test]
     async fn test_forward_native_protocol() {
@@ -2591,7 +2691,7 @@ mod test_serial_db {
             let (gw, _) = setup_gw(pool, ImplementationType::Custom).await;
             let msg = native_pool_creation();
 
-            let _exp = [ProtocolComponent {
+            let exp = [ProtocolComponent {
                 id: NATIVE_CREATED_CONTRACT.to_string(),
                 protocol_system: "test".to_string(),
                 protocol_type_name: "pool".to_string(),
@@ -2600,14 +2700,11 @@ mod test_serial_db {
                     Bytes::from_str(USDC_ADDRESS).unwrap(),
                     Bytes::from_str(WETH_ADDRESS).unwrap(),
                 ],
-                contract_addresses: vec![],
                 creation_tx: Bytes::from_str(
                     "0x88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6",
                 )
                 .unwrap(),
-                static_attributes: Default::default(),
-                created_at: Default::default(),
-                change: Default::default(),
+                ..Default::default()
             }];
 
             gw.advance(&msg, "cursor@500", false)
@@ -2626,10 +2723,8 @@ mod test_serial_db {
                 .await
                 .expect("test successfully inserted native contract")
                 .entity;
-            println!("{res:?}");
 
-            // TODO: This is failing because protocol_type_name is wrong in the gateway - waiting
-            // assert_eq!(res, exp);
+            assert_eq!(res, exp);
         })
         .await;
     }
@@ -2682,6 +2777,7 @@ mod test_serial_db {
                 .unwrap();
 
             // TODO: improve asserts
+            dbg!(&component_balances);
             assert_eq!(component_balances.len(), 1);
             assert_eq!(component_balances[0].component_id, "ambient_USDC_ETH");
         })
@@ -2740,7 +2836,11 @@ mod test_serial_db {
                 chrono::Duration::seconds(900),
                 Arc::new(cached_gw),
             );
-            let extractor = ProtocolExtractor::new(
+            let extractor = ProtocolExtractor::<
+                ExtractorPgGateway,
+                MockTokenPreProcessor,
+                MockExtractorExtension,
+            >::new(
                 gw,
                 "native_name",
                 Chain::Ethereum,
@@ -2750,19 +2850,18 @@ mod test_serial_db {
                 protocol_types,
                 get_mocked_token_pre_processor(),
                 None,
+                None,
             )
                 .await
                 .expect("Failed to create extractor");
 
-            // Send a sequence of block scoped data.
-            stream::iter(get_native_inp_sequence())
-                .for_each(|inp| async {
-                    extractor
-                        .handle_tick_scoped_data(inp)
-                        .await
-                        .unwrap();
-                })
-                .await;
+            // Process a sequence of block scoped data.
+            for inp in get_native_inp_sequence() {
+                extractor
+                    .handle_tick_scoped_data(inp)
+                    .await
+                    .unwrap();
+            }
 
             let client_msg = extractor
                 .handle_revert(BlockUndoSignal {
@@ -2804,7 +2903,6 @@ mod test_serial_db {
                         deleted_attributes: HashSet::new(),
                     }),
                 ]),
-                new_tokens: HashMap::new(),
                 new_protocol_components: HashMap::from([
                     ("pc_2".to_string(), ProtocolComponent {
                         id: "pc_2".to_string(),
@@ -2857,9 +2955,7 @@ mod test_serial_db {
                         }),
                     ])),
                 ]),
-                account_balances: HashMap::new(),
-                component_tvl: HashMap::new(),
-                account_deltas: Default::default(),
+                ..Default::default()
             };
 
             assert_eq!(
@@ -2922,7 +3018,11 @@ mod test_serial_db {
                 Arc::new(cached_gw),
             );
             let preprocessor = get_mocked_token_pre_processor();
-            let extractor = ProtocolExtractor::new(
+            let extractor = ProtocolExtractor::<
+                ExtractorPgGateway,
+                MockTokenPreProcessor,
+                MockExtractorExtension,
+            >::new(
                 gw,
                 "vm_name",
                 Chain::Ethereum,
@@ -2932,19 +3032,18 @@ mod test_serial_db {
                 protocol_types,
                 preprocessor,
                 None,
+                None,
             )
                 .await
                 .expect("Failed to create extractor");
 
-            // Send a sequence of block scoped data.
-            stream::iter(get_vm_inp_sequence())
-                .for_each(|inp| async {
-                    extractor
-                        .handle_tick_scoped_data(inp)
-                        .await
-                        .unwrap();
-                })
-                .await;
+            // Process a sequence of block scoped data.
+            for inp in get_vm_inp_sequence() {
+                extractor
+                    .handle_tick_scoped_data(inp)
+                    .await
+                    .unwrap();
+            }
 
             let client_msg = extractor
                 .handle_revert(BlockUndoSignal {
@@ -3001,8 +3100,6 @@ mod test_serial_db {
                         change: ChangeType::Update,
                     }),
                 ]),
-                new_tokens: HashMap::new(),
-                new_protocol_components: HashMap::new(),
                 deleted_protocol_components: HashMap::from([
                     ("pc_3".to_string(), ProtocolComponent {
                         id: "pc_3".to_string(),
@@ -3064,8 +3161,7 @@ mod test_serial_db {
                         }),
                     ]))
                 ]),
-                component_tvl: HashMap::new(),
-                state_deltas: Default::default(),
+                ..Default::default()
             };
 
             assert_eq!(
@@ -3123,7 +3219,11 @@ mod test_serial_db {
                 Arc::new(cached_gw),
             );
             let preprocessor = get_mocked_token_pre_processor();
-            let extractor = ProtocolExtractor::new(
+            let extractor = ProtocolExtractor::<
+                ExtractorPgGateway,
+                MockTokenPreProcessor,
+                MockExtractorExtension,
+            >::new(
                 gw,
                 "vm_name",
                 Chain::Ethereum,
@@ -3133,12 +3233,13 @@ mod test_serial_db {
                 protocol_types,
                 preprocessor,
                 None,
+                None,
             )
             .await
             .expect("Failed to create extractor");
 
             // Send a sequence of block scoped data with the same timestamp.
-            let base_ts = yesterday_midnight().timestamp() as u64;
+            let base_ts = db_fixtures::yesterday_midnight().timestamp() as u64;
             let versions = [1, 2, 3, 4];
 
             let inp_sequence = versions
@@ -3162,7 +3263,7 @@ mod test_serial_db {
                                     }
                                 },
                             }),
-                            changes: vec![],
+                            ..Default::default()
                         },
                         Some(format!("cursor@{version}").as_str()),
                         Some(5), // Buffered
@@ -3171,14 +3272,12 @@ mod test_serial_db {
                 .collect::<Vec<_>>() // materialize into Vec
                 .into_iter();
 
-            stream::iter(inp_sequence)
-                .for_each(|inp| async {
-                    extractor
-                        .handle_tick_scoped_data(inp)
-                        .await
-                        .unwrap();
-                })
-                .await;
+            for inp in inp_sequence {
+                extractor
+                    .handle_tick_scoped_data(inp)
+                    .await
+                    .unwrap();
+            }
 
             // Revert block #4, which had a timestamp of 1 second after block #3.
             extractor
@@ -3204,7 +3303,7 @@ mod test_serial_db {
                             parent_hash: Bytes::from(3_u64).lpad(32, 0).to_vec(),
                             ts: base_ts,
                         }),
-                        changes: vec![],
+                        ..Default::default()
                     },
                     Some(format!("cursor@{}", 4).as_str()),
                     Some(5), // Buffered

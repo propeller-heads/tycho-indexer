@@ -21,6 +21,12 @@
 //!
 //! # Design Decisions
 //!
+//! The versioning logic assumes data is inserted as block-scoped data. This means that if a row
+//! is inserted for a block, it is assumed that all updates for that EntityId on that block have
+//! been inserted. This is important to be aware of when inserting data to the db: you should batch
+//! insert all updates of a given type for a given block at once i.e. all account balance updates
+//! for a given block should be inserted in one call to the gateway.
+//!
 //! Initially we would support references in EntityId, to reduce the number of clones necessary for
 //! complex entity id types. This would lead to a strange situation, where these trait bounds
 //! for the `apply_versioning` method would not be expressible. Reasons for this are not 100% clear,
@@ -50,6 +56,7 @@ use diesel::{
     sql_types::{BigInt, Timestamp},
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use tracing::trace;
 use tycho_common::storage::StorageError;
 
 use crate::postgres::PostgresError;
@@ -70,7 +77,7 @@ pub trait VersionedRow {
     /// Exposes the entity identifier.
     fn get_entity_id(&self) -> Self::EntityId;
 
-    /// Allows setting `valid_to`` column, thereby invalidating this version.
+    /// Allows setting `valid_to` column, thereby invalidating this version.
     fn set_valid_to(&mut self, end_version: Self::Version);
 
     /// Exposes the starting version.
@@ -99,6 +106,9 @@ pub trait StoredVersionedRow {
 
     /// Exposes the entity id.
     fn get_entity_id(&self) -> Self::EntityId;
+
+    /// Exposes the starting version.
+    fn get_valid_from(&self) -> Self::Version;
 
     /// Retrieves the latest versions for the passed entity ids from the database.
     async fn latest_versions_by_ids<I: IntoIterator<Item = Self::EntityId> + Send + Sync>(
@@ -197,15 +207,18 @@ fn build_batch_update_query<'a, O: StoredVersionedRow>(
 /// Applies and execute versioning logic for a set of new entries.
 ///
 /// This function will execute the following steps:
-/// - Set end versions on a collection of new entries
-/// - Given the new entries query the table currently valid versions
-/// - Execute and update query to invalidate the previously retrieved entries
+/// - Retrieve the latest versions for all entities from the database
+/// - Filter out any new entry that is older than what's already in the database
+/// - Set end versions on the remaining collection of new entries
+/// - Execute an update query to invalidate the previously retrieved entries
 ///
 /// ## Important note:
 /// This function requires that new_data is sorted by ascending execution order (block, transaction,
-/// index) for conflicting entity_id.
+/// index) for conflicting entity_id. It also assumes that full block-scoped data is inserted in the
+/// database, meaning that if one version of a database entry exists for a block, it is assumed that
+/// all updates for that entry on that block have been inserted.
 pub async fn apply_versioning<N, S>(
-    new_data: &mut [N],
+    new_data: &mut Vec<N>,
     conn: &mut AsyncPgConnection,
 ) -> Result<(), StorageError>
 where
@@ -213,6 +226,37 @@ where
     S: StoredVersionedRow<EntityId = N::EntityId, Version = N::Version>,
     <N as VersionedRow>::EntityId: Clone,
 {
+    if new_data.is_empty() {
+        return Ok(());
+    }
+
+    // Retrieve the latest versions from database
+    let entity_ids: Vec<N::EntityId> = new_data
+        .iter()
+        .map(|row| row.get_entity_id())
+        .collect();
+    let latest_db_versions = S::latest_versions_by_ids(entity_ids.clone(), conn)
+        .await
+        .map_err(PostgresError::from)?
+        .iter()
+        .map(|row| (row.get_entity_id(), row.get_valid_from()))
+        .collect::<HashMap<N::EntityId, N::Version>>();
+
+    // Filter out entries that are older than/equal to the latest version in the db
+    new_data.retain(|entry| {
+        let entity_id = entry.get_entity_id();
+        match latest_db_versions.get(&entity_id) {
+            Some(latest_version) if entry.get_valid_from() <= *latest_version => {
+                trace!(
+                    "Skipping update for {:?} since it's older than/equal to the latest version",
+                    entity_id
+                );
+                false
+            }
+            _ => true,
+        }
+    });
+
     if new_data.is_empty() {
         return Ok(());
     }
@@ -234,24 +278,33 @@ where
 pub trait PartitionedVersionedRow: Clone + Send + Sync + Debug {
     /// The entity identifier this version belongs to.
     type EntityId: Clone + Ord + Hash + Debug + Send + Sync;
+
     /// Getter for the entity id.
     fn get_id(&self) -> Self::EntityId;
+
     /// Getter for the end version, uses `MAX_TS` if version is currently active.
     fn get_valid_to(&self) -> NaiveDateTime;
+
+    /// Getter for the start version.
+    fn get_valid_from(&self) -> NaiveDateTime;
+
     /// Archives this struct given the next valid versions struct.
     ///
     /// Any attribute changes that need to happen to archive a row should happen in here
     /// such as setting valid_to attribute but also potentially setting `previous_*`
     /// attributes on next_version.
     fn archive(&mut self, next_version: &mut Self);
+
     /// Marks this row as deleted.
     ///
     /// Any attribute changes when deleting a struct need to happen in this method.
     fn delete(&mut self, delete_version: NaiveDateTime);
-    /// Retrieves the currently active rows by entity ids.
+
+    /// Retrieves the latest version rows by entity ids.
     ///
     /// This method is used to provide the latest stored version of an entity id
-    /// during application side versioning.
+    /// during application side versioning. If an entity was deleted, the latest version
+    /// is the one before the deletion (with a valid_to set to the deletion time).
     async fn latest_versions_by_ids(
         ids: Vec<Self::EntityId>,
         conn: &mut AsyncPgConnection,
@@ -265,22 +318,70 @@ type ArchivedRows<N> = Vec<N>;
 type DeletedIds<N> = Vec<<N as PartitionedVersionedRow>::EntityId>;
 type RowsChanges<N> = (LatestRows<N>, ArchivedRows<N>, DeletedIds<N>);
 
+/// Process versioning attributes for partitioned tables.
+///
+/// This function handles the versioning logic for partitioned tables by:
+/// 1. Setting up archive versions for entities that are being updated
+/// 2. Marking rows as deleted when deletion entries are encountered
+/// 3. Maintaining the latest version of each entity
+/// 4. Skipping updates or deletions that are older than/equal to the latest version already in the
+///    database
+///
+/// The function maintains a collection of latest rows, archived rows, and deleted entity IDs.
+/// For each entity:
+/// - If a newer version arrives, the current version is archived and the new one becomes the latest
+/// - If a new deletion arrives, the current version is archived, marked as deleted, and added to
+///   the deleted IDs
+/// - If an update or deletion is older than/equal to the current version in the database, it's
+///   skipped
+///
+/// ## Parameters
+/// * `current_latest_data` - The current latest versions from the database
+/// * `new_data` - New entries to be processed (updates or deletions)
+///
+/// ## Returns
+/// A tuple containing:
+/// * Latest rows - The current valid version of each entity after processing
+/// * Archived rows - Previous versions that have been archived
+/// * Deleted IDs - Entity IDs that have been deleted and should be removed from the default
+///   partition
+///
+/// ## Note
+/// This function assumes that `new_data` is sorted in ascending execution order
+/// (by block, transaction, then index) for conflicting entity IDs.
 fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
     current_latest_data: &[N],
     new_data: &[VersioningEntry<N>],
 ) -> Result<RowsChanges<N>, StorageError> {
-    let mut latest: HashMap<N::EntityId, N> = current_latest_data
+    // current latest data from db
+    let db_latest: HashMap<N::EntityId, N> = current_latest_data
         .iter()
         .map(|row| (row.get_id(), row.clone()))
         .collect();
+    // versioned data
+    let mut latest = db_latest.clone();
     let mut archived = Vec::new();
     let mut deleted = HashSet::new();
+    let mut to_skip = HashSet::new();
     for item in new_data.iter() {
         let id = item.get_id();
         match item {
             VersioningEntry::Update(r) => {
                 // Handle updated rows
                 let mut row = r.clone();
+
+                // Skip if new version is older than/equal to the latest version in the db
+                if let Some(latest_row) = db_latest.get(&id) {
+                    if latest_row.get_valid_from() >= row.get_valid_from() {
+                        trace!(
+                            "Skipping update for {:?} since it's older than/equal to the latest version",
+                            id
+                        );
+                        to_skip.insert(id.clone());
+                        continue;
+                    }
+                }
+
                 if let Some(mut prev) = latest.remove(&id) {
                     prev.archive(&mut row);
                     archived.push(prev);
@@ -290,6 +391,18 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
                 latest.insert(id, row);
             }
             VersioningEntry::Deletion((id, delete_version)) => {
+                // Skip if new version is older than/equal to the latest version in the db
+                if let Some(latest_row) = db_latest.get(id) {
+                    if latest_row.get_valid_from() >= *delete_version {
+                        trace!(
+                            "Skipping delete for {:?} since it's older than/equal to the latest version",
+                            id
+                        );
+                        to_skip.insert(id.clone());
+                        continue;
+                    }
+                }
+
                 // Handle deleted rows
                 let mut delete_row = latest
                     .remove(id)
@@ -303,6 +416,7 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
             }
         }
     }
+    latest.retain(|id, _| !to_skip.contains(id));
     Ok((latest.into_values().collect(), archived, deleted.into_iter().collect()))
 }
 
@@ -343,7 +457,8 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
 ///
 /// This function will execute the following steps:
 ///
-/// - Retrieve the current state of all entities to be updated or deleted.
+/// - Retrieve the latest version state of all entities to be updated or deleted.
+/// - Filter out any updates that are older than what's already in the database.
 /// - Apply application side versioning, calling either delete or archive on the respective rows.
 /// - Filter any archived rows by the retention horizon.
 ///
@@ -357,7 +472,9 @@ fn set_partitioned_versioning_attributes<N: PartitionedVersionedRow>(
 ///
 /// ## Important note:
 /// This function requires that new_data is sorted by ascending execution order (block, transaction
-/// index) for conflicting entity_id.
+/// index) for conflicting entity_id. It also assumes that full block-scoped data is inserted in the
+/// database, meaning that if one version of a database entry exists for a block, it is assumed that
+/// all updates for that entry on that block have been inserted.
 ///
 /// ## Note
 /// This method may only works for rows that have a primary key know before insert. So e.g.
@@ -402,12 +519,19 @@ pub async fn apply_partitioned_versioning<T: PartitionedVersionedRow>(
 
 #[cfg(test)]
 mod test {
-    use chrono::NaiveDateTime;
-    use diesel_async::{AsyncConnection, AsyncPgConnection};
-    use tycho_common::Bytes;
+    use std::vec;
 
-    use super::apply_partitioned_versioning;
-    use crate::postgres::{orm::NewProtocolState, versioning::VersioningEntry};
+    use chrono::NaiveDateTime;
+    use diesel::prelude::*;
+    use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
+    use tycho_common::{models, Bytes};
+
+    use super::*;
+    use crate::postgres::{
+        db_fixtures,
+        orm::{AccountBalance, NewAccountBalance, NewProtocolState},
+        schema,
+    };
 
     async fn setup_db() -> AsyncPgConnection {
         let db_url = std::env::var("DATABASE_URL").unwrap();
@@ -421,9 +545,75 @@ mod test {
         conn
     }
 
+    async fn setup_state_data(conn: &mut AsyncPgConnection) {
+        let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
+        let blk = db_fixtures::insert_blocks(conn, chain_id).await;
+        let tx_hashes = [
+            "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945".to_string(),
+            "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54".to_string(),
+        ];
+        let txns = db_fixtures::insert_txns(
+            conn,
+            &[(blk[0], 1i64, &tx_hashes[0]), (blk[1], 2i64, &tx_hashes[1])],
+        )
+        .await;
+
+        // set up protocol state data
+        let protocol_system_id =
+            db_fixtures::insert_protocol_system(conn, "ambient".to_owned()).await;
+        let protocol_type_id = db_fixtures::insert_protocol_type(
+            conn,
+            "Pool",
+            Some(models::FinancialType::Swap),
+            None,
+            Some(models::ImplementationType::Custom),
+        )
+        .await;
+        let protocol_component_id = db_fixtures::insert_protocol_component(
+            conn,
+            "component1",
+            chain_id,
+            protocol_system_id,
+            protocol_type_id,
+            txns[0],
+            None,
+            None,
+        )
+        .await;
+        // protocol state for component1-liquidity
+        db_fixtures::insert_protocol_state(
+            conn,
+            protocol_component_id,
+            txns[0],
+            "liquidity".to_owned(),
+            Bytes::from(1100u64).lpad(32, 0),
+            None,
+            None,
+        )
+        .await;
+        // protocol state for component1-fee
+        db_fixtures::insert_protocol_state(
+            conn,
+            protocol_component_id,
+            txns[0],
+            "fee".to_owned(),
+            Bytes::from(0u64).lpad(32, 0),
+            None,
+            Some(txns[1]),
+        )
+        .await;
+    }
+
     #[tokio::test]
     async fn test_apply_partitioned_versioning() {
         let mut conn = setup_db().await;
+        setup_state_data(&mut conn).await;
+        let component_id = schema::protocol_component::table
+            .select(schema::protocol_component::id)
+            .first::<i64>(&mut conn)
+            .await
+            .expect("Failed to fetch protocol component");
+
         let row1 = VersioningEntry::Update(NewProtocolState {
             protocol_component_id: 0,
             attribute_name: "tick".to_string(),
@@ -451,6 +641,33 @@ mod test {
             valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
             valid_to: NaiveDateTime::from_timestamp_micros(999).unwrap(),
         });
+        // outdated row - should get filtered out and not be part of the returned versioning
+        let outdated_row = VersioningEntry::Update(NewProtocolState {
+            protocol_component_id: component_id,
+            attribute_name: "liquidity".to_string(),
+            attribute_value: Bytes::from(4u8),
+            previous_value: None,
+            modify_tx: 4,
+            valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
+            valid_to: NaiveDateTime::from_timestamp_micros(999).unwrap(),
+        });
+        // outdated row for same attribute - should get filtered out and not be part of the returned
+        // versioning
+        let outdated_row_repeat = VersioningEntry::Update(NewProtocolState {
+            protocol_component_id: component_id,
+            attribute_name: "liquidity".to_string(),
+            attribute_value: Bytes::from(4u8),
+            previous_value: None,
+            modify_tx: 5,
+            valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
+            valid_to: NaiveDateTime::from_timestamp_micros(999).unwrap(),
+        });
+        // re-delete previously deleted row - should get filtered out and not be part of the
+        // returned versioning
+        let outdated_delete = VersioningEntry::Deletion((
+            (component_id, "fee".to_string()),
+            NaiveDateTime::from_timestamp_micros(1).unwrap(),
+        ));
 
         let delete_row1 = VersioningEntry::Deletion((
             (0i64, "tick".to_string()),
@@ -458,7 +675,7 @@ mod test {
         ));
 
         let (latest, to_archive, to_delete) = apply_partitioned_versioning(
-            &[row1, delete_row1, row2, row3],
+            &[row1, delete_row1, row2, row3, outdated_row, outdated_row_repeat, outdated_delete],
             NaiveDateTime::from_timestamp_micros(0).unwrap(),
             &mut conn,
         )
@@ -493,13 +710,98 @@ mod test {
                     protocol_component_id: 0,
                     attribute_name: "tick".to_string(),
                     attribute_value: Bytes::from(2u8),
-                    previous_value: None, // None because raw 1 has been deleted in the meantime.
+                    previous_value: None, // None because row 1 has been deleted in the meantime
                     modify_tx: 2,
                     valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
                     valid_to: NaiveDateTime::from_timestamp_micros(1).unwrap(),
                 }
             ]
         );
+        // outdated re-delete should not appear here
         assert_eq!(to_delete, vec![]);
+    }
+
+    async fn setup_account_data(conn: &mut AsyncPgConnection) -> (i64, i64, i64) {
+        let chain_id = db_fixtures::insert_chain(conn, "ethereum").await;
+        let blk = db_fixtures::insert_blocks(conn, chain_id).await;
+        let txn = db_fixtures::insert_txns(
+            conn,
+            &[(blk[0], 1i64, "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945")],
+        )
+        .await[0];
+
+        // set up account data
+        let c0 = db_fixtures::insert_account(
+            conn,
+            "6B175474E89094C44Da98b954EedeAC495271d0F",
+            "account0",
+            chain_id,
+            Some(txn),
+        )
+        .await;
+        let (_, usdc_id) = db_fixtures::insert_token(
+            conn,
+            chain_id,
+            "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "USDC",
+            18,
+            Some(100),
+        )
+        .await;
+        db_fixtures::insert_account_balance(conn, 1000, usdc_id, txn, None, c0).await;
+        let (_, weth_id) = db_fixtures::insert_token(
+            conn,
+            chain_id,
+            "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "WETH",
+            18,
+            Some(100),
+        )
+        .await;
+        db_fixtures::insert_account_balance(conn, 2000, weth_id, txn, None, c0).await;
+        (c0, usdc_id, weth_id)
+    }
+
+    #[tokio::test]
+    async fn test_apply_versioning() {
+        let mut conn = setup_db().await;
+        let (acc, token0, token1) = setup_account_data(&mut conn).await;
+
+        let row1 = NewAccountBalance {
+            account_id: acc,
+            token_id: token0,
+            balance: Bytes::from(150u64),
+            modify_tx: 2,
+            valid_from: db_fixtures::yesterday_one_am(),
+            valid_to: None,
+        };
+        // outdated row - should get filtered out and not be part of the returned versioning
+        let outdated_row = NewAccountBalance {
+            account_id: acc,
+            token_id: token1,
+            balance: Bytes::from(150u64),
+            modify_tx: 2,
+            valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
+            valid_to: None,
+        };
+        // repeated outdated row - should get filtered out and not be part of the returned
+        // versioning
+        let outdated_row_repeat = NewAccountBalance {
+            account_id: acc,
+            token_id: token1,
+            balance: Bytes::from(150u64),
+            modify_tx: 3,
+            valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
+            valid_to: None,
+        };
+
+        let mut new_data = vec![row1.clone(), outdated_row, outdated_row_repeat];
+
+        apply_versioning::<_, AccountBalance>(&mut new_data, &mut conn)
+            .await
+            .unwrap();
+
+        // Only new data should be present, outdated row should be filtered out
+        assert_eq!(new_data, vec![row1]);
     }
 }

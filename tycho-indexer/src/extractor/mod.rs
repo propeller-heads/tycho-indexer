@@ -9,21 +9,25 @@ use tycho_common::{
         blockchain::{Block, BlockScoped},
         contract::AccountBalance,
         protocol::ComponentBalance,
-        Address, ExtractorIdentity, NormalisedMessage,
+        Address, BlockHash, ExtractorIdentity, MergeError, NormalisedMessage,
     },
     storage::StorageError,
     Bytes,
 };
 
 use crate::{
-    extractor::reorg_buffer::{
-        AccountStateIdType, AccountStateKeyType, AccountStateValueType, ProtocolStateIdType,
-        ProtocolStateKeyType, ProtocolStateValueType, StateUpdateBufferEntry,
+    extractor::{
+        models::BlockChanges,
+        reorg_buffer::{
+            AccountStateIdType, AccountStateKeyType, AccountStateValueType, ProtocolStateIdType,
+            ProtocolStateKeyType, ProtocolStateValueType, StateUpdateBufferEntry,
+        },
     },
     pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
 };
 
 pub mod chain_state;
+mod dynamic_contract_indexer;
 pub mod models;
 pub mod post_processors;
 pub mod protobuf_deserialisation;
@@ -53,9 +57,13 @@ pub enum ExtractionError {
     #[error("Service error: {0}")]
     ServiceError(String),
     #[error("Merge error: {0}")]
-    MergeError(String),
+    MergeError(#[from] MergeError),
     #[error("Reorg buffer error: {0}")]
     ReorgBufferError(String),
+    #[error("Tracing error: {0}")]
+    TracingError(String),
+    #[error("Account extraction error: {0}")]
+    AccountExtractionError(String),
 }
 
 #[derive(Error, Debug)]
@@ -90,6 +98,19 @@ pub trait Extractor: Send + Sync {
     ) -> Result<Option<ExtractorMsg>, ExtractionError>;
 
     async fn handle_progress(&self, inp: ModulesProgress) -> Result<(), ExtractionError>;
+}
+
+#[automock]
+#[async_trait]
+pub trait ExtractorExtension: Send + Sync {
+    /// Process a block update message and update it in-place.
+    async fn process_block_update(
+        &mut self,
+        block_changes: &mut BlockChanges,
+    ) -> Result<(), ExtractionError>;
+
+    /// Process a revert
+    async fn process_revert(&mut self, target_block: &BlockHash) -> Result<(), ExtractionError>;
 }
 
 /// Wrapper to carry a cursor along with another struct.

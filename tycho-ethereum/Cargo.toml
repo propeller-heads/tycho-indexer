@@ -24,10 +24,12 @@ thiserror.workspace = true
 reqwest.workspace = true
 unicode-segmentation.workspace = true
 url = "2"
+futures = "0.3"
 
 # Required dependencies
 ethers = "^2.0.2"
 web3 = { version = "0.19", default-features = false }
+alloy = { version = "0.14", default-features = true }
 
 # Optional dependencies
 contracts = { git = "https://github.com/cowprotocol/services", rev = "f3678428991e055ceb517f184d1b37244f2d8f51", optional = true }
@@ -37,6 +39,10 @@ ethcontract = { version = "0.25.4", default-features = false, features = [
 ], optional = true }
 clap = { version = "4", features = ["derive", "env"], optional = true }
 humantime = { version = "2.1.0", optional = true }
+tracing-test = "0.2.5"
+
+[dev-dependencies]
+pretty_assertions.workspace = true
 
 [features]
 default = []

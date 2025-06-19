@@ -1,9 +1,16 @@
 #[cfg(feature = "onchain_data")]
 pub mod account_extractor;
 #[cfg(feature = "onchain_data")]
+#[allow(unused)] //TODO: Remove when used
+pub mod entrypoint_tracer;
+#[cfg(feature = "onchain_data")]
 pub mod token_analyzer;
 #[cfg(feature = "onchain_data")]
 pub mod token_pre_processor;
+
+#[cfg(test)]
+#[macro_use]
+extern crate pretty_assertions;
 
 use ethers::{
     providers::ProviderError,
@@ -19,6 +26,8 @@ pub enum RPCError {
     SetupError(String),
     #[error("RPC error: {0}")]
     RequestError(#[from] ProviderError),
+    #[error("Unknown error: {0}")]
+    UnknownError(String),
 }
 
 pub struct BlockTagWrapper(BlockTag);

@@ -1,6 +1,7 @@
 #![doc = include_str!("../../README.md")]
 use std::{
     collections::HashMap,
+    env,
     fs::File,
     io::Read,
     process, slice,
@@ -29,7 +30,7 @@ use tycho_common::{
         Address, Chain, ExtractionState, ImplementationType,
     },
     storage::{ChainGateway, ContractStateGateway, ExtractionStateGateway},
-    traits::AccountExtractor,
+    traits::{AccountExtractor, StorageSnapshotRequest},
     Bytes,
 };
 use tycho_ethereum::{
@@ -42,7 +43,8 @@ use tycho_indexer::{
         chain_state::ChainState,
         protocol_cache::ProtocolMemoryCache,
         runner::{
-            ExtractorBuilder, ExtractorConfig, ExtractorHandle, HandleResult, ProtocolTypeConfig,
+            DCIType, ExtractorBuilder, ExtractorConfig, ExtractorHandle, HandleResult,
+            ProtocolTypeConfig,
         },
         token_analysis_cron::analyze_tokens,
         ExtractionError,
@@ -205,7 +207,6 @@ fn run_indexer(global_args: GlobalArgs, index_args: IndexArgs) -> Result<(), Ext
 
             let (extraction_tasks, other_tasks) = create_indexing_tasks(
                 &global_args,
-                &index_args.substreams_args.rpc_url,
                 &index_args
                     .chains
                     .iter()
@@ -258,6 +259,14 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
     create_tracing_subscriber();
     info!("Starting Tycho");
 
+    let dci_plugin = run_args
+        .dci_plugin
+        .clone()
+        .map_or(Ok(None), |s| match s.as_str() {
+            "rpc" => Ok(Some(DCIType::RPC(global_args.rpc_url.clone()))),
+            _ => Err(ExtractionError::Setup(format!("Unknown DCI plugin: {s}"))),
+        })?;
+
     let config = ExtractorConfigs::new(HashMap::from([(
         "test_protocol".to_string(),
         ExtractorConfig::new(
@@ -280,12 +289,12 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
             run_args.initialized_accounts,
             run_args.initialization_block,
             None,
+            dci_plugin,
         ),
     )]));
 
     let (extraction_tasks, mut other_tasks) = create_indexing_tasks(
         &global_args,
-        &run_args.substreams_args.rpc_url,
         &[Chain::from_str(&run_args.chain).unwrap()],
         Utc::now().naive_utc(),
         config,
@@ -303,18 +312,24 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
 #[tokio::main]
 async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
     create_tracing_subscriber();
-    let cached_gw = GatewayBuilder::new(&global_args.database_url)
-        .build_gw()
+
+    let direct_gw = GatewayBuilder::new(&global_args.database_url)
+        .set_chains(&[Chain::Ethereum]) // TODO: handle multichain
+        .build_direct_gw()
         .await?;
 
     info!("Starting Tycho RPC");
     let server_url = format!("http://{}:{}", global_args.server_ip, global_args.server_port);
-    let (server_handle, server_task) = ServicesBuilder::new(cached_gw)
-        .prefix(&global_args.server_version_prefix)
-        .bind(&global_args.server_ip)
-        .port(global_args.server_port)
-        .register_extractors(vec![])
-        .run()?;
+    let api_key = env::var("AUTH_API_KEY").map_err(|_| {
+        ExtractionError::Setup("AUTH_API_KEY environment variable is not set".to_string())
+    })?;
+
+    let (server_handle, server_task) =
+        ServicesBuilder::new(direct_gw.clone(), global_args.rpc_url.clone(), api_key)
+            .prefix(&global_args.server_version_prefix)
+            .bind(&global_args.server_ip)
+            .port(global_args.server_port)
+            .run()?;
     info!(server_url, "Http and Ws server started");
     let shutdown_task = tokio::spawn(shutdown_handler(server_handle, vec![], None));
     let (res, _, _) = select_all([server_task, shutdown_task]).await;
@@ -324,13 +339,12 @@ async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
 /// Creates extraction and server tasks.
 async fn create_indexing_tasks(
     global_args: &GlobalArgs,
-    rpc_url: &str,
     chains: &[Chain],
     retention_horizon: NaiveDateTime,
     extractors_config: ExtractorConfigs,
     extraction_runtime: Option<&Handle>,
 ) -> Result<(ExtractionTasks, ServerTasks), ExtractionError> {
-    let rpc_client = EthereumRpcClient::new_from_url(rpc_url);
+    let rpc_client = EthereumRpcClient::new_from_url(&global_args.rpc_url.clone());
     let block_number = rpc_client
         .get_block_number()
         .await
@@ -351,7 +365,7 @@ async fn create_indexing_tasks(
         .build()
         .await?;
     let token_processor = EthereumTokenPreProcessor::new_from_url(
-        rpc_url,
+        &global_args.rpc_url.clone(),
         *chains
             .first()
             .expect("No chain provided"), //TODO: handle multichain?
@@ -359,19 +373,23 @@ async fn create_indexing_tasks(
 
     let (tasks, extractor_handles): (Vec<_>, Vec<_>) =
         // TODO: accept substreams configuration from cli.
-        build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url,global_args.s3_bucket.as_deref(), &cached_gw, &token_processor, rpc_url, extraction_runtime)
+        build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url,global_args.s3_bucket.as_deref(), &cached_gw, &token_processor, &global_args.rpc_url.clone(), extraction_runtime)
             .await
             .map_err(|e| ExtractionError::Setup(format!("Failed to create extractors: {e}")))?
             .into_iter()
             .unzip();
 
     let server_url = format!("http://{}:{}", global_args.server_ip, global_args.server_port);
-    let (server_handle, server_task) = ServicesBuilder::new(cached_gw.clone())
-        .prefix(&global_args.server_version_prefix)
-        .bind(&global_args.server_ip)
-        .port(global_args.server_port)
-        .register_extractors(extractor_handles.clone())
-        .run()?;
+    let api_key = env::var("AUTH_API_KEY").map_err(|_| {
+        ExtractionError::Setup("AUTH_API_KEY environment variable is not set".to_string())
+    })?;
+    let (server_handle, server_task) =
+        ServicesBuilder::new(cached_gw.clone(), global_args.rpc_url.clone(), api_key)
+            .prefix(&global_args.server_version_prefix)
+            .bind(&global_args.server_ip)
+            .port(global_args.server_port)
+            .register_extractors(extractor_handles.clone())
+            .run()?;
     info!(server_url, "Http and Ws server started");
 
     let shutdown_task =
@@ -434,6 +452,20 @@ async fn build_all_extractors(
     Ok(extractor_handles)
 }
 
+async fn with_transaction<F, Fut, R>(gw: &CachedGateway, block: &Block, f: F) -> R
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = R>,
+{
+    gw.start_transaction(block, Some("accountExtractor"))
+        .await;
+    let result = f().await;
+    gw.commit_transaction(0)
+        .await
+        .expect("Failed to commit transaction");
+    result
+}
+
 #[instrument(skip_all, fields(n_accounts = %accounts.len(), block_id = block_id))]
 async fn initialize_accounts(
     accounts: Vec<Address>,
@@ -457,48 +489,54 @@ async fn initialize_accounts(
         index: 0,
     };
 
-    cached_gw
-        .start_transaction(&block, Some("accountExtractor"))
-        .await;
-
-    cached_gw
-        .upsert_block(slice::from_ref(&block))
-        .await
-        .expect("Failed to insert block");
-
-    cached_gw
-        .upsert_tx(slice::from_ref(&tx))
-        .await
-        .expect("Failed to insert tx");
-
-    for account_update in extracted_accounts.into_values() {
-        let new_account = account_update.into_account(&tx);
-        info!(block_number = block.number, contract_address = ?new_account.address, "NewContract");
-
-        // Insert new accounts
+    // First transaction
+    with_transaction(cached_gw, &block, || async {
         cached_gw
-            .upsert_contract(&new_account)
+            .upsert_block(slice::from_ref(&block))
             .await
-            .expect("Failed to insert contract");
+            .expect("Failed to insert block");
+
+        cached_gw
+            .upsert_tx(slice::from_ref(&tx))
+            .await
+            .expect("Failed to insert tx");
+    })
+    .await;
+
+    // Process account updates
+    for account_update in extracted_accounts.into_values() {
+        with_transaction(cached_gw, &block, || async {
+            let new_account = account_update.ref_into_account(&tx);
+            info!(block_number = block.number, contract_address = ?new_account.address, "NewContract");
+
+            // Insert new accounts
+            cached_gw
+                .insert_contract(&new_account)
+                .await
+                .expect("Failed to insert contract");
+            cached_gw
+                .update_contracts(&[(tx.hash.clone(), account_update)])
+                .await
+                .expect("Failed to update contract");
+        })
+        .await;
     }
 
-    let state = ExtractionState::new(
-        "accountExtractor".to_string(),
-        chain,
-        None,
-        "account_cursor".as_bytes(),
-        block.hash,
-    );
+    with_transaction(cached_gw, &block, || async {
+        let state = ExtractionState::new(
+            "accountExtractor".to_string(),
+            chain,
+            None,
+            "account_cursor".as_bytes(),
+            block.hash.clone(),
+        );
 
-    cached_gw
-        .save_state(&state)
-        .await
-        .expect("Failed to save cursor");
-
-    cached_gw
-        .commit_transaction(0)
-        .await
-        .expect("Failed to commit transaction");
+        cached_gw
+            .save_state(&state)
+            .await
+            .expect("Failed to save cursor");
+    })
+    .await;
 }
 
 async fn get_accounts_data(
@@ -516,8 +554,13 @@ async fn get_accounts_data(
         .await
         .expect("Failed to get block data");
 
+    let requests = accounts
+        .iter()
+        .map(|address| StorageSnapshotRequest { address: address.clone(), slots: None })
+        .collect::<Vec<_>>();
+
     let extracted_accounts: HashMap<Bytes, AccountDelta> = account_extractor
-        .get_accounts(block.clone(), accounts)
+        .get_accounts_at_block(&block, &requests)
         .await
         .expect("Failed to extract accounts");
     (block, extracted_accounts)

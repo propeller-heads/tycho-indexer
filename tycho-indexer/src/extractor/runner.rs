@@ -21,12 +21,17 @@ use tycho_common::{
     models::{Chain, ExtractorIdentity, FinancialType, ImplementationType, ProtocolType},
     Bytes,
 };
-use tycho_ethereum::token_pre_processor::EthereumTokenPreProcessor;
+use tycho_ethereum::{
+    account_extractor::contract::EVMBatchAccountExtractor,
+    entrypoint_tracer::tracer::EVMEntrypointService,
+    token_pre_processor::EthereumTokenPreProcessor,
+};
 use tycho_storage::postgres::cache::CachedGateway;
 
 use crate::{
     extractor::{
         chain_state::ChainState,
+        dynamic_contract_indexer::DynamicContractIndexer,
         post_processors::POST_PROCESSOR_REGISTRY,
         protocol_cache::ProtocolMemoryCache,
         protocol_extractor::{ExtractorPgGateway, ProtocolExtractor},
@@ -304,7 +309,7 @@ impl ProtocolTypeConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct ExtractorConfig {
     name: String,
     chain: Chain,
@@ -321,6 +326,8 @@ pub struct ExtractorConfig {
     pub initialized_accounts_block: i64,
     #[serde(default)]
     pub post_processor: Option<String>,
+    #[serde(default)]
+    pub dci_plugin: Option<DCIType>,
 }
 
 impl ExtractorConfig {
@@ -338,6 +345,7 @@ impl ExtractorConfig {
         initialized_accounts: Vec<Bytes>,
         initialized_accounts_block: i64,
         post_processor: Option<String>,
+        dci_plugin: Option<DCIType>,
     ) -> Self {
         Self {
             name,
@@ -352,8 +360,15 @@ impl ExtractorConfig {
             initialized_accounts,
             initialized_accounts_block,
             post_processor,
+            dci_plugin,
         }
     }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub enum DCIType {
+    /// RPC DCI plugin - uses the RPC endpoint to fetch the account data
+    RPC(String),
 }
 
 pub struct ExtractorBuilder {
@@ -383,6 +398,7 @@ impl ExtractorBuilder {
         }
     }
 
+    /// Set the substreams endpoint url
     pub fn endpoint_url(mut self, val: &str) -> Self {
         val.clone_into(&mut self.endpoint_url);
         self
@@ -490,8 +506,47 @@ impl ExtractorBuilder {
             })
             .transpose()?;
 
+        let dci_plugin = if let Some(ref dci_type) = self.config.dci_plugin {
+            Some(match dci_type {
+                DCIType::RPC(rpc_url) => {
+                    let account_extractor =
+                        EVMBatchAccountExtractor::new(rpc_url, self.config.chain)
+                            .await
+                            .map_err(|err| {
+                                ExtractionError::Setup(format!(
+                                    "Failed to create account extractor for {rpc_url}: {err}"
+                                ))
+                            })?;
+                    let tracer = EVMEntrypointService::try_from_url(rpc_url).map_err(|err| {
+                        ExtractionError::Setup(format!(
+                            "Failed to create entrypoint tracer for {rpc_url}: {err}"
+                        ))
+                    })?;
+                    let mut plugin = DynamicContractIndexer::new(
+                        self.config.chain,
+                        self.config.name.clone(),
+                        cached_gw.clone(),
+                        account_extractor,
+                        tracer,
+                    );
+                    plugin.initialize().await?;
+                    plugin
+                }
+            })
+        } else {
+            None
+        };
+
         self.extractor = Some(Arc::new(
-            ProtocolExtractor::new(
+            ProtocolExtractor::<
+                ExtractorPgGateway,
+                EthereumTokenPreProcessor,
+                DynamicContractIndexer<
+                    EVMBatchAccountExtractor,
+                    EVMEntrypointService,
+                    CachedGateway,
+                >,
+            >::new(
                 gw,
                 &self.config.name,
                 self.config.chain,
@@ -501,6 +556,7 @@ impl ExtractorBuilder {
                 protocol_types,
                 token_pre_processor.clone(),
                 post_processor,
+                dci_plugin,
             )
             .await?,
         ));
@@ -514,8 +570,9 @@ impl ExtractorBuilder {
             .extractor
             .clone()
             .expect("Extractor not set");
+        let extractor_id = extractor.get_id();
 
-        tracing::Span::current().record("id", format!("{}", extractor.get_id()));
+        tracing::Span::current().record("id", format!("{extractor_id}"));
 
         self.ensure_spkg().await?;
 
@@ -540,10 +597,9 @@ impl ExtractorBuilder {
             self.config.start_block,
             self.config.stop_block.unwrap_or(0) as u64,
             self.final_block_only,
-            extractor.get_id().to_string(),
+            extractor_id.to_string(),
         );
 
-        let id = extractor.get_id();
         let (ctrl_tx, ctrl_rx) = mpsc::channel(128);
         let runner = ExtractorRunner::new(
             extractor,
@@ -554,7 +610,7 @@ impl ExtractorBuilder {
         );
 
         let handle = runner.run();
-        Ok((handle, ExtractorHandle::new(id, ctrl_tx)))
+        Ok((handle, ExtractorHandle::new(extractor_id, ctrl_tx)))
     }
 }
 
@@ -642,23 +698,17 @@ mod test {
         // Build the ExtractorRunnerBuilder
         let extractor = Arc::new(mock_extractor);
         let builder = ExtractorBuilder::new(
-            &ExtractorConfig::new(
-                "test_module".to_owned(),
-                Chain::Ethereum,
-                ImplementationType::Vm,
-                0,
-                0,
-                None,
-                vec![ProtocolTypeConfig {
+            &ExtractorConfig {
+                name: "test_module".to_owned(),
+                implementation_type: ImplementationType::Vm,
+                protocol_types: vec![ProtocolTypeConfig {
                     name: "test_module_pool".to_owned(),
                     financial_type: FinancialType::Swap,
                 }],
-                "./test/spkg/substreams-ethereum-quickstart-v1.0.0.spkg".to_owned(),
-                "test_module".to_owned(),
-                vec![],
-                0,
-                None,
-            ),
+                spkg: "./test/spkg/substreams-ethereum-quickstart-v1.0.0.spkg".to_owned(),
+                module_name: "test_module".to_owned(),
+                ..Default::default()
+            },
             "https://mainnet.eth.streamingfast.io",
             None,
         )

@@ -1820,7 +1820,7 @@ mod test {
     use tycho_common::storage::BlockIdentifier;
 
     use super::*;
-    use crate::postgres::{db_fixtures, db_fixtures::yesterday_half_past_midnight};
+    use crate::postgres::db_fixtures;
 
     type EVMGateway = PostgresGateway;
 
@@ -3063,7 +3063,7 @@ mod test {
         setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
 
-        let days_cutoff: Option<NaiveDateTime> = Some(yesterday_half_past_midnight());
+        let days_cutoff: Option<NaiveDateTime> = Some(db_fixtures::yesterday_midnight());
 
         let tokens = gw
             .get_tokens(Chain::Ethereum, None, QualityRange::None(), days_cutoff, None, &mut conn)

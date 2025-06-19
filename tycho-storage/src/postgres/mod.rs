@@ -148,6 +148,8 @@ pub mod builder;
 pub mod cache;
 mod chain;
 mod contract;
+pub mod direct;
+mod entry_point;
 mod extraction_state;
 mod orm;
 mod protocol;
@@ -926,7 +928,7 @@ pub mod db_fixtures {
                     .unwrap(),
                 )),
                 schema::block::number.eq(2),
-                schema::block::ts.eq(yesterday_one_am()),
+                schema::block::ts.eq(yesterday_half_past_midnight()),
                 schema::block::chain_id.eq(chain_id),
             ),
         ];

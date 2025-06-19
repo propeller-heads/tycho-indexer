@@ -19,7 +19,8 @@ use tycho_common::{
         PaginationResponse, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
         ProtocolStateRequestBody, ProtocolStateRequestResponse, ProtocolSystemsRequestBody,
         ProtocolSystemsRequestResponse, ResponseToken, StateRequestBody, StateRequestResponse,
-        TokensRequestBody, TokensRequestResponse, VersionParam,
+        TokensRequestBody, TokensRequestResponse, TracedEntryPointRequestBody,
+        TracedEntryPointRequestResponse, VersionParam,
     },
     Bytes,
 };
@@ -510,6 +511,61 @@ pub trait RPCClient: Send + Sync {
             }
         }
     }
+
+    async fn get_traced_entry_points(
+        &self,
+        request: &TracedEntryPointRequestBody,
+    ) -> Result<TracedEntryPointRequestResponse, RPCError>;
+
+    async fn get_traced_entry_points_paginated(
+        &self,
+        chain: Chain,
+        protocol_system: &str,
+        component_ids: &[String],
+        chunk_size: usize,
+        concurrency: usize,
+    ) -> Result<TracedEntryPointRequestResponse, RPCError> {
+        let semaphore = Arc::new(Semaphore::new(concurrency));
+        let chunked_bodies = component_ids
+            .chunks(chunk_size)
+            .map(|c| TracedEntryPointRequestBody {
+                chain,
+                protocol_system: protocol_system.to_string(),
+                component_ids: Some(c.to_vec()),
+                pagination: PaginationParams { page: 0, page_size: chunk_size as i64 },
+            })
+            .collect::<Vec<_>>();
+
+        let mut tasks = Vec::new();
+        for body in chunked_bodies.iter() {
+            let sem = semaphore.clone();
+            tasks.push(async move {
+                let _permit = sem
+                    .acquire()
+                    .await
+                    .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
+                self.get_traced_entry_points(body).await
+            });
+        }
+
+        try_join_all(tasks)
+            .await
+            .map(|responses| {
+                let traced_entry_points = responses
+                    .clone()
+                    .into_iter()
+                    .flat_map(|r| r.traced_entry_points)
+                    .collect();
+                let total = responses
+                    .iter()
+                    .map(|r| r.pagination.total)
+                    .sum();
+                TracedEntryPointRequestResponse {
+                    traced_entry_points,
+                    pagination: PaginationResponse { page: 0, page_size: chunk_size as i64, total },
+                }
+            })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -797,17 +853,56 @@ impl RPCClient for HttpRPCClient {
         trace!(?component_tvl, "Received component_tvl response from Tycho server");
         Ok(component_tvl)
     }
+
+    async fn get_traced_entry_points(
+        &self,
+        request: &TracedEntryPointRequestBody,
+    ) -> Result<TracedEntryPointRequestResponse, RPCError> {
+        let uri = format!(
+            "{}/{TYCHO_SERVER_VERSION}/traced_entry_points",
+            self.url
+                .to_string()
+                .trim_end_matches('/')
+        );
+        debug!(%uri, "Sending traced_entry_points request to Tycho server");
+        trace!(?request, "Sending request to Tycho server");
+
+        let response = self
+            .http_client
+            .post(&uri)
+            .json(request)
+            .send()
+            .await
+            .map_err(|e| RPCError::HttpClient(e.to_string()))?;
+        trace!(?response, "Received response from Tycho server");
+
+        let body = response
+            .text()
+            .await
+            .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
+        let entrypoints =
+            serde_json::from_str::<TracedEntryPointRequestResponse>(&body).map_err(|err| {
+                error!("Failed to parse traced_entry_points response: {:?}", &body);
+                RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
+            })?;
+        trace!(?entrypoints, "Received traced_entry_points response from Tycho server");
+        Ok(entrypoints)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, str::FromStr};
+    use std::{
+        collections::{HashMap, HashSet},
+        str::FromStr,
+    };
 
     use mockito::Server;
     use rstest::rstest;
     // TODO: remove once deprecated ProtocolId struct is removed
     #[allow(deprecated)]
     use tycho_common::dto::ProtocolId;
+    use tycho_common::dto::TracingParams;
 
     use super::*;
 
@@ -1219,5 +1314,103 @@ mod tests {
 
         mocked_server.assert();
         assert_eq!(component_tvl.get("component1"), Some(&100.0));
+    }
+
+    #[tokio::test]
+    async fn test_get_traced_entry_points() {
+        let mut server = Server::new_async().await;
+        let server_resp = r#"
+        {
+            "traced_entry_points": {
+                "component_1": [
+                    [
+                        {
+                            "entry_point": {
+                                "external_id": "entrypoint_a",
+                                "target": "0x0000000000000000000000000000000000000001",
+                                "signature": "sig()"
+                            },
+                            "params": {
+                                "method": "rpctracer",
+                                "caller": "0x000000000000000000000000000000000000000a",
+                                "calldata": "0x000000000000000000000000000000000000000b"
+                            }
+                        },
+                        {
+                            "retriggers": [
+                                [
+                                    "0x00000000000000000000000000000000000000aa",
+                                    "0x0000000000000000000000000000000000000aaa"
+                                ]
+                            ],
+                            "accessed_slots": {
+                                "0x0000000000000000000000000000000000aaaa": [
+                                    "0x0000000000000000000000000000000000aaaa"
+                                ]
+                            }
+                        }
+                    ]
+                ]
+            },
+            "pagination": {
+                "page": 0,
+                "page_size": 20,
+                "total": 1
+            }
+        }
+        "#;
+        // test that the response is deserialized correctly
+        serde_json::from_str::<TracedEntryPointRequestResponse>(server_resp).expect("deserialize");
+
+        let mocked_server = server
+            .mock("POST", "/v1/traced_entry_points")
+            .expect(1)
+            .with_body(server_resp)
+            .create_async()
+            .await;
+        let client = HttpRPCClient::new(server.url().as_str(), None).expect("create client");
+
+        let response = client
+            .get_traced_entry_points(&Default::default())
+            .await
+            .expect("get traced entry points");
+        let entrypoints = response.traced_entry_points;
+
+        mocked_server.assert();
+        assert_eq!(entrypoints.len(), 1);
+        let comp1_entrypoints = entrypoints
+            .get("component_1")
+            .expect("component_1 entrypoints should exist");
+        assert_eq!(comp1_entrypoints.len(), 1);
+
+        let (entrypoint, trace_result) = &comp1_entrypoints[0];
+        assert_eq!(entrypoint.entry_point.external_id, "entrypoint_a");
+        assert_eq!(
+            entrypoint.entry_point.target,
+            Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap()
+        );
+        assert_eq!(entrypoint.entry_point.signature, "sig()");
+        let TracingParams::RPCTracer(rpc_params) = &entrypoint.params;
+        assert_eq!(
+            rpc_params.caller,
+            Some(Bytes::from("0x000000000000000000000000000000000000000a"))
+        );
+        assert_eq!(rpc_params.calldata, Bytes::from("0x000000000000000000000000000000000000000b"));
+
+        assert_eq!(
+            trace_result.retriggers,
+            HashSet::from([(
+                Bytes::from("0x00000000000000000000000000000000000000aa"),
+                Bytes::from("0x0000000000000000000000000000000000000aaa")
+            )])
+        );
+        assert_eq!(trace_result.accessed_slots.len(), 1);
+        assert_eq!(
+            trace_result.accessed_slots,
+            HashMap::from([(
+                Bytes::from("0x0000000000000000000000000000000000aaaa"),
+                HashSet::from([Bytes::from("0x0000000000000000000000000000000000aaaa")])
+            )])
+        );
     }
 }
