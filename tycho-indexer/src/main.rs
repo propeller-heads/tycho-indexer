@@ -263,7 +263,7 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
         .dci_plugin
         .clone()
         .map_or(Ok(None), |s| match s.as_str() {
-            "rpc" => Ok(Some(DCIType::RPC(global_args.rpc_url.clone()))),
+            "rpc" => Ok(Some(DCIType::RPC)),
             _ => Err(ExtractionError::Setup(format!("Unknown DCI plugin: {s}"))),
         })?;
 
@@ -439,6 +439,7 @@ async fn build_all_extractors(
             .unwrap_or_else(|| tokio::runtime::Handle::current());
 
         let (task, handle) = ExtractorBuilder::new(extractor_config, endpoint_url, s3_bucket)
+            .rpc_url(rpc_url)
             .build(chain_state, cached_gw, token_pre_processor, &protocol_cache)
             .await?
             .set_runtime(runtime)

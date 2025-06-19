@@ -368,7 +368,7 @@ impl ExtractorConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub enum DCIType {
     /// RPC DCI plugin - uses the RPC endpoint to fetch the account data
-    RPC(String),
+    RPC,
 }
 
 pub struct ExtractorBuilder {
@@ -381,6 +381,8 @@ pub struct ExtractorBuilder {
     /// Handle of the tokio runtime on which the extraction tasks will be run.
     /// If 'None' the default runtime will be used.
     runtime_handle: Option<Handle>,
+    /// Global RPC URL to use for DCI plugins
+    rpc_url: Option<String>,
 }
 
 pub type HandleResult = (JoinHandle<Result<(), ExtractionError>>, ExtractorHandle);
@@ -395,6 +397,7 @@ impl ExtractorBuilder {
             extractor: None,
             final_block_only: false,
             runtime_handle: None,
+            rpc_url: None,
         }
     }
 
@@ -426,6 +429,12 @@ impl ExtractorBuilder {
 
     pub fn set_runtime(mut self, runtime: Handle) -> Self {
         self.runtime_handle = Some(runtime);
+        self
+    }
+
+    /// Set the global RPC URL to use for DCI plugins
+    pub fn rpc_url(mut self, rpc_url: &str) -> Self {
+        self.rpc_url = Some(rpc_url.to_string());
         self
     }
 
@@ -508,7 +517,13 @@ impl ExtractorBuilder {
 
         let dci_plugin = if let Some(ref dci_type) = self.config.dci_plugin {
             Some(match dci_type {
-                DCIType::RPC(rpc_url) => {
+                DCIType::RPC => {
+                    let rpc_url = self.rpc_url.as_ref().ok_or_else(|| {
+                        ExtractionError::Setup(
+                            "RPC URL is required for RPC DCI plugin but not provided".to_string(),
+                        )
+                    })?;
+
                     let account_extractor =
                         EVMBatchAccountExtractor::new(rpc_url, self.config.chain)
                             .await
