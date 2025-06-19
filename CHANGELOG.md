@@ -1,3 +1,11 @@
+## [0.71.1](https://github.com/propeller-heads/tycho-indexer/compare/0.71.0...0.71.1) (2025-06-19)
+
+
+### Bug Fixes
+
+* get DCI plugin RPC url from global config ([88f2b91](https://github.com/propeller-heads/tycho-indexer/commit/88f2b91ab1e85fddd4883324b707e7c610d29b34))
+* get DCI plugin RPC url from global config ([#596](https://github.com/propeller-heads/tycho-indexer/issues/596)) ([cc922c4](https://github.com/propeller-heads/tycho-indexer/commit/cc922c4d0eef3cfbdab365f6efad8982b2be0bbc))
+
 ## [0.71.0](https://github.com/propeller-heads/tycho-indexer/compare/0.70.9...0.71.0) (2025-06-19)
 
 
