@@ -254,19 +254,10 @@ where
         }
 
         let component_tvl = if self.include_tvl {
-            let body =
-                ComponentTvlRequestBody::id_filtered(request_ids.clone(), self.extractor_id.chain);
-            self.rpc_client
-                .get_component_tvl_paginated(&body, 100, 4)
-                .await?
-                .tvl
-        } else {
-            HashMap::new()
-        };
-
-        let component_tvl = if self.include_tvl {
-            let body =
-                ComponentTvlRequestBody::id_filtered(request_ids.clone(), self.extractor_id.chain);
+            let body = ComponentTvlRequestBody::id_filtered(
+                component_ids.clone(),
+                self.extractor_id.chain,
+            );
             self.rpc_client
                 .get_component_tvl_paginated(&body, 100, 4)
                 .await?
@@ -529,9 +520,7 @@ where
                 warn!(shared = ?&shared, "Deltas channel closed, resetting shared state.");
                 shared.last_synced_block = None;
 
-                return Err(SynchronizerError::ConnectionError(
-                    "Deltas channel closed".to_string(),
-                ));
+                return Err(SynchronizerError::ConnectionError("Deltas channel closed".to_string()));
             }
         }
     }
@@ -850,7 +839,7 @@ mod test {
         };
 
         let snap = state_sync
-            .get_snapshots(header, &tracker, Some(&components_arg))
+            .get_snapshots(header, &mut tracker, Some(&components_arg))
             .await
             .expect("Retrieving snapshot failed");
 
@@ -865,6 +854,13 @@ mod test {
             .returning(|_| Ok(state_snapshot_native()));
         rpc.expect_get_component_tvl()
             .returning(|_| Ok(component_tvl_snapshot()));
+        rpc.expect_get_traced_entry_points()
+            .returning(|_| {
+                Ok(TracedEntryPointRequestResponse {
+                    traced_entry_points: HashMap::new(),
+                    pagination: PaginationResponse::new(0, 20, 0),
+                })
+            });
         let state_sync = with_mocked_clients(true, true, Some(rpc), None);
         let mut tracker = ComponentTracker::new(
             Chain::Ethereum,
@@ -890,6 +886,7 @@ mod test {
                                 state,
                                 component: component.clone(),
                                 component_tvl: Some(100.0),
+                                entrypoints: vec![],
                             },
                         )
                     })
@@ -1026,7 +1023,7 @@ mod test {
         };
 
         let snap = state_sync
-            .get_snapshots(header, &tracker, Some(&components_arg))
+            .get_snapshots(header, &mut tracker, Some(&components_arg))
             .await
             .expect("Retrieving snapshot failed");
 
@@ -1043,6 +1040,13 @@ mod test {
             .returning(|_| Ok(state_snapshot_vm()));
         rpc.expect_get_component_tvl()
             .returning(|_| Ok(component_tvl_snapshot()));
+        rpc.expect_get_traced_entry_points()
+            .returning(|_| {
+                Ok(TracedEntryPointRequestResponse {
+                    traced_entry_points: HashMap::new(),
+                    pagination: PaginationResponse::new(0, 20, 0),
+                })
+            });
         let state_sync = with_mocked_clients(false, true, Some(rpc), None);
         let mut tracker = ComponentTracker::new(
             Chain::Ethereum,

@@ -1269,9 +1269,9 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
          ("apiKey" = [])
     ),
 )]
-pub async fn component_tvl<G: Gateway>(
+pub async fn component_tvl<G: Gateway, T: EntryPointTracer>(
     body: web::Json<dto::ComponentTvlRequestBody>,
-    handler: web::Data<RpcHandler<G>>,
+    handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);

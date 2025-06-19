@@ -12,14 +12,14 @@ use tokio::task::JoinHandle;
 use tracing::info;
 use tycho_common::{
     dto::{
-        AccountUpdate, AddEntryPointRequestBody, BlockParam, Chain, ChangeType,
-        ComponentTvlRequestBody, ComponentTvlRequestResponse, ContractId, Health, PaginationParams,
-        PaginationResponse, ProtocolComponent, ProtocolComponentRequestResponse,
-        ProtocolComponentsRequestBody, ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody,
-        ProtocolStateRequestResponse, ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse,
-        ResponseAccount, ResponseProtocolState, ResponseToken, StateRequestBody,
-        StateRequestResponse, TokensRequestBody, TokensRequestResponse,
-        TracedEntryPointRequestBody, TracedEntryPointRequestResponse, VersionParam,
+        AccountUpdate, BlockParam, Chain, ChangeType, ComponentTvlRequestBody,
+        ComponentTvlRequestResponse, ContractId, Health, PaginationParams, PaginationResponse,
+        ProtocolComponent, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
+        ProtocolId, ProtocolStateDelta, ProtocolStateRequestBody, ProtocolStateRequestResponse,
+        ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, ResponseAccount,
+        ResponseProtocolState, ResponseToken, StateRequestBody, StateRequestResponse,
+        TokensRequestBody, TokensRequestResponse, TracedEntryPointRequestBody,
+        TracedEntryPointRequestResponse, VersionParam,
     },
     storage::Gateway,
 };
@@ -282,7 +282,7 @@ where
                 )
                 .service(
                     web::resource(format!("/{}/component_tvl", self.prefix))
-                        .route(web::post().to(rpc::component_tvl::<G>)),
+                        .route(web::post().to(rpc::component_tvl::<G, EVMEntrypointService>)),
                 )
                 .wrap(RequestTracing::new())
                 .service(

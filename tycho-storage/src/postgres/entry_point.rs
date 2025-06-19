@@ -39,7 +39,7 @@ impl PostgresGateway {
     ) -> Result<(), StorageError> {
         use schema::{entry_point::dsl::*, protocol_component_uses_entry_point::dsl::*};
 
-        let chain_id = self.get_chain_id(chain);
+        let chain_id = self.get_chain_id(chain)?;
 
         let pc_ids = orm::ProtocolComponent::ids_by_external_ids(
             &new_data
@@ -210,7 +210,7 @@ impl PostgresGateway {
 
         // Insert links between protocol components and tracing params
         if !new_links.is_empty() {
-            let chain_id = self.get_chain_id(chain);
+            let chain_id = self.get_chain_id(chain)?;
 
             // Fetch entry points tracing params, we can't use .returning() on the insert above
             // because it doesn't return the ids on conflicts.
@@ -309,7 +309,7 @@ impl PostgresGateway {
             protocol_component_uses_entry_point as pcuep,
         };
 
-        let ps_id = self.get_protocol_system_id(&filter.protocol_system);
+        let ps_id = self.get_protocol_system_id(&filter.protocol_system)?;
         let mut component_query = schema::protocol_component::table
             .filter(pc::protocol_system_id.eq(ps_id))
             .select(pc::id)
@@ -394,7 +394,7 @@ impl PostgresGateway {
             protocol_component_uses_entry_point as pcuep,
         };
 
-        let ps_id = self.get_protocol_system_id(&filter.protocol_system);
+        let ps_id = self.get_protocol_system_id(&filter.protocol_system)?;
         let mut component_query = schema::protocol_component::table
             .filter(pc::protocol_system_id.eq(ps_id))
             .select(pc::id)
