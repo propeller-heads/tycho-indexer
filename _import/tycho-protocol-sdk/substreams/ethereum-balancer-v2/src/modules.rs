@@ -76,65 +76,72 @@ pub fn map_relative_balances(
                 abi::vault::events::PoolBalanceChanged::match_and_decode(vault_log.log)
             {
                 let component_id = format!("0x{}", hex::encode(ev.pool_id));
+                let bpt_token = hex::decode(&component_id[2..42]).unwrap();
 
                 if store
                     .get_last(format!("pool:{}", &component_id[..42]))
                     .is_some()
                 {
-                    for (token, delta) in ev
-                        .tokens
-                        .iter()
-                        .zip(ev.deltas.iter())
-                        .filter(|(token, _)| **token != hex::decode(&component_id[2..42]).unwrap())
-                    {
-                        deltas.push(BalanceDelta {
-                            ord: vault_log.ordinal(),
-                            tx: Some(vault_log.receipt.transaction.into()),
-                            token: token.to_vec(),
-                            delta: delta.to_signed_bytes_be(),
-                            component_id: component_id.as_bytes().to_vec(),
-                        });
+                    for (token, delta) in ev.tokens.iter().zip(ev.deltas.iter()) {
+                        // BPT tokens not supported - their balance handling is currently bugged
+                        if *token != bpt_token {
+                            deltas.push(BalanceDelta {
+                                ord: vault_log.ordinal(),
+                                tx: Some(vault_log.receipt.transaction.into()),
+                                token: token.to_vec(),
+                                delta: delta.to_signed_bytes_be(),
+                                component_id: component_id.as_bytes().to_vec(),
+                            });
+                        }
                     }
                 }
             } else if let Some(ev) = abi::vault::events::Swap::match_and_decode(vault_log.log) {
                 let component_id = format!("0x{}", hex::encode(ev.pool_id));
+                let bpt_token = hex::decode(&component_id[2..42]).unwrap();
 
                 if store
                     .get_last(format!("pool:{}", &component_id[..42]))
                     .is_some()
                 {
-                    deltas.extend_from_slice(&[
-                        BalanceDelta {
+                    // BPT tokens not supported - their balance handling is currently bugged
+                    if ev.token_in != bpt_token {
+                        deltas.push(BalanceDelta {
                             ord: vault_log.ordinal(),
                             tx: Some(vault_log.receipt.transaction.into()),
                             token: ev.token_in.to_vec(),
                             delta: ev.amount_in.to_signed_bytes_be(),
                             component_id: component_id.as_bytes().to_vec(),
-                        },
-                        BalanceDelta {
+                        });
+                    }
+                    // BPT tokens not supported - their balance handling is currently bugged
+                    if ev.token_out != bpt_token {
+                        deltas.push(BalanceDelta {
                             ord: vault_log.ordinal(),
                             tx: Some(vault_log.receipt.transaction.into()),
                             token: ev.token_out.to_vec(),
                             delta: ev.amount_out.neg().to_signed_bytes_be(),
                             component_id: component_id.as_bytes().to_vec(),
-                        },
-                    ]);
+                        });
+                    }
                 }
             } else if let Some(ev) =
                 abi::vault::events::PoolBalanceManaged::match_and_decode(vault_log.log)
             {
                 let component_id = format!("0x{}", hex::encode(ev.pool_id));
+                let bpt_token = hex::decode(&component_id[2..42]).unwrap();
                 if store
                     .get_last(format!("pool:{}", &component_id[..42]))
                     .is_some()
+                    // BPT tokens not supported - their balance handling is currently bugged
+                    && ev.token != bpt_token
                 {
-                    deltas.extend_from_slice(&[BalanceDelta {
+                    deltas.push(BalanceDelta {
                         ord: vault_log.ordinal(),
                         tx: Some(vault_log.receipt.transaction.into()),
                         token: ev.token.to_vec(),
                         delta: ev.cash_delta.to_signed_bytes_be(),
                         component_id: component_id.as_bytes().to_vec(),
-                    }]);
+                    });
                 }
             }
 

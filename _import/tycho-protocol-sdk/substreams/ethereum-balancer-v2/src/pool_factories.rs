@@ -217,8 +217,8 @@ pub fn address_map(
             Some(
                 ProtocolComponent::new(&format!("0x{}", hex::encode(pool_registered.pool_id)))
                     .with_contracts(&[pool_created.pool.clone(), VAULT_ADDRESS.to_vec()])
-                    // .with_tokens(&tokens_registered.tokens) //TODO: does it make sense to include
-                    // BPT token here?
+                    // .with_tokens(&tokens_registered.tokens) // TODO: add this back if we need to
+                    // track BPT
                     .with_tokens(&[
                         create_call.main_token.clone(),
                         create_call.wrapped_token.clone(),
