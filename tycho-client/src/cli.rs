@@ -140,7 +140,6 @@ pub async fn run_cli() -> Result<(), String> {
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level)),
         )
         .with_writer(non_blocking)
-        .with_ansi(false)
         .finish();
 
     tracing::subscriber::set_global_default(subscriber)
