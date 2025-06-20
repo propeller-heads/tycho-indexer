@@ -1,25 +1,36 @@
-#[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
+use std::collections::HashMap;
 
-    use alloy_primitives::U256;
-    use rstest::rstest;
-    use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-    use tycho_common::{dto::ResponseProtocolState, Bytes};
+use alloy_primitives::U256;
+use rstest::rstest;
+use tycho_client::feed::{synchronizer::ComponentWithState, Header};
+use tycho_common::{dto::ResponseProtocolState, Bytes};
 
-    use super::super::state::CowAMMState;
-    use crate::protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock};
+use crate::{
+    evm::protocol::{
+        cowamm::{
+            state::CowAMMState,
+            bmath,
+        },
+    },
+    models::{Balances, Token},
+    protocol::{
+        errors::{SimulationError, TransitionError, InvalidSnapshotError},
+        models::TryFromWithBlock
+    },
+};
 
-    fn header() -> Header {
-        Header {
-            number: 1,
-            hash: Bytes::from(vec![0; 32]),
-            parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-        }
+const BYTES: usize = 32;
+
+fn header() -> Header {
+    Header {
+        number: 1,
+        hash: Bytes::from(vec![0; 32]),
+        parent_hash: Bytes::from(vec![0; 32]),
+        revert: false,
     }
+}
 
-    impl TryFromWithBlock<ComponentWithState> for CowAMMState {
+impl TryFromWithBlock<ComponentWithState> for CowAMMState {
     type Error = InvalidSnapshotError;
 
     async fn try_from_with_block(
@@ -29,53 +40,61 @@ mod tests {
         _all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
        
-        let token0 = U256::from_big_endian(
+        let token_a = snapshot
+            .component
+            .static_attributes
+            .get("token_a")
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("token_a".to_string()))?
+            .clone();
+
+        let token_b = snapshot
+            .component
+            .static_attributes
+            .get("token_b")
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("token_b".to_string()))?
+            .clone();
+
+        let lp_token = snapshot
+            .component
+            .static_attributes
+            .get("lp_token")
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("lp_token".to_string()))?
+            .clone();
+
+        let fee = 0u64;
+
+        //weight_a and weight_b are left padded big endian numbers of 32 bytes
+        let weight_a =  U256::from_be_bytes::<BYTES>(
             snapshot
                 .component
                 .static_attributes
-                .get("token_a")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("token_a".to_string()))?,
+                .get("weight_a")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("weight_a".to_string()))?
+                .as_ref()
+                .try_into()
+                .map_err(|err| {
+                    InvalidSnapshotError::ValueError(format!("weight_a length mismatch: {err:?}"))
+                })?,
         );
 
-        let token1 = U256::from_big_endian(
+        let weight_b = U256::from_be_bytes::<BYTES>(
             snapshot
                 .component
                 .static_attributes
-                .get("token_b")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("token_b".to_string()))?,
+                .get("weight_b")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("weight_b".to_string()))?
+                .as_ref()
+                .try_into()
+                .map_err(|err| {
+                    InvalidSnapshotError::ValueError(format!("weight_b length mismatch: {err:?}"))
+                })?,
         );
 
-        let lp_token = U256::from_big_endian(
-            snapshot
-                .component
-                .static_attributes
-                .get("lp_token")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("lp_token".to_string()))?,
-        );
-
-        let fee = u64::from_be_bytes(0);
-
-        let weight_a = U256::from_big_endian(
-            snapshot
-                .component
-                .static_attributes
-                .get("normalized_weight_a")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("normalized_weight_a".to_string()))?,
-        );
-
-        let weight_b = U256::from_big_endian(
-            snapshot
-                .component
-                .static_attributes
-                .get("normalized_weight_a")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("normalized_weight_a".to_string()))?,
-        );
-
-        Ok(Self::new(token0, token1, lp_token, fee, weight_a, weight_b))
+        Ok(Self::new(token_a, token_b, lp_token, weight_a, weight_b, fee))
     }
 }
 
-    #[tokio::test]
+#[tokio::test]
     async fn test_cowamm_try_from() {
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
@@ -85,10 +104,8 @@ mod tests {
                     ("token_b".to_string(), Bytes::from(vec![0; 32])),
                     ("lp_token".to_string(), Bytes::from(vec![0; 32])),
                     ("fee".to_string(), Bytes::from(vec![0; 32])),
-                    ("normalized_weight_a".to_string(), Bytes::from(vec![0; 32])),
-                    ("normalized_weight_b".to_string(), Bytes::from(vec![0; 32])),
-                    ("normalized_weight_a".to_string(), Bytes::from(vec![0; 32])),
-                    ("normalized_weight_b".to_string(), Bytes::from(vec![0; 32])),
+                    ("weight_a".to_string(), Bytes::from(vec![0; 32])),
+                    ("weight_b".to_string(), Bytes::from(vec![0; 32])),
                 ]),
                 balances: HashMap::new(),
             },
@@ -105,7 +122,7 @@ mod tests {
         .await;
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), CowAMMState::new(U256::from(0u64), U256::from(0u64)));
+        assert_eq!(result.unwrap(), CowAMMState::new(Bytes::from(vec![0; 32]), Bytes::from(vec![0; 32]), Bytes::from(vec![0; 32]),U256::from(0), U256::from(0), 0u64));
     }
 
     #[tokio::test]
@@ -114,16 +131,16 @@ mod tests {
     #[case::missing_token1("token_b")]
     #[case::missing_lp_token("lp_token")]
     #[case::missing_fee("fee")]
-    #[case::missing_normalized_weight_a("normalized_weight_a")]
-    #[case::missing_normalized_weight_b("normalized_weight_b")]
+    #[case::missing_weight_a("weight_a")]
+    #[case::missing_weight_b("weight_b")]
     async fn test_cowamm_try_from_missing_attribute(#[case] missing_attribute: &str) {
         let mut attributes = HashMap::from([
             ("token_a".to_string(), Bytes::from(vec![0; 32])),
             ("token_b".to_string(), Bytes::from(vec![0; 32])),
             ("lp_token".to_string(), Bytes::from(vec![0; 32])),
             ("fee".to_string(), Bytes::from(vec![0; 32])),
-            ("normalized_weight_a".to_string(), Bytes::from(vec![0; 32])),
-            ("normalized_weight_b".to_string(), Bytes::from(vec![0; 32])),
+            ("weight_a".to_string(), Bytes::from(vec![0; 32])),
+            ("weight_b".to_string(), Bytes::from(vec![0; 32])),
         ]);
         attributes.remove(missing_attribute);
 
@@ -148,7 +165,6 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            InvalidSnapshotError::MissingAttribute(ref x) if x == missing_attribute
+            InvalidSnapshotError::MissingAttribute(ref x) if x == missing_attribute 
         ));
-    }
 }

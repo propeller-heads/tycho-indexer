@@ -4,14 +4,13 @@ use alloy_primitives::{Address, U256};
 use num_bigint::BigUint;
 // use rug::{float::Round, Float};
 use tycho_common::{dto::ProtocolStateDelta, Bytes};
-use super::constants::{BONE};
-use super::error::CowAMMError;
-use super::bmath::calculate_out_given_in;
 
 use crate::{
     evm::protocol::{
         cowamm::{
             bmath,
+            error::CowAMMError,
+            constants::BONE,
         },
         u256_num::{u256_to_f64, u256_to_biguint, biguint_to_u256}, 
         safe_math::{div_mod_u256, safe_div_u256, safe_mul_u256, safe_add_u256, safe_sub_u256}
@@ -20,7 +19,7 @@ use crate::{
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,
-        state::ProtocolSim,
+        state::{ProtocolSim},
     },
 };
 
@@ -30,21 +29,79 @@ const MAX_OUT_FACTOR: u64 = 33;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TokenState {
-    pub liquidity: U256,
+    pub token: Token, // should it be Token 
     pub weight: U256,
-    pub token: Token,
+    pub liquidity: U256, 
+}
+
+
+impl TokenState {
+    /// Creates a new `TokenState` instance.
+    ///
+    /// # Arguments
+    /// - `token`: The token associated with this state.
+    /// - `weight`: The normalized weight of the token.
+    /// - `liquidity`: The current liquidity of the token in the pool.
+    ///
+    /// # Returns
+    /// A new `TokenState` instance.
+    pub fn new(token: Token, weight: U256, liquidity: U256) -> Self {
+        Self {
+            token,
+            weight,
+            liquidity,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CowAMMPoolState {
+pub struct CowAMMState {
      /// The Pool Address.
-    address: Address,
+    address: Bytes,
     state: HashMap<Bytes, TokenState>, 
     /// The Swap Fee on the Pool.
-    fee: u32,
+    fee: u64,
 }
 
-impl ProtocolSim for CowAMMPoolState {
+impl CowAMMState {
+    /// Creates a new `CowAMMState` instance.
+    ///
+    /// # Arguments
+    /// - `token_a`: The first token in the pair.
+    /// - `token_b`: The second token in the pair.
+    /// - `lp_token`: The pool address (usually the LP token address).
+    /// - `fee`: The swap fee for the pool.
+    /// - `weight_a`: The normalized weight of `token_a`.
+    /// - `weight_b`: The normalized weight of `token_b`.
+    ///
+    /// # Returns
+    /// A new `CowAMMState` with token states initialized.
+    pub fn new(
+        token_a: Bytes,
+        token_b: Bytes,
+        lp_token: Bytes,
+        weight_a: U256,
+        weight_b: U256,
+        fee: u64,
+    ) -> Self {
+        let mut state = HashMap::new();
+
+        let t1 = format!("0x{encoded}", encoded = hex::encode::<Vec<u8>>(token_a.clone().to_vec()));
+        let t2 = format!("0x{encoded}", encoded = hex::encode::<Vec<u8>>(token_b.clone().to_vec()));
+
+        //default values that can be updated 
+        state.insert(token_a, TokenState::new(Token::new(&t1, 18, "", BigUint::from(21_000u32)), weight_a, U256::from(0)));
+        state.insert(token_b, TokenState::new(Token::new(&t2, 18, "", BigUint::from(21_000u32)), weight_b, U256::from(0)));
+
+        CowAMMState {
+            address: lp_token, // address of pool and lp_token are the same
+            state,
+            fee,
+        }
+    }
+}
+
+impl ProtocolSim for CowAMMState {
     fn fee(&self) -> f64 {
         COWAMM_FEE
     }
@@ -132,23 +189,24 @@ impl ProtocolSim for CowAMMPoolState {
         
         let gas_used = U256::from(120000); //how can we determine the actual gas used? ans - (probably have to check calcInGivenOut() method when i run those unit test with -vvvvv in foundry)
         let mut new_state = self.clone();
+        //chatgpt said this actually works because of the mutable hashmap borrow? loll okay will test it
+           { 
+            let new_token_in_state = new_state
+                .state
+                .get_mut(&token_in.address)
+                .ok_or(CowAMMError::TokenOutDoesNotExist)
+                .map_err(|err| SimulationError::FatalError(format!("token not found: {err:?}")))?;
+                 new_token_in_state.liquidity = safe_add_u256(bal1, amount_in)?;
+           }
 
-        let mut liq1_mut = new_state
-            .state
-            .get_mut(&token_out.address)
-            .ok_or(CowAMMError::TokenOutDoesNotExist)
-            .map_err(|err| SimulationError::FatalError(format!("token not found: {err:?}")))?
-            .liquidity;
-
-        let mut liq2_mut = new_state
-            .state
-            .get_mut(&token_out.address)
-            .ok_or(CowAMMError::TokenOutDoesNotExist)
-            .map_err(|err| SimulationError::FatalError(format!("token not found: {err:?}")))?
-            .liquidity;
-
-        liq1_mut = safe_add_u256(bal1, amount_in)?;
-        liq2_mut = safe_sub_u256(bal2, amount_out)?;
+          {
+            let new_token_out_state = new_state
+                .state
+                .get_mut(&token_out.address)
+                .ok_or(CowAMMError::TokenOutDoesNotExist)
+                .map_err(|err| SimulationError::FatalError(format!("token not found: {err:?}")))?;
+                 new_token_out_state.liquidity = safe_sub_u256(bal2, amount_out)?;
+         }
 
         let res = GetAmountOutResult {
             amount: u256_to_biguint(amount_out),
@@ -216,7 +274,7 @@ impl ProtocolSim for CowAMMPoolState {
     fn eq(&self, other: &dyn ProtocolSim) -> bool {
         other
             .as_any()
-            .downcast_ref::<CowAMMPoolState>()
+            .downcast_ref::<CowAMMState>()
             .is_some_and(|other_state| self == other_state)
     }
 }
@@ -236,10 +294,10 @@ mod tests {
 
     use super::*;
     use crate::{
-        evm::protocol::cowamm::CowAMMPoolState,
+        evm::protocol::cowamm::state::{CowAMMState, ProtocolSim},
         evm::protocol::u256_num::{biguint_to_u256, u256_to_biguint},
-        models::Token,
-        protocol::{errors::{SimulationError, TransitionError}, Balances, ProtocolSim, state::ProtocolSim as _}
+        models::{Token, Balances },
+        protocol::{errors::{SimulationError, TransitionError}}
     };
 
     #[rstest]
@@ -265,15 +323,15 @@ mod tests {
         #[case] amount_in: BigUint,
         #[case] expected_out: BigUint,
     ) {
-        let t0 = Token::new("0x0000000000000000000000000000000000000000", dec0, "T0", BigUint::from(10_000u32));
-        let t1 = Token::new("0x0000000000000000000000000000000000000001", dec1, "T1", BigUint::from(10_000u32));
+        let t0 = Token::new("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB", dec0, "COW", BigUint::from(10_000u32));
+        let t1 = Token::new("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0", dec1, "wstETH", BigUint::from(10_000u32));
 
-        let mut state = CowAMMPoolState {
+        let mut state = CowAMMState {
             address: Address::ZERO,
             state: {
                 let mut m = HashMap::new();
-                m.insert(Bytes::from(t0.address.as_slice()), TokenState { liquidity: r0, weight: U256::from(1u8), token: t0.clone() });
-                m.insert(Bytes::from(t1.address.as_slice()), TokenState { liquidity: r1, weight: U256::from(1u8), token: t1.clone() });
+                m.insert(&Bytes::from(t0.address.as_slice()), TokenState { liquidity: r0, weight: U256::from(1u8), token: t0.clone() });
+                m.insert(&Bytes::from(t1.address.as_slice()), TokenState { liquidity: r1, weight: U256::from(1u8), token: t1.clone() });
                 m
             },
             fee: 0,
@@ -282,7 +340,7 @@ mod tests {
         let res = state.get_amount_out(amount_in.clone(), &t0, &t1).unwrap();
         assert_eq!(res.amount, expected_out);
 
-        let new_state = res.new_state.as_any().downcast_ref::<CowAMMPoolState>().unwrap();
+        let new_state = res.new_state.as_any().downcast_ref::<CowAMMState>().unwrap();
         assert_eq!(new_state.state[&Bytes::from(t0.address.as_slice())].liquidity, r0 + biguint_to_u256(&amount_in));
         assert_eq!(new_state.state[&Bytes::from(t1.address.as_slice())].liquidity, r1 - biguint_to_u256(&expected_out));
         // Original state unchanged
@@ -296,15 +354,15 @@ mod tests {
         let r1 = U256::from_str("43356945776493").unwrap();
         let max = (BigUint::one() << 256) - BigUint::one();
 
-        let t0 = Token::new("0x0000000000000000000000000000000000000000", 18, "T0", BigUint::one());
-        let t1 = Token::new("0x0000000000000000000000000000000000000001", 16, "T1", BigUint::one());
+        let t0 = Token::new("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB", 18, "COW", BigUint::one());
+        let t1 = Token::new("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0", 16, "wstETH", BigUint::one());
 
-        let mut state = CowAMMPoolState {
+        let mut state = CowAMMState {
             address: Address::ZERO,
             state: {
                 let mut m = HashMap::new();
-                m.insert(Bytes::from(t0.address.as_slice()), TokenState { liquidity: r0, weight: U256::from(1u8), token: t0.clone() });
-                m.insert(Bytes::from(t1.address.as_slice()), TokenState { liquidity: r1, weight: U256::from(1u8), token: t1.clone() });
+                m.insert(&Bytes::from(t0.address.as_slice()), TokenState { liquidity: r0, weight: U256::from(1u8), token: t0.clone() });
+                m.insert(&Bytes::from(t1.address.as_slice()), TokenState { liquidity: r1, weight: U256::from(1u8), token: t1.clone() });
                 m
             },
             fee: 0,
@@ -321,10 +379,10 @@ mod tests {
         let r0 = U256::from_str("1000").unwrap();
         let r1 = U256::from_str("100000").unwrap();
 
-        let t0 = Token::new("0x0", 18, "T0", BigUint::one());
-        let t1 = Token::new("0x1", 18, "T1", BigUint::one());
+        let t0 = Token::new("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB", 18, "COW", BigUint::one());
+        let t1 = Token::new("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0", 18, "wstETH", BigUint::one());
 
-        let state = CowAMMPoolState {
+        let state = CowAMMState {
             address: Address::ZERO,
             state: {
                 let mut m = HashMap::new();
@@ -342,7 +400,7 @@ mod tests {
 
     #[test]
     fn test_fee() {
-        let state = CowwV2State::new(
+        let state = CowAMMState::new(
             U256::from_str("36925554990922").unwrap(),
             U256::from_str("30314846538607556521556").unwrap(),
         );
@@ -353,7 +411,7 @@ mod tests {
     }
       #[test]
     fn test_delta_transition() { // chane the internal logic here lol
-        let mut state = CowAMMPoolState {
+        let mut state = CowAMMState {
             address: Address::ZERO,
             state: HashMap::new(),
             fee: 0,
@@ -374,7 +432,7 @@ mod tests {
 
     #[test]
     fn test_delta_transition_missing() {
-        let mut state = CowAMMPoolState {
+        let mut state = CowAMMState {
             address: Address::ZERO,
             state: HashMap::new(),
             fee: 0,
