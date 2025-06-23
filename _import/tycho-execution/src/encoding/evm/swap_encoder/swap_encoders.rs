@@ -43,8 +43,8 @@ impl SwapEncoder for UniswapV2SwapEncoder {
 
     fn encode_swap(
         &self,
-        swap: Swap,
-        encoding_context: EncodingContext,
+        swap: &Swap,
+        encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let token_in_address = bytes_to_address(&swap.token_in)?;
         let token_out_address = bytes_to_address(&swap.token_out)?;
@@ -101,8 +101,8 @@ impl SwapEncoder for UniswapV3SwapEncoder {
 
     fn encode_swap(
         &self,
-        swap: Swap,
-        encoding_context: EncodingContext,
+        swap: &Swap,
+        encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let token_in_address = bytes_to_address(&swap.token_in)?;
         let token_out_address = bytes_to_address(&swap.token_out)?;
@@ -162,8 +162,8 @@ impl SwapEncoder for UniswapV4SwapEncoder {
 
     fn encode_swap(
         &self,
-        swap: Swap,
-        encoding_context: EncodingContext,
+        swap: &Swap,
+        encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let fee = get_static_attribute(&swap, "key_lp_fee")?;
 
@@ -245,15 +245,15 @@ impl SwapEncoder for BalancerV2SwapEncoder {
 
     fn encode_swap(
         &self,
-        swap: Swap,
-        encoding_context: EncodingContext,
+        swap: &Swap,
+        encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let token_approvals_manager = ProtocolApprovalsManager::new()?;
         let token = bytes_to_address(&swap.token_in)?;
         let approval_needed: bool;
 
-        if let Some(router_address) = encoding_context.router_address {
-            let tycho_router_address = bytes_to_address(&router_address)?;
+        if let Some(router_address) = &encoding_context.router_address {
+            let tycho_router_address = bytes_to_address(router_address)?;
             approval_needed = token_approvals_manager.approval_needed(
                 token,
                 tycho_router_address,
@@ -306,8 +306,8 @@ impl SwapEncoder for EkuboSwapEncoder {
 
     fn encode_swap(
         &self,
-        swap: Swap,
-        encoding_context: EncodingContext,
+        swap: &Swap,
+        encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         if encoding_context.exact_out {
             return Err(EncodingError::InvalidInput("exact out swaps not implemented".to_string()));
@@ -405,7 +405,7 @@ impl CurveSwapEncoder {
 
     fn get_coin_indexes(
         &self,
-        swap: Swap,
+        swap: &Swap,
         token_in: Address,
         token_out: Address,
     ) -> Result<(U8, U8), EncodingError> {
@@ -451,8 +451,8 @@ impl SwapEncoder for CurveSwapEncoder {
 
     fn encode_swap(
         &self,
-        swap: Swap,
-        encoding_context: EncodingContext,
+        swap: &Swap,
+        encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let token_approvals_manager = ProtocolApprovalsManager::new()?;
         let native_token_curve_address = Address::from_str(&self.native_token_curve_address)
@@ -473,9 +473,9 @@ impl SwapEncoder for CurveSwapEncoder {
 
         let component_address = Address::from_str(&swap.component.id)
             .map_err(|_| EncodingError::FatalError("Invalid curve pool address".to_string()))?;
-        if let Some(router_address) = encoding_context.router_address {
+        if let Some(router_address) = &encoding_context.router_address {
             if token_in != native_token_curve_address {
-                let tycho_router_address = bytes_to_address(&router_address)?;
+                let tycho_router_address = bytes_to_address(router_address)?;
                 approval_needed = token_approvals_manager.approval_needed(
                     token_in,
                     tycho_router_address,
@@ -548,8 +548,8 @@ impl SwapEncoder for MaverickV2SwapEncoder {
 
     fn encode_swap(
         &self,
-        swap: Swap,
-        encoding_context: EncodingContext,
+        swap: &Swap,
+        encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let component_id = AlloyBytes::from_str(&swap.component.id)
             .map_err(|_| EncodingError::FatalError("Invalid component ID".to_string()))?;
@@ -591,8 +591,8 @@ impl SwapEncoder for BalancerV3SwapEncoder {
 
     fn encode_swap(
         &self,
-        swap: Swap,
-        encoding_context: EncodingContext,
+        swap: &Swap,
+        encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let pool = Address::from_str(&swap.component.id).map_err(|_| {
             EncodingError::FatalError("Invalid pool address for Balancer v3".to_string())
@@ -663,7 +663,7 @@ mod tests {
             )
             .unwrap();
             let encoded_swap = encoder
-                .encode_swap(swap, encoding_context)
+                .encode_swap(&swap, &encoding_context)
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
             assert_eq!(
@@ -723,7 +723,7 @@ mod tests {
             )
             .unwrap();
             let encoded_swap = encoder
-                .encode_swap(swap, encoding_context)
+                .encode_swap(&swap, &encoding_context)
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
             assert_eq!(
@@ -788,7 +788,7 @@ mod tests {
             )
             .unwrap();
             let encoded_swap = encoder
-                .encode_swap(swap, encoding_context)
+                .encode_swap(&swap, &encoding_context)
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
 
@@ -860,7 +860,7 @@ mod tests {
             )
             .unwrap();
             let encoded_swap = encoder
-                .encode_swap(swap, encoding_context)
+                .encode_swap(&swap, &encoding_context)
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
 
@@ -933,7 +933,7 @@ mod tests {
             )
             .unwrap();
             let encoded_swap = encoder
-                .encode_swap(swap, encoding_context)
+                .encode_swap(&swap, &encoding_context)
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
 
@@ -1028,10 +1028,10 @@ mod tests {
             )
             .unwrap();
             let initial_encoded_swap = encoder
-                .encode_swap(initial_swap, context.clone())
+                .encode_swap(&initial_swap, &context)
                 .unwrap();
             let second_encoded_swap = encoder
-                .encode_swap(second_swap, context)
+                .encode_swap(&second_swap, &context)
                 .unwrap();
 
             let combined_hex =
@@ -1112,7 +1112,7 @@ mod tests {
                     .unwrap();
 
             let encoded_swap = encoder
-                .encode_swap(swap, encoding_context)
+                .encode_swap(&swap, &encoding_context)
                 .unwrap();
 
             let hex_swap = encode(&encoded_swap);
@@ -1188,11 +1188,11 @@ mod tests {
             };
 
             let first_encoded_swap = encoder
-                .encode_swap(first_swap, encoding_context.clone())
+                .encode_swap(&first_swap, &encoding_context)
                 .unwrap();
 
             let second_encoded_swap = encoder
-                .encode_swap(second_swap, encoding_context)
+                .encode_swap(&second_swap, &encoding_context)
                 .unwrap();
 
             let combined_hex =
@@ -1314,7 +1314,7 @@ mod tests {
             .unwrap();
             let (i, j) = encoder
                 .get_coin_indexes(
-                    swap,
+                    &swap,
                     Address::from_str(token_in).unwrap(),
                     Address::from_str(token_out).unwrap(),
                 )
@@ -1366,7 +1366,7 @@ mod tests {
             )
             .unwrap();
             let encoded_swap = encoder
-                .encode_swap(swap, encoding_context)
+                .encode_swap(&swap, &encoding_context)
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
 
@@ -1438,7 +1438,7 @@ mod tests {
             )
             .unwrap();
             let encoded_swap = encoder
-                .encode_swap(swap, encoding_context)
+                .encode_swap(&swap, &encoding_context)
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
 
@@ -1520,7 +1520,7 @@ mod tests {
             )
             .unwrap();
             let encoded_swap = encoder
-                .encode_swap(swap, encoding_context)
+                .encode_swap(&swap, &encoding_context)
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
 
@@ -1585,7 +1585,7 @@ mod tests {
             )
             .unwrap();
             let encoded_swap = encoder
-                .encode_swap(swap, encoding_context)
+                .encode_swap(&swap, &encoding_context)
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
 
@@ -1644,7 +1644,7 @@ mod tests {
             .unwrap();
 
             let encoded_swap = encoder
-                .encode_swap(swap, encoding_context)
+                .encode_swap(&swap, &encoding_context)
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
 

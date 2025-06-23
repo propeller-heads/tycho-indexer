@@ -16,7 +16,7 @@ pub trait StrategyEncoder {
     ///
     /// # Returns
     /// * `Result<EncodedSwaps, EncodingError>`
-    fn encode_strategy(&self, solution: Solution) -> Result<EncodedSolution, EncodingError>;
+    fn encode_strategy(&self, solution: &Solution) -> Result<EncodedSolution, EncodingError>;
 
     /// Retrieves the swap encoder for a specific protocol system.
     ///
