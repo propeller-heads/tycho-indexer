@@ -1,3 +1,11 @@
+## [0.101.1](https://github.com/propeller-heads/tycho-execution/compare/0.101.0...0.101.1) (2025-06-23)
+
+
+### Bug Fixes
+
+* Exclude foundry files from the rust crate ([fa13f09](https://github.com/propeller-heads/tycho-execution/commit/fa13f09d3e922373eacfb15b07e79fdf09759e1a))
+* Remove unnecessary clones from encoding ([e704151](https://github.com/propeller-heads/tycho-execution/commit/e704151404917715d1f871be2c3f13ef03d376c2))
+
 ## [0.101.0](https://github.com/propeller-heads/tycho-execution/compare/0.100.1...0.101.0) (2025-06-23)
 
 
