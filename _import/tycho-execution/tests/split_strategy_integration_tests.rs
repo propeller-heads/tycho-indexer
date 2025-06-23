@@ -102,8 +102,8 @@ fn test_split_swap_strategy_encoder() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFromPermit2,
-        eth(),
+        &UserTransferType::TransferFromPermit2,
+        &eth(),
         Some(get_signer()),
     )
     .unwrap()
@@ -215,8 +215,8 @@ fn test_split_input_cyclic_swap() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFromPermit2,
-        eth(),
+        &UserTransferType::TransferFromPermit2,
+        &eth(),
         Some(get_signer()),
     )
     .unwrap()
@@ -375,8 +375,8 @@ fn test_split_output_cyclic_swap() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFromPermit2,
-        eth(),
+        &UserTransferType::TransferFromPermit2,
+        &eth(),
         Some(get_signer()),
     )
     .unwrap()
