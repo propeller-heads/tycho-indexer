@@ -19,12 +19,12 @@ pub struct SwapEncoderRegistry {
 
 impl SwapEncoderRegistry {
     /// Populates the registry with the `SwapEncoders` for the given blockchain by parsing the
-    /// protocols' addresses in the file at the given path.
+    /// executors' addresses in the file at the given path.
     pub fn new(executors_file_path: Option<String>, chain: Chain) -> Result<Self, EncodingError> {
         let config_str = if let Some(ref path) = executors_file_path {
             fs::read_to_string(path).map_err(|e| {
                 EncodingError::FatalError(format!(
-                    "Error reading protocols file from {executors_file_path:?}: {e}",
+                    "Error reading executors file from {executors_file_path:?}: {e}",
                 ))
             })?
         } else {
@@ -33,7 +33,7 @@ impl SwapEncoderRegistry {
         let config: HashMap<String, HashMap<String, String>> = serde_json::from_str(&config_str)?;
         let executors = config
             .get(&chain.name)
-            .ok_or(EncodingError::FatalError("No protocols found for chain".to_string()))?;
+            .ok_or(EncodingError::FatalError("No executors found for chain".to_string()))?;
 
         let protocol_specific_config: HashMap<String, HashMap<String, HashMap<String, String>>> =
             serde_json::from_str(PROTOCOL_SPECIFIC_CONFIG)?;

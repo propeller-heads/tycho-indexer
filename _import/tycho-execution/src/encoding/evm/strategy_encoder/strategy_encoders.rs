@@ -92,9 +92,9 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 
         let (mut unwrap, mut wrap) = (false, false);
         if let Some(action) = &solution.native_action {
-            match action {
-                &NativeAction::Wrap => wrap = true,
-                &NativeAction::Unwrap => unwrap = true,
+            match *action {
+                NativeAction::Wrap => wrap = true,
+                NativeAction::Unwrap => unwrap = true,
             }
         }
         let protocol = &grouped_swap.protocol_system;
@@ -255,7 +255,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
             let transfer = self
                 .transfer_optimization
                 .get_transfers(
-                    &grouped_swap,
+                    grouped_swap,
                     &solution.given_token,
                     wrap,
                     in_between_swap_optimization_allowed,
@@ -410,9 +410,9 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 
         let (mut unwrap, mut wrap) = (false, false);
         if let Some(action) = &solution.native_action {
-            match action {
-                &NativeAction::Wrap => wrap = true,
-                &NativeAction::Unwrap => unwrap = true,
+            match *action {
+                NativeAction::Wrap => wrap = true,
+                NativeAction::Unwrap => unwrap = true,
             }
         }
 
