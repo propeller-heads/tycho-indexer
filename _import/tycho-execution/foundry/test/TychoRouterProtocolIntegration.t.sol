@@ -298,9 +298,9 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
     function testSingleBebopIntegration() public {
         // The calldata swaps 200 USDC for ONDO
         // The receiver in the order is 0xc5564C13A157E6240659fb81882A28091add8670
-        address orderReceiver = 0xc5564C13A157E6240659fb81882A28091add8670;
+        address orderTaker = 0xc5564C13A157E6240659fb81882A28091add8670;
         address maker = 0xCe79b081c0c924cb67848723ed3057234d10FC6b;
-        deal(USDC_ADDR, ALICE, 200 * 10 ** 6); // 200 USDC
+        deal(USDC_ADDR, orderTaker, 200 * 10 ** 6); // 200 USDC
         uint256 expAmountOut = 237212396774431060000; // Expected ONDO amount from calldata
 
         // Fund the maker with ONDO and approve settlement
@@ -308,7 +308,9 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
         vm.prank(maker);
         IERC20(ONDO_ADDR).approve(BEBOP_SETTLEMENT, expAmountOut);
 
-        vm.startPrank(ALICE);
+        uint256 ondoBefore = IERC20(ONDO_ADDR).balanceOf(orderTaker);
+
+        vm.startPrank(orderTaker);
         IERC20(USDC_ADDR).approve(tychoRouterAddr, type(uint256).max);
 
         // Load calldata from file
@@ -318,9 +320,10 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
         (bool success,) = tychoRouterAddr.call(callData);
 
         // Check the receiver's balance (not ALICE, since the order specifies a different receiver)
-        uint256 finalBalance = IERC20(ONDO_ADDR).balanceOf(orderReceiver);
+        uint256 ondoReceived =
+            IERC20(ONDO_ADDR).balanceOf(orderTaker) - ondoBefore;
         assertTrue(success, "Call Failed");
-        assertGe(finalBalance, expAmountOut);
+        assertEq(ondoReceived, expAmountOut);
         assertEq(
             IERC20(USDC_ADDR).balanceOf(tychoRouterAddr),
             0,
@@ -363,7 +366,7 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
         uint256 finalBalance = IERC20(USDC_ADDR).balanceOf(orderTaker);
 
         assertTrue(success, "Call Failed");
-        assertGe(finalBalance, expAmountOut);
+        assertEq(finalBalance, expAmountOut);
         assertEq(address(tychoRouterAddr).balance, 0, "ETH left in router");
 
         vm.stopPrank();
