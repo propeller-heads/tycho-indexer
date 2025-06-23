@@ -74,53 +74,22 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         uint256 filledTakerAmount,
         bytes memory quoteData,
         bytes memory makerSignaturesData,
-        bool
+        bool approvalNeeded
     ) internal virtual override returns (uint256 amountOut) {
         // Decode the order from quoteData
         IBebopSettlement.Single memory order =
             abi.decode(quoteData, (IBebopSettlement.Single));
 
-        // Decode the MakerSignature array (should contain exactly 1 signature for Single orders)
-        IBebopSettlement.MakerSignature[] memory signatures =
-            abi.decode(makerSignaturesData, (IBebopSettlement.MakerSignature[]));
-
-        // Validate that there is exactly one maker signature
-        if (signatures.length != 1) {
-            revert BebopExecutor__InvalidInput();
-        }
-
-        // Get the maker signature from the first and only element of the array
-        IBebopSettlement.MakerSignature memory sig = signatures[0];
-
         uint256 actualFilledTakerAmount = _getActualFilledTakerAmount(
             givenAmount, order.taker_amount, filledTakerAmount
         );
 
-        if (tokenIn != address(0)) {
-            // Transfer tokens to executor
-            _transfer(address(this), transferType, tokenIn, givenAmount);
-        }
-
-        // NOTE: NOT NEEDED FOR TESTING
-        // // Approve Bebop settlement to spend tokens if needed
-        // if (approvalNeeded) {
-        //     // slither-disable-next-line unused-return
-        //     IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
-        // }
-
-        // NOTE: SETUP FOR TESTING
-
-        // Record balances before swap to calculate amountOut
-        uint256 balanceBefore = tokenOut == address(0)
-            ? order.receiver.balance
-            : IERC20(tokenOut).balanceOf(order.receiver);
-
-        // Execute the swap with ETH value if needed
-        uint256 ethValue = tokenIn == address(0) ? actualFilledTakerAmount : 0;
-
         // For testing: transfer tokens from executor to taker address
         // This simulates the taker having the tokens with approval
         if (tokenIn != address(0)) {
+            _transfer(
+                address(this), transferType, tokenIn, actualFilledTakerAmount
+            );
             IERC20(tokenIn).safeTransfer(
                 order.taker_address, actualFilledTakerAmount
             );
@@ -145,24 +114,21 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         uint256 currentTimestamp = block.timestamp;
         vm.warp(order.expiry - 1); // Set timestamp to just before expiry
 
-        // Use swapSingle - tokens are now in taker's wallet with approval
-        // slither-disable-next-line arbitrary-send-eth
-        IBebopSettlement(bebopSettlement).swapSingle{value: ethValue}(
-            order, sig, actualFilledTakerAmount
+        // Execute the single swap, let's test the actual settlement logic
+        amountOut = super._executeSingleRFQ(
+            tokenIn,
+            tokenOut,
+            TransferType.None, // We set transfer type to none for testing in order to keep the taker's balance unchanged as it will execute the swap
+            givenAmount,
+            filledTakerAmount,
+            quoteData,
+            makerSignaturesData,
+            approvalNeeded
         );
 
         // Restore original timestamp
         vm.warp(currentTimestamp);
         vm.stopPrank();
-
-        // NOTE: END SETUP FOR TESTING
-
-        // Calculate actual amount received
-        uint256 balanceAfter = tokenOut == address(0)
-            ? order.receiver.balance
-            : IERC20(tokenOut).balanceOf(order.receiver);
-
-        amountOut = balanceAfter - balanceBefore;
     }
 
     // Override to execute aggregate orders through the real settlement
@@ -174,23 +140,14 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         uint256 filledTakerAmount,
         bytes memory quoteData,
         bytes memory makerSignaturesData,
-        bool // approvalNeeded - unused in test harness
+        bool approvalNeeded
     ) internal virtual override returns (uint256 amountOut) {
         // Decode the Aggregate order
         IBebopSettlement.Aggregate memory order =
             abi.decode(quoteData, (IBebopSettlement.Aggregate));
 
-        // Decode the MakerSignature array (can contain multiple signatures for Aggregate orders)
-        IBebopSettlement.MakerSignature[] memory signatures =
-            abi.decode(makerSignaturesData, (IBebopSettlement.MakerSignature[]));
-
-        // Aggregate orders should have at least one signature
-        if (signatures.length == 0) {
-            revert BebopExecutor__InvalidInput();
-        }
-
         // For aggregate orders, calculate total taker amount across all amounts of the 2D array
-        uint256 totalTakerAmount;
+        uint256 totalTakerAmount = 0;
         for (uint256 i = 0; i < order.taker_amounts.length; i++) {
             for (uint256 j = 0; j < order.taker_amounts[i].length; j++) {
                 totalTakerAmount += order.taker_amounts[i][j];
@@ -201,31 +158,12 @@ contract BebopExecutorHarness is BebopExecutor, Test {
             givenAmount, totalTakerAmount, filledTakerAmount
         );
 
-        if (tokenIn != address(0)) {
-            // Transfer tokens to executor
-            _transfer(address(this), transferType, tokenIn, givenAmount);
-        }
-
-        // NOTE: NOT NEEDED FOR TESTING
-        // // Approve Bebop settlement to spend tokens if needed
-        // if (approvalNeeded) {
-        //     // slither-disable-next-line unused-return
-        //     IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
-        // }
-
-        // NOTE: SETUP FOR TESTING
-
-        // Record balances before swap to calculate amountOut
-        uint256 balanceBefore = tokenOut == address(0)
-            ? order.receiver.balance
-            : IERC20(tokenOut).balanceOf(order.receiver);
-
-        // Execute the swap with ETH value if needed
-        uint256 ethValue = tokenIn == address(0) ? actualFilledTakerAmount : 0;
-
         // For testing: transfer tokens from executor to taker address
         // This simulates the taker having the tokens with approval
         if (tokenIn != address(0)) {
+            _transfer(
+                address(this), transferType, tokenIn, actualFilledTakerAmount
+            );
             IERC20(tokenIn).safeTransfer(
                 order.taker_address, actualFilledTakerAmount
             );
@@ -250,24 +188,21 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         uint256 currentTimestamp = block.timestamp;
         vm.warp(order.expiry - 1); // Set timestamp to just before expiry
 
-        // Use swapAggregate - tokens are now in taker's wallet with approval
-        // slither-disable-next-line arbitrary-send-eth
-        IBebopSettlement(bebopSettlement).swapAggregate{value: ethValue}(
-            order, signatures, actualFilledTakerAmount
+        // Execute the aggregate swap, let's test the actual settlement logic
+        amountOut = super._executeAggregateRFQ(
+            tokenIn,
+            tokenOut,
+            TransferType.None, // We set transfer type to none for testing in order to keep the taker's balance unchanged as it will execute the swap
+            givenAmount,
+            filledTakerAmount,
+            quoteData,
+            makerSignaturesData,
+            approvalNeeded
         );
 
         // Restore original timestamp
         vm.warp(currentTimestamp);
         vm.stopPrank();
-
-        // NOTE: END SETUP FOR TESTING
-
-        // Calculate actual amount received
-        uint256 balanceAfter = tokenOut == address(0)
-            ? order.receiver.balance
-            : IERC20(tokenOut).balanceOf(order.receiver);
-
-        amountOut = balanceAfter - balanceBefore;
     }
 }
 
