@@ -1,3 +1,10 @@
+## [0.101.3](https://github.com/propeller-heads/tycho-execution/compare/0.101.2...0.101.3) (2025-06-23)
+
+
+### Bug Fixes
+
+* Add optimized_transfers_integration_tests.rs ([df63b87](https://github.com/propeller-heads/tycho-execution/commit/df63b87569df93bc773cd1430ae4a1e673cff659))
+
 ## [0.101.2](https://github.com/propeller-heads/tycho-execution/compare/0.101.1...0.101.2) (2025-06-23)
 
 
