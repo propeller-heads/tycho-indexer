@@ -152,7 +152,7 @@ where
     }
 
     /// Gets a mutable entry to a value in the permanent layer.
-    pub(super) fn permanent_entry(&mut self, k: &K) -> Entry<K, V> {
+    pub(super) fn permanent_entry<'a>(&'a mut self, k: &K) -> Entry<'a, K, V> {
         self.permanent.entry(k.clone())
     }
 
@@ -160,11 +160,11 @@ where
     ///
     /// If the block is not found, we check if the block is the child of the latest pending
     /// block. If it is, a new layer is created. Otherwise, an error is returned.
-    pub(super) fn pending_entry(
-        &mut self,
+    pub(super) fn pending_entry<'a>(
+        &'a mut self,
         block: &Block,
         k: &K,
-    ) -> Result<Entry<K, V>, DCICacheError> {
+    ) -> Result<Entry<'a, K, V>, DCICacheError> {
         let layer = self.validate_and_ensure_block_layer(block)?;
         Ok(layer.data.entry(k.clone()))
     }
