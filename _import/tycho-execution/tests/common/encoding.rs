@@ -74,8 +74,8 @@ pub fn encode_tycho_router_call(
     chain_id: u64,
     encoded_solution: EncodedSolution,
     solution: &Solution,
-    user_transfer_type: UserTransferType,
-    native_address: Bytes,
+    user_transfer_type: &UserTransferType,
+    native_address: &Bytes,
     signer: Option<PrivateKeySigner>,
 ) -> Result<Transaction, EncodingError> {
     let (mut unwrap, mut wrap) = (false, false);
@@ -136,7 +136,7 @@ pub fn encode_tycho_router_call(
             wrap,
             unwrap,
             receiver,
-            user_transfer_type == UserTransferType::TransferFrom,
+            *user_transfer_type == UserTransferType::TransferFrom,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -171,7 +171,7 @@ pub fn encode_tycho_router_call(
             wrap,
             unwrap,
             receiver,
-            user_transfer_type == UserTransferType::TransferFrom,
+            *user_transfer_type == UserTransferType::TransferFrom,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -208,7 +208,7 @@ pub fn encode_tycho_router_call(
             unwrap,
             n_tokens,
             receiver,
-            user_transfer_type == UserTransferType::TransferFrom,
+            *user_transfer_type == UserTransferType::TransferFrom,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -217,7 +217,7 @@ pub fn encode_tycho_router_call(
     };
 
     let contract_interaction = encode_input(&encoded_solution.function_signature, method_calldata);
-    let value = if solution.given_token == native_address {
+    let value = if solution.given_token == *native_address {
         solution.given_amount.clone()
     } else {
         BigUint::ZERO

@@ -66,8 +66,8 @@ fn test_single_encoding_strategy_ekubo() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFrom,
-        eth(),
+        &UserTransferType::TransferFrom,
+        &eth(),
         None,
     )
     .unwrap()
@@ -118,8 +118,8 @@ fn test_single_encoding_strategy_maverick() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFrom,
-        eth(),
+        &UserTransferType::TransferFrom,
+        &eth(),
         None,
     )
     .unwrap()
@@ -180,8 +180,8 @@ fn test_single_encoding_strategy_usv4_eth_in() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFromPermit2,
-        eth,
+        &UserTransferType::TransferFromPermit2,
+        &eth,
         Some(get_signer()),
     )
     .unwrap()
@@ -247,8 +247,8 @@ fn test_single_encoding_strategy_usv4_eth_out() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFromPermit2,
-        eth,
+        &UserTransferType::TransferFromPermit2,
+        &eth,
         Some(get_signer()),
     )
     .unwrap()
@@ -333,8 +333,8 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFromPermit2,
-        eth,
+        &UserTransferType::TransferFromPermit2,
+        &eth,
         Some(get_signer()),
     )
     .unwrap()
@@ -443,8 +443,8 @@ fn test_single_encoding_strategy_curve() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFrom,
-        eth(),
+        &UserTransferType::TransferFrom,
+        &eth(),
         None,
     )
     .unwrap()
@@ -510,8 +510,8 @@ fn test_single_encoding_strategy_curve_st_eth() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFrom,
-        eth(),
+        &UserTransferType::TransferFrom,
+        &eth(),
         None,
     )
     .unwrap()
@@ -563,8 +563,8 @@ fn test_single_encoding_strategy_balancer_v3() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFrom,
-        eth(),
+        &UserTransferType::TransferFrom,
+        &eth(),
         None,
     )
     .unwrap()

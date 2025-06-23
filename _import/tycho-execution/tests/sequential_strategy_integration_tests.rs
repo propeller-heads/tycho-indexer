@@ -72,8 +72,8 @@ fn test_sequential_swap_strategy_encoder() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFromPermit2,
-        eth(),
+        &UserTransferType::TransferFromPermit2,
+        &eth(),
         Some(get_signer()),
     )
     .unwrap()
@@ -138,8 +138,8 @@ fn test_sequential_swap_strategy_encoder_no_permit2() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFrom,
-        eth(),
+        &UserTransferType::TransferFrom,
+        &eth(),
         None,
     )
     .unwrap()
@@ -263,8 +263,8 @@ fn test_sequential_strategy_cyclic_swap() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFromPermit2,
-        eth(),
+        &UserTransferType::TransferFromPermit2,
+        &eth(),
         Some(get_signer()),
     )
     .unwrap()

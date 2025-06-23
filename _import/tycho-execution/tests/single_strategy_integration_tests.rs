@@ -57,8 +57,8 @@ fn test_single_swap_strategy_encoder() {
         eth_chain().id,
         encoded_solutions[0].clone(),
         &solution,
-        UserTransferType::TransferFromPermit2,
-        eth(),
+        &UserTransferType::TransferFromPermit2,
+        &eth(),
         Some(get_signer()),
     )
     .unwrap()
@@ -142,8 +142,8 @@ fn test_single_swap_strategy_encoder_no_permit2() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFrom,
-        eth(),
+        &UserTransferType::TransferFrom,
+        &eth(),
         None,
     )
     .unwrap()
@@ -224,8 +224,8 @@ fn test_single_swap_strategy_encoder_no_transfer_in() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::None,
-        eth(),
+        &UserTransferType::None,
+        &eth(),
         None,
     )
     .unwrap()
@@ -308,8 +308,8 @@ fn test_single_swap_strategy_encoder_wrap() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFromPermit2,
-        eth(),
+        &UserTransferType::TransferFromPermit2,
+        &eth(),
         Some(get_signer()),
     )
     .unwrap()
@@ -360,8 +360,8 @@ fn test_single_swap_strategy_encoder_unwrap() {
         eth_chain().id,
         encoded_solution,
         &solution,
-        UserTransferType::TransferFromPermit2,
-        eth(),
+        &UserTransferType::TransferFromPermit2,
+        &eth(),
         Some(get_signer()),
     )
     .unwrap()
