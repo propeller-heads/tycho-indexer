@@ -20,7 +20,7 @@ use crate::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta, QualityRange,
         },
-        token::CurrencyToken,
+        token::Token,
         Address, BlockHash, Chain, ComponentId, ContractId, EntryPointId, ExtractionState,
         PaginationParams, ProtocolSystem, ProtocolType, TxHash,
     },
@@ -381,7 +381,7 @@ pub trait ProtocolGateway {
         quality: QualityRange,
         traded_n_days_ago: Option<NaiveDateTime>,
         pagination_params: Option<&PaginationParams>,
-    ) -> Result<WithTotal<Vec<CurrencyToken>>, StorageError>;
+    ) -> Result<WithTotal<Vec<Token>>, StorageError>;
 
     /// Saves multiple component balances to storage.
     ///
@@ -407,7 +407,7 @@ pub trait ProtocolGateway {
     /// # Return
     /// Ok if all tokens could be inserted, Err if at least one token failed to
     /// insert.
-    async fn add_tokens(&self, tokens: &[CurrencyToken]) -> Result<(), StorageError>;
+    async fn add_tokens(&self, tokens: &[Token]) -> Result<(), StorageError>;
 
     /// Updates multiple tokens in storage.
     ///
@@ -420,7 +420,7 @@ pub trait ProtocolGateway {
     /// # Return
     /// Ok if all tokens could be inserted, Err if at least one token failed to
     /// insert.
-    async fn update_tokens(&self, tokens: &[CurrencyToken]) -> Result<(), StorageError>;
+    async fn update_tokens(&self, tokens: &[Token]) -> Result<(), StorageError>;
 
     /// Retrieve protocol state changes
     ///

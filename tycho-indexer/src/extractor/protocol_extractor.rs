@@ -22,7 +22,7 @@ use tycho_common::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta,
         },
-        token::{CurrencyToken, TokenOwnerStore},
+        token::{Token, TokenOwnerStore},
         Address, Balance, BlockHash, Chain, ChangeType, ComponentId, EntryPointId, ExtractionState,
         ExtractorIdentity, ProtocolType, TxHash,
     },
@@ -494,7 +494,7 @@ where
     async fn construct_currency_tokens(
         &self,
         msg: &BlockChanges,
-    ) -> Result<HashMap<Address, CurrencyToken>, StorageError> {
+    ) -> Result<HashMap<Address, Token>, StorageError> {
         let new_token_addresses = msg
             .protocol_components()
             .into_iter()
@@ -574,7 +574,7 @@ where
             .into_iter()
             .flatten()
             .map(|t| (t.address.clone(), t));
-        let new_tokens: HashMap<Address, CurrencyToken> = self
+        let new_tokens: HashMap<Address, Token> = self
             .token_pre_processor
             .get_tokens(unknown_tokens, Arc::new(tf), BlockTag::Number(msg.block.number))
             .await
@@ -1592,7 +1592,7 @@ mod test {
                 addresses: Vec<Bytes>,
                 token_finder: Arc<dyn TokenOwnerFinding>,
                 block: BlockTag,
-            ) -> Vec<CurrencyToken>;
+            ) -> Vec<Token>;
         }
     }
 
@@ -2012,7 +2012,7 @@ mod test {
             chrono::Duration::seconds(1),
             Arc::new(protocol_gw),
         );
-        let t1 = CurrencyToken::new(
+        let t1 = Token::new(
             &Bytes::from("0x0000000000000000000000000000000000000001"),
             "TOK1",
             18,
@@ -2027,7 +2027,7 @@ mod test {
             .expect("adding tokens failed");
 
         let mut preprocessor = MockTokenPreProcessor::new();
-        let t3 = CurrencyToken::new(
+        let t3 = Token::new(
             &Bytes::from_str("0000000000000000000000000000000000000003").unwrap(),
             "TOK3",
             18,
@@ -2186,7 +2186,7 @@ mod test {
             .expect("adding components failed");
         protocol_cache
             .add_tokens([
-                CurrencyToken::new(
+                Token::new(
                     &Bytes::from("0x0000000000000000000000000000000000000001"),
                     "PEPE",
                     18,
@@ -2195,7 +2195,7 @@ mod test {
                     Chain::Ethereum,
                     100,
                 ),
-                CurrencyToken::new(
+                Token::new(
                     &Bytes::from("0x0000000000000000000000000000000000000002"),
                     "USDC",
                     6,
@@ -2303,7 +2303,7 @@ mod test_serial_db {
                 addresses: Vec<Bytes>,
                 token_finder: Arc<dyn TokenOwnerFinding>,
                 block: BlockTag,
-            ) -> Vec<CurrencyToken>;
+            ) -> Vec<Token>;
         }
     }
 
@@ -2329,7 +2329,7 @@ mod test_serial_db {
     fn get_mocked_token_pre_processor() -> MockTokenPreProcessor {
         let mut mock_processor = MockTokenPreProcessor::new();
         let new_tokens = vec![
-            CurrencyToken::new(
+            Token::new(
                 &Bytes::from_str(WETH_ADDRESS).expect("Invalid address"),
                 "WETH",
                 18,
@@ -2338,7 +2338,7 @@ mod test_serial_db {
                 Default::default(),
                 100,
             ),
-            CurrencyToken::new(
+            Token::new(
                 &Bytes::from_str(USDC_ADDRESS).expect("Invalid address"),
                 "USDC",
                 6,
@@ -2347,7 +2347,7 @@ mod test_serial_db {
                 Default::default(),
                 100,
             ),
-            CurrencyToken::new(
+            Token::new(
                 &Bytes::from_str("6b175474e89094c44da98b954eedeac495271d0f")
                     .expect("Invalid address"),
                 "DAI",
@@ -2357,7 +2357,7 @@ mod test_serial_db {
                 Default::default(),
                 100,
             ),
-            CurrencyToken::new(
+            Token::new(
                 &Bytes::from_str("dAC17F958D2ee523a2206206994597C13D831ec7")
                     .expect("Invalid address"),
                 "USDT",
@@ -2489,7 +2489,7 @@ mod test_serial_db {
             HashMap::from([
                 (
                     Bytes::from_str(USDC_ADDRESS).unwrap(),
-                    CurrencyToken::new(
+                    Token::new(
                         &Bytes::from_str(USDC_ADDRESS).unwrap(),
                         "USDC",
                         6,
@@ -2501,7 +2501,7 @@ mod test_serial_db {
                 ),
                 (
                     Bytes::from(WETH_ADDRESS),
-                    CurrencyToken::new(
+                    Token::new(
                         &Bytes::from(WETH_ADDRESS),
                         "WETH",
                         18,

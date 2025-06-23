@@ -1374,7 +1374,7 @@ pub struct NewToken {
 }
 
 impl NewToken {
-    pub fn from_token(account_id: i64, token: &models::token::CurrencyToken) -> Self {
+    pub fn from_token(account_id: i64, token: &models::token::Token) -> Self {
         Self {
             account_id,
             symbol: token.symbol.clone(),

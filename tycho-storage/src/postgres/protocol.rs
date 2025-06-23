@@ -14,7 +14,7 @@ use tycho_common::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta, QualityRange,
         },
-        token::CurrencyToken,
+        token::Token,
         Address, Balance, Chain, ChangeType, ComponentId, FinancialType, ImplementationType,
         PaginationParams, ProtocolType, StoreVal, TxHash,
     },
@@ -909,7 +909,7 @@ impl PostgresGateway {
         last_traded_ts_threshold: Option<NaiveDateTime>,
         pagination_params: Option<&PaginationParams>,
         conn: &mut AsyncPgConnection,
-    ) -> Result<WithTotal<Vec<CurrencyToken>>, StorageError> {
+    ) -> Result<WithTotal<Vec<Token>>, StorageError> {
         use super::schema::{account::dsl::*, token::dsl::*};
         let chain_db_id = self.get_chain_id(&chain)?;
 
@@ -971,7 +971,7 @@ impl PostgresGateway {
             .await
             .map_err(|err| storage_error_from_diesel(err, "Token", &chain.to_string(), None))?;
 
-        let tokens: Vec<CurrencyToken> = results
+        let tokens: Vec<Token> = results
             .into_iter()
             .map(|(orm_token, address_)| {
                 let gas_usage: Vec<_> = orm_token
@@ -979,7 +979,7 @@ impl PostgresGateway {
                     .iter()
                     .map(|u| u.map(|g| g as u64))
                     .collect();
-                CurrencyToken::new(
+                Token::new(
                     &address_,
                     orm_token.symbol.as_str(),
                     orm_token.decimals as u32,
@@ -996,7 +996,7 @@ impl PostgresGateway {
 
     pub async fn add_tokens(
         &self,
-        tokens: &[CurrencyToken],
+        tokens: &[Token],
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
         let titles: Vec<String> = tokens
@@ -1079,7 +1079,7 @@ impl PostgresGateway {
 
     pub async fn update_tokens(
         &self,
-        tokens: &[CurrencyToken],
+        tokens: &[Token],
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
         trace!(addresses=?tokens.iter().map(|t| &t.address).collect::<Vec<_>>(), "Updating tokens");
@@ -2976,15 +2976,8 @@ mod test {
             .entity;
 
         assert_eq!(tokens.len(), 2);
-        let expected_token = CurrencyToken::new(
-            &ZKSYNC_PEPE.parse().unwrap(),
-            "PEPE",
-            6,
-            10,
-            &[Some(10)],
-            Chain::ZkSync,
-            0,
-        );
+        let expected_token =
+            Token::new(&ZKSYNC_PEPE.parse().unwrap(), "PEPE", 6, 10, &[Some(10)], Chain::ZkSync, 0);
 
         assert_eq!(tokens[1], expected_token);
     }
@@ -3010,15 +3003,8 @@ mod test {
 
         assert_eq!(tokens.len(), 2);
 
-        let expected_token = CurrencyToken::new(
-            &DAI.parse().unwrap(),
-            "DAI",
-            18,
-            10,
-            &[Some(10)],
-            Chain::Ethereum,
-            100,
-        );
+        let expected_token =
+            Token::new(&DAI.parse().unwrap(), "DAI", 18, 10, &[Some(10)], Chain::Ethereum, 100);
 
         assert_eq!(tokens[1], expected_token);
     }
@@ -3044,15 +3030,8 @@ mod test {
 
         assert_eq!(tokens.len(), 1);
 
-        let expected_token = CurrencyToken::new(
-            &LUSD.parse().unwrap(),
-            "LUSD",
-            18,
-            10,
-            &[Some(10)],
-            Chain::Ethereum,
-            70,
-        );
+        let expected_token =
+            Token::new(&LUSD.parse().unwrap(), "LUSD", 18, 10, &[Some(10)], Chain::Ethereum, 70);
 
         assert_eq!(tokens[0], expected_token);
     }
@@ -3072,15 +3051,8 @@ mod test {
             .entity;
 
         assert_eq!(tokens.len(), 1);
-        let expected_token = CurrencyToken::new(
-            &DAI.parse().unwrap(),
-            "DAI",
-            18,
-            10,
-            &[Some(10)],
-            Chain::Ethereum,
-            100,
-        );
+        let expected_token =
+            Token::new(&DAI.parse().unwrap(), "DAI", 18, 10, &[Some(10)], Chain::Ethereum, 100);
 
         assert_eq!(tokens[0], expected_token);
     }
@@ -3104,7 +3076,7 @@ mod test {
 
         let usdt_symbol = "USDT".to_string();
         let tokens = [
-            CurrencyToken::new(
+            Token::new(
                 &Bytes::from(USDT),
                 usdt_symbol.as_str(),
                 6,
@@ -3113,7 +3085,7 @@ mod test {
                 Chain::Ethereum,
                 100,
             ),
-            CurrencyToken::new(
+            Token::new(
                 &Bytes::from(WETH),
                 weth_symbol.as_str(),
                 18,
@@ -3931,7 +3903,7 @@ mod test {
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         let too_long_symbol = "🐶🐱🐰🦊🐻🐼🐨🐯🦁🐮🐷🐽🐸🐵🐔🐧🐦🐤🦅🦉🦇🐺🐗🐴🦄🐝🐛🪱🦋🐌🐞🐜🪰🪲🕷🦂🐢🐍🦎🦖🦕🐙🦑🦐🦞🦀🐡🐠🐟🐬🐳🐋🐊🐅🐆🦓🦍🦧🦣🐘🦛🦏🐪🐫🦒🦘🦬🐃🐂🐄🐎🐖🐏🐑🦙🐐🦌🐕🐩🦮🐕\u{200d}🦺🐈🐈\u{200d}⬛🐓🦤🦚🦜🦢🦩🕊🐇🦝🦨🦡🦫🦦🦥🐁🐀🐿🦔🐾🐉🐲🐶🐱🐰🦊🐻🐼🐨🐯🦁🐮🐷🐽🐸🐵🐔🐧🐦🐤🦅🦉🦇🐺🐗🐴🦄🐝🐛🪱🦋🐌🐞🐜🪰🪲🕷🦂🐢🐍🦎🦖🦕🐙🦑🦐🦞🦀🐡🐠🐟🐬🐳🐋🐊🐅🐆🦓🦍🦧🦣🐘🦛🦏🐪🐫🦒🦘🦬🐃🐂🐄🐎🐖🐏🐑🦙🐐🦌🐕🐩🦮🐕\u{200d}🦺🐈🐈\u{200d}⬛🐓🦤🦚🦜🦢🦩🕊🐇🦝🦨🦡🦫🦦🦥🐁🐀🐿🦔🐾🐉🐲🐶🐱🐰🦊🐻🐼🐨🐯🦁🐮🐷🐽🐸🐵🐔🐧🐦🐤🦅🦉🦇🐺🐗🐴🦄🐝🐛🪱🦋🐌🐞🐜🪰🪲🕷🦂🐢🐍🦎🦖🦕🐙🦑🦐🦞🦀".to_string();
-        let tokens = [CurrencyToken::new(
+        let tokens = [Token::new(
             &Bytes::from("0x052313a7af625b5a08fd3816ea0da1912ced8c8b"),
             &too_long_symbol,
             6,

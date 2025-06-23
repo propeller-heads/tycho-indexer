@@ -1,9 +1,18 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    hash::{Hash, Hasher},
+};
 
+use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 
 use super::{Address, Balance};
-use crate::{models::Chain, traits::TokenOwnerFinding, Bytes};
+use crate::{
+    dto::ResponseToken,
+    models::{error::ModelError, Chain},
+    traits::TokenOwnerFinding,
+    Bytes,
+};
 
 /// Cost related to a token transfer, for example amount of gas in evm chains.
 pub type TransferCost = u64;
@@ -11,8 +20,8 @@ pub type TransferCost = u64;
 /// Tax related to a token transfer. Should be given in Basis Points (1/100th of a percent)
 pub type TransferTax = u64;
 
-#[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
-pub struct CurrencyToken {
+#[derive(Debug, Clone, Deserialize, Serialize, Eq)]
+pub struct Token {
     pub address: Bytes,
     pub symbol: String,
     pub decimals: u32,
@@ -29,7 +38,7 @@ pub struct CurrencyToken {
     pub quality: u32,
 }
 
-impl CurrencyToken {
+impl Token {
     pub fn new(
         address: &Bytes,
         symbol: &str,
@@ -48,6 +57,49 @@ impl CurrencyToken {
             chain,
             quality,
         }
+    }
+
+    /// One
+    /// Get one token in BigUint format
+    ///
+    /// ## Return
+    /// Returns one token as BigUint
+    pub fn one(&self) -> BigUint {
+        BigUint::from((1.0 * 10f64.powi(self.decimals as i32)) as u128)
+    }
+}
+
+impl PartialOrd for Token {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.address.partial_cmp(&other.address)
+    }
+}
+
+impl PartialEq for Token {
+    fn eq(&self, other: &Self) -> bool {
+        self.address == other.address
+    }
+}
+
+impl Hash for Token {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.address.hash(state);
+    }
+}
+
+impl TryFrom<ResponseToken> for Token {
+    type Error = ModelError;
+
+    fn try_from(value: ResponseToken) -> Result<Self, Self::Error> {
+        Ok(Self {
+            address: value.address,
+            decimals: value.decimals,
+            symbol: value.symbol.to_string(),
+            gas: value.gas,
+            chain: Chain::from(value.chain),
+            tax: value.tax,
+            quality: value.quality,
+        })
     }
 }
 
@@ -107,5 +159,81 @@ impl TokenOwnerFinding for TokenOwnerStore {
         _min_balance: Balance,
     ) -> Result<Option<(Address, Balance)>, String> {
         Ok(self.values.get(&token).cloned())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn test_constructor() {
+        let token = Token::new(
+            &Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+            "USDC",
+            6,
+            1000,
+            &[Some(1000u64)],
+            Chain::Ethereum,
+            100,
+        );
+
+        assert_eq!(token.symbol, "USDC");
+        assert_eq!(token.decimals, 6);
+        assert_eq!(
+            format!("{token_address:#x}", token_address = token.address),
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+        );
+    }
+
+    #[test]
+    fn test_cmp() {
+        let usdc = Token::new(
+            &Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+            "USDC",
+            6,
+            1000,
+            &[Some(1000u64)],
+            Chain::Ethereum,
+            100,
+        );
+        let usdc2 = Token::new(
+            &Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+            "USDC2",
+            6,
+            1000,
+            &[Some(1000u64)],
+            Chain::Ethereum,
+            100,
+        );
+        let weth = Token::new(
+            &Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
+            "WETH",
+            18,
+            1000,
+            &[Some(1000u64)],
+            Chain::Ethereum,
+            100,
+        );
+
+        assert!(usdc < weth);
+        assert_eq!(usdc, usdc2);
+    }
+
+    #[test]
+    fn test_one() {
+        let usdc = Token::new(
+            &Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+            "USDC",
+            6,
+            1000,
+            &[Some(1000u64)],
+            Chain::Ethereum,
+            100,
+        );
+
+        assert_eq!(usdc.one(), BigUint::from(1000000u64));
     }
 }

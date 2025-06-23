@@ -9,7 +9,7 @@ use tycho_common::{
         },
         contract::{AccountBalance, AccountChangesWithTx},
         protocol::{ComponentBalance, ProtocolChangesWithTx, ProtocolComponent},
-        token::CurrencyToken,
+        token::Token,
         AccountToContractStore, Address, AttrStoreKey, Chain, ComponentId,
     },
     Bytes,
@@ -35,7 +35,7 @@ pub struct BlockContractChanges {
     pub revert: bool,
     /// Required here, so it is part of the revert buffer and thus inserted into storage once
     /// finalized.
-    pub new_tokens: HashMap<Address, CurrencyToken>,
+    pub new_tokens: HashMap<Address, Token>,
     /// Vec of updates at this block, aggregated by tx and sorted by tx index in ascending order
     pub tx_updates: Vec<AccountChangesWithTx>,
 }
@@ -92,7 +92,7 @@ pub struct BlockEntityChanges {
     pub revert: bool,
     /// Required here, so it is part of the revert buffer and thus inserted into storage once
     /// finalized.
-    pub new_tokens: HashMap<Address, CurrencyToken>,
+    pub new_tokens: HashMap<Address, Token>,
     /// Vec of updates at this block, aggregated by tx and sorted by tx index in ascending order
     pub txs_with_update: Vec<ProtocolChangesWithTx>,
 }
@@ -149,7 +149,7 @@ pub struct BlockChanges {
     pub block: Block,
     pub finalized_block_height: u64,
     pub revert: bool,
-    pub new_tokens: HashMap<Address, CurrencyToken>,
+    pub new_tokens: HashMap<Address, Token>,
     /// Vec of updates at this block, aggregated by tx and sorted by tx index in ascending order
     pub txs_with_update: Vec<TxWithChanges>,
     // Raw block storage changes. This is intended as DCI input and is to be omitted from the
@@ -430,7 +430,7 @@ pub mod fixtures {
             block: Block,
             finalized_block_height: u64,
             revert: bool,
-            new_tokens: HashMap<Address, CurrencyToken>,
+            new_tokens: HashMap<Address, Token>,
             txs_with_update: Vec<TxWithChanges>,
         ) -> Self {
             BlockChanges {

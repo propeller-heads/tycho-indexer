@@ -17,7 +17,7 @@ use tycho_common::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta, QualityRange,
         },
-        token::CurrencyToken,
+        token::Token,
         Address, Chain, ComponentId, ContractId, EntryPointId, ExtractionState, PaginationParams,
         ProtocolType, TxHash,
     },
@@ -453,7 +453,7 @@ mock! {
         ) -> ::core::pin::Pin<
             Box<
                 dyn ::core::future::Future<
-                    Output = Result<WithTotal<Vec<CurrencyToken>>, StorageError>,
+                    Output = Result<WithTotal<Vec<Token>>, StorageError>,
                 > + ::core::marker::Send + 'async_trait,
             >,
         >
@@ -481,7 +481,7 @@ mock! {
 
         fn add_tokens<'life0, 'life1, 'async_trait>(
             &'life0 self,
-            tokens: &'life1 [CurrencyToken],
+            tokens: &'life1 [Token],
         ) -> ::core::pin::Pin<
             Box<
                 dyn ::core::future::Future<
@@ -496,7 +496,7 @@ mock! {
 
         fn update_tokens<'life0, 'life1, 'async_trait>(
             &'life0 self,
-            tokens: &'life1 [CurrencyToken],
+            tokens: &'life1 [Token],
         ) -> ::core::pin::Pin<
             Box<
                 dyn ::core::future::Future<

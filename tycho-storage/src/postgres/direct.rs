@@ -19,7 +19,7 @@ use tycho_common::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta, QualityRange,
         },
-        token::CurrencyToken,
+        token::Token,
         Address, Chain, ComponentId, ContractId, EntryPointId, ExtractionState, PaginationParams,
         ProtocolType, TxHash,
     },
@@ -429,7 +429,7 @@ impl ProtocolGateway for DirectGateway {
         quality: QualityRange,
         traded_n_days_ago: Option<NaiveDateTime>,
         pagination_params: Option<&PaginationParams>,
-    ) -> Result<WithTotal<Vec<CurrencyToken>>, StorageError> {
+    ) -> Result<WithTotal<Vec<Token>>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -455,7 +455,7 @@ impl ProtocolGateway for DirectGateway {
     }
 
     #[instrument(skip_all)]
-    async fn add_tokens(&self, tokens: &[CurrencyToken]) -> Result<(), StorageError> {
+    async fn add_tokens(&self, tokens: &[Token]) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -476,7 +476,7 @@ impl ProtocolGateway for DirectGateway {
     /// This is a short term solution. Ideally we should have a simple gateway version
     /// for these use cases that creates a single transactions and emits them immediately.
     #[instrument(skip_all)]
-    async fn update_tokens(&self, tokens: &[CurrencyToken]) -> Result<(), StorageError> {
+    async fn update_tokens(&self, tokens: &[Token]) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))

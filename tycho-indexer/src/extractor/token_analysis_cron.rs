@@ -7,7 +7,7 @@ use tycho_common::{
     models::{
         blockchain::BlockTag,
         protocol::QualityRange,
-        token::{CurrencyToken, TokenOwnerStore, TokenQuality},
+        token::{Token, TokenOwnerStore, TokenQuality},
         Chain, PaginationParams,
     },
     storage::ProtocolGateway,
@@ -71,7 +71,7 @@ pub async fn analyze_tokens(
 async fn analyze_batch(
     chain: Chain,
     eth_rpc_url: String,
-    mut tokens: Vec<CurrencyToken>,
+    mut tokens: Vec<Token>,
     sem: Arc<Semaphore>,
     gw: Arc<dyn ProtocolGateway + Send + Sync>,
 ) -> anyhow::Result<()> {
@@ -207,7 +207,7 @@ mod test {
                 Box::pin(async {
                     Ok(WithTotal {
                         entity: vec![
-                            CurrencyToken::new(
+                            Token::new(
                                 &Bytes::from("0x228c6fcd7376177ff0cff304043f461189752750"),
                                 "BLITZ",
                                 9,
@@ -216,7 +216,7 @@ mod test {
                                 Chain::Ethereum,
                                 10,
                             ),
-                            CurrencyToken::new(
+                            Token::new(
                                 &Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
                                 "WETH",
                                 18,
@@ -231,7 +231,7 @@ mod test {
                 })
             });
         let exp = vec![
-            CurrencyToken::new(
+            Token::new(
                 &Bytes::from("0x228c6fcd7376177ff0cff304043f461189752750"),
                 "BLITZ",
                 9,
@@ -240,7 +240,7 @@ mod test {
                 Chain::Ethereum,
                 50,
             ),
-            CurrencyToken::new(
+            Token::new(
                 &Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
                 "WETH",
                 18,
