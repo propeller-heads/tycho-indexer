@@ -1,3 +1,10 @@
+## [0.101.0](https://github.com/propeller-heads/tycho-execution/compare/0.100.1...0.101.0) (2025-06-23)
+
+
+### Features
+
+* **curve:** Support passing eth/weth instead of weth/eth in encoding ([525c16a](https://github.com/propeller-heads/tycho-execution/commit/525c16a117393f205a3b1bf3e9677c702415463f))
+
 ## [0.100.1](https://github.com/propeller-heads/tycho-execution/compare/0.100.0...0.100.1) (2025-06-13)
 
 
