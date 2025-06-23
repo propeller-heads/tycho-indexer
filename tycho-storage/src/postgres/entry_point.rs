@@ -459,6 +459,9 @@ impl PostgresGateway {
     ///
     /// * `traced_entry_points` - The traced entry points to upsert.
     /// * `conn` - The database connection to use.
+    ///
+    /// Note: Upserts are processed in the input order. If one entrypoint with params is upserted
+    /// twice, only the last entry will be used.
     pub(crate) async fn upsert_traced_entry_points(
         &self,
         traced_entry_points: &[TracedEntryPoint],
@@ -499,7 +502,7 @@ impl PostgresGateway {
         )
         .await?;
 
-        let mut values = Vec::with_capacity(traced_entry_points.len());
+        let mut values = HashMap::new();
         for tep in traced_entry_points {
             let params_id = params_ids
                 .get(&(
@@ -535,15 +538,18 @@ impl PostgresGateway {
                 StorageError::Unexpected(format!("Failed to serialize TracingResult: {e}"))
             })?;
 
-            values.push(NewEntryPointTracingResult {
-                entry_point_tracing_params_id: *params_id,
-                detection_block: block_id,
-                detection_data: tracing_result,
-            });
+            values.insert(
+                params_id,
+                NewEntryPointTracingResult {
+                    entry_point_tracing_params_id: *params_id,
+                    detection_block: block_id,
+                    detection_data: tracing_result,
+                },
+            );
         }
 
         diesel::insert_into(entry_point_tracing_result)
-            .values(&values)
+            .values(&values.into_values().collect::<Vec<_>>())
             .on_conflict(schema::entry_point_tracing_result::entry_point_tracing_params_id)
             .do_update()
             .set((
