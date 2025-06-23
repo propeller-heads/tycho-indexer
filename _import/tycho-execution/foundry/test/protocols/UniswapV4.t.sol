@@ -287,6 +287,8 @@ contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
             true,
             RestrictTransferFrom.TransferType.TransferFrom,
             ALICE,
+            address(0),
+            bytes(""),
             pools
         );
 
@@ -335,6 +337,8 @@ contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
             true,
             RestrictTransferFrom.TransferType.TransferFrom,
             ALICE,
+            address(0),
+            bytes(""),clip
             pools
         );
 

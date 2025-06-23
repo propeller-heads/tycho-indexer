@@ -176,7 +176,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             EncodingError::FatalError("Failed to pad tick spacing bytes".to_string())
         })?;
 
-        let hook_address = match get_static_attribute(&swap, "hook") {
+        let hook_address = match get_static_attribute(swap, "hook") {
             Ok(hook) => Address::from_slice(&hook),
             Err(_) => Address::ZERO,
         };
@@ -185,6 +185,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             // Add hook data if it's only the last swap
             hook_data = AlloyBytes::from(
                 swap.user_data
+                    .clone()
                     .unwrap_or_default()
                     .to_vec(),
             );
