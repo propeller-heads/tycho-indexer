@@ -7,7 +7,7 @@ use tracing::{debug, info, instrument};
 use tycho_common::{
     models::{
         protocol::{ProtocolComponent, QualityRange},
-        token::CurrencyToken,
+        token::Token,
         Address, Chain, ComponentId,
     },
     storage::{ProtocolGateway, StorageError},
@@ -24,11 +24,11 @@ pub trait ProtocolDataCache: Send + Sync {
     async fn get_tokens<'a>(
         &'a self,
         addresses: &'a [Bytes],
-    ) -> Result<Vec<Option<CurrencyToken>>, StorageError>;
+    ) -> Result<Vec<Option<Token>>, StorageError>;
 
     async fn has_token(&self, addresses: &[Address]) -> Vec<bool>;
 
-    async fn add_tokens<T: IntoIterator<Item = CurrencyToken> + Send + Sync>(
+    async fn add_tokens<T: IntoIterator<Item = Token> + Send + Sync>(
         &self,
         tokens: T,
     ) -> Result<(), StorageError>;
@@ -50,7 +50,7 @@ type ProtocolComponentStore = HashMap<String, HashMap<ComponentId, ProtocolCompo
 #[derive(Clone)]
 pub struct ProtocolMemoryCache {
     chain: Chain,
-    tokens: Arc<RwLock<HashMap<Bytes, CurrencyToken>>>,
+    tokens: Arc<RwLock<HashMap<Bytes, Token>>>,
     token_prices: Arc<RwLock<TokenPrices>>,
     components: Arc<RwLock<ProtocolComponentStore>>,
     max_price_age: chrono::Duration,
@@ -157,7 +157,7 @@ impl ProtocolDataCache for ProtocolMemoryCache {
     async fn get_tokens<'a>(
         &'a self,
         addresses: &'a [Bytes],
-    ) -> Result<Vec<Option<CurrencyToken>>, StorageError> {
+    ) -> Result<Vec<Option<Token>>, StorageError> {
         let missing = {
             let cached_tokens = self.tokens.read().await;
             addresses
@@ -194,7 +194,7 @@ impl ProtocolDataCache for ProtocolMemoryCache {
             .collect()
     }
 
-    async fn add_tokens<T: IntoIterator<Item = CurrencyToken> + Send + Sync>(
+    async fn add_tokens<T: IntoIterator<Item = Token> + Send + Sync>(
         &self,
         tokens: T,
     ) -> Result<(), StorageError> {
@@ -352,10 +352,10 @@ mod tests {
         );
     }
 
-    fn tokens() -> Vec<CurrencyToken> {
+    fn tokens() -> Vec<Token> {
         vec![
-            CurrencyToken::new(&Bytes::from("0x01"), "T1", 18, 0, &[None], Chain::Ethereum, 100),
-            CurrencyToken::new(&Bytes::from("0x02"), "T2", 18, 0, &[None], Chain::Ethereum, 100),
+            Token::new(&Bytes::from("0x01"), "T1", 18, 0, &[None], Chain::Ethereum, 100),
+            Token::new(&Bytes::from("0x02"), "T2", 18, 0, &[None], Chain::Ethereum, 100),
         ]
     }
 

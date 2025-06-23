@@ -939,8 +939,8 @@ pub struct ResponseToken {
     pub quality: u32,
 }
 
-impl From<models::token::CurrencyToken> for ResponseToken {
-    fn from(value: models::token::CurrencyToken) -> Self {
+impl From<models::token::Token> for ResponseToken {
+    fn from(value: models::token::Token) -> Self {
         Self {
             chain: value.chain.into(),
             address: value.address,

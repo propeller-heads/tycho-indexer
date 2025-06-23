@@ -9,7 +9,7 @@ use tracing::{instrument, warn};
 use tycho_common::{
     models::{
         blockchain::BlockTag,
-        token::{CurrencyToken, TokenQuality},
+        token::{Token, TokenQuality},
         Chain,
     },
     traits::{TokenAnalyzer, TokenOwnerFinding, TokenPreProcessor},
@@ -69,7 +69,7 @@ impl TokenPreProcessor for EthereumTokenPreProcessor {
         addresses: Vec<Bytes>,
         token_finder: Arc<dyn TokenOwnerFinding>,
         block: BlockTag,
-    ) -> Vec<CurrencyToken> {
+    ) -> Vec<Token> {
         let mut tokens_info = Vec::new();
 
         for address in addresses {
@@ -125,7 +125,7 @@ impl TokenPreProcessor for EthereumTokenPreProcessor {
                 quality = 50;
             }
 
-            tokens_info.push(CurrencyToken {
+            tokens_info.push(Token {
                 address,
                 symbol: symbol
                     .replace('\0', "")

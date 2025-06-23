@@ -1,5 +1,6 @@
 pub mod blockchain;
 pub mod contract;
+mod error;
 pub mod protocol;
 pub mod token;
 
@@ -8,7 +9,7 @@ use std::{collections::HashMap, fmt::Display, str::FromStr, sync::Arc};
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 use thiserror::Error;
-use token::CurrencyToken;
+use token::Token;
 
 use crate::{dto, Bytes};
 
@@ -87,8 +88,8 @@ impl From<dto::Chain> for Chain {
     }
 }
 
-fn native_eth(chain: Chain) -> CurrencyToken {
-    CurrencyToken::new(
+fn native_eth(chain: Chain) -> Token {
+    Token::new(
         &Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
         "ETH",
         18,
@@ -101,7 +102,7 @@ fn native_eth(chain: Chain) -> CurrencyToken {
 
 impl Chain {
     /// Returns the native token symbol for the chain.
-    pub fn native_token(&self) -> CurrencyToken {
+    pub fn native_token(&self) -> Token {
         match self {
             Chain::Ethereum => native_eth(Chain::Ethereum),
             // It was decided that STRK token will be tracked as a dedicated AccountBalance on

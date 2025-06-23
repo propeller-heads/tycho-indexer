@@ -1416,7 +1416,7 @@ mod tests {
             },
             contract::Account,
             protocol::{ProtocolComponent, ProtocolComponentState},
-            token::CurrencyToken,
+            token::Token,
             ChangeType,
         },
         storage::WithTotal,
@@ -2354,8 +2354,8 @@ mod tests {
     #[tokio::test]
     async fn test_get_tokens() {
         let expected = vec![
-            CurrencyToken::new(&(USDC.parse().unwrap()), "USDC", 6, 0, &[], Chain::Ethereum, 100),
-            CurrencyToken::new(&(WETH.parse().unwrap()), "WETH", 18, 0, &[], Chain::Ethereum, 100),
+            Token::new(&(USDC.parse().unwrap()), "USDC", 6, 0, &[], Chain::Ethereum, 100),
+            Token::new(&(WETH.parse().unwrap()), "WETH", 18, 0, &[], Chain::Ethereum, 100),
         ];
         let mut gw = MockGateway::new();
         let mock_response = Ok(WithTotal { entity: expected.clone(), total: Some(3) });
