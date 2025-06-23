@@ -110,7 +110,7 @@ impl SwapEncoder for UniswapV3SwapEncoder {
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
         let component_id = Address::from_str(&swap.component.id)
             .map_err(|_| EncodingError::FatalError("Invalid USV3 component id".to_string()))?;
-        let pool_fee_bytes = get_static_attribute(&swap, "fee")?;
+        let pool_fee_bytes = get_static_attribute(swap, "fee")?;
 
         let pool_fee_u24 = pad_to_fixed_size::<3>(&pool_fee_bytes)
             .map_err(|_| EncodingError::FatalError("Failed to extract fee bytes".to_string()))?;
@@ -165,12 +165,12 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         swap: &Swap,
         encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        let fee = get_static_attribute(&swap, "key_lp_fee")?;
+        let fee = get_static_attribute(swap, "key_lp_fee")?;
 
         let pool_fee_u24 = pad_to_fixed_size::<3>(&fee)
             .map_err(|_| EncodingError::FatalError("Failed to pad fee bytes".to_string()))?;
 
-        let tick_spacing = get_static_attribute(&swap, "tick_spacing")?;
+        let tick_spacing = get_static_attribute(swap, "tick_spacing")?;
 
         let pool_tick_spacing_u24 = pad_to_fixed_size::<3>(&tick_spacing).map_err(|_| {
             EncodingError::FatalError("Failed to pad tick spacing bytes".to_string())
@@ -314,20 +314,20 @@ impl SwapEncoder for EkuboSwapEncoder {
         }
 
         let fee = u64::from_be_bytes(
-            get_static_attribute(&swap, "fee")?
+            get_static_attribute(swap, "fee")?
                 .try_into()
                 .map_err(|_| EncodingError::FatalError("fee should be an u64".to_string()))?,
         );
 
         let tick_spacing = u32::from_be_bytes(
-            get_static_attribute(&swap, "tick_spacing")?
+            get_static_attribute(swap, "tick_spacing")?
                 .try_into()
                 .map_err(|_| {
                     EncodingError::FatalError("tick_spacing should be an u32".to_string())
                 })?,
         );
 
-        let extension: Address = get_static_attribute(&swap, "extension")?
+        let extension: Address = get_static_attribute(swap, "extension")?
             .as_slice()
             .try_into()
             .map_err(|_| EncodingError::FatalError("extension should be an address".to_string()))?;
@@ -424,7 +424,7 @@ impl CurveSwapEncoder {
         token_in: Address,
         token_out: Address,
     ) -> Result<(U8, U8), EncodingError> {
-        let coins_bytes = get_static_attribute(&swap, "coins")?;
+        let coins_bytes = get_static_attribute(swap, "coins")?;
         let coins: Vec<Address> = from_str(std::str::from_utf8(&coins_bytes)?)?;
 
         let token_in = self.normalize_token(token_in, &coins)?;
@@ -508,7 +508,7 @@ impl SwapEncoder for CurveSwapEncoder {
             approval_needed = true;
         }
 
-        let factory_bytes = get_static_attribute(&swap, "factory")?.to_vec();
+        let factory_bytes = get_static_attribute(swap, "factory")?.to_vec();
         // the conversion to Address is necessary to checksum the address
         let factory_address =
             Address::from_str(std::str::from_utf8(&factory_bytes).map_err(|_| {

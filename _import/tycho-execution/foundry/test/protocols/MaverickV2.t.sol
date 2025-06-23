@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
+import "../TestUtils.sol";
+import "../TychoRouterTestSetup.sol";
 import "@src/executors/MaverickV2Executor.sol";
 import {Constants} from "../Constants.sol";
-import "../TestUtils.sol";
 
 contract MaverickV2ExecutorExposed is MaverickV2Executor {
     constructor(address _factory, address _permit2)
@@ -124,5 +125,25 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         uint256 balanceAfter = USDC.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
+    }
+}
+
+contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
+    function testSingleMaverickIntegration() public {
+        deal(GHO_ADDR, ALICE, 1 ether);
+        uint256 balanceBefore = IERC20(USDC_ADDR).balanceOf(ALICE);
+
+        vm.startPrank(ALICE);
+        IERC20(GHO_ADDR).approve(tychoRouterAddr, type(uint256).max);
+
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_maverick");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        uint256 balanceAfter = IERC20(USDC_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertGe(balanceAfter - balanceBefore, 999725);
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 }

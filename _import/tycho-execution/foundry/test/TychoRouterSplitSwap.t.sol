@@ -4,8 +4,6 @@ pragma solidity ^0.8.26;
 import "@src/executors/UniswapV4Executor.sol";
 import {TychoRouter, RestrictTransferFrom} from "@src/TychoRouter.sol";
 import "./TychoRouterTestSetup.sol";
-import "./executors/UniswapV4Utils.sol";
-import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 
 contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
     function _getSplitSwaps(bool transferFrom)
