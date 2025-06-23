@@ -48,7 +48,7 @@ pub fn percentage_to_uint24(decimal: f64) -> U24 {
 }
 
 /// Gets the position of a token in a list of tokens.
-pub fn get_token_position(tokens: Vec<Bytes>, token: Bytes) -> Result<U8, EncodingError> {
+pub fn get_token_position(tokens: &Vec<&Bytes>, token: &Bytes) -> Result<U8, EncodingError> {
     let position = U8::from(
         tokens
             .iter()

@@ -89,10 +89,9 @@ impl TychoRouterEncoder {
     fn encode_solution(&self, solution: &Solution) -> Result<EncodedSolution, EncodingError> {
         self.validate_solution(solution)?;
         let protocols: HashSet<String> = solution
-            .clone()
             .swaps
-            .into_iter()
-            .map(|swap| swap.component.protocol_system)
+            .iter()
+            .map(|swap| swap.component.protocol_system.clone())
             .collect();
 
         let mut encoded_solution = if (solution.swaps.len() == 1) ||
@@ -106,20 +105,20 @@ impl TychoRouterEncoder {
                     .all(|swap| swap.split == 0.0))
         {
             self.single_swap_strategy
-                .encode_strategy(solution.clone())?
+                .encode_strategy(solution)?
         } else if solution
             .swaps
             .iter()
             .all(|swap| swap.split == 0.0)
         {
             self.sequential_swap_strategy
-                .encode_strategy(solution.clone())?
+                .encode_strategy(solution)?
         } else {
             self.split_swap_strategy
-                .encode_strategy(solution.clone())?
+                .encode_strategy(solution)?
         };
 
-        if let Some(permit2) = self.permit2.clone() {
+        if let Some(permit2) = &self.permit2 {
             let permit = permit2.get_permit(
                 &self.router_address,
                 &solution.sender,
@@ -157,8 +156,8 @@ impl TychoEncoder for TychoRouterEncoder {
                 self.chain.id,
                 encoded_solution,
                 solution,
-                self.user_transfer_type.clone(),
-                self.chain.native_token()?.clone(),
+                &self.user_transfer_type,
+                &self.chain.native_token()?,
                 self.signer.clone(),
             )?;
 
@@ -189,8 +188,8 @@ impl TychoEncoder for TychoRouterEncoder {
         }
         let native_address = self.chain.native_token()?;
         let wrapped_address = self.chain.wrapped_token()?;
-        if let Some(native_action) = solution.clone().native_action {
-            if native_action == NativeAction::Wrap {
+        if let Some(native_action) = &solution.native_action {
+            if native_action == &NativeAction::Wrap {
                 if solution.given_token != native_address {
                     return Err(EncodingError::FatalError(
                         "Native token must be the input token in order to wrap".to_string(),
@@ -204,7 +203,7 @@ impl TychoEncoder for TychoRouterEncoder {
                         ));
                     }
                 }
-            } else if native_action == NativeAction::Unwrap {
+            } else if native_action == &NativeAction::Unwrap {
                 if solution.checked_token != native_address {
                     return Err(EncodingError::FatalError(
                         "Native token must be the output token in order to unwrap".to_string(),
@@ -227,17 +226,17 @@ impl TychoEncoder for TychoRouterEncoder {
             // so we don't count the split tokens more than once
             if swap.split != 0.0 {
                 if !split_tokens_already_considered.contains(&swap.token_in) {
-                    solution_tokens.push(swap.token_in.clone());
-                    split_tokens_already_considered.insert(swap.token_in.clone());
+                    solution_tokens.push(&swap.token_in);
+                    split_tokens_already_considered.insert(&swap.token_in);
                 }
             } else {
                 // it might be the last swap of the split or a regular swap
                 if !split_tokens_already_considered.contains(&swap.token_in) {
-                    solution_tokens.push(swap.token_in.clone());
+                    solution_tokens.push(&swap.token_in);
                 }
             }
             if i == solution.swaps.len() - 1 {
-                solution_tokens.push(swap.token_out.clone());
+                solution_tokens.push(&swap.token_out);
             }
         }
 
@@ -245,7 +244,7 @@ impl TychoEncoder for TychoRouterEncoder {
             solution_tokens
                 .iter()
                 .cloned()
-                .collect::<HashSet<Bytes>>()
+                .collect::<HashSet<&Bytes>>()
                 .len()
         {
             if let Some(last_swap) = solution.swaps.last() {
@@ -256,7 +255,7 @@ impl TychoEncoder for TychoRouterEncoder {
                 } else {
                     // it is a valid cyclical swap
                     // we don't support any wrapping or unwrapping in this case
-                    if let Some(_native_action) = solution.clone().native_action {
+                    if let Some(_native_action) = &solution.native_action {
                         return Err(EncodingError::FatalError(
                             "Wrapping/Unwrapping is not available in cyclical swaps".to_string(),
                         ));
@@ -287,9 +286,9 @@ impl TychoExecutorEncoder {
 
     fn encode_executor_calldata(
         &self,
-        solution: Solution,
+        solution: &Solution,
     ) -> Result<EncodedSolution, EncodingError> {
-        let grouped_swaps = group_swaps(solution.clone().swaps);
+        let grouped_swaps = group_swaps(&solution.swaps);
         let number_of_groups = grouped_swaps.len();
         if number_of_groups > 1 {
             return Err(EncodingError::InvalidInput(format!(
@@ -300,8 +299,6 @@ impl TychoExecutorEncoder {
         let grouped_swap = grouped_swaps
             .first()
             .ok_or_else(|| EncodingError::FatalError("Swap grouping failed".to_string()))?;
-
-        let receiver = solution.receiver;
 
         let swap_encoder = self
             .swap_encoder_registry
@@ -323,14 +320,14 @@ impl TychoExecutorEncoder {
                 TransferType::None
             };
             let encoding_context = EncodingContext {
-                receiver: receiver.clone(),
+                receiver: solution.receiver.clone(),
                 exact_out: solution.exact_out,
                 router_address: None,
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
                 transfer_type: transfer,
             };
-            let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
+            let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
             grouped_protocol_data.extend(protocol_data);
         }
 
@@ -357,7 +354,7 @@ impl TychoEncoder for TychoExecutorEncoder {
             .ok_or(EncodingError::FatalError("No solutions found".to_string()))?;
         self.validate_solution(solution)?;
 
-        let encoded_solution = self.encode_executor_calldata(solution.clone())?;
+        let encoded_solution = self.encode_executor_calldata(solution)?;
 
         Ok(vec![encoded_solution])
     }
@@ -1343,8 +1340,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solutions[0].clone(),
                     &solution,
-                    UserTransferType::TransferFromPermit2,
-                    eth(),
+                    &UserTransferType::TransferFromPermit2,
+                    &eth(),
                     Some(get_signer()),
                 )
                 .unwrap()
@@ -1433,8 +1430,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFrom,
-                    eth(),
+                    &UserTransferType::TransferFrom,
+                    &eth(),
                     None,
                 )
                 .unwrap()
@@ -1518,8 +1515,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::None,
-                    eth(),
+                    &UserTransferType::None,
+                    &eth(),
                     None,
                 )
                 .unwrap()
@@ -1601,8 +1598,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFromPermit2,
-                    eth(),
+                    &UserTransferType::TransferFromPermit2,
+                    &eth(),
                     Some(get_signer()),
                 )
                 .unwrap()
@@ -1657,8 +1654,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFromPermit2,
-                    eth(),
+                    &UserTransferType::TransferFromPermit2,
+                    &eth(),
                     Some(get_signer()),
                 )
                 .unwrap()
@@ -1734,8 +1731,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFromPermit2,
-                    eth(),
+                    &UserTransferType::TransferFromPermit2,
+                    &eth(),
                     Some(get_signer()),
                 )
                 .unwrap()
@@ -1804,8 +1801,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFrom,
-                    eth(),
+                    &UserTransferType::TransferFrom,
+                    &eth(),
                     None,
                 )
                 .unwrap()
@@ -1931,8 +1928,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFromPermit2,
-                    eth(),
+                    &UserTransferType::TransferFromPermit2,
+                    &eth(),
                     Some(get_signer()),
                 )
                 .unwrap()
@@ -2058,8 +2055,8 @@ mod tests {
                         eth_chain().id,
                         encoded_solution,
                         &solution,
-                        UserTransferType::TransferFrom,
-                        eth(),
+                        &UserTransferType::TransferFrom,
+                        &eth(),
                         None,
                     )
                     .unwrap()
@@ -2149,8 +2146,8 @@ mod tests {
                         eth_chain().id,
                         encoded_solution,
                         &solution,
-                        UserTransferType::TransferFrom,
-                        eth(),
+                        &UserTransferType::TransferFrom,
+                        &eth(),
                         None,
                     )
                     .unwrap()
@@ -2249,8 +2246,8 @@ mod tests {
                         eth_chain().id,
                         encoded_solution,
                         &solution,
-                        UserTransferType::TransferFrom,
-                        eth(),
+                        &UserTransferType::TransferFrom,
+                        &eth(),
                         None,
                     )
                     .unwrap()
@@ -2326,8 +2323,8 @@ mod tests {
                         eth_chain().id,
                         encoded_solution,
                         &solution,
-                        UserTransferType::TransferFrom,
-                        eth(),
+                        &UserTransferType::TransferFrom,
+                        &eth(),
                         None,
                     )
                     .unwrap()
@@ -2492,8 +2489,8 @@ mod tests {
                         eth_chain().id,
                         encoded_solution,
                         &solution,
-                        UserTransferType::TransferFromPermit2,
-                        eth,
+                        &UserTransferType::TransferFromPermit2,
+                        &crate::encoding::evm::tycho_encoders::tests::eth(),
                         Some(get_signer()),
                     )
                     .unwrap()
@@ -2571,8 +2568,8 @@ mod tests {
                         eth_chain().id,
                         encoded_solution,
                         &solution,
-                        UserTransferType::TransferFrom,
-                        eth(),
+                        &UserTransferType::TransferFrom,
+                        &eth(),
                         None,
                     )
                     .unwrap()
@@ -2675,8 +2672,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFromPermit2,
-                    eth(),
+                    &UserTransferType::TransferFromPermit2,
+                    &eth(),
                     Some(get_signer()),
                 )
                 .unwrap()
@@ -2791,8 +2788,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFromPermit2,
-                    eth(),
+                    &UserTransferType::TransferFromPermit2,
+                    &eth(),
                     Some(get_signer()),
                 )
                 .unwrap()
@@ -2960,8 +2957,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFromPermit2,
-                    eth(),
+                    &UserTransferType::TransferFromPermit2,
+                    &eth(),
                     Some(get_signer()),
                 )
                 .unwrap()
@@ -3089,8 +3086,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFrom,
-                    eth(),
+                    &UserTransferType::TransferFrom,
+                    &eth(),
                     None,
                 )
                 .unwrap()
@@ -3145,8 +3142,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFrom,
-                    eth(),
+                    &UserTransferType::TransferFrom,
+                    &eth(),
                     None,
                 )
                 .unwrap()
@@ -3212,8 +3209,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFromPermit2,
-                    eth,
+                    &UserTransferType::TransferFromPermit2,
+                    &eth,
                     Some(get_signer()),
                 )
                 .unwrap()
@@ -3284,8 +3281,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFromPermit2,
-                    eth,
+                    &UserTransferType::TransferFromPermit2,
+                    &eth,
                     Some(get_signer()),
                 )
                 .unwrap()
@@ -3376,8 +3373,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFromPermit2,
-                    eth,
+                    &UserTransferType::TransferFromPermit2,
+                    &eth,
                     Some(get_signer()),
                 )
                 .unwrap()
@@ -3487,8 +3484,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFrom,
-                    eth(),
+                    &UserTransferType::TransferFromPermit2,
+                    &eth(),
                     None,
                 )
                 .unwrap()
@@ -3558,8 +3555,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFrom,
-                    eth(),
+                    &UserTransferType::TransferFrom,
+                    &eth(),
                     None,
                 )
                 .unwrap()
@@ -3615,8 +3612,8 @@ mod tests {
                     eth_chain().id,
                     encoded_solution,
                     &solution,
-                    UserTransferType::TransferFrom,
-                    eth(),
+                    &UserTransferType::TransferFrom,
+                    &eth(),
                     None,
                 )
                 .unwrap()

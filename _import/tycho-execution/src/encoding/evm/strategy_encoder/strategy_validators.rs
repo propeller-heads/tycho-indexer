@@ -118,7 +118,7 @@ impl SplitSwapValidator {
     /// * The sum of all non-remainder splits for each token is < 1 (100%)
     /// * There are no negative split amounts
     pub fn validate_split_percentages(&self, swaps: &[Swap]) -> Result<(), EncodingError> {
-        let mut swaps_by_token: HashMap<Bytes, Vec<&Swap>> = HashMap::new();
+        let mut swaps_by_token: HashMap<&Bytes, Vec<&Swap>> = HashMap::new();
         for swap in swaps {
             if swap.split >= 1.0 {
                 return Err(EncodingError::InvalidInput(format!(
@@ -127,7 +127,7 @@ impl SplitSwapValidator {
                 )));
             }
             swaps_by_token
-                .entry(swap.token_in.clone())
+                .entry(&swap.token_in)
                 .or_default()
                 .push(swap);
         }
