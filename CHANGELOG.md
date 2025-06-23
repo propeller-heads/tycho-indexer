@@ -1,3 +1,11 @@
+## [0.71.4](https://github.com/propeller-heads/tycho-indexer/compare/0.71.3...0.71.4) (2025-06-23)
+
+
+### Bug Fixes
+
+* correctly handle traced entrypoint upserts ([0e69e84](https://github.com/propeller-heads/tycho-indexer/commit/0e69e84cd004faef89c1a9f177440c55d7e8ef86))
+* correctly handle traced entrypoint upserts ([#599](https://github.com/propeller-heads/tycho-indexer/issues/599)) ([e58d546](https://github.com/propeller-heads/tycho-indexer/commit/e58d5469f91b04c1776006a7dc12def6b7a62763))
+
 ## [0.71.3](https://github.com/propeller-heads/tycho-indexer/compare/0.71.2...0.71.3) (2025-06-19)
 
 ## [0.71.2](https://github.com/propeller-heads/tycho-indexer/compare/0.71.1...0.71.2) (2025-06-19)
