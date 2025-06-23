@@ -3899,16 +3899,17 @@ mod tests {
 
                 let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
+                let taker_address_bytes = Bytes::from_str(&taker_address.to_string()).unwrap();
+
                 let solution = Solution {
                     exact_out: false,
                     given_token: token_in,
                     given_amount: amount_in,
                     checked_token: token_out,
                     checked_amount: amount_out, // Expected output amount
-                    // Use ALICE as sender but order receiver as receiver
-                    sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                    receiver: Bytes::from_str("0xc5564C13A157E6240659fb81882A28091add8670")
-                        .unwrap(), // Order receiver from mainnet
+                    // Use the order's taker address as sender and receiver
+                    sender: taker_address_bytes.clone(),
+                    receiver: taker_address_bytes,
                     swaps: vec![swap],
                     ..Default::default()
                 };
