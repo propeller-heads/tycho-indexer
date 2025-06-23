@@ -2121,22 +2121,6 @@ pub struct NewEntryPointTracingParams {
     pub data: Option<serde_json::Value>,
 }
 
-#[derive(Queryable, Selectable)]
-#[diesel(table_name = entry_point_tracing_result)]
-#[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct EntryPointTracingResult {
-    #[allow(dead_code)]
-    entry_point_tracing_params_id: i64,
-    #[allow(dead_code)]
-    detection_block: i64,
-    #[allow(dead_code)]
-    detection_data: serde_json::Value,
-    #[allow(dead_code)]
-    inserted_ts: NaiveDateTime,
-    #[allow(dead_code)]
-    modified_ts: NaiveDateTime,
-}
-
 #[derive(Insertable, AsChangeset)]
 #[diesel(table_name = entry_point_tracing_result)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
