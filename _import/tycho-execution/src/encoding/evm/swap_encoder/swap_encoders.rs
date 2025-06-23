@@ -368,6 +368,7 @@ pub struct CurveSwapEncoder {
     executor_address: String,
     native_token_curve_address: String,
     native_token_address: Bytes,
+    wrapped_native_token_address: Bytes,
 }
 
 impl CurveSwapEncoder {
@@ -403,6 +404,20 @@ impl CurveSwapEncoder {
         }
     }
 
+    // Some curve pools support both ETH and WETH as tokens.
+    // They do the wrapping/unwrapping inside the pool
+    fn normalize_token(&self, token: Address, coins: &[Address]) -> Result<Address, EncodingError> {
+        let native_token_address = bytes_to_address(&self.native_token_address)?;
+        let wrapped_native_token_address = bytes_to_address(&self.wrapped_native_token_address)?;
+        if token == native_token_address && !coins.contains(&token) {
+            Ok(wrapped_native_token_address)
+        } else if token == wrapped_native_token_address && !coins.contains(&token) {
+            Ok(native_token_address)
+        } else {
+            Ok(token)
+        }
+    }
+
     fn get_coin_indexes(
         &self,
         swap: &Swap,
@@ -411,6 +426,10 @@ impl CurveSwapEncoder {
     ) -> Result<(U8, U8), EncodingError> {
         let coins_bytes = get_static_attribute(&swap, "coins")?;
         let coins: Vec<Address> = from_str(std::str::from_utf8(&coins_bytes)?)?;
+
+        let token_in = self.normalize_token(token_in, &coins)?;
+        let token_out = self.normalize_token(token_out, &coins)?;
+
         let i = coins
             .iter()
             .position(|&addr| addr == token_in)
@@ -446,6 +465,7 @@ impl SwapEncoder for CurveSwapEncoder {
             executor_address,
             native_token_address: chain.native_token()?,
             native_token_curve_address,
+            wrapped_native_token_address: chain.wrapped_token()?,
         })
     }
 
