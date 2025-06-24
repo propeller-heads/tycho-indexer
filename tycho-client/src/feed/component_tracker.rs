@@ -324,7 +324,20 @@ where
         ids.into_iter()
             .filter_map(|cid| {
                 if let Some(comp) = self.components.get(cid) {
-                    Some(comp.contract_ids.clone())
+                    // Collect contracts from all entrypoints linked to this component
+                    let dci_contracts: HashSet<Address> = self
+                        .entrypoints
+                        .values()
+                        .filter(|ep| ep.components.contains(cid))
+                        .flat_map(|ep| ep.contracts.iter().cloned())
+                        .collect();
+                    Some(
+                        comp.contract_ids
+                            .clone()
+                            .into_iter()
+                            .chain(dci_contracts)
+                            .collect::<HashSet<_>>(),
+                    )
                 } else {
                     warn!(
                         "Requested component is not tracked: {cid}. Skipping fetching contracts..."
