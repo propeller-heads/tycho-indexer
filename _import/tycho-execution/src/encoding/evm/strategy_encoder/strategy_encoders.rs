@@ -71,12 +71,12 @@ impl SingleSwapStrategyEncoder {
 }
 
 impl StrategyEncoder for SingleSwapStrategyEncoder {
-    fn encode_strategy(&self, solution: Solution) -> Result<EncodedSolution, EncodingError> {
-        let grouped_swaps = group_swaps(solution.clone().swaps);
+    fn encode_strategy(&self, solution: &Solution) -> Result<EncodedSolution, EncodingError> {
+        let grouped_swaps = group_swaps(&solution.swaps);
         let number_of_groups = grouped_swaps.len();
         if number_of_groups != 1 {
             return Err(EncodingError::InvalidInput(format!(
-                "Executor strategy only supports exactly one swap for non-groupable protocols. Found {number_of_groups}",
+                "Single strategy only supports exactly one swap for non-groupable protocols. Found {number_of_groups}",
             )))
         }
 
@@ -91,15 +91,15 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
         }
 
         let (mut unwrap, mut wrap) = (false, false);
-        if let Some(action) = solution.native_action.clone() {
-            match action {
+        if let Some(action) = &solution.native_action {
+            match *action {
                 NativeAction::Wrap => wrap = true,
                 NativeAction::Unwrap => unwrap = true,
             }
         }
-        let protocol = grouped_swap.protocol_system.clone();
+        let protocol = &grouped_swap.protocol_system;
         let swap_encoder = self
-            .get_swap_encoder(&protocol)
+            .get_swap_encoder(protocol)
             .ok_or_else(|| {
                 EncodingError::InvalidInput(format!(
                     "Swap encoder not found for protocol: {protocol}"
@@ -111,9 +111,9 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 
         let transfer = self
             .transfer_optimization
-            .get_transfers(grouped_swap.clone(), solution.given_token.clone(), wrap, false);
+            .get_transfers(grouped_swap, &solution.given_token, wrap, false);
         let encoding_context = EncodingContext {
-            receiver: swap_receiver.clone(),
+            receiver: swap_receiver,
             exact_out: solution.exact_out,
             router_address: Some(self.router_address.clone()),
             group_token_in: grouped_swap.token_in.clone(),
@@ -123,7 +123,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 
         let mut grouped_protocol_data: Vec<u8> = vec![];
         for swap in grouped_swap.swaps.iter() {
-            let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
+            let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
             grouped_protocol_data.extend(protocol_data);
         }
 
@@ -213,7 +213,7 @@ impl SequentialSwapStrategyEncoder {
 }
 
 impl StrategyEncoder for SequentialSwapStrategyEncoder {
-    fn encode_strategy(&self, solution: Solution) -> Result<EncodedSolution, EncodingError> {
+    fn encode_strategy(&self, solution: &Solution) -> Result<EncodedSolution, EncodingError> {
         self.sequential_swap_validator
             .validate_swap_path(
                 &solution.swaps,
@@ -224,11 +224,11 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 &self.wrapped_address,
             )?;
 
-        let grouped_swaps = group_swaps(solution.swaps);
+        let grouped_swaps = group_swaps(&solution.swaps);
 
         let mut wrap = false;
-        if let Some(action) = solution.native_action.clone() {
-            if action == NativeAction::Wrap {
+        if let Some(action) = &solution.native_action {
+            if action == &NativeAction::Wrap {
                 wrap = true
             }
         }
@@ -236,9 +236,9 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
         let mut swaps = vec![];
         let mut next_in_between_swap_optimization_allowed = true;
         for (i, grouped_swap) in grouped_swaps.iter().enumerate() {
-            let protocol = grouped_swap.protocol_system.clone();
+            let protocol = &grouped_swap.protocol_system;
             let swap_encoder = self
-                .get_swap_encoder(&protocol)
+                .get_swap_encoder(protocol)
                 .ok_or_else(|| {
                     EncodingError::InvalidInput(format!(
                         "Swap encoder not found for protocol: {protocol}",
@@ -249,19 +249,19 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
             let next_swap = grouped_swaps.get(i + 1);
             let (swap_receiver, next_swap_optimization) = self
                 .transfer_optimization
-                .get_receiver(solution.receiver.clone(), next_swap)?;
+                .get_receiver(&solution.receiver, next_swap)?;
             next_in_between_swap_optimization_allowed = next_swap_optimization;
 
             let transfer = self
                 .transfer_optimization
                 .get_transfers(
-                    grouped_swap.clone(),
-                    solution.given_token.clone(),
+                    grouped_swap,
+                    &solution.given_token,
                     wrap,
                     in_between_swap_optimization_allowed,
                 );
             let encoding_context = EncodingContext {
-                receiver: swap_receiver.clone(),
+                receiver: swap_receiver,
                 exact_out: solution.exact_out,
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.token_in.clone(),
@@ -271,8 +271,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
-                let protocol_data =
-                    swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
+                let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
                 grouped_protocol_data.extend(protocol_data);
             }
 
@@ -376,7 +375,7 @@ impl SplitSwapStrategyEncoder {
 }
 
 impl StrategyEncoder for SplitSwapStrategyEncoder {
-    fn encode_strategy(&self, solution: Solution) -> Result<EncodedSolution, EncodingError> {
+    fn encode_strategy(&self, solution: &Solution) -> Result<EncodedSolution, EncodingError> {
         self.split_swap_validator
             .validate_split_percentages(&solution.swaps)?;
         self.split_swap_validator
@@ -391,20 +390,17 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 
         // The tokens array is composed of the given token, the checked token and all the
         // intermediary tokens in between. The contract expects the tokens to be in this order.
-        let solution_tokens: HashSet<Bytes> =
-            vec![solution.given_token.clone(), solution.checked_token.clone()]
-                .into_iter()
-                .collect();
-
-        let grouped_swaps = group_swaps(solution.swaps);
-
-        let intermediary_tokens: HashSet<Bytes> = grouped_swaps
-            .iter()
-            .flat_map(|grouped_swap| {
-                vec![grouped_swap.token_in.clone(), grouped_swap.token_out.clone()]
-            })
+        let solution_tokens: HashSet<&Bytes> = vec![&solution.given_token, &solution.checked_token]
+            .into_iter()
             .collect();
-        let mut intermediary_tokens: Vec<Bytes> = intermediary_tokens
+
+        let grouped_swaps = group_swaps(&solution.swaps);
+
+        let intermediary_tokens: HashSet<&Bytes> = grouped_swaps
+            .iter()
+            .flat_map(|grouped_swap| vec![&grouped_swap.token_in, &grouped_swap.token_out])
+            .collect();
+        let mut intermediary_tokens: Vec<&Bytes> = intermediary_tokens
             .difference(&solution_tokens)
             .cloned()
             .collect();
@@ -413,8 +409,8 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         intermediary_tokens.sort();
 
         let (mut unwrap, mut wrap) = (false, false);
-        if let Some(action) = solution.native_action.clone() {
-            match action {
+        if let Some(action) = &solution.native_action {
+            match *action {
                 NativeAction::Wrap => wrap = true,
                 NativeAction::Unwrap => unwrap = true,
             }
@@ -422,23 +418,23 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 
         let mut tokens = Vec::with_capacity(2 + intermediary_tokens.len());
         if wrap {
-            tokens.push(self.wrapped_address.clone());
+            tokens.push(&self.wrapped_address);
         } else {
-            tokens.push(solution.given_token.clone());
+            tokens.push(&solution.given_token);
         }
         tokens.extend(intermediary_tokens);
 
         if unwrap {
-            tokens.push(self.wrapped_address.clone());
+            tokens.push(&self.wrapped_address);
         } else {
-            tokens.push(solution.checked_token.clone());
+            tokens.push(&solution.checked_token);
         }
 
         let mut swaps = vec![];
         for grouped_swap in grouped_swaps.iter() {
-            let protocol = grouped_swap.protocol_system.clone();
+            let protocol = &grouped_swap.protocol_system;
             let swap_encoder = self
-                .get_swap_encoder(&protocol)
+                .get_swap_encoder(protocol)
                 .ok_or_else(|| {
                     EncodingError::InvalidInput(format!(
                         "Swap encoder not found for protocol: {protocol}",
@@ -452,9 +448,9 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             };
             let transfer = self
                 .transfer_optimization
-                .get_transfers(grouped_swap.clone(), solution.given_token.clone(), wrap, false);
+                .get_transfers(grouped_swap, &solution.given_token, wrap, false);
             let encoding_context = EncodingContext {
-                receiver: swap_receiver.clone(),
+                receiver: swap_receiver,
                 exact_out: solution.exact_out,
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.token_in.clone(),
@@ -464,14 +460,13 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 
             let mut grouped_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
-                let protocol_data =
-                    swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
+                let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
                 grouped_protocol_data.extend(protocol_data);
             }
 
             let swap_data = self.encode_swap_header(
-                get_token_position(tokens.clone(), grouped_swap.token_in.clone())?,
-                get_token_position(tokens.clone(), grouped_swap.token_out.clone())?,
+                get_token_position(&tokens, &grouped_swap.token_in)?,
+                get_token_position(&tokens, &grouped_swap.token_out)?,
                 percentage_to_uint24(grouped_swap.split),
                 Bytes::from_str(swap_encoder.executor_address()).map_err(|_| {
                     EncodingError::FatalError("Invalid executor address".to_string())
@@ -581,7 +576,7 @@ mod tests {
             };
 
             let encoded_solution = encoder
-                .encode_strategy(solution.clone())
+                .encode_strategy(&solution)
                 .unwrap();
 
             let expected_swap = String::from(concat!(
@@ -642,7 +637,7 @@ mod tests {
             };
 
             let encoded_solution = encoder
-                .encode_strategy(solution.clone())
+                .encode_strategy(&solution)
                 .unwrap();
 
             let expected_input = [
@@ -724,7 +719,7 @@ mod tests {
             };
 
             let encoded_solution = encoder
-                .encode_strategy(solution.clone())
+                .encode_strategy(&solution)
                 .unwrap();
 
             let hex_calldata = encode(&encoded_solution.swaps);
@@ -864,7 +859,7 @@ mod tests {
             };
 
             let encoded_solution = encoder
-                .encode_strategy(solution.clone())
+                .encode_strategy(&solution)
                 .unwrap();
 
             let hex_calldata = hex::encode(&encoded_solution.swaps);
@@ -1014,7 +1009,7 @@ mod tests {
             };
 
             let encoded_solution = encoder
-                .encode_strategy(solution.clone())
+                .encode_strategy(&solution)
                 .unwrap();
 
             let hex_calldata = hex::encode(&encoded_solution.swaps);

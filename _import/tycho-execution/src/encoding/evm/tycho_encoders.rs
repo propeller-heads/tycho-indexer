@@ -89,33 +89,36 @@ impl TychoRouterEncoder {
     fn encode_solution(&self, solution: &Solution) -> Result<EncodedSolution, EncodingError> {
         self.validate_solution(solution)?;
         let protocols: HashSet<String> = solution
-            .clone()
             .swaps
-            .into_iter()
-            .map(|swap| swap.component.protocol_system)
+            .iter()
+            .map(|swap| swap.component.protocol_system.clone())
             .collect();
 
         let mut encoded_solution = if (solution.swaps.len() == 1) ||
-            (protocols.len() == 1 &&
+            ((protocols.len() == 1 &&
                 protocols
                     .iter()
-                    .any(|p| GROUPABLE_PROTOCOLS.contains(&p.as_str())))
+                    .any(|p| GROUPABLE_PROTOCOLS.contains(&p.as_str()))) &&
+                solution
+                    .swaps
+                    .iter()
+                    .all(|swap| swap.split == 0.0))
         {
             self.single_swap_strategy
-                .encode_strategy(solution.clone())?
+                .encode_strategy(solution)?
         } else if solution
             .swaps
             .iter()
             .all(|swap| swap.split == 0.0)
         {
             self.sequential_swap_strategy
-                .encode_strategy(solution.clone())?
+                .encode_strategy(solution)?
         } else {
             self.split_swap_strategy
-                .encode_strategy(solution.clone())?
+                .encode_strategy(solution)?
         };
 
-        if let Some(permit2) = self.permit2.clone() {
+        if let Some(permit2) = &self.permit2 {
             let permit = permit2.get_permit(
                 &self.router_address,
                 &solution.sender,
@@ -153,8 +156,8 @@ impl TychoEncoder for TychoRouterEncoder {
                 self.chain.id,
                 encoded_solution,
                 solution,
-                self.user_transfer_type.clone(),
-                self.chain.native_token()?.clone(),
+                &self.user_transfer_type,
+                &self.chain.native_token()?,
                 self.signer.clone(),
             )?;
 
@@ -185,8 +188,8 @@ impl TychoEncoder for TychoRouterEncoder {
         }
         let native_address = self.chain.native_token()?;
         let wrapped_address = self.chain.wrapped_token()?;
-        if let Some(native_action) = solution.clone().native_action {
-            if native_action == NativeAction::Wrap {
+        if let Some(native_action) = &solution.native_action {
+            if native_action == &NativeAction::Wrap {
                 if solution.given_token != native_address {
                     return Err(EncodingError::FatalError(
                         "Native token must be the input token in order to wrap".to_string(),
@@ -200,7 +203,7 @@ impl TychoEncoder for TychoRouterEncoder {
                         ));
                     }
                 }
-            } else if native_action == NativeAction::Unwrap {
+            } else if native_action == &NativeAction::Unwrap {
                 if solution.checked_token != native_address {
                     return Err(EncodingError::FatalError(
                         "Native token must be the output token in order to unwrap".to_string(),
@@ -223,17 +226,17 @@ impl TychoEncoder for TychoRouterEncoder {
             // so we don't count the split tokens more than once
             if swap.split != 0.0 {
                 if !split_tokens_already_considered.contains(&swap.token_in) {
-                    solution_tokens.push(swap.token_in.clone());
-                    split_tokens_already_considered.insert(swap.token_in.clone());
+                    solution_tokens.push(&swap.token_in);
+                    split_tokens_already_considered.insert(&swap.token_in);
                 }
             } else {
                 // it might be the last swap of the split or a regular swap
                 if !split_tokens_already_considered.contains(&swap.token_in) {
-                    solution_tokens.push(swap.token_in.clone());
+                    solution_tokens.push(&swap.token_in);
                 }
             }
             if i == solution.swaps.len() - 1 {
-                solution_tokens.push(swap.token_out.clone());
+                solution_tokens.push(&swap.token_out);
             }
         }
 
@@ -241,7 +244,7 @@ impl TychoEncoder for TychoRouterEncoder {
             solution_tokens
                 .iter()
                 .cloned()
-                .collect::<HashSet<Bytes>>()
+                .collect::<HashSet<&Bytes>>()
                 .len()
         {
             if let Some(last_swap) = solution.swaps.last() {
@@ -252,7 +255,7 @@ impl TychoEncoder for TychoRouterEncoder {
                 } else {
                     // it is a valid cyclical swap
                     // we don't support any wrapping or unwrapping in this case
-                    if let Some(_native_action) = solution.clone().native_action {
+                    if let Some(_native_action) = &solution.native_action {
                         return Err(EncodingError::FatalError(
                             "Wrapping/Unwrapping is not available in cyclical swaps".to_string(),
                         ));
@@ -283,9 +286,9 @@ impl TychoExecutorEncoder {
 
     fn encode_executor_calldata(
         &self,
-        solution: Solution,
+        solution: &Solution,
     ) -> Result<EncodedSolution, EncodingError> {
-        let grouped_swaps = group_swaps(solution.clone().swaps);
+        let grouped_swaps = group_swaps(&solution.swaps);
         let number_of_groups = grouped_swaps.len();
         if number_of_groups > 1 {
             return Err(EncodingError::InvalidInput(format!(
@@ -296,8 +299,6 @@ impl TychoExecutorEncoder {
         let grouped_swap = grouped_swaps
             .first()
             .ok_or_else(|| EncodingError::FatalError("Swap grouping failed".to_string()))?;
-
-        let receiver = solution.receiver;
 
         let swap_encoder = self
             .swap_encoder_registry
@@ -319,14 +320,14 @@ impl TychoExecutorEncoder {
                 TransferType::None
             };
             let encoding_context = EncodingContext {
-                receiver: receiver.clone(),
+                receiver: solution.receiver.clone(),
                 exact_out: solution.exact_out,
                 router_address: None,
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
                 transfer_type: transfer,
             };
-            let protocol_data = swap_encoder.encode_swap(swap.clone(), encoding_context.clone())?;
+            let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
             grouped_protocol_data.extend(protocol_data);
         }
 
@@ -353,7 +354,7 @@ impl TychoEncoder for TychoExecutorEncoder {
             .ok_or(EncodingError::FatalError("No solutions found".to_string()))?;
         self.validate_solution(solution)?;
 
-        let encoded_solution = self.encode_executor_calldata(solution.clone())?;
+        let encoded_solution = self.encode_executor_calldata(solution)?;
 
         Ok(vec![encoded_solution])
     }
@@ -607,6 +608,32 @@ mod tests {
             assert_eq!(transactions[0].value, eth_amount_in);
             // sequential swap selector
             assert_eq!(&hex::encode(transactions[0].clone().data)[..8], "e21dd0d3");
+        }
+
+        #[test]
+        fn test_encode_router_calldata_split_swap_group() {
+            let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+            let mut swap_usdc_eth = swap_usdc_eth_univ4();
+            swap_usdc_eth.split = 0.5; // Set split to 50%
+            let solution = Solution {
+                exact_out: false,
+                given_token: usdc(),
+                given_amount: BigUint::from_str("1000_000000").unwrap(),
+                checked_token: eth(),
+                checked_amount: BigUint::from_str("105_152_000000000000000000").unwrap(),
+                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                swaps: vec![swap_usdc_eth, swap_usdc_eth_univ4()],
+                ..Default::default()
+            };
+
+            let encoded_solution_res = encoder.encode_solution(&solution);
+            assert!(encoded_solution_res.is_ok());
+
+            let encoded_solution = encoded_solution_res.unwrap();
+            assert!(encoded_solution
+                .function_signature
+                .contains("splitSwap"));
         }
 
         #[test]
@@ -1260,98 +1287,7 @@ mod tests {
         use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
         use super::*;
-        use crate::encoding::{
-            evm::utils::{biguint_to_u256, write_calldata_to_file},
-            models::BebopOrderType,
-        };
-
-        /// Builds Bebop user_data with support for single or multiple signatures
-        ///
-        /// # Arguments
-        /// * `order_type` - The type of Bebop order (Single or Aggregate)
-        /// * `filled_taker_amount` - Amount to fill (0 means fill entire order)
-        /// * `quote_data` - The ABI-encoded order data
-        /// * `signatures` - Vector of (signature_bytes, signature_type) tuples
-        ///   - For Single orders: expects exactly 1 signature
-        ///   - For Aggregate orders: expects 1 or more signatures (one per maker)
-        fn build_bebop_user_data(
-            order_type: BebopOrderType,
-            filled_taker_amount: U256,
-            quote_data: &[u8],
-            signatures: Vec<(Vec<u8>, u8)>, // (signature, signature_type)
-        ) -> Bytes {
-            // ABI encode MakerSignature[] array
-            // Format: offset_to_array | array_length | [offset_to_struct_i]... | [struct_i_data]...
-            let mut encoded_maker_sigs = Vec::new();
-
-            // Calculate total size needed
-            let array_offset = 32; // offset to array start
-            let array_length_size = 32;
-            let struct_offsets_size = 32 * signatures.len();
-            let _header_size = array_length_size + struct_offsets_size;
-
-            // Build each struct's data and calculate offsets
-            let mut struct_data = Vec::new();
-            let mut struct_offsets = Vec::new();
-            // Offsets are relative to the start of array data, not the absolute position
-            // Array data starts after array length, so first offset is after all offset values
-            let mut current_offset = struct_offsets_size; // Just the space for offsets, not including array length
-
-            for (signature, signature_type) in &signatures {
-                struct_offsets.push(current_offset);
-
-                // Each struct contains:
-                // - offset to signatureBytes (32 bytes) - always 0x40 (64)
-                // - flags (32 bytes)
-                // - signatureBytes length (32 bytes)
-                // - signatureBytes data (padded to 32 bytes)
-                let mut struct_bytes = Vec::new();
-
-                // Offset to signatureBytes within this struct
-                struct_bytes.extend_from_slice(&U256::from(64).to_be_bytes::<32>());
-
-                // Flags (contains signature type) - AFTER the offset, not before!
-                let flags = U256::from(*signature_type);
-                struct_bytes.extend_from_slice(&flags.to_be_bytes::<32>());
-
-                // SignatureBytes length
-                struct_bytes.extend_from_slice(&U256::from(signature.len()).to_be_bytes::<32>());
-
-                // SignatureBytes data (padded to 32 byte boundary)
-                struct_bytes.extend_from_slice(signature);
-                let padding = (32 - (signature.len() % 32)) % 32;
-                struct_bytes.extend_from_slice(&vec![0u8; padding]);
-
-                current_offset += struct_bytes.len();
-                struct_data.push(struct_bytes);
-            }
-
-            // Build the complete ABI encoded array
-            // Offset to array (always 0x20 for a single parameter)
-            encoded_maker_sigs.extend_from_slice(&U256::from(array_offset).to_be_bytes::<32>());
-
-            // Array length
-            encoded_maker_sigs.extend_from_slice(&U256::from(signatures.len()).to_be_bytes::<32>());
-
-            // Struct offsets (relative to start of array data)
-            for offset in struct_offsets {
-                encoded_maker_sigs.extend_from_slice(&U256::from(offset).to_be_bytes::<32>());
-            }
-
-            // Struct data
-            for data in struct_data {
-                encoded_maker_sigs.extend_from_slice(&data);
-            }
-
-            // Build complete user_data
-            let mut user_data = Vec::new();
-            user_data.push(order_type as u8);
-            user_data.extend_from_slice(&filled_taker_amount.to_be_bytes::<32>());
-            user_data.extend_from_slice(&(quote_data.len() as u32).to_be_bytes());
-            user_data.extend_from_slice(quote_data);
-            user_data.extend_from_slice(&encoded_maker_sigs);
-            Bytes::from(user_data)
-        }
+        use crate::encoding::evm::utils::{biguint_to_u256, write_calldata_to_file};
 
         fn get_signer() -> PrivateKeySigner {
             // Set up a mock private key for signing (Alice's pk in our contract tests)
@@ -2050,7 +1986,6 @@ mod tests {
             mod optimized_transfers {
                 // In this module we test the ability to chain swaps or not. Different protocols are
                 // tested. The encoded data is used for solidity tests as well
-
                 use super::*;
 
                 #[test]
@@ -2401,140 +2336,6 @@ mod tests {
 
                     let hex_calldata = encode(&calldata);
                     write_calldata_to_file("test_balancer_v2_uniswap_v2", hex_calldata.as_str());
-                }
-
-                #[test]
-                fn test_uniswap_v3_bebop() {
-                    // Note: This test does not assert anything. It is only used to obtain
-                    // integration test data for our router solidity test.
-                    //
-                    // Performs a sequential swap from WETH to ONDO through USDC using USV3 and
-                    // Bebop RFQ
-                    //
-                    //   WETH ───(USV3)──> USDC ───(Bebop RFQ)──> ONDO
-
-                    let weth = weth();
-                    let usdc = usdc();
-                    let ondo = ondo();
-
-                    // First swap: WETH -> USDC via UniswapV3
-                    let swap_weth_usdc = Swap {
-                        component: ProtocolComponent {
-                            id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* WETH-USDC USV3 Pool 0.05% */
-                            protocol_system: "uniswap_v3".to_string(),
-                            static_attributes: {
-                                let mut attrs = HashMap::new();
-                                attrs.insert(
-                                    "fee".to_string(),
-                                    Bytes::from(BigInt::from(500).to_signed_bytes_be()),
-                                );
-                                attrs
-                            },
-                            ..Default::default()
-                        },
-                        token_in: weth.clone(),
-                        token_out: usdc.clone(),
-                        split: 0f64,
-                        user_data: None,
-                    };
-
-                    // Second swap: USDC -> ONDO via Bebop RFQ using real order data
-                    // Using the same real order from the mainnet transaction at block 22667985
-                    let expiry = 1749483840u64; // Real expiry from the order
-                    let taker_address =
-                        Address::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(); // Real taker
-                    let maker_address =
-                        Address::from_str("0xCe79b081c0c924cb67848723ed3057234d10FC6b").unwrap(); // Real maker
-                    let maker_nonce = 1749483765992417u64; // Real nonce
-                    let taker_token = Address::from_str(&usdc.to_string()).unwrap();
-                    let maker_token = Address::from_str(&ondo.to_string()).unwrap();
-                    // Using the real order amounts
-                    let taker_amount = U256::from_str("200000000").unwrap(); // 200 USDC (6 decimals)
-                    let maker_amount = U256::from_str("237212396774431060000").unwrap(); // 237.21 ONDO (18 decimals)
-                    let receiver =
-                        Address::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(); // Real receiver
-                    let packed_commands = U256::ZERO;
-                    let flags = U256::from_str("51915842898789398998206002334703507894664330885127600393944965515693155942400").unwrap(); // Real flags
-
-                    // Encode using standard ABI encoding (not packed)
-                    let quote_data = (
-                        expiry,
-                        taker_address,
-                        maker_address,
-                        maker_nonce,
-                        taker_token,
-                        maker_token,
-                        taker_amount,
-                        maker_amount,
-                        receiver,
-                        packed_commands,
-                        flags,
-                    )
-                        .abi_encode();
-
-                    // Real signature from the order
-                    let signature = hex::decode("eb5419631614978da217532a40f02a8f2ece37d8cfb94aaa602baabbdefb56b474f4c2048a0f56502caff4ea7411d99eed6027cd67dc1088aaf4181dcb0df7051c").unwrap();
-
-                    // Build user_data with the quote and signature
-                    let user_data = build_bebop_user_data(
-                        BebopOrderType::Single,
-                        U256::from(0), // 0 means fill entire order
-                        &quote_data,
-                        vec![(signature, 0)], // ETH_SIGN signature type (0)
-                    );
-
-                    let bebop_component = ProtocolComponent {
-                        id: String::from("bebop-rfq"),
-                        protocol_system: String::from("rfq:bebop"),
-                        static_attributes: HashMap::new(), // No static attributes needed
-                        ..Default::default()
-                    };
-
-                    let swap_usdc_ondo = Swap {
-                        component: bebop_component,
-                        token_in: usdc.clone(),
-                        token_out: ondo.clone(),
-                        split: 0f64,
-                        user_data: Some(user_data),
-                    };
-
-                    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-
-                    let solution = Solution {
-                        exact_out: false,
-                        given_token: weth,
-                        // Use ~0.099 WETH to get approximately 200 USDC from UniswapV3
-                        // This should leave only dust amount in the router after Bebop consumes 200
-                        // USDC
-                        given_amount: BigUint::from_str("99000000000000000").unwrap(), // 0.099 WETH
-                        checked_token: ondo,
-                        checked_amount: BigUint::from_str("237212396774431060000").unwrap(), /* Expected ONDO from Bebop order */
-                        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
-                            .unwrap(),
-                        receiver: Bytes::from_str("0xc5564C13A157E6240659fb81882A28091add8670")
-                            .unwrap(), // Using the real order receiver
-                        swaps: vec![swap_weth_usdc, swap_usdc_ondo],
-                        ..Default::default()
-                    };
-
-                    let encoded_solution = encoder
-                        .encode_solutions(vec![solution.clone()])
-                        .unwrap()[0]
-                        .clone();
-
-                    let calldata = encode_tycho_router_call(
-                        eth_chain().id,
-                        encoded_solution,
-                        &solution,
-                        UserTransferType::TransferFrom,
-                        eth(),
-                        None,
-                    )
-                    .unwrap()
-                    .data;
-
-                    let hex_calldata = encode(&calldata);
-                    write_calldata_to_file("test_uniswap_v3_bebop", hex_calldata.as_str());
                 }
 
                 #[test]
@@ -3824,252 +3625,6 @@ mod tests {
                 let hex_calldata = encode(&calldata);
                 write_calldata_to_file(
                     "test_single_encoding_strategy_balancer_v3",
-                    hex_calldata.as_str(),
-                );
-            }
-
-            #[test]
-            fn test_single_encoding_strategy_bebop() {
-                // Use the same mainnet data from Solidity tests
-                // Transaction: https://etherscan.io/tx/0x6279bc970273b6e526e86d9b69133c2ca1277e697ba25375f5e6fc4df50c0c94
-                let token_in = usdc();
-                let token_out = ondo();
-                let amount_in = BigUint::from_str("200000000").unwrap(); // 200 USDC
-                let amount_out = BigUint::from_str("237212396774431060000").unwrap(); // 237.21 ONDO
-
-                // Create the exact same order from mainnet
-                let expiry = 1749483840u64;
-                let taker_address =
-                    Address::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(); // Order receiver from mainnet
-                let maker_address =
-                    Address::from_str("0xCe79b081c0c924cb67848723ed3057234d10FC6b").unwrap();
-                let maker_nonce = 1749483765992417u64;
-                let taker_token = Address::from_str(&token_in.to_string()).unwrap();
-                let maker_token = Address::from_str(&token_out.to_string()).unwrap();
-                let taker_amount = U256::from_str(&amount_in.to_string()).unwrap();
-                let maker_amount = U256::from_str(&amount_out.to_string()).unwrap();
-                let receiver = taker_address; // Same as taker_address in this order
-                let packed_commands = U256::ZERO;
-                let flags = U256::from_str(
-                    "51915842898789398998206002334703507894664330885127600393944965515693155942400",
-                )
-                .unwrap();
-
-                // Encode using standard ABI encoding (not packed)
-                let quote_data = (
-                    expiry,
-                    taker_address,
-                    maker_address,
-                    maker_nonce,
-                    taker_token,
-                    maker_token,
-                    taker_amount,
-                    maker_amount,
-                    receiver,
-                    packed_commands,
-                    flags,
-                )
-                    .abi_encode();
-
-                // Real signature from mainnet
-                let signature = hex::decode("eb5419631614978da217532a40f02a8f2ece37d8cfb94aaa602baabbdefb56b474f4c2048a0f56502caff4ea7411d99eed6027cd67dc1088aaf4181dcb0df7051c").unwrap();
-
-                // Build user_data with the quote and signature
-                let user_data = build_bebop_user_data(
-                    BebopOrderType::Single,
-                    U256::ZERO, // 0 means fill entire order
-                    &quote_data,
-                    vec![(signature, 0)], // ETH_SIGN signature type
-                );
-
-                let bebop_component = ProtocolComponent {
-                    id: String::from("bebop-rfq"),
-                    protocol_system: String::from("rfq:bebop"),
-                    static_attributes: HashMap::new(), // No static attributes needed
-                    ..Default::default()
-                };
-
-                let swap = Swap {
-                    component: bebop_component,
-                    token_in: token_in.clone(),
-                    token_out: token_out.clone(),
-                    split: 0f64,
-                    user_data: Some(user_data),
-                };
-
-                let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-
-                let taker_address_bytes = Bytes::from_str(&taker_address.to_string()).unwrap();
-
-                let solution = Solution {
-                    exact_out: false,
-                    given_token: token_in,
-                    given_amount: amount_in,
-                    checked_token: token_out,
-                    checked_amount: amount_out, // Expected output amount
-                    // Use the order's taker address as sender and receiver
-                    sender: taker_address_bytes.clone(),
-                    receiver: taker_address_bytes,
-                    swaps: vec![swap],
-                    ..Default::default()
-                };
-
-                let encoded_solution = encoder
-                    .encode_solutions(vec![solution.clone()])
-                    .unwrap()[0]
-                    .clone();
-
-                let calldata = encode_tycho_router_call(
-                    eth_chain().id,
-                    encoded_solution,
-                    &solution,
-                    UserTransferType::TransferFrom,
-                    eth(),
-                    None,
-                )
-                .unwrap()
-                .data;
-                let hex_calldata = hex::encode(&calldata);
-                write_calldata_to_file(
-                    "test_single_encoding_strategy_bebop",
-                    hex_calldata.as_str(),
-                );
-            }
-
-            #[test]
-            fn test_single_encoding_strategy_bebop_aggregate() {
-                // Use real mainnet aggregate order data from CLAUDE.md
-                // Transaction: https://etherscan.io/tx/0xec88410136c287280da87d0a37c1cb745f320406ca3ae55c678dec11996c1b1c
-                // For testing, use WETH directly to avoid delegatecall + native ETH complexities
-                let token_in = eth();
-                let token_out = usdc();
-                let amount_in = BigUint::from_str("9850000000000000").unwrap(); // 0.00985 WETH
-                let amount_out = BigUint::from_str("17969561").unwrap(); // 17.969561 USDC
-
-                // Create the exact aggregate order from mainnet
-                let expiry = 1746367285u64;
-                let taker_address =
-                    Address::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap();
-                let receiver =
-                    Address::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap();
-
-                // Set up makers
-                let maker_addresses = vec![
-                    Address::from_str("0x67336Cec42645F55059EfF241Cb02eA5cC52fF86").unwrap(),
-                    Address::from_str("0xBF19CbF0256f19f39A016a86Ff3551ecC6f2aAFE").unwrap(),
-                ];
-                let maker_nonces = vec![U256::from(1746367197308u64), U256::from(15460096u64)];
-
-                // 2D arrays for tokens
-                // We use WETH as a taker token even when handling native ETH
-                let taker_tokens =
-                    vec![vec![Address::from_slice(&weth())], vec![Address::from_slice(&weth())]];
-                let maker_tokens = vec![
-                    vec![Address::from_slice(&token_out)],
-                    vec![Address::from_slice(&token_out)],
-                ];
-
-                // 2D arrays for amounts
-                let taker_amounts = vec![
-                    vec![U256::from_str("5812106401997138").unwrap()],
-                    vec![U256::from_str("4037893598002862").unwrap()],
-                ];
-                let maker_amounts = vec![
-                    vec![U256::from_str("10607211").unwrap()],
-                    vec![U256::from_str("7362350").unwrap()],
-                ];
-
-                // Commands and flags from the real transaction
-                let commands = hex!("00040004").to_vec();
-                let flags = U256::from_str(
-                    "95769172144825922628485191511070792431742484643425438763224908097896054784000",
-                )
-                .unwrap();
-
-                // Encode Aggregate order - must match IBebopSettlement.Aggregate struct exactly
-                let quote_data = (
-                    U256::from(expiry), // expiry as U256
-                    taker_address,
-                    maker_addresses,
-                    maker_nonces, // Array of maker nonces
-                    taker_tokens, // 2D array
-                    maker_tokens,
-                    taker_amounts, // 2D array
-                    maker_amounts,
-                    receiver,
-                    commands,
-                    flags,
-                )
-                    .abi_encode();
-
-                // Use real signatures from the mainnet transaction
-                let sig1 = hex::decode("d5abb425f9bac1f44d48705f41a8ab9cae207517be8553d2c03b06a88995f2f351ab8ce7627a87048178d539dd64fd2380245531a0c8e43fdc614652b1f32fc71c").unwrap();
-                let sig2 = hex::decode("f38c698e48a3eac48f184bc324fef0b135ee13705ab38cc0bbf5a792f21002f051e445b9e7d57cf24c35e17629ea35b3263591c4abf8ca87ffa44b41301b89c41b").unwrap();
-
-                // Build user_data with ETH_SIGN flag (0) for both signatures
-                let signatures = vec![
-                    (sig1, 0u8), // ETH_SIGN for maker 1
-                    (sig2, 0u8), // ETH_SIGN for maker 2
-                ];
-
-                let user_data = build_bebop_user_data(
-                    BebopOrderType::Aggregate,
-                    U256::from(0), // 0 means fill entire aggregate order
-                    &quote_data,
-                    signatures,
-                );
-
-                let bebop_component = ProtocolComponent {
-                    id: String::from("bebop-rfq"),
-                    protocol_system: String::from("rfq:bebop"),
-                    static_attributes: HashMap::new(),
-                    ..Default::default()
-                };
-
-                let swap = Swap {
-                    component: bebop_component,
-                    token_in: token_in.clone(),
-                    token_out: token_out.clone(),
-                    split: 0f64,
-                    user_data: Some(user_data),
-                };
-
-                // Use TransferFrom for WETH token transfer
-                let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-
-                let solution = Solution {
-                    exact_out: false,
-                    given_token: token_in.clone(),
-                    given_amount: amount_in,
-                    checked_token: token_out,
-                    checked_amount: amount_out,
-                    // Use ALICE as sender but order receiver as receiver
-                    sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(), /* ALICE */
-                    receiver: Bytes::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6")
-                        .unwrap(), /* Order receiver */
-                    swaps: vec![swap],
-                    ..Default::default()
-                };
-
-                let encoded_solution = encoder
-                    .encode_solutions(vec![solution.clone()])
-                    .unwrap()[0]
-                    .clone();
-
-                let calldata = encode_tycho_router_call(
-                    eth_chain().id,
-                    encoded_solution,
-                    &solution,
-                    UserTransferType::None,
-                    eth(),
-                    None,
-                )
-                .unwrap()
-                .data;
-                let hex_calldata = hex::encode(&calldata);
-
-                write_calldata_to_file(
-                    "test_single_encoding_strategy_bebop_aggregate",
                     hex_calldata.as_str(),
                 );
             }

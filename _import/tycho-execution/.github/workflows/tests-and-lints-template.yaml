@@ -72,7 +72,9 @@ jobs:
           cache-on-failure: true
 
       - name: Install latest nextest release
-        uses: taiki-e/install-action@b239071b2aedda3db20530301c2d88cd538e90d3
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nextest@0.9.98
 
       - name: Test
         run: cargo nextest run --workspace --lib --all-targets && cargo test --doc

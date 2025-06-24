@@ -1,23 +1,28 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "../src/executors/BalancerV2Executor.sol";
-import "../src/executors/CurveExecutor.sol";
-import "../src/executors/EkuboExecutor.sol";
-import "../src/executors/UniswapV2Executor.sol";
-import "../src/executors/UniswapV3Executor.sol";
-import "../src/executors/UniswapV4Executor.sol";
+// Executors
+import {BalancerV2Executor} from "../src/executors/BalancerV2Executor.sol";
+import {BalancerV3Executor} from "../src/executors/BalancerV3Executor.sol";
+import {CurveExecutor} from "../src/executors/CurveExecutor.sol";
+import {EkuboExecutor} from "../src/executors/EkuboExecutor.sol";
+import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
+import {UniswapV2Executor} from "../src/executors/UniswapV2Executor.sol";
+import {
+    UniswapV3Executor,
+    IUniswapV3Pool
+} from "../src/executors/UniswapV3Executor.sol";
+import {UniswapV4Executor} from "../src/executors/UniswapV4Executor.sol";
+import {BebopExecutorHarness} from "./executors/BebopExecutor.t.sol";
+
+// Test utilities and mocks
 import "./Constants.sol";
-import "./mock/MockERC20.sol";
+import "./TestUtils.sol";
+import {Permit2TestHelper} from "./Permit2TestHelper.sol";
+
+// Core contracts and interfaces
 import "@src/TychoRouter.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
-import {WETH} from "../lib/permit2/lib/solmate/src/tokens/WETH.sol";
-import {Permit2TestHelper} from "./Permit2TestHelper.sol";
-import "./TestUtils.sol";
-import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
-import {BalancerV3Executor} from "../src/executors/BalancerV3Executor.sol";
-import {BebopExecutorHarness} from "./executors/BebopExecutor.t.sol";
 
 contract TychoRouterExposed is TychoRouter {
     constructor(address _permit2, address weth) TychoRouter(_permit2, weth) {}
@@ -70,7 +75,6 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     MaverickV2Executor public maverickv2Executor;
     BalancerV3Executor public balancerV3Executor;
     BebopExecutorHarness public bebopExecutor;
-    MockERC20[] tokens;
 
     function getForkBlock() public view virtual returns (uint256) {
         return 22082754;
@@ -88,12 +92,6 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address[] memory executors = deployExecutors();
         vm.startPrank(EXECUTOR_SETTER);
         tychoRouter.setExecutors(executors);
-        vm.stopPrank();
-
-        vm.startPrank(BOB);
-        tokens.push(new MockERC20("Token A", "A"));
-        tokens.push(new MockERC20("Token B", "B"));
-        tokens.push(new MockERC20("Token C", "C"));
         vm.stopPrank();
     }
 
@@ -150,18 +148,6 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         executors[9] = address(bebopExecutor);
 
         return executors;
-    }
-
-    /**
-     * @dev Mints tokens to the given address
-     * @param amount The amount of tokens to mint
-     * @param to The address to mint tokens to
-     */
-    function mintTokens(uint256 amount, address to) internal {
-        for (uint256 i = 0; i < tokens.length; i++) {
-            // slither-disable-next-line calls-loop
-            tokens[i].mint(to, amount);
-        }
     }
 
     function pleEncode(bytes[] memory data)

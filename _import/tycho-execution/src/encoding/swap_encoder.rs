@@ -34,8 +34,8 @@ pub trait SwapEncoder: Sync + Send {
     /// The encoded swap data as bytes, directly executable on the executor contract
     fn encode_swap(
         &self,
-        swap: Swap,
-        encoding_context: EncodingContext,
+        swap: &Swap,
+        encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError>;
 
     /// Returns the address of the protocol-specific executor contract.

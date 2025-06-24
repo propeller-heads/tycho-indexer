@@ -203,7 +203,7 @@ pub struct EncodingContext {
 /// * `Transfer`: Transfer the token from the router into the protocol.
 /// * `None`: No transfer is needed. Tokens are already in the pool.
 #[repr(u8)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum TransferType {
     TransferFrom = 0,
     Transfer = 1,
