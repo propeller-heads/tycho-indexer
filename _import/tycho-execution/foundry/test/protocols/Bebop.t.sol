@@ -2,209 +2,14 @@
 pragma solidity ^0.8.26;
 
 import "../TestUtils.sol";
+import "../TychoRouterTestSetup.sol";
+import "./BebopExecutionHarness.t.sol";
 import "@src/executors/BebopExecutor.sol";
 import {Constants} from "../Constants.sol";
-import {Permit2TestHelper} from "../Permit2TestHelper.sol";
-import {Test, console} from "forge-std/Test.sol";
-import {StdCheats} from "forge-std/StdCheats.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {Permit2TestHelper} from "../Permit2TestHelper.sol";
 import {SafeERC20} from
     "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-
-contract MockToken is ERC20 {
-    uint8 private _decimals;
-
-    constructor(string memory name_, string memory symbol_, uint8 decimals_)
-        ERC20(name_, symbol_)
-    {
-        _decimals = decimals_;
-    }
-
-    function mint(address to, uint256 amount) external {
-        _mint(to, amount);
-    }
-
-    function decimals() public view virtual override returns (uint8) {
-        return _decimals;
-    }
-}
-
-contract BebopExecutorHarness is BebopExecutor, Test {
-    using SafeERC20 for IERC20;
-
-    constructor(address _bebopSettlement, address _permit2)
-        BebopExecutor(_bebopSettlement, _permit2)
-    {}
-
-    // Expose the internal decodeData function for testing
-    function decodeParams(bytes calldata data)
-        external
-        pure
-        returns (
-            address tokenIn,
-            address tokenOut,
-            RestrictTransferFrom.TransferType transferType,
-            BebopExecutor.OrderType orderType,
-            uint256 filledTakerAmount,
-            bytes memory quoteData,
-            bytes memory makerSignaturesData,
-            bool // approvalNeeded - unused in test harness
-        )
-    {
-        return _decodeData(data);
-    }
-
-    // Expose the internal getActualFilledTakerAmount function for testing
-    function exposed_getActualFilledTakerAmount(
-        uint256 givenAmount,
-        uint256 orderTakerAmount,
-        uint256 filledTakerAmount
-    ) external pure returns (uint256 actualFilledTakerAmount) {
-        return _getActualFilledTakerAmount(
-            givenAmount, orderTakerAmount, filledTakerAmount
-        );
-    }
-
-    // Override to prank the taker address before calling the real settlement
-    function _executeSingleRFQ(
-        address tokenIn,
-        address tokenOut,
-        TransferType transferType,
-        uint256 givenAmount,
-        uint256 filledTakerAmount,
-        bytes memory quoteData,
-        bytes memory makerSignaturesData,
-        bool approvalNeeded
-    ) internal virtual override returns (uint256 amountOut) {
-        // Decode the order from quoteData
-        IBebopSettlement.Single memory order =
-            abi.decode(quoteData, (IBebopSettlement.Single));
-
-        uint256 actualFilledTakerAmount = _getActualFilledTakerAmount(
-            givenAmount, order.taker_amount, filledTakerAmount
-        );
-
-        // For testing: transfer tokens from executor to taker address
-        // This simulates the taker having the tokens with approval
-        if (tokenIn != address(0)) {
-            _transfer(
-                address(this), transferType, tokenIn, actualFilledTakerAmount
-            );
-            IERC20(tokenIn).safeTransfer(
-                order.taker_address, actualFilledTakerAmount
-            );
-
-            // Approve settlement from taker's perspective
-            // Stop any existing prank first
-            vm.stopPrank();
-            vm.startPrank(order.taker_address);
-            IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
-            vm.stopPrank();
-        } else {
-            vm.stopPrank();
-            // For native ETH, send it to the taker address
-            payable(order.taker_address).transfer(actualFilledTakerAmount);
-        }
-
-        // IMPORTANT: Prank as the taker address to pass the settlement validation
-        vm.stopPrank();
-        vm.startPrank(order.taker_address);
-
-        // Set block timestamp to ensure order is valid regardless of fork block
-        uint256 currentTimestamp = block.timestamp;
-        vm.warp(order.expiry - 1); // Set timestamp to just before expiry
-
-        // Execute the single swap, let's test the actual settlement logic
-        amountOut = super._executeSingleRFQ(
-            tokenIn,
-            tokenOut,
-            TransferType.None, // We set transfer type to none for testing in order to keep the taker's balance unchanged as it will execute the swap
-            givenAmount,
-            filledTakerAmount,
-            quoteData,
-            makerSignaturesData,
-            approvalNeeded
-        );
-
-        // Restore original timestamp
-        vm.warp(currentTimestamp);
-        vm.stopPrank();
-    }
-
-    // Override to execute aggregate orders through the real settlement
-    function _executeAggregateRFQ(
-        address tokenIn,
-        address tokenOut,
-        TransferType transferType,
-        uint256 givenAmount,
-        uint256 filledTakerAmount,
-        bytes memory quoteData,
-        bytes memory makerSignaturesData,
-        bool approvalNeeded
-    ) internal virtual override returns (uint256 amountOut) {
-        // Decode the Aggregate order
-        IBebopSettlement.Aggregate memory order =
-            abi.decode(quoteData, (IBebopSettlement.Aggregate));
-
-        // For aggregate orders, calculate total taker amount across all amounts of the 2D array
-        uint256 totalTakerAmount = 0;
-        for (uint256 i = 0; i < order.taker_amounts.length; i++) {
-            for (uint256 j = 0; j < order.taker_amounts[i].length; j++) {
-                totalTakerAmount += order.taker_amounts[i][j];
-            }
-        }
-
-        uint256 actualFilledTakerAmount = _getActualFilledTakerAmount(
-            givenAmount, totalTakerAmount, filledTakerAmount
-        );
-
-        // For testing: transfer tokens from executor to taker address
-        // This simulates the taker having the tokens with approval
-        if (tokenIn != address(0)) {
-            _transfer(
-                address(this), transferType, tokenIn, actualFilledTakerAmount
-            );
-            IERC20(tokenIn).safeTransfer(
-                order.taker_address, actualFilledTakerAmount
-            );
-
-            // Approve settlement from taker's perspective
-            // Stop any existing prank first
-            vm.stopPrank();
-            vm.startPrank(order.taker_address);
-            IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
-            vm.stopPrank();
-        } else {
-            vm.stopPrank();
-            // For native ETH, send it to the taker address
-            payable(order.taker_address).transfer(actualFilledTakerAmount);
-        }
-
-        // IMPORTANT: Prank as the taker address to pass the settlement validation
-        vm.stopPrank();
-        vm.startPrank(order.taker_address);
-
-        // Set block timestamp to ensure order is valid regardless of fork block
-        uint256 currentTimestamp = block.timestamp;
-        vm.warp(order.expiry - 1); // Set timestamp to just before expiry
-
-        // Execute the aggregate swap, let's test the actual settlement logic
-        amountOut = super._executeAggregateRFQ(
-            tokenIn,
-            tokenOut,
-            TransferType.None, // We set transfer type to none for testing in order to keep the taker's balance unchanged as it will execute the swap
-            givenAmount,
-            filledTakerAmount,
-            quoteData,
-            makerSignaturesData,
-            approvalNeeded
-        );
-
-        // Restore original timestamp
-        vm.warp(currentTimestamp);
-        vm.stopPrank();
-    }
-}
 
 contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
     using SafeERC20 for IERC20;
@@ -1299,5 +1104,84 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
                 "Result should not exceed orderTakerAmount when filledTakerAmount is 0"
             );
         }
+    }
+}
+
+contract TychoRouterForBebopTest is TychoRouterTestSetup {
+    function testSingleBebopIntegration() public {
+        // The calldata swaps 200 USDC for ONDO
+        // The receiver in the order is 0xc5564C13A157E6240659fb81882A28091add8670
+        address orderTaker = 0xc5564C13A157E6240659fb81882A28091add8670;
+        address maker = 0xCe79b081c0c924cb67848723ed3057234d10FC6b;
+        deal(USDC_ADDR, orderTaker, 200 * 10 ** 6); // 200 USDC
+        uint256 expAmountOut = 237212396774431060000; // Expected ONDO amount from calldata
+
+        // Fund the maker with ONDO and approve settlement
+        deal(ONDO_ADDR, maker, expAmountOut);
+        vm.prank(maker);
+        IERC20(ONDO_ADDR).approve(BEBOP_SETTLEMENT, expAmountOut);
+
+        uint256 ondoBefore = IERC20(ONDO_ADDR).balanceOf(orderTaker);
+
+        vm.startPrank(orderTaker);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, type(uint256).max);
+
+        // Load calldata from file
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_bebop");
+
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        // Check the receiver's balance (not ALICE, since the order specifies a different receiver)
+        uint256 ondoReceived =
+            IERC20(ONDO_ADDR).balanceOf(orderTaker) - ondoBefore;
+        assertTrue(success, "Call Failed");
+        assertEq(ondoReceived, expAmountOut);
+        assertEq(
+            IERC20(USDC_ADDR).balanceOf(tychoRouterAddr),
+            0,
+            "USDC left in router"
+        );
+
+        vm.stopPrank();
+    }
+
+    function testBebopAggregateIntegration() public {
+        // Based on real transaction: https://etherscan.io/tx/0xec88410136c287280da87d0a37c1cb745f320406ca3ae55c678dec11996c1b1c
+        address orderTaker = 0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6; // This is both taker and receiver in the order
+        uint256 ethAmount = 9850000000000000; // 0.00985 WETH
+        uint256 expAmountOut = 17969561; // 17.969561 USDC expected output
+
+        // Fund the two makers from the real transaction with USDC
+        address maker1 = 0x67336Cec42645F55059EfF241Cb02eA5cC52fF86;
+        address maker2 = 0xBF19CbF0256f19f39A016a86Ff3551ecC6f2aAFE;
+
+        deal(USDC_ADDR, maker1, 10607211); // Maker 1 provides 10.607211 USDC
+        deal(USDC_ADDR, maker2, 7362350); // Maker 2 provides 7.362350 USDC
+
+        // Makers approve settlement contract
+        vm.prank(maker1);
+        IERC20(USDC_ADDR).approve(BEBOP_SETTLEMENT, type(uint256).max);
+        vm.prank(maker2);
+        IERC20(USDC_ADDR).approve(BEBOP_SETTLEMENT, type(uint256).max);
+
+        // Fund ALICE with ETH as it will send the transaction
+        vm.deal(ALICE, ethAmount);
+        vm.startPrank(ALICE);
+
+        // Load calldata from file
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_bebop_aggregate"
+        );
+
+        // Execute the swap
+        (bool success,) = tychoRouterAddr.call{value: ethAmount}(callData);
+        uint256 finalBalance = IERC20(USDC_ADDR).balanceOf(orderTaker);
+
+        assertTrue(success, "Call Failed");
+        assertEq(finalBalance, expAmountOut);
+        assertEq(address(tychoRouterAddr).balance, 0, "ETH left in router");
+
+        vm.stopPrank();
     }
 }

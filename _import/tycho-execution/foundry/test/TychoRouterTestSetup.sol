@@ -13,16 +13,17 @@ import {
     IUniswapV3Pool
 } from "../src/executors/UniswapV3Executor.sol";
 import {UniswapV4Executor} from "../src/executors/UniswapV4Executor.sol";
-import {BebopExecutorHarness} from "./executors/BebopExecutor.t.sol";
+import {BebopExecutorHarness} from "./protocols/BebopExecutionHarness.t.sol";
 
 // Test utilities and mocks
-import "./Constants.sol";
-import "./TestUtils.sol";
-import {Permit2TestHelper} from "./Permit2TestHelper.sol";
+import {EkuboExecutor} from "../src/executors/EkuboExecutor.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
 
 // Core contracts and interfaces
-import "@src/TychoRouter.sol";
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {Permit2TestHelper} from "./Permit2TestHelper.sol";
+import {UniswapV2Executor} from "../src/executors/UniswapV2Executor.sol";
+import {UniswapV4Executor} from "../src/executors/UniswapV4Executor.sol";
 
 contract TychoRouterExposed is TychoRouter {
     constructor(address _permit2, address weth) TychoRouter(_permit2, weth) {}

@@ -776,8 +776,8 @@ impl SwapEncoder for BebopSwapEncoder {
 
     fn encode_swap(
         &self,
-        swap: Swap,
-        encoding_context: EncodingContext,
+        swap: &Swap,
+        encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let token_in = bytes_to_address(&swap.token_in)?;
         let token_out = bytes_to_address(&swap.token_out)?;
@@ -785,8 +785,8 @@ impl SwapEncoder for BebopSwapEncoder {
         let token_approvals_manager = ProtocolApprovalsManager::new()?;
         let approval_needed: bool;
 
-        if let Some(router_address) = encoding_context.router_address {
-            let tycho_router_address = bytes_to_address(&router_address)?;
+        if let Some(router_address) = &encoding_context.router_address {
+            let tycho_router_address = bytes_to_address(router_address)?;
             let token_to_approve = token_in.clone();
             let settlement_address = Address::from_str(&self.settlement_address)
                 .map_err(|_| EncodingError::FatalError("Invalid settlement address".to_string()))?;
@@ -809,7 +809,7 @@ impl SwapEncoder for BebopSwapEncoder {
         Self::validate_component_id(&swap.component.id)?;
 
         // Extract data from user_data (required for Bebop)
-        let user_data = swap.user_data.ok_or_else(|| {
+        let user_data = swap.user_data.clone().ok_or_else(|| {
             EncodingError::InvalidInput(
                 "Bebop swaps require user_data with quote and signature".to_string(),
             )
@@ -2202,7 +2202,7 @@ mod tests {
             .unwrap();
 
             let encoded_swap = encoder
-                .encode_swap(swap, encoding_context)
+                .encode_swap(&swap, &encoding_context)
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
 
@@ -2352,7 +2352,7 @@ mod tests {
             .unwrap();
 
             let encoded_swap = encoder
-                .encode_swap(swap, encoding_context)
+                .encode_swap(&swap, &encoding_context)
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
 
