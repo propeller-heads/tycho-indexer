@@ -39,10 +39,15 @@ impl DCICache {
     /// Reverts the cache to the state at a specific block hash.
     ///
     /// This operation will discard all changes made in blocks after the specified block.
-    /// If the block hash is not found in the pending cache, all pending layers will be dropped.
+    /// Errors if the block is not found and is not the parent of the latest pending block.
     ///
     /// # Arguments
-    /// * `block` - Target block hash to revert to.
+    /// * `block` - The block to revert to.
+    ///
+    /// # Returns
+    /// * `Ok(())` - On successful reversion
+    /// * `Err(DCICacheError::RevertToBlockNotFound)` - If the block is not found in one of the
+    ///   pending layers
     pub(super) fn revert_to(&mut self, block: &BlockHash) -> Result<(), DCICacheError> {
         self.ep_id_to_entrypoint
             .revert_to(block)?;
@@ -199,8 +204,8 @@ where
     /// * `Err(DCICacheError::FinalityBlockNotFound)` - If the finalized block is not found in
     ///   pending layers
     ///
-    /// Note: to make sure the finalized height is always found in normal conditions, we keep the
-    /// finalized block in the pending layers. For example:
+    /// Note: to make sure the finalized height is always found, we keep the finalized block in the
+    /// pending layers. For example:
     /// If pending layers contain blocks [100, 101, 102, 103] and block 102 is finalized:
     /// - Blocks 100 and 101 are moved to permanent storage
     /// - Block 102 and 103 remain in pending storage
@@ -218,7 +223,7 @@ where
             .position(|layer| layer.block.number == finalized_block_height)
             .ok_or_else(|| DCICacheError::FinalityNotFound(finalized_block_height))?;
 
-        // Move all finalized layers to permanent storage
+        // Move all finalized layers but the last one to permanent storage
         let finalized_layers: Vec<_> = self
             .pending
             .drain(..finalized_index)

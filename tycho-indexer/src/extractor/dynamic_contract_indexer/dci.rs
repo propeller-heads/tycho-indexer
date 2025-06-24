@@ -290,6 +290,8 @@ where
         }
 
         // Update the entrypoint cache from the block changes
+        // Perf: when syncing we can completely bypass the reorgs handling logic and push directly
+        // to the permanent cache
         self.cache
             .ep_id_to_entrypoint
             .extend_pending(
@@ -348,14 +350,7 @@ where
         storage_source: AE,
         tracer: T,
     ) -> Self {
-        Self {
-            chain,
-            protocol,
-            entrypoint_gw,
-            storage_source,
-            tracer,
-            cache: DCICache::new_empty(),
-        }
+        Self { chain, protocol, entrypoint_gw, storage_source, tracer, cache: DCICache::new() }
     }
 
     /// Initialize the DynamicContractIndexer. Loads all the entrypoints and their respective
@@ -503,6 +498,8 @@ where
         new_tracing_results: &[TracedEntryPoint],
     ) -> Result<(), ExtractionError> {
         // Update the cache with the traced entrypoints
+        // Perf: when syncing we can completely bypass the reorgs handling logic and push directly
+        // to the permanent cache
         for traced_entry_point in new_tracing_results.iter() {
             for location in traced_entry_point
                 .tracing_result
