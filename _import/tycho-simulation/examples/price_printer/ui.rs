@@ -3,7 +3,7 @@ use std::{str::FromStr, time::Instant};
 use futures::StreamExt;
 use itertools::Itertools;
 use num_bigint::BigUint;
-use num_traits::{CheckedSub, One};
+use num_traits::{CheckedSub, One, Pow};
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEventKind},
     layout::{Constraint, Flex, Layout, Margin, Rect},
@@ -25,7 +25,7 @@ use tycho_simulation::protocol::{
 
 const INFO_TEXT: [&str; 2] = [
     "(Esc) quit | (↑) move up | (↓) move down | (↵) Toggle Quote | (+) Increase Quote Amount",
-    "(-) Decrease Quote Amount | (z) Flip Quote Direction ",
+    "(-) Decrease Quote Amount | (z) Flip Quote Direction | (=) Enter Quote Amount",
 ];
 
 const ITEM_HEIGHT: usize = 3;
@@ -83,6 +83,8 @@ pub struct App {
     rx: Receiver<BlockUpdate>,
     scroll_state: ScrollbarState,
     colors: TableColors,
+    input_mode: bool,
+    input_buffer: String,
 }
 
 impl App {
@@ -97,6 +99,8 @@ impl App {
             scroll_state: ScrollbarState::new(0),
             colors: TableColors::new(&tailwind::BLUE),
             items: data_vec,
+            input_mode: false,
+            input_buffer: String::new(),
         }
     }
 
@@ -133,8 +137,8 @@ impl App {
             if decimals >= prev_decimals {
                 self.quote_amount *= BigUint::from(10u64).pow((decimals - prev_decimals) as u32);
             } else {
-                let new_amount = self.quote_amount.clone() /
-                    BigUint::from(10u64).pow((prev_decimals - decimals) as u32);
+                let new_amount = self.quote_amount.clone()
+                    / BigUint::from(10u64).pow((prev_decimals - decimals) as u32);
                 self.quote_amount =
                     if new_amount > BigUint::ZERO { new_amount } else { BigUint::one() };
             }
@@ -213,28 +217,57 @@ impl App {
                 maybe_event = reader.next() => {
                     if let Some(Ok(Event::Key(key))) = maybe_event {
                         if key.kind == KeyEventKind::Press {
-                            match key.code {
-                                KeyCode::Char('q') | KeyCode::Esc => {
-                                    if !self.show_popup {
-                                        return Ok(())
-                                    } else {
-                                        self.show_popup = !self.show_popup
-                                    }
-                                },
-                                KeyCode::Char('j') | KeyCode::Down => self.move_row(1),
-                                KeyCode::Char('+') => {
-                                    self.modify_quote(true)
-                                },
-                                KeyCode::Char('-') => {
-                                    self.modify_quote(false)
-                                },
-                                KeyCode::Char('z') => {
-                                    self.zero2one = !self.zero2one;
-                                    self.quote_amount = BigUint::one();
+                            if self.input_mode {
+                                match key.code {
+                                    KeyCode::Char(c) => {
+                                        if c.is_ascii_digit() {
+                                            self.input_buffer.push(c);
+                                        }
+                                    },
+                                    KeyCode::Backspace => {
+                                        self.input_buffer.pop();
+                                    },
+                                    KeyCode::Enter => {
+                                        if let Ok(amount) = self.input_buffer.parse::<u64>() {
+                                            self.quote_amount = BigUint::from(amount);
+                                        }
+                                        self.input_mode = false;
+                                        self.input_buffer.clear();
+                                    },
+                                    KeyCode::Esc => {
+                                        self.input_mode = false;
+                                        self.input_buffer.clear();
+                                    },
+                                    _ => {}
                                 }
-                                KeyCode::Char('k') | KeyCode::Up => self.move_row(-1),
-                                KeyCode::Enter => self.show_popup = !self.show_popup,
-                                _ => {}
+                            } else {
+                                match key.code {
+                                    KeyCode::Char('q') | KeyCode::Esc => {
+                                        if !self.show_popup {
+                                            return Ok(())
+                                        } else {
+                                            self.show_popup = !self.show_popup
+                                        }
+                                    },
+                                    KeyCode::Char('j') | KeyCode::Down => self.move_row(1),
+                                    KeyCode::Char('+') => {
+                                        self.modify_quote(true)
+                                    },
+                                    KeyCode::Char('-') => {
+                                        self.modify_quote(false)
+                                    },
+                                    KeyCode::Char('z') => {
+                                        self.zero2one = !self.zero2one;
+                                        self.quote_amount = BigUint::one();
+                                    }
+                                    KeyCode::Char('k') | KeyCode::Up => self.move_row(-1),
+                                    KeyCode::Char('=') => {
+                                        self.input_mode = true;
+                                        self.input_buffer.clear();
+                                    },
+                                    KeyCode::Enter => self.show_popup = !self.show_popup,
+                                    _ => {}
+                                }
                             }
                         }
                     }
@@ -275,6 +308,9 @@ impl App {
         }
         if self.show_popup {
             self.render_quote_popup(frame);
+        }
+        if self.input_mode {
+            self.render_input_popup(frame);
         }
     }
 
@@ -411,6 +447,29 @@ impl App {
                 frame.render_widget(popup, area);
             }
         }
+    }
+
+    fn render_input_popup(&self, frame: &mut Frame) {
+        let area = frame.area();
+
+        let text = format!(
+            "Enter quote amount: {}\n\nPress Enter to confirm or Esc to cancel",
+            self.input_buffer
+        );
+        let block = Block::bordered()
+            .title("Quote Amount Input")
+            .border_style(Style::new().fg(self.colors.footer_border_color));
+        let input = Paragraph::new(Text::from(text))
+            .block(block)
+            .wrap(Wrap { trim: false })
+            .style(
+                Style::new()
+                    .fg(self.colors.row_fg)
+                    .bg(self.colors.buffer_bg),
+            );
+        let area = popup_area(area, Constraint::Percentage(50), Constraint::Length(8));
+        frame.render_widget(Clear, area);
+        frame.render_widget(input, area);
     }
 }
 
