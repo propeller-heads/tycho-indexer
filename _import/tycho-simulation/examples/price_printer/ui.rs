@@ -432,8 +432,12 @@ impl App {
                 let text = res
                     .map(|data| {
                         format!(
-                            "Quote amount: {quote_amount}\nReceived amount: {amount}\nGas: {gas}\nDuration: {duration:?}",
-                            quote_amount = self.quote_amount, amount = data.amount, gas = data.gas
+                            "Swap Direction: {token_in_symbol} → {token_out_symbol}\nQuote amount: {quote_amount}\nReceived amount: {amount}\nGas: {gas}\nDuration: {duration:?}",
+                            token_in_symbol = token_in.symbol,
+                            token_out_symbol = token_out.symbol,
+                            quote_amount = self.quote_amount, 
+                            amount = data.amount, 
+                            gas = data.gas
                         )
                     })
                     .unwrap_or_else(|err| format!("{err:?}"));
