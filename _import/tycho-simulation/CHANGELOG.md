@@ -1,3 +1,16 @@
+## [0.117.0](https://github.com/propeller-heads/tycho-simulation/compare/0.116.0...0.117.0) (2025-06-24)
+
+
+### Features
+
+* **price-printer:** add raw amount input functionality ([138734b](https://github.com/propeller-heads/tycho-simulation/commit/138734bae82f1a3f976f42a4a22b66a0c8997bcf))
+* **price-printer:** display swap direction ([b652151](https://github.com/propeller-heads/tycho-simulation/commit/b652151501de56b36adb108378fb249242efcc0b))
+
+
+### Bug Fixes
+
+* do not error on account balances for non-pool tokens ([4c20704](https://github.com/propeller-heads/tycho-simulation/commit/4c207045bc0d46c59c9ce125ac4533732f591b0d))
+
 ## [0.116.0](https://github.com/propeller-heads/tycho-simulation/compare/0.115.0...0.116.0) (2025-06-13)
 
 
