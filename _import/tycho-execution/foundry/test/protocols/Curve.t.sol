@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
+import "../TychoRouterTestSetup.sol";
 import "@src/executors/CurveExecutor.sol";
-import {Test} from "../../lib/forge-std/src/Test.sol";
 import {Constants} from "../Constants.sol";
+import {Test} from "../../lib/forge-std/src/Test.sol";
 
 interface ICurvePool {
     function coins(uint256 i) external view returns (address);
@@ -391,5 +392,22 @@ contract CurveExecutorTest is Test, Constants {
         (int128 coinInIndex, int128 coinOutIndex,) =
             metaRegistry.get_coin_indices(pool, tokenIn, tokenOut);
         return (coinInIndex, coinOutIndex);
+    }
+}
+
+contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
+    function testSingleCurveIntegration() public {
+        deal(UWU_ADDR, ALICE, 1 ether);
+
+        vm.startPrank(ALICE);
+        IERC20(UWU_ADDR).approve(tychoRouterAddr, type(uint256).max);
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_curve");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        assertTrue(success, "Call Failed");
+        assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), 2877855391767);
+
+        vm.stopPrank();
     }
 }

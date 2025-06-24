@@ -1,3 +1,32 @@
+## [0.101.3](https://github.com/propeller-heads/tycho-execution/compare/0.101.2...0.101.3) (2025-06-23)
+
+
+### Bug Fixes
+
+* Add optimized_transfers_integration_tests.rs ([df63b87](https://github.com/propeller-heads/tycho-execution/commit/df63b87569df93bc773cd1430ae4a1e673cff659))
+
+## [0.101.2](https://github.com/propeller-heads/tycho-execution/compare/0.101.1...0.101.2) (2025-06-23)
+
+
+### Bug Fixes
+
+* After rebase fixes ([1d263f8](https://github.com/propeller-heads/tycho-execution/commit/1d263f8b4c76f11febaa8d32a1c8aca46734bc5e))
+
+## [0.101.1](https://github.com/propeller-heads/tycho-execution/compare/0.101.0...0.101.1) (2025-06-23)
+
+
+### Bug Fixes
+
+* Exclude foundry files from the rust crate ([fa13f09](https://github.com/propeller-heads/tycho-execution/commit/fa13f09d3e922373eacfb15b07e79fdf09759e1a))
+* Remove unnecessary clones from encoding ([e704151](https://github.com/propeller-heads/tycho-execution/commit/e704151404917715d1f871be2c3f13ef03d376c2))
+
+## [0.101.0](https://github.com/propeller-heads/tycho-execution/compare/0.100.1...0.101.0) (2025-06-23)
+
+
+### Features
+
+* **curve:** Support passing eth/weth instead of weth/eth in encoding ([525c16a](https://github.com/propeller-heads/tycho-execution/commit/525c16a117393f205a3b1bf3e9677c702415463f))
+
 ## [0.100.1](https://github.com/propeller-heads/tycho-execution/compare/0.100.0...0.100.1) (2025-06-13)
 
 

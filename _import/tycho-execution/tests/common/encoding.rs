@@ -7,8 +7,7 @@ use alloy::{
 };
 use num_bigint::BigUint;
 use tycho_common::Bytes;
-
-use crate::encoding::{
+use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::PermitSingle,
@@ -137,7 +136,7 @@ pub fn encode_tycho_router_call(
             wrap,
             unwrap,
             receiver,
-            user_transfer_type == &UserTransferType::TransferFrom,
+            *user_transfer_type == UserTransferType::TransferFrom,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -172,7 +171,7 @@ pub fn encode_tycho_router_call(
             wrap,
             unwrap,
             receiver,
-            user_transfer_type == &UserTransferType::TransferFrom,
+            *user_transfer_type == UserTransferType::TransferFrom,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -209,7 +208,7 @@ pub fn encode_tycho_router_call(
             unwrap,
             n_tokens,
             receiver,
-            user_transfer_type == &UserTransferType::TransferFrom,
+            *user_transfer_type == UserTransferType::TransferFrom,
             encoded_solution.swaps,
         )
             .abi_encode()
@@ -235,7 +234,7 @@ pub fn encode_tycho_router_call(
 /// # Warning
 /// This is only an **example implementation** provided for reference purposes.
 /// **Do not rely on this in production.** You should implement your own version.
-pub fn sign_permit(
+fn sign_permit(
     chain_id: u64,
     permit_single: &models::PermitSingle,
     signer: PrivateKeySigner,
@@ -257,7 +256,7 @@ pub fn sign_permit(
 }
 
 /// Encodes the input data for a function call to the given function selector.
-pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
+fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
     let mut hasher = Keccak256::new();
     hasher.update(selector.as_bytes());
     let selector_bytes = &hasher.finalize()[..4];

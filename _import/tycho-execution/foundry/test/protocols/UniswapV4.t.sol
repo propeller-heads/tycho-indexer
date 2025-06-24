@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import "../../src/executors/UniswapV4Executor.sol";
 import "../TestUtils.sol";
+import "../TychoRouterTestSetup.sol";
 import "./UniswapV4Utils.sol";
 import "@src/executors/UniswapV4Executor.sol";
 import {Constants} from "../Constants.sol";
@@ -209,5 +210,177 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             usdeBalanceBeforeSwapExecutor - amountIn
         );
         assertTrue(IERC20(WBTC_ADDR).balanceOf(ALICE) == amountOut);
+    }
+}
+
+contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
+    function testSingleSwapUSV4CallbackPermit2() public {
+        vm.startPrank(ALICE);
+        uint256 amountIn = 100 ether;
+        deal(USDE_ADDR, ALICE, amountIn);
+        (
+            IAllowanceTransfer.PermitSingle memory permitSingle,
+            bytes memory signature
+        ) = handlePermit2Approval(USDE_ADDR, tychoRouterAddr, amountIn);
+
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+            new UniswapV4Executor.UniswapV4Pool[](1);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDT_ADDR,
+            fee: uint24(100),
+            tickSpacing: int24(1)
+        });
+
+        bytes memory protocolData = UniswapV4Utils.encodeExactInput(
+            USDE_ADDR,
+            USDT_ADDR,
+            true,
+            RestrictTransferFrom.TransferType.TransferFrom,
+            ALICE,
+            pools
+        );
+
+        bytes memory swap =
+            encodeSingleSwap(address(usv4Executor), protocolData);
+
+        tychoRouter.singleSwapPermit2(
+            amountIn,
+            USDE_ADDR,
+            USDT_ADDR,
+            99943850,
+            false,
+            false,
+            ALICE,
+            permitSingle,
+            signature,
+            swap
+        );
+
+        assertEq(IERC20(USDT_ADDR).balanceOf(ALICE), 99963618);
+        vm.stopPrank();
+    }
+
+    function testSplitSwapMultipleUSV4Callback() public {
+        // This test has two uniswap v4 hops that will be executed inside of the V4 pool manager
+        // USDE -> USDT -> WBTC
+        uint256 amountIn = 100 ether;
+        deal(USDE_ADDR, ALICE, amountIn);
+
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+            new UniswapV4Executor.UniswapV4Pool[](2);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDT_ADDR,
+            fee: uint24(100),
+            tickSpacing: int24(1)
+        });
+        pools[1] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: WBTC_ADDR,
+            fee: uint24(3000),
+            tickSpacing: int24(60)
+        });
+
+        bytes memory protocolData = UniswapV4Utils.encodeExactInput(
+            USDE_ADDR,
+            WBTC_ADDR,
+            true,
+            RestrictTransferFrom.TransferType.TransferFrom,
+            ALICE,
+            pools
+        );
+
+        bytes memory swap =
+            encodeSingleSwap(address(usv4Executor), protocolData);
+
+        vm.startPrank(ALICE);
+        IERC20(USDE_ADDR).approve(tychoRouterAddr, amountIn);
+        tychoRouter.singleSwap(
+            amountIn,
+            USDE_ADDR,
+            WBTC_ADDR,
+            118280,
+            false,
+            false,
+            ALICE,
+            true,
+            swap
+        );
+
+        assertEq(IERC20(WBTC_ADDR).balanceOf(ALICE), 118281);
+    }
+
+    function testSingleUSV4IntegrationGroupedSwap() public {
+        // Test created with calldata from our router encoder.
+
+        // Performs a single swap from USDC to PEPE though ETH using two
+        // consecutive USV4 pools. It's a single swap because it is a consecutive grouped swaps
+        //
+        //   USDC ──(USV4)──> ETH ───(USV4)──> PEPE
+        //
+        deal(USDC_ADDR, ALICE, 1 ether);
+        uint256 balanceBefore = IERC20(PEPE_ADDR).balanceOf(ALICE);
+
+        // Approve permit2
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_usv4_grouped_swap"
+        );
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = IERC20(PEPE_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertEq(balanceAfter - balanceBefore, 123172000092711286554274694);
+    }
+
+    function testSingleUSV4IntegrationInputETH() public {
+        // Test created with calldata from our router encoder.
+
+        // Performs a single swap from ETH to PEPE without wrapping or unwrapping
+        //
+        //   ETH ───(USV4)──> PEPE
+        //
+        deal(ALICE, 1 ether);
+        uint256 balanceBefore = IERC20(PEPE_ADDR).balanceOf(ALICE);
+
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_usv4_eth_in");
+        (bool success,) = tychoRouterAddr.call{value: 1 ether}(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = IERC20(PEPE_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertEq(balanceAfter - balanceBefore, 235610487387677804636755778);
+    }
+
+    function testSingleUSV4IntegrationOutputETH() public {
+        // Test created with calldata from our router encoder.
+
+        // Performs a single swap from USDC to ETH without wrapping or unwrapping
+        //
+        //   USDC ───(USV4)──> ETH
+        //
+        deal(USDC_ADDR, ALICE, 3000_000000);
+        uint256 balanceBefore = ALICE.balance;
+
+        // Approve permit2
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
+
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_usv4_eth_out");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = ALICE.balance;
+
+        assertTrue(success, "Call Failed");
+        console.logUint(balanceAfter - balanceBefore);
+        assertEq(balanceAfter - balanceBefore, 1474406268748155809);
     }
 }

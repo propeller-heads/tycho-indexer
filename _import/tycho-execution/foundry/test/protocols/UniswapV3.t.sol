@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "@src/executors/UniswapV3Executor.sol";
+import "../TychoRouterTestSetup.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
-import {Test} from "../../lib/forge-std/src/Test.sol";
+import "@src/executors/UniswapV3Executor.sol";
 import {Constants} from "../Constants.sol";
 import {Permit2TestHelper} from "../Permit2TestHelper.sol";
+import {Test} from "../../lib/forge-std/src/Test.sol";
 
 contract UniswapV3ExecutorExposed is UniswapV3Executor {
     constructor(address _factory, bytes32 _initCode, address _permit2)
@@ -43,7 +44,6 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
 
     UniswapV3ExecutorExposed uniswapV3Exposed;
     UniswapV3ExecutorExposed pancakeV3Exposed;
-    IERC20 WETH = IERC20(WETH_ADDR);
     IERC20 DAI = IERC20(DAI_ADDR);
     IAllowanceTransfer permit2;
 
@@ -209,5 +209,52 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             zero2one,
             transferType
         );
+    }
+}
+
+contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
+    function testSingleSwapUSV3Permit2() public {
+        // Trade 1 WETH for DAI with 1 swap on Uniswap V3 using Permit2
+        // Tests entire USV3 flow including callback
+        // 1 WETH   ->   DAI
+        //       (USV3)
+        vm.startPrank(ALICE);
+        uint256 amountIn = 10 ** 18;
+        deal(WETH_ADDR, ALICE, amountIn);
+        (
+            IAllowanceTransfer.PermitSingle memory permitSingle,
+            bytes memory signature
+        ) = handlePermit2Approval(WETH_ADDR, tychoRouterAddr, amountIn);
+
+        uint256 expAmountOut = 1205_128428842122129186; //Swap 1 WETH for 1205.12 DAI
+        bool zeroForOne = false;
+        bytes memory protocolData = encodeUniswapV3Swap(
+            WETH_ADDR,
+            DAI_ADDR,
+            ALICE,
+            DAI_WETH_USV3,
+            zeroForOne,
+            RestrictTransferFrom.TransferType.TransferFrom
+        );
+        bytes memory swap =
+            encodeSingleSwap(address(usv3Executor), protocolData);
+
+        tychoRouter.singleSwapPermit2(
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            expAmountOut - 1,
+            false,
+            false,
+            ALICE,
+            permitSingle,
+            signature,
+            swap
+        );
+
+        uint256 finalBalance = IERC20(DAI_ADDR).balanceOf(ALICE);
+        assertGe(finalBalance, expAmountOut);
+
+        vm.stopPrank();
     }
 }

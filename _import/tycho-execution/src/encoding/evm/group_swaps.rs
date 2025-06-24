@@ -24,7 +24,7 @@ pub struct SwapGroup {
 ///
 /// An example where this applies is the case of USV4, which uses a PoolManager contract
 /// to save token transfers on consecutive swaps.
-pub fn group_swaps(swaps: Vec<Swap>) -> Vec<SwapGroup> {
+pub fn group_swaps(swaps: &Vec<Swap>) -> Vec<SwapGroup> {
     let mut grouped_swaps: Vec<SwapGroup> = Vec::new();
     let mut current_group: Option<SwapGroup> = None;
     let mut last_swap_protocol = "".to_string();
@@ -127,7 +127,7 @@ mod tests {
             split: 0f64,
             user_data: None,
         };
-        let grouped_swaps = group_swaps(vec![
+        let grouped_swaps = group_swaps(&vec![
             swap_weth_wbtc.clone(),
             swap_wbtc_usdc.clone(),
             swap_usdc_dai.clone(),
@@ -211,7 +211,7 @@ mod tests {
             split: 0f64,
             user_data: None,
         };
-        let grouped_swaps = group_swaps(vec![
+        let grouped_swaps = group_swaps(&vec![
             swap_wbtc_weth.clone(),
             swap_weth_usdc.clone(),
             swap_weth_dai.clone(),
@@ -303,7 +303,7 @@ mod tests {
             user_data: None,
         };
 
-        let grouped_swaps = group_swaps(vec![
+        let grouped_swaps = group_swaps(&vec![
             swap_weth_wbtc.clone(),
             swap_wbtc_usdc.clone(),
             swap_weth_dai.clone(),

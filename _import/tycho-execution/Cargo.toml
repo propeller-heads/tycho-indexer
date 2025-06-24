@@ -1,6 +1,6 @@
 [package]
 name = "tycho-execution"
-version = "0.100.1"
+version = "0.101.3"
 edition = "2021"
 description = "Provides tools for encoding and executing swaps against Tycho router and protocol executors."
 repository = "https://github.com/propeller-heads/tycho-execution"
@@ -10,6 +10,14 @@ keywords = ["propellerheads", "solver", "defi", "dex", "mev"]
 license = "MIT"
 categories = ["finance", "cryptography::cryptocurrencies"]
 readme = "README.md"
+exclude = [
+    "foundry/*",
+    "foundry",
+    "tests/*",
+    "tests/common",
+    ".github/*",
+    ".gitmodules",
+]
 
 [[bin]]
 name = "tycho-encode"

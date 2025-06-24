@@ -1,22 +1,24 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "../src/executors/BalancerV2Executor.sol";
-import "../src/executors/CurveExecutor.sol";
+// Executors
+import {BalancerV2Executor} from "../src/executors/BalancerV2Executor.sol";
+import {BalancerV3Executor} from "../src/executors/BalancerV3Executor.sol";
+import {CurveExecutor} from "../src/executors/CurveExecutor.sol";
 import {EkuboExecutor} from "../src/executors/EkuboExecutor.sol";
-import "../src/executors/UniswapV2Executor.sol";
-import "../src/executors/UniswapV3Executor.sol";
-import "../src/executors/UniswapV4Executor.sol";
+import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
+import {UniswapV2Executor} from "../src/executors/UniswapV2Executor.sol";
+import {UniswapV3Executor, IUniswapV3Pool} from "../src/executors/UniswapV3Executor.sol";
+import {UniswapV4Executor} from "../src/executors/UniswapV4Executor.sol";
+
+// Test utilities and mocks
 import "./Constants.sol";
-import "./mock/MockERC20.sol";
+import "./TestUtils.sol";
+import {Permit2TestHelper} from "./Permit2TestHelper.sol";
+
+// Core contracts and interfaces
 import "@src/TychoRouter.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {PoolManager} from "@uniswap/v4-core/src/PoolManager.sol";
-import {WETH} from "../lib/permit2/lib/solmate/src/tokens/WETH.sol";
-import {Permit2TestHelper} from "./Permit2TestHelper.sol";
-import "./TestUtils.sol";
-import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
-import {BalancerV3Executor} from "../src/executors/BalancerV3Executor.sol";
 
 contract TychoRouterExposed is TychoRouter {
     constructor(address _permit2, address weth) TychoRouter(_permit2, weth) {}
@@ -36,7 +38,10 @@ contract TychoRouterExposed is TychoRouter {
         bool transferFromNeeded
     ) external {
         _tstoreTransferFromInfo(
-            tokenIn, amountIn, isPermit2, transferFromNeeded
+            tokenIn,
+            amountIn,
+            isPermit2,
+            transferFromNeeded
         );
     }
 
@@ -48,10 +53,10 @@ contract TychoRouterExposed is TychoRouter {
         return _splitSwap(amountIn, nTokens, swaps);
     }
 
-    function exposedSequentialSwap(uint256 amountIn, bytes calldata swaps)
-        external
-        returns (uint256)
-    {
+    function exposedSequentialSwap(
+        uint256 amountIn,
+        bytes calldata swaps
+    ) external returns (uint256) {
         return _sequentialSwap(amountIn, swaps);
     }
 }
@@ -68,7 +73,6 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     CurveExecutor public curveExecutor;
     MaverickV2Executor public maverickv2Executor;
     BalancerV3Executor public balancerV3Executor;
-    MockERC20[] tokens;
 
     function getForkBlock() public view virtual returns (uint256) {
         return 22082754;
@@ -87,12 +91,6 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         vm.startPrank(EXECUTOR_SETTER);
         tychoRouter.setExecutors(executors);
         vm.stopPrank();
-
-        vm.startPrank(BOB);
-        tokens.push(new MockERC20("Token A", "A"));
-        tokens.push(new MockERC20("Token B", "B"));
-        tokens.push(new MockERC20("Token C", "C"));
-        vm.stopPrank();
     }
 
     function deployRouter() public returns (TychoRouterExposed) {
@@ -102,7 +100,8 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         tychoRouter.grantRole(keccak256("PAUSER_ROLE"), PAUSER);
         tychoRouter.grantRole(keccak256("UNPAUSER_ROLE"), UNPAUSER);
         tychoRouter.grantRole(
-            keccak256("EXECUTOR_SETTER_ROLE"), EXECUTOR_SETTER
+            keccak256("EXECUTOR_SETTER_ROLE"),
+            EXECUTOR_SETTER
         );
         return tychoRouter;
     }
@@ -119,20 +118,34 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address ekuboMevResist = 0x553a2EFc570c9e104942cEC6aC1c18118e54C091;
 
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
-        usv2Executor =
-            new UniswapV2Executor(factoryV2, initCodeV2, PERMIT2_ADDRESS, 30);
-        usv3Executor =
-            new UniswapV3Executor(factoryV3, initCodeV3, PERMIT2_ADDRESS);
+        usv2Executor = new UniswapV2Executor(
+            factoryV2,
+            initCodeV2,
+            PERMIT2_ADDRESS,
+            30
+        );
+        usv3Executor = new UniswapV3Executor(
+            factoryV3,
+            initCodeV3,
+            PERMIT2_ADDRESS
+        );
         usv4Executor = new UniswapV4Executor(poolManager, PERMIT2_ADDRESS);
         pancakev3Executor = new UniswapV3Executor(
-            factoryPancakeV3, initCodePancakeV3, PERMIT2_ADDRESS
+            factoryPancakeV3,
+            initCodePancakeV3,
+            PERMIT2_ADDRESS
         );
         balancerv2Executor = new BalancerV2Executor(PERMIT2_ADDRESS);
-        ekuboExecutor =
-            new EkuboExecutor(ekuboCore, ekuboMevResist, PERMIT2_ADDRESS);
+        ekuboExecutor = new EkuboExecutor(
+            ekuboCore,
+            ekuboMevResist,
+            PERMIT2_ADDRESS
+        );
         curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, PERMIT2_ADDRESS);
-        maverickv2Executor =
-            new MaverickV2Executor(MAVERICK_V2_FACTORY, PERMIT2_ADDRESS);
+        maverickv2Executor = new MaverickV2Executor(
+            MAVERICK_V2_FACTORY,
+            PERMIT2_ADDRESS
+        );
         balancerV3Executor = new BalancerV3Executor(PERMIT2_ADDRESS);
 
         address[] memory executors = new address[](9);
@@ -149,23 +162,9 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         return executors;
     }
 
-    /**
-     * @dev Mints tokens to the given address
-     * @param amount The amount of tokens to mint
-     * @param to The address to mint tokens to
-     */
-    function mintTokens(uint256 amount, address to) internal {
-        for (uint256 i = 0; i < tokens.length; i++) {
-            // slither-disable-next-line calls-loop
-            tokens[i].mint(to, amount);
-        }
-    }
-
-    function pleEncode(bytes[] memory data)
-        public
-        pure
-        returns (bytes memory encoded)
-    {
+    function pleEncode(
+        bytes[] memory data
+    ) public pure returns (bytes memory encoded) {
         for (uint256 i = 0; i < data.length; i++) {
             encoded = bytes.concat(
                 encoded,
@@ -174,19 +173,17 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         }
     }
 
-    function encodeSingleSwap(address executor, bytes memory protocolData)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function encodeSingleSwap(
+        address executor,
+        bytes memory protocolData
+    ) internal pure returns (bytes memory) {
         return abi.encodePacked(executor, protocolData);
     }
 
-    function encodeSequentialSwap(address executor, bytes memory protocolData)
-        internal
-        pure
-        returns (bytes memory)
-    {
+    function encodeSequentialSwap(
+        address executor,
+        bytes memory protocolData
+    ) internal pure returns (bytes memory) {
         return abi.encodePacked(executor, protocolData);
     }
 
@@ -197,9 +194,14 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address executor,
         bytes memory protocolData
     ) internal pure returns (bytes memory) {
-        return abi.encodePacked(
-            tokenInIndex, tokenOutIndex, split, executor, protocolData
-        );
+        return
+            abi.encodePacked(
+                tokenInIndex,
+                tokenOutIndex,
+                split,
+                executor,
+                protocolData
+            );
     }
 
     function encodeUniswapV2Swap(
@@ -222,14 +224,15 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         RestrictTransferFrom.TransferType transferType
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
-        return abi.encodePacked(
-            tokenIn,
-            tokenOut,
-            pool.fee(),
-            receiver,
-            target,
-            zero2one,
-            transferType
-        );
+        return
+            abi.encodePacked(
+                tokenIn,
+                tokenOut,
+                pool.fee(),
+                receiver,
+                target,
+                zero2one,
+                transferType
+            );
     }
 }

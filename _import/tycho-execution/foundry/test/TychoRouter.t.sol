@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "@src/executors/UniswapV4Executor.sol";
 import {TychoRouter} from "@src/TychoRouter.sol";
 import "./TychoRouterTestSetup.sol";
-import "./executors/UniswapV4Utils.sol";
-import {SafeCallback} from "@uniswap/v4-periphery/src/base/SafeCallback.sol";
 
 contract TychoRouterTest is TychoRouterTestSetup {
     bytes32 public constant EXECUTOR_SETTER_ROLE =
@@ -91,16 +88,16 @@ contract TychoRouterTest is TychoRouterTestSetup {
     }
 
     function testWithdrawERC20Tokens() public {
-        vm.startPrank(BOB);
-        mintTokens(100 ether, tychoRouterAddr);
-        vm.stopPrank();
+        IERC20[] memory tokens = new IERC20[](2);
+        tokens[0] = IERC20(WETH_ADDR);
+        tokens[1] = IERC20(USDC_ADDR);
+        for (uint256 i = 0; i < tokens.length; i++) {
+            deal(address(tokens[i]), tychoRouterAddr, 100 ether);
+        }
 
         vm.startPrank(FUND_RESCUER);
-        IERC20[] memory tokensArray = new IERC20[](3);
-        tokensArray[0] = IERC20(address(tokens[0]));
-        tokensArray[1] = IERC20(address(tokens[1]));
-        tokensArray[2] = IERC20(address(tokens[2]));
-        tychoRouter.withdraw(tokensArray, FUND_RESCUER);
+
+        tychoRouter.withdraw(tokens, FUND_RESCUER);
 
         // Check balances after withdrawing
         for (uint256 i = 0; i < tokens.length; i++) {
@@ -113,21 +110,22 @@ contract TychoRouterTest is TychoRouterTestSetup {
     }
 
     function testWithdrawERC20TokensFailures() public {
-        mintTokens(100 ether, tychoRouterAddr);
-        IERC20[] memory tokensArray = new IERC20[](3);
-        tokensArray[0] = IERC20(address(tokens[0]));
-        tokensArray[1] = IERC20(address(tokens[1]));
-        tokensArray[2] = IERC20(address(tokens[2]));
+        IERC20[] memory tokens = new IERC20[](2);
+        tokens[0] = IERC20(WETH_ADDR);
+        tokens[1] = IERC20(USDC_ADDR);
+        for (uint256 i = 0; i < tokens.length; i++) {
+            deal(address(tokens[i]), tychoRouterAddr, 100 ether);
+        }
 
         vm.startPrank(FUND_RESCUER);
         vm.expectRevert(TychoRouter__AddressZero.selector);
-        tychoRouter.withdraw(tokensArray, address(0));
+        tychoRouter.withdraw(tokens, address(0));
         vm.stopPrank();
 
         // Not role FUND_RESCUER
         vm.startPrank(BOB);
         vm.expectRevert();
-        tychoRouter.withdraw(tokensArray, FUND_RESCUER);
+        tychoRouter.withdraw(tokens, FUND_RESCUER);
         vm.stopPrank();
     }
 

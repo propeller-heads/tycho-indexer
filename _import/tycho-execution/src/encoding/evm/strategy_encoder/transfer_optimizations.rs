@@ -33,12 +33,12 @@ impl TransferOptimization {
     /// Returns the transfer type that should be used for the current transfer.
     pub fn get_transfers(
         &self,
-        swap: SwapGroup,
-        given_token: Bytes,
+        swap: &SwapGroup,
+        given_token: &Bytes,
         wrap: bool,
         in_between_swap_optimization: bool,
     ) -> TransferType {
-        let is_first_swap = swap.token_in == given_token;
+        let is_first_swap = swap.token_in == *given_token;
         let in_transfer_required: bool =
             IN_TRANSFER_REQUIRED_PROTOCOLS.contains(&swap.protocol_system.as_str());
 
@@ -80,7 +80,7 @@ impl TransferOptimization {
     // is necessary for the next swap transfer type decision).
     pub fn get_receiver(
         &self,
-        solution_receiver: Bytes,
+        solution_receiver: &Bytes,
         next_swap: Option<&SwapGroup>,
     ) -> Result<(Bytes, bool), EncodingError> {
         if let Some(next) = next_swap {
@@ -104,7 +104,7 @@ impl TransferOptimization {
             }
         } else {
             // last swap - there is no next swap
-            Ok((solution_receiver, false))
+            Ok((solution_receiver.clone(), false))
         }
     }
 }
@@ -189,12 +189,8 @@ mod tests {
         };
         let optimization =
             TransferOptimization::new(eth(), weth(), user_transfer_type, router_address());
-        let transfer = optimization.get_transfers(
-            swap.clone(),
-            given_token,
-            wrap,
-            in_between_swap_optimization,
-        );
+        let transfer =
+            optimization.get_transfers(&swap, &given_token, wrap, in_between_swap_optimization);
         assert_eq!(transfer, expected_transfer);
     }
 
@@ -249,7 +245,7 @@ mod tests {
             })
         };
 
-        let result = optimization.get_receiver(receiver(), next_swap.as_ref());
+        let result = optimization.get_receiver(&receiver(), next_swap.as_ref());
 
         assert!(result.is_ok());
         let (actual_receiver, optimization_flag) = result.unwrap();
