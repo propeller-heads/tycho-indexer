@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy::primitives::{address, Address, U256};
+use alloy::primitives::{Address, U256};
 use revm::primitives::KECCAK_EMPTY;
 use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
@@ -335,7 +335,7 @@ impl TychoStreamDecoder {
                     .get(protocol.as_str())
                 {
                     if !predicate(&snapshot) {
-                        continue
+                        continue;
                     }
                 }
 
@@ -427,7 +427,7 @@ impl TychoStreamDecoder {
                             value.code = Some(ERC20_PROXY_BYTECODE.to_vec());
 
                             // Get or create proxy token address
-                            let proxy_addr = if !state_guard
+                            let (proxy_addr, change_type) = if !state_guard
                                 .token_proxy_tokens
                                 .contains_key(&addr)
                             {
@@ -437,12 +437,15 @@ impl TychoStreamDecoder {
                                 state_guard
                                     .token_proxy_tokens
                                     .insert(addr, new_address);
-                                new_address
+                                (new_address, ChangeType::Creation)
                             } else {
-                                *state_guard
-                                    .token_proxy_tokens
-                                    .get(&addr)
-                                    .unwrap()
+                                (
+                                    *state_guard
+                                        .token_proxy_tokens
+                                        .get(&addr)
+                                        .unwrap(),
+                                    ChangeType::Update,
+                                )
                             };
 
                             // Create proxy token account
@@ -452,7 +455,7 @@ impl TychoStreamDecoder {
                                 slots: HashMap::new(),
                                 balance: None,
                                 code: value.code.clone(),
-                                change: ChangeType::Creation,
+                                change: change_type,
                             };
                             token_proxy_accounts.insert(proxy_addr, proxy_state);
                         };
@@ -609,7 +612,7 @@ impl TychoStreamDecoder {
 }
 
 fn generate_proxy_token_address(idx: u32) -> Address {
-    let padded_idx = format!("{:x}", idx);
+    let padded_idx = format!("{idx:x}");
     let padded_zeroes = "0".repeat(33 - padded_idx.len());
     let proxy_token_address = format!("{padded_zeroes}{padded_idx}BAdbaBe");
     Address::from_slice(&hex::decode(proxy_token_address).expect("Invalid string for spender"))
@@ -619,6 +622,7 @@ fn generate_proxy_token_address(idx: u32) -> Address {
 mod tests {
     use std::{fs, path::Path};
 
+    use alloy::primitives::address;
     use mockall::predicate::*;
     use num_bigint::ToBigUint;
     use rstest::*;

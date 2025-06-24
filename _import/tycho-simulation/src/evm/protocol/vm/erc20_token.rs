@@ -1,28 +1,10 @@
-use std::{collections::HashMap, fmt::Debug, str::FromStr};
+use std::{collections::HashMap, str::FromStr};
 
-use alloy::{
-    primitives::{Address, U256},
-    sol_types::SolValue,
-};
+use alloy::primitives::{Address, U256};
 use lazy_static::lazy_static;
 
 use super::utils::get_storage_slot_index_at_key;
 use crate::evm::{ContractCompiler, SlotId};
-
-#[derive(Clone, Debug, PartialEq)]
-/// A struct representing ERC20 tokens storage slots.
-pub struct ERC20Slots {
-    // Base slot for the balance map
-    pub balance_map: SlotId,
-    // Base slot for the allowance map
-    pub allowance_map: SlotId,
-}
-
-impl ERC20Slots {
-    pub fn new(balance: SlotId, allowance: SlotId) -> Self {
-        Self { balance_map: balance, allowance_map: allowance }
-    }
-}
 
 pub(crate) type Overwrites = HashMap<SlotId, U256>;
 
@@ -66,9 +48,8 @@ pub(crate) struct TokenProxyOverwriteFactory {
     compiler: ContractCompiler,
 }
 
-#[allow(dead_code)]
 impl TokenProxyOverwriteFactory {
-    pub fn new(token_address: Address, proxy_address: Option<Address>) -> Self {
+    pub(crate) fn new(token_address: Address, proxy_address: Option<Address>) -> Self {
         let mut instance = Self {
             token_address,
             overwrites: HashMap::new(),
@@ -76,18 +57,19 @@ impl TokenProxyOverwriteFactory {
         };
 
         if let Some(proxy_addr) = proxy_address {
-            instance.set_implementation(proxy_addr);
+            instance.set_original_address(proxy_addr);
         }
 
         instance
     }
 
-    pub fn set_implementation(&mut self, implementation: Address) {
+    /// Sets the original address of the token contract in the implementation slot.
+    pub(crate) fn set_original_address(&mut self, implementation: Address) {
         self.overwrites
             .insert(*IMPLEMENTATION_SLOT, U256::from_be_slice(implementation.as_slice()));
     }
 
-    pub fn set_balance(&mut self, balance: U256, owner: Address) {
+    pub(crate) fn set_balance(&mut self, balance: U256, owner: Address) {
         // Set the balance in the custom storage slot
         let storage_index =
             get_storage_slot_index_at_key(owner, *BALANCES_MAPPING_POSITION, self.compiler);
@@ -101,7 +83,7 @@ impl TokenProxyOverwriteFactory {
             .insert(has_balance_index, U256::from(1)); // true in Solidity
     }
 
-    pub fn set_allowance(&mut self, allowance: U256, spender: Address, owner: Address) {
+    pub(crate) fn set_allowance(&mut self, allowance: U256, spender: Address, owner: Address) {
         // Set the allowance in the custom storage slot
         let owner_slot =
             get_storage_slot_index_at_key(owner, *CUSTOM_APPROVAL_MAPPING_POSITION, self.compiler);
@@ -119,12 +101,14 @@ impl TokenProxyOverwriteFactory {
             .insert(has_approval_index, U256::from(1)); // true in Solidity
     }
 
-    pub fn set_total_supply(&mut self, supply: U256) {
+    #[allow(dead_code)]
+    pub(crate) fn set_total_supply(&mut self, supply: U256) {
         self.overwrites
             .insert(*CUSTOM_TOTAL_SUPPLY_POSITION, supply);
     }
 
     /// Sets the has_custom_metadata flag for a given key
+    #[allow(dead_code)]
     fn set_metadata_flag(&mut self, key: &str) {
         let key_bytes = string_to_storage_bytes(key);
         let mapping_slot_bytes: [u8; 32] = HAS_CUSTOM_METADATA_POSITION.to_be_bytes();
@@ -135,7 +119,8 @@ impl TokenProxyOverwriteFactory {
             .insert(has_metadata_index, U256::from(1)); // true in Solidity
     }
 
-    pub fn set_name(&mut self, name: &str) {
+    #[allow(dead_code)]
+    pub(crate) fn set_name(&mut self, name: &str) {
         // Store the name value
         let name_value = U256::from_be_bytes(string_to_storage_bytes(name));
         self.overwrites
@@ -145,7 +130,8 @@ impl TokenProxyOverwriteFactory {
         self.set_metadata_flag("name");
     }
 
-    pub fn set_symbol(&mut self, symbol: &str) {
+    #[allow(dead_code)]
+    pub(crate) fn set_symbol(&mut self, symbol: &str) {
         // Store the symbol value
         let symbol_value = U256::from_be_bytes(string_to_storage_bytes(symbol));
         self.overwrites
@@ -155,7 +141,8 @@ impl TokenProxyOverwriteFactory {
         self.set_metadata_flag("symbol");
     }
 
-    pub fn set_decimals(&mut self, decimals: u8) {
+    #[allow(dead_code)]
+    pub(crate) fn set_decimals(&mut self, decimals: u8) {
         self.overwrites
             .insert(*CUSTOM_DECIMALS_POSITION, U256::from(decimals));
 
@@ -163,7 +150,7 @@ impl TokenProxyOverwriteFactory {
         self.set_metadata_flag("decimals");
     }
 
-    pub fn get_overwrites(&self) -> HashMap<Address, Overwrites> {
+    pub(crate) fn get_overwrites(&self) -> HashMap<Address, Overwrites> {
         let mut result = HashMap::new();
         result.insert(self.token_address, self.overwrites.clone());
         result
@@ -177,149 +164,6 @@ pub fn string_to_storage_bytes(s: &str) -> [u8; 32] {
     padded[..len].copy_from_slice(&s.as_bytes()[..len]);
     padded[31] = (len * 2) as u8; // Length * 2 for short strings
     padded
-}
-
-lazy_static! {
-    static ref MARKER_VALUE: U256 = U256::from(3141592653589793238462643383u128);
-    static ref SPENDER: Address = Address::from_slice(
-        &hex::decode("08d967bb0134F2d07f7cfb6E246680c53927DD30")
-            .expect("Invalid string for spender"),
-    );
-}
-type U256Return = U256;
-
-/// Brute-force detection of storage slots for token balances and allowances.
-///
-/// This function attempts to determine the storage slots used by a token contract
-/// for storing balance and allowance values. It systematically tests different
-/// storage locations by overwriting slots and checking whether the overwritten
-/// value produces the expected result when making calls to `balanceOf` or `allowance`.
-///
-/// # Parameters
-///
-/// * `token_addr` - A reference to the token's address (`H160`).
-/// * `block` - The block header at which the simulation is executed.
-/// * `engine` - The simulation engine used to simulate the blockchain environment.
-///
-/// # Returns
-///
-/// A `Result` containing:
-/// - `Ok((ERC20Slots, ContractCompiler))`: A tuple of detected storage slots (`ERC20Slots`) for
-///   balances and allowances, and the compiler type (`ContractCompiler`) used for the token
-///   contract.
-/// - `Err(TokenError)`: if the function fails to detect a valid slot for either balances or
-///   allowances after checking the first 100 slots.
-///
-/// # Notes
-///
-/// - This function tests slots in the range 0–99 for both balance and allowance detection.
-/// - The simulation engine is used to overwrite storage slots and simulate contract calls with the
-///   `balanceOf` and `allowance` functions.
-/// - Different compiler configurations (`Solidity` and `Vyper`) are tested to determine the correct
-///   storage layout of the contract.
-///
-/// # Implementation Details
-///
-/// - The function first searches for the balance slot by iterating through potential slots and
-///   testing both compiler configurations.
-/// - Once the balance slot is found, it uses the detected compiler to search for the allowance
-///   slot, which is dependent on the balance slot.
-pub(crate) fn brute_force_slots<D: EngineDatabaseInterface + Clone + Debug>(
-    token_addr: &Address,
-    block: &BlockHeader,
-    engine: &SimulationEngine<D>,
-) -> Result<(ERC20Slots, ContractCompiler), SimulationError>
-where
-    <D as DatabaseRef>::Error: Debug,
-    <D as EngineDatabaseInterface>::Error: Debug,
-{
-    let token_contract = TychoSimulationContract::new(*token_addr, engine.clone()).unwrap();
-
-    let mut compiler = ContractCompiler::Solidity;
-
-    let mut balance_slot = None;
-    for i in 0..100 {
-        for compiler_flag in [ContractCompiler::Solidity, ContractCompiler::Vyper] {
-            let mut overwrite_factory = ERC20OverwriteFactory::new(
-                *token_addr,
-                ERC20Slots::new(U256::from(i), U256::from(1)),
-                compiler_flag,
-            );
-            overwrite_factory.set_balance(*MARKER_VALUE, *EXTERNAL_ACCOUNT);
-
-            let res = token_contract
-                .call(
-                    "balanceOf(address)",
-                    *EXTERNAL_ACCOUNT,
-                    block.number,
-                    Some(block.timestamp),
-                    Some(overwrite_factory.get_overwrites()),
-                    Some(*EXTERNAL_ACCOUNT),
-                    U256::from(0u64),
-                    None,
-                )?
-                .return_value;
-            let decoded: U256Return = U256Return::abi_decode(&res).map_err(|e| {
-                SimulationError::FatalError(format!("Failed to decode swap return value: {e:?}"))
-            })?;
-            if decoded == *MARKER_VALUE {
-                balance_slot = Some(i);
-                compiler = compiler_flag;
-                break;
-            }
-        }
-    }
-
-    if balance_slot.is_none() {
-        return Err(SimulationError::FatalError(format!(
-            "Couldn't bruteforce balance for token {:?}",
-            token_addr.to_string()
-        )));
-    }
-
-    let mut allowance_slot = None;
-    for i in 0..100 {
-        let mut overwrite_factory = ERC20OverwriteFactory::new(
-            *token_addr,
-            ERC20Slots::new(U256::from(0), U256::from(i)),
-            compiler, /* At this point we know the compiler because we managed to find the
-                       * balance slot */
-        );
-
-        overwrite_factory.set_allowance(*MARKER_VALUE, *SPENDER, *EXTERNAL_ACCOUNT);
-
-        let res = token_contract
-            .call(
-                "allowance(address,address)",
-                (*EXTERNAL_ACCOUNT, *SPENDER),
-                block.number,
-                Some(block.timestamp),
-                Some(overwrite_factory.get_overwrites()),
-                Some(*EXTERNAL_ACCOUNT),
-                U256::from(0u64),
-                None,
-            )?
-            .return_value;
-        let decoded: U256Return = U256Return::abi_decode(&res).map_err(|e| {
-            SimulationError::FatalError(format!("Failed to decode swap return value: {e:?}"))
-        })?;
-        if decoded == *MARKER_VALUE {
-            allowance_slot = Some(i);
-            break;
-        }
-    }
-
-    if allowance_slot.is_none() {
-        return Err(SimulationError::FatalError(format!(
-            "Couldn't bruteforce allowance for token {:?}",
-            token_addr.to_string()
-        )));
-    }
-
-    Ok((
-        ERC20Slots::new(U256::from(balance_slot.unwrap()), U256::from(allowance_slot.unwrap())),
-        compiler,
-    ))
 }
 
 #[cfg(test)]
