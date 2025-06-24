@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use num_bigint::BigInt;
-use tracing::debug;
+use tracing::{debug, info};
 use tycho_client::feed::synchronizer::ComponentWithState;
 
 use crate::evm::protocol::vm::utils::json_deserialize_be_bigint_list;

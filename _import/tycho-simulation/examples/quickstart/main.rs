@@ -40,7 +40,9 @@ use tycho_simulation::{
         engine_db::tycho_db::PreCachedDB,
         protocol::{
             ekubo::state::EkuboState,
-            filters::{balancer_v2_pool_filter, curve_pool_filter, uniswap_v4_pool_with_hook_filter},
+            filters::{
+                balancer_v2_pool_filter, curve_pool_filter, uniswap_v4_pool_with_hook_filter,
+            },
             pancakeswap_v2::state::PancakeswapV2State,
             u256_num::biguint_to_u256,
             uniswap_v2::state::UniswapV2State,
