@@ -137,8 +137,8 @@ impl App {
             if decimals >= prev_decimals {
                 self.quote_amount *= BigUint::from(10u64).pow((decimals - prev_decimals) as u32);
             } else {
-                let new_amount = self.quote_amount.clone()
-                    / BigUint::from(10u64).pow((prev_decimals - decimals) as u32);
+                let new_amount = self.quote_amount.clone() /
+                    BigUint::from(10u64).pow((prev_decimals - decimals) as u32);
                 self.quote_amount =
                     if new_amount > BigUint::ZERO { new_amount } else { BigUint::one() };
             }
@@ -435,8 +435,8 @@ impl App {
                             "Swap Direction: {token_in_symbol} → {token_out_symbol}\nQuote amount: {quote_amount}\nReceived amount: {amount}\nGas: {gas}\nDuration: {duration:?}",
                             token_in_symbol = token_in.symbol,
                             token_out_symbol = token_out.symbol,
-                            quote_amount = self.quote_amount, 
-                            amount = data.amount, 
+                            quote_amount = self.quote_amount,
+                            amount = data.amount,
                             gas = data.gas
                         )
                     })
