@@ -8,7 +8,10 @@ import {CurveExecutor} from "../src/executors/CurveExecutor.sol";
 import {EkuboExecutor} from "../src/executors/EkuboExecutor.sol";
 import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
 import {UniswapV2Executor} from "../src/executors/UniswapV2Executor.sol";
-import {UniswapV3Executor, IUniswapV3Pool} from "../src/executors/UniswapV3Executor.sol";
+import {
+    UniswapV3Executor,
+    IUniswapV3Pool
+} from "../src/executors/UniswapV3Executor.sol";
 import {UniswapV4Executor} from "../src/executors/UniswapV4Executor.sol";
 
 // Test utilities and mocks
@@ -38,10 +41,7 @@ contract TychoRouterExposed is TychoRouter {
         bool transferFromNeeded
     ) external {
         _tstoreTransferFromInfo(
-            tokenIn,
-            amountIn,
-            isPermit2,
-            transferFromNeeded
+            tokenIn, amountIn, isPermit2, transferFromNeeded
         );
     }
 
@@ -53,10 +53,10 @@ contract TychoRouterExposed is TychoRouter {
         return _splitSwap(amountIn, nTokens, swaps);
     }
 
-    function exposedSequentialSwap(
-        uint256 amountIn,
-        bytes calldata swaps
-    ) external returns (uint256) {
+    function exposedSequentialSwap(uint256 amountIn, bytes calldata swaps)
+        external
+        returns (uint256)
+    {
         return _sequentialSwap(amountIn, swaps);
     }
 }
@@ -100,8 +100,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         tychoRouter.grantRole(keccak256("PAUSER_ROLE"), PAUSER);
         tychoRouter.grantRole(keccak256("UNPAUSER_ROLE"), UNPAUSER);
         tychoRouter.grantRole(
-            keccak256("EXECUTOR_SETTER_ROLE"),
-            EXECUTOR_SETTER
+            keccak256("EXECUTOR_SETTER_ROLE"), EXECUTOR_SETTER
         );
         return tychoRouter;
     }
@@ -118,34 +117,20 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address ekuboMevResist = 0x553a2EFc570c9e104942cEC6aC1c18118e54C091;
 
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
-        usv2Executor = new UniswapV2Executor(
-            factoryV2,
-            initCodeV2,
-            PERMIT2_ADDRESS,
-            30
-        );
-        usv3Executor = new UniswapV3Executor(
-            factoryV3,
-            initCodeV3,
-            PERMIT2_ADDRESS
-        );
+        usv2Executor =
+            new UniswapV2Executor(factoryV2, initCodeV2, PERMIT2_ADDRESS, 30);
+        usv3Executor =
+            new UniswapV3Executor(factoryV3, initCodeV3, PERMIT2_ADDRESS);
         usv4Executor = new UniswapV4Executor(poolManager, PERMIT2_ADDRESS);
         pancakev3Executor = new UniswapV3Executor(
-            factoryPancakeV3,
-            initCodePancakeV3,
-            PERMIT2_ADDRESS
+            factoryPancakeV3, initCodePancakeV3, PERMIT2_ADDRESS
         );
         balancerv2Executor = new BalancerV2Executor(PERMIT2_ADDRESS);
-        ekuboExecutor = new EkuboExecutor(
-            ekuboCore,
-            ekuboMevResist,
-            PERMIT2_ADDRESS
-        );
+        ekuboExecutor =
+            new EkuboExecutor(ekuboCore, ekuboMevResist, PERMIT2_ADDRESS);
         curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, PERMIT2_ADDRESS);
-        maverickv2Executor = new MaverickV2Executor(
-            MAVERICK_V2_FACTORY,
-            PERMIT2_ADDRESS
-        );
+        maverickv2Executor =
+            new MaverickV2Executor(MAVERICK_V2_FACTORY, PERMIT2_ADDRESS);
         balancerV3Executor = new BalancerV3Executor(PERMIT2_ADDRESS);
 
         address[] memory executors = new address[](9);
@@ -162,9 +147,11 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         return executors;
     }
 
-    function pleEncode(
-        bytes[] memory data
-    ) public pure returns (bytes memory encoded) {
+    function pleEncode(bytes[] memory data)
+        public
+        pure
+        returns (bytes memory encoded)
+    {
         for (uint256 i = 0; i < data.length; i++) {
             encoded = bytes.concat(
                 encoded,
@@ -173,17 +160,19 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         }
     }
 
-    function encodeSingleSwap(
-        address executor,
-        bytes memory protocolData
-    ) internal pure returns (bytes memory) {
+    function encodeSingleSwap(address executor, bytes memory protocolData)
+        internal
+        pure
+        returns (bytes memory)
+    {
         return abi.encodePacked(executor, protocolData);
     }
 
-    function encodeSequentialSwap(
-        address executor,
-        bytes memory protocolData
-    ) internal pure returns (bytes memory) {
+    function encodeSequentialSwap(address executor, bytes memory protocolData)
+        internal
+        pure
+        returns (bytes memory)
+    {
         return abi.encodePacked(executor, protocolData);
     }
 
@@ -194,14 +183,9 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address executor,
         bytes memory protocolData
     ) internal pure returns (bytes memory) {
-        return
-            abi.encodePacked(
-                tokenInIndex,
-                tokenOutIndex,
-                split,
-                executor,
-                protocolData
-            );
+        return abi.encodePacked(
+            tokenInIndex, tokenOutIndex, split, executor, protocolData
+        );
     }
 
     function encodeUniswapV2Swap(
@@ -224,15 +208,14 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         RestrictTransferFrom.TransferType transferType
     ) internal view returns (bytes memory) {
         IUniswapV3Pool pool = IUniswapV3Pool(target);
-        return
-            abi.encodePacked(
-                tokenIn,
-                tokenOut,
-                pool.fee(),
-                receiver,
-                target,
-                zero2one,
-                transferType
-            );
+        return abi.encodePacked(
+            tokenIn,
+            tokenOut,
+            pool.fee(),
+            receiver,
+            target,
+            zero2one,
+            transferType
+        );
     }
 }
