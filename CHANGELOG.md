@@ -1,3 +1,11 @@
+## [0.72.0](https://github.com/propeller-heads/tycho-indexer/compare/0.71.4...0.72.0) (2025-06-24)
+
+
+### Features
+
+* **dci:** add revert logic ([#590](https://github.com/propeller-heads/tycho-indexer/issues/590)) ([2d12b87](https://github.com/propeller-heads/tycho-indexer/commit/2d12b87417ba3d59d72d7f257e8933031ad529c8))
+* **dci:** add support for reorgs. ([f6c23bf](https://github.com/propeller-heads/tycho-indexer/commit/f6c23bf842065ec271dffe781e058403a41ebe13))
+
 ## [0.71.4](https://github.com/propeller-heads/tycho-indexer/compare/0.71.3...0.71.4) (2025-06-23)
 
 
