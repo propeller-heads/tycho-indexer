@@ -1,3 +1,16 @@
+## [0.118.0](https://github.com/propeller-heads/tycho-simulation/compare/0.117.0...0.118.0) (2025-06-24)
+
+
+### Features
+
+* add Balancer v3 assets and filter ([45a5613](https://github.com/propeller-heads/tycho-simulation/commit/45a56133eb54340046fcb562a2076c501f4a2795))
+* add spot prices calculation for components without capability ([cd91c3d](https://github.com/propeller-heads/tycho-simulation/commit/cd91c3dba7475081bbaacae7293f73d84cfa203d))
+
+
+### Bug Fixes
+
+* Fix post-rebase imports ([8d69bc3](https://github.com/propeller-heads/tycho-simulation/commit/8d69bc31610cf44fe3a32f6110dc8174cfd3a38e))
+
 ## [0.117.0](https://github.com/propeller-heads/tycho-simulation/compare/0.116.0...0.117.0) (2025-06-24)
 
 
