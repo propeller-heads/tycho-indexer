@@ -27,7 +27,7 @@ pub(super) struct DCICache {
 }
 
 impl DCICache {
-    pub(super) fn new_empty() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             ep_id_to_entrypoint: VersionedCache::new(),
             entrypoint_results: VersionedCache::new(),
@@ -487,7 +487,7 @@ mod tests {
 
     #[test]
     fn test_dci_cache_revert() {
-        let mut cache = DCICache::new_empty();
+        let mut cache = DCICache::new();
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
 
