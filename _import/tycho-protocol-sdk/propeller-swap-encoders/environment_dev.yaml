@@ -1,5 +1,0 @@
-name: propeller-swap-encoders
-channels:
-    - conda-forge
-dependencies:
-    - python=3.9
