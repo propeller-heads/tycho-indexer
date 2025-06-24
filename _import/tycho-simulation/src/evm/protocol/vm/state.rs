@@ -235,7 +235,10 @@ where
                         .insert((sell_token_address, buy_token_address), price);
                 }
             }
-            Err(_) => {
+            Err(SimulationError::FatalError(_)) => {
+                // If the pool does not support price function, we need to calculate spot prices by
+                // swapping two amounts and use the approximation to get the derivative.
+
                 for iter_tokens in self.tokens.iter().permutations(2) {
                     let t0 = bytes_to_address(iter_tokens[0])?;
                     let t1 = bytes_to_address(iter_tokens[1])?;
@@ -243,19 +246,26 @@ where
                     let overwrites =
                         Some(self.get_overwrites(vec![t0, t1], *MAX_BALANCE / U256::from(100))?);
 
+                    // Calculate the first sell amount (x1) as 1% of the maximum limit.
                     let x1 = self
                         .get_amount_limits(vec![t0, t1], overwrites.clone())?
                         .0 /
                         U256::from(100);
 
+                    // Calculate the second sell amount (x2) as x1 + 1% of x1. 1.01% of the max
+                    // limit
                     let x2 = x1 + (x1 / U256::from(100));
 
+                    // Perform a swap for the first sell amount (x1) and retrieve the received
+                    // amount (y1).
                     let y1 = self
                         .adapter_contract
                         .swap(&self.id, t0, t1, false, x1, self.block.number, overwrites.clone())?
                         .0
                         .received_amount;
 
+                    // Perform a swap for the second sell amount (x2) and retrieve the received
+                    // amount (y2).
                     let y2 = self
                         .adapter_contract
                         .swap(&self.id, t0, t1, false, x2, self.block.number, overwrites)?
@@ -268,6 +278,7 @@ where
                     let num = y2 - y1;
                     let den = x2 - x1;
 
+                    // Calculate the marginal price, adjusting for token decimals.
                     let token_correction =
                         10f64.powi(sell_token_decimals as i32 - buy_token_decimals as i32);
                     let marginal_price = u256_to_f64(num) / u256_to_f64(den) * token_correction;
@@ -276,6 +287,7 @@ where
                         .insert((t0, t1), marginal_price);
                 }
             }
+            Err(e) => return Err(e),
         }
         Ok(())
     }
