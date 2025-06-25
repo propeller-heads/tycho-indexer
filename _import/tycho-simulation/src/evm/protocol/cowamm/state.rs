@@ -85,7 +85,7 @@ impl CowAMMState {
         fee: u64,
     ) -> Self {
         let mut state = HashMap::new();
-
+  
         let t1 = format!("0x{encoded}", encoded = hex::encode::<Vec<u8>>(token_a.clone().to_vec()));
         let t2 = format!("0x{encoded}", encoded = hex::encode::<Vec<u8>>(token_b.clone().to_vec()));
 
@@ -104,7 +104,7 @@ impl CowAMMState {
 impl ProtocolSim for CowAMMState {
     fn fee(&self) -> f64 {
         COWAMM_FEE
-    }
+    } //handle lp_token case too
      /// Calculates a f64 representation of base token price in the AMM. 
     /// **********************************************************************************************
     /// calcSpotPrice                                                                             //
@@ -151,7 +151,14 @@ impl ProtocolSim for CowAMMState {
 
         Ok(ratio)
     }
-
+    // handle lp_token case too, where we calculate the expected amount of both tokens 
+    // both tokens cannot be lp_token -> CHECK
+    // exitPool
+    // if token_in is an lp_token compute the lp redemption , get both the other token in pair and token_out (double sided liquidity pool)
+        // get the proportional amount of both tokens
+            // get_amount_out of superfluous token we want to swap
+    //joinPool
+    // if token_out 
     fn get_amount_out(
         &self,
         amount_in: BigUint,
@@ -161,6 +168,10 @@ impl ProtocolSim for CowAMMState {
         let amount_in = biguint_to_u256(&amount_in);
         if amount_in == U256::from(0u64) {
             return Err(SimulationError::InvalidInput("Amount in cannot be zero".to_string(), None));
+        }
+        //how would we be able to tell its the address of a pool
+        if token_in.address == self.address && token_out.address == self.address{
+            return Err(SimulationError::InvalidInput("cannot exchange LP token for LP token".to_string(), None));
         }
         let token_in_state =  self
             .state
@@ -255,7 +266,17 @@ impl ProtocolSim for CowAMMState {
         tokens: &HashMap<Bytes, Token>,
         balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
-        unimplemented!()
+        //where are we getting tokens from
+        //where are we getting balances from 
+        // balances.
+        //where would this delta_transition be used where its input will be fe
+        //okay we can see it in line 484 of evm > decoder.rs
+         if let Some(component_balances) = balances.component_balances.get(&delta.component_id) {
+            for (token_addr, balance_bytes) in component_balances {
+                let liquidity = U256::from_be_slice(balance_bytes);
+                self.state.get_mut(token_addr).map(|s| s.liquidity = liquidity);
+            }
+        }
     }
     
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
