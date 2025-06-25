@@ -825,7 +825,11 @@ impl PostgresGateway {
                         .on(creation_tx.eq(schema::transaction::id.nullable())),
                 )
                 .filter(chain_id.eq(chain_db_id))
-                .filter(created_at.le(version_ts))
+                .filter(
+                    created_at
+                        .is_null()
+                        .or(created_at.le(version_ts)),
+                )
                 .filter(
                     deleted_at
                         .is_null()
@@ -853,7 +857,11 @@ impl PostgresGateway {
                         .on(creation_tx.eq(schema::transaction::id.nullable())),
                 )
                 .filter(chain_id.eq(chain_db_id))
-                .filter(created_at.le(version_ts))
+                .filter(
+                    created_at
+                        .is_null() // can be null if the account was initially added as a token
+                        .or(created_at.le(version_ts)),
+                )
                 .filter(
                     deleted_at
                         .is_null()
