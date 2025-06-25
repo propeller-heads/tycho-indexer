@@ -815,36 +815,6 @@ impl PostgresGateway {
             None => Utc::now().naive_utc(),
         };
 
-        // TODO: Try to reduce the duplication
-        // Total number of items, required for pagination.
-        let total_count = {
-            use schema::account::dsl::*;
-            let mut count_q = account
-                .filter(chain_id.eq(chain_db_id))
-                .filter(
-                    created_at
-                        .is_null()
-                        .or(created_at.le(version_ts)),
-                )
-                .filter(
-                    deleted_at
-                        .is_null()
-                        .or(deleted_at.gt(version_ts)),
-                )
-                .select(diesel::dsl::count_star())
-                .into_boxed();
-
-            // Apply contract id filters if provided
-            if let Some(contract_ids) = ids {
-                count_q = count_q.filter(address.eq_any(contract_ids));
-            }
-
-            count_q
-                .get_result::<i64>(conn)
-                .await
-                .map_err(PostgresError::from)?
-        };
-
         let accounts = {
             use schema::account::dsl::*;
             let mut q = account
@@ -992,6 +962,41 @@ impl PostgresGateway {
                 Ok(contract)
             })
             .collect::<Result<Vec<_>, _>>()?;
+
+        // TODO: Try to reduce the duplication
+        // Calculate total count based on whether pagination was used
+        let total_count = if pagination_params.is_some() {
+            // If pagination was used, we need to query the total count
+            use schema::account::dsl::*;
+            let mut count_q = account
+                .filter(chain_id.eq(chain_db_id))
+                .filter(
+                    created_at
+                        .is_null() // can be null if the account was initially added as a token
+                        .or(created_at.le(version_ts)),
+                )
+                .filter(
+                    deleted_at
+                        .is_null()
+                        .or(deleted_at.gt(version_ts)),
+                )
+                .select(diesel::dsl::count(id))
+                .into_boxed();
+
+            // Apply contract id filters if provided
+            if let Some(contract_ids) = ids {
+                count_q = count_q.filter(address.eq_any(contract_ids));
+            }
+
+            count_q
+                .get_result::<i64>(conn)
+                .await
+                .map_err(PostgresError::from)?
+        } else {
+            // If no pagination, use the length of the result
+            res.len() as i64
+        };
+
         Ok(WithTotal { entity: res, total: Some(total_count) })
     }
 
@@ -1969,11 +1974,7 @@ mod test {
                 "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
                     .parse()
                     .unwrap(),
-                Some(
-                    "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
-                        .parse()
-                        .unwrap(),
-                ),
+                None,
             ),
             _ => panic!("No version found"),
         }
@@ -2001,11 +2002,7 @@ mod test {
                 "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54"
                     .parse()
                     .unwrap(),
-                Some(
-                    "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54"
-                        .parse()
-                        .unwrap(),
-                ),
+                None,
             ),
             _ => panic!("No version found"),
         }
