@@ -820,10 +820,6 @@ impl PostgresGateway {
         let total_count = {
             use schema::account::dsl::*;
             let mut count_q = account
-                .left_join(
-                    schema::transaction::table
-                        .on(creation_tx.eq(schema::transaction::id.nullable())),
-                )
                 .filter(chain_id.eq(chain_db_id))
                 .filter(
                     created_at
@@ -852,10 +848,6 @@ impl PostgresGateway {
         let accounts = {
             use schema::account::dsl::*;
             let mut q = account
-                .left_join(
-                    schema::transaction::table
-                        .on(creation_tx.eq(schema::transaction::id.nullable())),
-                )
                 .filter(chain_id.eq(chain_db_id))
                 .filter(
                     created_at
@@ -868,7 +860,7 @@ impl PostgresGateway {
                         .or(deleted_at.gt(version_ts)),
                 )
                 .order_by(id)
-                .select((orm::Account::as_select(), schema::transaction::hash.nullable()))
+                .select(orm::Account::as_select())
                 .into_boxed();
 
             // if user passed any contract ids filter by those
@@ -884,11 +876,10 @@ impl PostgresGateway {
                     .offset(pagination.offset());
             }
 
-            q.get_results::<(orm::Account, Option<Bytes>)>(conn)
+            q.get_results::<orm::Account>(conn)
                 .await
                 .map_err(PostgresError::from)?
                 .into_iter()
-                .map(|(entity, tx)| WithTxHash { entity, tx })
                 .collect::<Vec<_>>()
         };
 
@@ -955,7 +946,6 @@ impl PostgresGateway {
 
                 // Note: it is safe to call unwrap here since above we always wrap it into Some
                 let code_tx = code.tx.clone().unwrap();
-                let creation_tx = account.tx.clone();
 
                 let balances = all_balances
                     .get_mut(&account.address)
@@ -976,8 +966,8 @@ impl PostgresGateway {
 
                 let mut contract = Account::new(
                     *chain,
-                    account.entity.address.clone(),
-                    account.entity.title.clone(),
+                    account.address.clone(),
+                    account.title.clone(),
                     HashMap::new(),
                     native_balance.balance,
                     balances.clone(),
@@ -986,7 +976,7 @@ impl PostgresGateway {
                     // TODO: remove balance_modify_tx from Account
                     Bytes::zero(32),
                     code_tx,
-                    creation_tx,
+                    None,
                 );
 
                 if let Some(storage) = &slots {
