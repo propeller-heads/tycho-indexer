@@ -1,3 +1,11 @@
+## [0.72.1](https://github.com/propeller-heads/tycho-indexer/compare/0.72.0...0.72.1) (2025-06-25)
+
+
+### Bug Fixes
+
+* **client:** link dci detected contracts to components within the tracker ([#601](https://github.com/propeller-heads/tycho-indexer/issues/601)) ([98855bf](https://github.com/propeller-heads/tycho-indexer/commit/98855bf2ad1a0930a5f2fba08056c3b18231beb0))
+* link dci detected contracts to components within the tracker ([3137ccf](https://github.com/propeller-heads/tycho-indexer/commit/3137ccf29beb50783c26baf8b9c2191c2fde823d))
+
 ## [0.72.0](https://github.com/propeller-heads/tycho-indexer/compare/0.71.4...0.72.0) (2025-06-24)
 
 
