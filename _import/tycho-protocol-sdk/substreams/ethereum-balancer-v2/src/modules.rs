@@ -15,6 +15,7 @@ use tycho_substreams::{
 };
 
 pub const VAULT_ADDRESS: &[u8] = &hex!("BA12222222228d8Ba445958a75a0704d566BF2C8");
+pub const ZERO_ADDRESS: &[u8] = &[0u8; 20];
 
 #[substreams::handlers::map]
 pub fn map_components(block: eth::v2::Block) -> Result<BlockTransactionProtocolComponents> {
@@ -214,6 +215,11 @@ pub fn map_protocol_changes(
 
                     if let Some(rate_providers) = rate_providers {
                         for rate_provider in rate_providers {
+                            if rate_provider == ZERO_ADDRESS {
+                                // Skipped: is not a rate provider
+                                continue;
+                            }
+
                             let trace_data = TraceData::Rpc(RpcTraceData {
                                 caller: None,
                                 calldata: hex::decode("679aefce").unwrap(), // getRate()
