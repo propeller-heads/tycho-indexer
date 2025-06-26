@@ -211,9 +211,18 @@ impl EkuboPool for TwammPool {
             self.state.token1_sale_rate = token1_sale_rate.clone().into();
         }
 
-        if let Some(last_execution_time) = updated_attributes.get("last_execution_time") {
-            self.state.last_execution_time = last_execution_time.clone().into();
-        }
+        let first_active_virtual_order_idx =
+            if let Some(last_execution_time) = updated_attributes.get("last_execution_time") {
+                let last_execution_time = last_execution_time.clone().into();
+
+                self.state.last_execution_time = last_execution_time;
+
+                self.imp
+                    .get_sale_rate_deltas()
+                    .partition_point(|srd| srd.time > last_execution_time)
+            } else {
+                0
+            };
 
         let changed_virtual_order_deltas = sale_rate_deltas_from_attributes(
             updated_attributes.into_iter().chain(
@@ -226,8 +235,9 @@ impl EkuboPool for TwammPool {
         .map_err(TransitionError::DecodeError)?
         .collect_vec();
 
-        if !changed_virtual_order_deltas.is_empty() {
-            let mut virtual_order_deltas = self.imp.get_sale_rate_deltas().clone();
+        if !changed_virtual_order_deltas.is_empty() || !first_active_virtual_order_idx.is_zero() {
+            let mut virtual_order_deltas =
+                self.imp.get_sale_rate_deltas()[first_active_virtual_order_idx..].to_vec();
 
             for virtual_order_delta in changed_virtual_order_deltas {
                 let res = virtual_order_deltas
