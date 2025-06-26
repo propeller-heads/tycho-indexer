@@ -4,7 +4,7 @@ use std::{
 };
 
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, trace};
 use tycho_common::models::{
     blockchain::{Block, EntryPoint, EntryPointWithTracingParams, TracingParams, TracingResult},
     Address, BlockHash, EntryPointId, StoreKey,
@@ -201,8 +201,8 @@ where
     ///
     /// # Returns
     /// * `Ok(())` - On successful processing
-    /// * `Err(DCICacheError::FinalityBlockNotFound)` - If the finalized block is not found in
-    ///   pending layers
+    /// * `Err(DCICacheError::FinalityNotFound)` - If the finalized block is not found in pending
+    ///   layers
     ///
     /// Note: to make sure the finalized height is always found, we keep the finalized block in the
     /// pending layers. For example:
@@ -216,6 +216,15 @@ where
         if self.pending.is_empty() {
             return Ok(());
         }
+
+        trace!(
+            "Handling finality for block {}, pending layers: {:?}",
+            finalized_block_height,
+            self.pending
+                .iter()
+                .map(|layer| layer.block.number)
+                .collect::<Vec<_>>()
+        );
 
         let finalized_index = self
             .pending
