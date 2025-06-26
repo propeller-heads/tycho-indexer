@@ -321,6 +321,34 @@ class TokensParams(BaseModel):
         allow_population_by_field_name = True
 
 
+class ProtocolSystemsParams(BaseModel):
+    chain: Optional[Chain] = None
+    pagination: Optional[PaginationParams] = None
+
+    class Config:
+        allow_population_by_field_name = True
+
+
+class ComponentTvlParams(BaseModel):
+    chain: Optional[Chain] = None
+    protocol_system: Optional[str] = Field(default=None, alias="protocolSystem")
+    component_ids: Optional[List[str]] = Field(default=None)
+    pagination: Optional[PaginationParams] = None
+
+    class Config:
+        allow_population_by_field_name = True
+
+
+class TracedEntryPointParams(BaseModel):
+    chain: Optional[Chain] = None
+    protocol_system: str
+    component_ids: Optional[List[str]] = Field(default=None)
+    pagination: Optional[PaginationParams] = None
+
+    class Config:
+        allow_population_by_field_name = True
+
+
 # Response objects
 
 
@@ -344,6 +372,11 @@ class PaginationResponse(BaseModel):
         return self.page > 0
 
 
+class ProtocolSystemsResponse(BaseModel):
+    protocol_systems: List[str]
+    pagination: PaginationResponse
+
+
 class ProtocolComponentsResponse(BaseModel):
     protocol_components: List[ProtocolComponent]
     pagination: PaginationResponse
@@ -361,4 +394,16 @@ class ContractStateResponse(BaseModel):
 
 class TokensResponse(BaseModel):
     tokens: List[ResponseToken]
+    pagination: PaginationResponse
+
+
+class ComponentTvlResponse(BaseModel):
+    tvl: Dict[str, float]
+    pagination: PaginationResponse
+
+
+class TracedEntryPointsResponse(BaseModel):
+    traced_entry_points: Dict[
+        str, List[tuple]
+    ]  # component_id -> [(EntryPointWithTracingParams, TracingResult)]
     pagination: PaginationResponse

@@ -10,10 +10,16 @@ from .dto import (
     ContractStateParams,
     TokensParams,
     HexBytes,
+    ProtocolSystemsParams,
+    ComponentTvlParams,
+    TracedEntryPointParams,
+    ProtocolSystemsResponse,
+    ComponentTvlResponse,
     ProtocolComponentsResponse,
     ProtocolStateResponse,
     ContractStateResponse,
     TokensResponse,
+    TracedEntryPointsResponse,
 )
 
 
@@ -224,6 +230,58 @@ class TychoRPCClient:
         res = self._post_request("/v1/tokens", body=params_dict)
         return TokensResponse(**res)
 
+    def get_protocol_systems(
+        self, params: ProtocolSystemsParams
+    ) -> ProtocolSystemsResponse:
+        """
+        Get list of supported protocol systems.
+
+        Args:
+            params: Parameters for filtering protocol systems
+
+        Returns:
+            Protocol systems response with pagination
+        """
+        params_dict = params.dict(exclude_none=True)
+        params_dict["chain"] = self._chain
+
+        res = self._post_request("/v1/protocol_systems", body=params_dict)
+        return ProtocolSystemsResponse(**res)
+
+    def get_component_tvl(self, params: ComponentTvlParams) -> ComponentTvlResponse:
+        """
+        Get component TVL data.
+
+        Args:
+            params: Parameters for filtering component TVL
+
+        Returns:
+            Component TVL response with pagination
+        """
+        params_dict = params.dict(exclude_none=True)
+        params_dict["chain"] = self._chain
+
+        res = self._post_request("/v1/component_tvl", body=params_dict)
+        return ComponentTvlResponse(**res)
+
+    def get_traced_entry_points(
+        self, params: TracedEntryPointParams
+    ) -> TracedEntryPointsResponse:
+        """
+        Get traced entry points.
+
+        Args:
+            params: Parameters for filtering traced entry points
+
+        Returns:
+            Traced entry points response with pagination
+        """
+        params_dict = params.dict(exclude_none=True)
+        params_dict["chain"] = self._chain
+
+        res = self._post_request("/v1/traced_entry_points", body=params_dict)
+        return TracedEntryPointsResponse(**res)
+
     def health(self) -> dict:
         """
         Get server health status.
@@ -258,6 +316,14 @@ if __name__ == "__main__":
         # Get tokens
         tokens = client.get_tokens(TokensParams(min_quality=10, traded_n_days_ago=30))
         print(f"Found {len(tokens.tokens)} tokens")
+
+        # Get protocol systems
+        systems = client.get_protocol_systems(ProtocolSystemsParams())
+        print(f"Found {len(systems.protocol_systems)} protocol systems")
+
+        # Get component TVL
+        tvl = client.get_component_tvl(ComponentTvlParams())
+        print(f"Found TVL data for {len(tvl.tvl)} components")
 
         # Get health status
         health = client.health()
