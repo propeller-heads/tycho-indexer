@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use num_bigint::BigInt;
-use tracing::debug;
+use tracing::{debug, info};
 use tycho_client::feed::synchronizer::ComponentWithState;
 
 use crate::evm::protocol::vm::utils::json_deserialize_be_bigint_list;
@@ -11,7 +11,7 @@ const ZERO_ADDRESS_ARR: [u8; 20] = [0u8; 20];
 
 /// Filters out pools that have dynamic rate providers or unsupported pool types
 /// in Balancer V2
-pub fn balancer_pool_filter(component: &ComponentWithState) -> bool {
+pub fn balancer_v2_pool_filter(component: &ComponentWithState) -> bool {
     // Check for rate_providers in static_attributes
     if let Some(rate_providers_data) = component
         .component
@@ -163,6 +163,24 @@ pub fn uniswap_v4_pool_with_hook_filter(component: &ComponentWithState) -> bool 
     {
         if hooks.to_vec() != ZERO_ADDRESS_ARR {
             debug!("Filtering out UniswapV4 pool {} because it has hooks", component.component.id);
+            return false;
+        }
+    }
+    true
+}
+
+/// Filters out pools that rely on ERC4626 in Balancer V3
+pub fn balancer_v3_pool_filter(component: &ComponentWithState) -> bool {
+    if let Some(erc4626) = component
+        .component
+        .static_attributes
+        .get("erc4626")
+    {
+        if erc4626.to_vec() == [1u8] {
+            info!(
+                "Filtering out Balancer V3 pool {} because it uses ERC4626",
+                component.component.id
+            );
             return false;
         }
     }
