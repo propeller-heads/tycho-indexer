@@ -8706,8 +8706,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-substreams"
-version = "0.2.1"
-source = "git+https://github.com/propeller-heads/tycho-protocol-sdk.git?tag=0.3.2#c778e7dee22024fadcc76560ebfca5721e495284"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8327567b9c6b20269f7df0f90ced71efdf1377c7fea94e0871bbd384f5c503ee"
 dependencies = [
  "ethabi 18.0.0",
  "hex",

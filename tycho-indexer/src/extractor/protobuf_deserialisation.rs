@@ -247,8 +247,7 @@ impl TryFromMessage for TracingParams {
 
         match trace_data {
             substreams::entry_point_params::TraceData::Rpc(rpc_data) => {
-                let caller =
-                    if !rpc_data.caller.is_empty() { Some(rpc_data.caller.into()) } else { None };
+                let caller = rpc_data.caller.map(|c| c.into());
                 Ok(Self::RPCTracer(RPCTracerParams::new(caller, rpc_data.calldata.into())))
             }
         }
@@ -441,14 +440,9 @@ impl TryFromMessage for TxWithChanges {
             let entrypoint_id = msg_entrypoint_params
                 .entrypoint_id
                 .clone();
-            let component_id = (!msg_entrypoint_params
+            let component_id = msg_entrypoint_params
                 .component_id
-                .is_empty())
-            .then(|| {
-                msg_entrypoint_params
-                    .component_id
-                    .clone()
-            });
+                .clone();
             let tracing_data = TracingParams::try_from_message(msg_entrypoint_params)?;
             entrypoint_params
                 .entry(entrypoint_id)
@@ -898,9 +892,9 @@ mod test {
     #[case::rpc_trace_data(
         substreams::entry_point_params::TraceData::Rpc(
                 substreams::RpcTraceData {
-                    caller: Bytes::from_str("0x1234567890123456789012345678901234567890")
+                    caller: Some(Bytes::from_str("0x1234567890123456789012345678901234567890")
                         .unwrap()
-                        .to_vec(),
+                        .to_vec()),
                     calldata: Bytes::from_str("0xabcdef")
                         .unwrap()
                         .to_vec(),
@@ -919,7 +913,7 @@ mod test {
     ) {
         let msg = substreams::EntryPointParams {
             entrypoint_id: "test_entrypoint".to_string(),
-            component_id: "test_component".to_string(),
+            component_id: Some("test_component".to_string()),
             trace_data: Some(trace_data),
         };
 
