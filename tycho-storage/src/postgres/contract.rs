@@ -828,6 +828,21 @@ impl PostgresGateway {
             // else get all contracts
             if let Some(contract_ids) = ids {
                 q = q.filter(address.eq_any(contract_ids));
+            } else {
+                // If no specific IDs requested, only get accounts that have code
+                // This ensures pagination works correctly with the filtered results
+                q = q.filter(
+                    id.eq_any(
+                        schema::contract_code::table
+                            .filter(schema::contract_code::valid_from.le(version_ts))
+                            .filter(
+                                schema::contract_code::valid_to
+                                    .is_null()
+                                    .or(schema::contract_code::valid_to.gt(version_ts)),
+                            )
+                            .select(schema::contract_code::account_id),
+                    ),
+                );
             }
 
             // Apply pagination if provided
@@ -882,8 +897,9 @@ impl PostgresGateway {
             .map(|code| (code.entity.account_id, code))
             .collect();
 
-        // Filter accounts to only include those with code, or error if specific IDs were requested
-        // and code is missing
+        // Since we already filtered accounts to only include those with code in the initial query,
+        // we can use accounts directly. For specific IDs, we still need to verify all accounts have
+        // code.
         let filtered_accounts = if ids.is_some() {
             // If specific IDs were requested, all accounts must have code
             if accounts.len() != code_map.len() {
@@ -895,11 +911,8 @@ impl PostgresGateway {
             }
             accounts
         } else {
-            // If no specific IDs were requested, skip accounts without code (token accounts)
+            // If no specific IDs were requested, accounts are already filtered to have code
             accounts
-                .into_iter()
-                .filter(|account| code_map.contains_key(&account.id))
-                .collect::<Vec<_>>()
         };
 
         let slots = if include_slots {
@@ -995,6 +1008,21 @@ impl PostgresGateway {
             // Apply contract id filters if provided
             if let Some(contract_ids) = ids {
                 count_q = count_q.filter(address.eq_any(contract_ids));
+            } else {
+                // If no specific IDs requested, only count accounts that have code
+                // This matches the filtering logic applied to the main query
+                count_q = count_q.filter(
+                    id.eq_any(
+                        schema::contract_code::table
+                            .filter(schema::contract_code::valid_from.le(version_ts))
+                            .filter(
+                                schema::contract_code::valid_to
+                                    .is_null()
+                                    .or(schema::contract_code::valid_to.gt(version_ts)),
+                            )
+                            .select(schema::contract_code::account_id),
+                    ),
+                );
             }
 
             count_q
@@ -2223,11 +2251,7 @@ mod test {
             "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
                 .parse()
                 .expect("txhash ok"),
-            Some(
-                "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
-                    .parse()
-                    .unwrap(),
-            ),
+            None,
         );
         gateway
             .insert_contract(&expected, &mut conn)
