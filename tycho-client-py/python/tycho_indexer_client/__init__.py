@@ -1,5 +1,6 @@
 from .rpc_client import (
     TychoRPCClient,
+    TychoRPCError,
     ProtocolComponentsParams,
     ProtocolStateParams,
     ContractStateParams,
@@ -12,5 +13,11 @@ from .dto import (
     ResponseAccount,
     ResponseToken,
     HexBytes,
+    PaginationParams,
+    PaginationResponse,
+    ProtocolComponentsResponse,
+    ProtocolStateResponse,
+    ContractStateResponse,
+    TokensResponse,
 )
 from .stream import TychoStream
