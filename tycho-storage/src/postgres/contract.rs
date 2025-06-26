@@ -761,15 +761,6 @@ impl PostgresGateway {
                 )
             })?;
 
-        let creation_tx = match account_orm.creation_tx {
-            Some(tx) => schema::transaction::table
-                .filter(schema::transaction::id.eq(tx))
-                .select(schema::transaction::hash)
-                .first::<Bytes>(conn)
-                .await
-                .ok(),
-            None => None,
-        };
         let mut account = Account::new(
             chain,
             account_orm.address,
@@ -782,7 +773,7 @@ impl PostgresGateway {
             // TODO: remove balance_modify_tx from Account
             Bytes::zero(32),
             code_tx,
-            creation_tx,
+            None,
         );
 
         if include_slots {
