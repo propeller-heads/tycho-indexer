@@ -2564,7 +2564,7 @@ mod test_serial_db {
                     .unwrap(),
                 Bytes::zero(32),
                 VM_TX_HASH_0.parse().unwrap(),
-                Some(VM_TX_HASH_0.parse().unwrap()),
+                None,
             ),
             _ => panic!("Unknown version"),
         }

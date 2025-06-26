@@ -761,15 +761,6 @@ impl PostgresGateway {
                 )
             })?;
 
-        let creation_tx = match account_orm.creation_tx {
-            Some(tx) => schema::transaction::table
-                .filter(schema::transaction::id.eq(tx))
-                .select(schema::transaction::hash)
-                .first::<Bytes>(conn)
-                .await
-                .ok(),
-            None => None,
-        };
         let mut account = Account::new(
             chain,
             account_orm.address,
@@ -782,7 +773,7 @@ impl PostgresGateway {
             // TODO: remove balance_modify_tx from Account
             Bytes::zero(32),
             code_tx,
-            creation_tx,
+            None,
         );
 
         if include_slots {
@@ -815,58 +806,43 @@ impl PostgresGateway {
             None => Utc::now().naive_utc(),
         };
 
-        // TODO: Try to reduce the duplication
-        // Total number of items, required for pagination.
-        let total_count = {
-            use schema::account::dsl::*;
-            let mut count_q = account
-                .left_join(
-                    schema::transaction::table
-                        .on(creation_tx.eq(schema::transaction::id.nullable())),
-                )
-                .filter(chain_id.eq(chain_db_id))
-                .filter(created_at.le(version_ts))
-                .filter(
-                    deleted_at
-                        .is_null()
-                        .or(deleted_at.gt(version_ts)),
-                )
-                .select(diesel::dsl::count_star())
-                .into_boxed();
-
-            // Apply contract id filters if provided
-            if let Some(contract_ids) = ids {
-                count_q = count_q.filter(address.eq_any(contract_ids));
-            }
-
-            count_q
-                .get_result::<i64>(conn)
-                .await
-                .map_err(PostgresError::from)?
-        };
-
         let accounts = {
             use schema::account::dsl::*;
             let mut q = account
-                .left_join(
-                    schema::transaction::table
-                        .on(creation_tx.eq(schema::transaction::id.nullable())),
-                )
                 .filter(chain_id.eq(chain_db_id))
-                .filter(created_at.le(version_ts))
+                .filter(
+                    created_at
+                        .is_null() // can be null if the account was initially added as a token
+                        .or(created_at.le(version_ts)),
+                )
                 .filter(
                     deleted_at
                         .is_null()
                         .or(deleted_at.gt(version_ts)),
                 )
                 .order_by(id)
-                .select((orm::Account::as_select(), schema::transaction::hash.nullable()))
+                .select(orm::Account::as_select())
                 .into_boxed();
 
             // if user passed any contract ids filter by those
             // else get all contracts
             if let Some(contract_ids) = ids {
                 q = q.filter(address.eq_any(contract_ids));
+            } else {
+                // If no specific IDs requested, only get accounts that have code
+                // This ensures pagination works correctly with the filtered results
+                q = q.filter(
+                    id.eq_any(
+                        schema::contract_code::table
+                            .filter(schema::contract_code::valid_from.le(version_ts))
+                            .filter(
+                                schema::contract_code::valid_to
+                                    .is_null()
+                                    .or(schema::contract_code::valid_to.gt(version_ts)),
+                            )
+                            .select(schema::contract_code::account_id),
+                    ),
+                );
             }
 
             // Apply pagination if provided
@@ -876,11 +852,10 @@ impl PostgresGateway {
                     .offset(pagination.offset());
             }
 
-            q.get_results::<(orm::Account, Option<Bytes>)>(conn)
+            q.get_results::<orm::Account>(conn)
                 .await
                 .map_err(PostgresError::from)?
                 .into_iter()
-                .map(|(entity, tx)| WithTxHash { entity, tx })
                 .collect::<Vec<_>>()
         };
 
@@ -916,6 +891,30 @@ impl PostgresGateway {
                 .collect::<Vec<_>>()
         };
 
+        // Create a map of account_id to code for efficient lookup
+        let code_map: HashMap<i64, WithTxHash<orm::ContractCode>> = codes
+            .into_iter()
+            .map(|code| (code.entity.account_id, code))
+            .collect();
+
+        // Since we already filtered accounts to only include those with code in the initial query,
+        // we can use accounts directly. For specific IDs, we still need to verify all accounts have
+        // code.
+        let filtered_accounts = if ids.is_some() {
+            // If specific IDs were requested, all accounts must have code
+            if accounts.len() != code_map.len() {
+                return Err(StorageError::Unexpected(format!(
+                    "Some accounts were missing code. Got {} accounts and {} code entries.",
+                    accounts.len(),
+                    code_map.len(),
+                )));
+            }
+            accounts
+        } else {
+            // If no specific IDs were requested, accounts are already filtered to have code
+            accounts
+        };
+
         let slots = if include_slots {
             Some(
                 self.get_contract_slots(chain, ids, version, conn)
@@ -925,29 +924,20 @@ impl PostgresGateway {
             None
         };
 
-        if accounts.len() != codes.len() {
-            return Err(StorageError::Unexpected(format!(
-                "Some accounts were missing either code. Got {} accounts and {} code entries.",
-                accounts.len(),
-                codes.len(),
-            )));
-        }
-
-        let res = accounts
+        let res = filtered_accounts
             .into_iter()
-            .zip(codes)
-            .map(|(account, code)| -> Result<Account, StorageError> {
-                if account.id != code.account_id {
-                    return Err(StorageError::Unexpected(format!(
-                        "Identity mismatch - while retrieving entries for account id: {} \
-                            encountered code for id {}",
-                        &account.id, &code.account_id
-                    )));
-                }
+            .map(|account| -> Result<Account, StorageError> {
+                let code = code_map
+                    .get(&account.id)
+                    .ok_or_else(|| {
+                        StorageError::Unexpected(format!(
+                            "Code not found for account id: {}",
+                            account.id
+                        ))
+                    })?;
 
                 // Note: it is safe to call unwrap here since above we always wrap it into Some
                 let code_tx = code.tx.clone().unwrap();
-                let creation_tx = account.tx.clone();
 
                 let balances = all_balances
                     .get_mut(&account.address)
@@ -968,8 +958,8 @@ impl PostgresGateway {
 
                 let mut contract = Account::new(
                     *chain,
-                    account.entity.address.clone(),
-                    account.entity.title.clone(),
+                    account.address.clone(),
+                    account.title.clone(),
                     HashMap::new(),
                     native_balance.balance,
                     balances.clone(),
@@ -978,7 +968,7 @@ impl PostgresGateway {
                     // TODO: remove balance_modify_tx from Account
                     Bytes::zero(32),
                     code_tx,
-                    creation_tx,
+                    None,
                 );
 
                 if let Some(storage) = &slots {
@@ -994,6 +984,56 @@ impl PostgresGateway {
                 Ok(contract)
             })
             .collect::<Result<Vec<_>, _>>()?;
+
+        // TODO: Try to reduce the duplication
+        // Calculate total count based on whether pagination was used
+        let total_count = if pagination_params.is_some() {
+            // If pagination was used, we need to query the total count
+            use schema::account::dsl::*;
+            let mut count_q = account
+                .filter(chain_id.eq(chain_db_id))
+                .filter(
+                    created_at
+                        .is_null() // can be null if the account was initially added as a token
+                        .or(created_at.le(version_ts)),
+                )
+                .filter(
+                    deleted_at
+                        .is_null()
+                        .or(deleted_at.gt(version_ts)),
+                )
+                .select(diesel::dsl::count(id))
+                .into_boxed();
+
+            // Apply contract id filters if provided
+            if let Some(contract_ids) = ids {
+                count_q = count_q.filter(address.eq_any(contract_ids));
+            } else {
+                // If no specific IDs requested, only count accounts that have code
+                // This matches the filtering logic applied to the main query
+                count_q = count_q.filter(
+                    id.eq_any(
+                        schema::contract_code::table
+                            .filter(schema::contract_code::valid_from.le(version_ts))
+                            .filter(
+                                schema::contract_code::valid_to
+                                    .is_null()
+                                    .or(schema::contract_code::valid_to.gt(version_ts)),
+                            )
+                            .select(schema::contract_code::account_id),
+                    ),
+                );
+            }
+
+            count_q
+                .get_result::<i64>(conn)
+                .await
+                .map_err(PostgresError::from)?
+        } else {
+            // If no pagination, use the length of the result
+            res.len() as i64
+        };
+
         Ok(WithTotal { entity: res, total: Some(total_count) })
     }
 
@@ -1867,11 +1907,7 @@ mod test {
                 "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
                     .parse()
                     .unwrap(),
-                Some(
-                    "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
-                        .parse()
-                        .unwrap(),
-                ),
+                None,
             ),
             2 => Account::new(
                 Chain::Ethereum,
@@ -1926,11 +1962,7 @@ mod test {
                 "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
                     .parse()
                     .unwrap(),
-                Some(
-                    "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
-                        .parse()
-                        .unwrap(),
-                ),
+                None,
             ),
             _ => panic!("No version found"),
         }
@@ -1971,11 +2003,7 @@ mod test {
                 "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
                     .parse()
                     .unwrap(),
-                Some(
-                    "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
-                        .parse()
-                        .unwrap(),
-                ),
+                None,
             ),
             _ => panic!("No version found"),
         }
@@ -2003,11 +2031,7 @@ mod test {
                 "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54"
                     .parse()
                     .unwrap(),
-                Some(
-                    "0x794f7df7a3fe973f1583fbb92536f9a8def3a89902439289315326c04068de54"
-                        .parse()
-                        .unwrap(),
-                ),
+                None,
             ),
             _ => panic!("No version found"),
         }
@@ -2227,11 +2251,7 @@ mod test {
             "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
                 .parse()
                 .expect("txhash ok"),
-            Some(
-                "0x3108322284d0a89a7accb288d1a94384d499504fe7e04441b0706c7628dee7b7"
-                    .parse()
-                    .unwrap(),
-            ),
+            None,
         );
         gateway
             .insert_contract(&expected, &mut conn)
