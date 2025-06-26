@@ -5,6 +5,9 @@ from .rpc_client import (
     ProtocolStateParams,
     ContractStateParams,
     TokensParams,
+    ProtocolSystemsParams,
+    ComponentTvlParams,
+    TracedEntryPointParams,
 )
 from .dto import (
     Chain,
@@ -13,11 +16,14 @@ from .dto import (
     ResponseAccount,
     ResponseToken,
     HexBytes,
+    ProtocolSystemsResponse,
+    ComponentTvlResponse,
     PaginationParams,
     PaginationResponse,
     ProtocolComponentsResponse,
     ProtocolStateResponse,
     ContractStateResponse,
     TokensResponse,
+    TracedEntryPointsResponse,
 )
 from .stream import TychoStream
