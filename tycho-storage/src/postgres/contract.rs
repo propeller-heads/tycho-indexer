@@ -885,6 +885,32 @@ impl PostgresGateway {
                 .collect::<Vec<_>>()
         };
 
+        // Create a map of account_id to code for efficient lookup
+        let code_map: HashMap<i64, WithTxHash<orm::ContractCode>> = codes
+            .into_iter()
+            .map(|code| (code.entity.account_id, code))
+            .collect();
+
+        // Filter accounts to only include those with code, or error if specific IDs were requested
+        // and code is missing
+        let filtered_accounts = if ids.is_some() {
+            // If specific IDs were requested, all accounts must have code
+            if accounts.len() != code_map.len() {
+                return Err(StorageError::Unexpected(format!(
+                    "Some accounts were missing code. Got {} accounts and {} code entries.",
+                    accounts.len(),
+                    code_map.len(),
+                )));
+            }
+            accounts
+        } else {
+            // If no specific IDs were requested, skip accounts without code (token accounts)
+            accounts
+                .into_iter()
+                .filter(|account| code_map.contains_key(&account.id))
+                .collect::<Vec<_>>()
+        };
+
         let slots = if include_slots {
             Some(
                 self.get_contract_slots(chain, ids, version, conn)
@@ -894,25 +920,17 @@ impl PostgresGateway {
             None
         };
 
-        if accounts.len() != codes.len() {
-            return Err(StorageError::Unexpected(format!(
-                "Some accounts were missing either code. Got {} accounts and {} code entries.",
-                accounts.len(),
-                codes.len(),
-            )));
-        }
-
-        let res = accounts
+        let res = filtered_accounts
             .into_iter()
-            .zip(codes)
-            .map(|(account, code)| -> Result<Account, StorageError> {
-                if account.id != code.account_id {
-                    return Err(StorageError::Unexpected(format!(
-                        "Identity mismatch - while retrieving entries for account id: {} \
-                            encountered code for id {}",
-                        &account.id, &code.account_id
-                    )));
-                }
+            .map(|account| -> Result<Account, StorageError> {
+                let code = code_map
+                    .get(&account.id)
+                    .ok_or_else(|| {
+                        StorageError::Unexpected(format!(
+                            "Code not found for account id: {}",
+                            account.id
+                        ))
+                    })?;
 
                 // Note: it is safe to call unwrap here since above we always wrap it into Some
                 let code_tx = code.tx.clone().unwrap();
@@ -1870,11 +1888,7 @@ mod test {
                 "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
                     .parse()
                     .unwrap(),
-                Some(
-                    "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
-                        .parse()
-                        .unwrap(),
-                ),
+                None,
             ),
             2 => Account::new(
                 Chain::Ethereum,
@@ -1929,11 +1943,7 @@ mod test {
                 "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
                     .parse()
                     .unwrap(),
-                Some(
-                    "0xbb7e16d797a9e2fbc537e30f91ed3d27a254dd9578aa4c3af3e5f0d3e8130945"
-                        .parse()
-                        .unwrap(),
-                ),
+                None,
             ),
             _ => panic!("No version found"),
         }
