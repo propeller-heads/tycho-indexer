@@ -35,6 +35,8 @@ interface ISwapAdapterV2 is ISwapAdapterTypes {
     /// @param sellToken The token being sold.
     /// @param buyToken The token being bought.
     /// @param specifiedAmounts Amounts to calculate marginal prices at.
+    /// @param data Any additional data required, that does not fit the
+    /// interface.
     /// @return prices array of prices as fractions corresponding to the
     /// provided amounts.
     function price(
