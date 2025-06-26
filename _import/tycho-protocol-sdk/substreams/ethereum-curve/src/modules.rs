@@ -64,7 +64,7 @@ pub fn map_components(params: String, block: eth::v2::Block) -> Result<BlockChan
             }
 
             if let Some((component, mut state)) = emit_specific_pools(&params, tx).expect(
-                "An unexpected error occured when parsing params for emitting specific pools",
+                "An unexpected error occurred when parsing params for emitting specific pools",
             ) {
                 entity_changes.append(&mut state);
                 components.push(component);
@@ -227,7 +227,7 @@ pub fn map_protocol_changes(
                     entity_changes: vec![],
                 });
 
-            let formated_components: Vec<_> = tx_changes //TODO: format directly at creation
+            let formatted_components: Vec<_> = tx_changes //TODO: format directly at creation
                 .component_changes
                 .into_iter()
                 .map(|mut component| {
@@ -238,14 +238,14 @@ pub fn map_protocol_changes(
 
             transaction_entry
                 .component_changes
-                .extend(formated_components);
+                .extend(formatted_components);
             transaction_entry
                 .entity_changes
                 .extend(tx_changes.entity_changes);
         });
 
     // Balance changes are gathered by the `StoreDelta` based on `TokenExchange`, etc. creating
-    //  `BalanceDeltas`. We essentially just process the changes that occured to the `store` this
+    //  `BalanceDeltas`. We essentially just process the changes that occurred to the `store` this
     //  block. Then, these balance changes are merged onto the existing map of tx contract changes,
     //  inserting a new one if it doesn't exist.
     balance_store

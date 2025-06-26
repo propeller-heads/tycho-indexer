@@ -94,7 +94,7 @@ type TxAggregatedBalances =
 /// Aggregates absolute balances per transaction and token.
 ///
 /// ## Arguments
-/// * `balance_store` - A `StoreDeltas` with all changes that occured in the source store module.
+/// * `balance_store` - A `StoreDeltas` with all changes that occurred in the source store module.
 /// * `deltas` - A `BlockBalanceDeltas` message containing the relative balances changes.
 ///
 /// This function reads absolute balance values from an additive store (see `store_balance_changes`
