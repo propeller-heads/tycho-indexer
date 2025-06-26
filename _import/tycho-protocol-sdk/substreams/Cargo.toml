@@ -16,6 +16,7 @@ members = [
     "ethereum-uniswap-v4",
     "ethereum-ekubo-v2",
     "ethereum-maverick-v2",
+    "ethereum-balancer-v3",
 ]
 resolver = "2"
 

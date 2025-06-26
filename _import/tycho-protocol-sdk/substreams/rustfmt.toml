@@ -21,4 +21,5 @@ ignore = [
     "ethereum-pancakeswap-v3/src/abi",
     "ethereum-uniswap-v4/src/abi",
     "ethereum-maverick-v2/src/abi",
+    "ethereum-balancer-v3/src/abi"
 ]

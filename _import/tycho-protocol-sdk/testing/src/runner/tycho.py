@@ -85,6 +85,8 @@ class TychoRunner:
                     "--stop-block",
                     # +2 is to make up for the cache in the index side.
                     str(end_block + 2),
+                    "--dci-plugin",
+                    "rpc",
                 ]
                 + (
                     [

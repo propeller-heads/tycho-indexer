@@ -14,9 +14,9 @@ use crate::{
     models::{InterimContractChange, TransactionChanges},
     prelude::TransactionChangesBuilder,
 };
-use substreams_ethereum::pb::{
-    eth,
-    eth::v2::{block::DetailLevel, CallType, TransactionTrace},
+use substreams_ethereum::pb::eth::{
+    self,
+    v2::{block::DetailLevel, CallType, TransactionTrace},
 };
 
 /// Extracts and aggregates contract changes from a block.

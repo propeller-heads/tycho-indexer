@@ -48,9 +48,9 @@ dependencies = [
 
 [[package]]
 name = "bitflags"
-version = "2.6.0"
+version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b048fb63fd8b5923fc5aa7b340d8e156aec7ec02f0c78fa8a6ddc2613f6f71de"
+checksum = "8f68f53c83ab957f72c32642f3868eec03eb974d1fb82e453128456482613d36"
 
 [[package]]
 name = "bitvec"
@@ -99,18 +99,18 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "cpufeatures"
-version = "0.2.16"
+version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16b80225097f2e5ae4e7179dd2266824648f3e2f49d9134d584b76389d31c4c3"
+checksum = "59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280"
 dependencies = [
  "libc",
 ]
 
 [[package]]
 name = "crunchy"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
+checksum = "43da5946c66ffcc7745f48db692ffbb10a83bfe0afd96235c5c2a4fb23994929"
 
 [[package]]
 name = "crypto-common"
@@ -131,12 +131,6 @@ dependencies = [
  "block-buffer",
  "crypto-common",
 ]
-
-[[package]]
-name = "downcast-rs"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 
 [[package]]
 name = "either"
@@ -166,7 +160,7 @@ version = "17.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4966fba78396ff92db3b817ee71143eccd98acf0f876b8d600e585a670c5d1b"
 dependencies = [
- "ethereum-types 0.13.1",
+ "ethereum-types",
  "hex",
  "once_cell",
  "regex",
@@ -174,24 +168,7 @@ dependencies = [
  "serde_json",
  "sha3",
  "thiserror 1.0.69",
- "uint 0.9.5",
-]
-
-[[package]]
-name = "ethabi"
-version = "18.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7413c5f74cc903ea37386a8965a936cbeb334bd270862fdece542c1b2dcbc898"
-dependencies = [
- "ethereum-types 0.14.1",
- "hex",
- "once_cell",
- "regex",
- "serde",
- "serde_json",
- "sha3",
- "thiserror 1.0.69",
- "uint 0.9.5",
+ "uint",
 ]
 
 [[package]]
@@ -201,232 +178,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11da94e443c60508eb62cf256243a64da87304c2802ac2528847f79d750007ef"
 dependencies = [
  "crunchy",
- "fixed-hash 0.7.0",
+ "fixed-hash",
  "impl-rlp",
- "impl-serde 0.3.2",
+ "impl-serde",
  "tiny-keccak",
-]
-
-[[package]]
-name = "ethbloom"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c22d4b5885b6aa2fe5e8b9329fb8d232bf739e434e6b87347c63bdd00c120f60"
-dependencies = [
- "crunchy",
- "fixed-hash 0.8.0",
- "impl-rlp",
- "impl-serde 0.4.0",
- "tiny-keccak",
-]
-
-[[package]]
-name = "ethereum-ambient"
-version = "0.6.1"
-dependencies = [
- "anyhow",
- "bytes",
- "ethabi 18.0.0",
- "hex",
- "hex-literal 0.4.1",
- "num-bigint",
- "prost 0.11.9",
- "quote",
- "substreams",
- "substreams-ethereum",
- "tiny-keccak",
- "tycho-substreams 0.2.1",
-]
-
-[[package]]
-name = "ethereum-balancer-v2"
-version = "0.3.2"
-dependencies = [
- "anyhow",
- "ethabi 18.0.0",
- "getrandom",
- "hex",
- "itertools 0.12.1",
- "num-bigint",
- "substreams",
- "substreams-ethereum",
- "tycho-substreams 0.2.2",
 ]
 
 [[package]]
 name = "ethereum-balancer-v3"
-version = "0.4.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
- "bytes",
- "ethabi 18.0.0",
  "getrandom",
- "hex",
- "hex-literal 0.4.1",
- "itertools 0.13.0",
- "keccak-hash",
+ "itertools 0.12.1",
  "num-bigint",
- "prost 0.11.9",
- "prost-types 0.12.6",
+ "num-traits",
  "regex",
- "serde",
- "serde_qs",
- "substreams",
- "substreams-ethereum",
- "tycho-substreams 0.2.1 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=51995f9)",
-]
-
-[[package]]
-name = "ethereum-curve"
-version = "0.3.3"
-dependencies = [
- "anyhow",
- "bytes",
- "ethabi 18.0.0",
- "getrandom",
- "hex",
- "hex-literal 0.4.1",
- "itertools 0.13.0",
- "num-bigint",
- "prost 0.11.9",
- "prost-types 0.12.6",
- "serde",
- "serde_qs",
- "substreams",
- "substreams-ethereum",
- "tycho-substreams 0.2.1",
-]
-
-[[package]]
-name = "ethereum-ekubo-v2"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ethabi 18.0.0",
- "hex",
- "itertools 0.10.5",
- "num-bigint",
- "prost 0.11.9",
- "serde",
- "serde_qs",
- "substreams",
- "substreams-ethereum",
- "substreams-helper 0.0.2 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=e4609be)",
- "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=3c08359)",
-]
-
-[[package]]
-name = "ethereum-maverick-v2"
-version = "0.1.1"
-dependencies = [
- "anyhow",
- "ethabi 18.0.0",
- "hex",
- "itertools 0.10.5",
- "num-bigint",
- "prost 0.11.9",
- "serde",
- "serde-sibor",
- "serde_qs",
- "substreams",
- "substreams-ethereum",
- "substreams-helper 0.0.2 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=52d5021)",
- "tycho-substreams 0.2.1",
-]
-
-[[package]]
-name = "ethereum-pancakeswap-v3"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "ethabi 18.0.0",
- "getrandom",
- "hex",
- "hex-literal 0.4.1",
- "itertools 0.13.0",
- "num-bigint",
- "prost 0.11.9",
- "substreams",
+ "substreams-database-change",
  "substreams-entity-change",
  "substreams-ethereum",
- "substreams-helper 0.0.2 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
- "tiny-keccak",
- "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
-]
-
-[[package]]
-name = "ethereum-sfrax"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "ethabi 17.2.0",
- "getrandom",
- "hex",
- "hex-literal 0.4.1",
- "itertools 0.12.1",
- "num-bigint",
- "num-traits",
- "prost 0.11.9",
- "prost-types 0.11.9",
- "regex",
- "substreams",
- "substreams-ethereum",
- "tycho-substreams 0.2.1",
-]
-
-[[package]]
-name = "ethereum-sfraxeth"
-version = "0.1.1"
-dependencies = [
- "anyhow",
- "ethabi 17.2.0",
- "getrandom",
- "hex",
- "hex-literal 0.4.1",
- "itertools 0.12.1",
- "num-bigint",
- "num-traits",
- "prost 0.11.9",
- "prost-types 0.11.9",
- "regex",
- "substreams",
- "substreams-ethereum",
- "tycho-substreams 0.2.1",
-]
-
-[[package]]
-name = "ethereum-template-factory"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ethabi 18.0.0",
- "hex",
- "itertools 0.10.5",
- "num-bigint",
- "prost 0.11.9",
- "serde",
- "serde-sibor",
- "substreams",
- "substreams-ethereum",
- "tycho-substreams 0.2.1",
-]
-
-[[package]]
-name = "ethereum-template-singleton"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ethabi 18.0.0",
- "hex",
- "itertools 0.10.5",
- "num-bigint",
- "prost 0.11.9",
- "serde",
- "serde-sibor",
- "serde_qs",
- "substreams",
- "substreams-ethereum",
- "tycho-substreams 0.2.1",
 ]
 
 [[package]]
@@ -435,105 +205,12 @@ version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2827b94c556145446fcce834ca86b7abf0c39a805883fe20e72c5bfdb5a0dc6"
 dependencies = [
- "ethbloom 0.12.1",
- "fixed-hash 0.7.0",
+ "ethbloom",
+ "fixed-hash",
  "impl-rlp",
- "impl-serde 0.3.2",
- "primitive-types 0.11.1",
- "uint 0.9.5",
-]
-
-[[package]]
-name = "ethereum-types"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02d215cbf040552efcbe99a38372fe80ab9d00268e20012b79fcd0f073edd8ee"
-dependencies = [
- "ethbloom 0.13.0",
- "fixed-hash 0.8.0",
- "impl-rlp",
- "impl-serde 0.4.0",
- "primitive-types 0.12.2",
- "uint 0.9.5",
-]
-
-[[package]]
-name = "ethereum-uniswap-v2"
-version = "0.3.1"
-dependencies = [
- "anyhow",
- "ethabi 18.0.0",
- "getrandom",
- "hex-literal 0.4.1",
- "itertools 0.12.1",
- "num-bigint",
- "prost 0.11.9",
- "serde",
- "serde_qs",
- "substreams",
- "substreams-ethereum",
- "substreams-helper 0.0.2 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
- "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
-]
-
-[[package]]
-name = "ethereum-uniswap-v3"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "ethabi 18.0.0",
- "getrandom",
- "hex",
- "hex-literal 0.4.1",
- "num-bigint",
- "prost 0.11.9",
- "substreams",
- "substreams-entity-change",
- "substreams-ethereum",
- "substreams-helper 0.0.2 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
- "tiny-keccak",
- "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
-]
-
-[[package]]
-name = "ethereum-uniswap-v3-logs-only"
-version = "0.1.1"
-dependencies = [
- "anyhow",
- "ethabi 18.0.0",
- "getrandom",
- "hex",
- "hex-literal 0.4.1",
- "itertools 0.13.0",
- "num-bigint",
- "prost 0.11.9",
- "substreams",
- "substreams-entity-change",
- "substreams-ethereum",
- "substreams-helper 0.0.2 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
- "tiny-keccak",
- "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
-]
-
-[[package]]
-name = "ethereum-uniswap-v4"
-version = "0.2.0"
-dependencies = [
- "anyhow",
- "ethabi 18.0.0",
- "getrandom",
- "hex",
- "hex-literal 0.4.1",
- "itertools 0.13.0",
- "num-bigint",
- "prost 0.11.9",
- "rstest",
- "substreams",
- "substreams-entity-change",
- "substreams-ethereum",
- "substreams-helper 0.0.2 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
- "tiny-keccak",
- "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
+ "impl-serde",
+ "primitive-types",
+ "uint",
 ]
 
 [[package]]
@@ -555,18 +232,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fixed-hash"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "835c052cb0c08c1acf6ffd71c022172e18723949c8282f2b9f27efbc51e64534"
-dependencies = [
- "byteorder",
- "rand",
- "rustc-hex",
- "static_assertions",
-]
-
-[[package]]
 name = "fixedbitset"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -577,49 +242,6 @@ name = "funty"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
-
-[[package]]
-name = "futures-core"
-version = "0.3.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05f29059c0c2090612e8d742178b0580d2dc940c837851ad723096f87af6663e"
-
-[[package]]
-name = "futures-macro"
-version = "0.3.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "162ee34ebcb7c64a8abebc059ce0fee27c2262618d7b60ed8faf72fef13c3650"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.100",
-]
-
-[[package]]
-name = "futures-task"
-version = "0.3.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f90f7dce0722e95104fcb095585910c0977252f286e354b5e3bd38902cd99988"
-
-[[package]]
-name = "futures-timer"
-version = "3.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f288b0a4f20f9a56b5d1da57e2227c661b7b16168e2f72365f57b63326e29b24"
-
-[[package]]
-name = "futures-util"
-version = "0.3.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fa08315bb612088cc391249efdc3bc77536f16c91f6cf495e6fbe85b20a4a81"
-dependencies = [
- "futures-core",
- "futures-macro",
- "futures-task",
- "pin-project-lite",
- "pin-utils",
- "slab",
-]
 
 [[package]]
 name = "generic-array"
@@ -643,12 +265,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "glob"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8d1add55171497b4705a648c6b583acafb01d58050a51727785f0b2c8e0a2b2"
-
-[[package]]
 name = "hashbrown"
 version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -661,25 +277,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
+name = "heck"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
+
+[[package]]
 name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "hex-literal"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ebdb29d2ea9ed0083cd8cece49bbd968021bd99b0849edb4a9a7ee0fdf6a4e0"
-
-[[package]]
-name = "hex-literal"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
 
 [[package]]
 name = "home"
@@ -718,15 +331,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "impl-serde"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebc88fc67028ae3db0c853baa36269d398d5f45b6982f95549ff5def78c935cd"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "impl-trait-for-tuples"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -734,14 +338,14 @@ checksum = "a0eb5a3343abf848c0984fe4604b2b105da9539376e24fc0a3b0007411ae4fd9"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.100",
+ "syn 2.0.96",
 ]
 
 [[package]]
 name = "indexmap"
-version = "2.7.0"
+version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62f822373a4fe84d4bb149bf54e584a7f4abec90e072ed49cda0edea5b95471f"
+checksum = "8c9c992b02b5b4c94ea26e32fe5bccb7aa7d9f390ab5c1221ff895bc7ea8b652"
 dependencies = [
  "equivalent",
  "hashbrown",
@@ -790,16 +394,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "keccak-hash"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e1b8590eb6148af2ea2d75f38e7d29f5ca970d5a4df456b3ef19b8b415d0264"
-dependencies = [
- "primitive-types 0.13.1",
- "tiny-keccak",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -807,21 +401,21 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "libc"
-version = "0.2.168"
+version = "0.2.169"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aaeb2981e0606ca11d79718f8bb01164f1d6ed75080182d3abf017e6d244b6d"
+checksum = "b5aba8db14291edd000dfcc4d620c7ebfb122c613afb886ca8803fa4e128a20a"
 
 [[package]]
 name = "linux-raw-sys"
-version = "0.4.14"
+version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78b3ae25bc7c8c38cec158d1f2757ee79e9b3740fbc7ccf0e59e4b08d793fa89"
+checksum = "d26c52dbd32dccf2d10cac7725f8eae5296885fb5703b261f7d0a0739ec807ab"
 
 [[package]]
 name = "log"
-version = "0.4.22"
+version = "0.4.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
+checksum = "04cbf5b083de1c7e0222a7a51dbfdba1cbe1c6ab0b15e29fff3f6c077fd9cd9f"
 
 [[package]]
 name = "memchr"
@@ -834,6 +428,12 @@ name = "multimap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
+
+[[package]]
+name = "multimap"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "defc4c55412d89136f966bbb339008b474350e5e6e78d2714439c386b3137a03"
 
 [[package]]
 name = "num-bigint"
@@ -905,19 +505,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "percent-encoding"
-version = "2.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
-
-[[package]]
 name = "pest"
 version = "2.7.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b7cafe60d6cf8e62e1b9b2ea516a089c008945bb5a275416789e7db0bc199dc"
 dependencies = [
  "memchr",
- "thiserror 2.0.7",
+ "thiserror 2.0.11",
  "ucd-trie",
 ]
 
@@ -941,7 +535,7 @@ dependencies = [
  "pest_meta",
  "proc-macro2",
  "quote",
- "syn 2.0.100",
+ "syn 2.0.96",
 ]
 
 [[package]]
@@ -966,18 +560,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pin-project-lite"
-version = "0.2.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b3cff922bd51709b605d9ead9aa71031d81447142d828eb4a6eba76fe619f9b"
-
-[[package]]
-name = "pin-utils"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
-
-[[package]]
 name = "ppv-lite86"
 version = "0.2.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -997,39 +579,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "prettyplease"
+version = "0.2.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6924ced06e1f7dfe3fa48d57b9f74f55d8915f5036121bef647ef4b204895fac"
+dependencies = [
+ "proc-macro2",
+ "syn 2.0.96",
+]
+
+[[package]]
 name = "primitive-types"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e28720988bff275df1f51b171e1b2a18c30d194c4d2b61defdacecd625a5d94a"
 dependencies = [
- "fixed-hash 0.7.0",
+ "fixed-hash",
  "impl-codec",
  "impl-rlp",
- "impl-serde 0.3.2",
- "uint 0.9.5",
-]
-
-[[package]]
-name = "primitive-types"
-version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b34d9fd68ae0b74a41b21c03c2f62847aa0ffea044eee893b4c140b37e244e2"
-dependencies = [
- "fixed-hash 0.8.0",
- "impl-codec",
- "impl-rlp",
- "impl-serde 0.4.0",
- "uint 0.9.5",
-]
-
-[[package]]
-name = "primitive-types"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d15600a7d856470b7d278b3fe0e311fe28c2526348549f8ef2ff7db3299c87f5"
-dependencies = [
- "fixed-hash 0.8.0",
- "uint 0.10.0",
+ "impl-serde",
+ "uint",
 ]
 
 [[package]]
@@ -1062,12 +631,12 @@ dependencies = [
 
 [[package]]
 name = "prost"
-version = "0.12.6"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "deb1435c188b76130da55f17a466d252ff7b1418b2ad3e037d127b94e3411f29"
+checksum = "2c0fef6c4230e4ccf618a35c59d7ede15dea37de8427500f50aff708806e42ec"
 dependencies = [
  "bytes",
- "prost-derive 0.12.6",
+ "prost-derive 0.13.4",
 ]
 
 [[package]]
@@ -1077,19 +646,39 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "119533552c9a7ffacc21e099c24a0ac8bb19c2a2a3f363de84cd9b844feab270"
 dependencies = [
  "bytes",
- "heck",
+ "heck 0.4.1",
  "itertools 0.10.5",
  "lazy_static",
  "log",
- "multimap",
+ "multimap 0.8.3",
  "petgraph",
- "prettyplease",
+ "prettyplease 0.1.25",
  "prost 0.11.9",
  "prost-types 0.11.9",
  "regex",
  "syn 1.0.109",
  "tempfile",
  "which",
+]
+
+[[package]]
+name = "prost-build"
+version = "0.13.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0f3e5beed80eb580c68e2c600937ac2c4eedabdfd5ef1e5b7ea4f3fba84497b"
+dependencies = [
+ "heck 0.5.0",
+ "itertools 0.13.0",
+ "log",
+ "multimap 0.10.0",
+ "once_cell",
+ "petgraph",
+ "prettyplease 0.2.29",
+ "prost 0.13.4",
+ "prost-types 0.13.4",
+ "regex",
+ "syn 2.0.96",
+ "tempfile",
 ]
 
 [[package]]
@@ -1107,15 +696,15 @@ dependencies = [
 
 [[package]]
 name = "prost-derive"
-version = "0.12.6"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
+checksum = "157c5a9d7ea5c2ed2d9fb8f495b64759f7816c7eaea54ba3978f0d63000162e3"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
- "syn 2.0.100",
+ "syn 2.0.96",
 ]
 
 [[package]]
@@ -1129,18 +718,18 @@ dependencies = [
 
 [[package]]
 name = "prost-types"
-version = "0.12.6"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9091c90b0a32608e984ff2fa4091273cbdd755d54935c51d520887f4a1dbd5b0"
+checksum = "cc2f1e56baa61e93533aebc21af4d2134b70f66275e0fcdf3cbe43d77ff7e8fc"
 dependencies = [
- "prost 0.12.6",
+ "prost 0.13.4",
 ]
 
 [[package]]
 name = "quote"
-version = "1.0.37"
+version = "1.0.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5b9d34b8991d19d98081b46eacdd8eb58c6f2b201139f7c5f643cc155a633af"
+checksum = "0e4dccaaaf89514f546c693ddc140f729f958c247918a13380cccc6078391acc"
 dependencies = [
  "proc-macro2",
 ]
@@ -1211,12 +800,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 
 [[package]]
-name = "relative-path"
-version = "1.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
-
-[[package]]
 name = "rlp"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1227,55 +810,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "rstest"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03e905296805ab93e13c1ec3a03f4b6c4f35e9498a3d5fa96dc626d22c03cd89"
-dependencies = [
- "futures-timer",
- "futures-util",
- "rstest_macros",
- "rustc_version",
-]
-
-[[package]]
-name = "rstest_macros"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef0053bbffce09062bee4bcc499b0fbe7a57b879f1efe088d6d8d4c7adcdef9b"
-dependencies = [
- "cfg-if",
- "glob",
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "regex",
- "relative-path",
- "rustc_version",
- "syn 2.0.100",
- "unicode-ident",
-]
-
-[[package]]
 name = "rustc-hex"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e75f6a532d0fd9f7f13144f392b6ad56a32696bfcd9c78f797f16bbb6f072d6"
 
 [[package]]
-name = "rustc_version"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
-dependencies = [
- "semver",
-]
-
-[[package]]
 name = "rustix"
-version = "0.38.42"
+version = "0.38.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f93dc38ecbab2eb790ff964bb77fa94faf256fd3e73285fd7ba0903b76bedb85"
+checksum = "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154"
 dependencies = [
  "bitflags",
  "errno",
@@ -1291,28 +835,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
 
 [[package]]
-name = "semver"
-version = "1.0.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f79dfe2d285b0488816f30e700a7438c5a73d816b5b7d3ac72fbc48b0d185e03"
-
-[[package]]
 name = "serde"
 version = "1.0.217"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02fc4265df13d6fa1d00ecff087228cc0a2b5f3c0e87e258d8b94a156e984c70"
 dependencies = [
  "serde_derive",
-]
-
-[[package]]
-name = "serde-sibor"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "859877cf5123a0b2c03e92b01c0b7adefb5ea0b6e6a390f2f7107b85783eee14"
-dependencies = [
- "serde",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1323,30 +851,19 @@ checksum = "5a9bf7cf98d04a2b28aead066b7496853d4779c9cc183c440dbac457641e19a0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.100",
+ "syn 2.0.96",
 ]
 
 [[package]]
 name = "serde_json"
-version = "1.0.133"
+version = "1.0.137"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7fceb2473b9166b2294ef05efcb65a3db80803f0b03ef86a5fc88a2b85ee377"
+checksum = "930cfb6e6abf99298aaad7d29abbef7a9999a9a8806a40088f55f0dcec03146b"
 dependencies = [
  "itoa",
  "memchr",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "serde_qs"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd34f36fe4c5ba9654417139a9b3a20d2e1de6012ee678ad14d240c22c78d8d6"
-dependencies = [
- "percent-encoding",
- "serde",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1371,15 +888,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "slab"
-version = "0.4.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f92a496fb766b417c996b9c5e57daf2f7ad3b0bebe1ccfca4856390e3d3bb67"
-dependencies = [
- "autocfg",
-]
-
-[[package]]
 name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1394,7 +902,7 @@ dependencies = [
  "anyhow",
  "bigdecimal",
  "hex",
- "hex-literal 0.3.4",
+ "hex-literal",
  "num-bigint",
  "num-integer",
  "num-traits",
@@ -1402,22 +910,56 @@ dependencies = [
  "pest",
  "pest_derive",
  "prost 0.11.9",
- "prost-build",
+ "prost-build 0.11.9",
  "prost-types 0.11.9",
- "substreams-macro",
+ "substreams-macro 0.5.22",
  "thiserror 1.0.69",
 ]
 
 [[package]]
-name = "substreams-entity-change"
-version = "1.3.2"
+name = "substreams"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2c7fca123abff659d15ed30da5b605fa954a29e912c94260c488d0d18f9107d"
+checksum = "5bb63116b90d4c174114fb237a8916dd995c939874f7576333990a44d78b642a"
+dependencies = [
+ "anyhow",
+ "bigdecimal",
+ "hex",
+ "hex-literal",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "pad",
+ "pest",
+ "pest_derive",
+ "prost 0.13.4",
+ "prost-build 0.13.4",
+ "prost-types 0.13.4",
+ "substreams-macro 0.6.0",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "substreams-database-change"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06fe88d25f4c3d56fc2a92583708dc34822ea99fb3f96609f9d684f717974b27"
+dependencies = [
+ "prost 0.13.4",
+ "prost-types 0.13.4",
+ "substreams 0.6.0",
+]
+
+[[package]]
+name = "substreams-entity-change"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0587b8d5dd7bffb0415d544c31e742c4cabdb81bbe9a3abfffff125185e4e9e8"
 dependencies = [
  "base64",
- "prost 0.11.9",
- "prost-types 0.11.9",
- "substreams",
+ "prost 0.13.4",
+ "prost-types 0.13.4",
+ "substreams 0.6.0",
 ]
 
 [[package]]
@@ -1428,7 +970,7 @@ checksum = "3d033738be190ad9c9a63712cf121e4f33ae9c57845c64021e421c45aac688b5"
 dependencies = [
  "getrandom",
  "num-bigint",
- "substreams",
+ "substreams 0.5.22",
  "substreams-ethereum-abigen",
  "substreams-ethereum-core",
  "substreams-ethereum-derive",
@@ -1441,10 +983,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27ef0adda971fbbd085545e73ccd7efbc12e31139cd301252f478e6b9743ff65"
 dependencies = [
  "anyhow",
- "ethabi 17.2.0",
- "heck",
+ "ethabi",
+ "heck 0.4.1",
  "hex",
- "prettyplease",
+ "prettyplease 0.1.25",
  "proc-macro2",
  "quote",
  "substreams-ethereum-core",
@@ -1458,13 +1000,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0a38e740018de8c2453f08621bab84ac55b0f1bfd42d56cf8b43ad340e670862"
 dependencies = [
  "bigdecimal",
- "ethabi 17.2.0",
+ "ethabi",
  "getrandom",
  "num-bigint",
  "prost 0.11.9",
- "prost-build",
+ "prost-build 0.11.9",
  "prost-types 0.11.9",
- "substreams",
+ "substreams 0.5.22",
 ]
 
 [[package]]
@@ -1473,8 +1015,8 @@ version = "0.9.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55c934c70e6ab1fe11a89f401f36e7d9be3fe087687395767a4c13ab3d6bd055"
 dependencies = [
- "ethabi 17.2.0",
- "heck",
+ "ethabi",
+ "heck 0.4.1",
  "hex",
  "num-bigint",
  "proc-macro2",
@@ -1484,101 +1026,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "substreams-helper"
-version = "0.0.2"
-dependencies = [
- "anyhow",
- "base64",
- "bigdecimal",
- "downcast-rs",
- "ethabi 18.0.0",
- "hex",
- "hex-literal 0.4.1",
- "num-bigint",
- "pad",
- "prost 0.11.9",
- "prost-types 0.12.6",
- "substreams",
- "substreams-entity-change",
- "substreams-ethereum",
- "thiserror 1.0.69",
- "tiny-keccak",
-]
-
-[[package]]
-name = "substreams-helper"
-version = "0.0.2"
-source = "git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=52d5021#52d502198e9aa964814ef5f139df0886c3eb7bb0"
-dependencies = [
- "anyhow",
- "base64",
- "bigdecimal",
- "downcast-rs",
- "ethabi 18.0.0",
- "hex",
- "hex-literal 0.4.1",
- "num-bigint",
- "pad",
- "prost 0.11.9",
- "prost-types 0.12.6",
- "substreams",
- "substreams-entity-change",
- "substreams-ethereum",
- "thiserror 1.0.69",
- "tiny-keccak",
-]
-
-[[package]]
-name = "substreams-helper"
-version = "0.0.2"
-source = "git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3#b8aeaa3dc6e7242a5dd23681921258ef2cb3c6dd"
-dependencies = [
- "anyhow",
- "base64",
- "bigdecimal",
- "downcast-rs",
- "ethabi 18.0.0",
- "hex",
- "hex-literal 0.4.1",
- "num-bigint",
- "pad",
- "prost 0.11.9",
- "prost-types 0.12.6",
- "substreams",
- "substreams-entity-change",
- "substreams-ethereum",
- "thiserror 1.0.69",
- "tiny-keccak",
-]
-
-[[package]]
-name = "substreams-helper"
-version = "0.0.2"
-source = "git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=e4609be#e4609bed0bb3c73a13864a951b8cb64c523bc148"
-dependencies = [
- "anyhow",
- "base64",
- "bigdecimal",
- "downcast-rs",
- "ethabi 18.0.0",
- "hex",
- "hex-literal 0.4.1",
- "num-bigint",
- "pad",
- "prost 0.11.9",
- "prost-types 0.12.6",
- "substreams",
- "substreams-entity-change",
- "substreams-ethereum",
- "thiserror 1.0.69",
- "tiny-keccak",
-]
-
-[[package]]
 name = "substreams-macro"
 version = "0.5.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4ac77f08d723dace35739d65df8ed122f6d04e2a3e47929831d4021e3339240"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "substreams-macro"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f36f36e9da94db29f49daf3ab6b47b529b57c43fc5d58bc35b160aaad1a7233f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1599,9 +1062,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.100"
+version = "2.0.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b09a44accad81e1ba1cd74a32461ba89dee89095ba17b32f5d03683b1b1fc2a0"
+checksum = "d5d0adab1ae378d7f53bdebc67a39f1f151407ef230f0ce2883572f5d8985c80"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1616,12 +1079,13 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tempfile"
-version = "3.14.0"
+version = "3.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28cce251fcbc87fac86a866eeb0d6c2d536fc16d06f184bb61aeae11aa4cee0c"
+checksum = "9a8a559c81686f576e8cd0290cd2a24a2a9ad80c98b3478856500fcbd7acd704"
 dependencies = [
  "cfg-if",
  "fastrand",
+ "getrandom",
  "once_cell",
  "rustix",
  "windows-sys",
@@ -1638,11 +1102,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.7"
+version = "2.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93605438cbd668185516ab499d589afb7ee1859ea3d5fc8f6b0755e1c7443767"
+checksum = "d452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc"
 dependencies = [
- "thiserror-impl 2.0.7",
+ "thiserror-impl 2.0.11",
 ]
 
 [[package]]
@@ -1653,18 +1117,18 @@ checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.100",
+ "syn 2.0.96",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.7"
+version = "2.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1d8749b4531af2117677a5fcd12b1348a3fe2b81e36e61ffeac5c4aa3273e36"
+checksum = "26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.100",
+ "syn 2.0.96",
 ]
 
 [[package]]
@@ -1694,70 +1158,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tycho-substreams"
-version = "0.2.0"
-source = "git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=3c08359#3c08359cf112e15c137dd5256b8dc8e9cd6c1626"
-dependencies = [
- "ethabi 18.0.0",
- "hex",
- "itertools 0.12.1",
- "num-bigint",
- "prost 0.11.9",
- "serde",
- "serde_json",
- "substreams",
- "substreams-ethereum",
-]
-
-[[package]]
-name = "tycho-substreams"
-version = "0.2.1"
-source = "git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=52d5021#52d502198e9aa964814ef5f139df0886c3eb7bb0"
-dependencies = [
- "ethabi 18.0.0",
- "hex",
- "itertools 0.12.1",
- "num-bigint",
- "prost 0.11.9",
- "serde",
- "serde_json",
- "substreams",
- "substreams-ethereum",
-]
-
-[[package]]
-name = "tycho-substreams"
-version = "0.2.2"
-source = "git+https://github.com/propeller-heads/tycho-protocol-sdk.git?tag=0.4.0#cfbf6812bdc9503ff51debcf5e171cd680b4d694"
-dependencies = [
- "ethabi 18.0.0",
- "hex",
- "itertools 0.12.1",
- "num-bigint",
- "prost 0.11.9",
- "serde",
- "serde_json",
- "substreams",
- "substreams-ethereum",
-]
-
-[[package]]
-name = "tycho-substreams"
-version = "0.4.0"
-dependencies = [
- "ethabi 18.0.0",
- "hex",
- "itertools 0.12.1",
- "num-bigint",
- "prost 0.11.9",
- "rstest",
- "serde",
- "serde_json",
- "substreams",
- "substreams-ethereum",
-]
-
-[[package]]
 name = "typenum"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1782,22 +1182,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "uint"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "909988d098b2f738727b161a106cfc7cab00c539c2687a8836f8e565976fb53e"
-dependencies = [
- "byteorder",
- "crunchy",
- "hex",
- "static_assertions",
-]
-
-[[package]]
 name = "unicode-ident"
-version = "1.0.14"
+version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adb9e6ca4f869e1180728b7950e35922a7fc6397f7b641499e8f3ef06e50dc83"
+checksum = "11cd88e12b17c6494200a9c1b683a04fcac9573ed74cd1b62aeb2727c5592243"
 
 [[package]]
 name = "unicode-width"
@@ -1904,9 +1292,9 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 
 [[package]]
 name = "winnow"
-version = "0.6.20"
+version = "0.6.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36c1fec1a2bb5866f07c25f68c26e565c4c200aebb96d7e55710c19d3e8ac49b"
+checksum = "c8d71a593cc5c42ad7876e2c1fda56f314f3754c084128833e64f1345ff8a03a"
 dependencies = [
  "memchr",
 ]
@@ -1938,5 +1326,5 @@ checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.100",
+ "syn 2.0.96",
 ]

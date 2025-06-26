@@ -1,4 +1,4 @@
-name: test & check evm
+name: Foundry CI
 
 on:
   pull_request:
@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: true
 
-    name: Foundry project
+    name: Foundry Lint & Test
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -26,7 +26,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: nightly
+          version: stable
 
       - name: Run Forge build
         run: |

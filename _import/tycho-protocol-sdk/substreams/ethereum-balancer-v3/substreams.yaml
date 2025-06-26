@@ -1,0 +1,78 @@
+specVersion: v0.1.0
+package:
+  name: "ethereum_balancer_v3"
+  version: v0.4.0
+
+protobuf:
+  files:
+    - tycho/evm/v1/vm.proto
+    - tycho/evm/v1/common.proto
+    - tycho/evm/v1/utils.proto
+  importPaths:
+    - ../../proto
+  excludePaths:
+    - sf/substreams
+    - google
+
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ../target/wasm32-unknown-unknown/release/ethereum_balancer_v3.wasm
+
+modules:
+  - name: map_components
+    kind: map
+    initialBlock: 21332121
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:tycho.evm.v1.BlockTransactionProtocolComponents
+
+  - name: store_components
+    kind: store
+    initialBlock: 21332121
+    updatePolicy: set_if_not_exists
+    valueType: proto:tycho.evm.v1.ProtocolComponents
+    inputs:
+      - map: map_components
+
+  - name: store_token_set
+    kind: store
+    initialBlock: 21332121
+    updatePolicy: set_if_not_exists
+    valueType: int64
+    inputs:
+      - map: map_components
+
+  - name: map_relative_balances
+    kind: map
+    initialBlock: 21332121
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - store: store_components
+    output:
+      type: proto:tycho.evm.v1.BlockBalanceDeltas
+
+  - name: store_balances
+    kind: store
+    initialBlock: 21332121
+    updatePolicy: add
+    valueType: bigint
+    inputs:
+      - map: map_relative_balances
+
+  - name: map_protocol_changes
+    kind: map
+    initialBlock: 21332121
+    inputs:
+      - source: sf.ethereum.type.v2.Block
+      - map: map_components
+      - map: map_relative_balances
+      - store: store_components
+      - store: store_token_set
+      - store: store_balances
+        mode: deltas # This is the key property that simplifies `BalanceChange` handling
+    output:
+      type: proto:tycho.evm.v1.BlockChanges
+
+network: mainnet
