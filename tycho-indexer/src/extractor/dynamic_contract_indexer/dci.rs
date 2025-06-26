@@ -47,6 +47,9 @@ where
         &mut self,
         block_changes: &mut BlockChanges,
     ) -> Result<(), ExtractionError> {
+        self.cache
+            .try_insert_block_layer(&block_changes.block)?;
+
         let new_entrypoints: HashMap<EntryPointId, EntryPoint> = block_changes
             .txs_with_update
             .iter()
@@ -281,8 +284,6 @@ where
             }
 
             // Update the cache with new traced entrypoints
-            self.cache
-                .handle_finality(block_changes.finalized_block_height)?;
             self.update_cache(&block_changes.block, &traced_entry_points)?;
 
             // Update the block changes with the traced entrypoints
@@ -327,6 +328,10 @@ where
         block_changes
             .txs_with_update
             .sort_by_key(|tx| tx.tx.index);
+
+        // Handle finality for the cache
+        self.cache
+            .handle_finality(block_changes.finalized_block_height)?;
 
         Ok(())
     }
@@ -688,7 +693,7 @@ mod tests {
                     "test".to_string(),
                     Chain::Ethereum,
                     testing::block(1),
-                    0,
+                    1,
                     false,
                     vec![TxWithChanges { tx, ..Default::default() }],
                     Vec::new(),
@@ -703,7 +708,7 @@ mod tests {
                     "test".to_string(),
                     Chain::Ethereum,
                     testing::block(2),
-                    0,
+                    2,
                     false,
                     vec![TxWithChanges {
                         tx,
@@ -728,7 +733,7 @@ mod tests {
                     "test".to_string(),
                     Chain::Ethereum,
                     testing::block(3),
-                    0,
+                    3,
                     false,
                     vec![],
                     vec![TxWithStorageChanges {
@@ -762,7 +767,7 @@ mod tests {
                     "test".to_string(),
                     Chain::Ethereum,
                     testing::block(4),
-                    0,
+                    4,
                     false,
                     vec![],
                     vec![TxWithStorageChanges {

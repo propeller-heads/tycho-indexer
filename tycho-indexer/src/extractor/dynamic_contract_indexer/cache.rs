@@ -79,16 +79,39 @@ impl DCICache {
 
         Ok(())
     }
+
+    /// Tries to insert a block layer for the given block.
+    /// If the block already exists, no-op.
+    /// If the block does not exist, we check if it's the next block in the chain. If it's not it
+    /// returns an error.
+    ///
+    /// # Arguments
+    /// * `block` - The block to validate and ensure the layer for.
+    ///
+    /// # Returns
+    /// * `Ok(())` - On successful layer creation
+    /// * `Err(DCICacheError::UnexpectedBlockOrder)` - If the inserted block is not the correct
+    ///   order
+    pub(super) fn try_insert_block_layer(&mut self, block: &Block) -> Result<(), DCICacheError> {
+        self.ep_id_to_entrypoint
+            .validate_and_ensure_block_layer(block)?;
+        self.entrypoint_results
+            .validate_and_ensure_block_layer(block)?;
+        self.retriggers
+            .validate_and_ensure_block_layer(block)?;
+        self.tracked_contracts
+            .validate_and_ensure_block_layer(block)?;
+
+        Ok(())
+    }
 }
 
 #[derive(Error, Debug, PartialEq)]
 pub enum DCICacheError {
     #[error("Unexpected block order: new block number {0} is not a child of {1}")]
     UnexpectedBlockOrder(u64, u64),
-    #[error("Revert to block {0} failed. Block not found in pending cache.")]
-    RevertToBlockNotFound(BlockHash),
-    #[error("Finality block {0} not found in pending cache.")]
-    FinalityNotFound(u64),
+    #[error("Block {0} not found in pending cache in context: {1}")]
+    BlockNotFound(String, String),
 }
 
 /// A versioned data container scoped to a specific block.
@@ -129,10 +152,9 @@ where
 
     /// Inserts a key-value pair into the pending layer for the specified block.
     ///
-    /// If the block is not found, we check if the block is the child of the latest pending
-    /// block. If it is, a new layer is created. Otherwise, an error is returned.
+    /// An error is returned if the layer for the block is not found.
     pub(super) fn insert_pending(&mut self, block: Block, k: K, v: V) -> Result<(), DCICacheError> {
-        let layer = self.validate_and_ensure_block_layer(&block)?;
+        let layer = self.get_layer_mut(&block)?;
         layer.data.insert(k, v);
         Ok(())
     }
@@ -144,14 +166,13 @@ where
 
     /// Adds multiple key-value pairs to the pending layer for the given block.
     ///
-    /// If the block is not found, we check if the block is the child of the latest pending
-    /// block. If it is, a new layer is created. Otherwise, an error is returned.
+    /// An error is returned if the layer for the block is not found.
     pub(super) fn extend_pending(
         &mut self,
         block: Block,
         entries: impl IntoIterator<Item = (K, V)>,
     ) -> Result<(), DCICacheError> {
-        let layer = self.validate_and_ensure_block_layer(&block)?;
+        let layer = self.get_layer_mut(&block)?;
         layer.data.extend(entries);
         Ok(())
     }
@@ -163,14 +184,13 @@ where
 
     /// Gets a mutable entry to a value in the pending layer for the specified block.
     ///
-    /// If the block is not found, we check if the block is the child of the latest pending
-    /// block. If it is, a new layer is created. Otherwise, an error is returned.
+    /// An error is returned if the layer for the block is not found.
     pub(super) fn pending_entry<'a>(
         &'a mut self,
         block: &Block,
         k: &K,
     ) -> Result<Entry<'a, K, V>, DCICacheError> {
-        let layer = self.validate_and_ensure_block_layer(block)?;
+        let layer = self.get_layer_mut(block)?;
         Ok(layer.data.entry(k.clone()))
     }
 
@@ -230,7 +250,12 @@ where
             .pending
             .iter()
             .position(|layer| layer.block.number == finalized_block_height)
-            .ok_or_else(|| DCICacheError::FinalityNotFound(finalized_block_height))?;
+            .ok_or_else(|| {
+                DCICacheError::BlockNotFound(
+                    finalized_block_height.to_string(),
+                    "finality".to_string(),
+                )
+            })?;
 
         // Move all finalized layers but the last one to permanent storage
         let finalized_layers: Vec<_> = self
@@ -291,15 +316,13 @@ where
             }
 
             // Otherwise, we're in an erroneous state.
-            return Err(DCICacheError::RevertToBlockNotFound(block.clone()));
+            return Err(DCICacheError::BlockNotFound(block.to_string(), "revert to".to_string()));
         }
 
         Ok(())
     }
 
     /// Validates block order and ensures the corresponding block layer exists.
-    ///
-    /// Should only be called by methods that operate on pending layers.
     ///
     /// A valid block must:
     /// - Be the same block as the most recent pending layer;
@@ -311,19 +334,16 @@ where
     /// * `block` - The block used to determine or create the layer.
     ///
     /// # Returns
-    /// * `Ok(&mut BlockScopedMap<K, V>)` - Layer for the block
+    /// * `Ok(())` - On successful validation and layer creation
     /// * `Err(DCICacheError::UnexpectedBlockOrder)` - On invalid chain progression
-    fn validate_and_ensure_block_layer(
-        &mut self,
-        block: &Block,
-    ) -> Result<&mut BlockScopedMap<K, V>, DCICacheError> {
+    fn validate_and_ensure_block_layer(&mut self, block: &Block) -> Result<(), DCICacheError> {
         match self.pending.back() {
             None => {
                 self.pending
                     .push_back(BlockScopedMap { block: block.clone(), data: HashMap::new() });
             }
             Some(last_layer) if last_layer.block == *block => {
-                // no-op, same block
+                // no-op, already exists
             }
             Some(last_layer) if last_layer.block.hash == block.parent_hash => {
                 self.pending
@@ -337,10 +357,24 @@ where
             }
         }
 
-        Ok(self
-            .pending
-            .back_mut()
-            .expect("Layer should now exist"))
+        Ok(())
+    }
+
+    /// Gets a mutable reference to the layer for the given block.
+    ///
+    /// # Arguments
+    /// * `block` - The block to get the layer for.
+    ///
+    /// # Returns
+    /// * `Ok(&mut BlockScopedMap<K, V>)` - Layer for the block
+    /// * `Err(DCICacheError::BlockNotFound)` - If the block is not found in the pending layers
+    fn get_layer_mut(&mut self, block: &Block) -> Result<&mut BlockScopedMap<K, V>, DCICacheError> {
+        self.pending
+            .iter_mut()
+            .find(|layer| layer.block == *block)
+            .ok_or_else(|| {
+                DCICacheError::BlockNotFound(block.number.to_string(), "get layer".to_string())
+            })
     }
 
     /// Returns full permanent state (only available in tests).
@@ -433,6 +467,12 @@ mod tests {
         let mut cache: VersionedCache<String, u32> = VersionedCache::new();
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
+        cache
+            .validate_and_ensure_block_layer(&block1)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer(&block2)
+            .unwrap();
 
         // Test pending insert
         cache
@@ -472,6 +512,12 @@ mod tests {
         let mut cache: VersionedCache<String, u32> = VersionedCache::new();
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
+        cache
+            .validate_and_ensure_block_layer(&block1)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer(&block2)
+            .unwrap();
 
         // Insert data in both blocks
         cache.insert_permanent("perm".to_string(), 0);
@@ -499,6 +545,12 @@ mod tests {
         let mut cache = DCICache::new();
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
+        cache
+            .try_insert_block_layer(&block1)
+            .unwrap();
+        cache
+            .try_insert_block_layer(&block2)
+            .unwrap();
 
         // Setup test data
         let entrypoint = get_entrypoint(1);
@@ -590,6 +642,15 @@ mod tests {
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
         let block3 = create_test_block(3, "0x03", "0x02");
+        cache
+            .validate_and_ensure_block_layer(&block1)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer(&block2)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer(&block3)
+            .unwrap();
 
         // Insert data in block1
         cache
@@ -624,6 +685,12 @@ mod tests {
         let mut cache: VersionedCache<String, u32> = VersionedCache::new();
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
+        cache
+            .validate_and_ensure_block_layer(&block1)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer(&block2)
+            .unwrap();
 
         // Insert same key with different values in different blocks
         cache.insert_permanent("key".to_string(), 1);
@@ -655,6 +722,12 @@ mod tests {
         let mut cache: VersionedCache<String, u32> = VersionedCache::new();
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
+        cache
+            .validate_and_ensure_block_layer(&block1)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer(&block2)
+            .unwrap();
 
         // Insert same key with different values in different blocks
         cache.insert_permanent("key".to_string(), 1);
@@ -671,11 +744,6 @@ mod tests {
             .unwrap();
         assert_eq!(entry.or_insert(4), &3);
 
-        // pending_entry() should error when trying to access an older block
-        assert!(cache
-            .pending_entry(&block1, &"key".to_string())
-            .is_err());
-
         // Test that pending_entry() creates a new entry if key doesn't exist in that block
         let entry = cache
             .pending_entry(&block2, &"new_key".to_string())
@@ -689,6 +757,12 @@ mod tests {
         let mut cache: VersionedCache<String, u32> = VersionedCache::new();
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
+        cache
+            .validate_and_ensure_block_layer(&block1)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer(&block2)
+            .unwrap();
 
         // Insert initial values
         cache.insert_permanent("key1".to_string(), 1);
