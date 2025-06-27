@@ -1,3 +1,22 @@
+## [0.73.0](https://github.com/propeller-heads/tycho-indexer/compare/0.72.1...0.73.0) (2025-06-27)
+
+
+### Features
+
+* mark creation_tx as deprecated on ResponseAccount ([224c4b8](https://github.com/propeller-heads/tycho-indexer/commit/224c4b883a6733e310b9feb6c06ecc81c5d7338d))
+* **storage:** remove join to transaction table in get_contracts ([0e6e9e5](https://github.com/propeller-heads/tycho-indexer/commit/0e6e9e5071ca722887266a8861862a66ddb6dea6))
+
+
+### Bug Fixes
+
+* correctly fill the reorg buffer ([10c951d](https://github.com/propeller-heads/tycho-indexer/commit/10c951def0487fa97baf4e93ee519d40e35435b0))
+* correctly fill the reorg buffer ([#605](https://github.com/propeller-heads/tycho-indexer/issues/605)) ([2f924f5](https://github.com/propeller-heads/tycho-indexer/commit/2f924f5f38380e5f878d294693af946b3ab02379))
+* do not filter out contracts with NULL created_ts ([46fbd82](https://github.com/propeller-heads/tycho-indexer/commit/46fbd822dfb91cd75a9ed83b4ee9ef96875648d4))
+* filter for accounts that have associated code ([e9904bb](https://github.com/propeller-heads/tycho-indexer/commit/e9904bb7b1b6d518142e116b22887e4d7a29836d))
+* improve handling of missing code errors ([7393c92](https://github.com/propeller-heads/tycho-indexer/commit/7393c92d006e211aca4eed378485334c8a159700))
+* remove transaction table query from get_contract ([f60106a](https://github.com/propeller-heads/tycho-indexer/commit/f60106afa7932a063d9be0891bb53cc369f88cdf))
+* **storage:** fix bug that filters out contracts missing a creation_tx ([#602](https://github.com/propeller-heads/tycho-indexer/issues/602)) ([75428da](https://github.com/propeller-heads/tycho-indexer/commit/75428da852b4b0aca169504f10cc9a59cec068a5))
+
 ## [0.72.1](https://github.com/propeller-heads/tycho-indexer/compare/0.72.0...0.72.1) (2025-06-25)
 
 
