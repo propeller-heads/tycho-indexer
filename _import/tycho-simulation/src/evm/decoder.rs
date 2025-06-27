@@ -204,43 +204,45 @@ impl TychoStreamDecoder {
             }
 
             // Remove untracked components
-            let state_guard = self.state.read().await;
-            removed_pairs.extend(
-                protocol_msg
-                    .removed_components
-                    .iter()
-                    .flat_map(|(id, comp)| match Bytes::from_str(id) {
-                        Ok(addr) => Some(Ok((id, addr, comp))),
-                        Err(e) => {
-                            if self.skip_state_decode_failures {
-                                None
-                            } else {
-                                Some(Err(StreamDecodeError::Fatal(e.to_string())))
+            {
+                let state_guard = self.state.read().await;
+                removed_pairs.extend(
+                    protocol_msg
+                        .removed_components
+                        .iter()
+                        .flat_map(|(id, comp)| match Bytes::from_str(id) {
+                            Ok(addr) => Some(Ok((id, addr, comp))),
+                            Err(e) => {
+                                if self.skip_state_decode_failures {
+                                    None
+                                } else {
+                                    Some(Err(StreamDecodeError::Fatal(e.to_string())))
+                                }
                             }
-                        }
-                    })
-                    .collect::<Result<Vec<_>, StreamDecodeError>>()?
-                    .into_iter()
-                    .flat_map(|(id, _, comp)| {
-                        let tokens = comp
-                            .tokens
-                            .iter()
-                            .flat_map(|addr| state_guard.tokens.get(addr).cloned())
-                            .collect::<Vec<_>>();
+                        })
+                        .collect::<Result<Vec<_>, StreamDecodeError>>()?
+                        .into_iter()
+                        .flat_map(|(id, _, comp)| {
+                            let tokens = comp
+                                .tokens
+                                .iter()
+                                .flat_map(|addr| state_guard.tokens.get(addr).cloned())
+                                .collect::<Vec<_>>();
 
-                        if tokens.len() == comp.tokens.len() {
-                            Some((
-                                id.clone(),
-                                ProtocolComponent::from_with_tokens(comp.clone(), tokens),
-                            ))
-                        } else {
-                            // We may reach this point if the removed component
-                            //  contained low quality tokens, in this case the component
-                            //  was never added, so we can skip emitting it.
-                            None
-                        }
-                    }),
-            );
+                            if tokens.len() == comp.tokens.len() {
+                                Some((
+                                    id.clone(),
+                                    ProtocolComponent::from_with_tokens(comp.clone(), tokens),
+                                ))
+                            } else {
+                                // We may reach this point if the removed component
+                                //  contained low quality tokens, in this case the component
+                                //  was never added, so we can skip emitting it.
+                                None
+                            }
+                        }),
+                );
+            }
 
             let mut state_guard = self.state.write().await;
             // UPDATE VM STORAGE
@@ -297,7 +299,6 @@ impl TychoStreamDecoder {
                 .collect();
             drop(state_guard);
 
-            let state_guard = self.state.read().await;
             let account_balances = protocol_msg
                 .clone()
                 .snapshots
@@ -322,86 +323,89 @@ impl TychoStreamDecoder {
             info!("Engine updated");
 
             let mut new_components = HashMap::new();
-
-            // PROCESS SNAPSHOTS
-            'outer: for (id, snapshot) in protocol_msg
-                .snapshots
-                .get_states()
-                .clone()
             {
-                // Skip any unsupported pools
-                if let Some(predicate) = self
-                    .inclusion_filters
-                    .get(protocol.as_str())
+                let state_guard = self.state.read().await;
+                // PROCESS SNAPSHOTS
+                'outer: for (id, snapshot) in protocol_msg
+                    .snapshots
+                    .get_states()
+                    .clone()
                 {
-                    if !predicate(&snapshot) {
-                        continue;
-                    }
-                }
-
-                // Construct component from snapshot
-                let mut component_tokens = Vec::new();
-                for token in snapshot.component.tokens.clone() {
-                    match state_guard.tokens.get(&token) {
-                        Some(token) => component_tokens.push(token.clone()),
-                        None => {
-                            debug!("Token not found {}, ignoring pool {:x?}", token, id);
-                            continue 'outer;
-                        }
-                    }
-                }
-                let component = ProtocolComponent::from_with_tokens(
-                    snapshot.component.clone(),
-                    component_tokens,
-                );
-
-                // collect contracts:ids mapping for states that should update on contract changes
-
-                if component
-                    .static_attributes
-                    .contains_key("manual_updates")
-                {
-                    for contract in &component.contract_ids {
-                        contracts_map
-                            .entry(contract.clone())
-                            .or_insert_with(HashSet::new)
-                            .insert(id.clone());
-                    }
-                }
-
-                new_pairs.insert(id.clone(), component);
-
-                // Construct state from snapshot
-                if let Some(state_decode_f) = self.registry.get(protocol.as_str()) {
-                    match state_decode_f(
-                        snapshot,
-                        block.clone(),
-                        account_balances.clone(),
-                        self.state.clone(),
-                    )
-                    .await
+                    // Skip any unsupported pools
+                    if let Some(predicate) = self
+                        .inclusion_filters
+                        .get(protocol.as_str())
                     {
-                        Ok(state) => {
-                            new_components.insert(id.clone(), state);
+                        if !predicate(&snapshot) {
+                            continue;
                         }
-                        Err(e) => {
-                            if self.skip_state_decode_failures {
-                                warn!(pool = id, error = %e, "StateDecodingFailure");
+                    }
+
+                    // Construct component from snapshot
+                    let mut component_tokens = Vec::new();
+                    for token in snapshot.component.tokens.clone() {
+                        match state_guard.tokens.get(&token) {
+                            Some(token) => component_tokens.push(token.clone()),
+                            None => {
+                                debug!("Token not found {}, ignoring pool {:x?}", token, id);
                                 continue 'outer;
-                            } else {
-                                error!(pool = id, error = %e, "StateDecodingFailure");
-                                return Err(StreamDecodeError::Fatal(format!("{e}")));
                             }
                         }
                     }
-                } else if self.skip_state_decode_failures {
-                    warn!(pool = id, "MissingDecoderRegistration");
-                    continue 'outer;
-                } else {
-                    error!(pool = id, "MissingDecoderRegistration");
-                    return Err(StreamDecodeError::Fatal(format!(
-                        "Missing decoder registration for: {id}"
-                    )));
+                    let component = ProtocolComponent::from_with_tokens(
+                        snapshot.component.clone(),
+                        component_tokens,
+                    );
+
+                    // collect contracts:ids mapping for states that should update on contract
+                    // changes
+
+                    if component
+                        .static_attributes
+                        .contains_key("manual_updates")
+                    {
+                        for contract in &component.contract_ids {
+                            contracts_map
+                                .entry(contract.clone())
+                                .or_insert_with(HashSet::new)
+                                .insert(id.clone());
+                        }
+                    }
+
+                    new_pairs.insert(id.clone(), component);
+
+                    // Construct state from snapshot
+                    if let Some(state_decode_f) = self.registry.get(protocol.as_str()) {
+                        match state_decode_f(
+                            snapshot,
+                            block.clone(),
+                            account_balances.clone(),
+                            self.state.clone(),
+                        )
+                        .await
+                        {
+                            Ok(state) => {
+                                new_components.insert(id.clone(), state);
+                            }
+                            Err(e) => {
+                                if self.skip_state_decode_failures {
+                                    warn!(pool = id, error = %e, "StateDecodingFailure");
+                                    continue 'outer;
+                                } else {
+                                    error!(pool = id, error = %e, "StateDecodingFailure");
+                                    return Err(StreamDecodeError::Fatal(format!("{e}")));
+                                }
+                            }
+                        }
+                    } else if self.skip_state_decode_failures {
+                        warn!(pool = id, "MissingDecoderRegistration");
+                        continue 'outer;
+                    } else {
+                        error!(pool = id, "MissingDecoderRegistration");
+                        return Err(StreamDecodeError::Fatal(format!(
+                            "Missing decoder registration for: {id}"
+                        )));
+                    }
                 }
             }
 
