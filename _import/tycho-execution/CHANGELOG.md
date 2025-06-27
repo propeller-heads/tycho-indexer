@@ -1,3 +1,10 @@
+## [0.101.5](https://github.com/propeller-heads/tycho-execution/compare/0.101.4...0.101.5) (2025-06-27)
+
+
+### Bug Fixes
+
+* Use native token curve address and not regular zero address ([0f679d6](https://github.com/propeller-heads/tycho-execution/commit/0f679d6e0663aba881babb09319815723cdf68e5))
+
 ## [0.101.4](https://github.com/propeller-heads/tycho-execution/compare/0.101.3...0.101.4) (2025-06-27)
 
 
