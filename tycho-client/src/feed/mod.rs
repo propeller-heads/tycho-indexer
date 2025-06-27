@@ -201,7 +201,7 @@ impl SynchronizerStream {
 
     /// Standard way to advance a well-behaved state synchronizer.
     ///
-    /// Will wait for a new block on the synchronizer within a timeout. And modify it's state based
+    /// Will wait for a new block on the synchronizer within a timeout. And modify its state based
     /// on the outcome.
     async fn try_recv_next_expected(
         &mut self,
@@ -238,7 +238,7 @@ impl SynchronizerStream {
     /// Tries to catch up a delayed state synchronizer.
     ///
     /// If a synchronizer is delayed, this method will try to catch up to the next expected block
-    /// by consuming all waiting messages in it's queue and waiting for any new block messages
+    /// by consuming all waiting messages in its queue and waiting for any new block messages
     /// within a timeout. Finally, all update messages are merged into one and returned.
     async fn try_catch_up(
         &mut self,

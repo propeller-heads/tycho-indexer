@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS protocol_calls_contract(
     "id" bigserial PRIMARY KEY,
     "protocol_component_id" bigint REFERENCES protocol_component(id) ON DELETE CASCADE NOT NULL,
     "account_id" bigint REFERENCES account(id) ON DELETE CASCADE NOT NULL,
-    -- Tx this assocuation became valud, versioned association between contracts,
+    -- Tx this association became valid, versioned association between contracts,
     -- allows to track updates of e.g. price feeds.
     "valid_from" timestamptz NOT NULL,
     -- The tx at which this association stopped being valid. Null if this
