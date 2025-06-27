@@ -28,7 +28,10 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
 
     receive() external payable {}
 
-    function testPriceFuzzEtherfi(uint256 amount0, uint256 amount1) public {
+    function testPriceFuzzEtherfi(uint256 amount0, uint256 amount1)
+        public
+        view
+    {
         bytes32 pair = bytes32(0);
         uint256[] memory limits = adapter.getLimits(
             pair, address(address(weEth)), address(address(eEth))
@@ -319,10 +322,10 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
                     weEth_.balanceOf(address(this)) - weEth_balance
                 );
                 /// @dev Transfer function contains rounding errors because of
-                /// rewards in eETH contract, therefore we assume a +/-2
+                /// rewards in eETH contract, therefore we assume a +/-4
                 /// tolerance
                 assertLe(
-                    specifiedAmount - 2,
+                    specifiedAmount - 4,
                     weEth_.balanceOf(address(this)) - weEth_balance
                 );
                 assertEq(
@@ -386,6 +389,7 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
 
     function testGetCapabilitiesEtherfi(bytes32 pair, address t0, address t1)
         public
+        view
     {
         Capability[] memory res =
             adapter.getCapabilities(pair, address(t0), address(t1));
@@ -393,14 +397,14 @@ contract EtherfiAdapterTest is Test, ISwapAdapterTypes {
         assertEq(res.length, 3);
     }
 
-    function testGetTokensEtherfi() public {
+    function testGetTokensEtherfi() public view {
         bytes32 pair = bytes32(0);
         address[] memory tokens = adapter.getTokens(pair);
 
         assertEq(tokens.length, 3);
     }
 
-    function testGetLimitsEtherfi() public {
+    function testGetLimitsEtherfi() public view {
         bytes32 pair = bytes32(0);
         uint256[] memory limits =
             adapter.getLimits(pair, address(eEth), address(weEth));

@@ -6,9 +6,11 @@ import "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import {ISwapAdapter} from "src/interfaces/ISwapAdapter.sol";
 import "src/interfaces/ISwapAdapterTypes.sol";
 import "src/libraries/FractionMath.sol";
+import "src/libraries/EfficientERC20.sol";
 
 contract AdapterTest is Test, ISwapAdapterTypes {
     using FractionMath for Fraction;
+    using EfficientERC20 for IERC20;
 
     uint256 constant pricePrecision = 10e24;
     string[] public stringPctgs = ["0%", "0.1%", "50%", "100%"];
@@ -29,8 +31,8 @@ contract AdapterTest is Test, ISwapAdapterTypes {
         );
         for (uint256 i = 0; i < poolIds.length; i++) {
             address[] memory tokens = adapter.getTokens(poolIds[i]);
-            IERC20(tokens[0]).approve(address(adapter), type(uint256).max);
-            IERC20(tokens[1]).approve(address(adapter), type(uint256).max);
+            IERC20(tokens[0]).forceApprove(address(adapter), type(uint256).max);
+            IERC20(tokens[1]).forceApprove(address(adapter), type(uint256).max);
 
             testPricesForPair(
                 adapter, poolIds[i], tokens[0], tokens[1], hasPriceImpact
@@ -68,6 +70,9 @@ contract AdapterTest is Test, ISwapAdapterTypes {
         );
         uint256[] memory amounts =
             calculateTestAmounts(sellLimit, hasMarginalPrices);
+
+        // TODO: What if the price function is not available? Do we still want
+        // to run this test?
         Fraction[] memory prices =
             adapter.price(poolId, tokenIn, tokenOut, amounts);
         assertGt(
