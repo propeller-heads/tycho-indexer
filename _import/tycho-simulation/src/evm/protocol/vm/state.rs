@@ -218,8 +218,8 @@ where
                         })?;
                         let sell_token_decimals = self.get_decimals(tokens, &sell_token_address)?;
                         let buy_token_decimals = self.get_decimals(tokens, &buy_token_address)?;
-                        *unscaled_price * 10f64.powi(sell_token_decimals as i32)
-                            / 10f64.powi(buy_token_decimals as i32)
+                        *unscaled_price * 10f64.powi(sell_token_decimals as i32) /
+                            10f64.powi(buy_token_decimals as i32)
                     };
 
                     self.spot_prices
@@ -240,8 +240,8 @@ where
                     // Calculate the first sell amount (x1) as 1% of the maximum limit.
                     let x1 = self
                         .get_amount_limits(vec![t0, t1], overwrites.clone())?
-                        .0
-                        / U256::from(100);
+                        .0 /
+                        U256::from(100);
 
                     // Calculate the second sell amount (x2) as x1 + 1% of x1. 1.01% of the max
                     // limit
@@ -558,8 +558,8 @@ where
         )?;
         let (sell_amount_respecting_limit, sell_amount_exceeds_limit) = if self
             .capabilities
-            .contains(&Capability::HardLimits)
-            && sell_amount_limit < sell_amount
+            .contains(&Capability::HardLimits) &&
+            sell_amount_limit < sell_amount
         {
             (sell_amount_limit, true)
         } else {
