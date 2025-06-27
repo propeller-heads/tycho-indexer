@@ -34,7 +34,7 @@ class HexBytes(_HexBytes):
         if self.hex() != "0x":
             return int(self.hex(), 16)
         else:
-          return 0
+            return 0
 
 
 class Chain(str, Enum):
@@ -42,6 +42,8 @@ class Chain(str, Enum):
     starknet = "starknet"
     arbitrum = "arbitrum"
     base = "base"
+    zksync = "zksync"
+    unichain = "unichain"
 
 
 class ChangeType(str, Enum):
@@ -109,9 +111,10 @@ class ComponentBalance(BaseModel):
 
 class TokenBalances(BaseModel):
     __root__: Dict[HexBytes, ComponentBalance]
-    
+
     def items(self):
-            return self.__root__.items()
+        return self.__root__.items()
+
 
 class AccountUpdate(BaseModel):
     address: HexBytes
@@ -163,7 +166,9 @@ class BlockChanges(BaseModel):
     new_protocol_components: Dict[str, ProtocolComponent]
     deleted_protocol_components: Dict[str, ProtocolComponent]
     component_balances: Dict[str, TokenBalances]
-    account_balances: Dict[HexBytes, Dict[HexBytes, HexBytes]] = Field(default_factory=dict)
+    account_balances: Dict[HexBytes, Dict[HexBytes, HexBytes]] = Field(
+        default_factory=dict
+    )
     component_tvl: Dict[str, float]
 
 
@@ -241,7 +246,12 @@ class FeedMessage(BaseModel):
     sync_states: dict[str, SynchronizerState]
 
 
-# Client Parameters
+# Request Parameters
+
+
+class PaginationParams(BaseModel):
+    page: Optional[int] = None
+    page_size: Optional[int] = None
 
 
 class ProtocolId(BaseModel):
@@ -263,6 +273,7 @@ class ProtocolComponentsParams(BaseModel):
     protocol_system: Optional[str] = None
     component_addresses: Optional[List[HexBytes]] = Field(default=None)
     tvl_gt: Optional[int] = None
+    pagination: Optional[PaginationParams] = None
 
     class Config:
         allow_population_by_field_name = True
@@ -273,6 +284,7 @@ class ProtocolStateParams(BaseModel):
     protocol_ids: Optional[List[ProtocolId]] = Field(default=None)
     protocol_system: Optional[str] = Field(default=None)
     version: Optional[VersionParams] = None
+    pagination: Optional[PaginationParams] = None
 
     class Config:
         allow_population_by_field_name = True
@@ -283,31 +295,115 @@ class ContractStateParams(BaseModel):
     contract_ids: Optional[List[str]] = Field(default=None)
     protocol_system: Optional[str] = Field(default=None)
     version: Optional[VersionParams] = None
+    pagination: Optional[PaginationParams] = None
 
     # Backward compatibility with old ContractId format
     # To be removed in the future
     @root_validator(pre=True)
     def handle_old_contract_id_format(cls, values):
-        contract_ids = values.get('contract_ids')
+        contract_ids = values.get("contract_ids")
         if contract_ids and isinstance(contract_ids[0], ContractId):
             # Handle old format: List of ContractId objects
-            values['contract_ids'] = [c.address.hex() for c in contract_ids]
+            values["contract_ids"] = [c.address.hex() for c in contract_ids]
         return values
 
     class Config:
         allow_population_by_field_name = True
 
 
-class PaginationParams(BaseModel):
-    page: Optional[int] = None
-    page_size: Optional[int] = None
-
-
 class TokensParams(BaseModel):
     min_quality: Optional[int] = None
-    pagination: Optional[PaginationParams] = None
     token_addresses: Optional[List[HexBytes]] = Field(default=None)
     traded_n_days_ago: Optional[int] = None
+    pagination: Optional[PaginationParams] = None
 
     class Config:
         allow_population_by_field_name = True
+
+
+class ProtocolSystemsParams(BaseModel):
+    chain: Optional[Chain] = None
+    pagination: Optional[PaginationParams] = None
+
+    class Config:
+        allow_population_by_field_name = True
+
+
+class ComponentTvlParams(BaseModel):
+    chain: Optional[Chain] = None
+    protocol_system: Optional[str] = Field(default=None, alias="protocolSystem")
+    component_ids: Optional[List[str]] = Field(default=None)
+    pagination: Optional[PaginationParams] = None
+
+    class Config:
+        allow_population_by_field_name = True
+
+
+class TracedEntryPointParams(BaseModel):
+    chain: Optional[Chain] = None
+    protocol_system: str
+    component_ids: Optional[List[str]] = Field(default=None)
+    pagination: Optional[PaginationParams] = None
+
+    class Config:
+        allow_population_by_field_name = True
+
+
+# Response objects
+
+
+class PaginationResponse(BaseModel):
+    page: int
+    page_size: int
+    total: int  # Total number of items across all pages
+
+    def total_pages(self) -> int:
+        """Calculate the total number of pages."""
+        if self.page_size <= 0:
+            return 0
+        return (self.total + self.page_size - 1) // self.page_size
+
+    def has_next_page(self) -> bool:
+        """Check if there is a next page."""
+        return self.page < self.total_pages() - 1
+
+    def has_previous_page(self) -> bool:
+        """Check if there is a previous page."""
+        return self.page > 0
+
+
+class ProtocolSystemsResponse(BaseModel):
+    protocol_systems: List[str]
+    pagination: PaginationResponse
+
+
+class ProtocolComponentsResponse(BaseModel):
+    protocol_components: List[ProtocolComponent]
+    pagination: PaginationResponse
+
+
+class ProtocolStateResponse(BaseModel):
+    states: List[ResponseProtocolState]
+    pagination: PaginationResponse
+
+
+class ContractStateResponse(BaseModel):
+    accounts: List[ResponseAccount]
+    pagination: PaginationResponse
+
+
+class TokensResponse(BaseModel):
+    tokens: List[ResponseToken]
+    pagination: PaginationResponse
+
+
+class ComponentTvlResponse(BaseModel):
+    tvl: Dict[str, float]
+    pagination: PaginationResponse
+
+
+class TracedEntryPointsResponse(BaseModel):
+    traced_entry_points: Dict[
+        str, List[tuple]
+    ]  # component_id -> [(EntryPointWithTracingParams, TracingResult)]
+    pagination: PaginationResponse
