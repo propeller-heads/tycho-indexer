@@ -628,11 +628,12 @@ impl TychoStreamDecoder {
     }
 }
 
+// Generate a proxy token address for a given token index
 fn generate_proxy_token_address(idx: u32) -> Address {
     let padded_idx = format!("{idx:x}");
     let padded_zeroes = "0".repeat(33 - padded_idx.len());
     let proxy_token_address = format!("{padded_zeroes}{padded_idx}BAdbaBe");
-    Address::from_slice(&hex::decode(proxy_token_address).expect("Invalid string for spender"))
+    Address::from_slice(&hex::decode(proxy_token_address).expect("Should be a valid address"))
 }
 
 #[cfg(test)]
