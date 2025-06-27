@@ -359,15 +359,17 @@ where
                 .component_balances
                 .get(&self.id)
             {
-                for (token, bal) in bals {
-                    let addr = bytes_to_address(token).map_err(|_| {
-                        SimulationError::FatalError(format!(
-                            "Invalid token address in balance update: {token:?}"
-                        ))
-                    })?;
-                    self.balances
-                        .insert(addr, U256::from_be_slice(bal));
-                }
+                self.balances = bals
+                    .iter()
+                    .map(|(token, bal)| {
+                        let addr = bytes_to_address(token).map_err(|_| {
+                            SimulationError::FatalError(format!(
+                                "Invalid token address in balance update: {token:?}"
+                            ))
+                        })?;
+                        Ok((addr, U256::from_be_slice(bal)))
+                    })
+                    .collect::<Result<HashMap<_, _>, SimulationError>>()?;
             }
         } else {
             // Pool uses contract balances for overwrites
