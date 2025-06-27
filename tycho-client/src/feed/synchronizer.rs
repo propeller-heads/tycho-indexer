@@ -179,7 +179,7 @@ pub trait StateSynchronizer: Send + Sync + 'static {
     async fn initialize(&self) -> SyncResult<()>;
     /// Starts the state synchronization.
     async fn start(&self) -> SyncResult<(JoinHandle<SyncResult<()>>, Receiver<StateSyncMessage>)>;
-    /// Ends the sychronization loop.
+    /// Ends the synchronization loop.
     async fn close(&mut self) -> SyncResult<()>;
 }
 
@@ -1421,7 +1421,7 @@ mod test {
                 .collect(),
                 ..Default::default()
             }),
-            // "Component2" was removed, because it's tvl changed to 0.
+            // "Component2" was removed, because its tvl changed to 0.
             removed_components: [(
                 "Component2".to_string(),
                 ProtocolComponent { id: "Component2".to_string(), ..Default::default() },

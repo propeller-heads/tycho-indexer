@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS "chain"(
     "modified_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- This table stores block at which relevant changes occured.
+-- This table stores block at which relevant changes occurred.
 CREATE TABLE IF NOT EXISTS "block"(
     "id" bigserial PRIMARY KEY,
     -- The unique hash of this block.
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS "block"(
     -- Whether this block is part of the canonical chain.
     "main" bool NOT NULL DEFAULT TRUE,
     -- The block number, table might contain forks so the number is not
-    --	necessarily unique - not even withing a single chains scope.
+    --	necessarily unique - not even within a single chains scope.
     "number" bigint NOT NULL,
     -- Timestamp this block was validated/mined/created.
     "ts" timestamptz NOT NULL,
@@ -79,7 +79,7 @@ CREATE INDEX IF NOT EXISTS idx_transaction_block_id ON TRANSACTION (block_id);
 --	belong to the same logical system.
 CREATE TABLE IF NOT EXISTS protocol_system(
     "id" bigserial PRIMARY KEY,
-    -- The name of the procotol system, e.g. uniswap-v2, ambient, etc.
+    -- The name of the protocol system, e.g. uniswap-v2, ambient, etc.
     "name" varchar(255) NOT NULL,
     -- Timestamp this entry was inserted into this table.
     "inserted_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS protocol_type(
     "modified_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Saves the state of an extractor, note that static extration parameters
+-- Saves the state of an extractor, note that static extraction parameters
 -- 	are usually defined through infrastructure configuration tools e.g.
 --	terraform. So this table only maintains dynamic state that changes during
 --	runtime and has to be persisted between restarts.
@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS protocol_component(
     "creation_tx" bigint REFERENCES "transaction"(id) ON DELETE CASCADE NOT NULL,
     -- The ts at which this protocol ceased to exist.
     "deleted_at" timestamptz,
-    -- The transaction at which the protocol was destructed.
+    -- The transaction at which the protocol was destroyed.
     "deletion_tx" bigint REFERENCES "transaction"(id) ON DELETE SET NULL,
     -- Timestamp this entry was inserted into this table.
     "inserted_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -217,7 +217,7 @@ CREATE TABLE IF NOT EXISTS "account"(
     "created_at" timestamptz,
     -- The tx this contract was destroyed. Null in case it is active.
     "deleted_at" timestamptz,
-    -- transaction that destructed this contract.
+    -- transaction that destroyed this contract.
     "deletion_tx" bigint REFERENCES "transaction"(id) ON DELETE SET NULL,
     -- Timestamp this entry was inserted into this table.
     "inserted_ts" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -292,7 +292,7 @@ CREATE INDEX IF NOT EXISTS idx_account_balance_valid_to ON account_balance(valid
 -- Versioned contract code.
 CREATE TABLE contract_code(
     "id" bigserial PRIMARY KEY,
-    -- The code of this contract optimised for the system using it, e.g. revm.
+    -- The code of this contract optimized for the system using it, e.g. revm.
     "code" bytea NOT NULL,
     -- The hash of the code, allows to easily detect changes.
     "hash" bytea NOT NULL,
@@ -300,7 +300,7 @@ CREATE TABLE contract_code(
     "account_id" bigint REFERENCES account(id) ON DELETE CASCADE NOT NULL,
     -- the transaction that modified the code to this entry.
     "modify_tx" bigint REFERENCES "transaction"(id) ON DELETE CASCADE NOT NULL,
-    -- The ts at which this copde became valid at.
+    -- The ts at which this code became valid at.
     "valid_from" timestamptz NOT NULL,
     -- The ts at which this code stopped being valid at. Null if this
     --	state is the currently valid entry.
@@ -321,7 +321,7 @@ CREATE TABLE IF NOT EXISTS contract_storage(
     "id" bigserial PRIMARY KEY,
     -- the preimage/slot for this entry.
     "slot" bytea NOT NULL,
-    -- the value of the storage slot at this verion.
+    -- the value of the storage slot at this version.
     "value" bytea,
     -- the previous versions value, null if first insertion.
     "previous_value" bytea,
@@ -359,7 +359,7 @@ CREATE TABLE IF NOT EXISTS protocol_calls_contract(
     "id" bigserial PRIMARY KEY,
     "protocol_component_id" bigint REFERENCES protocol_component(id) ON DELETE CASCADE NOT NULL,
     "account_id" bigint REFERENCES account(id) ON DELETE CASCADE NOT NULL,
-    -- Tx this assocuation became valud, versioned association between contracts,
+    -- Tx this association became valid, versioned association between contracts,
     -- allows to track updates of e.g. price feeds.
     "valid_from" timestamptz NOT NULL,
     -- The tx at which this association stopped being valid. Null if this

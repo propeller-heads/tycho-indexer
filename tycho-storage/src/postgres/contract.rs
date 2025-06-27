@@ -332,9 +332,9 @@ impl PostgresGateway {
     ///
     /// # Returns
     ///
-    /// The CreatedOrDeleted struct. It contains accounts that fall under 1a within it's created
+    /// The CreatedOrDeleted struct. It contains accounts that fall under 1a within its created
     /// attribute. We can use this attribute to satisfy the first operation. It also contains new
-    /// restored / deleted delta structs withing the `restored` attribute with which we can satisfy
+    /// restored / deleted delta structs within the `restored` attribute with which we can satisfy
     /// the second rule.
     #[instrument(level = Level::DEBUG, skip(self, conn))]
     async fn get_created_or_deleted_accounts(
@@ -377,8 +377,8 @@ impl PostgresGateway {
         //         updates after creation
         //      4. d + c + d -> current: present, target: not present => emit deletion
         // - backward
-        //      5. c + d -> current: not present, target: not preset => noop
-        //      6. c + d + c -> current: present, target: not preset => emit delete
+        //      5. c + d -> current: not present, target: not present => noop
+        //      6. c + d + c -> current: present, target: not present => emit delete
         //      7. d + c -> current: present, target: present => restore at target
         //      8. d + c + d -> current: not present, target: present => restore at target
         //
