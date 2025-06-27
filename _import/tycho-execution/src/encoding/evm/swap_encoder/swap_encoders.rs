@@ -440,7 +440,7 @@ impl CurveSwapEncoder {
             .iter()
             .position(|&addr| addr == token_out)
             .ok_or(EncodingError::FatalError(format!(
-                "Token in address {token_in} not found in curve pool coins"
+                "Token in address {token_out} not found in curve pool coins"
             )))?;
         Ok((U8::from(i), U8::from(j)))
     }
