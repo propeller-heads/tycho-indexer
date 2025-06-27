@@ -248,6 +248,14 @@ impl TychoStreamDecoder {
             // UPDATE VM STORAGE
             let mut token_proxy_accounts: HashMap<Address, AccountUpdate> = HashMap::new();
 
+            info!(
+                "Processing {} contracts from snapshots",
+                protocol_msg
+                    .snapshots
+                    .get_vm_storage()
+                    .len()
+            );
+
             let storage_by_address: HashMap<Address, ResponseAccount> = protocol_msg
                 .snapshots
                 .get_vm_storage()
@@ -312,7 +320,7 @@ impl TychoStreamDecoder {
                     Some((addr.clone(), balances))
                 })
                 .collect::<AccountBalances>();
-            info!("Updating engine with {} snapshots", storage_by_address.len());
+            info!("Updating engine with {} contracts from snapshots", storage_by_address.len());
             update_engine(
                 SHARED_TYCHO_DB.clone(),
                 block.clone().into(),
@@ -323,6 +331,7 @@ impl TychoStreamDecoder {
             info!("Engine updated");
 
             let mut new_components = HashMap::new();
+            let mut count_token_skips = 0;
             {
                 let state_guard = self.state.read().await;
                 // PROCESS SNAPSHOTS
@@ -347,6 +356,7 @@ impl TychoStreamDecoder {
                         match state_guard.tokens.get(&token) {
                             Some(token) => component_tokens.push(token.clone()),
                             None => {
+                                count_token_skips += 1;
                                 debug!("Token not found {}, ignoring pool {:x?}", token, id);
                                 continue 'outer;
                             }
@@ -409,8 +419,11 @@ impl TychoStreamDecoder {
                 }
             }
 
-            if !new_components.is_empty() {
-                info!("Decoded {} snapshots for protocol {}", new_components.len(), protocol);
+            if !protocol_msg.snapshots.states.is_empty() {
+                info!("Decoded {} snapshots for protocol {protocol}", new_components.len());
+            }
+            if count_token_skips > 0 {
+                info!("Skipped {count_token_skips} pools due to missing tokens");
             }
             updated_states.extend(new_components);
 
@@ -469,7 +482,7 @@ impl TychoStreamDecoder {
                 drop(state_guard);
 
                 let state_guard = self.state.read().await;
-                info!("Updating engine with {} contract deltas", deltas.state_updates.len());
+                info!("Updating engine with {} contract deltas", deltas.account_updates.len());
                 update_engine(
                     SHARED_TYCHO_DB.clone(),
                     block.clone().into(),
