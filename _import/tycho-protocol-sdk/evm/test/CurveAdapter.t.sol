@@ -65,12 +65,6 @@ contract CurveAdapterTest is Test, ISwapAdapterTypes, AdapterTest {
             0xC26b89A667578ec7b3f11b2F98d6Fd15C07C54ba,
             0x9409280DC1e6D33AB7A8C6EC03e5763FB61772B5,
             0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A
-            // 0x87650D7bbfC3A9F10587d7778206671719d9910D // Uses a token
-            // that can't be `deal`ed with foundry
-            // https://etherscan.io/token/0x2a8e1e676ec238d8a992307b495b45b3feaa5e86
-            // 0x50f3752289e1456BfA505afd37B241bca23e685d, // Uses a token
-            // that can't be `deal`ed with foundry
-            // https://etherscan.io/token/0x3472A5A71965499acd81997a54BBA8D852C6E53d
         ];
 
         vm.label(address(adapter), "CurveAdapter");
