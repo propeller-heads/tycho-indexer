@@ -178,31 +178,29 @@ impl TychoStreamDecoder {
             // Add any new tokens
             if let Some(deltas) = protocol_msg.deltas.as_ref() {
                 let mut state_guard = self.state.write().await;
-                let res = deltas
+
+                let new_tokens = deltas
                     .new_tokens
                     .iter()
-                    .filter_map(|(addr, t)| {
-                        if t.quality < self.min_token_quality ||
-                            // Do not add the token if it's already included in the state_guard
-                            state_guard.tokens.contains_key(addr)
-                        {
-                            return None;
-                        }
-
-                        let token = t.clone().try_into();
-                        let result = match token {
-                            Ok(t) => Ok((addr.clone(), t)),
-                            Err(e) => Err(StreamDecodeError::Fatal(format!(
-                                "Failed decoding token {e} {addr:#044x}"
-                            ))),
-                        };
-                        Some(result)
+                    .filter(|(addr, t)| {
+                        t.quality >= self.min_token_quality &&
+                            !state_guard.tokens.contains_key(*addr)
                     })
-                    .collect::<Result<HashMap<Bytes, Token>, StreamDecodeError>>()?;
+                    .filter_map(|(addr, t)| {
+                        t.clone()
+                            .try_into()
+                            .map(|token| (addr.clone(), token))
+                            .map_err(|e| {
+                                warn!("Failed decoding token {e} {addr:#044x}");
+                                e
+                            })
+                            .ok()
+                    })
+                    .collect::<HashMap<Bytes, Token>>();
 
-                if !res.is_empty() {
-                    debug!(n = res.len(), "NewTokens");
-                    state_guard.tokens.extend(res);
+                if !new_tokens.is_empty() {
+                    debug!(n = new_tokens.len(), "NewTokens");
+                    state_guard.tokens.extend(new_tokens);
                 }
             }
 
@@ -363,7 +361,8 @@ impl TychoStreamDecoder {
                             Some(token) => {
                                 component_tokens.push(token.clone());
 
-                                // If the token is not a proxy token, we need to add it to the simulation engine
+                                // If the token is not a proxy token, we need to add it to the
+                                // simulation engine
                                 let token_address = match bytes_to_address(&token.address) {
                                     Ok(addr) => addr,
                                     Err(_) => {
