@@ -2,5 +2,5 @@ psycopg2==2.9.9
 PyYAML==6.0.1
 Requests==2.32.2
 web3==5.31.3
-git+https://github.com/propeller-heads/tycho-indexer.git@0.60.0#subdirectory=tycho-client-py
-git+https://github.com/propeller-heads/tycho-simulation.git@0.105.0#subdirectory=tycho_simulation_py
+git+https://github.com/propeller-heads/tycho-indexer.git@0.74.0#subdirectory=tycho-client-py
+git+https://github.com/propeller-heads/tycho-simulation.git@0.118.0#subdirectory=tycho_simulation_py

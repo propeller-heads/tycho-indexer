@@ -32,7 +32,6 @@ def build_snapshot_message(
     for state in protocol_states:
         pool_id = state.component_id
         if pool_id not in states:
-            log.warning(f"State for pool {pool_id} not found in components")
             continue
         states[pool_id]["state"] = state
 
@@ -62,7 +61,7 @@ def token_factory(rpc_client: TychoRPCClient) -> callable(HexBytes):
         if to_fetch:
             pagination = PaginationParams(page_size=len(to_fetch), page=0)
             params = TokensParams(token_addresses=to_fetch, pagination=pagination)
-            tokens = _client.get_tokens(params)
+            tokens = _client.get_tokens(params).tokens
             for token in tokens:
                 address = to_checksum_address(token.address)
                 eth_token = EthereumToken(
