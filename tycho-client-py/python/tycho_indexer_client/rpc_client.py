@@ -20,6 +20,7 @@ from .dto import (
     ContractStateResponse,
     TokensResponse,
     TracedEntryPointsResponse,
+    PaginationParams,
 )
 
 
@@ -293,41 +294,136 @@ class TychoRPCClient:
 
 
 if __name__ == "__main__":
-    # Example usage
-    client = TychoRPCClient("http://0.0.0.0:4242")
+    # Example usage of the Tycho RPC client
+    client = TychoRPCClient(
+        rpc_url="https://tycho-beta.propellerheads.xyz",
+        chain=Chain.ethereum,
+        auth_token="sampletoken",
+    )
+
+    print("Tycho RPC Client Example Usage")
+    print("=" * 50)
 
     try:
-        # Get protocol components
-        components = client.get_protocol_components(
-            ProtocolComponentsParams(protocol_system="test_protocol")
-        )
-        print(f"Found {len(components.protocol_components)} protocol components")
-
-        # Get protocol state
-        states = client.get_protocol_state(
-            ProtocolStateParams(protocol_system="test_protocol")
-        )
-        print(f"Found {len(states.states)} protocol states")
-
-        # Get contract state
-        contracts = client.get_contract_state(ContractStateParams())
-        print(f"Found {len(contracts.accounts)} contracts")
-
-        # Get tokens
-        tokens = client.get_tokens(TokensParams(min_quality=10, traded_n_days_ago=30))
-        print(f"Found {len(tokens.tokens)} tokens")
-
-        # Get protocol systems
-        systems = client.get_protocol_systems(ProtocolSystemsParams())
-        print(f"Found {len(systems.protocol_systems)} protocol systems")
-
-        # Get component TVL
-        tvl = client.get_component_tvl(ComponentTvlParams())
-        print(f"Found TVL data for {len(tvl.tvl)} components")
-
-        # Get health status
+        # Example 1: Check server health
+        print("1. Checking server health...")
         health = client.health()
-        print(f"Server health: {health}")
+        print(f"   Health status: {health}")
+        print()
+
+        # Example 2: Get list of supported protocol systems
+        print("2. Getting protocol systems...")
+        systems_params = ProtocolSystemsParams(
+            chain=Chain.ethereum, pagination=PaginationParams(page=0, page_size=10)
+        )
+        systems = client.get_protocol_systems(systems_params)
+        print(f"   Found {len(systems.protocol_systems)} protocol systems")
+        print(
+            f"   Pagination: page {systems.pagination.page}, size {systems.pagination.page_size}, total {systems.pagination.total}"
+        )
+        if systems.protocol_systems:
+            print(f"   First system: {systems.protocol_systems[0]}")
+        print()
+
+        # Example 3: Get tokens with quality and trading filters
+        print("3. Getting tokens with filters...")
+        tokens_params = TokensParams(
+            min_quality=10,
+            traded_n_days_ago=30,
+            pagination=PaginationParams(page=0, page_size=5),
+        )
+        tokens = client.get_tokens(tokens_params)
+        print(f"   Found {len(tokens.tokens)} tokens")
+        print(
+            f"   Pagination: page {tokens.pagination.page}, size {tokens.pagination.page_size}, total {tokens.pagination.total}"
+        )
+        if tokens.tokens:
+            print(
+                f"   First token: {tokens.tokens[0].symbol} ({tokens.tokens[0].address.hex()})"
+            )
+        print()
+
+        # Example 4: Get protocol components for a specific system
+        if systems.protocol_systems:
+            print("4. Getting protocol components...")
+            components_params = ProtocolComponentsParams(
+                protocol_system=systems.protocol_systems[0],
+                pagination=PaginationParams(page=0, page_size=5),
+            )
+            components = client.get_protocol_components(components_params)
+            print(f"   Found {len(components.protocol_components)} protocol components")
+            print(
+                f"   Pagination: page {components.pagination.page}, size {components.pagination.page_size}, total {components.pagination.total}"
+            )
+            if components.protocol_components:
+                print(f"   First component: {components.protocol_components[0].id}")
+            print()
+
+            # Example 5: Get component TVL data
+            print("5. Getting component TVL data...")
+            tvl_params = ComponentTvlParams(
+                protocol_system=systems.protocol_systems[0],
+                pagination=PaginationParams(page=0, page_size=10),
+            )
+            tvl = client.get_component_tvl(tvl_params)
+            print(f"   Found TVL data for {len(tvl.tvl)} components")
+            print(
+                f"   Pagination: page {tvl.pagination.page}, size {tvl.pagination.page_size}, total {tvl.pagination.total}"
+            )
+            if tvl.tvl:
+                first_component = list(tvl.tvl.keys())[0]
+                print(
+                    f"   First component TVL: {first_component} = {tvl.tvl[first_component]}"
+                )
+            print()
+
+            # Example 6: Get traced entry points
+            print("6. Getting traced entry points...")
+            entry_points_params = TracedEntryPointParams(
+                protocol_system=systems.protocol_systems[0],
+                pagination=PaginationParams(page=0, page_size=5),
+            )
+            entry_points = client.get_traced_entry_points(entry_points_params)
+            print(
+                f"   Found traced entry points for {len(entry_points.traced_entry_points)} components"
+            )
+            print(
+                f"   Pagination: page {entry_points.pagination.page}, size {entry_points.pagination.page_size}, total {entry_points.pagination.total}"
+            )
+            print()
+
+        # Example 7: Get contract state
+        print("7. Getting contract state...")
+        contract_params = ContractStateParams(
+            pagination=PaginationParams(page=0, page_size=5)
+        )
+        contracts = client.get_contract_state(contract_params)
+        print(f"   Found {len(contracts.accounts)} contracts")
+        print(
+            f"   Pagination: page {contracts.pagination.page}, size {contracts.pagination.page_size}, total {contracts.pagination.total}"
+        )
+        if contracts.accounts:
+            print(f"   First contract: {contracts.accounts[0].address.hex()}")
+        print()
+
+        # Example 8: Get protocol state with balances
+        if systems.protocol_systems:
+            print("8. Getting protocol state with balances...")
+            state_params = ProtocolStateParams(
+                protocol_system=systems.protocol_systems[0],
+                include_balances=True,
+                pagination=PaginationParams(page=0, page_size=5),
+            )
+            states = client.get_protocol_state(state_params)
+            print(f"   Found {len(states.states)} protocol states")
+            print(
+                f"   Pagination: page {states.pagination.page}, size {states.pagination.page_size}, total {states.pagination.total}"
+            )
+            if states.states:
+                print(f"   First state: {states.states[0].component_id}")
+            print()
+
+        print("All examples completed successfully!")
 
     except TychoRPCError as e:
         print(f"RPC Error: {e.message}")
@@ -337,3 +433,6 @@ if __name__ == "__main__":
             print(f"Response data: {e.response_data}")
     except Exception as e:
         print(f"Unexpected error: {e}")
+        import traceback
+
+        traceback.print_exc()
