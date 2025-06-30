@@ -1844,7 +1844,7 @@ impl ComponentTVL {
         // Generate bind parameter 2-tuples the result will look like '($1, $2), ($3, $4), ...'
         // These are later subsituted with the primary key and valid to values.
         let bind_params = (1..=new_tvl_values.len() * 2)
-            .map(|i| if i % 2 == 0 { format!("${i}") } else { format!("(${i}") })
+            .map(|i| if i.is_multiple_of(2) { format!("${i}") } else { format!("(${i}") })
             .collect::<Vec<String>>()
             .chunks(2)
             .map(|chunk| chunk.join(", ") + ")")
