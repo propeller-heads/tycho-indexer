@@ -1,3 +1,12 @@
+## [0.74.0](https://github.com/propeller-heads/tycho-indexer/compare/0.73.0...0.74.0) (2025-06-30)
+
+
+### Features
+
+* **client-py:** add missing endpoints ([efd6d96](https://github.com/propeller-heads/tycho-indexer/commit/efd6d96a8d09d6313af77ca42bda4b9ac9d1e8d0))
+* **client-py:** add pagination to all endpoints ([f7c98b2](https://github.com/propeller-heads/tycho-indexer/commit/f7c98b2658f5b4c047db0842d1ca1bab236c67f0))
+* **client-py:** update python RPC client ([#606](https://github.com/propeller-heads/tycho-indexer/issues/606)) ([f6a4ef5](https://github.com/propeller-heads/tycho-indexer/commit/f6a4ef54095d5e5d2b550d81316ce282413268c0))
+
 ## [0.73.0](https://github.com/propeller-heads/tycho-indexer/compare/0.72.1...0.73.0) (2025-06-27)
 
 
