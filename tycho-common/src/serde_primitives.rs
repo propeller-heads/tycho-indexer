@@ -5,7 +5,7 @@ fn decode_hex_with_prefix(val: &str) -> Result<Vec<u8>, FromHexError> {
         if let Some(stripped) = val.strip_prefix("0x") { stripped } else { val }.into();
 
     // Check if the length of the string is odd
-    if stripped.len() % 2 != 0 {
+    if !stripped.len().is_multiple_of(2) {
         // If it's odd, prepend a zero
         stripped.insert(0, '0');
     }
