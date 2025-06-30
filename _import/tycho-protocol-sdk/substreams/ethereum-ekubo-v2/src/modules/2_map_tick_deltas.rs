@@ -6,7 +6,7 @@ use crate::pb::ekubo::{
 };
 
 #[substreams::handlers::map]
-pub fn map_tick_changes(block_tx_events: BlockTransactionEvents) -> TickDeltas {
+pub fn map_tick_deltas(block_tx_events: BlockTransactionEvents) -> TickDeltas {
     TickDeltas {
         deltas: block_tx_events
             .block_transaction_events

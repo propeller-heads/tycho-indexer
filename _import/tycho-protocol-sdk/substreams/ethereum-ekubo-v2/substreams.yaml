@@ -1,7 +1,7 @@
 specVersion: v0.1.0
 package:
   name: "ethereum_ekubo_v2"
-  version: v0.1.0
+  version: v0.2.0
   url: "https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/substreams/ethereum-ekubo-v2"
 
 protobuf:
@@ -15,6 +15,7 @@ protobuf:
   excludePaths:
     - google
     - tycho
+    - sf/substreams
 
 binaries:
   default:
@@ -27,7 +28,7 @@ networks:
     initialBlock:
       map_events: 22048334 # First pool initialization https://etherscan.io/tx/0x7c2e697e73dc1f114a5473d1015c411f10585b2b671bee0bd6d5706895e16b27
     params:
-      map_events: "core=e0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444&oracle=51d02A5948496a67827242EaBc5725531342527C"
+      map_events: "core=e0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444&oracle=51d02A5948496a67827242EaBc5725531342527C&twamm=D4279c050DA1F5c5B2830558C7A08E57e12b54eC&mev_resist=553a2EFc570c9e104942cEC6aC1c18118e54C091"
 
 modules:
   - name: map_events
@@ -45,7 +46,21 @@ modules:
     output:
       type: proto:tycho.evm.v1.BlockChanges
 
-  - name: map_tick_changes
+  - name: map_order_sale_rate_deltas
+    kind: map
+    inputs:
+      - map: map_events
+    output:
+      type: proto:ekubo.OrderSaleRateDeltas
+
+  - name: map_sale_rate_changes
+    kind: map
+    inputs:
+      - map: map_events
+    output:
+      type: proto:ekubo.SaleRateChanges
+
+  - name: map_tick_deltas
     kind: map
     inputs:
       - map: map_events
@@ -67,6 +82,20 @@ modules:
     output:
       type: proto:ekubo.LiquidityChanges
 
+  - name: store_active_sale_rates
+    kind: store
+    valueType: bigint
+    updatePolicy: set_sum
+    inputs:
+      - map: map_sale_rate_changes
+
+  - name: store_order_sale_rates
+    kind: store
+    valueType: bigint
+    updatePolicy: add
+    inputs:
+      - map: map_order_sale_rate_deltas
+
   - name: store_pool_details
     kind: store
     valueType: proto:ekubo.PoolDetails
@@ -79,7 +108,7 @@ modules:
     valueType: bigint
     updatePolicy: add
     inputs:
-      - map: map_tick_changes
+      - map: map_tick_deltas
 
   - name: map_balance_changes
     kind: map
@@ -89,7 +118,7 @@ modules:
     output:
       type: proto:tycho.evm.v1.BlockBalanceDeltas
 
-  - name: store_liquidities
+  - name: store_active_liquidities
     kind: store
     valueType: bigint
     updatePolicy: set_sum
@@ -112,11 +141,17 @@ modules:
       - map: map_balance_changes
       - store: store_balance_changes
         mode: deltas
-      - map: map_tick_changes
+      - map: map_tick_deltas
       - store: store_tick_liquidities
         mode: deltas
+      - map: map_order_sale_rate_deltas
+      - store: store_order_sale_rates
+        mode: deltas
       - map: map_liquidity_changes
-      - store: store_liquidities
+      - store: store_active_liquidities
+        mode: deltas
+      - map: map_sale_rate_changes
+      - store: store_active_sale_rates
         mode: deltas
     output:
       type: proto:tycho.evm.v1.BlockChanges

@@ -14,7 +14,7 @@ use tycho_substreams::{
 
 use crate::pb::ekubo::{
     block_transaction_events::transaction_events::pool_log::Event, BlockTransactionEvents,
-    LiquidityChanges, TickDeltas,
+    LiquidityChanges, OrderSaleRateDeltas, SaleRateChanges, TickDeltas,
 };
 
 /// Aggregates protocol components and balance changes by transaction.
@@ -30,8 +30,12 @@ fn map_protocol_changes(
     balances_store_deltas: StoreDeltas,
     ticks_map_deltas: TickDeltas,
     ticks_store_deltas: StoreDeltas,
+    order_sale_rate_map_deltas: OrderSaleRateDeltas,
+    order_sale_rate_store_deltas: StoreDeltas,
     liquidity_changes: LiquidityChanges,
     liquidity_store_deltas: StoreDeltas,
+    sale_rate_changes: SaleRateChanges,
+    sale_rate_store_deltas: StoreDeltas,
 ) -> Result<BlockChanges, substreams::errors::Error> {
     let mut transaction_changes: HashMap<_, TransactionChangesBuilder> = HashMap::new();
 
@@ -90,21 +94,11 @@ fn map_protocol_changes(
         .into_iter()
         .zip(ticks_map_deltas.deltas)
         .for_each(|(store_delta, tick_delta)| {
-            let new_value_bigint = BigInt::from_store_bytes(&store_delta.new_value);
+            let (old_value, new_value) = (
+                BigInt::from_store_bytes(&store_delta.old_value),
+                BigInt::from_store_bytes(&store_delta.new_value),
+            );
 
-            let is_creation = BigInt::from_store_bytes(&store_delta.old_value).is_zero();
-
-            let attribute = Attribute {
-                name: format!("ticks/{}", tick_delta.tick_index),
-                value: new_value_bigint.to_signed_bytes_be(),
-                change: if is_creation {
-                    ChangeType::Creation.into()
-                } else if new_value_bigint.is_zero() {
-                    ChangeType::Deletion.into()
-                } else {
-                    ChangeType::Update.into()
-                },
-            };
             let tx = tick_delta.transaction.unwrap();
             let builder = transaction_changes
                 .entry(tx.index)
@@ -112,7 +106,39 @@ fn map_protocol_changes(
 
             builder.add_entity_change(&EntityChanges {
                 component_id: tick_delta.pool_id.to_hex(),
-                attributes: vec![attribute],
+                attributes: vec![Attribute {
+                    name: format!("ticks/{}", tick_delta.tick_index),
+                    value: new_value.to_signed_bytes_be(),
+                    change: change_type_from_delta(&old_value, &new_value).into(),
+                }],
+            });
+        });
+
+    // TWAMM order sale rate deltas
+    order_sale_rate_store_deltas
+        .deltas
+        .into_iter()
+        .zip(order_sale_rate_map_deltas.deltas)
+        .for_each(|(store_delta, sale_rate_delta)| {
+            let tx = sale_rate_delta.transaction.unwrap();
+            let builder = transaction_changes
+                .entry(tx.index)
+                .or_insert_with(|| TransactionChangesBuilder::new(&tx.into()));
+
+            let (old_value, new_value) = (
+                BigInt::from_store_bytes(&store_delta.old_value),
+                BigInt::from_store_bytes(&store_delta.new_value),
+            );
+
+            let token = if sale_rate_delta.is_token1 { "token1" } else { "token0" };
+
+            builder.add_entity_change(&EntityChanges {
+                component_id: sale_rate_delta.pool_id.to_hex(),
+                attributes: vec![Attribute {
+                    name: format!("orders/{}/{}", token, sale_rate_delta.time),
+                    value: new_value.to_signed_bytes_be(),
+                    change: change_type_from_delta(&old_value, &new_value).into(),
+                }],
             });
         });
 
@@ -127,19 +153,47 @@ fn map_protocol_changes(
                 .entry(tx.index)
                 .or_insert_with(|| TransactionChangesBuilder::new(&tx.into()));
 
-            let new_value_bigint = BigInt::from_str(key::segment_at(
-                &String::from_utf8(store_delta.new_value).unwrap(),
-                1,
-            ))
-            .unwrap();
-
             builder.add_entity_change(&EntityChanges {
                 component_id: change.pool_id.to_hex(),
                 attributes: vec![Attribute {
                     name: "liquidity".to_string(),
-                    value: new_value_bigint.to_signed_bytes_be(),
+                    value: bigint_from_set_sum_store_delta_value(store_delta.new_value)
+                        .to_signed_bytes_be(),
                     change: ChangeType::Update.into(),
                 }],
+            });
+        });
+
+    // TWAMM active sale rates
+    sale_rate_store_deltas
+        .deltas
+        .chunks(2)
+        .zip(sale_rate_changes.changes)
+        .for_each(|(store_deltas, change)| {
+            let tx = change.transaction.unwrap();
+            let builder = transaction_changes
+                .entry(tx.index)
+                .or_insert_with(|| TransactionChangesBuilder::new(&tx.into()));
+
+            let (token0_sale_rate, token1_sale_rate) = (
+                bigint_from_set_sum_store_delta_value(store_deltas[0].new_value.clone()),
+                bigint_from_set_sum_store_delta_value(store_deltas[1].new_value.clone()),
+            );
+
+            builder.add_entity_change(&EntityChanges {
+                component_id: change.pool_id.to_hex(),
+                attributes: vec![
+                    Attribute {
+                        name: "token0_sale_rate".to_string(),
+                        value: token0_sale_rate.to_bytes_be().1,
+                        change: ChangeType::Update.into(),
+                    },
+                    Attribute {
+                        name: "token1_sale_rate".to_string(),
+                        value: token1_sale_rate.to_bytes_be().1,
+                        change: ChangeType::Update.into(),
+                    },
+                ],
             });
         });
 
@@ -156,12 +210,17 @@ fn map_protocol_changes(
                 .flat_map(move |log| {
                     let tx = tx.clone();
 
-                    maybe_attribute_updates(log.event.unwrap()).map(|attrs| {
-                        (
-                            tx,
-                            EntityChanges { component_id: log.pool_id.to_hex(), attributes: attrs },
-                        )
-                    })
+                    maybe_attribute_updates(log.event.unwrap(), block_tx_events.timestamp).map(
+                        |attrs| {
+                            (
+                                tx,
+                                EntityChanges {
+                                    component_id: log.pool_id.to_hex(),
+                                    attributes: attrs,
+                                },
+                            )
+                        },
+                    )
                 })
         })
         .for_each(|(tx, entity_changes)| {
@@ -181,23 +240,39 @@ fn map_protocol_changes(
     })
 }
 
-fn maybe_attribute_updates(ev: Event) -> Option<Vec<Attribute>> {
+fn maybe_attribute_updates(ev: Event, timestamp: u64) -> Option<Vec<Attribute>> {
     match ev {
-        Event::Swapped(swapped) => Some(vec![
+        Event::Swapped(ev) => Some(vec![
             Attribute {
                 name: "tick".into(),
-                value: swapped
-                    .tick_after
-                    .to_be_bytes()
-                    .to_vec(),
+                value: ev.tick_after.to_be_bytes().to_vec(),
                 change: ChangeType::Update.into(),
             },
             Attribute {
                 name: "sqrt_ratio".into(),
-                value: swapped.sqrt_ratio_after,
+                value: ev.sqrt_ratio_after,
                 change: ChangeType::Update.into(),
             },
         ]),
+        Event::VirtualOrdersExecuted(_) => Some(vec![Attribute {
+            name: "last_execution_time".to_string(),
+            value: timestamp.to_be_bytes().to_vec(),
+            change: ChangeType::Update.into(),
+        }]),
         _ => None,
     }
+}
+
+fn change_type_from_delta(old_value: &BigInt, new_value: &BigInt) -> ChangeType {
+    if old_value.is_zero() {
+        ChangeType::Creation
+    } else if new_value.is_zero() {
+        ChangeType::Deletion
+    } else {
+        ChangeType::Update
+    }
+}
+
+fn bigint_from_set_sum_store_delta_value(value: Vec<u8>) -> BigInt {
+    BigInt::from_str(key::segment_at(&String::from_utf8(value).unwrap(), 1)).unwrap()
 }

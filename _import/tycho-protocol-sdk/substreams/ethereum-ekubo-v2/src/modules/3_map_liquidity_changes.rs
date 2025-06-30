@@ -4,7 +4,7 @@ use substreams_helper::hex::Hexable;
 
 use crate::pb::ekubo::{
     block_transaction_events::transaction_events::{pool_log::Event, PoolLog},
-    BlockTransactionEvents, LiquidityChange, LiquidityChangeType, LiquidityChanges,
+    BlockTransactionEvents, ChangeType, LiquidityChange, LiquidityChanges,
 };
 
 #[substreams::handlers::map]
@@ -40,7 +40,7 @@ pub fn map_liquidity_changes(
 
 struct PartialLiquidityChange {
     value: Vec<u8>,
-    change_type: LiquidityChangeType,
+    change_type: ChangeType,
 }
 
 fn maybe_liquidity_change(
@@ -50,7 +50,7 @@ fn maybe_liquidity_change(
     match log.event.as_ref().unwrap() {
         Event::Swapped(swapped) => Some(PartialLiquidityChange {
             value: swapped.liquidity_after.clone(),
-            change_type: LiquidityChangeType::Absolute,
+            change_type: ChangeType::Absolute,
         }),
         Event::PositionUpdated(position_updated) => {
             let current_tick = current_tick_store
@@ -61,7 +61,7 @@ fn maybe_liquidity_change(
                 current_tick < position_updated.upper.into())
             .then(|| PartialLiquidityChange {
                 value: position_updated.liquidity_delta.clone(),
-                change_type: LiquidityChangeType::Delta,
+                change_type: ChangeType::Delta,
             })
         }
         _ => None,

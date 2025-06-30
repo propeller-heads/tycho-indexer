@@ -57,54 +57,28 @@ struct ReducedBalanceDelta {
 
 fn balance_deltas(ev: Event, pool_details: PoolDetails) -> Vec<ReducedBalanceDelta> {
     match ev {
-        Event::Swapped(swapped) => {
-            vec![
-                ReducedBalanceDelta { token: pool_details.token0, delta: swapped.delta0 },
-                ReducedBalanceDelta { token: pool_details.token1, delta: swapped.delta1 },
-            ]
-        }
-        Event::PositionUpdated(position_updated) => {
-            vec![
-                ReducedBalanceDelta {
-                    token: pool_details.token0,
-                    delta: adjust_delta_by_fee(
-                        BigInt::from_signed_bytes_be(&position_updated.delta0),
-                        pool_details.fee,
-                    )
-                    .to_signed_bytes_be(),
-                },
-                ReducedBalanceDelta {
-                    token: pool_details.token1,
-                    delta: adjust_delta_by_fee(
-                        BigInt::from_signed_bytes_be(&position_updated.delta1),
-                        pool_details.fee,
-                    )
-                    .to_signed_bytes_be(),
-                },
-            ]
-        }
-        Event::PositionFeesCollected(position_fees_collected) => {
-            vec![
-                ReducedBalanceDelta {
-                    token: pool_details.token0,
-                    delta: BigInt::from_unsigned_bytes_be(&position_fees_collected.amount0)
-                        .neg()
-                        .to_signed_bytes_be(),
-                },
-                ReducedBalanceDelta {
-                    token: pool_details.token1,
-                    delta: BigInt::from_unsigned_bytes_be(&position_fees_collected.amount1)
-                        .neg()
-                        .to_signed_bytes_be(),
-                },
-            ]
-        }
-        Event::FeesAccumulated(fees_accumulated) => {
-            vec![
-                ReducedBalanceDelta { token: pool_details.token0, delta: fees_accumulated.amount0 },
-                ReducedBalanceDelta { token: pool_details.token1, delta: fees_accumulated.amount1 },
-            ]
-        }
+        Event::Swapped(ev) => vec![
+            ReducedBalanceDelta { token: pool_details.token0, delta: ev.delta0 },
+            ReducedBalanceDelta { token: pool_details.token1, delta: ev.delta1 },
+        ],
+        Event::PositionUpdated(ev) => vec![
+            ReducedBalanceDelta {
+                token: pool_details.token0,
+                delta: adjust_delta_by_fee(
+                    BigInt::from_signed_bytes_be(&ev.delta0),
+                    pool_details.fee,
+                )
+                .to_signed_bytes_be(),
+            },
+            ReducedBalanceDelta {
+                token: pool_details.token1,
+                delta: adjust_delta_by_fee(
+                    BigInt::from_signed_bytes_be(&ev.delta1),
+                    pool_details.fee,
+                )
+                .to_signed_bytes_be(),
+            },
+        ],
         _ => vec![],
     }
 }
@@ -113,8 +87,10 @@ fn balance_deltas(ev: Event, pool_details: PoolDetails) -> Vec<ReducedBalanceDel
 // here (i.e. subtract from the component's balance)
 fn adjust_delta_by_fee(delta: BigInt, fee: u64) -> BigInt {
     if delta < BigInt::zero() {
-        let denom = BigInt::from_signed_bytes_be(&hex!("0100000000000000000000000000000000"));
-        (delta * denom.clone()) / (denom - fee)
+        let denom = BigInt::from_signed_bytes_be(&hex!("010000000000000000"));
+        let (quotient, remainder) = (delta * denom.clone()).div_rem(&(denom - fee));
+
+        quotient - (!remainder.is_zero()) as u8
     } else {
         delta
     }
