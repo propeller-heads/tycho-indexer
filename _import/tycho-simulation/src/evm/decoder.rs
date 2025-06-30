@@ -357,9 +357,42 @@ impl TychoStreamDecoder {
 
                     // Construct component from snapshot
                     let mut component_tokens = Vec::new();
+                    let mut new_tokens_accounts = HashMap::new();
                     for token in snapshot.component.tokens.clone() {
                         match state_guard.tokens.get(&token) {
-                            Some(token) => component_tokens.push(token.clone()),
+                            Some(token) => {
+                                component_tokens.push(token.clone());
+
+                                // If the token is not a proxy token, we need to add it to the simulation engine
+                                let token_address = match bytes_to_address(&token.address) {
+                                    Ok(addr) => addr,
+                                    Err(_) => {
+                                        debug!(
+                                            "Token address could not be decoded {}, ignoring pool {:x?}",
+                                            token.address, id
+                                        );
+                                        continue 'outer;
+                                    }
+                                };
+                                if !state_guard
+                                    .proxy_token_addresses
+                                    .contains_key(&token_address)
+                                {
+                                    new_tokens_accounts.insert(
+                                        token_address,
+                                        AccountUpdate {
+                                            address: token_address,
+                                            chain: snapshot.component.chain.into(),
+                                            slots: HashMap::new(),
+                                            balance: None,
+                                            code: Some(ERC20_PROXY_BYTECODE.into()),
+                                            change: ChangeType::Creation,
+                                        },
+                                    );
+                                } else {
+                                    info!("Token is a proxy token, ignoring: {:x?}", token_address);
+                                }
+                            }
                             None => {
                                 count_token_skips += 1;
                                 debug!("Token not found {}, ignoring pool {:x?}", token, id);
@@ -372,9 +405,19 @@ impl TychoStreamDecoder {
                         component_tokens,
                     );
 
+                    // Add new tokens to the simulation engine
+                    if !new_tokens_accounts.is_empty() {
+                        update_engine(
+                            SHARED_TYCHO_DB.clone(),
+                            block.clone().into(),
+                            None,
+                            new_tokens_accounts,
+                        )
+                        .await;
+                    }
+
                     // collect contracts:ids mapping for states that should update on contract
                     // changes
-
                     if component
                         .static_attributes
                         .contains_key("manual_updates")
@@ -387,6 +430,7 @@ impl TychoStreamDecoder {
                         }
                     }
 
+                    // Collect new pairs (components)
                     new_pairs.insert(id.clone(), component);
 
                     // Construct state from snapshot
