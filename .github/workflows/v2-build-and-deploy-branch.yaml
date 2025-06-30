@@ -1,4 +1,4 @@
-name: Dev; Build and deploy
+name: Test CI
 
 on:
   workflow_dispatch:
@@ -38,7 +38,7 @@ jobs:
   deploy-dev:
     needs:
       - build-and-push
-    uses: propeller-heads/ci-cd-templates/.github/workflows/deploy-any-branch-dev.yaml@main
+    uses: propeller-heads/ci-cd-templates/.github/workflows/deploy-any-branch-dev.yaml@INFRA-146
     permissions:
       id-token: write
       contents: read
