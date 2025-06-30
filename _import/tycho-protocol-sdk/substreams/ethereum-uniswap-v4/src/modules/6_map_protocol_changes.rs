@@ -160,6 +160,7 @@ pub fn map_protocol_changes(
             .sorted_unstable_by_key(|(index, _)| *index)
             .filter_map(|(_, builder)| builder.build())
             .collect::<Vec<_>>(),
+        ..Default::default()
     })
 }
 

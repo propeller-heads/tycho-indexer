@@ -111,7 +111,6 @@ fn get_new_pools(
                     attribute_schema: vec![],
                     implementation_type: ImplementationType::Custom.into(),
                 }),
-                tx: Some(tycho_tx),
             }],
             balance_changes: vec![
                 BalanceChange {

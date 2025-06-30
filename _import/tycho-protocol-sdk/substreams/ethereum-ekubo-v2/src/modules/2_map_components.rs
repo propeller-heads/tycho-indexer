@@ -40,9 +40,11 @@ fn map_components(block_tx_events: BlockTransactionEvents) -> BlockChanges {
                     contract_changes: vec![],
                     entity_changes: entities,
                     component_changes: components,
+                    ..Default::default()
                 })
             })
             .collect(),
+        ..Default::default()
     }
 }
 

@@ -112,7 +112,7 @@ pub fn map_pool_events(
     let tycho_block: Block = (&block).into();
 
     let block_entity_changes =
-        BlockChanges { block: Some(tycho_block), changes: tx_entity_changes };
+        BlockChanges { block: Some(tycho_block), changes: tx_entity_changes, ..Default::default() };
 
     Ok(block_entity_changes)
 }
@@ -146,6 +146,7 @@ fn update_tx_changes_map(
             entity_changes,
             balance_changes,
             component_changes: vec![],
+            ..Default::default()
         };
         tx_changes_map.insert(tx_hash, tx_changes);
     }

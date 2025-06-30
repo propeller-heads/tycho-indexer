@@ -19,7 +19,7 @@ pub fn map_pools_created(
 
     get_new_pools(&block, &mut new_pools, factory_address);
 
-    Ok(BlockChanges { block: Some((&block).into()), changes: new_pools })
+    Ok(BlockChanges { block: Some((&block).into()), changes: new_pools, ..Default::default() })
 }
 
 // Extract new pools from PoolCreated events
@@ -83,9 +83,9 @@ fn get_new_pools(
                     attribute_schema: vec![],
                     implementation_type: ImplementationType::Custom.into(),
                 }),
-                tx: Some(tycho_tx),
             }],
             balance_changes: vec![],
+            ..Default::default()
         })
     };
 
