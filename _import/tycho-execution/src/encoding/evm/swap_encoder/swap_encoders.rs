@@ -407,7 +407,10 @@ impl CurveSwapEncoder {
     // Some curve pools support both ETH and WETH as tokens.
     // They do the wrapping/unwrapping inside the pool
     fn normalize_token(&self, token: Address, coins: &[Address]) -> Result<Address, EncodingError> {
-        let native_token_address = bytes_to_address(&self.native_token_address)?;
+        let native_token_address =
+            Address::from_str(&self.native_token_curve_address).map_err(|_| {
+                EncodingError::FatalError("Invalid native token curve address".to_string())
+            })?;
         let wrapped_native_token_address = bytes_to_address(&self.wrapped_native_token_address)?;
         if token == native_token_address && !coins.contains(&token) {
             Ok(wrapped_native_token_address)
@@ -440,7 +443,7 @@ impl CurveSwapEncoder {
             .iter()
             .position(|&addr| addr == token_out)
             .ok_or(EncodingError::FatalError(format!(
-                "Token in address {token_in} not found in curve pool coins"
+                "Token in address {token_out} not found in curve pool coins"
             )))?;
         Ok((U8::from(i), U8::from(j)))
     }
