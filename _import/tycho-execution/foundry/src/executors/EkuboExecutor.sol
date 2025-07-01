@@ -9,8 +9,12 @@ import {ILocker, IPayer} from "@ekubo/interfaces/IFlashAccountant.sol";
 import {NATIVE_TOKEN_ADDRESS} from "@ekubo/math/constants.sol";
 import {SafeTransferLib} from "@solady/utils/SafeTransferLib.sol";
 import {LibBytes} from "@solady/utils/LibBytes.sol";
-import {Config, EkuboPoolKey} from "@ekubo/types/poolKey.sol";
-import {MAX_SQRT_RATIO, MIN_SQRT_RATIO} from "@ekubo/types/sqrtRatio.sol";
+import {Config, PoolKey} from "@ekubo/types/poolKey.sol";
+import {
+    MAX_SQRT_RATIO,
+    MIN_SQRT_RATIO,
+    SqrtRatio
+} from "@ekubo/types/sqrtRatio.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
@@ -21,11 +25,13 @@ contract EkuboExecutor is
     ICallback,
     RestrictTransferFrom
 {
+    error EkuboExecutor__AddressZero();
     error EkuboExecutor__InvalidDataLength();
     error EkuboExecutor__CoreOnly();
     error EkuboExecutor__UnknownCallback();
 
     ICore immutable core;
+    address immutable mevResist;
 
     uint256 constant POOL_DATA_OFFSET = 57;
     uint256 constant HOP_BYTE_LEN = 52;
@@ -33,12 +39,19 @@ contract EkuboExecutor is
     bytes4 constant LOCKED_SELECTOR = 0xb45a3c0e; // locked(uint256)
     bytes4 constant PAY_CALLBACK_SELECTOR = 0x599d0714; // payCallback(uint256,address)
 
+    uint256 constant SKIP_AHEAD = 0;
+
     using SafeERC20 for IERC20;
 
-    constructor(address _core, address _permit2)
+    constructor(address _core, address _mevResist, address _permit2)
         RestrictTransferFrom(_permit2)
     {
         core = ICore(_core);
+
+        if (_mevResist == address(0)) {
+            revert EkuboExecutor__AddressZero();
+        }
+        mevResist = _mevResist;
     }
 
     function swap(uint256 amountIn, bytes calldata data)
@@ -141,19 +154,40 @@ contract EkuboExecutor is
             Config poolConfig =
                 Config.wrap(LibBytes.loadCalldata(swapData, offset + 20));
 
-            (address token0, address token1, bool isToken1) = nextTokenIn
-                > nextTokenOut
-                ? (nextTokenOut, nextTokenIn, true)
-                : (nextTokenIn, nextTokenOut, false);
+            (
+                address token0,
+                address token1,
+                bool isToken1,
+                SqrtRatio sqrtRatioLimit
+            ) = nextTokenIn > nextTokenOut
+                ? (nextTokenOut, nextTokenIn, true, MAX_SQRT_RATIO)
+                : (nextTokenIn, nextTokenOut, false, MIN_SQRT_RATIO);
 
-            // slither-disable-next-line calls-loop
-            (int128 delta0, int128 delta1) = core.swap_611415377(
-                EkuboPoolKey(token0, token1, poolConfig),
-                nextAmountIn,
-                isToken1,
-                isToken1 ? MAX_SQRT_RATIO : MIN_SQRT_RATIO,
-                0
-            );
+            PoolKey memory pk = PoolKey(token0, token1, poolConfig);
+
+            int128 delta0;
+            int128 delta1;
+
+            if (poolConfig.extension() == mevResist) {
+                (delta0, delta1) = abi.decode(
+                    _forward(
+                        mevResist,
+                        abi.encode(
+                            pk,
+                            nextAmountIn,
+                            isToken1,
+                            sqrtRatioLimit,
+                            SKIP_AHEAD
+                        )
+                    ),
+                    (int128, int128)
+                );
+            } else {
+                // slither-disable-next-line calls-loop
+                (delta0, delta1) = core.swap_611415377(
+                    pk, nextAmountIn, isToken1, sqrtRatioLimit, SKIP_AHEAD
+                );
+            }
 
             nextTokenIn = nextTokenOut;
             nextAmountIn = -(isToken1 ? delta0 : delta1);
@@ -164,6 +198,45 @@ contract EkuboExecutor is
         _pay(tokenIn, tokenInDebtAmount, transferType);
         core.withdraw(nextTokenIn, receiver, uint128(nextAmountIn));
         return nextAmountIn;
+    }
+
+    function _forward(address to, bytes memory data)
+        internal
+        returns (bytes memory result)
+    {
+        address target = address(core);
+
+        // slither-disable-next-line assembly
+        assembly ("memory-safe") {
+            // We will store result where the free memory pointer is now, ...
+            result := mload(0x40)
+
+            // But first use it to store the calldata
+
+            // Selector of forward(address)
+            mstore(result, shl(224, 0x101e8952))
+            mstore(add(result, 4), to)
+
+            // We only copy the data, not the length, because the length is read from the calldata size
+            let len := mload(data)
+            mcopy(add(result, 36), add(data, 32), len)
+
+            // If the call failed, pass through the revert
+            if iszero(call(gas(), target, 0, result, add(36, len), 0, 0)) {
+                returndatacopy(result, 0, returndatasize())
+                revert(result, returndatasize())
+            }
+
+            // Copy the entire return data into the space where the result is pointing
+            mstore(result, returndatasize())
+            returndatacopy(add(result, 32), 0, returndatasize())
+
+            // Update the free memory pointer to be after the end of the data, aligned to the next 32 byte word
+            mstore(
+                0x40,
+                and(add(add(result, add(32, returndatasize())), 31), not(31))
+            )
+        }
     }
 
     function _pay(address token, uint128 amount, TransferType transferType)
