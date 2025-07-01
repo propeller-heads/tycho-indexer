@@ -618,6 +618,7 @@ fn create_solution(
         // Split defines the fraction of the amount to be swapped. A value of 0 indicates 100% of
         // the amount or the total remaining balance.
         0f64,
+        None,
     );
 
     // Compute a minimum amount out
