@@ -35,5 +35,6 @@
     "change": "Creation",
     "creation_tx": "0x3d458bfd841ee29b03958b19f737255286c9ce9b4026220c47f8a015b8ed6d1a",
     "created_at": "2024-10-31T14:23:12"
-  }
+  },
+  "entrypoints": []
 }

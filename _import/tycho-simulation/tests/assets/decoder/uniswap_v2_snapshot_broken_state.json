@@ -37,7 +37,8 @@
               "change": "Creation",
               "creation_tx": "0xe64069acd123ec94b8a3316378183ba8bf42b40979df3b0bb57b0e7b9e47ef38",
               "created_at": "2020-05-19T01:07:09"
-            }
+            },
+            "entrypoints": []
           }
         },
         "vm_storage": {}
@@ -61,7 +62,12 @@
         "deleted_protocol_components": {},
         "component_balances": {},
         "account_balances": {},
-        "component_tvl": {}
+        "component_tvl": {},
+        "dci_update": {
+          "new_entrypoints": {},
+          "new_entrypoint_params": {},
+          "trace_results": {}
+        }
       },
       "removed_components": {
         "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852": {

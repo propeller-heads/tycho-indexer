@@ -96,5 +96,6 @@
     "change": "Creation",
     "creation_tx": "0x614913e0ab608c68a397791fe49f977729f56664666b28f963e2f45742c054f6",
     "created_at": "2024-09-11T19:39:47"
-  }
+  },
+  "entrypoints": []
 }
