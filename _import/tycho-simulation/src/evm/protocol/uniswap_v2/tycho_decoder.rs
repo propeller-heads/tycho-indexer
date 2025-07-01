@@ -32,6 +32,7 @@ mod tests {
             },
             component: Default::default(),
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
 
         let result = UniswapV2State::try_from_with_block(
@@ -65,6 +66,7 @@ mod tests {
             },
             component: Default::default(),
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
 
         let result = UniswapV2State::try_from_with_block(

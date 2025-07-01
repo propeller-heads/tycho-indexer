@@ -186,6 +186,7 @@ mod tests {
             },
             component: usv3_component(),
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
 
         let result = UniswapV3State::try_from_with_block(
@@ -242,6 +243,7 @@ mod tests {
             },
             component,
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
 
         let result = UniswapV3State::try_from_with_block(
@@ -275,6 +277,7 @@ mod tests {
             },
             component,
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
 
         let result = UniswapV3State::try_from_with_block(

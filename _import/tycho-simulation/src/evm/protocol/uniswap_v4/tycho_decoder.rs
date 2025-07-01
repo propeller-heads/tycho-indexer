@@ -195,6 +195,7 @@ mod tests {
             },
             component: usv4_component(),
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
 
         let result = UniswapV4State::try_from_with_block(
@@ -255,6 +256,7 @@ mod tests {
             },
             component,
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
 
         let result = UniswapV4State::try_from_with_block(
