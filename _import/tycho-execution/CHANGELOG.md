@@ -1,3 +1,24 @@
+## [0.102.0](https://github.com/propeller-heads/tycho-execution/compare/0.101.5...0.102.0) (2025-07-01)
+
+
+### Features
+
+* Deploy EkuboExecutor with MEV-resist ([3fe9906](https://github.com/propeller-heads/tycho-execution/commit/3fe9906e5babb4a31af45c1d48fda3a096802fe8))
+
+## [0.101.5](https://github.com/propeller-heads/tycho-execution/compare/0.101.4...0.101.5) (2025-06-27)
+
+
+### Bug Fixes
+
+* Use native token curve address and not regular zero address ([0f679d6](https://github.com/propeller-heads/tycho-execution/commit/0f679d6e0663aba881babb09319815723cdf68e5))
+
+## [0.101.4](https://github.com/propeller-heads/tycho-execution/compare/0.101.3...0.101.4) (2025-06-27)
+
+
+### Bug Fixes
+
+* Fix wrong log in CurveEncoder ([312269d](https://github.com/propeller-heads/tycho-execution/commit/312269dabba5b0d8f303f9aba47d9456e5cd5db7))
+
 ## [0.101.3](https://github.com/propeller-heads/tycho-execution/compare/0.101.2...0.101.3) (2025-06-23)
 
 
