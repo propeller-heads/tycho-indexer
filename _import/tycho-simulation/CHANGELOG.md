@@ -1,3 +1,31 @@
+## [0.118.1](https://github.com/propeller-heads/tycho-simulation/compare/0.118.0...0.118.1) (2025-06-27)
+
+## [0.118.0](https://github.com/propeller-heads/tycho-simulation/compare/0.117.0...0.118.0) (2025-06-24)
+
+
+### Features
+
+* add Balancer v3 assets and filter ([45a5613](https://github.com/propeller-heads/tycho-simulation/commit/45a56133eb54340046fcb562a2076c501f4a2795))
+* add spot prices calculation for components without capability ([cd91c3d](https://github.com/propeller-heads/tycho-simulation/commit/cd91c3dba7475081bbaacae7293f73d84cfa203d))
+
+
+### Bug Fixes
+
+* Fix post-rebase imports ([8d69bc3](https://github.com/propeller-heads/tycho-simulation/commit/8d69bc31610cf44fe3a32f6110dc8174cfd3a38e))
+
+## [0.117.0](https://github.com/propeller-heads/tycho-simulation/compare/0.116.0...0.117.0) (2025-06-24)
+
+
+### Features
+
+* **price-printer:** add raw amount input functionality ([138734b](https://github.com/propeller-heads/tycho-simulation/commit/138734bae82f1a3f976f42a4a22b66a0c8997bcf))
+* **price-printer:** display swap direction ([b652151](https://github.com/propeller-heads/tycho-simulation/commit/b652151501de56b36adb108378fb249242efcc0b))
+
+
+### Bug Fixes
+
+* do not error on account balances for non-pool tokens ([4c20704](https://github.com/propeller-heads/tycho-simulation/commit/4c207045bc0d46c59c9ce125ac4533732f591b0d))
+
 ## [0.116.0](https://github.com/propeller-heads/tycho-simulation/compare/0.115.0...0.116.0) (2025-06-13)
 
 

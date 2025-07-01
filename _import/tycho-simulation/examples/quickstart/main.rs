@@ -40,7 +40,9 @@ use tycho_simulation::{
         engine_db::tycho_db::PreCachedDB,
         protocol::{
             ekubo::state::EkuboState,
-            filters::{balancer_pool_filter, curve_pool_filter, uniswap_v4_pool_with_hook_filter},
+            filters::{
+                balancer_v2_pool_filter, curve_pool_filter, uniswap_v4_pool_with_hook_filter,
+            },
             pancakeswap_v2::state::PancakeswapV2State,
             u256_num::biguint_to_u256,
             uniswap_v2::state::UniswapV2State,
@@ -177,7 +179,7 @@ async fn main() {
                 .exchange::<EVMPoolState<PreCachedDB>>(
                     "vm:balancer_v2",
                     tvl_filter.clone(),
-                    Some(balancer_pool_filter),
+                    Some(balancer_v2_pool_filter),
                 )
                 .exchange::<UniswapV4State>(
                     "uniswap_v4",
@@ -451,7 +453,7 @@ async fn main() {
                                         );
 
                                         println!(
-                                            "Summary: Swapped {formatted_in} {sell_symbol} → {formatted_out} {buy_symbol} at 
+                                            "Summary: Swapped {formatted_in} {sell_symbol} → {formatted_out} {buy_symbol} at
                                             a price of {forward_price:.6} {buy_symbol} per {sell_symbol}",
                                             formatted_in = format_token_amount(&amount_in, &sell_token),
                                             sell_symbol = sell_token.symbol,
@@ -495,7 +497,7 @@ async fn main() {
                             );
 
                             println!(
-                                "Summary: Swapped {formatted_in} {sell_symbol} → {formatted_out} {buy_symbol} at 
+                                "Summary: Swapped {formatted_in} {sell_symbol} → {formatted_out} {buy_symbol} at
                                 a price of {forward_price:.6} {buy_symbol} per {sell_symbol}",
                                 formatted_in = format_token_amount(&amount_in, &sell_token),
                                 sell_symbol = sell_token.symbol,
@@ -587,7 +589,7 @@ fn get_best_swap(
 
         println!(
             "Swap: {formatted_in} {sell_symbol} -> {formatted_out} {buy_symbol} \n
-            Price: {forward_price:.6} {buy_symbol} per {sell_symbol}, 
+            Price: {forward_price:.6} {buy_symbol} per {sell_symbol},
             {reverse_price:.6} {sell_symbol} per {buy_symbol}",
             sell_symbol = sell_token.symbol,
             buy_symbol = buy_token.symbol,
