@@ -1,3 +1,10 @@
+## [0.102.0](https://github.com/propeller-heads/tycho-execution/compare/0.101.5...0.102.0) (2025-07-01)
+
+
+### Features
+
+* Deploy EkuboExecutor with MEV-resist ([3fe9906](https://github.com/propeller-heads/tycho-execution/commit/3fe9906e5babb4a31af45c1d48fda3a096802fe8))
+
 ## [0.101.5](https://github.com/propeller-heads/tycho-execution/compare/0.101.4...0.101.5) (2025-06-27)
 
 
