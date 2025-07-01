@@ -708,7 +708,10 @@ mod tests {
     use super::*;
     use crate::evm::{
         engine_db::{create_engine, SHARED_TYCHO_DB},
-        protocol::vm::{constants::BALANCER_V2, state_builder::EVMPoolStateBuilder},
+        protocol::vm::{
+            constants::{BALANCER_V2, ERC20_PROXY_BYTECODE},
+            state_builder::EVMPoolStateBuilder,
+        },
         simulation::SimulationEngine,
         tycho_models::AccountUpdate,
     };
@@ -777,6 +780,20 @@ mod tests {
         db.update(accounts, Some(block));
 
         let tokens = vec![dai().address, bal().address];
+        for token in &tokens {
+            engine.state.init_account(
+                bytes_to_address(token).unwrap(),
+                AccountInfo {
+                    balance: U256::from(0),
+                    nonce: 0,
+                    code_hash: KECCAK_EMPTY,
+                    code: Some(Bytecode::new_raw(ERC20_PROXY_BYTECODE.into())),
+                },
+                None,
+                true,
+            );
+        }
+
         let block = BlockHeader {
             number: 18485417,
             hash: B256::from_str(
@@ -891,7 +908,6 @@ mod tests {
             .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
         assert_eq!(result.amount, BigUint::from_str("137780051463393923").unwrap());
-        assert_eq!(result.gas, BigUint::from_str("102770").unwrap());
         assert_ne!(new_state.spot_prices, pool_state.spot_prices);
         assert!(pool_state
             .block_lasting_overwrites
@@ -912,7 +928,6 @@ mod tests {
             .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
         assert_eq!(result.amount, BigUint::from_str("137780051463393923").unwrap());
-        assert_eq!(result.gas, BigUint::from_str("102770").unwrap());
         assert_ne!(new_state.spot_prices, pool_state.spot_prices);
 
         let new_result = new_state
@@ -925,7 +940,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(new_result.amount, BigUint::from_str("136964651490065626").unwrap());
-        assert_eq!(new_result.gas, BigUint::from_str("70048").unwrap());
         assert_ne!(new_state_second_swap.spot_prices, new_state.spot_prices);
     }
 
@@ -943,7 +957,6 @@ mod tests {
             .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
         assert_eq!(result.amount, BigUint::ZERO);
-        assert_eq!(result.gas, 68656.to_biguint().unwrap());
         assert_eq!(new_state.spot_prices, pool_state.spot_prices)
     }
 

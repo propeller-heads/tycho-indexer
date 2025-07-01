@@ -454,16 +454,13 @@ mod tests {
         let builder = EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, block, adapter_address)
             .balances(balances);
 
-        let engine =
-            tokio_test::block_on(builder.get_default_engine(SHARED_TYCHO_DB.clone())).unwrap();
+        let engine = tokio_test::block_on(builder.get_default_engine(SHARED_TYCHO_DB.clone()));
 
+        assert!(engine.is_ok());
+        let engine = engine.unwrap();
         assert!(engine
             .state
             .get_account_storage()
-            .account_present(&bytes_to_address(&token2).unwrap()));
-        assert!(engine
-            .state
-            .get_account_storage()
-            .account_present(&bytes_to_address(&token3).unwrap()));
+            .account_present(&EXTERNAL_ACCOUNT));
     }
 }
