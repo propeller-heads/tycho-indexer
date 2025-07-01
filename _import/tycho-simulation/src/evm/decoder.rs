@@ -290,6 +290,7 @@ impl TychoStreamDecoder {
                             let proxy_state = create_proxy_token_account(
                                 account.address,
                                 new_address,
+                                &account.slots,
                                 value.chain.into(),
                             );
                             token_proxy_accounts.insert(account.address, proxy_state);
@@ -388,8 +389,6 @@ impl TychoStreamDecoder {
                                             change: ChangeType::Creation,
                                         },
                                     );
-                                } else {
-                                    info!("Token is a proxy token, ignoring: {:x?}", token_address);
                                 }
                             }
                             None => {
@@ -509,6 +508,7 @@ impl TychoStreamDecoder {
                                 let proxy_state = create_proxy_token_account(
                                     update.address,
                                     new_address,
+                                    &update.slots,
                                     update.chain,
                                 );
                                 token_proxy_accounts.insert(update.address, proxy_state);
@@ -692,11 +692,20 @@ fn generate_proxy_token_address(idx: u32) -> Address {
 ///
 /// The proxy token account is created at the original token address and points to the new token
 /// address.
-fn create_proxy_token_account(addr: Address, new_address: Address, chain: Chain) -> AccountUpdate {
+fn create_proxy_token_account(
+    addr: Address,
+    new_address: Address,
+    storage: &HashMap<U256, U256>,
+    chain: Chain,
+) -> AccountUpdate {
+    let mut slots =
+        HashMap::from([(*IMPLEMENTATION_SLOT, U256::from_be_slice(new_address.as_slice()))]);
+    slots.extend(storage);
+
     AccountUpdate {
         address: addr,
         chain,
-        slots: HashMap::from([(*IMPLEMENTATION_SLOT, U256::from_be_slice(new_address.as_slice()))]),
+        slots,
         balance: None,
         code: Some(ERC20_PROXY_BYTECODE.to_vec()),
         change: ChangeType::Creation,
