@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use chrono::{Duration as ChronoDuration, Local, NaiveDateTime};
+use chrono::{Duration as ChronoDuration, Local, NaiveDateTime, Utc};
 use futures03::{
     future::{join_all, try_join_all},
     stream::FuturesUnordered,
@@ -29,15 +29,20 @@ mod block_history;
 pub mod component_tracker;
 pub mod synchronizer;
 
+pub trait HeaderLike {
+    fn block(self) -> Option<BlockHeader>;
+    fn ts(self) -> u64;
+}
+
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Eq, Hash)]
-pub struct Header {
+pub struct BlockHeader {
     pub hash: Bytes,
     pub number: u64,
     pub parent_hash: Bytes,
     pub revert: bool,
 }
 
-impl Header {
+impl BlockHeader {
     fn from_block(block: &Block, revert: bool) -> Self {
         Self {
             hash: block.hash.clone(),
@@ -45,6 +50,16 @@ impl Header {
             parent_hash: block.parent_hash.clone(),
             revert,
         }
+    }
+}
+
+impl HeaderLike for BlockHeader {
+    fn block(self) -> Option<BlockHeader> {
+        Some(self)
+    }
+
+    fn ts(self) -> u64 {
+        Utc::now().naive_utc().timestamp() as u64
     }
 }
 
@@ -126,14 +141,14 @@ pub struct BlockSynchronizer<S> {
 #[serde(tag = "status", rename_all = "lowercase")]
 pub enum SynchronizerState {
     Started,
-    Ready(Header),
+    Ready(BlockHeader),
     // no progress, we consider it stale at that point we should purge it.
-    Stale(Header),
-    Delayed(Header),
+    Stale(BlockHeader),
+    Delayed(BlockHeader),
     // For this to happen we must have a gap, and a gap usually means a new snapshot from the
     // StateSynchronizer. This can only happen if we are processing too slow and one of the
     // synchronizers restarts e.g. because Tycho ended the subscription.
-    Advanced(Header),
+    Advanced(BlockHeader),
     Ended,
 }
 
@@ -141,7 +156,7 @@ pub struct SynchronizerStream {
     extractor_id: ExtractorIdentity,
     state: SynchronizerState,
     modify_ts: NaiveDateTime,
-    rx: Receiver<StateSyncMessage>,
+    rx: Receiver<StateSyncMessage<BlockHeader>>,
 }
 
 impl SynchronizerStream {
@@ -150,7 +165,7 @@ impl SynchronizerStream {
         block_history: &BlockHistory,
         max_wait: std::time::Duration,
         stale_threshold: std::time::Duration,
-    ) -> BlockSyncResult<Option<StateSyncMessage>> {
+    ) -> BlockSyncResult<Option<StateSyncMessage<BlockHeader>>> {
         let extractor_id = self.extractor_id.clone();
         let latest_block = block_history.latest();
         match &self.state {
@@ -207,9 +222,9 @@ impl SynchronizerStream {
         &mut self,
         max_wait: std::time::Duration,
         block_history: &BlockHistory,
-        previous_block: Header,
+        previous_block: BlockHeader,
         stale_threshold: std::time::Duration,
-    ) -> BlockSyncResult<Option<StateSyncMessage>> {
+    ) -> BlockSyncResult<Option<StateSyncMessage<BlockHeader>>> {
         let extractor_id = self.extractor_id.clone();
         match timeout(max_wait, self.rx.recv()).await {
             Ok(Some(msg)) => {
@@ -245,7 +260,7 @@ impl SynchronizerStream {
         block_history: &BlockHistory,
         max_wait: std::time::Duration,
         stale_threshold: std::time::Duration,
-    ) -> BlockSyncResult<Option<StateSyncMessage>> {
+    ) -> BlockSyncResult<Option<StateSyncMessage<BlockHeader>>> {
         let mut results = Vec::new();
         let extractor_id = self.extractor_id.clone();
 
@@ -301,7 +316,7 @@ impl SynchronizerStream {
     /// - Advanced block -> Advanced state (block ahead of expected position)
     fn transition(
         &mut self,
-        latest_retrieved: Header,
+        latest_retrieved: BlockHeader,
         block_history: &BlockHistory,
         stale_threshold: std::time::Duration,
     ) -> Result<(), BlockSynchronizerError> {
@@ -354,14 +369,20 @@ impl SynchronizerStream {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct FeedMessage {
-    pub state_msgs: HashMap<String, StateSyncMessage>,
+pub struct FeedMessage<T>
+where
+    T: HeaderLike,
+{
+    pub state_msgs: HashMap<String, StateSyncMessage<T>>,
     pub sync_states: HashMap<String, SynchronizerState>,
 }
 
-impl FeedMessage {
+impl<T> FeedMessage<T>
+where
+    T: HeaderLike,
+{
     fn new(
-        state_msgs: HashMap<String, StateSyncMessage>,
+        state_msgs: HashMap<String, StateSyncMessage<T>>,
         sync_states: HashMap<String, SynchronizerState>,
     ) -> Self {
         Self { state_msgs, sync_states }
@@ -390,7 +411,9 @@ where
         self.synchronizers = Some(registered);
         self
     }
-    pub async fn run(mut self) -> BlockSyncResult<(JoinHandle<()>, Receiver<FeedMessage>)> {
+    pub async fn run(
+        mut self,
+    ) -> BlockSyncResult<(JoinHandle<()>, Receiver<FeedMessage<BlockHeader>>)> {
         trace!("Starting BlockSynchronizer...");
         let mut state_sync_tasks = FuturesUnordered::new();
         let mut synchronizers = self
@@ -458,7 +481,7 @@ where
                 }
                 Err(_) => {
                     warn!(%extractor_id, "Timed out waiting for first message: Stale synchronizer at startup will be purged!");
-                    synchronizer.state = SynchronizerState::Stale(Header::default());
+                    synchronizer.state = SynchronizerState::Stale(BlockHeader::default());
                     synchronizer.modify_ts = Local::now().naive_utc();
                     None
                 }
@@ -701,7 +724,7 @@ mod tests {
             v3_sync.clone(),
         );
         let start_msg = StateSyncMessage {
-            header: Header { number: 1, ..Default::default() },
+            header: BlockHeader { number: 1, ..Default::default() },
             ..Default::default()
         };
         v2_sync
@@ -720,7 +743,7 @@ mod tests {
             .await
             .expect("header channel was closed");
         let second_msg = StateSyncMessage {
-            header: Header { number: 2, ..Default::default() },
+            header: BlockHeader { number: 2, ..Default::default() },
             ..Default::default()
         };
         v2_sync
@@ -786,7 +809,7 @@ mod tests {
 
         // Initial messages - both synchronizers are at block 1
         let block1_msg = StateSyncMessage {
-            header: Header {
+            header: BlockHeader {
                 number: 1,
                 hash: Bytes::from(vec![1]),
                 parent_hash: Bytes::from(vec![0]),
@@ -830,7 +853,7 @@ mod tests {
 
         // Send block 2 to v2 synchronizer only
         let block2_msg = StateSyncMessage {
-            header: Header {
+            header: BlockHeader {
                 number: 2,
                 hash: Bytes::from(vec![2]),
                 parent_hash: Bytes::from(vec![1]),
@@ -869,7 +892,7 @@ mod tests {
 
         // Both advance to block 3
         let block3_msg = StateSyncMessage {
-            header: Header {
+            header: BlockHeader {
                 number: 3,
                 hash: Bytes::from(vec![3]),
                 parent_hash: Bytes::from(vec![2]),
@@ -923,7 +946,7 @@ mod tests {
 
         // Initial messages - synchronizers at different blocks
         let block1_msg = StateSyncMessage {
-            header: Header {
+            header: BlockHeader {
                 number: 1,
                 hash: Bytes::from(vec![1]),
                 parent_hash: Bytes::from(vec![0]),
@@ -932,7 +955,7 @@ mod tests {
             ..Default::default()
         };
         let block2_msg = StateSyncMessage {
-            header: Header {
+            header: BlockHeader {
                 number: 2,
                 hash: Bytes::from(vec![2]),
                 parent_hash: Bytes::from(vec![1]),
@@ -975,7 +998,7 @@ mod tests {
 
         // Both advance to block 3
         let block3_msg = StateSyncMessage {
-            header: Header {
+            header: BlockHeader {
                 number: 3,
                 hash: Bytes::from(vec![3]),
                 parent_hash: Bytes::from(vec![2]),
