@@ -1,5 +1,6 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 
+use bimap::BiHashMap;
 use chrono::{NaiveDateTime, Utc};
 use diesel::{
     prelude::*,
@@ -900,7 +901,7 @@ impl PostgresGateway {
         Ok(())
     }
 
-    #[instrument(level = Level::DEBUG, skip(self, addresses, conn))]
+    #[instrument(level = Level::DEBUG, skip(self, addresses, _conn))]
     pub async fn get_tokens(
         &self,
         chain: Chain,
@@ -908,90 +909,11 @@ impl PostgresGateway {
         quality_filter: QualityRange,
         last_traded_ts_threshold: Option<NaiveDateTime>,
         pagination_params: Option<&PaginationParams>,
-        conn: &mut AsyncPgConnection,
+        _conn: &mut AsyncPgConnection, //TODO: remove this
     ) -> Result<WithTotal<Vec<CurrencyToken>>, StorageError> {
-        use super::schema::{account::dsl::*, token::dsl::*};
-        let chain_db_id = self.get_chain_id(&chain)?;
-
-        let mut count_query = token
-            .inner_join(account)
-            .select(token::all_columns())
-            .filter(schema::account::chain_id.eq(chain_db_id))
-            .into_boxed();
-
-        let mut query = token
-            .inner_join(account)
-            .select((token::all_columns(), schema::account::address))
-            .filter(schema::account::chain_id.eq(chain_db_id))
-            .into_boxed();
-
-        if let Some(addrs) = addresses {
-            query = query.filter(schema::account::address.eq_any(addrs));
-            count_query = count_query.filter(schema::account::address.eq_any(addrs));
-        }
-
-        if let Some(min_quality) = quality_filter.min {
-            query = query.filter(schema::token::quality.ge(min_quality));
-            count_query = count_query.filter(schema::token::quality.ge(min_quality));
-        }
-        if let Some(max_quality) = quality_filter.max {
-            query = query.filter(schema::token::quality.le(max_quality));
-            count_query = count_query.filter(schema::token::quality.le(max_quality));
-        }
-
-        if let Some(last_traded_ts_threshold) = last_traded_ts_threshold {
-            let active_tokens_exists = diesel::dsl::exists(
-                schema::component_balance_default::table
-                    .filter(
-                        schema::component_balance_default::valid_from.gt(last_traded_ts_threshold),
-                    )
-                    .filter(schema::component_balance_default::token_id.eq(schema::token::id)),
-            );
-
-            query = query.filter(active_tokens_exists);
-            count_query = count_query.filter(active_tokens_exists);
-        }
-
-        // TODO: Improve performance by running as subquery
-        let count = count_query
-            .count()
-            .get_result::<i64>(conn)
+        self.token_cache
+            .query_tokens(addresses, quality_filter, last_traded_ts_threshold, pagination_params)
             .await
-            .map_err(PostgresError::from)?;
-
-        if let Some(pagination) = pagination_params {
-            query = query
-                .limit(pagination.page_size)
-                .offset(pagination.offset());
-        }
-
-        let results = query
-            .order(schema::token::id.asc())
-            .load::<(orm::Token, Address)>(conn)
-            .await
-            .map_err(|err| storage_error_from_diesel(err, "Token", &chain.to_string(), None))?;
-
-        let tokens: Vec<CurrencyToken> = results
-            .into_iter()
-            .map(|(orm_token, address_)| {
-                let gas_usage: Vec<_> = orm_token
-                    .gas
-                    .iter()
-                    .map(|u| u.map(|g| g as u64))
-                    .collect();
-                CurrencyToken::new(
-                    &address_,
-                    orm_token.symbol.as_str(),
-                    orm_token.decimals as u32,
-                    orm_token.tax as u64,
-                    gas_usage.as_slice(),
-                    chain,
-                    orm_token.quality as u32,
-                )
-            })
-            .collect();
-
-        Ok(WithTotal { entity: tokens, total: Some(count) })
     }
 
     pub async fn add_tokens(
@@ -999,6 +921,10 @@ impl PostgresGateway {
         tokens: &[CurrencyToken],
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
+        self.token_cache
+            .upsert_tokens(tokens.to_vec())
+            .await;
+
         let titles: Vec<String> = tokens
             .iter()
             .map(|token| {
@@ -1082,6 +1008,10 @@ impl PostgresGateway {
         tokens: &[CurrencyToken],
         conn: &mut AsyncPgConnection,
     ) -> Result<(), StorageError> {
+        self.token_cache
+            .upsert_tokens(tokens.to_vec())
+            .await;
+
         trace!(addresses=?tokens.iter().map(|t| &t.address).collect::<Vec<_>>(), "Updating tokens");
         let address_to_db_id = {
             let token_addresses: Vec<Address> = tokens
@@ -1139,7 +1069,7 @@ impl PostgresGateway {
             .iter()
             .map(|component_balance| component_balance.token.clone())
             .collect();
-        let token_ids: HashMap<Address, i64> = token
+        let token_ids: BiHashMap<Address, i64> = token
             .inner_join(account)
             .select((schema::account::address, schema::token::id))
             .filter(schema::account::address.eq_any(&token_addresses))
@@ -1178,7 +1108,7 @@ impl PostgresGateway {
         let mut new_component_balances = Vec::new();
         for component_balance in component_balances.iter() {
             let token_id = token_ids
-                .get(&component_balance.token)
+                .get_by_left(&component_balance.token)
                 .ok_or_else(|| {
                     error!(?chain, ?component_balance.token, ?component_balance, "Token not found");
                     StorageError::NotFound("Token".to_string(), component_balance.token.to_string())
@@ -1215,6 +1145,26 @@ impl PostgresGateway {
                 .collect::<Vec<_>>();
             let (latest, to_archive, _) =
                 apply_partitioned_versioning(&sorted, self.retention_horizon, conn).await?;
+
+            self.token_cache
+                .update_last_traded_ts(
+                    latest
+                        .iter()
+                        .fold(HashMap::new(), |mut acc: HashMap<NaiveDateTime, Vec<Address>>, c| {
+                            acc.entry(c.valid_from)
+                                .or_default()
+                                .push(
+                                    token_ids
+                                        .get_by_right(&c.token_id)
+                                        .unwrap()
+                                        .clone(),
+                                );
+                            acc
+                        })
+                        .into_iter()
+                        .collect(),
+                )
+                .await;
 
             diesel::insert_into(schema::component_balance::table)
                 .values(&to_archive)
