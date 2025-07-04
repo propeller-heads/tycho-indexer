@@ -144,6 +144,8 @@ use tycho_common::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
+use crate::postgres::token_cache::TokenCache;
+
 pub mod builder;
 pub mod cache;
 mod chain;
@@ -154,6 +156,7 @@ mod extraction_state;
 mod orm;
 mod protocol;
 mod schema;
+mod token_cache;
 mod versioning;
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!("./migrations/");
@@ -447,6 +450,7 @@ pub(crate) struct PostgresGateway {
     protocol_system_id_cache: Arc<ProtocolSystemEnumCache>,
     chain_id_cache: Arc<ChainEnumCache>,
     native_token_id_cache: Arc<NativeTokenEnumCache>,
+    token_cache: TokenCache,
     /// Any versions dated before this date, as per their `valid_to` column, will be
     /// discarded and never be inserted into the db. We supply this as an absolute date
     /// since updating it must be done carefully. To avoid gaps in versions this can't
@@ -460,12 +464,14 @@ impl PostgresGateway {
         chain_cache: Arc<ChainEnumCache>,
         native_token_cache: Arc<NativeTokenEnumCache>,
         protocol_system_cache: Arc<ProtocolSystemEnumCache>,
+        token_cache: TokenCache,
         retention_horizon: NaiveDateTime,
     ) -> Self {
         Self {
             protocol_system_id_cache: protocol_system_cache,
             chain_id_cache: chain_cache,
             native_token_id_cache: native_token_cache,
+            token_cache,
             retention_horizon,
         }
     }
@@ -481,11 +487,15 @@ impl PostgresGateway {
         let native_token_cache = Self::native_token_cache_from_connection(conn, &chain_cache)
             .await
             .expect("Failed to load native token cache");
+        let token_cache = TokenCache::from_connection(conn)
+            .await
+            .expect("Failed to load token cache");
 
         Self::with_cache(
             Arc::new(chain_cache),
             Arc::new(native_token_cache),
             Arc::new(protocol_system_cache),
+            token_cache,
             NaiveDateTime::default(),
         )
     }
@@ -521,10 +531,12 @@ impl PostgresGateway {
         let native_token_cache = Self::native_cache_from_pool(pool.clone(), &chain_cache).await?;
         let protocol_system_cache: ValueIdTableCache<String> =
             ProtocolSystemEnumCache::from_pool(pool.clone()).await?;
+        let token_cache = TokenCache::from_pool(pool.clone()).await?;
         let gw = PostgresGateway::with_cache(
             Arc::new(chain_cache),
             Arc::new(native_token_cache),
             Arc::new(protocol_system_cache),
+            token_cache,
             retention_horizon,
         );
 
