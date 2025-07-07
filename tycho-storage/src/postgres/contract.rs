@@ -2187,6 +2187,16 @@ mod test {
     #[tokio::test]
     async fn test_get_missing_account() {
         let mut conn = setup_db().await;
+        let chain_id = db_fixtures::insert_chain(&mut conn, "ethereum").await;
+        db_fixtures::insert_token(
+            &mut conn,
+            chain_id,
+            "0000000000000000000000000000000000000000",
+            "ETH",
+            18,
+            Some(100),
+        )
+        .await;
         let gateway = EVMGateway::from_connection(&mut conn).await;
         let contract_id = ContractId::new(
             Chain::Ethereum,

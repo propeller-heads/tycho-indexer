@@ -2172,6 +2172,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bimap"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "230c5f1ca6a325a32553f8640d31ac9b49f2411e901e427570154868b46da4f7"
+
+[[package]]
 name = "bindgen"
 version = "0.69.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8685,6 +8691,7 @@ name = "tycho-storage"
 version = "0.74.0"
 dependencies = [
  "async-trait",
+ "bimap",
  "chrono",
  "diesel",
  "diesel-async",
