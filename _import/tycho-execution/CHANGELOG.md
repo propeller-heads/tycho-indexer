@@ -1,3 +1,10 @@
+## [0.103.0](https://github.com/propeller-heads/tycho-execution/compare/0.102.0...0.103.0) (2025-07-07)
+
+
+### Features
+
+* Deploy Balancer V3 executor ([266e30d](https://github.com/propeller-heads/tycho-execution/commit/266e30d1aa49f3ad04dddeb6a3bb047ed4db90e9))
+
 ## [0.102.0](https://github.com/propeller-heads/tycho-execution/compare/0.101.5...0.102.0) (2025-07-01)
 
 
