@@ -8,8 +8,10 @@ use tycho_common::{
 
 use crate::extractor::{
     dynamic_contract_indexer::{
-        cache::VersionedCache, component_metadata::BlockMetadataOrchestrator,
-        dci::DynamicContractIndexer, hook_orchestrator::{self, HookOrchestratorRegistry},
+        cache::VersionedCache,
+        component_metadata::BlockMetadataOrchestrator,
+        dci::DynamicContractIndexer,
+        hook_orchestrator::{self, HookOrchestratorRegistry},
     },
     models::BlockChanges,
     ExtractionError, ExtractorExtension,
@@ -166,14 +168,23 @@ where
         for (component, result) in component_results.iter() {
             // If it's a balance-only component, we need to update the component's balances.
         }
-        // 
-        // Here, we need to group components per-orchestrator. Then, we call orchestrator.generate_entrypoint_params
+        //
+        // Here, we need to group components per-orchestrator. Then, we call
+        // orchestrator.generate_entrypoint_params
         // 5. Call HookOrchestrator to generate entrypoints.
-        
+
         // 6. Delegate to standard DCI (handles tracing + pruning)
         self.inner_dci
             .process_block_update(block_changes)
             .await
+            .expect("Failed to process block update");
+
+        // 7. Prune components
+        // self.hook_orchestrator_registry
+        //     .prune_components(block_changes)
+        //     .expect("Failed to prune components");
+
+        Ok(())
     }
 
     /// Handles revert by reverting the state of the component_states cache and calling the
