@@ -35,6 +35,12 @@ pub trait HookOrchestrator: Send + Sync {
         components: &[ProtocolComponent],
         metadata: &HashMap<ProtocolComponentId, ComponentTracingMetadata>,
     ) -> Result<HashMap<EntryPointId, Vec<(Transaction, TracingParams)>>, HookOrchestratorError>;
+
+    fn prune_components(
+        &self,
+        block_changes: &mut BlockChanges,
+
+    ) -> Result<(), HookOrchestratorError>;
 }
 
 pub struct HookOrchestratorRegistry {
