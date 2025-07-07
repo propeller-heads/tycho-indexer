@@ -12,7 +12,7 @@ import {
     VaultSwapParams
 } from "@balancer-labs/v3-interfaces/contracts/vault/VaultTypes.sol";
 import {RestrictTransferFrom} from "../RestrictTransferFrom.sol";
-import {ICallback} from "../../interfaces/ICallback.sol";
+import {ICallback} from "@interfaces/ICallback.sol";
 
 error BalancerV3Executor__InvalidDataLength();
 error BalancerV3Executor__SenderIsNotVault(address sender);

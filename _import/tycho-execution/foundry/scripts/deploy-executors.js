@@ -79,6 +79,8 @@ const executors_to_deploy = {
                 "0x000000000022D473030F116dDEE9F6B43aC78BA3"
             ]
         },
+        // Args: Permit2
+        {exchange: "BalancerV3Executor", args: ["0x000000000022D473030F116dDEE9F6B43aC78BA3"]},
     ],
     "base": [
         // Args: Factory, Pool Init Code Hash, Permit2, Fee BPS
