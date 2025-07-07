@@ -353,7 +353,7 @@ impl SynchronizerStream {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct FeedMessage {
     pub state_msgs: HashMap<String, StateSyncMessage>,
     pub sync_states: HashMap<String, SynchronizerState>,
