@@ -44,7 +44,7 @@ module.exports = {
     },
 
     tenderly: {
-        project: "project",
+        project: "tycho",
         username: "tvinagre",
         privateVerification: false,
     },
