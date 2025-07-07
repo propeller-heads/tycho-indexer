@@ -8,7 +8,7 @@ use tycho_common::{
     models::{
         protocol::{ProtocolComponent, QualityRange},
         token::CurrencyToken,
-        Address, Chain, ComponentId,
+        Address, Chain, ComponentId, ProtocolSystem,
     },
     storage::{ProtocolGateway, StorageError},
     Bytes,
@@ -45,7 +45,7 @@ pub trait ProtocolDataCache: Send + Sync {
     ) -> Result<(), StorageError>;
 }
 
-type ProtocolComponentStore = HashMap<String, HashMap<ComponentId, ProtocolComponent>>;
+type ProtocolComponentStore = HashMap<ProtocolSystem, HashMap<ComponentId, ProtocolComponent>>;
 
 #[derive(Clone)]
 pub struct ProtocolMemoryCache {
