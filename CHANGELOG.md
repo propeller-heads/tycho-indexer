@@ -1,3 +1,11 @@
+## [0.75.0](https://github.com/propeller-heads/tycho-indexer/compare/0.74.0...0.75.0) (2025-07-07)
+
+
+### Features
+
+* Support cloning FeedMessage ([408a349](https://github.com/propeller-heads/tycho-indexer/commit/408a349ff9b282276402c5090a550b7edc38535b))
+* Support cloning FeedMessage ([#612](https://github.com/propeller-heads/tycho-indexer/issues/612)) ([ab32f4a](https://github.com/propeller-heads/tycho-indexer/commit/ab32f4a0d3458ceb186835d6318beadb230735e3))
+
 ## [0.74.0](https://github.com/propeller-heads/tycho-indexer/compare/0.73.0...0.74.0) (2025-06-30)
 
 
