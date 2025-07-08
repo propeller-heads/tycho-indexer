@@ -22,6 +22,20 @@ pub enum HookOrchestratorError {
 
 /// Trait for hook orchestration operations
 pub trait HookOrchestrator: Send + Sync {
+    /// Main Entrypoint for the orchestrator.
+    ///
+    /// This method is called for each block and is responsible for
+    /// 1. Generating the Entrypoints with TracingParams
+    /// 2. Updating the components with the collected metadata
+    ///    2.1 Inject Balances to the ProtocolComponents
+    ///    2.2 Inject the Limits to the ProtocolComponents (if they are RPC calls)
+    ///    2.3 Inject Entrypoints to the ProtocolComponents
+    fn update_components(
+        &self,
+        block_changes: &mut BlockChanges,
+        metadata: &HashMap<ProtocolComponentId, ComponentTracingMetadata>,
+    ) -> Result<(), HookOrchestratorError>;
+
     /// Update components with the collected metadata (e.g., inject balances)
     fn prepare_components(
         &self,
@@ -36,11 +50,6 @@ pub trait HookOrchestrator: Send + Sync {
         metadata: &HashMap<ProtocolComponentId, ComponentTracingMetadata>,
     ) -> Result<HashMap<EntryPointId, Vec<(Transaction, TracingParams)>>, HookOrchestratorError>;
 
-    fn prune_components(
-        &self,
-        block_changes: &mut BlockChanges,
-
-    ) -> Result<(), HookOrchestratorError>;
 }
 
 pub struct HookOrchestratorRegistry {
