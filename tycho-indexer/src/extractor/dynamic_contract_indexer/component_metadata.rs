@@ -61,7 +61,20 @@ impl Clone for MetadataRequest {
     }
 }
 
+impl MetadataRequest {
+    pub fn new(
+        request_id: RequestId,
+        component_id: ComponentId,
+        request_type: MetadataRequestType,
+        transport: Box<dyn RequestTransport>,
+        tx_hash: TxHash,
+    ) -> Self {
+        Self { request_id, component_id, request_type, transport, tx_hash }
+    }
+}
+
 #[derive(Clone)]
+#[cfg_attr(test, derive(PartialEq, Debug))]
 pub enum MetadataRequestType {
     ComponentBalance { token_addresses: Vec<Address> },
     Tvl,
