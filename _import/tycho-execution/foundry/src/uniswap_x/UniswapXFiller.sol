@@ -16,7 +16,7 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
     using SafeERC20 for IERC20;
 
     // UniswapX V2DutchOrder Reactor
-    IReactor public immutable USXEDAReactor;
+    IReactor public immutable reactor;
     address public immutable tychoRouter;
 
     // keccak256("NAME_OF_ROLE") : save gas on deployment
@@ -34,16 +34,16 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
         if (_reactor == address(0)) revert UniswapXFiller__AddressZero();
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(REACTOR_ROLE, address(USXEDAReactor));
+        _grantRole(REACTOR_ROLE, address(reactor));
         tychoRouter = _tychoRouter;
-        USXEDAReactor = IReactor(_reactor);
+        reactor = IReactor(_reactor);
     }
 
     function execute(SignedOrder calldata order, bytes calldata callbackData)
         external
         onlyRole(EXECUTOR_ROLE)
     {
-        USXEDAReactor.executeWithCallback(order, callbackData);
+        reactor.executeWithCallback(order, callbackData);
     }
 
     function reactorCallback(
