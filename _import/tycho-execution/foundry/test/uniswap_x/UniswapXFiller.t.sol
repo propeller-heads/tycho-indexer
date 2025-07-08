@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
-import "@src/executors/UniswapV4Executor.sol";
 import "forge-std/Test.sol";
 import "@src/uniswap_x/UniswapXFiller.sol";
 import "../TychoRouterTestSetup.sol";
@@ -13,9 +12,6 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
     UniswapXFiller filler;
     address fillerAddr;
 
-    bytes32 public constant EXECUTOR_ROLE =
-        0xd8aa0f3194971a2a116679f7c2090f6939c8d4e01a2a8d7e41d55e5351469e63;
-
     event CallbackVerifierSet(address indexed callbackVerifier);
     event Withdrawal(
         address indexed token, uint256 amount, address indexed receiver
@@ -23,15 +19,20 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
 
     function fillerSetup() public {
         vm.startPrank(ADMIN);
-        filler = new UniswapXFiller(tychoRouterAddr);
+        filler = new UniswapXFiller(tychoRouterAddr, REACTOR);
         fillerAddr = address(filler);
         filler.grantRole(keccak256("EXECUTOR_ROLE"), EXECUTOR);
         vm.stopPrank();
     }
 
-    function testTychoAddressZero() public {
+    function testTychoAddressZeroTychoRouter() public {
         vm.expectRevert(UniswapXFiller__AddressZero.selector);
-        filler = new UniswapXFiller(address(0));
+        filler = new UniswapXFiller(address(0), REACTOR);
+    }
+
+    function testTychoAddressZeroReactor() public {
+        vm.expectRevert(UniswapXFiller__AddressZero.selector);
+        filler = new UniswapXFiller(tychoRouterAddr, address(0));
     }
 
     function testWithdrawNative() public {

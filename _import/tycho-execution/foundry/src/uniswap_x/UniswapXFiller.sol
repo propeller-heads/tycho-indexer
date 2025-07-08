@@ -16,8 +16,7 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
     using SafeERC20 for IERC20;
 
     // UniswapX V2DutchOrder Reactor
-    IReactor public constant USXEDAReactor =
-        IReactor(0x00000011F84B9aa48e5f8aA8B9897600006289Be);
+    IReactor public immutable USXEDAReactor;
     address public immutable tychoRouter;
 
     // keccak256("NAME_OF_ROLE") : save gas on deployment
@@ -30,12 +29,14 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
         address indexed token, uint256 amount, address indexed receiver
     );
 
-    constructor(address _tychoRouter) {
+    constructor(address _tychoRouter, address _reactor) {
         if (_tychoRouter == address(0)) revert UniswapXFiller__AddressZero();
+        if (_reactor == address(0)) revert UniswapXFiller__AddressZero();
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(REACTOR_ROLE, address(USXEDAReactor));
         tychoRouter = _tychoRouter;
+        USXEDAReactor = IReactor(_reactor);
     }
 
     function execute(SignedOrder calldata order, bytes calldata callbackData)
@@ -65,7 +66,7 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
     }
 
     /**
-     * @dev Allows withdrawing any ERC20 funds if funds get stuck in case of a bug.
+     * @dev Allows withdrawing any ERC20 funds.
      */
     function withdraw(IERC20[] memory tokens, address receiver)
         external
@@ -84,8 +85,7 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
     }
 
     /**
-     * @dev Allows withdrawing any NATIVE funds if funds get stuck in case of a bug.
-     * The contract should never hold any NATIVE tokens for security reasons.
+     * @dev Allows withdrawing any NATIVE funds.
      */
     function withdrawNative(address receiver)
         external

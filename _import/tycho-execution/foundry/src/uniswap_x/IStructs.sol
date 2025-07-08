@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 /// @dev external struct including a generic encoded order and swapper signature
 ///  The order bytes will be parsed and mapped to a ResolvedOrder in the concrete reactor contract
-
 struct SignedOrder {
     bytes order;
     bytes sig;
@@ -41,8 +40,8 @@ struct OutputToken {
     uint256 amount;
     address recipient;
 }
-/// @dev generic concrete order that specifies exact tokens which need to be sent and received
 
+/// @dev generic concrete order that specifies exact tokens which need to be sent and received
 struct ResolvedOrder {
     OrderInfo info;
     InputToken input;
