@@ -1,0 +1,55 @@
+const {ethers} = require("hardhat");
+const Safe = require('@safe-global/protocol-kit').default;
+const {EthersAdapter} = require('@safe-global/protocol-kit');
+const {default: SafeApiKit} = require("@safe-global/api-kit");
+
+const txServiceUrl = 'https://safe-transaction-mainnet.safe.global';
+
+async function proposeOrSendTransaction(safeAddress, txData, signer, methodName, nonceOffset = 0) {
+    if (safeAddress) {
+        return proposeTransaction(safeAddress, txData, signer, methodName, nonceOffset);
+    } else {
+        console.log(`Executing the transaction directly`);
+        const tx = await signer.sendTransaction(txData);
+        await tx.wait();
+        return tx.hash;
+    }
+}
+
+async function proposeTransaction(safeAddress, txData, signer, methodName, nonceOffset = 0) {
+    const signerAddress = await signer.getAddress();
+    console.log(`Proposing transaction to Safe: ${safeAddress} with account: ${signerAddress}`);
+
+    const ethAdapter = new EthersAdapter({
+        ethers,
+        signerOrProvider: signer,
+    });
+
+    const safeService = new SafeApiKit({txServiceUrl, ethAdapter});
+
+    const safeSdk = await Safe.create({
+        ethAdapter,
+        safeAddress,
+    });
+
+    const safeTransaction = await safeSdk.createTransaction({safeTransactionData: txData});
+    const safeTxHash = await safeSdk.getTransactionHash(safeTransaction);
+    const senderSignature = await safeSdk.signTransactionHash(safeTxHash);
+
+    const proposeArgs = {
+        safeAddress,
+        safeTransactionData: safeTransaction.data,
+        safeTxHash,
+        senderAddress: signerAddress,
+        senderSignature: senderSignature.data,
+        origin: `Proposed from hardhat: ${methodName}`,
+        nonce: await safeService.getNextNonce(safeAddress) + nonceOffset,
+    };
+
+    await safeService.proposeTransaction(proposeArgs);
+    return safeTxHash;
+}
+
+module.exports = {
+    proposeOrSendTransaction
+}

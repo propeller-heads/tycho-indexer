@@ -3,15 +3,21 @@ const {ethers} = require("hardhat");
 const path = require('path');
 const fs = require('fs');
 const hre = require("hardhat");
+const {proposeOrSendTransaction} = require("./utils");
 
 async function main() {
     const network = hre.network.name;
     const routerAddress = process.env.ROUTER_ADDRESS;
+    const safeAddress = process.env.SAFE_ADDRESS;
+    if (!routerAddress) {
+        throw new Error("Missing ROUTER_ADDRESS");
+    }
+
     console.log(`Setting roles on TychoRouter at ${routerAddress} on ${network}`);
 
-    const [deployer] = await ethers.getSigners();
-    console.log(`Setting roles with account: ${deployer.address}`);
-    console.log(`Account balance: ${ethers.utils.formatEther(await deployer.getBalance())} ETH`);
+    const [signer] = await ethers.getSigners();
+    console.log(`Setting roles with account: ${signer.address}`);
+    console.log(`Account balance: ${ethers.utils.formatEther(await signer.getBalance())} ETH`);
     const TychoRouter = await ethers.getContractFactory("TychoRouter");
     const router = TychoRouter.attach(routerAddress);
 
@@ -27,13 +33,21 @@ async function main() {
     };
 
     // Iterate through roles and grant them to the corresponding addresses
+    let nonceOffset = 0
     for (const [roleName, roleHash] of Object.entries(roles)) {
         const addresses = rolesDict[network][roleName];
         if (addresses && addresses.length > 0) {
             console.log(`Granting ${roleName} to the following addresses:`, addresses);
-            const tx = await router.batchGrantRole(roleHash, addresses);
-            await tx.wait(); // Wait for the transaction to be mined
-            console.log(`Role ${roleName} granted at transaction: ${tx.hash}`);
+
+            const txData = {
+                to: router.address,
+                data: router.interface.encodeFunctionData("batchGrantRole", [roleHash, addresses]),
+                value: "0",
+            };
+
+            const txHash = await proposeOrSendTransaction(safeAddress, txData, signer, "batchGrantRole", nonceOffset);
+            nonceOffset += 1
+            console.log(`Role ${roleName} granted at TX hash: ${txHash}`);
         } else {
             console.log(`No addresses found for role ${roleName}`);
         }
