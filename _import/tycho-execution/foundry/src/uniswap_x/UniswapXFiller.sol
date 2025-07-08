@@ -11,6 +11,7 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
 error UniswapXFiller__AddressZero();
+error UniswapXFiller__BatchExecutionNotSupported();
 
 contract UniswapXFiller is AccessControl, IReactorCallback {
     using SafeERC20 for IERC20;
@@ -34,7 +35,7 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
         if (_reactor == address(0)) revert UniswapXFiller__AddressZero();
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(REACTOR_ROLE, address(reactor));
+        _grantRole(REACTOR_ROLE, address(_reactor));
         tychoRouter = _tychoRouter;
         reactor = IReactor(_reactor);
     }
@@ -50,7 +51,32 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
         ResolvedOrder[] calldata resolvedOrders,
         bytes calldata callbackData
     ) external onlyRole(REACTOR_ROLE) {
-        // TODO
+        require(
+            resolvedOrders.length == 1,
+            UniswapXFiller__BatchExecutionNotSupported()
+        );
+
+        ResolvedOrder memory order = resolvedOrders[0];
+
+        // TODO properly handle native in and out tokens
+        uint256 ethValue = 0;
+        (bool success, bytes memory result) =
+            tychoRouter.call{value: ethValue}(callbackData);
+
+        if (!success) {
+            revert(
+                string(
+                    result.length > 0
+                        ? result
+                        : abi.encodePacked("Execution failed")
+                )
+            );
+        }
+
+        // Multiple outputs are possible when taking fees - but token itself should
+        // not change.
+        IERC20 token = IERC20(order.outputs[0].token);
+        token.forceApprove(address(reactor), type(uint256).max);
     }
 
     /**
