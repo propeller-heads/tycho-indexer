@@ -9,6 +9,7 @@ import {
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import {TychoRouter} from "../TychoRouter.sol";
 
 error UniswapXFiller__AddressZero();
 error UniswapXFiller__BatchExecutionNotSupported();
@@ -58,12 +59,34 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
 
         ResolvedOrder memory order = resolvedOrders[0];
 
+        (
+            bool tokenInApprovalNeeded,
+            bool tokenOutApprovalNeeded,
+            bytes memory tychoCalldata
+        ) = abi.decode(callbackData, (bool, bool, bytes));
+
+        // The TychoRouter will take the input tokens from the filler
+        if (tokenInApprovalNeeded) {
+            // TODO only if ERC20
+            IERC20(order.input.token).forceApprove(
+                tychoRouter, order.input.maxAmount
+            );
+        } else {
+            // The filler will manually transfer into the TychoRouter
+            // Note: We are using the balance of our filler instead of the order
+            // input amount to avoid having to do a decay calculation in the filler.
+            IERC20 inputToken = IERC20(order.input.token);
+            inputToken.transfer(
+                tychoRouter, inputToken.balanceOf(address(this))
+            );
+        }
+
         // TODO properly handle native in and out tokens
         uint256 ethValue = 0;
 
         // slither-disable-next-line low-level-calls
         (bool success, bytes memory result) =
-            tychoRouter.call{value: ethValue}(callbackData);
+            tychoRouter.call{value: ethValue}(tychoCalldata);
 
         if (!success) {
             revert(
@@ -75,10 +98,13 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
             );
         }
 
-        // Multiple outputs are possible when taking fees - but token itself should
-        // not change.
-        IERC20 token = IERC20(order.outputs[0].token);
-        token.forceApprove(address(reactor), type(uint256).max);
+        if (tokenOutApprovalNeeded) {
+            // Multiple outputs are possible when taking fees - but token itself should
+            // not change.
+            // TODO only if ERC20
+            IERC20 token = IERC20(order.outputs[0].token);
+            token.forceApprove(address(reactor), type(uint256).max);
+        }
     }
 
     /**

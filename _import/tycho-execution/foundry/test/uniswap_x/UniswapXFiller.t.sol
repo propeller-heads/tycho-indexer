@@ -55,7 +55,7 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
 
-        bytes memory callbackData = abi.encodeWithSelector(
+        bytes memory tychoRouterData = abi.encodeWithSelector(
             tychoRouter.singleSwap.selector,
             amountIn,
             WETH_ADDR,
@@ -68,6 +68,8 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
             swap
         );
 
+        bytes memory callbackData = abi.encode(true, true, tychoRouterData);
+
         deal(WETH_ADDR, address(filler), amountIn);
         vm.startPrank(address(filler));
         IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
@@ -76,11 +78,11 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
         OutputToken[] memory outputs = new OutputToken[](1);
         outputs[0] = OutputToken({
             token: address(DAI_ADDR),
-            // Irrelevant fields - we only need the token address for approval
             amount: 1847751195973566072891,
             recipient: BOB
         });
-        // All irrelevant fields for this test - we only need the output token address
+        // Mostly irrelevant fields for this test - we only need token input and outputs
+        // info for the sake of testing.
         orders[0] = ResolvedOrder({
             info: OrderInfo({
                 reactor: address(0),
@@ -90,7 +92,12 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
                 additionalValidationContract: address(0),
                 additionalValidationData: ""
             }),
-            input: InputToken({token: address(WETH_ADDR), amount: 0, maxAmount: 0}),
+            input: InputToken({
+                token: address(WETH_ADDR),
+                amount: amountIn,
+                // We need the proper maxAmount for our approval to work
+                maxAmount: amountIn
+            }),
             outputs: outputs,
             sig: "",
             hash: ""
@@ -133,7 +140,7 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
 
-        bytes memory callbackData = abi.encodeWithSelector(
+        bytes memory tychoRouterData = abi.encodeWithSelector(
             tychoRouter.singleSwap.selector,
             amountIn,
             WBTC_ADDR,
@@ -144,6 +151,12 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
             fillerAddr,
             true,
             swap
+        );
+
+        bytes memory callbackData = abi.encode(
+            true, // tokenIn approval needed
+            true, // tokenOut approval needed
+            tychoRouterData
         );
 
         vm.startPrank(address(filler));
