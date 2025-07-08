@@ -26,7 +26,6 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
         filler = new UniswapXFiller(tychoRouterAddr, REACTOR);
         fillerAddr = address(filler);
         filler.grantRole(keccak256("EXECUTOR_ROLE"), EXECUTOR);
-        filler.grantRole(keccak256("REACTOR_ROLE"), REACTOR);
         vm.stopPrank();
     }
 
@@ -111,7 +110,6 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
         vm.stopPrank();
         assertGe(IERC20(DAI_ADDR).balanceOf(BOB), amountOut);
     }
-
 
     function testExecuteIntegration() public {
         fillerSetup();
