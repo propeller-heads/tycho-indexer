@@ -26,14 +26,12 @@ async function main() {
 
     const roles = {
         EXECUTOR_SETTER_ROLE: "0x6a1dd52dcad5bd732e45b6af4e7344fa284e2d7d4b23b5b09cb55d36b0685c87",
-        FEE_SETTER_ROLE: "0xe6ad9a47fbda1dc18de1eb5eeb7d935e5e81b4748f3cfc61e233e64f88182060",
         PAUSER_ROLE: "0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a",
         UNPAUSER_ROLE: "0x427da25fe773164f88948d3e215c94b6554e2ed5e5f203a821c9f2f6131cf75a",
         FUND_RESCUER_ROLE: "0x912e45d663a6f4cc1d0491d8f046e06c616f40352565ea1cdb86a0e1aaefa41b"
     };
 
     // Iterate through roles and grant them to the corresponding addresses
-    let nonceOffset = 0
     for (const [roleName, roleHash] of Object.entries(roles)) {
         const addresses = rolesDict[network][roleName];
         if (addresses && addresses.length > 0) {
@@ -45,8 +43,7 @@ async function main() {
                 value: "0",
             };
 
-            const txHash = await proposeOrSendTransaction(safeAddress, txData, signer, "batchGrantRole", nonceOffset);
-            nonceOffset += 1
+            const txHash = await proposeOrSendTransaction(safeAddress, txData, signer, "batchGrantRole");
             console.log(`Role ${roleName} granted at TX hash: ${txHash}`);
         } else {
             console.log(`No addresses found for role ${roleName}`);

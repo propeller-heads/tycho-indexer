@@ -3,11 +3,17 @@ const Safe = require('@safe-global/protocol-kit').default;
 const {EthersAdapter} = require('@safe-global/protocol-kit');
 const {default: SafeApiKit} = require("@safe-global/api-kit");
 
-const txServiceUrl = 'https://safe-transaction-mainnet.safe.global';
+const txServiceUrls = {
+    mainnet: "https://safe-transaction-mainnet.safe.global",
+    base: "https://safe-transaction-base.safe.global",
+    unichain: "https://safe-transaction-unichain.safe.global",
+};
 
-async function proposeOrSendTransaction(safeAddress, txData, signer, methodName, nonceOffset = 0) {
+const txServiceUrl = txServiceUrls[hre.network.name];
+
+async function proposeOrSendTransaction(safeAddress, txData, signer, methodName) {
     if (safeAddress) {
-        return proposeTransaction(safeAddress, txData, signer, methodName, nonceOffset);
+        return proposeTransaction(safeAddress, txData, signer, methodName);
     } else {
         console.log(`Executing the transaction directly`);
         const tx = await signer.sendTransaction(txData);
@@ -16,7 +22,7 @@ async function proposeOrSendTransaction(safeAddress, txData, signer, methodName,
     }
 }
 
-async function proposeTransaction(safeAddress, txData, signer, methodName, nonceOffset = 0) {
+async function proposeTransaction(safeAddress, txData, signer, methodName) {
     const signerAddress = await signer.getAddress();
     console.log(`Proposing transaction to Safe: ${safeAddress} with account: ${signerAddress}`);
 
@@ -31,8 +37,13 @@ async function proposeTransaction(safeAddress, txData, signer, methodName, nonce
         ethAdapter,
         safeAddress,
     });
-
-    const safeTransaction = await safeSdk.createTransaction({safeTransactionData: txData});
+    let next_nonce = await safeService.getNextNonce(safeAddress);
+    const safeTransaction = await safeSdk.createTransaction({
+        safeTransactionData: {
+            ...txData,
+            nonce: next_nonce
+        }
+    });
     const safeTxHash = await safeSdk.getTransactionHash(safeTransaction);
     const senderSignature = await safeSdk.signTransactionHash(safeTxHash);
 
@@ -43,7 +54,7 @@ async function proposeTransaction(safeAddress, txData, signer, methodName, nonce
         senderAddress: signerAddress,
         senderSignature: senderSignature.data,
         origin: `Proposed from hardhat: ${methodName}`,
-        nonce: await safeService.getNextNonce(safeAddress) + nonceOffset,
+        nonce: next_nonce,
     };
 
     await safeService.proposeTransaction(proposeArgs);
