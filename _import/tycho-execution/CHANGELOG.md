@@ -1,3 +1,15 @@
+## [0.105.0](https://github.com/propeller-heads/tycho-execution/compare/0.104.0...0.105.0) (2025-07-09)
+
+
+### Features
+
+* Upgrade scripts to submit to Safe wallet ([2733bb0](https://github.com/propeller-heads/tycho-execution/commit/2733bb00724fb2df8d6f8151df02826807289c9a))
+
+
+### Bug Fixes
+
+* Simplify nonceOffset logic ([ba60e4b](https://github.com/propeller-heads/tycho-execution/commit/ba60e4bb73741c17c44e1cfcdea3fd599ae027eb))
+
 ## [0.104.0](https://github.com/propeller-heads/tycho-execution/compare/0.103.0...0.104.0) (2025-07-08)
 
 
