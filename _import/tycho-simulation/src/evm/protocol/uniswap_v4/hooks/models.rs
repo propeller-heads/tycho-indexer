@@ -148,8 +148,8 @@ pub struct WithGasEstimate<T> {
 
 #[allow(dead_code)]
 pub struct AmountRanges {
-    amount_in_range: (U256, U256),
-    amount_out_range: (U256, U256),
+    pub amount_in_range: (U256, U256),
+    pub amount_out_range: (U256, U256),
 }
 
 sol! {

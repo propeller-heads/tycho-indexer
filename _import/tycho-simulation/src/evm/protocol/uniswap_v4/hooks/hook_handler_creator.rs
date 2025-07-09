@@ -1,13 +1,13 @@
 #![allow(dead_code)]
 use std::{collections::HashMap, sync::RwLock};
 
-use alloy::{primitives::Address, rpc::types::Header};
+use alloy::primitives::Address;
 use lazy_static::lazy_static;
 use tycho_common::Bytes;
 
 use crate::{
     evm::{
-        engine_db::{create_engine, SHARED_TYCHO_DB},
+        engine_db::{create_engine, simulation_db::BlockHeader, SHARED_TYCHO_DB},
         protocol::uniswap_v4::{
             hooks::{generic_vm_hook_handler::GenericVMHookHandler, hook_handler::HookHandler},
             state::UniswapV4State,
@@ -19,7 +19,7 @@ use crate::{
 
 /// Parameters for creating a HookHandler.
 pub struct HookCreationParams<'a> {
-    block: Header,
+    block: BlockHeader,
     account_balances: &'a HashMap<Bytes, HashMap<Bytes, Bytes>>,
     all_tokens: &'a HashMap<Bytes, Token>,
     state: UniswapV4State,
@@ -33,7 +33,7 @@ pub struct HookCreationParams<'a> {
 
 impl<'a> HookCreationParams<'a> {
     pub fn new(
-        block: Header,
+        block: BlockHeader,
         account_balances: &'a HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &'a HashMap<Bytes, Token>,
         state: UniswapV4State,

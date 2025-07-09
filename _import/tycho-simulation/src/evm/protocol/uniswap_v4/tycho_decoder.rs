@@ -1,13 +1,16 @@
 use std::collections::HashMap;
 
-use alloy::primitives::U256;
+use alloy::primitives::{Address, U256};
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_common::Bytes;
 
 use super::state::UniswapV4State;
 use crate::{
     evm::protocol::{
-        uniswap_v4::state::UniswapV4Fees,
+        uniswap_v4::{
+            hooks::hook_handler_creator::{instantiate_hook_handler, HookCreationParams},
+            state::UniswapV4Fees,
+        },
         utils::uniswap::{i24_be_bytes_to_i32, tick_list::TickInfo},
     },
     models::Token,
@@ -22,8 +25,8 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
     async fn try_from_with_block(
         snapshot: ComponentWithState,
         block: Header,
-        _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
-        _all_tokens: &HashMap<Bytes, Token>,
+        account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
+        all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
         let liq = snapshot
             .state
@@ -121,15 +124,35 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
 
         ticks.sort_by_key(|tick| tick.index);
 
-        Ok(UniswapV4State::new(
+        let mut state = UniswapV4State::new(
             liquidity,
             sqrt_price,
             fees,
             tick,
             tick_spacing,
             ticks,
-            block.into(),
-        ))
+            block.clone().into(),
+        );
+
+        let hook_address = snapshot
+            .component
+            .static_attributes
+            .get("hook");
+        if let Some(hook_address) = hook_address {
+            let hook_address = Address::from_slice(&hook_address.0);
+            let hook_params = HookCreationParams::new(
+                block.into(),
+                account_balances,
+                all_tokens,
+                state.clone(),
+                &snapshot.component.static_attributes,
+                &snapshot.state.balances,
+            );
+
+            let hook_handler = instantiate_hook_handler(&hook_address, hook_params)?;
+            state.set_hook_handler(hook_handler);
+        }
+        Ok(state)
     }
 }
 
