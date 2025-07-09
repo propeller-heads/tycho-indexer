@@ -487,6 +487,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires a RPC connection"]
     async fn test_trace_balancer_v2_stable_pool() {
         let url = env::var("RPC_URL").expect("RPC_URL is not set");
         let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
