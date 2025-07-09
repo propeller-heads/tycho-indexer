@@ -1,3 +1,5 @@
+#![allow(dead_code)] // TODO: Remove this
+
 // This struct already exists, duplicated here for convenience.
 
 use std::collections::HashMap;
