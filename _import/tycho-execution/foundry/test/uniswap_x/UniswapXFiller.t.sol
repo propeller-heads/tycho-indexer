@@ -23,7 +23,7 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
 
     function fillerSetup() public {
         vm.startPrank(ADMIN);
-        filler = new UniswapXFiller(tychoRouterAddr, REACTOR);
+        filler = new UniswapXFiller(tychoRouterAddr, REACTOR, address(0));
         fillerAddr = address(filler);
         filler.grantRole(keccak256("EXECUTOR_ROLE"), EXECUTOR);
         vm.stopPrank();
@@ -31,12 +31,12 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
 
     function testTychoAddressZeroTychoRouter() public {
         vm.expectRevert(UniswapXFiller__AddressZero.selector);
-        filler = new UniswapXFiller(address(0), REACTOR);
+        filler = new UniswapXFiller(address(0), REACTOR, address(0));
     }
 
     function testTychoAddressZeroReactor() public {
         vm.expectRevert(UniswapXFiller__AddressZero.selector);
-        filler = new UniswapXFiller(tychoRouterAddr, address(0));
+        filler = new UniswapXFiller(tychoRouterAddr, address(0), address(0));
     }
 
     function testCallback() public {
