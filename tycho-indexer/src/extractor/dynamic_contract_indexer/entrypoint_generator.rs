@@ -1,6 +1,5 @@
 // This struct already exists, duplicated here for convenience.
 
-
 use std::collections::HashMap;
 
 use alloy_primitives::U256;
@@ -12,7 +11,7 @@ use tycho_common::{
         blockchain::{Block, EntryPointWithTracingParams},
         protocol::ProtocolComponent,
         Address,
-    }
+    },
 };
 
 use crate::extractor::dynamic_contract_indexer::component_metadata::ComponentTracingMetadata;
@@ -97,7 +96,7 @@ pub trait SwapAmountEstimator {
         &self,
         metadata: &ComponentTracingMetadata,
         pool_key: &PoolKey,
-    ) -> Result<HashMap<Address,Vec<U256>>, EntrypointGenerationError>;
+    ) -> Result<HashMap<Address, Vec<U256>>, EntrypointGenerationError>;
 }
 
 // Auxiliary code
