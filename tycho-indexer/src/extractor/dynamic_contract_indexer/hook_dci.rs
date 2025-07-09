@@ -140,6 +140,9 @@ where
         // 1. Filter components with swap hooks (beforeSwap/afterSwap only)
         // TODO: How can I get the components that were created in the previous blocks?
         // Do we need to fetch them on startup and store them in the cache?
+
+        // TODO: Need to keep track of the link between component and the transaction that updated
+        // it.
         let swap_hook_components = self.extract_components_with_swap_hooks(block_changes);
 
         if swap_hook_components.is_empty() {
