@@ -54,3 +54,16 @@ For each of the following, you must select one of `tenderly_ethereum`, `tenderly
 1. If you set a new executor for the same protocol, you need to remove the old one.
 2. Run: `npx hardhat run scripts/remove-executor.js --network NETWORK`
 3. There will be a prompt for you to insert the executor address you want to remove.
+
+### Revoke roles
+
+1. If you wish to revoke a role for a certain address, run: `npx hardhat run scripts/revoke-role.js --network NETWORK`
+2. There will be a prompt for you to insert the role hash and the address you want to revoke it for.
+
+### Safe wallet
+
+1. If the wallet that has the role, is a Gnosis Safe, you need to set the `SAFE_ADDRESS` env var.
+2. The scripts deploy-executors, remove-executor, set-roles and revoke-role all support this.
+    1. If `SAFE_ADDRESS` is set, then it will propose a transaction to the safe wallet and later on it needs to be
+       approved in their UI to execute on chain.
+    2. If it's not set, it will submit the transaction directly to the chain. 
