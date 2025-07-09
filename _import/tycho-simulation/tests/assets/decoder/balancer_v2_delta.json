@@ -61,6 +61,11 @@
         "account_balances": {},
         "component_tvl": {
           "0x93d199263632a4ef4bb438f1feb99e57b4b5f0bd0000000000000000000005c2": 12902.997863620163
+        },
+        "dci_update": {
+          "new_entrypoints": {},
+          "new_entrypoint_params": {},
+          "trace_results": {}
         }
       },
       "removed_components": {}

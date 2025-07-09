@@ -287,6 +287,7 @@ mod tests {
             },
             component: vm_component(),
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
         // Initialize engine with balancer storage
         let block = header();
