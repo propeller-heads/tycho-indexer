@@ -7,7 +7,7 @@ use std::{
 use alloy::primitives::{Address, B256, U256};
 use revm::state::Bytecode;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_common::Bytes;
+use tycho_common::{models::token::Token, Bytes};
 
 use super::{state::EVMPoolState, state_builder::EVMPoolStateBuilder};
 use crate::{
@@ -15,7 +15,6 @@ use crate::{
         engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB, SHARED_TYCHO_DB},
         protocol::vm::constants::get_adapter_file,
     },
-    models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 
@@ -182,7 +181,6 @@ mod tests {
     use std::{collections::HashSet, fs, path::Path};
 
     use chrono::DateTime;
-    use num_bigint::ToBigUint;
     use revm::{primitives::KECCAK_EMPTY, state::AccountInfo};
     use serde_json::Value;
     use tycho_common::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
@@ -263,16 +261,22 @@ mod tests {
         .collect();
         let tokens = [
             Token::new(
-                "0x6b175474e89094c44da98b954eedeac495271d0f",
-                18,
+                &Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
                 "DAI",
-                10_000.to_biguint().unwrap(),
+                18,
+                0,
+                &[Some(10_000)],
+                tycho_common::models::Chain::Ethereum,
+                100,
             ),
             Token::new(
-                "0xba100000625a3754423978a60c9317c58a424e3d",
-                18,
+                &Bytes::from_str("0xba100000625a3754423978a60c9317c58a424e3d").unwrap(),
                 "BAL",
-                10_000.to_biguint().unwrap(),
+                18,
+                0,
+                &[Some(10_000)],
+                tycho_common::models::Chain::Ethereum,
+                100,
             ),
         ]
         .into_iter()

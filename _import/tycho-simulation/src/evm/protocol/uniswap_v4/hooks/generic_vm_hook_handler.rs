@@ -10,7 +10,7 @@ use revm::{
     state::{AccountInfo, Bytecode},
     DatabaseRef,
 };
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
 
 use crate::{
     evm::{
@@ -31,7 +31,7 @@ use crate::{
         },
         simulation::SimulationEngine,
     },
-    models::{Balances, Token},
+    models::Balances,
     protocol::errors::{SimulationError, TransitionError},
 };
 

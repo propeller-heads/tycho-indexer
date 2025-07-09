@@ -10,7 +10,7 @@ use alloy::primitives::{Address, U256};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use revm::DatabaseRef;
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
 
 use super::{
     constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
@@ -30,7 +30,7 @@ use crate::{
         },
         ContractCompiler, SlotId,
     },
-    models::{Balances, Token},
+    models::Balances,
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,
@@ -299,7 +299,7 @@ where
     ) -> Result<usize, SimulationError> {
         tokens
             .get(&Bytes::from(sell_token_address.as_slice()))
-            .map(|t| t.decimals)
+            .map(|t| t.decimals as usize)
             .ok_or_else(|| {
                 SimulationError::FatalError(format!(
                     "Failed to scale spot prices! Pool: {} Token 0x{:x} is not available!",
@@ -743,6 +743,7 @@ mod tests {
         state::{AccountInfo, Bytecode},
     };
     use serde_json::Value;
+    use tycho_common::models::Chain;
 
     use super::*;
     use crate::evm::{
@@ -754,19 +755,25 @@ mod tests {
 
     fn dai() -> Token {
         Token::new(
-            "0x6b175474e89094c44da98b954eedeac495271d0f",
-            18,
+            &Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
             "DAI",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         )
     }
 
     fn bal() -> Token {
         Token::new(
-            "0xba100000625a3754423978a60c9317c58a424e3d",
-            18,
+            &Bytes::from_str("0xba100000625a3754423978a60c9317c58a424e3d").unwrap(),
             "BAL",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         )
     }
 

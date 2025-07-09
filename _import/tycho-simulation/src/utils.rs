@@ -2,9 +2,12 @@ use std::collections::HashMap;
 
 use tracing::info;
 use tycho_client::{rpc::RPCClient, HttpRPCClient};
-use tycho_common::{models::Chain, Bytes};
+use tycho_common::{
+    models::{token::Token, Chain},
+    Bytes,
+};
 
-use crate::{models::Token, protocol::errors::SimulationError};
+use crate::protocol::errors::SimulationError;
 
 /// Converts a hexadecimal string into a `Vec<u8>`.
 ///

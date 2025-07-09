@@ -2,12 +2,11 @@ use std::collections::HashMap;
 
 use alloy::primitives::U256;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_common::Bytes;
+use tycho_common::{models::token::Token, Bytes};
 
 use super::{enums::FeeAmount, state::UniswapV3State};
 use crate::{
     evm::protocol::utils::uniswap::{i24_be_bytes_to_i32, tick_list::TickInfo},
-    models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 

@@ -30,11 +30,12 @@ use chrono::NaiveDateTime;
 use num_bigint::BigUint;
 use serde::Serialize;
 use tycho_client::feed::Header;
-use tycho_common::{models::Chain, Bytes};
+use tycho_common::{
+    models::{token::Token, Chain},
+    Bytes,
+};
 
 use super::state::ProtocolSim;
-use crate::models::Token;
-
 /// ProtocolComponent struct represents the properties of a trading pair
 ///
 /// # Fields

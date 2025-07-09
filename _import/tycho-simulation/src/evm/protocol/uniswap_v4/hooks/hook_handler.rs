@@ -6,14 +6,14 @@ use alloy::{
     primitives::{aliases::U24, Address, I256, U256},
     sol,
 };
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
 
 use crate::{
     evm::{
         engine_db::simulation_db::BlockHeader,
         protocol::uniswap_v4::state::{UniswapV4Fees, UniswapV4State},
     },
-    models::{Balances, Token},
+    models::Balances,
     protocol::errors::{SimulationError, TransitionError},
 };
 

@@ -4,7 +4,7 @@ use alloy::primitives::U256;
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::Zero;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
 
 use super::reserve_price::spot_price_from_reserves;
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
         safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
         u256_num::{biguint_to_u256, u256_to_biguint},
     },
-    models::{Balances, Token},
+    models::Balances,
     protocol::{
         errors::{InvalidSnapshotError, SimulationError, TransitionError},
         models::{GetAmountOutResult, TryFromWithBlock},
@@ -78,19 +78,9 @@ impl<T: CPMMProtocol + Clone + 'static + std::fmt::Debug + Sync + Send> Protocol
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
         let (reserve0, reserve1) = self.get_reserves();
         if base < quote {
-            Ok(spot_price_from_reserves(
-                reserve0,
-                reserve1,
-                base.decimals as u32,
-                quote.decimals as u32,
-            ))
+            Ok(spot_price_from_reserves(reserve0, reserve1, base.decimals, quote.decimals))
         } else {
-            Ok(spot_price_from_reserves(
-                reserve1,
-                reserve0,
-                base.decimals as u32,
-                quote.decimals as u32,
-            ))
+            Ok(spot_price_from_reserves(reserve1, reserve0, base.decimals, quote.decimals))
         }
     }
 

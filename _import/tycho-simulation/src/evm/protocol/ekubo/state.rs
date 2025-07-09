@@ -9,14 +9,14 @@ use evm_ekubo_sdk::{
     quoting::types::{NodeKey, TokenAmount},
 };
 use num_bigint::BigUint;
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
 
 use super::pool::{
     base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool, EkuboPool,
 };
 use crate::{
     evm::protocol::{ekubo::pool::mev_resist::MevResistPool, u256_num::u256_to_f64},
-    models::{Balances, Token},
+    models::Balances,
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,
@@ -48,7 +48,7 @@ impl ProtocolSim for EkuboState {
 
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
         let sqrt_ratio = self.sqrt_ratio();
-        let (base_decimals, quote_decimals) = (base.decimals, quote.decimals);
+        let (base_decimals, quote_decimals) = (base.decimals as usize, quote.decimals as usize);
 
         Ok(if base < quote {
             sqrt_price_q128_to_f64(sqrt_ratio, (base_decimals, quote_decimals))

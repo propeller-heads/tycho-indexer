@@ -135,10 +135,10 @@ impl App {
             let comp = &self.items[new_index].component;
             let decimals = comp.tokens[if self.zero2one { 0 } else { 1 }].decimals;
             if decimals >= prev_decimals {
-                self.quote_amount *= BigUint::from(10u64).pow((decimals - prev_decimals) as u32);
+                self.quote_amount *= BigUint::from(10u64).pow(decimals - prev_decimals);
             } else {
-                let new_amount = self.quote_amount.clone() /
-                    BigUint::from(10u64).pow((prev_decimals - decimals) as u32);
+                let new_amount =
+                    self.quote_amount.clone() / BigUint::from(10u64).pow(prev_decimals - decimals);
                 self.quote_amount =
                     if new_amount > BigUint::ZERO { new_amount } else { BigUint::one() };
             }
@@ -286,11 +286,11 @@ impl App {
             let decimals =
                 if self.zero2one { comp.tokens[0].decimals } else { comp.tokens[1].decimals };
             if increase {
-                self.quote_amount += BigUint::from(10u64).pow(decimals as u32);
+                self.quote_amount += BigUint::from(10u64).pow(decimals);
             } else {
                 self.quote_amount = self
                     .quote_amount
-                    .checked_sub(&BigUint::from(10u64).pow(decimals as u32))
+                    .checked_sub(&BigUint::from(10u64).pow(decimals))
                     .unwrap_or(BigUint::one());
             }
         }

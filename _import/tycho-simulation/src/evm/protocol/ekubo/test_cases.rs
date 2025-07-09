@@ -18,17 +18,18 @@ use evm_ekubo_sdk::{
 use num_bigint::BigUint;
 use rstest::*;
 use rstest_reuse::template;
-use tycho_common::{dto::ProtocolComponent, Bytes};
+use tycho_common::{
+    dto::ProtocolComponent,
+    models::{token::Token, Chain},
+    Bytes,
+};
 
 use super::{
     pool::{base::BasePool, EkuboPool},
     state::EkuboState,
 };
-use crate::{
-    evm::protocol::ekubo::pool::{
-        full_range::FullRangePool, mev_resist::MevResistPool, oracle::OraclePool, twamm::TwammPool,
-    },
-    models::Token,
+use crate::evm::protocol::ekubo::pool::{
+    full_range::FullRangePool, mev_resist::MevResistPool, oracle::OraclePool, twamm::TwammPool,
 };
 
 pub struct TestCase {
@@ -56,7 +57,10 @@ impl TestCase {
                 .into(),
             decimals: 18,
             symbol: "TOKEN0".to_string(),
-            gas: 0_u8.into(),
+            gas: vec![Some(0)],
+            chain: Chain::Ethereum,
+            tax: 0,
+            quality: 100,
         }
     }
 
@@ -70,7 +74,10 @@ impl TestCase {
                 .into(),
             decimals: 18,
             symbol: "TOKEN1".to_string(),
-            gas: 0_u8.into(),
+            gas: vec![Some(0)],
+            chain: Chain::Ethereum,
+            tax: 0,
+            quality: 100,
         }
     }
 }
