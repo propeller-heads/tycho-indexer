@@ -1,10 +1,12 @@
+#![allow(unused_variables)] // TODO: Remove this
+#![allow(dead_code)] // TODO: Remove this
+
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tycho_common::{
-    dto::ProtocolComponentId,
     models::{
         blockchain::{Block, EntryPointWithTracingParams},
         protocol::ProtocolComponent,
@@ -23,7 +25,7 @@ type Balances = HashMap<Address, Bytes>;
 // so that Tycho Simulation can use this information to calculate the limits for the component on
 // every block.
 type Limits = Vec<((Address, Address), (Bytes, Bytes, Option<EntryPointWithTracingParams>))>;
-type TVL = f64;
+type Tvl = f64;
 
 pub struct ComponentTracingMetadata {
     // Here we need to link the each metadata field with the transaction hash that triggered the
@@ -31,7 +33,7 @@ pub struct ComponentTracingMetadata {
     // Entrypoints to the correct transaction hash.
     pub balances: Option<Result<(TxHash, Balances), MetadataError>>,
     pub limits: Option<Result<(TxHash, Limits), MetadataError>>,
-    pub tvl: Option<Result<(TxHash, TVL), MetadataError>>,
+    pub tvl: Option<Result<(TxHash, Tvl), MetadataError>>,
 }
 
 // Request Generation Types
@@ -63,7 +65,7 @@ impl Clone for MetadataRequest {
 #[derive(Clone)]
 pub enum MetadataRequestType {
     ComponentBalance { token_addresses: Vec<Address> },
-    TVL,
+    Tvl,
     // Every request should cover only one token pair - but we should leave the interface
     // open to allow for future extensions or requests that cover multiple token pairs.
     Limits { token_pair: Vec<(Address, Address)> },
@@ -183,7 +185,7 @@ pub struct MetadataResult {
 pub enum MetadataValue {
     Balances(HashMap<Address, Bytes>),
     Limits(Vec<((Address, Address), (Bytes, Bytes))>),
-    TVL(f64),
+    Tvl(f64),
 }
 
 // Provider registry with configurable routing keys
@@ -303,7 +305,7 @@ impl BlockMetadataOrchestrator {
         &self,
         _requests_by_provider: HashMap<String, Vec<MetadataRequest>>,
     ) -> Vec<MetadataResult> {
-        !todo!()
+        todo!()
     }
 
     fn assemble_component_metadata(
@@ -311,7 +313,7 @@ impl BlockMetadataOrchestrator {
         _all_requests: &[MetadataRequest],
         _results: Vec<MetadataResult>,
     ) -> Result<HashMap<ProtocolComponent, ComponentTracingMetadata>, MetadataError> {
-        !todo!()
+        todo!()
     }
 }
 
@@ -342,8 +344,8 @@ pub struct HttpTransport {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum HttpMethod {
-    GET,
-    POST,
+    Get,
+    Post,
 }
 
 impl HttpTransport {
@@ -399,8 +401,8 @@ impl RequestTransport for HttpTransport {
 impl HttpMethod {
     fn as_str(&self) -> &str {
         match self {
-            HttpMethod::GET => "GET",
-            HttpMethod::POST => "POST",
+            HttpMethod::Get => "GET",
+            HttpMethod::Post => "POST",
         }
     }
 }
@@ -452,7 +454,7 @@ impl RpcTransport {
         // Create multicall3 aggregate call data
         // Function selector for aggregate3((address,bool,bytes)[])
         let selector = hex::decode("82ad56cb").unwrap();
-        let mut call_data = selector;
+        let call_data = selector;
 
         // Encode array of calls
         // This is simplified - in production you'd use proper ABI encoding

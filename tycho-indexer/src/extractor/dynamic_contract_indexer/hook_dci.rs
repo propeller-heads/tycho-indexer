@@ -1,4 +1,6 @@
-use diesel_async::RunQueryDsl;
+#![allow(unused_variables)] // TODO: Remove this
+#![allow(dead_code)] // TODO: Remove this
+
 use tonic::async_trait;
 use tycho_common::{
     models::{protocol::ProtocolComponent, Address, BlockHash, ComponentId},
@@ -8,10 +10,8 @@ use tycho_common::{
 
 use crate::extractor::{
     dynamic_contract_indexer::{
-        cache::VersionedCache,
-        component_metadata::BlockMetadataOrchestrator,
-        dci::DynamicContractIndexer,
-        hook_orchestrator::{self, HookOrchestratorRegistry},
+        cache::VersionedCache, component_metadata::BlockMetadataOrchestrator,
+        dci::DynamicContractIndexer, hook_orchestrator::HookOrchestratorRegistry,
     },
     models::BlockChanges,
     ExtractionError, ExtractorExtension,
@@ -53,7 +53,7 @@ where
 
     fn categorize_components(
         &self,
-        components: &Vec<ProtocolComponent>,
+        components: &[ProtocolComponent],
         block_changes: &mut BlockChanges,
     ) -> Result<(Vec<ProtocolComponent>, Vec<ProtocolComponent>), ExtractionError> {
         todo!()
@@ -200,7 +200,7 @@ mod tests {
 
     #[test]
     fn test_hook_permissions() {
-        let hook_address = Address::from_str("0x1234567890123456789012345678901234567890").unwrap();
+        let hook_address = Address::from("0x1234567890123456789012345678901234567890");
         assert!(HookPermissions::has_before_swap_hook(&hook_address));
     }
 }
