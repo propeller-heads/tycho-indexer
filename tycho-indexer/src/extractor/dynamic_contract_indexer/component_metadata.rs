@@ -26,6 +26,8 @@ type Balances = HashMap<Address, Bytes>;
 type Limits = Vec<((Address, Address), (Bytes, Bytes, Option<EntryPointWithTracingParams>))>;
 type Tvl = f64;
 
+type RoutingKey = String;
+
 pub struct ComponentTracingMetadata {
     // Here we need to link the each metadata field with the transaction hash that triggered the
     // fetching so we can modify the Block data with the new balances - and link the generated
@@ -165,6 +167,7 @@ pub trait RequestTransport: Send + Sync {
 /// - Each generator typically specializes in one protocol or hook type
 /// - Generators can create requests with different transport types as needed. Example: using RPC
 ///   transport for Balances and API calls for TVL
+#[cfg_attr(test, mockall::automock)]
 pub trait MetadataRequestGenerator: Send + Sync {
     /// Generates all metadata requests needed for a component.
     ///
@@ -286,6 +289,23 @@ pub struct MetadataGeneratorRegistry {
 }
 
 impl MetadataGeneratorRegistry {
+    pub fn new() -> Self {
+        Self { hook_generators: HashMap::new(), default_generator: None }
+    }
+
+    pub fn register_hook_generator(
+        &mut self,
+        hook_address: Address,
+        generator: Box<dyn MetadataRequestGenerator>,
+    ) {
+        self.hook_generators
+            .insert(hook_address, generator);
+    }
+
+    pub fn set_default_generator(&mut self, generator: Option<Box<dyn MetadataRequestGenerator>>) {
+        self.default_generator = generator;
+    }
+
     /// Retrieves the appropriate metadata generator for a given component.
     ///
     /// This method implements the lookup logic, first checking for a hook-specific
@@ -319,21 +339,19 @@ impl MetadataGeneratorRegistry {
         &self,
         component: &ProtocolComponent,
     ) -> Option<&dyn MetadataRequestGenerator> {
-        // Extract hook address from component's static attributes
-        // The hook address is the key identifier for protocol-specific behavior
-        let hook_address = component
-            .static_attributes
-            .get("hook")?;
-
-        // First try to find a hook-specific generator
-        self.hook_generators
-            .get(hook_address)
-            .map(|boxed_generator| boxed_generator.as_ref())
-            // Fall back to default generator if no specific mapping exists
-            .or(self
-                .default_generator
+        if let Some(hook_address) = component.static_attributes.get("hook") {
+            self.hook_generators
+                .get(hook_address)
+                .map(|boxed_generator| boxed_generator.as_ref())
+                .or(self
+                    .default_generator
+                    .as_ref()
+                    .map(|boxed_generator| boxed_generator.as_ref()))
+        } else {
+            self.default_generator
                 .as_ref()
-                .map(|boxed_generator| boxed_generator.as_ref()))
+                .map(|boxed_generator| boxed_generator.as_ref())
+        }
     }
 }
 
@@ -361,6 +379,7 @@ impl MetadataGeneratorRegistry {
 /// - Each provider handles one specific `RequestTransport` type
 /// - Providers must be thread-safe for concurrent execution
 /// - Batch operations should be atomic when possible
+#[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait RequestProvider: Send + Sync {
     /// Executes a batch of requests and returns their results.
@@ -443,10 +462,14 @@ pub enum MetadataValue {
 
 // Provider registry with configurable routing keys
 pub struct ProviderRegistry {
-    providers: HashMap<String, Arc<dyn RequestProvider>>, // routing_key -> provider
+    providers: HashMap<RoutingKey, Arc<dyn RequestProvider>>,
 }
 
 impl ProviderRegistry {
+    pub fn new() -> Self {
+        Self { providers: HashMap::new() }
+    }
+
     pub fn register_provider(&mut self, routing_key: String, provider: Arc<dyn RequestProvider>) {
         self.providers
             .insert(routing_key, provider);
@@ -751,5 +774,88 @@ impl RequestTransport for RpcTransport {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use rstest::*;
+
+    use super::*;
+
+    fn create_test_component(id: &str, hook_address: Option<Address>) -> ProtocolComponent {
+        let mut static_attributes = HashMap::new();
+        if let Some(hook) = hook_address {
+            static_attributes.insert("hook".to_string(), hook);
+        }
+
+        ProtocolComponent { id: id.to_string(), ..Default::default() }
+    }
+
+    #[rstest]
+    #[case::hook_with_registered_generator(true, true, true)] // Should return hook generator
+    #[case::hook_without_registered_generator(true, false, true)] // Should return default generator
+    #[case::hook_without_any_generator(true, false, false)] // Should return None
+    #[case::no_hook_with_default_generator(false, false, true)] // Should return default generator
+    #[case::no_hook_without_default_generator(false, false, false)] // Should return None
+    fn test_get_generator_for_component(
+        #[case] has_hook: bool,
+        #[case] has_hook_generator: bool,
+        #[case] has_default_generator: bool,
+    ) {
+        let mut registry = MetadataGeneratorRegistry::new();
+        let hook_address = Address::from(Bytes::from(vec![1u8; 20]));
+
+        if has_hook_generator {
+            registry.register_hook_generator(
+                hook_address.clone(),
+                Box::new(MockMetadataRequestGenerator::new()),
+            );
+        }
+
+        if has_default_generator {
+            registry.set_default_generator(Some(Box::new(MockMetadataRequestGenerator::new())));
+        }
+
+        let component = create_test_component(
+            "test_component",
+            if has_hook { Some(hook_address) } else { None },
+        );
+
+        let generator = registry.get_generator_for_component(&component);
+        let should_have_generator = (has_hook && has_hook_generator) ||
+            (has_hook && !has_hook_generator && has_default_generator) ||
+            (!has_hook && has_default_generator);
+
+        assert_eq!(generator.is_some(), should_have_generator);
+    }
+
+    #[test]
+    fn test_provider_registry() {
+        let mut registry = ProviderRegistry::new();
+        assert!(registry.providers.is_empty());
+
+        // Create a mock provider
+        let mock_provider = Arc::new(MockRequestProvider::new());
+
+        // Register provider
+        let routing_key = "test_provider".to_string();
+        registry.register_provider(routing_key.clone(), mock_provider);
+
+        assert_eq!(registry.providers.len(), 1);
+        assert!(registry
+            .providers
+            .contains_key(&routing_key));
+
+        let mut transport = HttpTransport::new("http://example.com".to_string(), HttpMethod::Get);
+        let provider = registry.get_provider(&transport);
+        assert!(provider.is_none()); // Should be none since transport has different routing key
+
+        // Set the routing key to the correct one
+        transport.set_routing_key(routing_key.clone());
+        let provider = registry.get_provider(&transport);
+        assert!(provider.is_some());
     }
 }
