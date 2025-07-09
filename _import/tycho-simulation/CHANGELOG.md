@@ -1,3 +1,15 @@
+## [0.121.0](https://github.com/propeller-heads/tycho-simulation/compare/0.120.0...0.121.0) (2025-07-09)
+
+
+### Features
+
+* add new balancer v2 filter ([42aaee5](https://github.com/propeller-heads/tycho-simulation/commit/42aaee5bd1f8ec8041eba8524a97722e039be919))
+
+
+### Bug Fixes
+
+* Update comments and debug message ([839852f](https://github.com/propeller-heads/tycho-simulation/commit/839852f14c50a0422142ede19960cac8b1ad7ac9))
+
 ## [0.120.0](https://github.com/propeller-heads/tycho-simulation/compare/0.119.0...0.120.0) (2025-07-09)
 
 
