@@ -1,3 +1,15 @@
+## [0.120.0](https://github.com/propeller-heads/tycho-simulation/compare/0.119.0...0.120.0) (2025-07-09)
+
+
+### Features
+
+* update tycho dependencies for DCI supported protocols ([accfa55](https://github.com/propeller-heads/tycho-simulation/commit/accfa55ed8721b80429f299354753899d94056b0))
+
+
+### Bug Fixes
+
+* upgrade execution and allow deprecated creation_tx ([671b974](https://github.com/propeller-heads/tycho-simulation/commit/671b974988edd4bbdf9442ea7400c1e31ff6c6cb))
+
 ## [0.119.0](https://github.com/propeller-heads/tycho-simulation/compare/0.118.1...0.119.0) (2025-07-01)
 
 
