@@ -1,3 +1,15 @@
+## [0.106.0](https://github.com/propeller-heads/tycho-execution/compare/0.105.0...0.106.0) (2025-07-09)
+
+
+### Features
+
+* UniswapXFiller callback - naive implementation ([a114dfc](https://github.com/propeller-heads/tycho-execution/commit/a114dfc9da52a6393c55b00ea5b57143c8106429))
+
+
+### Bug Fixes
+
+* disable slither warnings ([a2d123a](https://github.com/propeller-heads/tycho-execution/commit/a2d123a26328f71afa6e8c163096d29bfef6957b))
+
 ## [0.105.0](https://github.com/propeller-heads/tycho-execution/compare/0.104.0...0.105.0) (2025-07-09)
 
 
