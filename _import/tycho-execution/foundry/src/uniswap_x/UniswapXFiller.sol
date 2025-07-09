@@ -44,6 +44,8 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
         _grantRole(REACTOR_ROLE, address(_reactor));
         tychoRouter = _tychoRouter;
         reactor = IReactor(_reactor);
+
+        // slither-disable-next-line missing-zero-check
         nativeAddress = _native_address;
     }
 
