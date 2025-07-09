@@ -241,8 +241,8 @@ mod tests {
                 },
                 component,
                 component_tvl: None,
-            entrypoints: Vec::new(),
-        };
+                entrypoints: Vec::new(),
+            };
 
             let result = EkuboState::try_from_with_block(
                 snapshot,

@@ -262,6 +262,7 @@ impl std::fmt::Debug for ResponseAccount {
 }
 
 impl From<tycho_common::dto::ResponseAccount> for ResponseAccount {
+    #[allow(deprecated)]
     fn from(value: tycho_common::dto::ResponseAccount) -> Self {
         Self {
             chain: value.chain.into(),
