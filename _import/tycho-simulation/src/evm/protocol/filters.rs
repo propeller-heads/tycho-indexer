@@ -9,7 +9,7 @@ use crate::evm::protocol::vm::utils::json_deserialize_be_bigint_list;
 const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
 const ZERO_ADDRESS_ARR: [u8; 20] = [0u8; 20];
 
-/// Filters out pools that are broken after DCI update
+/// Filters out pools that are failing at the moment after DCI update
 pub fn balancer_v2_pool_filter_after_dci_update(component: &ComponentWithState) -> bool {
     const UNSUPPORTED_COMPONENT_IDS: [&str; 6] = [
         "0x848a5564158d84b8a8fb68ab5d004fae11619a5400000000000000000000066a",
@@ -28,7 +28,7 @@ pub fn balancer_v2_pool_filter_after_dci_update(component: &ComponentWithState) 
             .as_str(),
     ) {
         debug!(
-            "Filtering out Balancer pool {} because it's broken after DCI update",
+            "Filtering out Balancer pools {} that have missing Accounts after DCI update.",
             component.component.id
         );
         return false;
