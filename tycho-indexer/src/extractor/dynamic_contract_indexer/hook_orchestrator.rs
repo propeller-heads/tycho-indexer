@@ -26,10 +26,9 @@ pub trait HookOrchestrator: Send + Sync {
     ///
     /// This method is called for each block and is responsible for
     /// 1. Generating the Entrypoints with TracingParams
-    /// 2. Updating the components with the collected metadata
-    ///    2.1 Inject Balances to the ProtocolComponents
-    ///    2.2 Inject the Limits to the ProtocolComponents (if they are RPC calls)
-    ///    2.3 Inject Entrypoints to the ProtocolComponents
+    /// 2. Updating the components with the collected metadata 2.1 Inject Balances to the
+    ///    ProtocolComponents 2.2 Inject the Limits to the ProtocolComponents (if they are RPC
+    ///    calls) 2.3 Inject Entrypoints to the ProtocolComponents
     fn update_components(
         &self,
         block_changes: &mut BlockChanges,
@@ -49,7 +48,6 @@ pub trait HookOrchestrator: Send + Sync {
         components: &[ProtocolComponent],
         metadata: &HashMap<ProtocolComponentId, ComponentTracingMetadata>,
     ) -> Result<HashMap<EntryPointId, Vec<(Transaction, TracingParams)>>, HookOrchestratorError>;
-
 }
 
 pub struct HookOrchestratorRegistry {
