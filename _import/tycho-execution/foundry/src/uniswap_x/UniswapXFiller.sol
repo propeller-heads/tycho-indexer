@@ -67,17 +67,15 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
 
         ResolvedOrder memory order = resolvedOrders[0];
 
-        (
-            bool tokenInApprovalNeeded,
-            bool tokenOutApprovalNeeded,
-            bytes memory tychoCalldata
-        ) = abi.decode(callbackData, (bool, bool, bytes));
+        bool tokenInApprovalNeeded = bool(uint8(callbackData[0]) == 1);
+        bool tokenOutApprovalNeeded = bool(uint8(callbackData[1]) == 1);
+        bytes calldata tychoCalldata = bytes(callbackData[2:]);
 
         // The TychoRouter will take the input tokens from the filler
         if (tokenInApprovalNeeded) {
             // Native ETH input is not supported by UniswapX
             IERC20(order.input.token).forceApprove(
-                tychoRouter, order.input.maxAmount
+                tychoRouter, type(uint256).max
             );
         }
 

@@ -68,7 +68,8 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
             swap
         );
 
-        bytes memory callbackData = abi.encode(true, true, tychoRouterData);
+        bytes memory callbackData =
+            abi.encodePacked(true, true, tychoRouterData);
 
         deal(WETH_ADDR, address(filler), amountIn);
         vm.startPrank(address(filler));
@@ -153,7 +154,7 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
             swap
         );
 
-        bytes memory callbackData = abi.encode(
+        bytes memory callbackData = abi.encodePacked(
             true, // tokenIn approval needed
             true, // tokenOut approval needed
             tychoRouterData
