@@ -1,6 +1,7 @@
+#![allow(dead_code)] // TODO: Remove this
+
 use std::collections::HashMap;
 
-use tonic::async_trait;
 use tycho_common::{
     dto::ProtocolComponentId,
     models::{
