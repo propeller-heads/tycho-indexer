@@ -15,7 +15,8 @@ use tycho_simulation::{
         protocol::{
             ekubo::state::EkuboState,
             filters::{
-                balancer_v2_pool_filter, curve_pool_filter, uniswap_v4_pool_with_hook_filter,
+                balancer_v2_pool_filter_after_dci_update, curve_pool_filter,
+                uniswap_v4_pool_with_hook_filter,
             },
             uniswap_v2::state::UniswapV2State,
             uniswap_v3::state::UniswapV3State,
@@ -52,7 +53,7 @@ fn register_exchanges(
                 .exchange::<EVMPoolState<PreCachedDB>>(
                     "vm:balancer_v2",
                     tvl_filter.clone(),
-                    Some(balancer_v2_pool_filter),
+                    Some(balancer_v2_pool_filter_after_dci_update),
                 )
                 .exchange::<EVMPoolState<PreCachedDB>>(
                     "vm:curve",
