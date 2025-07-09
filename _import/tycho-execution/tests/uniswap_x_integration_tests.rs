@@ -29,8 +29,7 @@ fn test_sequential_swap_usx() {
     // Creates all the calldata needed for the uniswap X callbackData
 
     let filler = Bytes::from_str("0x6D9da78B6A5BEdcA287AA5d49613bA36b90c15C4").unwrap();
-    let usx_reactor = Address::from_str("0x00000011F84B9aa48e5f8aA8B9897600006289Be")
-    .unwrap();
+    let usx_reactor = Address::from_str("0x00000011F84B9aa48e5f8aA8B9897600006289Be").unwrap();
 
     let dai = dai();
     let usdc = usdc();
