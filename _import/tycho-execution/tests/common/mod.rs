@@ -43,6 +43,10 @@ pub fn pepe() -> Bytes {
     Bytes::from_str("0x6982508145454Ce325dDbE47a25d4ec3d2311933").unwrap()
 }
 
+pub fn usdt() -> Bytes {
+    Bytes::from_str("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap()
+}
+
 pub fn get_signer() -> PrivateKeySigner {
     // Set up a mock private key for signing (Alice's pk in our contract tests)
     let private_key =

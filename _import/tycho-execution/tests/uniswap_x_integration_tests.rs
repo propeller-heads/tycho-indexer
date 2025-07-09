@@ -12,54 +12,54 @@ use tycho_execution::encoding::{
 };
 
 use crate::common::{
-    encoding::encode_tycho_router_call, eth, eth_chain, get_tycho_router_encoder, router_address,
-    usdc, wbtc, weth,
+    dai, encoding::encode_tycho_router_call, eth, eth_chain, get_tycho_router_encoder,
+    router_address, usdc, usdt,
 };
 
 mod common;
 
 #[test]
 fn test_sequential_swap_unix() {
-    // Performs a sequential swap from WETH to USDC though WBTC using USV3 and USV2
-    // pools
+    // Replicates real uniswap X order settled in tx:
+    // 0x005d7b150017ba1b59d2f99395ccae7bda9b739938ade4e509817e32760aaf9d
+    // Performs a sequential
+    // swap from DAI to USDT though USDC using USV3 and USV2 pools
     //
-    //   WETH ───(USV3)──> WBTC ───(USV2)──> USDC
+    //   DAI ───(USV3)──> USDC ───(USV2)──> USDT
     // Creates all the calldata needed for the uniswap X callbackData
 
     let filler = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap();
     let unix_reactor = Address::from_str("0x00000011F84B9aa48e5f8aA8B9897600006289Be").unwrap();
 
-    let weth = weth();
-    let wbtc = wbtc();
+    let dai = dai();
     let usdc = usdc();
+    let usdt = usdt();
 
-    let swap_weth_wbtc = Swap {
+    let swap_dai_usdc = Swap {
         component: ProtocolComponent {
-            id: "0xCBCdF9626bC03E24f779434178A73a0B4bad62eD".to_string(),
+            id: "0x5777d92f208679DB4b9778590Fa3CAB3aC9e2168".to_string(),
             protocol_system: "uniswap_v3".to_string(),
             static_attributes: {
                 let mut attrs = HashMap::new();
-                attrs.insert(
-                    "fee".to_string(),
-                    Bytes::from(BigInt::from(3000).to_signed_bytes_be()),
-                );
+                attrs
+                    .insert("fee".to_string(), Bytes::from(BigInt::from(100).to_signed_bytes_be()));
                 attrs
             },
             ..Default::default()
         },
-        token_in: weth.clone(),
-        token_out: wbtc.clone(),
+        token_in: dai.clone(),
+        token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
     };
-    let swap_wbtc_usdc = Swap {
+    let swap_usdc_usdt = Swap {
         component: ProtocolComponent {
-            id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
+            id: "0x3041CbD36888bECc7bbCBc0045E3B1f144466f5f".to_string(),
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        token_in: wbtc.clone(),
-        token_out: usdc.clone(),
+        token_in: usdc.clone(),
+        token_out: usdt.clone(),
         split: 0f64,
         user_data: None,
     };
@@ -67,13 +67,13 @@ fn test_sequential_swap_unix() {
 
     let solution = Solution {
         exact_out: false,
-        given_token: weth.clone(),
-        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
-        checked_token: usdc.clone(),
-        checked_amount: BigUint::from_str("26173932").unwrap(),
+        given_token: dai.clone(),
+        given_amount: BigUint::from_str("2_000_000000000000000000").unwrap(),
+        checked_token: usdt.clone(),
+        checked_amount: BigUint::from_str("1_990_000000").unwrap(),
         sender: filler.clone(),
         receiver: filler.clone(),
-        swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
+        swaps: vec![swap_dai_usdc, swap_usdc_usdt],
         ..Default::default()
     };
 
@@ -99,7 +99,7 @@ fn test_sequential_swap_unix() {
 
     let token_in_approval_needed = token_approvals_manager
         .approval_needed(
-            bytes_to_address(&weth).unwrap(),
+            bytes_to_address(&dai).unwrap(),
             filler_address,
             bytes_to_address(&router_address()).unwrap(),
         )
