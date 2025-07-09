@@ -19,7 +19,7 @@ use crate::common::{
 mod common;
 
 #[test]
-fn test_sequential_swap_unix() {
+fn test_sequential_swap_usx() {
     // Replicates real uniswap X order settled in tx:
     // 0x005d7b150017ba1b59d2f99395ccae7bda9b739938ade4e509817e32760aaf9d
     // Performs a sequential
@@ -28,8 +28,9 @@ fn test_sequential_swap_unix() {
     //   DAI ───(USV3)──> USDC ───(USV2)──> USDT
     // Creates all the calldata needed for the uniswap X callbackData
 
-    let filler = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap();
-    let unix_reactor = Address::from_str("0x00000011F84B9aa48e5f8aA8B9897600006289Be").unwrap();
+    let filler = Bytes::from_str("0x6D9da78B6A5BEdcA287AA5d49613bA36b90c15C4").unwrap();
+    let usx_reactor = Address::from_str("0x00000011F84B9aa48e5f8aA8B9897600006289Be")
+    .unwrap();
 
     let dai = dai();
     let usdc = usdc();
@@ -106,12 +107,12 @@ fn test_sequential_swap_unix() {
         .unwrap();
 
     let token_out_approval_needed = token_approvals_manager
-        .approval_needed(bytes_to_address(&usdc).unwrap(), filler_address, unix_reactor)
+        .approval_needed(bytes_to_address(&usdc).unwrap(), filler_address, usx_reactor)
         .unwrap();
 
     let full_calldata =
         (token_in_approval_needed, token_out_approval_needed, tycho_calldata).abi_encode_packed();
 
     let hex_calldata = encode(&full_calldata);
-    write_calldata_to_file("test_sequential_swap_unix", hex_calldata.as_str());
+    write_calldata_to_file("test_sequential_swap_usx", hex_calldata.as_str());
 }

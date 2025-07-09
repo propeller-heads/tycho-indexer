@@ -72,9 +72,7 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
             abi.encodePacked(true, true, tychoRouterData);
 
         deal(WETH_ADDR, address(filler), amountIn);
-        vm.startPrank(address(filler));
-        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
-        vm.stopPrank();
+
         ResolvedOrder[] memory orders = new ResolvedOrder[](1);
         OutputToken[] memory outputs = new OutputToken[](1);
         outputs[0] = OutputToken({
@@ -82,7 +80,7 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
             amount: 1847751195973566072891,
             recipient: BOB
         });
-        // Mostly irrelevant fields for this test - we only need token input and outputs
+        // Irrelevant fields for this test - we only need token output
         // info for the sake of testing.
         orders[0] = ResolvedOrder({
             info: OrderInfo({
@@ -96,7 +94,6 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
             input: InputToken({
                 token: address(WETH_ADDR),
                 amount: amountIn,
-                // We need the proper maxAmount for our approval to work
                 maxAmount: amountIn
             }),
             outputs: outputs,
@@ -119,7 +116,45 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
         assertGe(IERC20(DAI_ADDR).balanceOf(BOB), amountOut);
     }
 
-    function testExecuteIntegration() public {
+    function testCallbackIntegration() public {
+        fillerSetup();
+        deal(DAI_ADDR, address(filler), 2000 ether);
+        uint256 amountOut = 1994835180;
+
+        ResolvedOrder[] memory orders = new ResolvedOrder[](1);
+        OutputToken[] memory outputs = new OutputToken[](1);
+
+        outputs[0] =
+            OutputToken({token: address(USDT_ADDR), amount: 0, recipient: BOB});
+        // Irrelevant fields for this test - we only need token output
+        // info for the sake of testing.
+        orders[0] = ResolvedOrder({
+            info: OrderInfo({
+                reactor: address(0),
+                swapper: address(0),
+                nonce: 0,
+                deadline: 0,
+                additionalValidationContract: address(0),
+                additionalValidationData: ""
+            }),
+            input: InputToken({token: address(DAI_ADDR), amount: 0, maxAmount: 0}),
+            outputs: outputs,
+            sig: "",
+            hash: ""
+        });
+        bytes memory callbackData =
+            loadCallDataFromFile("test_sequential_swap_usx");
+
+        vm.startPrank(REACTOR);
+        filler.reactorCallback(orders, callbackData);
+        vm.stopPrank();
+
+        // Check that the funds are in the filler at the end of the function call
+        uint256 finalBalance = IERC20(USDT_ADDR).balanceOf(address(filler));
+        assertGe(finalBalance, amountOut);
+    }
+
+    function testExecute() public {
         fillerSetup();
         // tx: 0x5b602b7d0a37e241bd032a907b9ddf314e9f2fc2104fd91cb55bdb3d8dfe4e9c
         // 0.2 WBTC -> USDC
