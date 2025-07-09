@@ -485,4 +485,34 @@ mod tests {
             ],
         );
     }
+
+    #[tokio::test]
+    async fn test_trace_balancer_v2_stable_pool() {
+        let url = env::var("RPC_URL").expect("RPC_URL is not set");
+        let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
+        let entry_points = vec![EntryPointWithTracingParams::new(
+            EntryPoint::new(
+                "1a8f81c256aee9c640e14bb0453ce247ea0dfe6f:getRate()".to_string(),
+                Bytes::from_str("1a8f81c256aee9c640e14bb0453ce247ea0dfe6f").unwrap(),
+                "getRate()".to_string(),
+            ),
+            TracingParams::RPCTracer(RPCTracerParams::new(
+                None,
+                Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
+            )),
+        )];
+        let traced_entry_points = tracer
+            .trace(
+                // Block 22589134 hash
+                Bytes::from_str(
+                    "0xf5e2c5bc64ba61e1230e34b2d5d8906416633100919b477d17a7c6fd69cde31d",
+                )
+                .unwrap(),
+                entry_points.clone(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(traced_entry_points, vec![]);
+    }
 }
