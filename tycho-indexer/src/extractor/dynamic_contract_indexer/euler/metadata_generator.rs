@@ -1,4 +1,4 @@
-use tycho_common::models::{blockchain::Block, protocol::ProtocolComponent, TxHash};
+use tycho_common::models::{blockchain::Block, protocol::ProtocolComponent};
 
 use crate::extractor::dynamic_contract_indexer::component_metadata::{
     MetadataError, MetadataRequest, MetadataRequestGenerator, MetadataRequestType, RpcTransport,
@@ -22,25 +22,13 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
     ) -> Result<Vec<MetadataRequest>, MetadataError> {
         let mut requests = vec![];
 
-        let balance_transport = RpcTransport::new(
-            self.rpc_url.clone(),
-            "eth_call".to_string(),
-            vec![serde_json::json!([
-                  {
-                    "data": "0x0902f1ac", // getReserves()
-                    "to": component.id
-                  },
-                  block.number.to_string() //TODO: should it be formatted as a hex string?
-                ]
-            )],
-        );
-        requests.push(MetadataRequest::new(
-            format!("euler_balance_{}", component.id),
-            component.id.clone(),
-            MetadataRequestType::ComponentBalance { token_addresses: component.tokens.clone() },
-            Box::new(balance_transport),
-            TxHash::zero(32), //TODO: how can we get the tx hash?
-        ));
+        let balance_request = self
+            .generate_balance_only_requests(component, block)?
+            .into_iter()
+            .next()
+            .expect("Balance request should be generated");
+
+        requests.push(balance_request);
 
         let limits_transport_0to1 = RpcTransport::new(
             self.rpc_url.clone(),
@@ -50,18 +38,20 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
                 "data": format!("0xaaed87a3000000000000000000000000{}000000000000000000000000{}", component.tokens[0], component.tokens[1]),
                 "to": component.id
               },
-              block.number.to_string()
+              format!("0x{:x}", block.number)
             ])],
         );
         requests.push(MetadataRequest::new(
-            format!("euler_limits_{}", component.id),
+            format!(
+                "euler_limits_{}_{}_to_{}",
+                component.id, component.tokens[0], component.tokens[1]
+            ),
             component.id.clone(),
             // Euler swap only has pools with 2 tokens
             MetadataRequestType::Limits {
                 token_pair: vec![(component.tokens[0].clone(), component.tokens[1].clone())],
             },
             Box::new(limits_transport_0to1),
-            TxHash::zero(32), //TODO: how can we get the tx hash?
         ));
 
         let limits_transport_1to0 = RpcTransport::new(
@@ -72,18 +62,20 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
                 "data": format!("0xaaed87a3000000000000000000000000{}000000000000000000000000{}", component.tokens[1], component.tokens[0]),
                 "to": component.id
               },
-              block.number.to_string()
+              format!("0x{:x}", block.number)
             ])],
         );
         requests.push(MetadataRequest::new(
-            format!("euler_limits_{}", component.id),
+            format!(
+                "euler_limits_{}_{}_to_{}",
+                component.id, component.tokens[1], component.tokens[0]
+            ),
             component.id.clone(),
             // Euler swap only has pools with 2 tokens
             MetadataRequestType::Limits {
                 token_pair: vec![(component.tokens[1].clone(), component.tokens[0].clone())],
             },
             Box::new(limits_transport_1to0),
-            TxHash::zero(32), //TODO: how can we get the tx hash?
         ));
 
         Ok(requests)
@@ -104,7 +96,7 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
                     "data": "0x0902f1ac", // getReserves()
                     "to": component.id
                   },
-                  block.number.to_string()
+                  format!("0x{:x}", block.number)
                 ]
             )],
         );
@@ -113,7 +105,6 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
             component.id.clone(),
             MetadataRequestType::ComponentBalance { token_addresses: component.tokens.clone() },
             Box::new(balance_transport),
-            TxHash::zero(32), //TODO: how can we get the tx hash?
         ));
         Ok(requests)
     }
@@ -129,10 +120,7 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
 #[cfg(test)]
 mod tests {
     use chrono::NaiveDateTime;
-    use tycho_common::{
-        models::{Chain, TxHash},
-        Bytes,
-    };
+    use tycho_common::{models::Chain, Bytes};
 
     use super::*;
 
@@ -180,7 +168,7 @@ mod tests {
         assert_eq!(requests[0].transport.routing_key(), "rpc_default".to_string());
         assert_eq!(
             requests[0].transport.deduplication_id(),
-            "eth_call_[[{\"data\":\"0x0902f1ac\",\"to\":\"0xbeef\"},\"12345\"]]".to_string()
+            "eth_call_[[{\"data\":\"0x0902f1ac\",\"to\":\"0xbeef\"},\"0x3039\"]]".to_string()
         );
 
         // Limits request 0 to 1
@@ -191,11 +179,14 @@ mod tests {
                 token_pair: vec![(component.tokens[0].clone(), component.tokens[1].clone())]
             }
         );
-        assert_eq!(requests[1].request_id, "euler_limits_0xbeef".to_string());
+        assert_eq!(
+            requests[1].request_id,
+            "euler_limits_0xbeef_0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48_to_0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".to_string()
+        );
         assert_eq!(requests[1].transport.routing_key(), "rpc_default".to_string());
         assert_eq!(
             requests[1].transport.deduplication_id(),
-            "eth_call_[[{\"data\":\"0xaaed87a30000000000000000000000000xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\",\"to\":\"0xbeef\"},\"12345\"]]".to_string()
+            "eth_call_[[{\"data\":\"0xaaed87a30000000000000000000000000xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\",\"to\":\"0xbeef\"},\"0x3039\"]]".to_string()
         );
 
         // Limits request 1 to 0
@@ -206,11 +197,14 @@ mod tests {
                 token_pair: vec![(component.tokens[1].clone(), component.tokens[0].clone())]
             }
         );
-        assert_eq!(requests[2].request_id, "euler_limits_0xbeef".to_string());
+        assert_eq!(
+            requests[2].request_id,
+            "euler_limits_0xbeef_0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2_to_0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string()
+        );
         assert_eq!(requests[2].transport.routing_key(), "rpc_default".to_string());
         assert_eq!(
             requests[2].transport.deduplication_id(),
-            "eth_call_[[{\"data\":\"0xaaed87a30000000000000000000000000xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000000xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\",\"to\":\"0xbeef\"},\"12345\"]]".to_string()
+            "eth_call_[[{\"data\":\"0xaaed87a30000000000000000000000000xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000000xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\",\"to\":\"0xbeef\"},\"0x3039\"]]".to_string()
         );
     }
 
@@ -231,12 +225,11 @@ mod tests {
             requests[0].request_type,
             MetadataRequestType::ComponentBalance { token_addresses: component.tokens.clone() }
         );
-        assert_eq!(requests[0].tx_hash, TxHash::zero(32));
         assert_eq!(requests[0].request_id, "euler_balance_0xbeef".to_string());
         assert_eq!(requests[0].transport.routing_key(), "rpc_default".to_string());
         assert_eq!(
             requests[0].transport.deduplication_id(),
-            "eth_call_[[{\"data\":\"0x0902f1ac\",\"to\":\"0xbeef\"},\"12345\"]]".to_string()
+            "eth_call_[[{\"data\":\"0x0902f1ac\",\"to\":\"0xbeef\"},\"0x3039\"]]".to_string()
         );
     }
 
