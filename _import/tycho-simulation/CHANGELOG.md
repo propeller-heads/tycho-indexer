@@ -1,3 +1,22 @@
+## [0.122.0](https://github.com/propeller-heads/tycho-simulation/compare/0.121.0...0.122.0) (2025-07-10)
+
+
+### Features
+
+* Add TokenProxyOverwriteFactory ([d95cf81](https://github.com/propeller-heads/tycho-simulation/commit/d95cf81224200572a801ea2832936686fd5987bc))
+* move token contract initialization to decoder ([27c00ea](https://github.com/propeller-heads/tycho-simulation/commit/27c00ea59d8dde096afd5d28ec527a9d03acd608))
+* remove deprecated ERC20OverwriteFactory ([b91f377](https://github.com/propeller-heads/tycho-simulation/commit/b91f377cb8522d45256bab38601b51aac8044682))
+
+
+### Bug Fixes
+
+* add original token slots to proxy token account ([fee1aaa](https://github.com/propeller-heads/tycho-simulation/commit/fee1aaad1d71db545705c8c1c9453df01894da37))
+* allow accounts to be loaded on the engine without native balances ([76cb251](https://github.com/propeller-heads/tycho-simulation/commit/76cb251e651224eadd308eaf77c11610bd7391b0))
+* fix state guard write lock scopes ([74eb6cd](https://github.com/propeller-heads/tycho-simulation/commit/74eb6cd5c270d33001036d8788b5f18ed3e2d6db))
+* Fix token AccountUpdate creation when processing deltas ([52eb686](https://github.com/propeller-heads/tycho-simulation/commit/52eb686e2801a7b0b450c067dfe5d04afcc67485))
+* initialize token accounts when creating a new pool state ([7c2dcea](https://github.com/propeller-heads/tycho-simulation/commit/7c2dcea7fb1bd3a6a51fa1a5521a9355ef01bfcf))
+* rollback CurveSwapAdapter ([a65dad4](https://github.com/propeller-heads/tycho-simulation/commit/a65dad440a9236b11e458ec161666ba02b942020))
+
 ## [0.121.0](https://github.com/propeller-heads/tycho-simulation/compare/0.120.0...0.121.0) (2025-07-09)
 
 
