@@ -63,7 +63,7 @@ fn test_single_encoding_strategy_ekubo() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -115,7 +115,7 @@ fn test_single_encoding_strategy_maverick() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -177,7 +177,7 @@ fn test_single_encoding_strategy_usv4_eth_in() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFromPermit2,
@@ -244,7 +244,7 @@ fn test_single_encoding_strategy_usv4_eth_out() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFromPermit2,
@@ -330,7 +330,7 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFromPermit2,
@@ -440,7 +440,7 @@ fn test_single_encoding_strategy_curve() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -507,7 +507,7 @@ fn test_single_encoding_strategy_curve_st_eth() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -560,7 +560,7 @@ fn test_single_encoding_strategy_balancer_v3() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,

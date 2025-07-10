@@ -99,7 +99,7 @@ fn test_split_swap_strategy_encoder() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFromPermit2,
@@ -212,7 +212,7 @@ fn test_split_input_cyclic_swap() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFromPermit2,
@@ -372,7 +372,7 @@ fn test_split_output_cyclic_swap() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFromPermit2,

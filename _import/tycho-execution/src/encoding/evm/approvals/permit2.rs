@@ -187,10 +187,10 @@ mod tests {
         signers::local::PrivateKeySigner,
     };
     use num_bigint::BigUint;
-    use tycho_common::models::Chain as TychoCommonChain;
+    use tycho_common::models::Chain;
 
     use super::*;
-    use crate::encoding::{evm::encoding_utils::sign_permit, models::Chain};
+    use crate::encoding::evm::encoding_utils::sign_permit;
 
     // These two implementations are to avoid comparing the expiration and sig_deadline fields
     // because they are timestamps
@@ -224,7 +224,7 @@ mod tests {
     }
 
     fn eth_chain() -> Chain {
-        TychoCommonChain::Ethereum.into()
+        Chain::Ethereum
     }
 
     #[test]
@@ -334,7 +334,7 @@ mod tests {
         let sol_permit: PermitSingle =
             PermitSingle::try_from(&permit).expect("Failed to convert to PermitSingle");
 
-        let signature = sign_permit(eth_chain().id, &permit, signer).unwrap();
+        let signature = sign_permit(eth_chain().id(), &permit, signer).unwrap();
         let encoded =
             (bytes_to_address(&anvil_account).unwrap(), sol_permit, signature.as_bytes().to_vec())
                 .abi_encode();

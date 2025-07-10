@@ -1,12 +1,13 @@
 use std::{collections::HashMap, fs};
 
+use tycho_common::models::Chain;
+
 use crate::encoding::{
     errors::EncodingError,
     evm::{
         constants::{DEFAULT_EXECUTORS_JSON, PROTOCOL_SPECIFIC_CONFIG},
         swap_encoder::builder::SwapEncoderBuilder,
     },
-    models::Chain,
     swap_encoder::SwapEncoder,
 };
 
@@ -30,15 +31,15 @@ impl SwapEncoderRegistry {
         } else {
             DEFAULT_EXECUTORS_JSON.to_string()
         };
-        let config: HashMap<String, HashMap<String, String>> = serde_json::from_str(&config_str)?;
+        let config: HashMap<Chain, HashMap<String, String>> = serde_json::from_str(&config_str)?;
         let executors = config
-            .get(&chain.name)
+            .get(&chain)
             .ok_or(EncodingError::FatalError("No executors found for chain".to_string()))?;
 
-        let protocol_specific_config: HashMap<String, HashMap<String, HashMap<String, String>>> =
+        let protocol_specific_config: HashMap<Chain, HashMap<String, HashMap<String, String>>> =
             serde_json::from_str(PROTOCOL_SPECIFIC_CONFIG)?;
         let protocol_specific_config = protocol_specific_config
-            .get(&chain.name)
+            .get(&chain)
             .ok_or(EncodingError::FatalError(
                 "No protocol specific config found for chain".to_string(),
             ))?;
@@ -47,7 +48,7 @@ impl SwapEncoderRegistry {
             let builder = SwapEncoderBuilder::new(
                 protocol,
                 executor_address,
-                chain.clone(),
+                chain,
                 protocol_specific_config
                     .get(protocol)
                     .cloned(),

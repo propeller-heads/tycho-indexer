@@ -5,7 +5,7 @@ use alloy::{
     sol_types::SolValue,
 };
 use serde_json::from_str;
-use tycho_common::Bytes;
+use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -13,7 +13,7 @@ use crate::encoding::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
         utils::{bytes_to_address, get_static_attribute, pad_to_fixed_size},
     },
-    models::{Chain, EncodingContext, Swap},
+    models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
 
@@ -466,9 +466,9 @@ impl SwapEncoder for CurveSwapEncoder {
             .to_string();
         Ok(Self {
             executor_address,
-            native_token_address: chain.native_token()?,
+            native_token_address: chain.native_token().address,
             native_token_curve_address,
-            wrapped_native_token_address: chain.wrapped_token()?,
+            wrapped_native_token_address: chain.wrapped_native_token().address,
         })
     }
 
@@ -646,7 +646,7 @@ mod tests {
     use alloy::hex::encode;
     use num_bigint::BigInt;
     use tycho_common::{
-        models::{protocol::ProtocolComponent, Chain as TychoCoreChain},
+        models::{protocol::ProtocolComponent, Chain},
         Bytes,
     };
 
@@ -681,7 +681,7 @@ mod tests {
             };
             let encoder = UniswapV2SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
-                TychoCoreChain::Ethereum.into(),
+                Chain::Ethereum,
                 None,
             )
             .unwrap();
@@ -741,7 +741,7 @@ mod tests {
             };
             let encoder = UniswapV3SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
-                TychoCoreChain::Ethereum.into(),
+                Chain::Ethereum,
                 None,
             )
             .unwrap();
@@ -803,7 +803,7 @@ mod tests {
             };
             let encoder = BalancerV2SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
-                TychoCoreChain::Ethereum.into(),
+                Chain::Ethereum,
                 Some(HashMap::from([(
                     "vault_address".to_string(),
                     "0xba12222222228d8ba445958a75a0704d566bf2c8".to_string(),
@@ -878,7 +878,7 @@ mod tests {
             };
             let encoder = UniswapV4SwapEncoder::new(
                 String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
-                TychoCoreChain::Ethereum.into(),
+                Chain::Ethereum,
                 None,
             )
             .unwrap();
@@ -951,7 +951,7 @@ mod tests {
 
             let encoder = UniswapV4SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
-                TychoCoreChain::Ethereum.into(),
+                Chain::Ethereum,
                 None,
             )
             .unwrap();
@@ -1046,7 +1046,7 @@ mod tests {
 
             let encoder = UniswapV4SwapEncoder::new(
                 String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
-                TychoCoreChain::Ethereum.into(),
+                Chain::Ethereum,
                 None,
             )
             .unwrap();
@@ -1130,9 +1130,7 @@ mod tests {
                 transfer_type: TransferType::Transfer,
             };
 
-            let encoder =
-                EkuboSwapEncoder::new(String::default(), TychoCoreChain::Ethereum.into(), None)
-                    .unwrap();
+            let encoder = EkuboSwapEncoder::new(String::default(), Chain::Ethereum, None).unwrap();
 
             let encoded_swap = encoder
                 .encode_swap(&swap, &encoding_context)
@@ -1163,9 +1161,7 @@ mod tests {
             let group_token_out = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
             let intermediary_token = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
 
-            let encoder =
-                EkuboSwapEncoder::new(String::default(), TychoCoreChain::Ethereum.into(), None)
-                    .unwrap();
+            let encoder = EkuboSwapEncoder::new(String::default(), Chain::Ethereum, None).unwrap();
 
             let encoding_context = EncodingContext {
                 receiver: RECEIVER.into(),
@@ -1329,12 +1325,8 @@ mod tests {
                 split: 0f64,
                 user_data: None,
             };
-            let encoder = CurveSwapEncoder::new(
-                String::default(),
-                TychoCoreChain::Ethereum.into(),
-                curve_config(),
-            )
-            .unwrap();
+            let encoder =
+                CurveSwapEncoder::new(String::default(), Chain::Ethereum, curve_config()).unwrap();
             let (i, j) = encoder
                 .get_coin_indexes(
                     &swap,
@@ -1384,7 +1376,7 @@ mod tests {
             };
             let encoder = CurveSwapEncoder::new(
                 String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
-                TychoCoreChain::Ethereum.into(),
+                Chain::Ethereum,
                 curve_config(),
             )
             .unwrap();
@@ -1456,7 +1448,7 @@ mod tests {
             };
             let encoder = CurveSwapEncoder::new(
                 String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
-                TychoCoreChain::Ethereum.into(),
+                Chain::Ethereum,
                 curve_config(),
             )
             .unwrap();
@@ -1529,7 +1521,7 @@ mod tests {
             };
             let encoder = CurveSwapEncoder::new(
                 String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
-                TychoCoreChain::Ethereum.into(),
+                Chain::Ethereum,
                 Some(HashMap::from([
                     (
                         "native_token_address".to_string(),
@@ -1603,7 +1595,7 @@ mod tests {
             };
             let encoder = BalancerV3SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
-                TychoCoreChain::Ethereum.into(),
+                Chain::Ethereum,
                 None,
             )
             .unwrap();
@@ -1661,7 +1653,7 @@ mod tests {
             };
             let encoder = MaverickV2SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
-                TychoCoreChain::Ethereum.into(),
+                Chain::Ethereum,
                 None,
             )
             .unwrap();

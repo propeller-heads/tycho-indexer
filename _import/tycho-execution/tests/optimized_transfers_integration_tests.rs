@@ -80,7 +80,7 @@ fn test_uniswap_v3_uniswap_v2() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -167,7 +167,7 @@ fn test_uniswap_v3_uniswap_v3() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -263,7 +263,7 @@ fn test_uniswap_v3_curve() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -334,7 +334,7 @@ fn test_balancer_v2_uniswap_v2() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -490,7 +490,7 @@ fn test_multi_protocol() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFromPermit2,
@@ -565,7 +565,7 @@ fn test_uniswap_v3_balancer_v3() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
