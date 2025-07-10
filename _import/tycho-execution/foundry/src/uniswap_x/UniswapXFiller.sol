@@ -9,6 +9,7 @@ import {
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import {TychoRouter} from "../TychoRouter.sol";
 
 error UniswapXFiller__AddressZero();
 error UniswapXFiller__BatchExecutionNotSupported();
@@ -19,6 +20,7 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
     // UniswapX V2DutchOrder Reactor
     IReactor public immutable reactor;
     address public immutable tychoRouter;
+    address public immutable nativeAddress;
 
     // keccak256("NAME_OF_ROLE") : save gas on deployment
     bytes32 public constant REACTOR_ROLE =
@@ -30,7 +32,11 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
         address indexed token, uint256 amount, address indexed receiver
     );
 
-    constructor(address _tychoRouter, address _reactor) {
+    constructor(
+        address _tychoRouter,
+        address _reactor,
+        address _native_address
+    ) {
         if (_tychoRouter == address(0)) revert UniswapXFiller__AddressZero();
         if (_reactor == address(0)) revert UniswapXFiller__AddressZero();
 
@@ -38,6 +44,9 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
         _grantRole(REACTOR_ROLE, address(_reactor));
         tychoRouter = _tychoRouter;
         reactor = IReactor(_reactor);
+
+        // slither-disable-next-line missing-zero-check
+        nativeAddress = _native_address;
     }
 
     function execute(SignedOrder calldata order, bytes calldata callbackData)
@@ -58,12 +67,20 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
 
         ResolvedOrder memory order = resolvedOrders[0];
 
-        // TODO properly handle native in and out tokens
-        uint256 ethValue = 0;
+        bool tokenInApprovalNeeded = bool(uint8(callbackData[0]) == 1);
+        bool tokenOutApprovalNeeded = bool(uint8(callbackData[1]) == 1);
+        bytes calldata tychoCalldata = bytes(callbackData[2:]);
+
+        // The TychoRouter will take the input tokens from the filler
+        if (tokenInApprovalNeeded) {
+            // Native ETH input is not supported by UniswapX
+            IERC20(order.input.token).forceApprove(
+                tychoRouter, type(uint256).max
+            );
+        }
 
         // slither-disable-next-line low-level-calls
-        (bool success, bytes memory result) =
-            tychoRouter.call{value: ethValue}(callbackData);
+        (bool success, bytes memory result) = tychoRouter.call(tychoCalldata);
 
         if (!success) {
             revert(
@@ -75,10 +92,19 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
             );
         }
 
-        // Multiple outputs are possible when taking fees - but token itself should
-        // not change.
-        IERC20 token = IERC20(order.outputs[0].token);
-        token.forceApprove(address(reactor), type(uint256).max);
+        if (tokenOutApprovalNeeded) {
+            // Multiple outputs are possible when taking fees - but token itself should
+            // not change.
+            OutputToken memory output = order.outputs[0];
+            if (output.token != nativeAddress) {
+                IERC20 token = IERC20(output.token);
+                token.forceApprove(address(reactor), type(uint256).max);
+            } else {
+                // With native ETH - the filler is responsible for transferring back
+                // to the reactor.
+                Address.sendValue(payable(address(reactor)), output.amount);
+            }
+        }
     }
 
     /**
