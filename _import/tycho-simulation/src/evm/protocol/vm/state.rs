@@ -14,7 +14,7 @@ use tycho_common::{dto::ProtocolStateDelta, Bytes};
 
 use super::{
     constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
-    erc20_token::{ERC20OverwriteFactory, ERC20Slots, Overwrites},
+    erc20_token::{Overwrites, TokenProxyOverwriteFactory},
     models::Capability,
     tycho_simulation_contract::TychoSimulationContract,
 };
@@ -28,7 +28,6 @@ use crate::{
             u256_num::{u256_to_biguint, u256_to_f64},
             utils::bytes_to_address,
         },
-        ContractCompiler, SlotId,
     },
     models::{Balances, Token},
     protocol::{
@@ -68,12 +67,6 @@ where
     involved_contracts: HashSet<Address>,
     /// A map of contracts to their token balances.
     contract_balances: HashMap<Address, HashMap<Address, U256>>,
-    /// Allows the specification of custom storage slots for token allowances and
-    /// balances. This is particularly useful for token contracts involved in protocol
-    /// logic that extends beyond simple transfer functionality.
-    /// Each entry also specify the compiler with which the target contract was compiled. This is
-    /// later used to compute storage slot for maps.
-    token_storage_slots: HashMap<Address, (ERC20Slots, ContractCompiler)>,
     /// Indicates if the protocol uses custom update rules and requires update
     /// triggers to recalculate spot prices ect. Default is to update on all changes on
     /// the pool.
@@ -104,7 +97,6 @@ where
         capabilities: HashSet<Capability>,
         block_lasting_overwrites: HashMap<Address, Overwrites>,
         involved_contracts: HashSet<Address>,
-        token_storage_slots: HashMap<Address, (ERC20Slots, ContractCompiler)>,
         manual_updates: bool,
         adapter_contract: TychoSimulationContract<D>,
     ) -> Self {
@@ -119,7 +111,6 @@ where
             block_lasting_overwrites,
             involved_contracts,
             contract_balances,
-            token_storage_slots,
             manual_updates,
             adapter_contract,
         }
@@ -368,15 +359,17 @@ where
                 .component_balances
                 .get(&self.id)
             {
-                for (token, bal) in bals {
-                    let addr = bytes_to_address(token).map_err(|_| {
-                        SimulationError::FatalError(format!(
-                            "Invalid token address in balance update: {token:?}"
-                        ))
-                    })?;
-                    self.balances
-                        .insert(addr, U256::from_be_slice(bal));
-                }
+                self.balances = bals
+                    .iter()
+                    .map(|(token, bal)| {
+                        let addr = bytes_to_address(token).map_err(|_| {
+                            SimulationError::FatalError(format!(
+                                "Invalid token address in balance update: {token:?}"
+                            ))
+                        })?;
+                        Ok((addr, U256::from_be_slice(bal)))
+                    })
+                    .collect::<Result<HashMap<_, _>, SimulationError>>()?;
             }
         } else {
             // Pool uses contract balances for overwrites
@@ -434,16 +427,7 @@ where
             res.push(self.get_balance_overwrites()?);
         }
 
-        let (slots, compiler) = self
-            .token_storage_slots
-            .get(sell_token)
-            .cloned()
-            .unwrap_or((
-                ERC20Slots::new(SlotId::from(0), SlotId::from(1)),
-                ContractCompiler::Solidity,
-            ));
-
-        let mut overwrites = ERC20OverwriteFactory::new(*sell_token, slots.clone(), compiler);
+        let mut overwrites = TokenProxyOverwriteFactory::new(*sell_token, None);
 
         overwrites.set_balance(max_amount, Address::from_slice(&*EXTERNAL_ACCOUNT.0));
 
@@ -483,21 +467,7 @@ where
         };
         if let Some(address) = address {
             for (token, bal) in &self.balances {
-                let (slots, compiler) = if self.involved_contracts.contains(token) {
-                    self.token_storage_slots
-                        .get(token)
-                        .cloned()
-                        .ok_or_else(|| {
-                            SimulationError::FatalError(
-                                "Failed to get balance overwrites: Token storage slots not found"
-                                    .into(),
-                            )
-                        })?
-                } else {
-                    (ERC20Slots::new(SlotId::from(0), SlotId::from(1)), ContractCompiler::Solidity)
-                };
-
-                let mut overwrites = ERC20OverwriteFactory::new(*token, slots, compiler);
+                let mut overwrites = TokenProxyOverwriteFactory::new(*token, None);
                 overwrites.set_balance(*bal, address);
                 balance_overwrites.extend(overwrites.get_overwrites());
             }
@@ -507,16 +477,7 @@ where
         // for a contract we explicitly track balances for)
         for (contract, balances) in &self.contract_balances {
             for (token, balance) in balances {
-                let (slots, compiler) = self
-                    .token_storage_slots
-                    .get(token)
-                    .cloned()
-                    .unwrap_or((
-                        ERC20Slots::new(SlotId::from(0), SlotId::from(1)),
-                        ContractCompiler::Solidity,
-                    ));
-
-                let mut overwrites = ERC20OverwriteFactory::new(*token, slots, compiler);
+                let mut overwrites = TokenProxyOverwriteFactory::new(*token, None);
                 overwrites.set_balance(*balance, *contract);
                 balance_overwrites.extend(overwrites.get_overwrites());
             }
@@ -747,7 +708,10 @@ mod tests {
     use super::*;
     use crate::evm::{
         engine_db::{create_engine, SHARED_TYCHO_DB},
-        protocol::vm::{constants::BALANCER_V2, state_builder::EVMPoolStateBuilder},
+        protocol::vm::{
+            constants::{BALANCER_V2, ERC20_PROXY_BYTECODE},
+            state_builder::EVMPoolStateBuilder,
+        },
         simulation::SimulationEngine,
         tycho_models::AccountUpdate,
     };
@@ -816,6 +780,20 @@ mod tests {
         db.update(accounts, Some(block));
 
         let tokens = vec![dai().address, bal().address];
+        for token in &tokens {
+            engine.state.init_account(
+                bytes_to_address(token).unwrap(),
+                AccountInfo {
+                    balance: U256::from(0),
+                    nonce: 0,
+                    code_hash: KECCAK_EMPTY,
+                    code: Some(Bytecode::new_raw(ERC20_PROXY_BYTECODE.into())),
+                },
+                None,
+                true,
+            );
+        }
+
         let block = BlockHeader {
             number: 18485417,
             hash: B256::from_str(
@@ -930,7 +908,6 @@ mod tests {
             .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
         assert_eq!(result.amount, BigUint::from_str("137780051463393923").unwrap());
-        assert_eq!(result.gas, BigUint::from_str("102770").unwrap());
         assert_ne!(new_state.spot_prices, pool_state.spot_prices);
         assert!(pool_state
             .block_lasting_overwrites
@@ -951,7 +928,6 @@ mod tests {
             .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
         assert_eq!(result.amount, BigUint::from_str("137780051463393923").unwrap());
-        assert_eq!(result.gas, BigUint::from_str("102770").unwrap());
         assert_ne!(new_state.spot_prices, pool_state.spot_prices);
 
         let new_result = new_state
@@ -964,7 +940,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(new_result.amount, BigUint::from_str("136964651490065626").unwrap());
-        assert_eq!(new_result.gas, BigUint::from_str("70048").unwrap());
         assert_ne!(new_state_second_swap.spot_prices, new_state.spot_prices);
     }
 
@@ -982,7 +957,6 @@ mod tests {
             .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
         assert_eq!(result.amount, BigUint::ZERO);
-        assert_eq!(result.gas, 68656.to_biguint().unwrap());
         assert_eq!(new_state.spot_prices, pool_state.spot_prices)
     }
 

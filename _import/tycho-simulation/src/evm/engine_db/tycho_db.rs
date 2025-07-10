@@ -10,7 +10,7 @@ use revm::{
     DatabaseRef,
 };
 use thiserror::Error;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 
 use crate::evm::{
     account_storage::{AccountStorage, StateUpdate},
@@ -82,7 +82,7 @@ impl PreCachedDB {
         for update in account_updates {
             match update.change {
                 ChangeType::Update => {
-                    info!(%update.address, "Updating account");
+                    debug!(%update.address, "Updating account");
 
                     // If the account is not present, the internal storage will handle throwing
                     // an exception.
@@ -95,21 +95,22 @@ impl PreCachedDB {
                     );
                 }
                 ChangeType::Deletion => {
-                    info!(%update.address, "Deleting account");
+                    debug!(%update.address, "Deleting account");
 
                     warn!(%update.address, "Deletion not implemented");
                 }
                 ChangeType::Creation => {
-                    info!(%update.address, "Creating account");
+                    debug!(%update.address, "Creating account");
 
-                    // We expect the code and balance to be present.
+                    // We expect the code to be present.
                     let code = Bytecode::new_raw(Bytes::from(
                         update
                             .code
                             .clone()
                             .expect("account code"),
                     ));
-                    let balance = update.balance.expect("account balance");
+                    // If the balance is not present, we set it to zero.
+                    let balance = update.balance.unwrap_or(U256::ZERO);
 
                     // Initialize the account.
                     write_guard.accounts.init_account(
@@ -590,11 +591,7 @@ mod tests {
         let ambient_contract =
             Address::from_str("0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688").unwrap();
 
-        let tycho_http_url = "http://127.0.0.1:4242";
-        info!(tycho_http_url, "Creating PreCachedDB");
         let db = PreCachedDB::new().expect("db should initialize");
-
-        info!("Fetching account info");
 
         let acc_info = db
             .basic_ref(ambient_contract)

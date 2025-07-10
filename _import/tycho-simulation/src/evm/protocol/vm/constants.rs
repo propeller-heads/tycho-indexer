@@ -12,6 +12,7 @@ lazy_static! {
 }
 
 pub const ERC20_BYTECODE: &[u8] = include_bytes!("assets/ERC20.bin");
+pub const ERC20_PROXY_BYTECODE: &[u8] = include_bytes!("assets/TokenProxy.bin");
 pub const BALANCER_V2: &[u8] = include_bytes!("assets/BalancerV2SwapAdapter.evm.runtime");
 pub const BALANCER_V3: &[u8] = include_bytes!("assets/BalancerV3SwapAdapter.evm.runtime");
 pub const CURVE: &[u8] = include_bytes!("assets/CurveSwapAdapter.evm.runtime");
