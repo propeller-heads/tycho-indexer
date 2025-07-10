@@ -1,3 +1,10 @@
+## [0.123.0](https://github.com/propeller-heads/tycho-simulation/compare/0.122.0...0.123.0) (2025-07-10)
+
+
+### Features
+
+* create default BalancerV2 filter ([0c448cc](https://github.com/propeller-heads/tycho-simulation/commit/0c448cc9726529c6a2f46728da2f6f627e8dd66a))
+
 ## [0.122.0](https://github.com/propeller-heads/tycho-simulation/compare/0.121.0...0.122.0) (2025-07-10)
 
 
