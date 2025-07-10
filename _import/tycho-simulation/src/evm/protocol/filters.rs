@@ -9,9 +9,42 @@ use crate::evm::protocol::vm::utils::json_deserialize_be_bigint_list;
 const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
 const ZERO_ADDRESS_ARR: [u8; 20] = [0u8; 20];
 
+// Defines the default Balancer V2 Filter
+pub fn balancer_v2_pool_filter(component: &ComponentWithState) -> bool {
+    balancer_v2_pool_filter_after_dci_update(component)
+}
+
+/// Filters out pools that are failing at the moment after DCI update
+pub fn balancer_v2_pool_filter_after_dci_update(component: &ComponentWithState) -> bool {
+    const UNSUPPORTED_COMPONENT_IDS: [&str; 6] = [
+        "0x848a5564158d84b8a8fb68ab5d004fae11619a5400000000000000000000066a",
+        "0x596192bb6e41802428ac943d2f1476c1af25cc0e000000000000000000000659",
+        "0x05ff47afada98a98982113758878f9a8b9fdda0a000000000000000000000645",
+        "0x265b6d1a6c12873a423c177eba6dd2470f40a3b50001000000000000000003fd",
+        "0x9f9d900462492d4c21e9523ca95a7cd86142f298000200000000000000000462",
+        "0x42ed016f826165c2e5976fe5bc3df540c5ad0af700000000000000000000058b",
+    ];
+
+    if UNSUPPORTED_COMPONENT_IDS.contains(
+        &component
+            .component
+            .id
+            .to_lowercase()
+            .as_str(),
+    ) {
+        debug!(
+            "Filtering out Balancer pools {} that have missing Accounts after DCI update.",
+            component.component.id
+        );
+        return false;
+    }
+
+    true
+}
+
 /// Filters out pools that have dynamic rate providers or unsupported pool types
 /// in Balancer V2
-pub fn balancer_v2_pool_filter(component: &ComponentWithState) -> bool {
+pub fn balancer_v2_pool_filter_pre_dci(component: &ComponentWithState) -> bool {
     // Check for rate_providers in static_attributes
     if let Some(rate_providers_data) = component
         .component

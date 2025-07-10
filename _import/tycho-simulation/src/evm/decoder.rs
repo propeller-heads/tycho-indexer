@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use alloy::primitives::Address;
+use alloy::primitives::{Address, U256};
 use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{debug, error, info, warn};
@@ -16,6 +16,10 @@ use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
 use crate::{
     evm::{
         engine_db::{update_engine, SHARED_TYCHO_DB},
+        protocol::{
+            utils::bytes_to_address,
+            vm::{constants::ERC20_PROXY_BYTECODE, erc20_token::IMPLEMENTATION_SLOT},
+        },
         tycho_models::{AccountUpdate, ResponseAccount},
     },
     models::Balances,
@@ -38,6 +42,8 @@ struct DecoderState {
     states: HashMap<String, Box<dyn ProtocolSim>>,
     // maps contract address to the pools they affect
     contracts_map: HashMap<Bytes, HashSet<String>>,
+    // Maps original token address to their new proxy token address
+    proxy_token_addresses: HashMap<Address, Address>,
 }
 
 type DecodeFut =
@@ -168,81 +174,138 @@ impl TychoStreamDecoder {
             // Add any new tokens
             if let Some(deltas) = protocol_msg.deltas.as_ref() {
                 let mut state_guard = self.state.write().await;
-                let res = deltas
+
+                let new_tokens = deltas
                     .new_tokens
                     .iter()
-                    .filter_map(|(addr, t)| {
-                        if t.quality < self.min_token_quality ||
-                            // Do not add the token if it's already included in the state_guard
-                            state_guard.tokens.contains_key(addr)
-                        {
-                            return None;
-                        }
-
-                        let token = t.clone().try_into();
-                        let result = match token {
-                            Ok(t) => Ok((addr.clone(), t)),
-                            Err(e) => Err(StreamDecodeError::Fatal(format!(
-                                "Failed decoding token {e} {addr:#044x}"
-                            ))),
-                        };
-                        Some(result)
+                    .filter(|(addr, t)| {
+                        t.quality >= self.min_token_quality &&
+                            !state_guard.tokens.contains_key(*addr)
                     })
-                    .collect::<Result<HashMap<Bytes, Token>, StreamDecodeError>>()?;
+                    .filter_map(|(addr, t)| {
+                        t.clone()
+                            .try_into()
+                            .map(|token| (addr.clone(), token))
+                            .map_err(|e| {
+                                warn!("Failed decoding token {e} {addr:#044x}");
+                                e
+                            })
+                            .ok()
+                    })
+                    .collect::<HashMap<Bytes, Token>>();
 
-                if !res.is_empty() {
-                    debug!(n = res.len(), "NewTokens");
-                    state_guard.tokens.extend(res);
+                if !new_tokens.is_empty() {
+                    debug!(n = new_tokens.len(), "NewTokens");
+                    state_guard.tokens.extend(new_tokens);
                 }
             }
 
             // Remove untracked components
-            let state_guard = self.state.read().await;
-            removed_pairs.extend(
-                protocol_msg
-                    .removed_components
-                    .iter()
-                    .flat_map(|(id, comp)| match Bytes::from_str(id) {
-                        Ok(addr) => Some(Ok((id, addr, comp))),
-                        Err(e) => {
-                            if self.skip_state_decode_failures {
-                                None
-                            } else {
-                                Some(Err(StreamDecodeError::Fatal(e.to_string())))
+            {
+                let state_guard = self.state.read().await;
+                removed_pairs.extend(
+                    protocol_msg
+                        .removed_components
+                        .iter()
+                        .flat_map(|(id, comp)| match Bytes::from_str(id) {
+                            Ok(addr) => Some(Ok((id, addr, comp))),
+                            Err(e) => {
+                                if self.skip_state_decode_failures {
+                                    None
+                                } else {
+                                    Some(Err(StreamDecodeError::Fatal(e.to_string())))
+                                }
                             }
-                        }
-                    })
-                    .collect::<Result<Vec<_>, StreamDecodeError>>()?
-                    .into_iter()
-                    .flat_map(|(id, _, comp)| {
-                        let tokens = comp
-                            .tokens
-                            .iter()
-                            .flat_map(|addr| state_guard.tokens.get(addr).cloned())
-                            .collect::<Vec<_>>();
+                        })
+                        .collect::<Result<Vec<_>, StreamDecodeError>>()?
+                        .into_iter()
+                        .flat_map(|(id, _, comp)| {
+                            let tokens = comp
+                                .tokens
+                                .iter()
+                                .flat_map(|addr| state_guard.tokens.get(addr).cloned())
+                                .collect::<Vec<_>>();
 
-                        if tokens.len() == comp.tokens.len() {
-                            Some((
-                                id.clone(),
-                                ProtocolComponent::from_with_tokens(comp.clone(), tokens),
-                            ))
-                        } else {
-                            // We may reach this point if the removed component
-                            //  contained low quality tokens, in this case the component
-                            //  was never added, so we can skip emitting it.
-                            None
-                        }
-                    }),
+                            if tokens.len() == comp.tokens.len() {
+                                Some((
+                                    id.clone(),
+                                    ProtocolComponent::from_with_tokens(comp.clone(), tokens),
+                                ))
+                            } else {
+                                // We may reach this point if the removed component
+                                //  contained low quality tokens, in this case the component
+                                //  was never added, so we can skip emitting it.
+                                None
+                            }
+                        }),
+                );
+            }
+
+            let mut state_guard = self.state.write().await;
+            // UPDATE VM STORAGE
+            let mut token_proxy_accounts: HashMap<Address, AccountUpdate> = HashMap::new();
+
+            info!(
+                "Processing {} contracts from snapshots",
+                protocol_msg
+                    .snapshots
+                    .get_vm_storage()
+                    .len()
             );
 
-            // UPDATE VM STORAGE
             let storage_by_address: HashMap<Address, ResponseAccount> = protocol_msg
-                .clone()
                 .snapshots
                 .get_vm_storage()
                 .iter()
-                .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
+                .map(|(key, value)| {
+                    let mut account: ResponseAccount = value.clone().into();
+
+                    if state_guard.tokens.contains_key(key) {
+                        // To work with Tycho's token overwrites system, if we get account snapshots
+                        // for a token we must handle them with a proxy/wrapper contract.
+                        // This is done by loading the original token contract at a new address,
+                        // setting the proxy token contract at the original token address and
+                        // pointing that proxy contract to the token's new contract address.
+
+                        // Get or create a new token address
+                        let proxy_addr = if !state_guard
+                            .proxy_token_addresses
+                            .contains_key(&account.address)
+                        {
+                            // Token does not have a proxy contract yet, create one
+
+                            // Assign original token contract to new address
+                            let new_address = generate_proxy_token_address(
+                                state_guard.proxy_token_addresses.len() as u32,
+                            );
+                            state_guard
+                                .proxy_token_addresses
+                                .insert(account.address, new_address);
+
+                            // Add proxy token contract at original token address
+                            let proxy_state = create_proxy_token_account(
+                                account.address,
+                                new_address,
+                                &account.slots,
+                                value.chain.into(),
+                            );
+                            token_proxy_accounts.insert(account.address, proxy_state);
+                            new_address
+                        } else {
+                            *state_guard
+                                .proxy_token_addresses
+                                .get(&account.address)
+                                .unwrap()
+                        };
+
+                        // assign original token contract to new address
+                        account.address = proxy_addr;
+                    };
+                    (account.address, account)
+                })
                 .collect();
+            drop(state_guard);
+
             let account_balances = protocol_msg
                 .clone()
                 .snapshots
@@ -256,119 +319,223 @@ impl TychoStreamDecoder {
                     Some((addr.clone(), balances))
                 })
                 .collect::<AccountBalances>();
-            info!("Updating engine with {} snapshots", storage_by_address.len());
+
+            info!("Updating engine with {} contracts from snapshots", storage_by_address.len());
             update_engine(
                 SHARED_TYCHO_DB.clone(),
                 block.clone(),
                 Some(storage_by_address),
-                HashMap::new(),
+                token_proxy_accounts,
             )
             .await;
             info!("Engine updated");
 
             let mut new_components = HashMap::new();
-
-            // PROCESS SNAPSHOTS
-            'outer: for (id, snapshot) in protocol_msg
-                .snapshots
-                .get_states()
-                .clone()
+            let mut count_token_skips = 0;
             {
-                // Skip any unsupported pools
-                if let Some(predicate) = self
-                    .inclusion_filters
-                    .get(protocol.as_str())
+                let state_guard = self.state.read().await;
+                // PROCESS SNAPSHOTS
+                'outer: for (id, snapshot) in protocol_msg
+                    .snapshots
+                    .get_states()
+                    .clone()
                 {
-                    if !predicate(&snapshot) {
-                        continue
-                    }
-                }
-
-                // Construct component from snapshot
-                let mut component_tokens = Vec::new();
-                for token in snapshot.component.tokens.clone() {
-                    match state_guard.tokens.get(&token) {
-                        Some(token) => component_tokens.push(token.clone()),
-                        None => {
-                            debug!("Token not found {}, ignoring pool {:x?}", token, id);
-                            continue 'outer;
-                        }
-                    }
-                }
-                let component = ProtocolComponent::from_with_tokens(
-                    snapshot.component.clone(),
-                    component_tokens,
-                );
-
-                // collect contracts:ids mapping for states that should update on contract changes
-
-                if component
-                    .static_attributes
-                    .contains_key("manual_updates")
-                {
-                    for contract in &component.contract_ids {
-                        contracts_map
-                            .entry(contract.clone())
-                            .or_insert_with(HashSet::new)
-                            .insert(id.clone());
-                    }
-                }
-
-                new_pairs.insert(id.clone(), component);
-
-                // Construct state from snapshot
-                if let Some(state_decode_f) = self.registry.get(protocol.as_str()) {
-                    match state_decode_f(
-                        snapshot,
-                        block.clone(),
-                        account_balances.clone(),
-                        self.state.clone(),
-                    )
-                    .await
+                    // Skip any unsupported pools
+                    if let Some(predicate) = self
+                        .inclusion_filters
+                        .get(protocol.as_str())
                     {
-                        Ok(state) => {
-                            new_components.insert(id.clone(), state);
+                        if !predicate(&snapshot) {
+                            continue;
                         }
-                        Err(e) => {
-                            if self.skip_state_decode_failures {
-                                warn!(pool = id, error = %e, "StateDecodingFailure");
+                    }
+
+                    // Construct component from snapshot
+                    let mut component_tokens = Vec::new();
+                    let mut new_tokens_accounts = HashMap::new();
+                    for token in snapshot.component.tokens.clone() {
+                        match state_guard.tokens.get(&token) {
+                            Some(token) => {
+                                component_tokens.push(token.clone());
+
+                                // If the token is not a proxy token, we need to add it to the
+                                // simulation engine
+                                let token_address = match bytes_to_address(&token.address) {
+                                    Ok(addr) => addr,
+                                    Err(_) => {
+                                        debug!(
+                                            "Token address could not be decoded {}, ignoring pool {:x?}",
+                                            token.address, id
+                                        );
+                                        continue 'outer;
+                                    }
+                                };
+                                if !state_guard
+                                    .proxy_token_addresses
+                                    .contains_key(&token_address)
+                                {
+                                    new_tokens_accounts.insert(
+                                        token_address,
+                                        AccountUpdate {
+                                            address: token_address,
+                                            chain: snapshot.component.chain.into(),
+                                            slots: HashMap::new(),
+                                            balance: None,
+                                            code: Some(ERC20_PROXY_BYTECODE.into()),
+                                            change: ChangeType::Creation,
+                                        },
+                                    );
+                                }
+                            }
+                            None => {
+                                count_token_skips += 1;
+                                debug!("Token not found {}, ignoring pool {:x?}", token, id);
                                 continue 'outer;
-                            } else {
-                                error!(pool = id, error = %e, "StateDecodingFailure");
-                                return Err(StreamDecodeError::Fatal(format!("{e}")));
                             }
                         }
                     }
-                } else if self.skip_state_decode_failures {
-                    warn!(pool = id, "MissingDecoderRegistration");
-                    continue 'outer;
-                } else {
-                    error!(pool = id, "MissingDecoderRegistration");
-                    return Err(StreamDecodeError::Fatal(format!(
-                        "Missing decoder registration for: {id}"
-                    )));
+                    let component = ProtocolComponent::from_with_tokens(
+                        snapshot.component.clone(),
+                        component_tokens,
+                    );
+
+                    // Add new tokens to the simulation engine
+                    if !new_tokens_accounts.is_empty() {
+                        update_engine(
+                            SHARED_TYCHO_DB.clone(),
+                            block.clone().into(),
+                            None,
+                            new_tokens_accounts,
+                        )
+                        .await;
+                    }
+
+                    // collect contracts:ids mapping for states that should update on contract
+                    // changes
+                    if component
+                        .static_attributes
+                        .contains_key("manual_updates")
+                    {
+                        for contract in &component.contract_ids {
+                            contracts_map
+                                .entry(contract.clone())
+                                .or_insert_with(HashSet::new)
+                                .insert(id.clone());
+                        }
+                    }
+
+                    // Collect new pairs (components)
+                    new_pairs.insert(id.clone(), component);
+
+                    // Construct state from snapshot
+                    if let Some(state_decode_f) = self.registry.get(protocol.as_str()) {
+                        match state_decode_f(
+                            snapshot,
+                            block.clone(),
+                            account_balances.clone(),
+                            self.state.clone(),
+                        )
+                        .await
+                        {
+                            Ok(state) => {
+                                new_components.insert(id.clone(), state);
+                            }
+                            Err(e) => {
+                                if self.skip_state_decode_failures {
+                                    warn!(pool = id, error = %e, "StateDecodingFailure");
+                                    continue 'outer;
+                                } else {
+                                    error!(pool = id, error = %e, "StateDecodingFailure");
+                                    return Err(StreamDecodeError::Fatal(format!("{e}")));
+                                }
+                            }
+                        }
+                    } else if self.skip_state_decode_failures {
+                        warn!(pool = id, "MissingDecoderRegistration");
+                        continue 'outer;
+                    } else {
+                        error!(pool = id, "MissingDecoderRegistration");
+                        return Err(StreamDecodeError::Fatal(format!(
+                            "Missing decoder registration for: {id}"
+                        )));
+                    }
                 }
             }
 
-            if !new_components.is_empty() {
-                info!("Decoded {} snapshots for protocol {}", new_components.len(), protocol);
+            if !protocol_msg.snapshots.states.is_empty() {
+                info!("Decoded {} snapshots for protocol {protocol}", new_components.len());
+            }
+            if count_token_skips > 0 {
+                info!("Skipped {count_token_skips} pools due to missing tokens");
             }
             updated_states.extend(new_components);
 
             // PROCESS DELTAS
             if let Some(deltas) = protocol_msg.deltas.clone() {
                 // Update engine with account changes
+                let mut state_guard = self.state.write().await;
+
+                let mut token_proxy_accounts: HashMap<Address, AccountUpdate> = HashMap::new();
                 let account_update_by_address: HashMap<Address, AccountUpdate> = deltas
                     .account_updates
                     .iter()
-                    .map(|(key, value)| (Address::from_slice(&key[..20]), value.clone().into()))
+                    .map(|(key, value)| {
+                        let mut update: AccountUpdate = value.clone().into();
+
+                        if state_guard.tokens.contains_key(key) {
+                            // If the account is a token, we need to handle it with a proxy contract
+
+                            // Get or create a new token address
+                            let proxy_addr = if !state_guard
+                                .proxy_token_addresses
+                                .contains_key(&update.address)
+                            {
+                                // Token does not have a proxy contract yet, create one
+
+                                // Assign original token contract to new address
+                                let new_address = generate_proxy_token_address(
+                                    state_guard.proxy_token_addresses.len() as u32,
+                                );
+                                state_guard
+                                    .proxy_token_addresses
+                                    .insert(update.address, new_address);
+
+                                // Create proxy token account
+                                let proxy_state = create_proxy_token_account(
+                                    update.address,
+                                    new_address,
+                                    &update.slots,
+                                    update.chain,
+                                );
+                                token_proxy_accounts.insert(update.address, proxy_state);
+
+                                new_address
+                            } else {
+                                // Token already has a proxy contract, update the original token
+                                // contract
+                                *state_guard
+                                    .proxy_token_addresses
+                                    .get(&update.address)
+                                    .unwrap()
+                            };
+
+                            // assign original token contract to new address
+                            update.address = proxy_addr;
+                        };
+                        (update.address, update)
+                    })
                     .collect();
-                info!("Updating engine with {} contract deltas", deltas.state_updates.len());
+                drop(state_guard);
+
+                token_proxy_accounts.extend(account_update_by_address);
+
+                let state_guard = self.state.read().await;
+                info!("Updating engine with {} contract deltas", deltas.account_updates.len());
                 update_engine(
                     SHARED_TYCHO_DB.clone(),
                     block.clone(),
                     None,
-                    account_update_by_address,
+                    token_proxy_accounts,
                 )
                 .await;
                 info!("Engine updated");
@@ -509,10 +676,43 @@ impl TychoStreamDecoder {
     }
 }
 
+/// Generate a proxy token address for a given token index
+fn generate_proxy_token_address(idx: u32) -> Address {
+    let padded_idx = format!("{idx:x}");
+    let padded_zeroes = "0".repeat(33 - padded_idx.len());
+    let proxy_token_address = format!("{padded_zeroes}{padded_idx}BAdbaBe");
+    Address::from_slice(&hex::decode(proxy_token_address).expect("Should be a valid address"))
+}
+
+/// Create a proxy token account for a token at a given address
+///
+/// The proxy token account is created at the original token address and points to the new token
+/// address.
+fn create_proxy_token_account(
+    addr: Address,
+    new_address: Address,
+    storage: &HashMap<U256, U256>,
+    chain: Chain,
+) -> AccountUpdate {
+    let mut slots =
+        HashMap::from([(*IMPLEMENTATION_SLOT, U256::from_be_slice(new_address.as_slice()))]);
+    slots.extend(storage);
+
+    AccountUpdate {
+        address: addr,
+        chain,
+        slots,
+        balance: None,
+        code: Some(ERC20_PROXY_BYTECODE.to_vec()),
+        change: ChangeType::Creation,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{fs, path::Path};
 
+    use alloy::primitives::address;
     use mockall::predicate::*;
     use rstest::*;
     use tycho_common::models::Chain;
@@ -704,5 +904,16 @@ mod tests {
             .expect("decode failure");
 
         // The mock framework will assert that `delta_transition` was called exactly once
+    }
+
+    #[test]
+    fn test_generate_proxy_token_address() {
+        let idx = 1;
+        let generated_address = generate_proxy_token_address(idx);
+        assert_eq!(generated_address, address!("000000000000000000000000000000001badbabe"));
+
+        let idx = 123456;
+        let generated_address = generate_proxy_token_address(idx);
+        assert_eq!(generated_address, address!("00000000000000000000000000001e240badbabe"));
     }
 }
