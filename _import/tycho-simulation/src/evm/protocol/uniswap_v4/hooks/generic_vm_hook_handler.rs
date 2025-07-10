@@ -10,11 +10,12 @@ use revm::{
     state::{AccountInfo, Bytecode},
     DatabaseRef,
 };
+use tycho_client::feed::Header;
 use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
 
 use crate::{
     evm::{
-        engine_db::{engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader},
+        engine_db::engine_db_interface::EngineDatabaseInterface,
         protocol::{
             uniswap_v4::{
                 hooks::{
@@ -112,7 +113,7 @@ where
     fn before_swap(
         &self,
         params: BeforeSwapParameters,
-        block: BlockHeader,
+        block: Header,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
         transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<WithGasEstimate<BeforeSwapOutput>, SimulationError> {
@@ -176,7 +177,7 @@ where
     fn after_swap(
         &self,
         params: AfterSwapParameters,
-        block: BlockHeader,
+        block: Header,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
         transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<WithGasEstimate<BeforeSwapDelta>, SimulationError> {
@@ -275,15 +276,16 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{default::Default, str::FromStr};
 
     use alloy::primitives::{aliases::U24, B256, I256};
+    use tycho_client::feed::Header;
 
     use super::*;
     use crate::evm::{
         engine_db::{
             create_engine,
-            simulation_db::{BlockHeader, SimulationDB},
+            simulation_db::SimulationDB,
             utils::{get_client, get_runtime},
         },
         protocol::uniswap_v4::{hooks::hook_handler::StateContext, state::UniswapV4Fees},
@@ -291,15 +293,16 @@ mod tests {
 
     #[test]
     fn test_before_swap() {
-        let block = BlockHeader {
+        let block = Header {
             number: 22578103,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0x035c0e674c3bf3384a74b766908ab41c1968e989360aa26bea1dd64b1626f5f0",
             )
             .unwrap(),
             timestamp: 1748397011,
+            ..Default::default()
         };
-        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block));
+        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
 
         let hook_address = Address::from_str("0x0010d0d5db05933fa0d9f7038d365e1541a41888")
@@ -377,15 +380,16 @@ mod tests {
 
     #[test]
     fn test_after_swap() {
-        let block = BlockHeader {
+        let block = Header {
             number: 15797251,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0x7032b93c5b0d419f2001f7c77c19ade6da92d2df147712eac1a27c7ffedfe410",
             )
             .unwrap(),
             timestamp: 1748397011,
+            ..Default::default()
         };
-        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block));
+        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
 
         // pool manager on ethereum
@@ -456,18 +460,19 @@ mod tests {
 
     #[test]
     fn test_before_and_after_swap() {
-        let block = BlockHeader {
+        let block = Header {
             number: 15797251,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0x7032b93c5b0d419f2001f7c77c19ade6da92d2df147712eac1a27c7ffedfe410",
             )
             .unwrap(),
             timestamp: 1746562410,
+            ..Default::default()
         };
         let db = SimulationDB::new(
             get_client(Some("https://unichain.drpc.org".into())),
             get_runtime(),
-            Some(block),
+            Some(block.clone()),
         );
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
 
@@ -517,7 +522,7 @@ mod tests {
         )]);
 
         let result = hook_handler
-            .before_swap(params, block, None, Some(transient_storage.clone()))
+            .before_swap(params, block.clone(), None, Some(transient_storage.clone()))
             .unwrap();
 
         assert_eq!(result.result.amount_delta, I256::from_dec_str("0").unwrap());

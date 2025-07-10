@@ -181,6 +181,7 @@ mod tests {
             hash: Bytes::from(vec![0; 32]),
             parent_hash: Bytes::from(vec![0; 32]),
             revert: false,
+            timestamp: 1,
         }
     }
 

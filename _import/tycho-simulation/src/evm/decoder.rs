@@ -259,7 +259,7 @@ impl TychoStreamDecoder {
             info!("Updating engine with {} snapshots", storage_by_address.len());
             update_engine(
                 SHARED_TYCHO_DB.clone(),
-                block.clone().into(),
+                block.clone(),
                 Some(storage_by_address),
                 HashMap::new(),
             )
@@ -366,7 +366,7 @@ impl TychoStreamDecoder {
                 info!("Updating engine with {} contract deltas", deltas.state_updates.len());
                 update_engine(
                     SHARED_TYCHO_DB.clone(),
-                    block.clone().into(),
+                    block.clone(),
                     None,
                     account_update_by_address,
                 )

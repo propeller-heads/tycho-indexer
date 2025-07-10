@@ -10,6 +10,7 @@ use alloy::primitives::{Address, U256};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use revm::DatabaseRef;
+use tycho_client::feed::Header;
 use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
 
 use super::{
@@ -20,10 +21,7 @@ use super::{
 };
 use crate::{
     evm::{
-        engine_db::{
-            engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
-            tycho_db::PreCachedDB,
-        },
+        engine_db::{engine_db_interface::EngineDatabaseInterface, tycho_db::PreCachedDB},
         protocol::{
             u256_num::{u256_to_biguint, u256_to_f64},
             utils::bytes_to_address,
@@ -49,7 +47,7 @@ where
     /// The pool's token's addresses
     pub tokens: Vec<Bytes>,
     /// The current block, will be used to set vm context
-    block: BlockHeader,
+    block: Header,
     /// The pool's component balances.
     balances: HashMap<Address, U256>,
     /// The contract address for where protocol balances are stored (i.e. a vault contract).
@@ -96,7 +94,7 @@ where
     pub fn new(
         id: String,
         tokens: Vec<Bytes>,
-        block: BlockHeader,
+        block: Header,
         component_balances: HashMap<Address, U256>,
         balance_owner: Option<Address>,
         contract_balances: HashMap<Address, HashMap<Address, U256>>,
@@ -735,7 +733,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use alloy::primitives::B256;
+    use std::default::Default;
+
     use num_bigint::ToBigUint;
     use num_traits::One;
     use revm::{
@@ -743,6 +742,7 @@ mod tests {
         state::{AccountInfo, Bytecode},
     };
     use serde_json::Value;
+    use tycho_client::feed::Header;
     use tycho_common::models::Chain;
 
     use super::*;
@@ -795,13 +795,14 @@ mod tests {
         let db = SHARED_TYCHO_DB.clone();
         let engine: SimulationEngine<_> = create_engine(db.clone(), false).unwrap();
 
-        let block = BlockHeader {
+        let block = Header {
             number: 20463609,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0x4315fd1afc25cc2ebc72029c543293f9fd833eeb305e2e30159459c827733b1b",
             )
             .unwrap(),
             timestamp: 1722875891,
+            ..Default::default()
         };
 
         for account in accounts.clone() {
@@ -823,13 +824,14 @@ mod tests {
         db.update(accounts, Some(block));
 
         let tokens = vec![dai().address, bal().address];
-        let block = BlockHeader {
+        let block = Header {
             number: 18485417,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
             )
             .expect("Invalid block hash"),
             timestamp: 0,
+            ..Default::default()
         };
 
         let pool_id: String =

@@ -3,13 +3,11 @@ use std::{collections::HashMap, fmt::Debug};
 use alloy::primitives::Address;
 use lazy_static::lazy_static;
 use revm::{primitives::KECCAK_EMPTY, state::AccountInfo, DatabaseRef};
+use tycho_client::feed::Header;
 
 use crate::{
     evm::{
-        engine_db::{
-            engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
-            tycho_db::PreCachedDB,
-        },
+        engine_db::{engine_db_interface::EngineDatabaseInterface, tycho_db::PreCachedDB},
         simulation::SimulationEngine,
         tycho_models::{AccountUpdate, ChangeType, ResponseAccount},
     },
@@ -71,7 +69,7 @@ where
 
 pub async fn update_engine(
     db: PreCachedDB,
-    block: BlockHeader,
+    block: Header,
     vm_storage: Option<HashMap<Address, ResponseAccount>>,
     account_updates: HashMap<Address, AccountUpdate>,
 ) -> Vec<AccountUpdate> {

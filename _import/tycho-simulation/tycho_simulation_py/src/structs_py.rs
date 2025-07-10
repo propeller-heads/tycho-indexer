@@ -1,20 +1,24 @@
 #![allow(non_local_definitions)] //TODO: Update PYO3 to >= 0.21.2 (https://github.com/PyO3/pyo3/issues/4094#issuecomment-2064510190)
 use std::{collections::HashMap, fmt::Debug, str::FromStr};
 
-use alloy::primitives::{Address, B256, U256};
+use alloy::primitives::{Address, U256};
 use num_bigint::BigUint;
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 use revm::state::Bytecode;
 use tracing::info;
-use tycho_simulation::evm::{
-    account_storage,
-    engine_db::{
-        simulation_db,
-        simulation_db::EVMProvider,
-        tycho_db,
-        utils::{get_client, get_runtime},
+use tycho_simulation::{
+    evm::{
+        account_storage,
+        engine_db::{
+            simulation_db,
+            simulation_db::EVMProvider,
+            tycho_db,
+            utils::{get_client, get_runtime},
+        },
+        simulation, tycho_models,
     },
-    simulation, tycho_models,
+    tycho_client::feed::Header,
+    tycho_common::Bytes,
 };
 
 /// Data needed to invoke a transaction simulation
@@ -407,12 +411,14 @@ impl BlockHeader {
     }
 }
 
-impl From<BlockHeader> for tycho_simulation::evm::engine_db::simulation_db::BlockHeader {
+impl From<BlockHeader> for Header {
     fn from(py_header: BlockHeader) -> Self {
-        tycho_simulation::evm::engine_db::simulation_db::BlockHeader {
+        Header {
             number: py_header.number,
-            hash: B256::from_str(&py_header.hash).unwrap(),
+            hash: Bytes::from_str(&py_header.hash).unwrap(),
             timestamp: py_header.timestamp,
+            parent_hash: Default::default(),
+            revert: false,
         }
     }
 }
@@ -527,7 +533,7 @@ impl TychoDB {
             .map(Into::into)
             .collect();
 
-        let block = block.map(tycho_simulation::evm::engine_db::simulation_db::BlockHeader::from);
+        let block = block.map(Header::from);
 
         self_
             .inner

@@ -11,10 +11,11 @@ use revm::{
 };
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, warn};
+use tycho_client::feed::Header;
 
 use crate::evm::{
     account_storage::{AccountStorage, StateUpdate},
-    engine_db::{engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader},
+    engine_db::engine_db_interface::EngineDatabaseInterface,
     tycho_models::{AccountUpdate, ChangeType},
 };
 
@@ -47,7 +48,7 @@ pub struct PreCachedDBInner {
     /// Storage for accounts
     accounts: AccountStorage,
     /// Current block
-    block: Option<BlockHeader>,
+    block: Option<Header>,
 }
 
 #[derive(Clone, Debug)]
@@ -72,7 +73,7 @@ impl PreCachedDB {
     }
 
     #[instrument(skip_all)]
-    pub fn update(&self, account_updates: Vec<AccountUpdate>, block: Option<BlockHeader>) {
+    pub fn update(&self, account_updates: Vec<AccountUpdate>, block: Option<Header>) {
         // Hold the write lock for the duration of the function so that no other thread can
         // write to the storage.
         let mut write_guard = self.inner.write().unwrap();
@@ -162,7 +163,7 @@ impl PreCachedDB {
     pub fn update_state(
         &mut self,
         updates: &HashMap<Address, StateUpdate>,
-        block: BlockHeader,
+        block: Header,
     ) -> HashMap<Address, StateUpdate> {
         // Hold the write lock for the duration of the function so that no other thread can
         // write to the storage.
@@ -329,10 +330,10 @@ impl DatabaseRef for PreCachedDB {
         }
     }
 
-    /// If block header is set, returns the hash. Otherwise returns a zero hash.
+    /// If block header is set, returns the hash. Otherwise, returns a zero hash.
     fn block_hash_ref(&self, _number: u64) -> Result<B256, Self::Error> {
-        match self.inner.read().unwrap().block {
-            Some(header) => Ok(header.hash),
+        match self.inner.read().unwrap().block.clone() {
+            Some(header) => Ok(B256::from_slice(&header.hash)),
             None => Ok(B256::default()),
         }
     }
@@ -344,6 +345,7 @@ mod tests {
 
     use revm::primitives::U256;
     use rstest::{fixture, rstest};
+    use tycho_common::Bytes;
 
     use super::*;
     use crate::evm::tycho_models::{AccountUpdate, Chain, ChangeType};
@@ -442,13 +444,14 @@ mod tests {
         new_storage.insert(new_storage_value_index, new_storage_value_index);
         let new_balance = U256::from_limbs_slice(&[500]);
         let update = StateUpdate { storage: Some(new_storage), balance: Some(new_balance) };
-        let new_block = BlockHeader {
+        let new_block = Header {
             number: 1,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0xc6b994ec855fb2b31013c7ae65074406fac46679b5b963469104e0bfeddd66d9",
             )
             .unwrap(),
             timestamp: 123,
+            ..Default::default()
         };
         let mut updates = HashMap::default();
         updates.insert(address, update);
@@ -471,6 +474,7 @@ mod tests {
             .read()
             .unwrap()
             .block
+            .clone()
             .expect("block is Some");
         assert_eq!(block.number, 1);
 
@@ -483,13 +487,14 @@ mod tests {
         let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         mock_db.init_account(address, AccountInfo::default(), None, false);
 
-        let new_block = BlockHeader {
+        let new_block = Header {
             number: 1,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0xc6b994ec855fb2b31013c7ae65074406fac46679b5b963469104e0bfeddd66d9",
             )
             .unwrap(),
             timestamp: 123,
+            ..Default::default()
         };
         let updates = HashMap::default();
 
@@ -520,13 +525,14 @@ mod tests {
             ChangeType::Creation,
         );
 
-        let new_block = BlockHeader {
+        let new_block = Header {
             number: 1,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0xc6b994ec855fb2b31013c7ae65074406fac46679b5b963469104e0bfeddd66d9",
             )
             .unwrap(),
             timestamp: 123,
+            ..Default::default()
         };
 
         mock_db.update(vec![account_update], Some(new_block));
@@ -555,6 +561,7 @@ mod tests {
                 .read()
                 .unwrap()
                 .block
+                .clone()
                 .expect("block is Some")
                 .number,
             1

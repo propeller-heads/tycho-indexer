@@ -6,6 +6,7 @@ use alloy::{
 };
 use lazy_static::lazy_static;
 use revm::DatabaseRef;
+use tycho_client::feed::Header;
 
 use super::{
     constants::EXTERNAL_ACCOUNT, tycho_simulation_contract::TychoSimulationContract,
@@ -13,8 +14,7 @@ use super::{
 };
 use crate::{
     evm::{
-        engine_db::{engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader},
-        simulation::SimulationEngine,
+        engine_db::engine_db_interface::EngineDatabaseInterface, simulation::SimulationEngine,
         ContractCompiler, SlotId,
     },
     protocol::errors::SimulationError,
@@ -134,7 +134,7 @@ type U256Return = U256;
 ///   slot, which is dependent on the balance slot.
 pub(crate) fn brute_force_slots<D: EngineDatabaseInterface + Clone + Debug>(
     token_addr: &Address,
-    block: &BlockHeader,
+    block: &Header,
     engine: &SimulationEngine<D>,
 ) -> Result<(ERC20Slots, ContractCompiler), SimulationError>
 where
@@ -235,6 +235,7 @@ mod tests {
     use std::str::FromStr;
 
     use chrono::NaiveDateTime;
+    use tycho_client::feed::Header;
 
     use super::*;
     use crate::evm::engine_db::{
@@ -321,7 +322,7 @@ mod tests {
         let state = new_state();
 
         let eng = SimulationEngine::new(state, false);
-        let block = BlockHeader {
+        let block = Header {
             number: 20_000_000,
             timestamp: NaiveDateTime::parse_from_str("2024-06-01T22:36:47", "%Y-%m-%dT%H:%M:%S")
                 .unwrap()
@@ -346,7 +347,7 @@ mod tests {
         let state = new_state();
 
         let eng = SimulationEngine::new(state, false);
-        let block = BlockHeader {
+        let block = Header {
             number: 20_000_000,
             timestamp: NaiveDateTime::parse_from_str("2024-06-01T22:36:47", "%Y-%m-%dT%H:%M:%S")
                 .unwrap()

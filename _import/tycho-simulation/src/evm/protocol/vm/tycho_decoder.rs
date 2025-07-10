@@ -1,10 +1,9 @@
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
-use alloy::primitives::{Address, B256, U256};
+use alloy::primitives::{Address, U256};
 use revm::state::Bytecode;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
 use tycho_common::{models::token::Token, Bytes};
@@ -12,31 +11,11 @@ use tycho_common::{models::token::Token, Bytes};
 use super::{state::EVMPoolState, state_builder::EVMPoolStateBuilder};
 use crate::{
     evm::{
-        engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB, SHARED_TYCHO_DB},
+        engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB},
         protocol::vm::constants::get_adapter_file,
     },
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
-
-impl From<Header> for BlockHeader {
-    fn from(header: Header) -> Self {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs();
-        BlockHeader {
-            number: header.number,
-            hash: B256::new(
-                header
-                    .hash
-                    .as_ref()
-                    .try_into()
-                    .expect("Hash must be 32 bytes"),
-            ),
-            timestamp: now,
-        }
-    }
-}
 
 impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
     type Error = InvalidSnapshotError;
@@ -54,7 +33,6 @@ impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
     ) -> Result<Self, Self::Error> {
         let id = snapshot.component.id.clone();
         let tokens = snapshot.component.tokens.clone();
-        let block = BlockHeader::from(block);
 
         // Decode involved contracts
         let mut stateless_contracts = HashMap::new();
@@ -232,6 +210,7 @@ mod tests {
             hash: Bytes::from(vec![0; 32]),
             parent_hash: Bytes::from(vec![0; 32]),
             revert: false,
+            timestamp: 1,
         }
     }
 
@@ -314,7 +293,7 @@ mod tests {
                 false,
             );
         }
-        db.update(accounts, Some(block.into()));
+        db.update(accounts, Some(block));
         let account_balances = HashMap::from([(
             Bytes::from("0xBA12222222228d8Ba445958a75a0704d566BF2C8"),
             HashMap::from([
