@@ -44,9 +44,6 @@ pub struct MetadataRequest {
     pub component_id: ComponentId,
     pub request_type: MetadataRequestType,
     pub transport: Box<dyn RequestTransport>,
-    // tx_hash: Transaction hash that triggered this metadata request
-    // Used to map balance/limit changes back to specific on-chain events
-    pub tx_hash: TxHash,
 }
 
 impl Clone for MetadataRequest {
@@ -56,12 +53,23 @@ impl Clone for MetadataRequest {
             component_id: self.component_id.clone(),
             request_type: self.request_type.clone(),
             transport: self.transport.clone_box(),
-            tx_hash: self.tx_hash.clone(),
         }
     }
 }
 
+impl MetadataRequest {
+    pub fn new(
+        request_id: RequestId,
+        component_id: ComponentId,
+        request_type: MetadataRequestType,
+        transport: Box<dyn RequestTransport>,
+    ) -> Self {
+        Self { request_id, component_id, request_type, transport }
+    }
+}
+
 #[derive(Clone)]
+#[cfg_attr(test, derive(PartialEq, Debug))]
 pub enum MetadataRequestType {
     ComponentBalance { token_addresses: Vec<Address> },
     Tvl,
