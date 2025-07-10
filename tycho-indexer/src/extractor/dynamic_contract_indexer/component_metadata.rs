@@ -156,7 +156,7 @@ pub trait RequestTransport: Send + Sync {
 /// - Generators should be stateless when possible
 /// - Each generator typically specializes in one protocol or hook type
 /// - Generators can create requests with different transport types as needed. Example: using RPC
-/// transport for Balances and API calls for TVL
+///   transport for Balances and API calls for TVL
 pub trait MetadataRequestGenerator: Send + Sync {
     /// Generates all metadata requests needed for a component.
     ///
