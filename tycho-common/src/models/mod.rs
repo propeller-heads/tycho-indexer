@@ -100,8 +100,23 @@ fn native_eth(chain: Chain) -> Token {
     )
 }
 
+fn wrapped_native_eth(chain: Chain, address: &str) -> Token {
+    Token::new(&Bytes::from_str(address).unwrap(), "WETH", 18, 0, &[Some(2300)], chain, 100)
+}
+
 impl Chain {
-    /// Returns the native token symbol for the chain.
+    pub fn id(&self) -> u64 {
+        match self {
+            Chain::Ethereum => 1,
+            Chain::ZkSync => 324,
+            Chain::Arbitrum => 42161,
+            Chain::Starknet => 0,
+            Chain::Base => 8453,
+            Chain::Unichain => 130,
+        }
+    }
+
+    /// Returns the native token for the chain.
     pub fn native_token(&self) -> Token {
         match self {
             Chain::Ethereum => native_eth(Chain::Ethereum),
@@ -112,6 +127,31 @@ impl Chain {
             Chain::Arbitrum => native_eth(Chain::Arbitrum),
             Chain::Base => native_eth(Chain::Base),
             Chain::Unichain => native_eth(Chain::Unichain),
+        }
+    }
+
+    /// Returns the wrapped native token for the chain.
+    pub fn wrapped_native_token(&self) -> Token {
+        match self {
+            Chain::Ethereum => {
+                wrapped_native_eth(Chain::Ethereum, "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2")
+            }
+            // Starknet does not have a wrapped native token
+            Chain::Starknet => {
+                wrapped_native_eth(Chain::Starknet, "0x0000000000000000000000000000000000000000")
+            }
+            Chain::ZkSync => {
+                wrapped_native_eth(Chain::ZkSync, "0x5AEa5775959fBC2557Cc8789bC1bf90A239D9a91")
+            }
+            Chain::Arbitrum => {
+                wrapped_native_eth(Chain::Arbitrum, "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1")
+            }
+            Chain::Base => {
+                wrapped_native_eth(Chain::Base, "0x4200000000000000000000000000000000000006")
+            }
+            Chain::Unichain => {
+                wrapped_native_eth(Chain::Unichain, "0x4200000000000000000000000000000000000006")
+            }
         }
     }
 }
