@@ -9,6 +9,7 @@ pub struct EulerMetadataGenerator {
 }
 
 impl EulerMetadataGenerator {
+    #[allow(dead_code)]
     pub fn new(rpc_url: String) -> Self {
         Self { rpc_url }
     }
