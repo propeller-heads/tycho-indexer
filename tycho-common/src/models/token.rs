@@ -7,12 +7,7 @@ use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 
 use super::{Address, Balance};
-use crate::{
-    dto::ResponseToken,
-    models::{error::ModelError, Chain},
-    traits::TokenOwnerFinding,
-    Bytes,
-};
+use crate::{dto::ResponseToken, models::Chain, traits::TokenOwnerFinding, Bytes};
 
 /// Cost related to a token transfer, for example amount of gas in evm chains.
 pub type TransferCost = u64;
@@ -88,7 +83,7 @@ impl Hash for Token {
 }
 
 impl TryFrom<ResponseToken> for Token {
-    type Error = ModelError;
+    type Error = ();
 
     fn try_from(value: ResponseToken) -> Result<Self, Self::Error> {
         Ok(Self {
