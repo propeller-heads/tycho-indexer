@@ -125,7 +125,7 @@ pub trait RequestTransport: Send + Sync {
     /// # Returns
     ///
     /// A new boxed instance with the same state as this transport.
-    /// TODO: Might not be removed if not necessary on the final implementations
+    /// TODO: Might be removed if not necessary on the final implementations
     fn clone_box(&self) -> Box<dyn RequestTransport>;
 
     /// Returns a reference to the concrete type as `Any`.
