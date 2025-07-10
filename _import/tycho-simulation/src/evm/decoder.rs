@@ -11,7 +11,11 @@ use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{debug, error, info, warn};
 use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage, Header};
-use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
+use tycho_common::{
+    dto::{ChangeType, ProtocolStateDelta},
+    models::{token::Token, Chain},
+    Bytes,
+};
 
 use crate::{
     evm::{
@@ -403,7 +407,7 @@ impl TychoStreamDecoder {
                     if !new_tokens_accounts.is_empty() {
                         update_engine(
                             SHARED_TYCHO_DB.clone(),
-                            block.clone().into(),
+                            block.clone(),
                             None,
                             new_tokens_accounts,
                         )
@@ -531,13 +535,8 @@ impl TychoStreamDecoder {
 
                 let state_guard = self.state.read().await;
                 info!("Updating engine with {} contract deltas", deltas.account_updates.len());
-                update_engine(
-                    SHARED_TYCHO_DB.clone(),
-                    block.clone(),
-                    None,
-                    token_proxy_accounts,
-                )
-                .await;
+                update_engine(SHARED_TYCHO_DB.clone(), block.clone(), None, token_proxy_accounts)
+                    .await;
                 info!("Engine updated");
 
                 // Collect all pools related to the updated accounts

@@ -696,7 +696,6 @@ where
 mod tests {
     use std::default::Default;
 
-    use num_bigint::ToBigUint;
     use num_traits::One;
     use revm::{
         primitives::KECCAK_EMPTY,
