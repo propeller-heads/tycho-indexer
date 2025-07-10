@@ -1,5 +1,4 @@
-#![allow(unused_variables)] // TODO: Remove this
-#![allow(dead_code)] // TODO: Remove this
+#![allow(dead_code)] // TODO: Remove when implementation is complete
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -71,68 +70,258 @@ pub enum MetadataRequestType {
     Limits { token_pair: Vec<(Address, Address)> },
 }
 
-// Specifies a transport type that can be used to send requests. It's essential for differentiating
-// requests and the trait should provide flexibility to support different chains.
-// A transport on EVM context can be RPC Provider or API Provider.
+/// Specifies a transport mechanism for sending metadata requests to external data providers.
+///
+/// This trait abstracts the transport layer, allowing different implementations for various
+/// protocols (HTTP, RPC, WebSocket, GraphQL etc.) and chains. Implementations handle the low-level
+/// details of how requests are formatted and transmitted.
+///
+/// # Examples
+///
+/// Common implementations include:
+/// - `DefiLLamaHttpTransport`: For REST API calls to Defillama API (e.g., DeFiLlama TVL data)
+/// - `RpcTransport`: For JSON-RPC calls to blockchain nodes
 pub trait RequestTransport: Send + Sync {
-    // Routing key is used to group requests by provider.
+    /// Returns a routing key that identifies which provider should handle this request.
+    ///
+    /// The routing key groups requests by their destination provider, enabling efficient
+    /// batching and connection pooling. For example, all RPC requests might share a routing key
+    /// like "rpc_mainnet". All API requests to the same provider, like Defillama should share
+    /// a routing key like defillama_api_v1
+    ///
+    /// # Returns
+    ///
+    /// A string identifier for routing requests to the appropriate provider.
     fn routing_key(&self) -> String;
 
-    // Allow setting custom routing keys.
+    /// Sets a custom routing key for this transport.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The new routing key to use for this transport
     fn set_routing_key(&mut self, key: String);
 
-    // Deduplication ID is used to deduplicate requests by provider.
+    /// Returns a unique identifier for request deduplication.
+    ///
+    /// This ID helps prevent duplicate requests within a batch. Transports should generate
+    /// IDs based on the request content, so identical requests produce the same ID.
+    ///
+    /// # Returns
+    ///
+    /// A string that uniquely identifies this request's content for deduplication purposes.
+    ///
+    /// # Implementation Notes
+    ///
+    /// - Should be deterministic: same request parameters always produce the same ID
+    /// - Should include all relevant request data (method, parameters, etc.)
+    /// - Consider using a hash function for complex request data
     fn deduplication_id(&self) -> String;
 
-    // Clone method for boxed trait objects
+    /// Creates a boxed clone of this transport.
+    ///
+    /// Required for cloning trait objects, as Rust's standard `Clone` trait cannot be
+    /// object-safe. This enables storing and passing transports as trait objects.
+    ///
+    /// # Returns
+    ///
+    /// A new boxed instance with the same state as this transport.
+    /// TODO: Might not be removed if not necessary on the final implementations
     fn clone_box(&self) -> Box<dyn RequestTransport>;
 
-    // Get the raw request data for execution.
+    /// Returns a reference to the concrete type as `Any`.
+    ///
+    /// This enables downcasting to the specific transport implementation when needed,
+    /// allowing providers to access transport-specific data and methods.
+    ///
+    /// # Returns
+    ///
+    /// A reference to this transport as a trait object that can be downcast.
     fn as_any(&self) -> &dyn std::any::Any;
 }
 
-// Focused metadata generation trait - purely for request generation
+/// Generates metadata requests for protocol components.
+///
+/// This trait is responsible for analyzing a protocol component and determining what metadata
+/// needs to be fetched. It creates the appropriate requests but does not execute them.
+/// Different implementations can specialize in different types of protocols or metadata.
+///
+/// # Design Philosophy
+///
+/// Generators are protocol-aware but transport-agnostic. They understand what data is needed
+/// based on the component type and current blockchain state, but delegate the actual fetching
+/// to providers through transport objects.
+///
+/// # Implementation Guidelines
+///
+/// - Generators should be stateless when possible
+/// - Each generator typically specializes in one protocol or hook type
+/// - Generators can create requests with different transport types as needed. Example: using RPC
+/// transport for Balances and API calls for TVL
 pub trait MetadataRequestGenerator: Send + Sync {
-    /// Generate all metadata requests for a component
-    /// Returns boxed requests that can contain different transport types
+    /// Generates all metadata requests needed for a component.
+    ///
+    /// Analyzes the component's state and the current block to determine what metadata
+    /// should be fetched. This includes balances, limits, TVL, and any other relevant data.
+    ///
+    /// # Arguments
+    ///
+    /// * `component` - The protocol component to generate requests for
+    /// * `block` - The current block context, used to determine state changes
+    ///
+    /// # Returns
+    ///
+    /// A vector of metadata requests with appropriate transport configurations, or an error
+    /// if request generation fails.
+    ///
+    /// # Example Requests Generated
+    ///
+    /// - Token balance from onchain calls via RPC
+    /// - TVL data from external APIs
+    /// - Trading limits from onchain calls via RPC
     fn generate_requests(
         &self,
         component: &ProtocolComponent,
         block: &Block,
     ) -> Result<Vec<MetadataRequest>, MetadataError>;
 
+    /// Generates only balance-related metadata requests for a component.
+    ///
+    /// This is a specialized method for components that only need balance updates,
+    /// providing an optimized path for lightweight metadata collection.
+    ///
+    /// # Arguments
+    ///
+    /// * `component` - The protocol component to generate balance requests for
+    /// * `block` - The current block context
+    ///
+    /// # Returns
+    ///
+    /// A vector of balance-specific metadata requests, or an error if generation fails.
+    ///
+    /// # Use Cases
+    ///
+    /// - Components marked for balance-only updates
+    /// - Periodic balance reconciliation
+    /// - Lightweight monitoring scenarios
     fn generate_balance_only_requests(
         &self,
         component: &ProtocolComponent,
         block: &Block,
     ) -> Result<Vec<MetadataRequest>, MetadataError>;
 
-    /// Return which metadata types this generator supports  
+    /// Returns the types of metadata this generator can produce.
+    ///
+    /// Used by the orchestrator to understand generator capabilities and ensure
+    /// all required metadata types are covered by available generators.
+    ///
+    /// # Returns
+    ///
+    /// A vector of metadata request types this generator supports.
+    ///
+    /// # Example
+    ///
+    /// A DEX generator might return:
+    /// ```ignore
+    /// vec![
+    ///     MetadataRequestType::ComponentBalance { token_addresses: vec![] },
+    ///     MetadataRequestType::Limits { token_pair: vec![] },
+    ///     MetadataRequestType::Tvl,
+    /// ]
+    /// ```
     fn supported_metadata_types(&self) -> Vec<MetadataRequestType>;
 }
 
-// Registry maps components to generators (not providers)
+/// Registry that manages the mapping between protocol components and their metadata generators.
+///
+/// This registry is the central configuration point for determining which generator should
+/// handle metadata requests for a given component. It supports both specific hook-based
+/// mappings and a default fallback generator.
+///
+/// # Architecture
+///
+/// The registry uses a two-tier lookup system:
+/// 1. **Hook-specific generators**: Mapped by the hook address from the component's static
+///    attributes
+/// 2. **Default generator**: Fallback for components without specific mappings
+///
+/// # Usage
+///
+/// The registry is typically configured during application initialization with generators
+/// for each supported protocol or hook type. During runtime, the orchestrator queries
+/// this registry to find the appropriate generator for each component.
+///
+/// # Example Configuration
+///
+/// ```ignore
+/// let mut registry = MetadataGeneratorRegistry::new();
+///
+/// // Register specific generators for known hooks
+/// registry.register_hook_generator(bunni_hook, BunniGenerator::new());
+/// registry.register_hook_generator(euler_hook, EulerGenerator::new());
+///
+/// // Set a default generator for unknown hooks
+/// registry.set_default_generator(GenericDexGenerator::new());
+/// ```
 pub struct MetadataGeneratorRegistry {
-    // Maps hook address to generator instance
+    /// Maps hook addresses to their specific generator instances.
+    ///
+    /// Each hook address corresponds to a protocol-specific generator that understands
+    /// how to create metadata requests for components using that hook.
     hook_generators: HashMap<Address, Box<dyn MetadataRequestGenerator>>,
-    // Fallback for hooks without specific hook mapping
+
+    /// Fallback generator for components without specific hook mappings.
+    ///
+    /// This ensures that all components can have metadata generated, even if they
+    /// use an unknown or new hook type. The default generator should implement
+    /// conservative, generic metadata collection strategies.
     default_generator: Option<Box<dyn MetadataRequestGenerator>>,
 }
 
 impl MetadataGeneratorRegistry {
-    // Component-to-generator mapping logic
+    /// Retrieves the appropriate metadata generator for a given component.
+    ///
+    /// This method implements the lookup logic, first checking for a hook-specific
+    /// generator, then falling back to the default generator if available.
+    ///
+    /// # Arguments
+    ///
+    /// * `component` - The protocol component to find a generator for
+    ///
+    /// # Returns
+    ///
+    /// - `Some(&dyn MetadataRequestGenerator)` if a suitable generator is found
+    /// - `None` if no generator is registered for the component's hook and no default is set
+    ///
+    /// # Lookup Process
+    ///
+    /// 1. Extract the hook address from the component's static attributes
+    /// 2. Look for a hook-specific generator in the registry
+    /// 3. If not found, use the default generator if configured
+    /// 4. Return None if no suitable generator exists
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// if let Some(generator) = registry.get_generator_for_component(&component) {
+    ///     let requests = generator.generate_requests(&component, &block)?;
+    ///     // Process requests...
+    /// }
+    /// ```
     pub fn get_generator_for_component(
         &self,
         component: &ProtocolComponent,
     ) -> Option<&dyn MetadataRequestGenerator> {
-        // Extract hook address from component
+        // Extract hook address from component's static attributes
+        // The hook address is the key identifier for protocol-specific behavior
         let hook_address = component
             .static_attributes
             .get("hook")?;
-        // Map hook to generator
+
+        // First try to find a hook-specific generator
         self.hook_generators
             .get(hook_address)
             .map(|boxed_generator| boxed_generator.as_ref())
+            // Fall back to default generator if no specific mapping exists
             .or(self
                 .default_generator
                 .as_ref()
@@ -142,25 +331,81 @@ impl MetadataGeneratorRegistry {
 
 // Request Execution Types
 
-// Provider handles batching, deduplication and intelligent grouping, whenever possible.
-// It's also responsible for interacting with the provider (sending requests and receiving
-// responses).
+/// Executes metadata requests by interacting with external data sources.
+///
+/// Providers handle the actual communication with external systems (RPC nodes, APIs, etc.)
+/// and implement optimizations like batching, deduplication, and connection pooling.
+/// Each provider typically specializes in one transport type and protocol.
+///
+/// # Architecture
+///
+/// The provider layer sits between the high-level request generation and the low-level
+/// transport execution. It adds intelligence for:
+///
+/// - Request batching (e.g., multicall for RPC)
+/// - Deduplication of identical requests
+/// - Connection management and pooling
+/// - Error handling and retries
+/// - Response parsing and normalization
+///
+/// # Implementation Requirements
+///
+/// - Each provider handles one specific `RequestTransport` type
+/// - Providers must be thread-safe for concurrent execution
+/// - Batch operations should be atomic when possible
 #[async_trait]
 pub trait RequestProvider: Send + Sync {
-    // Here, each provider implementation should be able to handle only one Type of
-    // RequestTransport. So there's a 1-1 relationship between RequestProvider and
-    // RequestTransport. This is important for the orchestrator to be able to group requests by
-    // provider. Also, for both RPC and HTTP requests, pay attention to the optimization
-    // opportunities, like deduplication, connection pooling, etc. They should be specified on
-    // the plan.
+    /// Executes a batch of requests and returns their results.
+    ///
+    /// This is the main entry point for request execution. Providers should implement
+    /// optimizations like deduplication and batching internally. Results are returned
+    /// in the same order as requests, with errors for failed requests.
+    ///
+    /// # Arguments
+    ///
+    /// * `requests` - Slice of boxed transport objects to execute
+    ///
+    /// # Returns
+    ///
+    /// A vector of results corresponding to each request. Failed requests return
+    /// `MetadataError` in their result field.
+    ///
+    /// # Implementation Notes
+    ///
+    /// - Providers should downcast transports to their expected type
+    /// - Batch size limits should be respected (e.g., RPC batch limits)
+    /// - Connection pooling should be used for network efficiency
+    /// - Duplicate requests within the batch should be deduplicated
+    ///
+    /// # Example
+    ///
+    /// An RPC provider might:
+    /// 1. Group requests by endpoint
+    /// 2. Deduplicate identical calls
+    /// 3. Batch into multicall or JSON-RPC batch requests
+    /// 4. Execute with connection pooling
+    /// 5. Map results back to original requests
     async fn execute_batch(&self, requests: &[Box<dyn RequestTransport>]) -> Vec<MetadataResult>;
 
-    // For RPC providers: group compatible requests into batched calls.
-    // For API providers: Currently, not batching will be done, but in the
-    // future we might add the ability to group compatible requests into single calls
-    // (e.g., multiple TVL requests -> single Defillama call). This means that there could be more
-    // than one HTTP request transport type and, consequently, more than one RequestProvider that
-    // handles HTTP requests.
+    /// Groups requests into optimal batches for execution.
+    ///
+    /// Providers can override this to implement smart batching strategies.
+    /// The default implementation treats each request independently.
+    ///
+    /// # Arguments
+    ///
+    /// * `requests` - Slice of requests to potentially group
+    ///
+    /// # Returns
+    ///
+    /// A vector of request groups, where each group can be executed together.
+    ///
+    /// # Batching Strategies
+    ///
+    /// - **RPC Providers**: Always group eth_calls for multicall
+    /// - **API Providers**: Group by API endpoint and rate limits
+    /// - **Default**: Each request in its own group (no batching)
+    /// ```
     fn can_group_requests(
         &self,
         requests: &[Box<dyn RequestTransport>],
@@ -458,7 +703,7 @@ impl RpcTransport {
 
         // Encode array of calls
         // This is simplified - in production you'd use proper ABI encoding
-        let encoded_calls = calls
+        let _encoded_calls = calls
             .iter()
             .map(|(target, data)| {
                 serde_json::json!({
