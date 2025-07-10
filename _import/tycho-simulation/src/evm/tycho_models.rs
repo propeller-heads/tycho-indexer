@@ -3,6 +3,7 @@ use std::{collections::HashMap, fmt::Display};
 use alloy::primitives::{Address, B256, U256};
 use chrono::{NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
+use tycho_common::models::ExtractorIdentity;
 pub use tycho_common::{dto::ChangeType, models::Chain};
 use uuid::Uuid;
 
@@ -11,24 +12,6 @@ use crate::{
     evm::protocol::u256_num,
     serde_helpers::{hex_bytes, hex_bytes_option},
 };
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash, Default)]
-pub struct ExtractorIdentity {
-    pub chain: Chain,
-    pub name: String,
-}
-
-impl ExtractorIdentity {
-    pub fn new(chain: Chain, name: &str) -> Self {
-        Self { chain, name: name.to_owned() }
-    }
-}
-
-impl std::fmt::Display for ExtractorIdentity {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}", self.chain, self.name)
-    }
-}
 
 /// A command sent from the client to the server
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]

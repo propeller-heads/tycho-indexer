@@ -8249,7 +8249,7 @@ dependencies = [
 [[package]]
 name = "tycho-client"
 version = "0.75.0"
-source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=a30c046ac7b022f7a816545486af81e724863f07#a30c046ac7b022f7a816545486af81e724863f07"
+source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=9c79c8f7a3501e1edd2b86cff43460729b62991f#9c79c8f7a3501e1edd2b86cff43460729b62991f"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8275,7 +8275,7 @@ dependencies = [
 [[package]]
 name = "tycho-common"
 version = "0.75.0"
-source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=a30c046ac7b022f7a816545486af81e724863f07#a30c046ac7b022f7a816545486af81e724863f07"
+source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=9c79c8f7a3501e1edd2b86cff43460729b62991f#9c79c8f7a3501e1edd2b86cff43460729b62991f"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8299,7 +8299,7 @@ dependencies = [
 [[package]]
 name = "tycho-execution"
 version = "0.106.0"
-source = "git+https://github.com/propeller-heads/tycho-execution.git?rev=2e22817f00284451e8adf024d715b79061e9a622#2e22817f00284451e8adf024d715b79061e9a622"
+source = "git+https://github.com/propeller-heads/tycho-execution.git?rev=8f9ab775200d2157a608990d0b8aa13a8b1275cd#8f9ab775200d2157a608990d0b8aa13a8b1275cd"
 dependencies = [
  "alloy",
  "chrono",
