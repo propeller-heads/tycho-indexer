@@ -7,7 +7,6 @@ use tycho_common::models::{blockchain::Block, ExtractorIdentity};
 pub use tycho_common::{dto::ChangeType, models::Chain};
 use uuid::Uuid;
 
-use super::engine_db::simulation_db::BlockHeader;
 use crate::{
     evm::protocol::u256_num,
     serde_helpers::{hex_bytes, hex_bytes_option},
@@ -35,16 +34,6 @@ pub enum Response {
 pub enum WebSocketMessage {
     BlockAccountChanges(BlockAccountChanges),
     Response(Response),
-}
-
-impl From<Block> for BlockHeader {
-    fn from(value: Block) -> Self {
-        Self {
-            number: value.number,
-            hash: B256::from_slice(&value.hash),
-            timestamp: value.ts.and_utc().timestamp() as u64,
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]

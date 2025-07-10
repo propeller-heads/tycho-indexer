@@ -342,10 +342,8 @@ impl DatabaseRef for PreCachedDB {
 mod tests {
     use std::{error::Error, str::FromStr};
 
-    use chrono::DateTime;
     use revm::primitives::U256;
     use rstest::{fixture, rstest};
-    use tycho_common::{models::blockchain::Block, Bytes};
 
     use super::*;
     use crate::evm::tycho_models::{AccountUpdate, Chain, ChangeType};
@@ -444,22 +442,18 @@ mod tests {
         new_storage.insert(new_storage_value_index, new_storage_value_index);
         let new_balance = U256::from_limbs_slice(&[500]);
         let update = StateUpdate { storage: Some(new_storage), balance: Some(new_balance) };
-        let new_block = Block {
+        let new_block = BlockHeader {
             number: 1,
-            hash: Bytes::from_str(
+            hash: B256::from_str(
                 "0xc6b994ec855fb2b31013c7ae65074406fac46679b5b963469104e0bfeddd66d9",
             )
             .unwrap(),
-            parent_hash: Bytes::default(),
-            chain: Chain::Ethereum,
-            ts: DateTime::from_timestamp_millis(123)
-                .unwrap()
-                .naive_utc(),
+            timestamp: 123,
         };
         let mut updates = HashMap::default();
         updates.insert(address, update);
 
-        mock_db.update_state(&updates, new_block.into());
+        mock_db.update_state(&updates, new_block);
 
         assert_eq!(
             mock_db
@@ -489,21 +483,17 @@ mod tests {
         let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         mock_db.init_account(address, AccountInfo::default(), None, false);
 
-        let new_block = Block {
+        let new_block = BlockHeader {
             number: 1,
-            hash: Bytes::from_str(
+            hash: B256::from_str(
                 "0xc6b994ec855fb2b31013c7ae65074406fac46679b5b963469104e0bfeddd66d9",
             )
             .unwrap(),
-            parent_hash: Bytes::default(),
-            chain: Chain::Ethereum,
-            ts: DateTime::from_timestamp_millis(123)
-                .unwrap()
-                .naive_utc(),
+            timestamp: 123,
         };
         let updates = HashMap::default();
 
-        mock_db.update_state(&updates, new_block.into());
+        mock_db.update_state(&updates, new_block);
 
         let block_number = mock_db.block_number();
         assert_eq!(block_number.unwrap(), 1);
@@ -530,20 +520,16 @@ mod tests {
             ChangeType::Creation,
         );
 
-        let new_block = Block {
+        let new_block = BlockHeader {
             number: 1,
-            hash: Bytes::from_str(
+            hash: B256::from_str(
                 "0xc6b994ec855fb2b31013c7ae65074406fac46679b5b963469104e0bfeddd66d9",
             )
             .unwrap(),
-            parent_hash: Bytes::default(),
-            chain: Chain::Ethereum,
-            ts: DateTime::from_timestamp_millis(123)
-                .unwrap()
-                .naive_utc(),
+            timestamp: 123,
         };
 
-        mock_db.update(vec![account_update], Some(new_block.into()));
+        mock_db.update(vec![account_update], Some(new_block));
 
         let account_info = mock_db
             .basic_ref(Address::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap())
