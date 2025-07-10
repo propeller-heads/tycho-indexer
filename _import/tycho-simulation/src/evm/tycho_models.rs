@@ -1,10 +1,13 @@
-use std::{collections::HashMap, fmt::Display};
+use std::collections::HashMap;
 
 use alloy::primitives::{Address, B256, U256};
 use chrono::{NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
-use tycho_common::models::{blockchain::Block, ExtractorIdentity};
 pub use tycho_common::{dto::ChangeType, models::Chain};
+use tycho_common::{
+    models::{blockchain::Block, ContractId, ExtractorIdentity},
+    Bytes,
+};
 use uuid::Uuid;
 
 use crate::{
@@ -126,7 +129,7 @@ impl StateRequestBody {
         Self {
             contract_ids: contract_ids.map(|ids| {
                 ids.into_iter()
-                    .map(|id| ContractId::new(Chain::Ethereum, id))
+                    .map(|id| ContractId::new(Chain::Ethereum, Bytes::from(id.to_vec())))
                     .collect()
             }),
             version,
@@ -248,29 +251,6 @@ impl From<tycho_common::dto::ResponseAccount> for ResponseAccount {
                 .creation_tx
                 .map(|tx| B256::from_slice(&tx[..])), // Optionally map creation_tx if present
         }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
-pub struct ContractId {
-    pub address: Address,
-    pub chain: Chain,
-}
-
-/// Uniquely identifies a contract on a specific chain.
-impl ContractId {
-    pub fn new(chain: Chain, address: Address) -> Self {
-        Self { address, chain }
-    }
-
-    pub fn address(&self) -> &Address {
-        &self.address
-    }
-}
-
-impl Display for ContractId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}: 0x{}", self.chain, hex::encode(self.address))
     }
 }
 
