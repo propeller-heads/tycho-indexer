@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Display};
 use alloy::primitives::{Address, B256, U256};
 use chrono::{NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
-use tycho_common::models::ExtractorIdentity;
+use tycho_common::models::{blockchain::Block, ExtractorIdentity};
 pub use tycho_common::{dto::ChangeType, models::Chain};
 use uuid::Uuid;
 
@@ -37,20 +37,11 @@ pub enum WebSocketMessage {
     Response(Response),
 }
 
-#[derive(Debug, PartialEq, Copy, Clone, Deserialize, Serialize, Default)]
-pub struct Block {
-    pub number: u64,
-    pub hash: B256,
-    pub parent_hash: B256,
-    pub chain: Chain,
-    pub ts: NaiveDateTime,
-}
-
 impl From<Block> for BlockHeader {
     fn from(value: Block) -> Self {
         Self {
             number: value.number,
-            hash: value.hash,
+            hash: B256::from_slice(&value.hash),
             timestamp: value.ts.and_utc().timestamp() as u64,
         }
     }

@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use alloy::primitives::{Address, Bytes, B256, U256};
+use alloy::primitives::{Address, Bytes as AlloyBytes, B256, U256};
 use revm::{
     context::DBErrorMarker,
     state::{AccountInfo, Bytecode},
@@ -103,7 +103,7 @@ impl PreCachedDB {
                     info!(%update.address, "Creating account");
 
                     // We expect the code and balance to be present.
-                    let code = Bytecode::new_raw(Bytes::from(
+                    let code = Bytecode::new_raw(AlloyBytes::from(
                         update
                             .code
                             .clone()
@@ -345,9 +345,10 @@ mod tests {
     use chrono::DateTime;
     use revm::primitives::U256;
     use rstest::{fixture, rstest};
+    use tycho_common::{models::blockchain::Block, Bytes};
 
     use super::*;
-    use crate::evm::tycho_models::{AccountUpdate, Block, Chain, ChangeType};
+    use crate::evm::tycho_models::{AccountUpdate, Chain, ChangeType};
 
     #[fixture]
     pub fn mock_db() -> PreCachedDB {
@@ -445,8 +446,11 @@ mod tests {
         let update = StateUpdate { storage: Some(new_storage), balance: Some(new_balance) };
         let new_block = Block {
             number: 1,
-            hash: B256::default(),
-            parent_hash: B256::default(),
+            hash: Bytes::from_str(
+                "0xc6b994ec855fb2b31013c7ae65074406fac46679b5b963469104e0bfeddd66d9",
+            )
+            .unwrap(),
+            parent_hash: Bytes::default(),
             chain: Chain::Ethereum,
             ts: DateTime::from_timestamp_millis(123)
                 .unwrap()
@@ -487,8 +491,11 @@ mod tests {
 
         let new_block = Block {
             number: 1,
-            hash: B256::default(),
-            parent_hash: B256::default(),
+            hash: Bytes::from_str(
+                "0xc6b994ec855fb2b31013c7ae65074406fac46679b5b963469104e0bfeddd66d9",
+            )
+            .unwrap(),
+            parent_hash: Bytes::default(),
             chain: Chain::Ethereum,
             ts: DateTime::from_timestamp_millis(123)
                 .unwrap()
@@ -525,8 +532,11 @@ mod tests {
 
         let new_block = Block {
             number: 1,
-            hash: B256::default(),
-            parent_hash: B256::default(),
+            hash: Bytes::from_str(
+                "0xc6b994ec855fb2b31013c7ae65074406fac46679b5b963469104e0bfeddd66d9",
+            )
+            .unwrap(),
+            parent_hash: Bytes::default(),
             chain: Chain::Ethereum,
             ts: DateTime::from_timestamp_millis(123)
                 .unwrap()
