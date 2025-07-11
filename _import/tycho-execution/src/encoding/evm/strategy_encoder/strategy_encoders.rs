@@ -1,7 +1,7 @@
 use std::{collections::HashSet, str::FromStr};
 
 use alloy::primitives::{aliases::U24, U8};
-use tycho_common::Bytes;
+use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -14,7 +14,7 @@ use crate::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::{get_token_position, percentage_to_uint24, ple_encode},
     },
-    models::{Chain, EncodedSolution, EncodingContext, NativeAction, Solution, UserTransferType},
+    models::{EncodedSolution, EncodingContext, NativeAction, Solution, UserTransferType},
     strategy_encoder::StrategyEncoder,
     swap_encoder::SwapEncoder,
 };
@@ -52,8 +52,8 @@ impl SingleSwapStrategyEncoder {
             swap_encoder_registry,
             router_address: router_address.clone(),
             transfer_optimization: TransferOptimization::new(
-                chain.native_token()?,
-                chain.wrapped_token()?,
+                chain.native_token().address,
+                chain.wrapped_native_token().address,
                 user_transfer_type,
                 router_address,
             ),
@@ -186,16 +186,18 @@ impl SequentialSwapStrategyEncoder {
             "sequentialSwap(uint256,address,address,uint256,bool,bool,address,bool,bytes)"
 
         }.to_string();
+        let native_token_address = chain.native_token().address;
+        let wrapped_token_address = chain.wrapped_native_token().address;
         Ok(Self {
             function_signature,
             swap_encoder_registry,
             router_address: router_address.clone(),
-            native_address: chain.native_token()?,
-            wrapped_address: chain.wrapped_token()?,
+            native_address: native_token_address.clone(),
+            wrapped_address: wrapped_token_address.clone(),
             sequential_swap_validator: SequentialSwapValidator,
             transfer_optimization: TransferOptimization::new(
-                chain.native_token()?,
-                chain.wrapped_token()?,
+                native_token_address,
+                wrapped_token_address,
                 user_transfer_type,
                 router_address,
             ),
@@ -338,16 +340,18 @@ impl SplitSwapStrategyEncoder {
         } else {
                 "splitSwap(uint256,address,address,uint256,bool,bool,uint256,address,bool,bytes)"
         }.to_string();
+        let native_token_address = chain.native_token().address;
+        let wrapped_token_address = chain.wrapped_native_token().address;
         Ok(Self {
             function_signature,
             swap_encoder_registry,
-            native_address: chain.native_token()?,
-            wrapped_address: chain.wrapped_token()?,
+            native_address: native_token_address.clone(),
+            wrapped_address: wrapped_token_address.clone(),
             split_swap_validator: SplitSwapValidator,
             router_address: router_address.clone(),
             transfer_optimization: TransferOptimization::new(
-                chain.native_token()?,
-                chain.wrapped_token()?,
+                native_token_address,
+                wrapped_token_address,
                 user_transfer_type,
                 router_address,
             ),
@@ -508,7 +512,7 @@ mod tests {
     use alloy::{hex::encode, primitives::hex};
     use num_bigint::{BigInt, BigUint};
     use tycho_common::{
-        models::{protocol::ProtocolComponent, Chain as TychoCommonChain},
+        models::{protocol::ProtocolComponent, Chain},
         Bytes,
     };
 
@@ -516,7 +520,7 @@ mod tests {
     use crate::encoding::models::Swap;
 
     fn eth_chain() -> Chain {
-        TychoCommonChain::Ethereum.into()
+        Chain::Ethereum
     }
 
     fn weth() -> Bytes {

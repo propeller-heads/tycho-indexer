@@ -54,7 +54,7 @@ fn test_single_swap_strategy_encoder() {
         .unwrap();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solutions[0].clone(),
         &solution,
         &UserTransferType::TransferFromPermit2,
@@ -139,7 +139,7 @@ fn test_single_swap_strategy_encoder_no_permit2() {
         .unwrap()[0]
         .clone();
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -221,7 +221,7 @@ fn test_single_swap_strategy_encoder_no_transfer_in() {
         .unwrap()[0]
         .clone();
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::None,
@@ -305,7 +305,7 @@ fn test_single_swap_strategy_encoder_wrap() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFromPermit2,
@@ -357,7 +357,7 @@ fn test_single_swap_strategy_encoder_unwrap() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFromPermit2,
