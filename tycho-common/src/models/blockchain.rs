@@ -451,23 +451,23 @@ impl From<dto::TracingParams> for TracingParams {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
-pub enum Storage {
+pub enum StorageOverride {
     Diff(BTreeMap<StoreKey, StoreVal>),
     Replace(BTreeMap<StoreKey, StoreVal>),
 }
 
-impl From<dto::Storage> for Storage {
-    fn from(value: dto::Storage) -> Self {
+impl From<dto::StorageOverride> for StorageOverride {
+    fn from(value: dto::StorageOverride) -> Self {
         match value {
-            dto::Storage::Diff(diff) => Storage::Diff(diff),
-            dto::Storage::Replace(replace) => Storage::Replace(replace),
+            dto::StorageOverride::Diff(diff) => StorageOverride::Diff(diff),
+            dto::StorageOverride::Replace(replace) => StorageOverride::Replace(replace),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
 pub struct AccountOverrides {
-    pub slots: Option<Storage>,
+    pub slots: Option<StorageOverride>,
     pub native_balance: Option<Balance>,
     pub code: Option<Code>,
 }

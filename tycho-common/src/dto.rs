@@ -1609,7 +1609,7 @@ pub struct EntryPoint {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, Eq, Hash)]
-pub enum Storage {
+pub enum StorageOverride {
     /// Applies changes incrementally to the existing account storage.
     /// Only modifies the specific storage slots provided in the map while
     /// preserving all other storage slots.
@@ -1621,22 +1621,28 @@ pub enum Storage {
     Replace(BTreeMap<StoreKey, StoreVal>),
 }
 
-impl From<models::blockchain::Storage> for Storage {
-    fn from(value: models::blockchain::Storage) -> Self {
+impl From<models::blockchain::StorageOverride> for StorageOverride {
+    fn from(value: models::blockchain::StorageOverride) -> Self {
         match value {
-            models::blockchain::Storage::Diff(diff) => Storage::Diff(diff),
-            models::blockchain::Storage::Replace(replace) => Storage::Replace(replace),
+            models::blockchain::StorageOverride::Diff(diff) => StorageOverride::Diff(diff),
+            models::blockchain::StorageOverride::Replace(replace) => {
+                StorageOverride::Replace(replace)
+            }
         }
     }
 }
 
+/// State overrides for an account.
+///
+/// Used to modify account state. Commonly used for testing contract interactions with specific
+/// state conditions or simulating transactions with modified balances/code.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, Eq, Hash)]
 pub struct AccountOverrides {
-    /// The storage slots to override, if not provided, native balance and code are still used
-    pub slots: Option<Storage>,
-    /// The native balance to override, if not provided, the native balance is not overridden
+    /// Storage slots to override
+    pub slots: Option<StorageOverride>,
+    /// Native token balance override
     pub native_balance: Option<Balance>,
-    /// The code to override, if not provided, the code is not overridden
+    /// Contract code override
     pub code: Option<Code>,
 }
 
