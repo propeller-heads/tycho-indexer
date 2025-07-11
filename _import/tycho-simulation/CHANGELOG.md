@@ -1,3 +1,20 @@
+## [0.124.0](https://github.com/propeller-heads/tycho-simulation/compare/0.123.0...0.124.0) (2025-07-11)
+
+
+### Features
+
+* Update tycho-common and tycho-execution ([3c8f649](https://github.com/propeller-heads/tycho-simulation/commit/3c8f649bdfebea6fbaa8a2d99298bcc712dd51eb))
+* Use Block from tycho common instead of redefining it ([d2e27d9](https://github.com/propeller-heads/tycho-simulation/commit/d2e27d9205bcb4a185b76c4ed676d667a57a9e53))
+* Use ContractId from tycho-common instead of redefining ([3edac06](https://github.com/propeller-heads/tycho-simulation/commit/3edac06939e30c12a2ccfba74f767a9c24236d3f))
+* Use ExtractorIdentity from tycho common instead of redefining it ([6f70b01](https://github.com/propeller-heads/tycho-simulation/commit/6f70b019121698f17ab765a1ceacb8697224ebb8))
+* Use Header from tycho-client instead of redefining a BlockHeader ([ce7d353](https://github.com/propeller-heads/tycho-simulation/commit/ce7d353a0f0307e8a5c26322d0483ca1eaccdb50))
+* Use Token from tycho-common ([1e89048](https://github.com/propeller-heads/tycho-simulation/commit/1e890481be05340c2dc1b6aad9fc724edfe0d1a7))
+
+
+### Bug Fixes
+
+* After merge with main fixes ([f28f22a](https://github.com/propeller-heads/tycho-simulation/commit/f28f22a057864b3776280472b7f8c22683fc6c77))
+
 ## [0.123.0](https://github.com/propeller-heads/tycho-simulation/compare/0.122.0...0.123.0) (2025-07-10)
 
 
