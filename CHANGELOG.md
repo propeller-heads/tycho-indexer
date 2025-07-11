@@ -1,3 +1,13 @@
+## [0.76.0](https://github.com/propeller-heads/tycho-indexer/compare/0.75.1...0.76.0) (2025-07-11)
+
+
+### Features
+
+* Add id and wrapped_native_token to Chain ([9c79c8f](https://github.com/propeller-heads/tycho-indexer/commit/9c79c8f7a3501e1edd2b86cff43460729b62991f))
+* Add timestamp to Header ([684834a](https://github.com/propeller-heads/tycho-indexer/commit/684834a8f053907ad9547b68d870d2e2c4117249))
+* Remove duplicated models ([#618](https://github.com/propeller-heads/tycho-indexer/issues/618)) ([b528e9b](https://github.com/propeller-heads/tycho-indexer/commit/b528e9b38a9e321f295f09bcb90d9760a7e3c591))
+* Rename CurrencyToken to Token ([a30c046](https://github.com/propeller-heads/tycho-indexer/commit/a30c046ac7b022f7a816545486af81e724863f07))
+
 ## [0.75.1](https://github.com/propeller-heads/tycho-indexer/compare/0.75.0...0.75.1) (2025-07-11)
 
 
