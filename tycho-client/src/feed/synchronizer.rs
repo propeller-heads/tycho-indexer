@@ -1031,6 +1031,7 @@ mod test {
                             caller: Some(Bytes::from("0x0badc0ffee")),
                             calldata: Bytes::from("0x0badc0ffee"),
                             state_overrides: None,
+                            prune_addresses: None,
                         }),
                     },
                     TracingResult {
@@ -1093,6 +1094,7 @@ mod test {
                                     caller: Some(Bytes::from("0x0badc0ffee")),
                                     calldata: Bytes::from("0x0badc0ffee"),
                                     state_overrides: None,
+                                    prune_addresses: None,
                                 }),
                             },
                             TracingResult {
@@ -1349,6 +1351,7 @@ mod test {
                                 caller: Some(Bytes::from("0x0badc0ffee")),
                                 calldata: Bytes::from("0x0badc0ffee"),
                                 state_overrides: None,
+                                prune_addresses: None,
                             }),
                             Some("Component1".to_string()),
                         )]),

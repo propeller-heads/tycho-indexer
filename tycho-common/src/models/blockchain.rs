@@ -420,6 +420,7 @@ impl From<dto::EntryPointWithTracingParams> for EntryPointWithTracingParams {
                                 .map(|(k, v)| (k, v.into()))
                                 .collect()
                         }),
+                    prune_addresses: tracer_params.prune_addresses.clone(),
                 }),
             },
         }
@@ -491,6 +492,9 @@ pub struct RPCTracerParams {
     pub calldata: Bytes,
     /// Optionally allow for state overrides so that the call works as expected
     pub state_overrides: Option<BTreeMap<Address, AccountOverrides>>,
+    /// Addresses to prune from trace results. Useful for hooks that use mock
+    /// accounts/routers that shouldn't be tracked in the final DCI results.
+    pub prune_addresses: Option<Vec<Address>>,
 }
 
 impl From<dto::RPCTracerParams> for RPCTracerParams {
@@ -504,17 +508,23 @@ impl From<dto::RPCTracerParams> for RPCTracerParams {
                     .map(|(address, account_overrides)| (address, account_overrides.into()))
                     .collect()
             }),
+            prune_addresses: value.prune_addresses,
         }
     }
 }
 
 impl RPCTracerParams {
     pub fn new(caller: Option<Address>, calldata: Bytes) -> Self {
-        Self { caller, calldata, state_overrides: None }
+        Self { caller, calldata, state_overrides: None, prune_addresses: None }
     }
 
     pub fn with_state_overrides(mut self, state: BTreeMap<Address, AccountOverrides>) -> Self {
         self.state_overrides = Some(state);
+        self
+    }
+
+    pub fn with_prune_addresses(mut self, addresses: Vec<Address>) -> Self {
+        self.prune_addresses = Some(addresses);
         self
     }
 }
@@ -525,9 +535,27 @@ impl Serialize for RPCTracerParams {
     where
         S: Serializer,
     {
-        let mut state = serializer.serialize_struct("RPCTracerEntryPoint", 2)?;
+        // Count fields: always serialize caller and calldata, plus optional fields
+        let mut field_count = 2;
+        if self.state_overrides.is_some() {
+            field_count += 1;
+        }
+        if self.prune_addresses.is_some() {
+            field_count += 1;
+        }
+
+        let mut state = serializer.serialize_struct("RPCTracerEntryPoint", field_count)?;
         state.serialize_field("caller", &self.caller)?;
         state.serialize_field("calldata", &self.calldata)?;
+
+        // Only serialize optional fields if they are present
+        if let Some(ref overrides) = self.state_overrides {
+            state.serialize_field("state_overrides", overrides)?;
+        }
+        if let Some(ref prune_addrs) = self.prune_addresses {
+            state.serialize_field("prune_addresses", prune_addrs)?;
+        }
+
         state.end()
     }
 }
