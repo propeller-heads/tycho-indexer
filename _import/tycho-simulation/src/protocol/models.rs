@@ -27,15 +27,13 @@
 use std::{collections::HashMap, default::Default, future::Future};
 
 use chrono::NaiveDateTime;
-use num_bigint::BigUint;
 use serde::Serialize;
 use tycho_client::feed::BlockHeader;
 use tycho_common::{
     models::{token::Token, Chain},
+    simulation::protocol_sim::ProtocolSim,
     Bytes,
 };
-
-use super::state::ProtocolSim;
 /// ProtocolComponent struct represents the properties of a trading pair
 ///
 /// # Fields
@@ -137,34 +135,6 @@ pub trait TryFromWithBlock<T> {
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send + Sync
     where
         Self: Sized;
-}
-
-/// GetAmountOutResult struct represents the result of getting the amount out of a trading pair
-///
-/// # Fields
-///
-/// * `amount`: BigUint, the amount of the trading pair
-/// * `gas`: BigUint, the gas of the trading pair
-#[derive(Debug)]
-pub struct GetAmountOutResult {
-    pub amount: BigUint,
-    pub gas: BigUint,
-    pub new_state: Box<dyn ProtocolSim>,
-}
-
-impl GetAmountOutResult {
-    /// Constructs a new GetAmountOutResult struct with the given amount and gas
-    pub fn new(amount: BigUint, gas: BigUint, new_state: Box<dyn ProtocolSim>) -> Self {
-        GetAmountOutResult { amount, gas, new_state }
-    }
-
-    /// Aggregates the given GetAmountOutResult struct to the current one.
-    /// It updates the amount with the other's amount and adds the other's gas to the current one's
-    /// gas.
-    pub fn aggregate(&mut self, other: &Self) {
-        self.amount = other.amount.clone();
-        self.gas += &other.gas;
-    }
 }
 
 #[derive(Debug, Clone)]

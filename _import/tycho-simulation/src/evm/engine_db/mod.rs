@@ -4,14 +4,12 @@ use alloy::primitives::Address;
 use lazy_static::lazy_static;
 use revm::{primitives::KECCAK_EMPTY, state::AccountInfo, DatabaseRef};
 use tycho_client::feed::BlockHeader;
+use tycho_common::simulation::errors::SimulationError;
 
-use crate::{
-    evm::{
-        engine_db::{engine_db_interface::EngineDatabaseInterface, tycho_db::PreCachedDB},
-        simulation::SimulationEngine,
-        tycho_models::{AccountUpdate, ChangeType, ResponseAccount},
-    },
-    protocol::errors::SimulationError,
+use crate::evm::{
+    engine_db::{engine_db_interface::EngineDatabaseInterface, tycho_db::PreCachedDB},
+    simulation::SimulationEngine,
+    tycho_models::{AccountUpdate, ChangeType, ResponseAccount},
 };
 
 pub mod engine_db_interface;

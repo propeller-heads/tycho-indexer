@@ -11,29 +11,33 @@ use revm::{
     DatabaseRef,
 };
 use tycho_client::feed::BlockHeader;
-use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
-
-use crate::{
-    evm::{
-        engine_db::engine_db_interface::EngineDatabaseInterface,
-        protocol::{
-            uniswap_v4::{
-                hooks::{
-                    constants::POOL_MANAGER_BYTECODE,
-                    hook_handler::{
-                        AfterSwapParameters, AfterSwapSolReturn, AmountRanges, BeforeSwapDelta,
-                        BeforeSwapOutput, BeforeSwapParameters, BeforeSwapSolOutput, HookHandler,
-                        SwapParams, WithGasEstimate,
-                    },
-                },
-                state::UniswapV4State,
-            },
-            vm::{constants::MAX_BALANCE, tycho_simulation_contract::TychoSimulationContract},
-        },
-        simulation::SimulationEngine,
+use tycho_common::{
+    dto::ProtocolStateDelta,
+    models::token::Token,
+    simulation::{
+        errors::{SimulationError, TransitionError},
+        protocol_sim::Balances,
     },
-    models::Balances,
-    protocol::errors::{SimulationError, TransitionError},
+    Bytes,
+};
+
+use crate::evm::{
+    engine_db::engine_db_interface::EngineDatabaseInterface,
+    protocol::{
+        uniswap_v4::{
+            hooks::{
+                constants::POOL_MANAGER_BYTECODE,
+                hook_handler::{
+                    AfterSwapParameters, AfterSwapSolReturn, AmountRanges, BeforeSwapDelta,
+                    BeforeSwapOutput, BeforeSwapParameters, BeforeSwapSolOutput, HookHandler,
+                    SwapParams, WithGasEstimate,
+                },
+            },
+            state::UniswapV4State,
+        },
+        vm::{constants::MAX_BALANCE, tycho_simulation_contract::TychoSimulationContract},
+    },
+    simulation::SimulationEngine,
 };
 
 #[derive(Debug, Clone)]

@@ -1,10 +1,11 @@
 use alloy::primitives::{I256, U256};
+use tycho_common::simulation::errors::SimulationError;
 
 use super::{
     solidity_math::{mul_div, mul_div_rounding_up},
     sqrt_price_math,
 };
-use crate::{evm::protocol::safe_math::safe_sub_u256, protocol::errors::SimulationError};
+use crate::evm::protocol::safe_math::safe_sub_u256;
 
 pub(crate) fn compute_swap_step(
     sqrt_ratio_current: U256,

@@ -16,7 +16,7 @@ use revm::{
 };
 use tracing::warn;
 use tycho_client::feed::BlockHeader;
-use tycho_common::Bytes as TychoBytes;
+use tycho_common::{simulation::errors::SimulationError, Bytes as TychoBytes};
 
 use super::{
     constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
@@ -25,13 +25,10 @@ use super::{
     tycho_simulation_contract::TychoSimulationContract,
     utils::get_code_for_contract,
 };
-use crate::{
-    evm::{
-        engine_db::{create_engine, engine_db_interface::EngineDatabaseInterface},
-        protocol::utils::bytes_to_address,
-        simulation::{SimulationEngine, SimulationParameters},
-    },
-    protocol::errors::SimulationError,
+use crate::evm::{
+    engine_db::{create_engine, engine_db_interface::EngineDatabaseInterface},
+    protocol::utils::bytes_to_address,
+    simulation::{SimulationEngine, SimulationParameters},
 };
 
 #[derive(Debug)]
@@ -48,7 +45,6 @@ use crate::{
 /// use std::path::PathBuf;
 /// use tycho_common::Bytes;
 /// use tycho_simulation::evm::engine_db::SHARED_TYCHO_DB;
-/// use tycho_simulation::protocol::errors::SimulationError;
 /// use tycho_simulation::evm::protocol::vm::state_builder::EVMPoolStateBuilder;
 /// use tycho_simulation::evm::protocol::vm::constants::BALANCER_V2;
 /// use tycho_client::feed::BlockHeader;
@@ -56,6 +52,7 @@ use crate::{
 /// #[tokio::main]
 /// async fn main() -> Result<(), SimulationError> {
 ///     use revm::state::Bytecode;
+/// use tycho_common::simulation::errors::SimulationError;
 /// let pool_id: String = "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
 ///
 ///     let tokens = vec![

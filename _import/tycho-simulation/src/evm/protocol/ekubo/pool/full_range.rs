@@ -8,10 +8,13 @@ use evm_ekubo_sdk::{
         types::{NodeKey, Pool, QuoteParams, TokenAmount},
     },
 };
-use tycho_common::Bytes;
+use tycho_common::{
+    simulation::errors::{SimulationError, TransitionError},
+    Bytes,
+};
 
 use super::{EkuboPool, EkuboPoolQuote};
-use crate::protocol::errors::{InvalidSnapshotError, SimulationError, TransitionError};
+use crate::protocol::errors::InvalidSnapshotError;
 
 #[derive(Debug, Clone, Eq)]
 pub struct FullRangePool {

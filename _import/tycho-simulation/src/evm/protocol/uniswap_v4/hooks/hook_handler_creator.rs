@@ -4,7 +4,7 @@ use std::{collections::HashMap, sync::RwLock};
 use alloy::primitives::Address;
 use lazy_static::lazy_static;
 use tycho_client::feed::BlockHeader;
-use tycho_common::{models::token::Token, Bytes};
+use tycho_common::{models::token::Token, simulation::errors::SimulationError, Bytes};
 
 use crate::{
     evm::{
@@ -14,7 +14,7 @@ use crate::{
             state::UniswapV4State,
         },
     },
-    protocol::errors::{InvalidSnapshotError, SimulationError},
+    protocol::errors::InvalidSnapshotError,
 };
 
 /// Parameters for creating a HookHandler.

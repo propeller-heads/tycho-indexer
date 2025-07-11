@@ -11,7 +11,15 @@ use itertools::Itertools;
 use num_bigint::BigUint;
 use revm::DatabaseRef;
 use tycho_client::feed::BlockHeader;
-use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
+use tycho_common::{
+    dto::ProtocolStateDelta,
+    models::token::Token,
+    simulation::{
+        errors::{SimulationError, TransitionError},
+        protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
+    },
+    Bytes,
+};
 
 use super::{
     constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
@@ -19,19 +27,11 @@ use super::{
     models::Capability,
     tycho_simulation_contract::TychoSimulationContract,
 };
-use crate::{
-    evm::{
-        engine_db::{engine_db_interface::EngineDatabaseInterface, tycho_db::PreCachedDB},
-        protocol::{
-            u256_num::{u256_to_biguint, u256_to_f64},
-            utils::bytes_to_address,
-        },
-    },
-    models::Balances,
+use crate::evm::{
+    engine_db::{engine_db_interface::EngineDatabaseInterface, tycho_db::PreCachedDB},
     protocol::{
-        errors::{SimulationError, TransitionError},
-        models::GetAmountOutResult,
-        state::ProtocolSim,
+        u256_num::{u256_to_biguint, u256_to_f64},
+        utils::bytes_to_address,
     },
 };
 

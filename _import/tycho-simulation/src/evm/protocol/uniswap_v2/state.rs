@@ -55,17 +55,14 @@ mod tests {
         dto::ProtocolStateDelta,
         hex_bytes::Bytes,
         models::{token::Token, Chain},
+        simulation::{
+            errors::{SimulationError, TransitionError},
+            protocol_sim::{Balances, ProtocolSim},
+        },
     };
 
     use super::*;
-    use crate::{
-        evm::protocol::u256_num::biguint_to_u256,
-        models::Balances,
-        protocol::{
-            errors::{SimulationError, TransitionError},
-            state::ProtocolSim,
-        },
-    };
+    use crate::evm::protocol::u256_num::biguint_to_u256;
 
     #[rstest]
     #[case::same_dec(

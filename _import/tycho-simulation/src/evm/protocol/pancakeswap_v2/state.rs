@@ -55,16 +55,13 @@ mod tests {
         dto::ProtocolStateDelta,
         hex_bytes::Bytes,
         models::{token::Token, Chain},
+        simulation::{
+            errors::{SimulationError, TransitionError},
+            protocol_sim::{Balances, ProtocolSim},
+        },
     };
 
     use super::*;
-    use crate::{
-        models::Balances,
-        protocol::{
-            errors::{SimulationError, TransitionError},
-            state::ProtocolSim,
-        },
-    };
 
     #[test]
     fn test_get_amount_out() {

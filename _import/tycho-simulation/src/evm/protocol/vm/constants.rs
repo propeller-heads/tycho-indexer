@@ -1,7 +1,6 @@
 use alloy::primitives::{Address, U256};
 use lazy_static::lazy_static;
-
-use crate::protocol::errors::SimulationError;
+use tycho_common::simulation::errors::SimulationError;
 
 lazy_static! {
     pub static ref EXTERNAL_ACCOUNT: Address = Address::from_slice(

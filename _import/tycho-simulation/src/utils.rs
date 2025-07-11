@@ -4,10 +4,9 @@ use tracing::info;
 use tycho_client::{rpc::RPCClient, HttpRPCClient};
 use tycho_common::{
     models::{token::Token, Chain},
+    simulation::errors::SimulationError,
     Bytes,
 };
-
-use crate::protocol::errors::SimulationError;
 
 /// Converts a hexadecimal string into a `Vec<u8>`.
 ///
