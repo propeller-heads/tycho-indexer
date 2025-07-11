@@ -1,3 +1,11 @@
+## [0.75.1](https://github.com/propeller-heads/tycho-indexer/compare/0.75.0...0.75.1) (2025-07-11)
+
+
+### Bug Fixes
+
+* correctly handle reverts in DCI cache ([aee8b7d](https://github.com/propeller-heads/tycho-indexer/commit/aee8b7d70ef65977b4cd9343cf9f5473643fb154))
+* correctly handle reverts in DCI cache ([#620](https://github.com/propeller-heads/tycho-indexer/issues/620)) ([ab4c838](https://github.com/propeller-heads/tycho-indexer/commit/ab4c838fafeb73138f386249c9af75cd154215a3))
+
 ## [0.75.0](https://github.com/propeller-heads/tycho-indexer/compare/0.74.0...0.75.0) (2025-07-07)
 
 
