@@ -1,3 +1,11 @@
+## [0.76.1](https://github.com/propeller-heads/tycho-indexer/compare/0.76.0...0.76.1) (2025-07-11)
+
+
+### Bug Fixes
+
+* Correctly set Url scheme in TychoStreamBuilder ([bac1975](https://github.com/propeller-heads/tycho-indexer/commit/bac19756741194b2ecc5902b4fc4e92f20585464))
+* Correctly set Url scheme in TychoStreamBuilder ([#621](https://github.com/propeller-heads/tycho-indexer/issues/621)) ([839e919](https://github.com/propeller-heads/tycho-indexer/commit/839e91917da0a7c9a1ad340fd7fed205700a6f36))
+
 ## [0.76.0](https://github.com/propeller-heads/tycho-indexer/compare/0.75.1...0.76.0) (2025-07-11)
 
 
