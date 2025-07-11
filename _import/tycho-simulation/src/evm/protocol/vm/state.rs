@@ -10,7 +10,8 @@ use alloy::primitives::{Address, U256};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use revm::DatabaseRef;
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
+use tycho_client::feed::Header;
+use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
 
 use super::{
     constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
@@ -20,16 +21,13 @@ use super::{
 };
 use crate::{
     evm::{
-        engine_db::{
-            engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
-            tycho_db::PreCachedDB,
-        },
+        engine_db::{engine_db_interface::EngineDatabaseInterface, tycho_db::PreCachedDB},
         protocol::{
             u256_num::{u256_to_biguint, u256_to_f64},
             utils::bytes_to_address,
         },
     },
-    models::{Balances, Token},
+    models::Balances,
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,
@@ -48,7 +46,7 @@ where
     /// The pool's token's addresses
     pub tokens: Vec<Bytes>,
     /// The current block, will be used to set vm context
-    block: BlockHeader,
+    block: Header,
     /// The pool's component balances.
     balances: HashMap<Address, U256>,
     /// The contract address for where protocol balances are stored (i.e. a vault contract).
@@ -89,7 +87,7 @@ where
     pub fn new(
         id: String,
         tokens: Vec<Bytes>,
-        block: BlockHeader,
+        block: Header,
         component_balances: HashMap<Address, U256>,
         balance_owner: Option<Address>,
         contract_balances: HashMap<Address, HashMap<Address, U256>>,
@@ -290,7 +288,7 @@ where
     ) -> Result<usize, SimulationError> {
         tokens
             .get(&Bytes::from(sell_token_address.as_slice()))
-            .map(|t| t.decimals)
+            .map(|t| t.decimals as usize)
             .ok_or_else(|| {
                 SimulationError::FatalError(format!(
                     "Failed to scale spot prices! Pool: {} Token 0x{:x} is not available!",
@@ -696,14 +694,16 @@ where
 
 #[cfg(test)]
 mod tests {
-    use alloy::primitives::B256;
-    use num_bigint::ToBigUint;
+    use std::default::Default;
+
     use num_traits::One;
     use revm::{
         primitives::KECCAK_EMPTY,
         state::{AccountInfo, Bytecode},
     };
     use serde_json::Value;
+    use tycho_client::feed::Header;
+    use tycho_common::models::Chain;
 
     use super::*;
     use crate::evm::{
@@ -718,19 +718,25 @@ mod tests {
 
     fn dai() -> Token {
         Token::new(
-            "0x6b175474e89094c44da98b954eedeac495271d0f",
-            18,
+            &Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
             "DAI",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         )
     }
 
     fn bal() -> Token {
         Token::new(
-            "0xba100000625a3754423978a60c9317c58a424e3d",
-            18,
+            &Bytes::from_str("0xba100000625a3754423978a60c9317c58a424e3d").unwrap(),
             "BAL",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         )
     }
 
@@ -752,13 +758,14 @@ mod tests {
         let db = SHARED_TYCHO_DB.clone();
         let engine: SimulationEngine<_> = create_engine(db.clone(), false).unwrap();
 
-        let block = BlockHeader {
+        let block = Header {
             number: 20463609,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0x4315fd1afc25cc2ebc72029c543293f9fd833eeb305e2e30159459c827733b1b",
             )
             .unwrap(),
             timestamp: 1722875891,
+            ..Default::default()
         };
 
         for account in accounts.clone() {
@@ -794,13 +801,14 @@ mod tests {
             );
         }
 
-        let block = BlockHeader {
+        let block = Header {
             number: 18485417,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
             )
             .expect("Invalid block hash"),
             timestamp: 0,
+            ..Default::default()
         };
 
         let pool_id: String =

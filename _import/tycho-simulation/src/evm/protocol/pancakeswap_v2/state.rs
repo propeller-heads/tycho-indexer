@@ -48,14 +48,18 @@ mod tests {
     };
 
     use approx::assert_ulps_eq;
-    use num_bigint::{BigUint, ToBigUint};
+    use num_bigint::BigUint;
     use num_traits::One;
     use rstest::rstest;
-    use tycho_common::{dto::ProtocolStateDelta, hex_bytes::Bytes};
+    use tycho_common::{
+        dto::ProtocolStateDelta,
+        hex_bytes::Bytes,
+        models::{token::Token, Chain},
+    };
 
     use super::*;
     use crate::{
-        models::{Balances, Token},
+        models::Balances,
         protocol::{
             errors::{SimulationError, TransitionError},
             state::ProtocolSim,
@@ -67,16 +71,23 @@ mod tests {
         // Values based on mainnet WETH/USDC pool swap at transaction
         // 0x6b3193b0ce348cf45d2c70a6481d8088f58ee22ba41502b611a2b045f4464c9f
         let t0 = Token::new(
-            "0x0000000000000000000000000000000000000000",
-            18,
+            &Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
             "WETH",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(100_000)],
+            Chain::Ethereum,
+            100,
         );
+
         let t1 = Token::new(
-            "0x0000000000000000000000000000000000000001",
-            6,
+            &Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
             "USDC",
-            10_000.to_biguint().unwrap(),
+            6,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
         let reserve0 = U256::from_str("114293490733").unwrap();
         let reserve1 = U256::from_str("69592908201923870949").unwrap();
@@ -109,16 +120,22 @@ mod tests {
         let t0d = 18;
         let t1d = 16;
         let t0 = Token::new(
-            "0x0000000000000000000000000000000000000000",
-            t0d,
+            &Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
             "T0",
-            10_000.to_biguint().unwrap(),
+            t0d,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
         let t1 = Token::new(
-            "0x0000000000000000000000000000000000000001",
-            t1d,
+            &Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
             "T0",
-            10_000.to_biguint().unwrap(),
+            t1d,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
         let state = PancakeswapV2State::new(r0, r1);
 
@@ -137,16 +154,22 @@ mod tests {
             U256::from_str("30314846538607556521556").unwrap(),
         );
         let usdc = Token::new(
-            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-            6,
+            &Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
             "USDC",
-            10_000.to_biguint().unwrap(),
+            6,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
         let weth = Token::new(
-            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-            18,
+            &Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
             "WETH",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
 
         let res = if zero_to_one {
@@ -237,16 +260,22 @@ mod tests {
             .unwrap();
 
         let token_0 = Token::new(
-            "0x0000000000000000000000000000000000000000",
-            18,
+            &Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
             "T0",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
         let token_1 = Token::new(
-            "0x0000000000000000000000000000000000000001",
-            18,
+            &Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
             "T1",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
 
         let result = state

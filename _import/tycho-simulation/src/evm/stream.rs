@@ -7,11 +7,13 @@ use tycho_client::{
     feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState},
     stream::{StreamError, TychoStreamBuilder},
 };
-use tycho_common::{models::Chain, Bytes};
+use tycho_common::{
+    models::{token::Token, Chain},
+    Bytes,
+};
 
 use crate::{
     evm::decoder::{StreamDecodeError, TychoStreamDecoder},
-    models::Token,
     protocol::{
         errors::InvalidSnapshotError,
         models::{BlockUpdate, TryFromWithBlock},

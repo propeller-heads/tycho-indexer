@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use alloy::primitives::U256;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_common::Bytes;
+use tycho_common::{models::token::Token, Bytes};
 
 use super::state::UniswapV4State;
 use crate::{
@@ -10,7 +10,6 @@ use crate::{
         uniswap_v4::state::UniswapV4Fees,
         utils::uniswap::{i24_be_bytes_to_i32, tick_list::TickInfo},
     },
-    models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 
@@ -182,6 +181,7 @@ mod tests {
             hash: Bytes::from(vec![0; 32]),
             parent_hash: Bytes::from(vec![0; 32]),
             revert: false,
+            timestamp: 1,
         }
     }
 

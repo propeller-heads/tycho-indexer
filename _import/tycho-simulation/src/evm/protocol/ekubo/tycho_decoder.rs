@@ -12,7 +12,7 @@ use evm_ekubo_sdk::{
 use itertools::Itertools;
 use num_traits::Zero;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_common::Bytes;
+use tycho_common::{models::token::Token, Bytes};
 
 use super::{
     attributes::{sale_rate_deltas_from_attributes, ticks_from_attributes},
@@ -21,7 +21,6 @@ use super::{
 };
 use crate::{
     evm::protocol::ekubo::pool::mev_resist::MevResistPool,
-    models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 

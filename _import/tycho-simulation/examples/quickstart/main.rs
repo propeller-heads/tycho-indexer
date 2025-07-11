@@ -27,7 +27,7 @@ use futures::StreamExt;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use tracing_subscriber::EnvFilter;
-use tycho_common::Bytes;
+use tycho_common::{models::token::Token, Bytes};
 pub mod utils;
 use tycho_execution::encoding::{
     errors::EncodingError,
@@ -52,7 +52,6 @@ use tycho_simulation::{
         },
         stream::ProtocolStreamBuilder,
     },
-    models::Token,
     protocol::models::{BlockUpdate, ProtocolComponent},
     tycho_client::feed::component_tracker::ComponentFilter,
     tycho_common::models::Chain,

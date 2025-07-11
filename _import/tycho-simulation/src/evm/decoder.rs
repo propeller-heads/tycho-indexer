@@ -13,7 +13,7 @@ use tracing::{debug, error, info, warn};
 use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage, Header};
 use tycho_common::{
     dto::{ChangeType, ProtocolStateDelta},
-    models::Chain,
+    models::{token::Token, Chain},
     Bytes,
 };
 
@@ -26,7 +26,7 @@ use crate::{
         },
         tycho_models::{AccountUpdate, ResponseAccount},
     },
-    models::{Balances, Token},
+    models::Balances,
     protocol::{
         errors::InvalidSnapshotError,
         models::{BlockUpdate, ProtocolComponent, TryFromWithBlock},
@@ -190,9 +190,9 @@ impl TychoStreamDecoder {
                         t.clone()
                             .try_into()
                             .map(|token| (addr.clone(), token))
-                            .map_err(|e| {
-                                warn!("Failed decoding token {e} {addr:#044x}");
-                                e
+                            .inspect_err(|e| {
+                                warn!("Failed decoding token {e:?} {addr:#044x}");
+                                *e
                             })
                             .ok()
                     })
@@ -327,7 +327,7 @@ impl TychoStreamDecoder {
             info!("Updating engine with {} contracts from snapshots", storage_by_address.len());
             update_engine(
                 SHARED_TYCHO_DB.clone(),
-                block.clone().into(),
+                block.clone(),
                 Some(storage_by_address),
                 token_proxy_accounts,
             )
@@ -407,7 +407,7 @@ impl TychoStreamDecoder {
                     if !new_tokens_accounts.is_empty() {
                         update_engine(
                             SHARED_TYCHO_DB.clone(),
-                            block.clone().into(),
+                            block.clone(),
                             None,
                             new_tokens_accounts,
                         )
@@ -535,13 +535,8 @@ impl TychoStreamDecoder {
 
                 let state_guard = self.state.read().await;
                 info!("Updating engine with {} contract deltas", deltas.account_updates.len());
-                update_engine(
-                    SHARED_TYCHO_DB.clone(),
-                    block.clone().into(),
-                    None,
-                    token_proxy_accounts,
-                )
-                .await;
+                update_engine(SHARED_TYCHO_DB.clone(), block.clone(), None, token_proxy_accounts)
+                    .await;
                 info!("Engine updated");
 
                 // Collect all pools related to the updated accounts
@@ -718,13 +713,12 @@ mod tests {
 
     use alloy::primitives::address;
     use mockall::predicate::*;
-    use num_bigint::ToBigUint;
     use rstest::*;
+    use tycho_common::models::Chain;
 
     use super::*;
     use crate::{
-        evm::protocol::uniswap_v2::state::UniswapV2State, models::Token,
-        protocol::state::MockProtocolSim,
+        evm::protocol::uniswap_v2::state::UniswapV2State, protocol::state::MockProtocolSim,
     };
 
     async fn setup_decoder(set_tokens: bool) -> TychoStreamDecoder {
@@ -738,7 +732,10 @@ mod tests {
             .iter()
             .map(|addr| {
                 let addr_str = format!("{addr:x}");
-                (addr.clone(), Token::new(&addr_str, 18, &addr_str, 100_000.to_biguint().unwrap()))
+                (
+                    addr.clone(),
+                    Token::new(addr, &addr_str, 18, 100, &[Some(100_000)], Chain::Ethereum, 100),
+                )
             })
             .collect();
             decoder.set_tokens(tokens).await;
@@ -779,7 +776,10 @@ mod tests {
             .iter()
             .map(|addr| {
                 let addr_str = format!("{addr:x}");
-                (addr.clone(), Token::new(&addr_str, 18, &addr_str, 100_000.to_biguint().unwrap()))
+                (
+                    addr.clone(),
+                    Token::new(addr, &addr_str, 18, 100, &[Some(100_000)], Chain::Ethereum, 100),
+                )
             })
             .collect();
         decoder.set_tokens(tokens).await;

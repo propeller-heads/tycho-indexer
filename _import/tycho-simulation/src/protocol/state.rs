@@ -20,9 +20,11 @@
 //! use std::str::FromStr;
 //! use alloy::primitives::U256;
 //! use num_bigint::ToBigUint;
+//! use tycho_common::Bytes;
+//! use tycho_common::models::Chain;
 //! use tycho_simulation::evm::protocol::uniswap_v2::state::UniswapV2State;
 //! use tycho_simulation::protocol::state::{ProtocolSim};
-//! use tycho_simulation::models::Token;
+//! use tycho_common::models::token::Token;
 //! use tycho_simulation::evm::protocol::u256_num::u256_to_biguint;
 //!
 //! // Initialize the UniswapV2 state with token reserves
@@ -33,10 +35,10 @@
 //!
 //! // Define two ERC20 tokens: USDC and WETH
 //! let usdc = Token::new(
-//!     "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6, "USDC", 10_000.to_biguint().unwrap()
+//!    &Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(), "USDC", 6, 0, &[Some(10_000)], Chain::Ethereum, 100
 //! );
 //! let weth = Token::new(
-//!     "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", 18, "WETH", 10_000.to_biguint().unwrap()
+//!    &Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(), "WETH", 18, 0, &[Some(10_000)], Chain::Ethereum, 100
 //! );
 //!
 //! // Get the amount out for swapping WETH to USDC
@@ -49,10 +51,10 @@ use std::{any::Any, collections::HashMap};
 #[cfg(test)]
 use mockall::mock;
 use num_bigint::BigUint;
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
 
 use crate::{
-    models::{Balances, Token},
+    models::Balances,
     protocol::{
         errors::{SimulationError, TransitionError},
         models::GetAmountOutResult,

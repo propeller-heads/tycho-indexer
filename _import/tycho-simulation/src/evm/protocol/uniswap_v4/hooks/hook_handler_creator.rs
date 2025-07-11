@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::RwLock};
 
 use alloy::{primitives::Address, rpc::types::Header};
 use lazy_static::lazy_static;
-use tycho_common::Bytes;
+use tycho_common::{models::token::Token, Bytes};
 
 use crate::{
     evm::{
@@ -13,7 +13,6 @@ use crate::{
             state::UniswapV4State,
         },
     },
-    models::Token,
     protocol::errors::{InvalidSnapshotError, SimulationError},
 };
 
