@@ -1,25 +1,28 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     str::FromStr,
 };
 
 use async_trait::async_trait;
 use ethcontract::{H160, H256};
 use ethers::{
-    prelude::Middleware,
+    prelude::{spoof, Middleware},
     providers::{Http, Provider},
     types::{
         Address as EthersAddress, BlockId, Bytes as EthersBytes, CallFrame,
         GethDebugBuiltInTracerType, GethDebugTracerType, GethDebugTracingCallOptions,
         GethDebugTracingOptions, GethTrace, GethTraceFrame, NameOrAddress, PreStateFrame,
-        PreStateMode, TransactionRequest,
+        PreStateMode, TransactionRequest, U256,
     },
 };
-use thiserror::Error;
+use tracing::warn;
 use tycho_common::{
     keccak256,
     models::{
-        blockchain::{EntryPointWithTracingParams, TracedEntryPoint, TracingParams, TracingResult},
+        blockchain::{
+            EntryPointWithTracingParams, RPCTracerParams, StorageOverride, TracedEntryPoint,
+            TracingParams, TracingResult,
+        },
         Address, BlockHash,
     },
     traits::EntryPointTracer,
@@ -43,17 +46,20 @@ impl EVMEntrypointService {
     async fn trace_call(
         &self,
         target: &Address,
-        caller: &Address,
-        data: &Bytes,
+        params: &RPCTracerParams,
         block_hash: &BlockHash,
         tracer_type: GethDebugBuiltInTracerType,
     ) -> Result<GethTrace, RPCError> {
+        let caller = params
+            .caller
+            .as_ref()
+            .map(H160::from_bytes);
         self.provider
             .debug_trace_call(
                 TransactionRequest {
                     to: Some(NameOrAddress::Address(H160::from_bytes(target))),
-                    from: Some(H160::from_bytes(caller)),
-                    data: Some(EthersBytes::from(data.to_vec())),
+                    from: caller,
+                    data: Some(EthersBytes::from(params.calldata.to_vec())),
                     ..Default::default()
                 },
                 Some(BlockId::Hash(H256::from_bytes(block_hash))),
@@ -62,12 +68,47 @@ impl EVMEntrypointService {
                         tracer: Some(GethDebugTracerType::BuiltInTracer(tracer_type)),
                         ..Default::default()
                     },
+                    state_overrides: params
+                        .state_overrides
+                        .as_ref()
+                        .map(|s| {
+                            let mut state = spoof::state();
+                            s.iter()
+                                .for_each(|(address, overrides)| {
+                                    let account = state.account(H160::from_slice(address.as_ref()));
+                                    account.storage = match overrides.slots.as_ref() {
+                                        Some(StorageOverride::Diff(slots)) => {
+                                            Some(spoof::Storage::Diff(convert_storage(slots)))
+                                        }
+                                        Some(StorageOverride::Replace(slots)) => {
+                                            Some(spoof::Storage::Replace(convert_storage(slots)))
+                                        }
+                                        _ => None,
+                                    };
+                                    account.balance = overrides
+                                        .native_balance
+                                        .as_ref()
+                                        .map(|b| U256::from_big_endian(b.as_ref()));
+                                    account.code = overrides
+                                        .code
+                                        .as_ref()
+                                        .map(|c| ethers::types::Bytes::from(c.to_vec()));
+                                });
+                            state
+                        }),
                     ..Default::default()
                 },
             )
             .await
             .map_err(RPCError::RequestError)
     }
+}
+
+fn convert_storage(slots: &BTreeMap<Bytes, Bytes>) -> HashMap<H256, H256> {
+    slots
+        .iter()
+        .map(|(k, v)| (H256::from_slice(k.as_ref()), H256::from_slice(v.as_ref())))
+        .collect()
 }
 
 #[async_trait]
@@ -90,11 +131,7 @@ impl EntryPointTracer for EVMEntrypointService {
                     let call_trace = self
                         .trace_call(
                             &entry_point.entry_point.target,
-                            rpc_entry_point
-                                .caller
-                                .as_ref()
-                                .unwrap_or(&EthersAddress::zero().to_bytes()),
-                            &rpc_entry_point.calldata,
+                            rpc_entry_point,
                             &block_hash,
                             GethDebugBuiltInTracerType::CallTracer,
                         )
@@ -113,11 +150,7 @@ impl EntryPointTracer for EVMEntrypointService {
                     let pre_state_trace = self
                         .trace_call(
                             &entry_point.entry_point.target,
-                            rpc_entry_point
-                                .caller
-                                .as_ref()
-                                .unwrap_or(&EthersAddress::zero().to_bytes()),
-                            &rpc_entry_point.calldata,
+                            rpc_entry_point,
                             &block_hash,
                             GethDebugBuiltInTracerType::PreStateTracer,
                         )
@@ -180,6 +213,9 @@ impl EntryPointTracer for EVMEntrypointService {
 }
 
 fn flatten_calls(call: &CallFrame) -> Vec<EthersAddress> {
+    if let Some(err) = &call.error {
+        warn!("Error in call frame: {:?}", err);
+    }
     let to = if let Some(NameOrAddress::Address(a)) = &call.to { *a } else { return vec![] };
     let mut flat_calls = vec![to];
     if let Some(sub_calls) = &call.calls {
@@ -195,7 +231,7 @@ mod tests {
     use std::env;
 
     use tycho_common::{
-        models::blockchain::{EntryPoint, RPCTracerParams},
+        models::blockchain::{AccountOverrides, EntryPoint, RPCTracerParams},
         Bytes,
     };
 
@@ -305,6 +341,147 @@ mod tests {
                         ]),
                     ),
                 },
+            ],
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires a RPC connection"]
+    /// This test traces a UniswapV2Router02 swapExactTokensForTokens call
+    /// It uses an account with no balance and relies on tracer overrides for setting custom values
+    /// for POLS token balance and allowance attributes
+    async fn test_trace_univ2_swap() {
+        let url = env::var("RPC_URL").expect("RPC_URL is not set");
+        let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
+
+        // Create state overrides for the POLS contract
+        let mut state_overrides = BTreeMap::new();
+        let pols_address = Bytes::from_str("0x83e6f1e41cdd28eaceb20cb649155049fac3d5aa").unwrap();
+
+        // Create storage overrides
+        let mut slots = BTreeMap::new();
+        // Override POLS balance for the caller
+        slots.insert(
+            Bytes::from_str("0x563494035215327c9cc08a85694f34eab8bc22017bd383b01d83f2bb8c78aa91")
+                .unwrap(),
+            Bytes::from_str("0x00000000000000000000000000000000000000000000004c4c6e64f5134a0000")
+                .unwrap(),
+        );
+        // Override POLS allowance for the caller to UniswapV2Router02 contract
+        slots.insert(
+            Bytes::from_str("0x6402d480789caf1f1824771fcdd31558cac90b7d044d14b2201c8ca95eae8955")
+                .unwrap(),
+            Bytes::from_str("0x00000000000000000000000000000000000000000000004c4c6e64f5134a0000")
+                .unwrap(),
+        );
+
+        // Create account overrides
+        let account_overrides = AccountOverrides {
+            slots: Some(StorageOverride::Diff(slots)),
+            native_balance: None,
+            code: None,
+        };
+
+        // Add to the state overrides map
+        state_overrides.insert(pols_address.clone(), account_overrides);
+
+        // UniswapV2Router02 address on Ethereum mainnet
+        let router_address = Bytes::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap();
+
+        // Prepare swapExactTokensForTokens parameters
+        // Function signature: swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[]
+        // path, address to, uint deadline) Function selector: 0x38ed1739
+
+        // Parameters:
+        // amountIn: 1407460000000000000000 - amount of POLS
+        // amountOutMin: 105047450000000000 - minimum amount of WETH
+        // path: [POLS, WETH] - token swap path
+        // to: caller address - recipient of the swapped tokens
+        // deadline: 1750085651
+
+        let caller = Bytes::from_str("0xd0a3dAC187ab0CbAaE92127F143A31fB6badbabe").unwrap();
+
+        // Construct calldata for swapExactTokensForTokens
+        let calldata = Bytes::from(
+            "0x38ed173900000000000000000000000000000000000000000000004c4c6e64f5134a00000000000000000000000000000000000000000000000000000175341965cf840000000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000d0a3dac187ab0cbaae92127f143a31fb6badbabe0000000000000000000000000000000000000000000000000000000068503013000000000000000000000000000000000000000000000000000000000000000200000000000000000000000083e6f1e41cdd28eaceb20cb649155049fac3d5aa000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        );
+
+        let entry_points = vec![EntryPointWithTracingParams::new(
+            EntryPoint::new(
+                "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D:swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline)"
+                    .to_string(),
+                router_address.clone(),
+                "swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline)".to_string(),
+            ),
+            TracingParams::RPCTracer(RPCTracerParams::new(
+                Some(caller.clone()),
+                calldata,
+            ).with_state_overrides(state_overrides)),
+        )];
+
+        let block_hash =
+            Bytes::from_str("0xfebbe1110db8fd453b7125860a1c909561d00872aedb40765f54356ac4d7cc40")
+                .unwrap();
+        let traced_entry_points = tracer
+            .trace(
+                // 22717805 block hash
+                block_hash.clone(),
+                entry_points.clone(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            traced_entry_points,
+            vec ![
+            TracedEntryPoint {
+            entry_point_with_params: entry_points[0].clone(),
+            detection_block_hash: block_hash,
+            tracing_result: TracingResult::new(
+            // Retriggers
+            HashSet::from([
+                    (
+                        Bytes::from_str("0xffa98a091331df4600f87c9164cd27e8a5cd2405").unwrap(),
+                        Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000007").unwrap(),
+                    ),
+                    (
+                        Bytes::from_str("0xffa98a091331df4600f87c9164cd27e8a5cd2405").unwrap(),
+                        Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000006").unwrap(),
+                    ),
+                ]),
+            // Accessed slots
+            HashMap::from([
+            (
+                Bytes::from_str("0xffa98a091331df4600f87c9164cd27e8a5cd2405").unwrap(),
+                HashSet::from([
+                    Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000007").unwrap(),
+                    Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000009").unwrap(),
+                    Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000006").unwrap(),
+                    Bytes::from_str("0x000000000000000000000000000000000000000000000000000000000000000c").unwrap(),
+                    Bytes::from_str("0x000000000000000000000000000000000000000000000000000000000000000a").unwrap(),
+                    Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000008").unwrap(),
+                ])
+            ),
+            (Bytes::from_str("0x7a250d5630b4cf539739df2c5dacb4c659f2488d").unwrap(), HashSet::new()),
+            (
+                Bytes::from_str("0x83e6f1e41cdd28eaceb20cb649155049fac3d5aa").unwrap(),
+                HashSet::from([
+                    Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000003").unwrap(),
+                    Bytes::from_str("0x563494035215327c9cc08a85694f34eab8bc22017bd383b01d83f2bb8c78aa91").unwrap(),
+                    Bytes::from_str("0x6402d480789caf1f1824771fcdd31558cac90b7d044d14b2201c8ca95eae8955").unwrap(),
+                    Bytes::from_str("0x517313a419aa2ecd2d81b1726218564c7f0e0ab3a7f7ab9d34edc89c63e5f354").unwrap(),
+                ])
+            ),
+            (
+                Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+                HashSet::from([
+                    Bytes::from_str("0xcafe3db63107f22b0a41ab8ae57012c28217ebfcf75e49a58208dc6968d7ff57").unwrap(),
+                    Bytes::from_str("0x732054380c06f66b946fe3c55339b1fc707995878c89c46f3c874fa55acf3188").unwrap(),
+                ])
+            ),
+            ]),
+            ),
+            },
             ],
         );
     }
