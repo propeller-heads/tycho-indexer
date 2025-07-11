@@ -19,7 +19,7 @@ use revm::{
 };
 use thiserror::Error;
 use tracing::{debug, info};
-use tycho_client::feed::Header;
+use tycho_client::feed::BlockHeader;
 
 use super::{
     super::account_storage::{AccountStorage, StateUpdate},
@@ -93,7 +93,7 @@ pub struct SimulationDB<P: Provider + Debug> {
     /// Cached data
     account_storage: Arc<RwLock<AccountStorage>>,
     /// Current block
-    block: Option<Header>,
+    block: Option<BlockHeader>,
     /// Tokio runtime to execute async code
     pub runtime: Option<Arc<tokio::runtime::Runtime>>,
 }
@@ -110,7 +110,7 @@ impl<P: Provider + Debug + 'static> SimulationDB<P> {
     pub fn new(
         client: Arc<P>,
         runtime: Option<Arc<tokio::runtime::Runtime>>,
-        block: Option<Header>,
+        block: Option<BlockHeader>,
     ) -> Self {
         Self {
             client,
@@ -121,7 +121,7 @@ impl<P: Provider + Debug + 'static> SimulationDB<P> {
     }
 
     /// Set the block that will be used when querying a node
-    pub fn set_block(&mut self, block: Option<Header>) {
+    pub fn set_block(&mut self, block: Option<BlockHeader>) {
         self.block = block;
     }
 
@@ -139,7 +139,7 @@ impl<P: Provider + Debug + 'static> SimulationDB<P> {
     pub fn update_state(
         &mut self,
         updates: &HashMap<Address, StateUpdate>,
-        block: Header,
+        block: BlockHeader,
     ) -> HashMap<Address, StateUpdate> {
         info!("Received account state update.");
         let mut revert_updates = HashMap::new();
@@ -497,7 +497,7 @@ mod tests {
     #[rstest]
     fn test_query_account_info() {
         let mut db = SimulationDB::new(get_client(None), get_runtime(), None);
-        let block = Header {
+        let block = BlockHeader {
             number: 20308186,
             hash: Bytes::from_str(
                 "0x61c51e3640b02ae58a03201be0271e84e02dac8a4826501995cbe4da24174b52",
@@ -566,7 +566,7 @@ mod tests {
         let update = StateUpdate { storage: Some(new_storage), balance: Some(new_balance) };
         let mut updates = HashMap::default();
         updates.insert(address, update);
-        let new_block = Header { number: 1, timestamp: 234, ..Default::default() };
+        let new_block = BlockHeader { number: 1, timestamp: 234, ..Default::default() };
 
         let reverse_update = db.update_state(&updates, new_block);
 

@@ -10,7 +10,7 @@ use alloy::primitives::{Address, U256};
 use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{debug, error, info, warn};
-use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage, Header};
+use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader, FeedMessage};
 use tycho_common::{
     dto::{ChangeType, ProtocolStateDelta},
     models::{token::Token, Chain},
@@ -53,7 +53,7 @@ struct DecoderState {
 type DecodeFut =
     Pin<Box<dyn Future<Output = Result<Box<dyn ProtocolSim>, InvalidSnapshotError>> + Send + Sync>>;
 type AccountBalances = HashMap<Bytes, HashMap<Bytes, Bytes>>;
-type RegistryFn = dyn Fn(ComponentWithState, Header, AccountBalances, Arc<RwLock<DecoderState>>) -> DecodeFut
+type RegistryFn = dyn Fn(ComponentWithState, BlockHeader, AccountBalances, Arc<RwLock<DecoderState>>) -> DecodeFut
     + Send
     + Sync;
 type FilterFn = fn(&ComponentWithState) -> bool;
@@ -122,7 +122,7 @@ impl TychoStreamDecoder {
     {
         let decoder = Box::new(
             move |component: ComponentWithState,
-                  header: Header,
+                  header: BlockHeader,
                   account_balances: AccountBalances,
                   state: Arc<RwLock<DecoderState>>| {
                 Box::pin(async move {

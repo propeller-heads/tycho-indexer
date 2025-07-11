@@ -3,7 +3,7 @@ use std::{any::Any, collections::HashMap};
 use alloy::primitives::U256;
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::Zero;
-use tycho_client::feed::{synchronizer::ComponentWithState, Header};
+use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
 
 use super::reserve_price::spot_price_from_reserves;
@@ -46,7 +46,7 @@ impl<T: CPMMProtocol + Clone + 'static + std::fmt::Debug + Sync + Send>
     /// `InvalidSnapshotError` if either reserve0 or reserve1 attributes are missing.
     async fn try_from_with_block(
         snapshot: ComponentWithState,
-        _block: Header,
+        _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {

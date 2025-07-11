@@ -10,7 +10,7 @@ use revm::{
     state::{AccountInfo, Bytecode},
     DatabaseRef,
 };
-use tycho_client::feed::Header;
+use tycho_client::feed::BlockHeader;
 use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
 
 use crate::{
@@ -113,7 +113,7 @@ where
     fn before_swap(
         &self,
         params: BeforeSwapParameters,
-        block: Header,
+        block: BlockHeader,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
         transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<WithGasEstimate<BeforeSwapOutput>, SimulationError> {
@@ -177,7 +177,7 @@ where
     fn after_swap(
         &self,
         params: AfterSwapParameters,
-        block: Header,
+        block: BlockHeader,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
         transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<WithGasEstimate<BeforeSwapDelta>, SimulationError> {
@@ -279,7 +279,7 @@ mod tests {
     use std::{default::Default, str::FromStr};
 
     use alloy::primitives::{aliases::U24, B256, I256};
-    use tycho_client::feed::Header;
+    use tycho_client::feed::BlockHeader;
 
     use super::*;
     use crate::evm::{
@@ -293,7 +293,7 @@ mod tests {
 
     #[test]
     fn test_before_swap() {
-        let block = Header {
+        let block = BlockHeader {
             number: 22578103,
             hash: Bytes::from_str(
                 "0x035c0e674c3bf3384a74b766908ab41c1968e989360aa26bea1dd64b1626f5f0",
@@ -380,7 +380,7 @@ mod tests {
 
     #[test]
     fn test_after_swap() {
-        let block = Header {
+        let block = BlockHeader {
             number: 15797251,
             hash: Bytes::from_str(
                 "0x7032b93c5b0d419f2001f7c77c19ade6da92d2df147712eac1a27c7ffedfe410",
@@ -460,7 +460,7 @@ mod tests {
 
     #[test]
     fn test_before_and_after_swap() {
-        let block = Header {
+        let block = BlockHeader {
             number: 15797251,
             hash: Bytes::from_str(
                 "0x7032b93c5b0d419f2001f7c77c19ade6da92d2df147712eac1a27c7ffedfe410",

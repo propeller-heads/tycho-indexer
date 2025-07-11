@@ -15,7 +15,7 @@ use revm::{
     DatabaseRef,
 };
 use tracing::warn;
-use tycho_client::feed::Header;
+use tycho_client::feed::BlockHeader;
 use tycho_common::Bytes as TychoBytes;
 
 use super::{
@@ -51,7 +51,7 @@ use crate::{
 /// use tycho_simulation::protocol::errors::SimulationError;
 /// use tycho_simulation::evm::protocol::vm::state_builder::EVMPoolStateBuilder;
 /// use tycho_simulation::evm::protocol::vm::constants::BALANCER_V2;
-/// use tycho_client::feed::Header;
+/// use tycho_client::feed::BlockHeader;
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), SimulationError> {
@@ -62,7 +62,7 @@ use crate::{
 ///         Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f"),
 ///         Bytes::from("0xba100000625a3754423978a60c9317c58a424e3d"),
 ///     ];
-///     let block = Header {
+///     let block = BlockHeader {
 ///         number: 1,
 ///         hash: Default::default(),
 ///         timestamp: 1632456789,
@@ -84,7 +84,7 @@ where
 {
     id: String,
     tokens: Vec<TychoBytes>,
-    block: Header,
+    block: BlockHeader,
     balances: HashMap<Address, U256>,
     adapter_address: Address,
     balance_owner: Option<Address>,
@@ -108,7 +108,7 @@ where
     pub fn new(
         id: String,
         tokens: Vec<TychoBytes>,
-        block: Header,
+        block: BlockHeader,
         adapter_address: Address,
     ) -> Self {
         Self {
@@ -412,7 +412,7 @@ where
 mod tests {
     use std::str::FromStr;
 
-    use tycho_client::feed::Header;
+    use tycho_client::feed::BlockHeader;
 
     use super::*;
     use crate::evm::engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB};
@@ -423,7 +423,7 @@ mod tests {
         let tokens =
             vec![TychoBytes::from_str("0000000000000000000000000000000000000000").unwrap()];
         let balances = HashMap::new();
-        let block = Header { number: 1, timestamp: 234, ..Default::default() };
+        let block = BlockHeader { number: 1, timestamp: 234, ..Default::default() };
         let adapter_address =
             Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270").unwrap();
         let result = tokio_test::block_on(
@@ -447,7 +447,7 @@ mod tests {
         let token2 = TychoBytes::from_str("0000000000000000000000000000000000000002").unwrap();
         let token3 = TychoBytes::from_str("0000000000000000000000000000000000000003").unwrap();
         let tokens = vec![token2.clone(), token3.clone()];
-        let block = Header { number: 1, timestamp: 234, ..Default::default() };
+        let block = BlockHeader { number: 1, timestamp: 234, ..Default::default() };
         let balances = HashMap::new();
         let adapter_address =
             Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270").unwrap();

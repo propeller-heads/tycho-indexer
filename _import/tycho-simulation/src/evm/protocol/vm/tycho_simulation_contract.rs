@@ -311,7 +311,7 @@ mod tests {
             .call(
                 selector,
                 args,
-                22578103, // blockHeader
+                22578103, // blockBlockHeader
                 None,
                 None,
                 None,

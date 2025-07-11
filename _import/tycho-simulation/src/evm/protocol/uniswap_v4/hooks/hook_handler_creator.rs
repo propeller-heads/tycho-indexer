@@ -1,8 +1,9 @@
 #![allow(dead_code)]
 use std::{collections::HashMap, sync::RwLock};
 
-use alloy::{primitives::Address, rpc::types::Header};
+use alloy::primitives::Address;
 use lazy_static::lazy_static;
+use tycho_client::feed::BlockHeader;
 use tycho_common::{models::token::Token, Bytes};
 
 use crate::{
@@ -18,7 +19,7 @@ use crate::{
 
 /// Parameters for creating a HookHandler.
 pub struct HookCreationParams<'a> {
-    block: Header,
+    block: BlockHeader,
     account_balances: &'a HashMap<Bytes, HashMap<Bytes, Bytes>>,
     all_tokens: &'a HashMap<Bytes, Token>,
     state: UniswapV4State,
@@ -32,7 +33,7 @@ pub struct HookCreationParams<'a> {
 
 impl<'a> HookCreationParams<'a> {
     pub fn new(
-        block: Header,
+        block: BlockHeader,
         account_balances: &'a HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &'a HashMap<Bytes, Token>,
         state: UniswapV4State,

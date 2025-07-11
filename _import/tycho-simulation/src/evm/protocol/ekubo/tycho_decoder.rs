@@ -11,7 +11,7 @@ use evm_ekubo_sdk::{
 };
 use itertools::Itertools;
 use num_traits::Zero;
-use tycho_client::feed::{synchronizer::ComponentWithState, Header};
+use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{models::token::Token, Bytes};
 
 use super::{
@@ -54,7 +54,7 @@ impl TryFromWithBlock<ComponentWithState> for EkuboState {
 
     async fn try_from_with_block(
         snapshot: ComponentWithState,
-        _block: Header,
+        _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
@@ -210,7 +210,7 @@ mod tests {
 
         let result = EkuboState::try_from_with_block(
             snapshot,
-            Header::default(),
+            BlockHeader::default(),
             &HashMap::new(),
             &HashMap::new(),
         )
@@ -245,7 +245,7 @@ mod tests {
 
             let result = EkuboState::try_from_with_block(
                 snapshot,
-                Header::default(),
+                BlockHeader::default(),
                 &HashMap::default(),
                 &HashMap::default(),
             )

@@ -29,7 +29,7 @@ use std::{collections::HashMap, default::Default, future::Future};
 use chrono::NaiveDateTime;
 use num_bigint::BigUint;
 use serde::Serialize;
-use tycho_client::feed::Header;
+use tycho_client::feed::BlockHeader;
 use tycho_common::{
     models::{token::Token, Chain},
     Bytes,
@@ -131,7 +131,7 @@ pub trait TryFromWithBlock<T> {
 
     fn try_from_with_block(
         value: T,
-        block: Header,
+        block: BlockHeader,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send + Sync

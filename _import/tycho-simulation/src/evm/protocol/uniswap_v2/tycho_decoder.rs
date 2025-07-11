@@ -4,14 +4,14 @@ mod tests {
 
     use alloy::primitives::U256;
     use rstest::rstest;
-    use tycho_client::feed::{synchronizer::ComponentWithState, Header};
+    use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
     use tycho_common::{dto::ResponseProtocolState, Bytes};
 
     use super::super::state::UniswapV2State;
     use crate::protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock};
 
-    fn header() -> Header {
-        Header {
+    fn header() -> BlockHeader {
+        BlockHeader {
             number: 1,
             hash: Bytes::from(vec![0; 32]),
             parent_hash: Bytes::from(vec![0; 32]),

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use alloy::primitives::U256;
-use tycho_client::feed::{synchronizer::ComponentWithState, Header};
+use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{models::token::Token, Bytes};
 
 use super::state::UniswapV4State;
@@ -20,7 +20,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
     /// if the snapshot is missing any required attributes.
     async fn try_from_with_block(
         snapshot: ComponentWithState,
-        _block: Header,
+        _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
@@ -175,8 +175,8 @@ mod tests {
             ("ticks/60/net_liquidity".to_string(), Bytes::from(400_i128.to_be_bytes().to_vec())),
         ])
     }
-    fn header() -> Header {
-        Header {
+    fn header() -> BlockHeader {
+        BlockHeader {
             number: 1,
             hash: Bytes::from(vec![0; 32]),
             parent_hash: Bytes::from(vec![0; 32]),

@@ -11,7 +11,7 @@ use revm::{
 };
 use thiserror::Error;
 use tracing::{debug, error, instrument, warn};
-use tycho_client::feed::Header;
+use tycho_client::feed::BlockHeader;
 
 use crate::evm::{
     account_storage::{AccountStorage, StateUpdate},
@@ -48,7 +48,7 @@ pub struct PreCachedDBInner {
     /// Storage for accounts
     accounts: AccountStorage,
     /// Current block
-    block: Option<Header>,
+    block: Option<BlockHeader>,
 }
 
 #[derive(Clone, Debug)]
@@ -73,7 +73,7 @@ impl PreCachedDB {
     }
 
     #[instrument(skip_all)]
-    pub fn update(&self, account_updates: Vec<AccountUpdate>, block: Option<Header>) {
+    pub fn update(&self, account_updates: Vec<AccountUpdate>, block: Option<BlockHeader>) {
         // Hold the write lock for the duration of the function so that no other thread can
         // write to the storage.
         let mut write_guard = self.inner.write().unwrap();
@@ -164,7 +164,7 @@ impl PreCachedDB {
     pub fn update_state(
         &mut self,
         updates: &HashMap<Address, StateUpdate>,
-        block: Header,
+        block: BlockHeader,
     ) -> HashMap<Address, StateUpdate> {
         // Hold the write lock for the duration of the function so that no other thread can
         // write to the storage.
@@ -445,7 +445,7 @@ mod tests {
         new_storage.insert(new_storage_value_index, new_storage_value_index);
         let new_balance = U256::from_limbs_slice(&[500]);
         let update = StateUpdate { storage: Some(new_storage), balance: Some(new_balance) };
-        let new_block = Header {
+        let new_block = BlockHeader {
             number: 1,
             hash: Bytes::from_str(
                 "0xc6b994ec855fb2b31013c7ae65074406fac46679b5b963469104e0bfeddd66d9",
@@ -488,7 +488,7 @@ mod tests {
         let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         mock_db.init_account(address, AccountInfo::default(), None, false);
 
-        let new_block = Header {
+        let new_block = BlockHeader {
             number: 1,
             hash: Bytes::from_str(
                 "0xc6b994ec855fb2b31013c7ae65074406fac46679b5b963469104e0bfeddd66d9",
@@ -526,7 +526,7 @@ mod tests {
             ChangeType::Creation,
         );
 
-        let new_block = Header {
+        let new_block = BlockHeader {
             number: 1,
             hash: Bytes::from_str(
                 "0xc6b994ec855fb2b31013c7ae65074406fac46679b5b963469104e0bfeddd66d9",

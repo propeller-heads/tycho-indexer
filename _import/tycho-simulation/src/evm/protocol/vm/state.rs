@@ -10,7 +10,7 @@ use alloy::primitives::{Address, U256};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use revm::DatabaseRef;
-use tycho_client::feed::Header;
+use tycho_client::feed::BlockHeader;
 use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
 
 use super::{
@@ -46,7 +46,7 @@ where
     /// The pool's token's addresses
     pub tokens: Vec<Bytes>,
     /// The current block, will be used to set vm context
-    block: Header,
+    block: BlockHeader,
     /// The pool's component balances.
     balances: HashMap<Address, U256>,
     /// The contract address for where protocol balances are stored (i.e. a vault contract).
@@ -87,7 +87,7 @@ where
     pub fn new(
         id: String,
         tokens: Vec<Bytes>,
-        block: Header,
+        block: BlockHeader,
         component_balances: HashMap<Address, U256>,
         balance_owner: Option<Address>,
         contract_balances: HashMap<Address, HashMap<Address, U256>>,
@@ -702,7 +702,7 @@ mod tests {
         state::{AccountInfo, Bytecode},
     };
     use serde_json::Value;
-    use tycho_client::feed::Header;
+    use tycho_client::feed::BlockHeader;
     use tycho_common::models::Chain;
 
     use super::*;
@@ -758,7 +758,7 @@ mod tests {
         let db = SHARED_TYCHO_DB.clone();
         let engine: SimulationEngine<_> = create_engine(db.clone(), false).unwrap();
 
-        let block = Header {
+        let block = BlockHeader {
             number: 20463609,
             hash: Bytes::from_str(
                 "0x4315fd1afc25cc2ebc72029c543293f9fd833eeb305e2e30159459c827733b1b",
@@ -801,7 +801,7 @@ mod tests {
             );
         }
 
-        let block = Header {
+        let block = BlockHeader {
             number: 18485417,
             hash: Bytes::from_str(
                 "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",

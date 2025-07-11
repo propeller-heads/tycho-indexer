@@ -5,7 +5,7 @@ use std::{
 
 use alloy::primitives::{Address, U256};
 use revm::state::Bytecode;
-use tycho_client::feed::{synchronizer::ComponentWithState, Header};
+use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{models::token::Token, Bytes};
 
 use super::{state::EVMPoolState, state_builder::EVMPoolStateBuilder};
@@ -20,14 +20,14 @@ use crate::{
 impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
     type Error = InvalidSnapshotError;
 
-    /// Decodes a `ComponentWithState`, block `Header` and HashMap of all available tokens into an
-    /// `EVMPoolState`.
+    /// Decodes a `ComponentWithState`, block `BlockHeader` and HashMap of all available tokens into
+    /// an `EVMPoolState`.
     ///
     /// Errors with a `InvalidSnapshotError`.
     #[allow(deprecated)]
     async fn try_from_with_block(
         snapshot: ComponentWithState,
-        block: Header,
+        block: BlockHeader,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
@@ -204,8 +204,8 @@ mod tests {
         }
     }
 
-    fn header() -> Header {
-        Header {
+    fn header() -> BlockHeader {
+        BlockHeader {
             number: 1,
             hash: Bytes::from(vec![0; 32]),
             parent_hash: Bytes::from(vec![0; 32]),
