@@ -7,7 +7,7 @@ use crate::{
     models::{
         blockchain::{Block, BlockTag, EntryPointWithTracingParams, TracedEntryPoint},
         contract::AccountDelta,
-        token::{CurrencyToken, TokenQuality, TransferCost, TransferTax},
+        token::{Token, TokenQuality, TransferCost, TransferTax},
         Address, Balance, BlockHash, StoreKey,
     },
     Bytes,
@@ -117,7 +117,7 @@ pub trait TokenPreProcessor: Send + Sync {
         addresses: Vec<Bytes>,
         token_finder: Arc<dyn TokenOwnerFinding>,
         block: BlockTag,
-    ) -> Vec<CurrencyToken>;
+    ) -> Vec<Token>;
 }
 
 /// Trait for tracing blockchain transaction execution.

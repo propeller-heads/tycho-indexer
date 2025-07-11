@@ -28,7 +28,7 @@ use tycho_common::{
             ComponentBalance, ProtocolComponent, ProtocolComponentState,
             ProtocolComponentStateDelta, QualityRange,
         },
-        token::CurrencyToken,
+        token::Token,
         Address, Chain, ComponentId, ContractId, EntryPointId, ExtractionState, PaginationParams,
         ProtocolType, TxHash,
     },
@@ -60,10 +60,10 @@ pub(crate) enum WriteOp {
     // Simply merge
     InsertProtocolComponents(Vec<models::protocol::ProtocolComponent>),
     // Simply merge
-    InsertTokens(Vec<models::token::CurrencyToken>),
+    InsertTokens(Vec<models::token::Token>),
     // Currently unused but supported, please see `CacheGateway.update_tokens` docs.
     #[allow(dead_code)]
-    UpdateTokens(Vec<models::token::CurrencyToken>),
+    UpdateTokens(Vec<models::token::Token>),
     // Simply merge
     InsertComponentBalances(Vec<models::protocol::ComponentBalance>),
     // Simply merge
@@ -1024,7 +1024,7 @@ impl ProtocolGateway for CachedGateway {
         quality: QualityRange,
         traded_n_days_ago: Option<NaiveDateTime>,
         pagination_params: Option<&PaginationParams>,
-    ) -> Result<WithTotal<Vec<CurrencyToken>>, StorageError> {
+    ) -> Result<WithTotal<Vec<Token>>, StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -1045,7 +1045,7 @@ impl ProtocolGateway for CachedGateway {
     }
 
     #[instrument(skip_all)]
-    async fn add_tokens(&self, tokens: &[CurrencyToken]) -> Result<(), StorageError> {
+    async fn add_tokens(&self, tokens: &[Token]) -> Result<(), StorageError> {
         self.add_op(WriteOp::InsertTokens(tokens.to_vec()))
             .await?;
         Ok(())
@@ -1061,7 +1061,7 @@ impl ProtocolGateway for CachedGateway {
     /// This is a short term solution. Ideally we should have a simple gateway version
     /// for these use cases that creates a single transactions and emits them immediately.
     #[instrument(skip_all)]
-    async fn update_tokens(&self, tokens: &[CurrencyToken]) -> Result<(), StorageError> {
+    async fn update_tokens(&self, tokens: &[Token]) -> Result<(), StorageError> {
         let mut conn =
             self.pool.get().await.map_err(|e| {
                 StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
@@ -1368,7 +1368,7 @@ mod test_serial_db {
             let tx_1 = get_sample_transaction(1);
             let extraction_state_1 = get_sample_extraction(1);
             let usdc_address = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7");
-            let token = models::token::CurrencyToken::new(
+            let token = models::token::Token::new(
                 &usdc_address,
                 "USDT",
                 6,

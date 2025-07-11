@@ -232,7 +232,13 @@ mod test {
         let mut parent_hash = parent.unwrap_or_else(random_hash);
         for i in start_n..start_n + n as u64 {
             let hash = int_hash(i);
-            blocks.push(Header { number: i, hash: hash.clone(), parent_hash, revert: false });
+            blocks.push(Header {
+                number: i,
+                hash: hash.clone(),
+                parent_hash,
+                revert: false,
+                ..Default::default()
+            });
             parent_hash = hash;
         }
         blocks
@@ -241,8 +247,13 @@ mod test {
     #[test]
     fn test_push() {
         let start_blocks = generate_blocks(1, 0, None);
-        let new_block =
-            Header { number: 1, hash: random_hash(), parent_hash: int_hash(0), revert: false };
+        let new_block = Header {
+            number: 1,
+            hash: random_hash(),
+            parent_hash: int_hash(0),
+            revert: false,
+            ..Default::default()
+        };
         let mut history =
             BlockHistory::new(start_blocks.clone(), 2).expect("block history creation failed");
 
@@ -275,10 +286,20 @@ mod test {
     fn test_push_revert_push() {
         let blocks = generate_blocks(5, 0, None);
         let mut history = BlockHistory::new(blocks.clone(), 5).expect("failed to create history");
-        let revert_block =
-            Header { number: 2, hash: int_hash(2), parent_hash: int_hash(1), revert: true };
-        let new_block =
-            Header { number: 3, hash: random_hash(), parent_hash: int_hash(2), revert: false };
+        let revert_block = Header {
+            number: 2,
+            hash: int_hash(2),
+            parent_hash: int_hash(1),
+            revert: true,
+            ..Default::default()
+        };
+        let new_block = Header {
+            number: 3,
+            hash: random_hash(),
+            parent_hash: int_hash(2),
+            revert: false,
+            ..Default::default()
+        };
         let mut exp_history: Vec<_> = blocks[0..3]
             .iter()
             .cloned()
@@ -302,8 +323,13 @@ mod test {
     fn test_push_detached_block() {
         let blocks = generate_blocks(3, 0, None);
         let mut history = BlockHistory::new(blocks.clone(), 5).expect("failed to create history");
-        let new_block =
-            Header { number: 2, hash: int_hash(2), parent_hash: random_hash(), revert: true };
+        let new_block = Header {
+            number: 2,
+            hash: int_hash(2),
+            parent_hash: random_hash(),
+            revert: true,
+            ..Default::default()
+        };
 
         let res = history.push(new_block.clone());
 
@@ -321,12 +347,14 @@ mod test {
             hash: random_hash(),
             parent_hash: random_hash(),
             revert: false,
+            ..Default::default()
         });
         blocks.push(Header {
             number: 4,
             hash: random_hash(),
             parent_hash: random_hash(), // Disconnected
             revert: false,
+            ..Default::default()
         });
 
         let history = BlockHistory::new(blocks, 10).expect("failed to create history");
@@ -343,12 +371,12 @@ mod test {
     }
 
     #[rstest]
-    #[case(Header { number: 15, hash: int_hash(15), parent_hash: int_hash(14), revert: false }, BlockPosition::NextExpected)]
-    #[case(Header { number: 14, hash: int_hash(14), parent_hash: int_hash(13), revert: false }, BlockPosition::Latest)]
-    #[case(Header { number: 16, hash: int_hash(16), parent_hash: int_hash(15), revert: false }, BlockPosition::Advanced)]
-    #[case(Header { number: 12, hash: int_hash(12), parent_hash: int_hash(11), revert: false }, BlockPosition::Delayed)]
-    #[case(Header { number: 14, hash: int_hash(14), parent_hash: int_hash(13), revert: true }, BlockPosition::NextExpected)]
-    #[case(Header { number: 1, hash: int_hash(1), parent_hash: int_hash(0), revert: false }, BlockPosition::Delayed)]
+    #[case(Header { number: 15, hash: int_hash(15), parent_hash: int_hash(14), revert: false,..Default::default() }, BlockPosition::NextExpected)]
+    #[case(Header { number: 14, hash: int_hash(14), parent_hash: int_hash(13), revert: false,..Default::default() }, BlockPosition::Latest)]
+    #[case(Header { number: 16, hash: int_hash(16), parent_hash: int_hash(15), revert: false ,..Default::default()}, BlockPosition::Advanced)]
+    #[case(Header { number: 12, hash: int_hash(12), parent_hash: int_hash(11), revert: false ,..Default::default()}, BlockPosition::Delayed)]
+    #[case(Header { number: 14, hash: int_hash(14), parent_hash: int_hash(13), revert: true ,..Default::default()}, BlockPosition::NextExpected)]
+    #[case(Header { number: 1, hash: int_hash(1), parent_hash: int_hash(0), revert: false ,..Default::default()}, BlockPosition::Delayed)]
     fn test_determine_position(#[case] add_block: Header, #[case] exp_pos: BlockPosition) {
         let start_blocks = generate_blocks(10, 5, None);
         let history = BlockHistory::new(start_blocks, 20).expect("failed to create history");
@@ -366,7 +394,13 @@ mod test {
         let mut history = BlockHistory::new(start_blocks, 15).expect("failed to create history");
         // revert by 2 blocks, add a new one
         history
-            .push(Header { number: 7, hash: int_hash(7), parent_hash: int_hash(6), revert: true })
+            .push(Header {
+                number: 7,
+                hash: int_hash(7),
+                parent_hash: int_hash(6),
+                revert: true,
+                ..Default::default()
+            })
             .unwrap();
         history
             .push(Header {
@@ -374,10 +408,16 @@ mod test {
                 hash: random_hash(),
                 parent_hash: int_hash(7),
                 revert: false,
+                ..Default::default()
             })
             .unwrap();
-        let add_block =
-            Header { number: 9, hash: int_hash(9), parent_hash: int_hash(8), revert: false };
+        let add_block = Header {
+            number: 9,
+            hash: int_hash(9),
+            parent_hash: int_hash(8),
+            revert: false,
+            ..Default::default()
+        };
 
         let res = history
             .determine_block_position(&add_block)

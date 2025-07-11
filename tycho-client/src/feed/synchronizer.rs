@@ -1327,6 +1327,7 @@ mod test {
                 hash: Bytes::from("0x01"),
                 parent_hash: Bytes::from("0x00"),
                 revert: false,
+                ..Default::default()
             },
             snapshots: Snapshot {
                 states: [
@@ -1375,6 +1376,7 @@ mod test {
                 hash: Bytes::from("0x02"),
                 parent_hash: Bytes::from("0x01"),
                 revert: false,
+                ..Default::default()
             },
             snapshots: Snapshot {
                 states: [
@@ -1645,6 +1647,7 @@ mod test {
                 hash: Bytes::from("0x02"),
                 parent_hash: Bytes::from("0x01"),
                 revert: false,
+                ..Default::default()
             },
             snapshots: Snapshot {
                 states: [(

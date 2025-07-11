@@ -35,6 +35,7 @@ pub struct Header {
     pub number: u64,
     pub parent_hash: Bytes,
     pub revert: bool,
+    pub timestamp: u64,
 }
 
 impl Header {
@@ -44,6 +45,7 @@ impl Header {
             number: block.number,
             parent_hash: block.parent_hash.clone(),
             revert,
+            timestamp: block.ts.timestamp() as u64,
         }
     }
 }
@@ -791,6 +793,7 @@ mod tests {
                 hash: Bytes::from(vec![1]),
                 parent_hash: Bytes::from(vec![0]),
                 revert: false,
+                ..Default::default()
             },
             ..Default::default()
         };
@@ -835,6 +838,7 @@ mod tests {
                 hash: Bytes::from(vec![2]),
                 parent_hash: Bytes::from(vec![1]),
                 revert: false,
+                ..Default::default()
             },
             ..Default::default()
         };
@@ -874,6 +878,7 @@ mod tests {
                 hash: Bytes::from(vec![3]),
                 parent_hash: Bytes::from(vec![2]),
                 revert: false,
+                ..Default::default()
             },
             ..Default::default()
         };
@@ -928,6 +933,7 @@ mod tests {
                 hash: Bytes::from(vec![1]),
                 parent_hash: Bytes::from(vec![0]),
                 revert: false,
+                ..Default::default()
             },
             ..Default::default()
         };
@@ -937,6 +943,7 @@ mod tests {
                 hash: Bytes::from(vec![2]),
                 parent_hash: Bytes::from(vec![1]),
                 revert: false,
+                ..Default::default()
             },
             ..Default::default()
         };
@@ -980,6 +987,7 @@ mod tests {
                 hash: Bytes::from(vec![3]),
                 parent_hash: Bytes::from(vec![2]),
                 revert: false,
+                ..Default::default()
             },
             ..Default::default()
         };
