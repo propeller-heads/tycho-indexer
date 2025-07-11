@@ -319,6 +319,8 @@ impl MetadataGeneratorRegistry {
     ///
     /// - `Some(&dyn MetadataRequestGenerator)` if a suitable generator is found
     /// - `None` if no generator is registered for the component's hook and no default is set
+    /// - `Err(MetadataError::MissingData(field, component_id))` if the component does not have a
+    ///   hook
     ///
     /// # Lookup Process
     ///
@@ -338,19 +340,18 @@ impl MetadataGeneratorRegistry {
     pub fn get_generator_for_component(
         &self,
         component: &ProtocolComponent,
-    ) -> Option<&dyn MetadataRequestGenerator> {
+    ) -> Result<Option<&dyn MetadataRequestGenerator>, MetadataError> {
         if let Some(hook_address) = component.static_attributes.get("hook") {
-            self.hook_generators
+            Ok(self
+                .hook_generators
                 .get(hook_address)
                 .map(|boxed_generator| boxed_generator.as_ref())
                 .or(self
                     .default_generator
                     .as_ref()
-                    .map(|boxed_generator| boxed_generator.as_ref()))
+                    .map(|boxed_generator| boxed_generator.as_ref())))
         } else {
-            self.default_generator
-                .as_ref()
-                .map(|boxed_generator| boxed_generator.as_ref())
+            Err(MetadataError::MissingData("hook".to_string(), component.id.clone()))
         }
     }
 }
@@ -530,7 +531,7 @@ impl BlockMetadataOrchestrator {
         for component in components {
             if let Some(generator) = self
                 .generator_registry
-                .get_generator_for_component(component)
+                .get_generator_for_component(component)?
             {
                 let requests = generator.generate_requests(component, block)?;
                 all_requests.extend(requests);
@@ -550,7 +551,7 @@ impl BlockMetadataOrchestrator {
         for component in components {
             if let Some(generator) = self
                 .generator_registry
-                .get_generator_for_component(component)
+                .get_generator_for_component(component)?
             {
                 let requests = generator.generate_balance_only_requests(component, block)?;
                 all_requests.extend(requests);
@@ -604,6 +605,8 @@ pub enum MetadataError {
     RequestFailed(String),
     #[error("Unknown error: {0}")]
     UnknownError(String),
+    #[error("Missing {0} for {1}")]
+    MissingData(String, String),
 }
 
 // Example Implementations
@@ -791,15 +794,15 @@ mod tests {
             static_attributes.insert("hook".to_string(), hook);
         }
 
-        ProtocolComponent { id: id.to_string(), ..Default::default() }
+        ProtocolComponent { id: id.to_string(), static_attributes, ..Default::default() }
     }
 
     #[rstest]
     #[case::hook_with_registered_generator(true, true, true)] // Should return hook generator
     #[case::hook_without_registered_generator(true, false, true)] // Should return default generator
     #[case::hook_without_any_generator(true, false, false)] // Should return None
-    #[case::no_hook_with_default_generator(false, false, true)] // Should return default generator
-    #[case::no_hook_without_default_generator(false, false, false)] // Should return None
+    #[case::no_hook_with_default_generator(false, false, true)] // Should return error (no hook)
+    #[case::no_hook_without_default_generator(false, false, false)] // Should return error (no hook)
     fn test_get_generator_for_component(
         #[case] has_hook: bool,
         #[case] has_hook_generator: bool,
@@ -824,12 +827,24 @@ mod tests {
             if has_hook { Some(hook_address) } else { None },
         );
 
-        let generator = registry.get_generator_for_component(&component);
-        let should_have_generator = (has_hook && has_hook_generator) ||
-            (has_hook && !has_hook_generator && has_default_generator) ||
-            (!has_hook && has_default_generator);
+        let generator_result = registry.get_generator_for_component(&component);
 
-        assert_eq!(generator.is_some(), should_have_generator);
+        if has_hook {
+            // Component has a hook, so we expect Ok(Some(...)) or Ok(None)
+            let generator =
+                generator_result.expect("Should not return error for component with hook");
+            let should_have_generator = has_hook_generator || has_default_generator;
+            assert_eq!(generator.is_some(), should_have_generator);
+        } else {
+            // Component has no hook, so we expect an error
+            assert!(generator_result.is_err());
+            if let Err(MetadataError::MissingData(field, component_id)) = generator_result {
+                assert_eq!(field, "hook");
+                assert_eq!(component_id, "test_component");
+            } else {
+                panic!("Expected MissingData error for component without hook");
+            }
+        }
     }
 
     #[test]
