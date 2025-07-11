@@ -1,3 +1,13 @@
+## [0.108.0](https://github.com/propeller-heads/tycho-execution/compare/0.107.0...0.108.0) (2025-07-11)
+
+
+### Features
+
+* Upgrade tycho-common ([8458b46](https://github.com/propeller-heads/tycho-execution/commit/8458b4628e351daaf4d4a639afc5099903107ff6))
+* Upgrade tycho-common ([effc25c](https://github.com/propeller-heads/tycho-execution/commit/effc25c2d723107a56260190d6f7b5c7b8c42e4e))
+* Upgrade tycho-common ([cb6042e](https://github.com/propeller-heads/tycho-execution/commit/cb6042ea7974faee93c1a87ca84fc6677c999548))
+* Use Chain from tycho-core and remove current implementation ([2c25b5a](https://github.com/propeller-heads/tycho-execution/commit/2c25b5a18f06beb61d93530660d9530bf0c46b36))
+
 ## [0.107.0](https://github.com/propeller-heads/tycho-execution/compare/0.106.0...0.107.0) (2025-07-10)
 
 
