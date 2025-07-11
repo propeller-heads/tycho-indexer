@@ -20,8 +20,8 @@ use tycho_common::{
     keccak256,
     models::{
         blockchain::{
-            EntryPointWithTracingParams, RPCTracerParams, Storage, TracedEntryPoint, TracingParams,
-            TracingResult,
+            EntryPointWithTracingParams, RPCTracerParams, StorageOverride, TracedEntryPoint,
+            TracingParams, TracingResult,
         },
         Address, BlockHash,
     },
@@ -77,11 +77,11 @@ impl EVMEntrypointService {
                                 .for_each(|(address, overrides)| {
                                     let account = state.account(H160::from_slice(address.as_ref()));
                                     account.storage = match overrides.slots.as_ref() {
-                                        Some(Storage::Diff(slots)) => {
+                                        Some(StorageOverride::Diff(slots)) => {
                                             Some(spoof::Storage::Diff(convert_storage(slots)))
                                         }
-                                        Some(Storage::Replace(slots)) => {
-                                            Some(spoof::Storage::Diff(convert_storage(slots)))
+                                        Some(StorageOverride::Replace(slots)) => {
+                                            Some(spoof::Storage::Replace(convert_storage(slots)))
                                         }
                                         _ => None,
                                     };
@@ -377,7 +377,7 @@ mod tests {
 
         // Create account overrides
         let account_overrides = AccountOverrides {
-            slots: Some(Storage::Diff(slots)),
+            slots: Some(StorageOverride::Diff(slots)),
             native_balance: None,
             code: None,
         };
