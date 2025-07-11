@@ -905,6 +905,7 @@ mod test {
                     caller: Some(Address::from_str("0x1234567890123456789012345678901234567890").unwrap()),
                     calldata: Bytes::from_str("0xabcdef").unwrap(),
                     state_overrides: None,
+                    prune_addresses: None,
                 }
         )
     )]
