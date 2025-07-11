@@ -1832,11 +1832,13 @@ mod tests {
                 caller: None,
                 calldata: Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
                 state_overrides: None,
+                prune_addresses: None,
             }),
             dto::TracingParams::RPCTracer(dto::RPCTracerParams {
                 caller: None,
                 calldata: Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
                 state_overrides: None,
+                prune_addresses: None,
             }),
         ];
         let entry_points_with_tracing_params = vec![
@@ -2163,11 +2165,13 @@ mod tests {
             caller: Some(Bytes::from("0x000000000000000000000000000000000000000a")),
             calldata: Bytes::from("0x000000000000000000000000000000000000000b"),
             state_overrides: None,
+            prune_addresses: None,
         });
         let tracing_params_b = TracingParams::RPCTracer(RPCTracerParams {
             caller: Some(Bytes::from("0x000000000000000000000000000000000000000b")),
             calldata: Bytes::from("0x000000000000000000000000000000000000000c"),
             state_overrides: None,
+            prune_addresses: None,
         });
         let entry_point_with_params_a = EntryPointWithTracingParams {
             entry_point: entry_point_a.clone(),
@@ -2364,11 +2368,13 @@ mod tests {
             caller: Some(Bytes::from("0x000000000000000000000000000000000000000a")),
             calldata: Bytes::from("0x000000000000000000000000000000000000000b"),
             state_overrides: None,
+            prune_addresses: None,
         });
         let tracing_params_b = TracingParams::RPCTracer(RPCTracerParams {
             caller: Some(Bytes::from("0x000000000000000000000000000000000000000b")),
             calldata: Bytes::from("0x000000000000000000000000000000000000000c"),
             state_overrides: None,
+            prune_addresses: None,
         });
         let entry_point_with_params_a = EntryPointWithTracingParams {
             entry_point: entry_point_a.clone(),
