@@ -4,6 +4,7 @@ use std::{
     time::Duration,
 };
 
+use reqwest::Url;
 use thiserror::Error;
 use tokio::{sync::mpsc::Receiver, task::JoinHandle};
 use tracing::{info, warn};
@@ -145,17 +146,25 @@ impl TychoStreamBuilder {
             .clone()
             .or_else(|| env::var("TYCHO_AUTH_TOKEN").ok());
 
+        // Parse the URL
+        let tycho_url = Url::parse(&self.tycho_url)
+            .map_err(|e| StreamError::SetUpError(format!("Invalid URL: {e}")))?;
+
         // Determine the URLs based on the TLS setting
         let (tycho_ws_url, tycho_rpc_url) = if self.no_tls {
             info!("Using non-secure connection: ws:// and http://");
-            let tycho_ws_url = format!("ws://{}", self.tycho_url);
-            let tycho_rpc_url = format!("http://{}", self.tycho_url);
-            (tycho_ws_url, tycho_rpc_url)
+            let mut tycho_ws_url = tycho_url.clone();
+            let mut tycho_rpc_url = tycho_url.clone();
+            tycho_ws_url.set_scheme("ws").unwrap();
+            tycho_rpc_url.set_scheme("http").unwrap();
+            (tycho_ws_url.to_string(), tycho_rpc_url.to_string())
         } else {
             info!("Using secure connection: wss:// and https://");
-            let tycho_ws_url = format!("wss://{}", self.tycho_url);
-            let tycho_rpc_url = format!("https://{}", self.tycho_url);
-            (tycho_ws_url, tycho_rpc_url)
+            let mut tycho_ws_url = tycho_url.clone();
+            let mut tycho_rpc_url = tycho_url.clone();
+            tycho_ws_url.set_scheme("wss").unwrap();
+            tycho_rpc_url.set_scheme("https").unwrap();
+            (tycho_ws_url.to_string(), tycho_rpc_url.to_string())
         };
 
         // Initialize the WebSocket client
