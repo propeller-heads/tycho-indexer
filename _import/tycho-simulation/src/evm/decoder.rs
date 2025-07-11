@@ -190,9 +190,9 @@ impl TychoStreamDecoder {
                         t.clone()
                             .try_into()
                             .map(|token| (addr.clone(), token))
-                            .map_err(|e| {
-                                warn!("Failed decoding token {e} {addr:#044x}");
-                                e
+                            .inspect_err(|e| {
+                                warn!("Failed decoding token {e:?} {addr:#044x}");
+                                *e
                             })
                             .ok()
                     })

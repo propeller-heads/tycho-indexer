@@ -48,8 +48,8 @@ mini-moka = "0.10"
 lazy_static = "1.4.0"
 
 # Tycho dependencies
-tycho-common = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-common", rev = "684834a8f053907ad9547b68d870d2e2c4117249" }
-tycho-client = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", rev = "684834a8f053907ad9547b68d870d2e2c4117249" }
+tycho-common = "0.76.0"
+tycho-client = "0.76.0"
 
 # EVM dependencies
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "ab753e9", optional = true }
@@ -89,7 +89,7 @@ unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
 
 # tycho execution for quickstart
-tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", package = "tycho-execution", features = ["evm"], rev = "57f696c72d096e9e3277de3a3e0bb61dcce1a745" }
+tycho-execution = "0.108.0"
 
 [features]
 default = ["evm"]
