@@ -155,15 +155,25 @@ impl TychoStreamBuilder {
             info!("Using non-secure connection: ws:// and http://");
             let mut tycho_ws_url = tycho_url.clone();
             let mut tycho_rpc_url = tycho_url.clone();
-            tycho_ws_url.set_scheme("ws").unwrap();
-            tycho_rpc_url.set_scheme("http").unwrap();
+            tycho_ws_url
+                .set_scheme("ws")
+                .map_err(|_| StreamError::SetUpError("Failed to set scheme to ws".to_string()))?;
+            tycho_rpc_url
+                .set_scheme("http")
+                .map_err(|_| StreamError::SetUpError("Failed to set scheme to http".to_string()))?;
             (tycho_ws_url.to_string(), tycho_rpc_url.to_string())
         } else {
             info!("Using secure connection: wss:// and https://");
             let mut tycho_ws_url = tycho_url.clone();
             let mut tycho_rpc_url = tycho_url.clone();
-            tycho_ws_url.set_scheme("wss").unwrap();
-            tycho_rpc_url.set_scheme("https").unwrap();
+            tycho_ws_url
+                .set_scheme("wss")
+                .map_err(|_| StreamError::SetUpError("Failed to set scheme to wss".to_string()))?;
+            tycho_rpc_url
+                .set_scheme("https")
+                .map_err(|_| {
+                    StreamError::SetUpError("Failed to set scheme to https".to_string())
+                })?;
             (tycho_ws_url.to_string(), tycho_rpc_url.to_string())
         };
 
