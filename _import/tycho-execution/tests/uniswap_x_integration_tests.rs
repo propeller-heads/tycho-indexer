@@ -23,7 +23,7 @@ fn test_sequential_swap_usx() {
     // Replicates real uniswap X order settled in tx:
     // 0x005d7b150017ba1b59d2f99395ccae7bda9b739938ade4e509817e32760aaf9d
     // Performs a sequential
-    // swap from DAI to USDT though USDC using USV3 and USV2 pools
+    // swap from DAI to USDT though USDC using USV3 pools
     //
     //   DAI ───(USV3)──> USDC ───(USV2)──> USDT
     // Creates all the calldata needed for the uniswap X callbackData
@@ -54,8 +54,14 @@ fn test_sequential_swap_usx() {
     };
     let swap_usdc_usdt = Swap {
         component: ProtocolComponent {
-            id: "0x3041CbD36888bECc7bbCBc0045E3B1f144466f5f".to_string(),
-            protocol_system: "uniswap_v2".to_string(),
+            id: "0x3416cF6C708Da44DB2624D63ea0AAef7113527C6".to_string(),
+            protocol_system: "uniswap_v3".to_string(),
+            static_attributes: {
+                let mut attrs = HashMap::new();
+                attrs
+                    .insert("fee".to_string(), Bytes::from(BigInt::from(100).to_signed_bytes_be()));
+                attrs
+            },
             ..Default::default()
         },
         token_in: usdc.clone(),

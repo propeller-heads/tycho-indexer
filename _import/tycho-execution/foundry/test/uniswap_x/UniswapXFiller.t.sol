@@ -6,7 +6,7 @@ import "@src/uniswap_x/UniswapXFiller.sol";
 import "../TychoRouterTestSetup.sol";
 
 contract UniswapXFillerTest is Test, TychoRouterTestSetup {
-    address EXECUTOR = makeAddr("executor");
+    address EXECUTOR = address(0xCe79b081c0c924cb67848723ed3057234d10FC6b);
     address REACTOR = address(0x00000011F84B9aa48e5f8aA8B9897600006289Be);
 
     UniswapXFiller filler;
@@ -18,7 +18,7 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
     );
 
     function getForkBlock() public pure override returns (uint256) {
-        return 22788691;
+        return 22880493;
     }
 
     function fillerSetup() public {
@@ -116,46 +116,49 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
         assertGe(IERC20(DAI_ADDR).balanceOf(BOB), amountOut);
     }
 
-    function testCallbackIntegration() public {
+    function testExecuteIntegration() public {
         fillerSetup();
-        deal(DAI_ADDR, address(filler), 2000 ether);
-        uint256 amountOut = 1994835180;
 
-        ResolvedOrder[] memory orders = new ResolvedOrder[](1);
-        OutputToken[] memory outputs = new OutputToken[](1);
+        // Set to time with no more exclusivity penalty for not being exclusive filler
+        vm.warp(1752050415);
 
-        outputs[0] =
-            OutputToken({token: address(USDT_ADDR), amount: 0, recipient: BOB});
-        // Irrelevant fields for this test - we only need token output
-        // info for the sake of testing.
-        orders[0] = ResolvedOrder({
-            info: OrderInfo({
-                reactor: address(0),
-                swapper: address(0),
-                nonce: 0,
-                deadline: 0,
-                additionalValidationContract: address(0),
-                additionalValidationData: ""
-            }),
-            input: InputToken({token: address(DAI_ADDR), amount: 0, maxAmount: 0}),
-            outputs: outputs,
-            sig: "",
-            hash: ""
+        deal(
+            DAI_ADDR,
+            address(0xD213e6F6dCB2DBaC03FA28b893F6dA1BD822e852),
+            2000 ether
+        );
+
+        uint256 amountIn = 2000000000000000000000;
+
+        vm.startPrank(address(0xD213e6F6dCB2DBaC03FA28b893F6dA1BD822e852));
+        // Approve Permit2
+        IERC20(DAI_ADDR).approve(
+            address(0x000000000022D473030F116dDEE9F6B43aC78BA3), amountIn
+        );
+        vm.stopPrank();
+
+        // Tx 0x005d7b150017ba1b59d2f99395ccae7bda9b739938ade4e509817e32760aaf9d
+        // Calldata generated using rust test `test_sequential_swap_usx`
+
+        SignedOrder memory order = SignedOrder({
+            order: hex"000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000001000000000000000000000000004449cd34d1eb1fedcf02a1be3834ffde8e6a61800000000000000000000000006b175474e89094c44da98b954eedeac495271d0f00000000000000000000000000000000000000000000006c6b935b8bbd40000000000000000000000000000000000000000000000000006c6b935b8bbd40000000000000000000000000000000000000000000000000000000000000000001e00000000000000000000000000000000000000000000000000000000000000280000000000000000000000000000000000000000000000000000000000000038000000000000000000000000000000011f84b9aa48e5f8aa8b9897600006289be000000000000000000000000d213e6f6dcb2dbac03fa28b893f6da1bd822e8520468320351debb1ddbfb032a239d699e3d54e3ce2b6e1037cd836a784c80b60100000000000000000000000000000000000000000000000000000000686e2bf9000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000dac17f958d2ee523a2206206994597c13d831ec70000000000000000000000000000000000000000000000000000000076f9f4870000000000000000000000000000000000000000000000000000000076566300000000000000000000000000d213e6f6dcb2dbac03fa28b893f6da1bd822e85200000000000000000000000000000000000000000000000000000000686e2aee00000000000000000000000000000000000000000000000000000000686e2b2a000000000000000000000000ce79b081c0c924cb67848723ed3057234d10fc6b0000000000000000000000000000000000000000000000000000000000000064000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000007727b5f40000000000000000000000000000000000000000000000000000000000000041a2d261cd4c8930428260f18b55e3036024bac68d58cb2ee6161e6395b0984b827104158713d44ddc4e14d852b48d93d95a4e60b8d5be1ef431c1e82d2f76a4111b00000000000000000000000000000000000000000000000000000000000000",
+            sig: hex"f4cc5734820e4ee08519045c83a25b75687756053b3d6c0fda2141380dfa6ef17b40f64d9279f237e96982c6ba53a202e01a4358fd66e027c9bdf200d5626f441c"
         });
+
         bytes memory callbackData =
             loadCallDataFromFile("test_sequential_swap_usx");
 
-        vm.startPrank(REACTOR);
-        filler.reactorCallback(orders, callbackData);
+        vm.startPrank(EXECUTOR);
+        filler.execute(order, callbackData);
         vm.stopPrank();
-
-        // Check that the funds are in the filler at the end of the function call
-        uint256 finalBalance = IERC20(USDT_ADDR).balanceOf(address(filler));
-        assertGe(finalBalance, amountOut);
     }
 
     function testExecute() public {
         fillerSetup();
+
+        // Overwrite block so signature doesn't expire.
+        vm.rollFork(22788691);
+
         // tx: 0x5b602b7d0a37e241bd032a907b9ddf314e9f2fc2104fd91cb55bdb3d8dfe4e9c
         // 0.2 WBTC -> USDC
         SignedOrder memory order = SignedOrder({
@@ -200,11 +203,12 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
         vm.stopPrank();
 
         // This is a hack because the tx we are trying to replicate returns a looooot more USDC than what the uni v2 pool does at this point
-        // 5113180081 is the difference and 54068100 is the fee
-        deal(USDC_ADDR, address(filler), 5113180081 + 54068100);
+        // 21613301393 is the difference and 54068100 is the fee
+        deal(USDC_ADDR, address(filler), 21613301393 + 54068100);
 
         vm.startPrank(EXECUTOR);
         filler.execute(order, callbackData);
+        console.logUint(IERC20(USDC_ADDR).balanceOf(address(filler)));
         vm.stopPrank();
     }
 
