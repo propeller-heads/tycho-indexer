@@ -292,9 +292,9 @@ where
         debug!("Purging DCI cache... Target hash {}", block.to_string());
 
         let mut found = false;
-        for (index, layer) in self.pending.iter().rev().enumerate() {
+        for (index, layer) in self.pending.iter().enumerate().rev() {
             if layer.block.hash == *block {
-                let _ = self.pending.split_off(index);
+                let _ = self.pending.split_off(index + 1); // +1 to keep the target block
                 found = true;
                 break;
             }
@@ -512,11 +512,19 @@ mod tests {
         let mut cache: VersionedCache<String, u32> = VersionedCache::new();
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
+        let block3 = create_test_block(3, "0x03", "0x02");
+        let block4 = create_test_block(4, "0x04", "0x03");
         cache
             .validate_and_ensure_block_layer(&block1)
             .unwrap();
         cache
             .validate_and_ensure_block_layer(&block2)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer(&block3)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer(&block4)
             .unwrap();
 
         // Insert data in both blocks
@@ -538,6 +546,14 @@ mod tests {
         assert_eq!(cache.get(&"perm".to_string()), Some(&0));
         assert_eq!(cache.get(&"key1".to_string()), Some(&1));
         assert_eq!(cache.get(&"key2".to_string()), None);
+
+        // Make sure we can insert correct new layers after reverting
+        cache
+            .validate_and_ensure_block_layer(&block2)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer(&block3)
+            .unwrap();
     }
 
     #[test]
