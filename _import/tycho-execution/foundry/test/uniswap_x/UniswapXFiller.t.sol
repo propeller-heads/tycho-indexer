@@ -153,7 +153,7 @@ contract UniswapXFillerTest is Test, TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testExecutes() public {
+    function testExecute() public {
         fillerSetup();
 
         // Set to time with no more penalty for not being exclusive filler
