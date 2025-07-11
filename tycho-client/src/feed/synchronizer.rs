@@ -26,7 +26,7 @@ use crate::{
     deltas::{DeltasClient, SubscriptionOptions},
     feed::{
         component_tracker::{ComponentFilter, ComponentTracker},
-        Header,
+        BlockHeader, HeaderLike,
     },
     rpc::{RPCClient, RPCError},
     DeltasError,
@@ -61,8 +61,8 @@ pub enum SynchronizerError {
 
 pub type SyncResult<T> = Result<T, SynchronizerError>;
 
-impl From<SendError<StateSyncMessage>> for SynchronizerError {
-    fn from(err: SendError<StateSyncMessage>) -> Self {
+impl From<SendError<StateSyncMessage<BlockHeader>>> for SynchronizerError {
+    fn from(err: SendError<StateSyncMessage<BlockHeader>>) -> Self {
         SynchronizerError::ChannelError(err.to_string())
     }
 }
@@ -93,7 +93,7 @@ pub struct ProtocolStateSynchronizer<R: RPCClient, D: DeltasClient> {
 
 #[derive(Debug, Default)]
 struct SharedState {
-    last_synced_block: Option<Header>,
+    last_synced_block: Option<BlockHeader>,
 }
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -126,9 +126,12 @@ impl Snapshot {
 }
 
 #[derive(Clone, PartialEq, Debug, Default, Serialize, Deserialize)]
-pub struct StateSyncMessage {
+pub struct StateSyncMessage<H>
+where
+    H: HeaderLike,
+{
     /// The block information for this update.
-    pub header: Header,
+    pub header: H,
     /// Snapshot for new components.
     pub snapshots: Snapshot,
     /// A single delta contains state updates for all tracked components, as well as additional
@@ -139,7 +142,10 @@ pub struct StateSyncMessage {
     pub removed_components: HashMap<String, ProtocolComponent>,
 }
 
-impl StateSyncMessage {
+impl<H> StateSyncMessage<H>
+where
+    H: HeaderLike,
+{
     pub fn merge(mut self, other: Self) -> Self {
         // be careful with removed and snapshots attributes here, these can be ambiguous.
         self.removed_components
@@ -178,7 +184,9 @@ impl StateSyncMessage {
 pub trait StateSynchronizer: Send + Sync + 'static {
     async fn initialize(&self) -> SyncResult<()>;
     /// Starts the state synchronization.
-    async fn start(&self) -> SyncResult<(JoinHandle<SyncResult<()>>, Receiver<StateSyncMessage>)>;
+    async fn start(
+        &self,
+    ) -> SyncResult<(JoinHandle<SyncResult<()>>, Receiver<StateSyncMessage<BlockHeader>>)>;
     /// Ends the synchronization loop.
     async fn close(&mut self) -> SyncResult<()>;
 }
@@ -227,10 +235,10 @@ where
     #[allow(deprecated)]
     async fn get_snapshots<'a, I: IntoIterator<Item = &'a String>>(
         &self,
-        header: Header,
+        header: BlockHeader,
         tracked_components: &mut ComponentTracker<R>,
         ids: Option<I>,
-    ) -> SyncResult<StateSyncMessage> {
+    ) -> SyncResult<StateSyncMessage<BlockHeader>> {
         if !self.include_snapshots {
             return Ok(StateSyncMessage { header, ..Default::default() });
         }
@@ -406,7 +414,10 @@ where
 
     /// Main method that does all the work.
     #[instrument(skip(self, block_tx), fields(extractor_id = %self.extractor_id))]
-    async fn state_sync(self, block_tx: &mut Sender<StateSyncMessage>) -> SyncResult<()> {
+    async fn state_sync(
+        self,
+        block_tx: &mut Sender<StateSyncMessage<BlockHeader>>,
+    ) -> SyncResult<()> {
         // initialisation
         let mut tracker = self.component_tracker.lock().await;
 
@@ -436,12 +447,16 @@ where
         // initial snapshot
         let block = first_msg.get_block().clone();
         info!(height = &block.number, "Deltas received. Retrieving snapshot");
-        let header = Header::from_block(first_msg.get_block(), first_msg.is_revert());
+        let header = BlockHeader::from_block(first_msg.get_block(), first_msg.is_revert());
         let snapshot = self
-            .get_snapshots::<Vec<&String>>(Header::from_block(&block, false), &mut tracker, None)
+            .get_snapshots::<Vec<&String>>(
+                BlockHeader::from_block(&block, false),
+                &mut tracker,
+                None,
+            )
             .await?
             .merge(StateSyncMessage {
-                header: Header::from_block(first_msg.get_block(), first_msg.is_revert()),
+                header: BlockHeader::from_block(first_msg.get_block(), first_msg.is_revert()),
                 snapshots: Default::default(),
                 deltas: Some(first_msg),
                 removed_components: Default::default(),
@@ -459,7 +474,7 @@ where
 
         loop {
             if let Some(mut deltas) = msg_rx.recv().await {
-                let header = Header::from_block(deltas.get_block(), deltas.is_revert());
+                let header = BlockHeader::from_block(deltas.get_block(), deltas.is_revert());
                 debug!(block_number=?header.number, "Received delta message");
 
                 let (snapshots, removed_components) = {
@@ -550,7 +565,9 @@ where
         Ok(())
     }
 
-    async fn start(&self) -> SyncResult<(JoinHandle<SyncResult<()>>, Receiver<StateSyncMessage>)> {
+    async fn start(
+        &self,
+    ) -> SyncResult<(JoinHandle<SyncResult<()>>, Receiver<StateSyncMessage<BlockHeader>>)> {
         let (mut tx, rx) = channel(15);
 
         let this = self.clone();
@@ -791,7 +808,7 @@ mod test {
 
     #[test(tokio::test)]
     async fn test_get_snapshots_native() {
-        let header = Header::default();
+        let header = BlockHeader::default();
         let mut rpc = MockRPCClient::new();
         rpc.expect_get_protocol_states()
             .returning(|_| Ok(state_snapshot_native()));
@@ -848,7 +865,7 @@ mod test {
 
     #[test(tokio::test)]
     async fn test_get_snapshots_native_with_tvl() {
-        let header = Header::default();
+        let header = BlockHeader::default();
         let mut rpc = MockRPCClient::new();
         rpc.expect_get_protocol_states()
             .returning(|_| Ok(state_snapshot_native()));
@@ -949,7 +966,7 @@ mod test {
 
     #[test(tokio::test)]
     async fn test_get_snapshots_vm() {
-        let header = Header::default();
+        let header = BlockHeader::default();
         let mut rpc = MockRPCClient::new();
         rpc.expect_get_protocol_states()
             .returning(|_| Ok(state_snapshot_native()));
@@ -1032,7 +1049,7 @@ mod test {
 
     #[test(tokio::test)]
     async fn test_get_snapshots_vm_with_tvl() {
-        let header = Header::default();
+        let header = BlockHeader::default();
         let mut rpc = MockRPCClient::new();
         rpc.expect_get_protocol_states()
             .returning(|_| Ok(state_snapshot_native()));
@@ -1322,7 +1339,7 @@ mod test {
 
         // assertions
         let exp1 = StateSyncMessage {
-            header: Header {
+            header: BlockHeader {
                 number: 1,
                 hash: Bytes::from("0x01"),
                 parent_hash: Bytes::from("0x00"),
@@ -1371,7 +1388,7 @@ mod test {
         };
 
         let exp2 = StateSyncMessage {
-            header: Header {
+            header: BlockHeader {
                 number: 2,
                 hash: Bytes::from("0x02"),
                 parent_hash: Bytes::from("0x01"),
@@ -1642,7 +1659,7 @@ mod test {
             .expect("state sync task panicked!");
 
         let expected_second_msg = StateSyncMessage {
-            header: Header {
+            header: BlockHeader {
                 number: 2,
                 hash: Bytes::from("0x02"),
                 parent_hash: Bytes::from("0x01"),
