@@ -1719,6 +1719,11 @@ pub struct RPCTracerParams {
     pub calldata: Bytes,
     /// Optionally allow for state overrides so that the call works as expected
     pub state_overrides: Option<BTreeMap<Address, AccountOverrides>>,
+    /// Addresses to prune from trace results. Useful for hooks that use mock
+    /// accounts/routers that shouldn't be tracked in the final DCI results.
+    #[schema(value_type=Option<Vec<String>>)]
+    #[serde(default)]
+    pub prune_addresses: Option<Vec<Address>>,
 }
 
 impl From<models::blockchain::RPCTracerParams> for RPCTracerParams {
@@ -1732,6 +1737,7 @@ impl From<models::blockchain::RPCTracerParams> for RPCTracerParams {
                     .map(|(address, account_overrides)| (address, account_overrides.into()))
                     .collect()
             }),
+            prune_addresses: value.prune_addresses,
         }
     }
 }
