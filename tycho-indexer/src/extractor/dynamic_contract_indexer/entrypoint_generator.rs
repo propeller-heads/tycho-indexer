@@ -14,6 +14,7 @@ use tycho_common::{
         protocol::ProtocolComponent,
         Address,
     },
+    Bytes,
 };
 
 use crate::extractor::dynamic_contract_indexer::component_metadata::ComponentTracingMetadata;
@@ -68,9 +69,11 @@ pub struct HookTracerContext {
     block: Block,
 }
 
+#[derive(Debug)]
 pub enum EntrypointGenerationError {
     AmountsEstimationFailed(String),
     EntrypointGenerationFailed(String),
+    NoDataAvailable(String),
 }
 
 #[async_trait]
@@ -97,8 +100,8 @@ pub trait SwapAmountEstimator {
     async fn estimate_swap_amounts(
         &self,
         metadata: &ComponentTracingMetadata,
-        pool_key: &PoolKey,
-    ) -> Result<HashMap<Address, Vec<U256>>, EntrypointGenerationError>;
+        tokens: &[Address],
+    ) -> Result<HashMap<(Address, Address), Vec<Bytes>>, EntrypointGenerationError>;
 }
 
 // Auxiliary code
@@ -180,5 +183,203 @@ impl ERC6909Overwrites {
             balance_mapping_slot,
             ContractCompiler::Solidity,
         )
+    }
+}
+
+pub struct DefaultSwapAmountEstimator;
+
+#[async_trait]
+impl SwapAmountEstimator for DefaultSwapAmountEstimator {
+    async fn estimate_swap_amounts(
+        &self,
+        metadata: &ComponentTracingMetadata,
+        tokens: &[Address],
+    ) -> Result<HashMap<(Address, Address), Vec<Bytes>>, EntrypointGenerationError> {
+        let mut result = HashMap::new();
+
+        // Try to use limits first (preferred)
+        if let Some(Ok((_, limits))) = &metadata.limits {
+            if !limits.is_empty() {
+                for ((token0, token1), (limit0, _limit1, _)) in limits {
+                    // limit0 is the max amount of token0 that can be sold
+                    let limit_amount = U256::from_be_slice(limit0.as_ref());
+                    if limit_amount > U256::ZERO {
+                        let amounts = vec![
+                            Bytes::from((limit_amount / U256::from(100)).to_be_bytes_vec()), // 1%
+                            Bytes::from((limit_amount / U256::from(10)).to_be_bytes_vec()),  // 10%
+                            Bytes::from((limit_amount / U256::from(2)).to_be_bytes_vec()),   // 50%
+                            Bytes::from(
+                                ((limit_amount * U256::from(95)) / U256::from(100))
+                                    .to_be_bytes_vec(),
+                            ), // 95%
+                        ];
+                        result.insert((token0.clone(), token1.clone()), amounts);
+                    }
+                }
+                if !result.is_empty() {
+                    return Ok(result);
+                }
+            }
+        }
+
+        // Fallback to using balances if no limits available
+        // For each token that has a balance, create amounts for all possible sell->buy pairs
+        if let Some(Ok((_, balances))) = &metadata.balances {
+            for sell_token in tokens {
+                if let Some(balance_bytes) = balances.get(sell_token) {
+                    let balance = U256::from_be_slice(balance_bytes.as_ref());
+                    if balance > U256::ZERO {
+                        let amounts = vec![
+                            Bytes::from((balance / U256::from(100)).to_be_bytes_vec()), // 1%
+                            Bytes::from((balance / U256::from(10)).to_be_bytes_vec()),  // 10%
+                            Bytes::from((balance / U256::from(2)).to_be_bytes_vec()),   // 50%
+                            Bytes::from(
+                                ((balance * U256::from(95)) / U256::from(100)).to_be_bytes_vec(),
+                            ), // 95%
+                        ];
+                        // Create entries for each possible buy token
+                        for buy_token in tokens {
+                            if sell_token != buy_token {
+                                result.insert(
+                                    (sell_token.clone(), buy_token.clone()),
+                                    amounts.clone(),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            if !result.is_empty() {
+                return Ok(result);
+            }
+        }
+
+        // If neither limits nor balances are available, return error
+        Err(EntrypointGenerationError::NoDataAvailable(
+            "No limits or balances available for swap amount estimation".to_string(),
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use tycho_common::{models::TxHash, Bytes};
+
+    use super::*;
+
+    fn create_test_tokens() -> Vec<Address> {
+        vec![Address::from([1u8; 20]), Address::from([2u8; 20])]
+    }
+
+    fn create_metadata_with_limits(
+        limits: Vec<((Address, Address), (Bytes, Bytes))>,
+    ) -> ComponentTracingMetadata {
+        ComponentTracingMetadata {
+            balances: None,
+            limits: Some(Ok((
+                TxHash::from([0u8; 32]),
+                limits
+                    .into_iter()
+                    .map(|(tokens, (l0, l1))| (tokens, (l0, l1, None)))
+                    .collect(),
+            ))),
+            tvl: None,
+        }
+    }
+
+    fn create_metadata_with_balances(
+        balances: HashMap<Address, Bytes>,
+    ) -> ComponentTracingMetadata {
+        ComponentTracingMetadata {
+            balances: Some(Ok((TxHash::from([0u8; 32]), balances))),
+            limits: None,
+            tvl: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_estimate_with_limits() {
+        let estimator = DefaultSwapAmountEstimator;
+        let tokens = create_test_tokens();
+
+        let limit_value = U256::from(1000u64);
+        let limits = vec![(
+            (tokens[0].clone(), tokens[1].clone()),
+            (
+                Bytes::from(limit_value.to_be_bytes_vec()),
+                Bytes::from(limit_value.to_be_bytes_vec()),
+            ),
+        )];
+        let metadata = create_metadata_with_limits(limits);
+
+        let result = estimator
+            .estimate_swap_amounts(&metadata, &tokens)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+
+        let amounts = result
+            .get(&(tokens[0].clone(), tokens[1].clone()))
+            .unwrap();
+        assert_eq!(amounts.len(), 4);
+        assert_eq!(amounts[0], Bytes::from(U256::from(10u64).to_be_bytes_vec())); // 1%
+        assert_eq!(amounts[1], Bytes::from(U256::from(100u64).to_be_bytes_vec())); // 10%
+        assert_eq!(amounts[2], Bytes::from(U256::from(500u64).to_be_bytes_vec())); // 50%
+        assert_eq!(amounts[3], Bytes::from(U256::from(950u64).to_be_bytes_vec())); // 95%
+    }
+
+    #[tokio::test]
+    async fn test_estimate_with_balances_fallback() {
+        let estimator = DefaultSwapAmountEstimator;
+        let tokens = create_test_tokens();
+
+        let balance_value = U256::from(2000u64);
+        let mut balances = HashMap::new();
+        balances.insert(tokens[0].clone(), Bytes::from(balance_value.to_be_bytes_vec()));
+        balances.insert(tokens[1].clone(), Bytes::from(balance_value.to_be_bytes_vec()));
+
+        let metadata = create_metadata_with_balances(balances);
+
+        let result = estimator
+            .estimate_swap_amounts(&metadata, &tokens)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2); // 2 pairs: token0->token1, token1->token0
+
+        let amounts01 = result
+            .get(&(tokens[0].clone(), tokens[1].clone()))
+            .unwrap();
+        assert_eq!(amounts01.len(), 4);
+        assert_eq!(amounts01[0], Bytes::from(U256::from(20u64).to_be_bytes_vec())); // 1%
+        assert_eq!(amounts01[1], Bytes::from(U256::from(200u64).to_be_bytes_vec())); // 10%
+        assert_eq!(amounts01[2], Bytes::from(U256::from(1000u64).to_be_bytes_vec())); // 50%
+        assert_eq!(amounts01[3], Bytes::from(U256::from(1900u64).to_be_bytes_vec())); // 95%
+
+        let amounts10 = result
+            .get(&(tokens[1].clone(), tokens[0].clone()))
+            .unwrap();
+        assert_eq!(amounts10.len(), 4);
+        assert_eq!(amounts10[0], Bytes::from(U256::from(20u64).to_be_bytes_vec())); // 1%
+        assert_eq!(amounts10[1], Bytes::from(U256::from(200u64).to_be_bytes_vec())); // 10%
+        assert_eq!(amounts10[2], Bytes::from(U256::from(1000u64).to_be_bytes_vec())); // 50%
+        assert_eq!(amounts10[3], Bytes::from(U256::from(1900u64).to_be_bytes_vec())); // 95%
+    }
+
+    #[tokio::test]
+    async fn test_estimate_with_no_data() {
+        let estimator = DefaultSwapAmountEstimator;
+        let tokens = create_test_tokens();
+
+        let metadata = ComponentTracingMetadata { balances: None, limits: None, tvl: None };
+
+        let result = estimator
+            .estimate_swap_amounts(&metadata, &tokens)
+            .await;
+
+        assert!(matches!(result, Err(EntrypointGenerationError::NoDataAvailable(_))));
     }
 }
