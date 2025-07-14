@@ -66,6 +66,10 @@ dialoguer = "0.10.4"
 # Ekubo
 evm_ekubo_sdk = "0.6.2"
 
+# rfq
+reqwest = { version = "0.12.22", optional = true }
+async-trait = { version = "0.1.88", optional = true }
+
 [dev-dependencies]
 tokio-test = "0.4.4"
 approx = "0.5.1"
@@ -92,11 +96,12 @@ tracing-appender = "0.2.3"
 tycho-execution = "0.108.0"
 
 [features]
-default = ["evm"]
+default = ["evm", "rfq"]
 network_tests = []
 evm = [
     "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors", "dep:alloy",
 ]
+rfq = ["dep:reqwest", "dep:async-trait"]
 
 [profile.bench]
 debug = true
