@@ -1,3 +1,12 @@
+## [0.77.0](https://github.com/propeller-heads/tycho-indexer/compare/0.76.1...0.77.0) (2025-07-14)
+
+
+### Features
+
+* Generalise Header and add ProtocolSim ([#619](https://github.com/propeller-heads/tycho-indexer/issues/619)) ([d6c7be4](https://github.com/propeller-heads/tycho-indexer/commit/d6c7be437c54c8369740d577442657d3e6c1350e))
+* Generalise Header by creating a HeaderLike trait ([828f4d4](https://github.com/propeller-heads/tycho-indexer/commit/828f4d44bba6fec9be3e25546eff52391dd808fa))
+* Move ProtocolSim from simulation to tycho-common ([97e8e08](https://github.com/propeller-heads/tycho-indexer/commit/97e8e08db5ee442af13c7dd25135bd6edb3fb269))
+
 ## [0.76.1](https://github.com/propeller-heads/tycho-indexer/compare/0.76.0...0.76.1) (2025-07-11)
 
 
