@@ -139,7 +139,6 @@ pub trait TryFromWithBlock<T> {
 
 #[derive(Debug, Clone)]
 pub struct Update {
-    /// Can be either a block number or a timestamp
     pub block_number_or_timestamp: u64,
     /// The new and updated states of this block
     pub states: HashMap<String, Box<dyn ProtocolSim>>,
