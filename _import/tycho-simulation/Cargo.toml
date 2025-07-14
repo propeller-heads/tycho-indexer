@@ -13,7 +13,7 @@ readme = "README.md"
 
 
 [workspace]
-members = ["tycho_simulation_py"]
+members = ["tycho-rfq", "tycho_simulation_py"]
 
 [dependencies]
 # Serialization/Deserialization
