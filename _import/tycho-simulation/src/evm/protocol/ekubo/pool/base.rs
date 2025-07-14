@@ -13,12 +13,14 @@ use evm_ekubo_sdk::{
     },
 };
 use num_traits::Zero;
-use tycho_common::Bytes;
+use tycho_common::{
+    simulation::errors::{SimulationError, TransitionError},
+    Bytes,
+};
 
 use super::{EkuboPool, EkuboPoolQuote};
 use crate::{
-    evm::protocol::ekubo::attributes::ticks_from_attributes,
-    protocol::errors::{InvalidSnapshotError, SimulationError, TransitionError},
+    evm::protocol::ekubo::attributes::ticks_from_attributes, protocol::errors::InvalidSnapshotError,
 };
 
 #[derive(Debug, Clone, Eq)]

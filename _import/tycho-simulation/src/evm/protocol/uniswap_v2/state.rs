@@ -1,6 +1,24 @@
-use alloy::primitives::U256;
+use std::{any::Any, collections::HashMap};
 
-use crate::evm::protocol::cpmm::protocol::CPMMProtocol;
+use alloy::primitives::U256;
+use num_bigint::{BigUint, ToBigUint};
+use tycho_common::{
+    dto::ProtocolStateDelta,
+    models::token::Token,
+    simulation::{
+        errors::{SimulationError, TransitionError},
+        protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
+    },
+    Bytes,
+};
+
+use crate::evm::protocol::{
+    cpmm::protocol::{
+        cpmm_delta_transition, cpmm_fee, cpmm_get_amount_out, cpmm_get_limits, cpmm_spot_price,
+    },
+    safe_math::{safe_add_u256, safe_sub_u256},
+    u256_num::{biguint_to_u256, u256_to_biguint},
+};
 
 const UNISWAP_V2_FEE_BPS: u32 = 30; // 0.3% fee
 
@@ -22,21 +40,88 @@ impl UniswapV2State {
     }
 }
 
-impl CPMMProtocol for UniswapV2State {
-    fn get_fee_bps(&self) -> u32 {
-        UNISWAP_V2_FEE_BPS
+impl ProtocolSim for UniswapV2State {
+    fn fee(&self) -> f64 {
+        cpmm_fee(UNISWAP_V2_FEE_BPS)
     }
 
-    fn get_reserves(&self) -> (U256, U256) {
-        (self.reserve0, self.reserve1)
+    fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
+        cpmm_spot_price(base, quote, self.reserve0, self.reserve1)
     }
 
-    fn get_reserves_mut(&mut self) -> (&mut U256, &mut U256) {
-        (&mut self.reserve0, &mut self.reserve1)
+    fn get_amount_out(
+        &self,
+        amount_in: BigUint,
+        token_in: &Token,
+        token_out: &Token,
+    ) -> Result<GetAmountOutResult, SimulationError> {
+        let amount_in = biguint_to_u256(&amount_in);
+        let zero2one = token_in.address < token_out.address;
+        let amount_out = cpmm_get_amount_out(
+            amount_in,
+            zero2one,
+            self.reserve0,
+            self.reserve1,
+            UNISWAP_V2_FEE_BPS,
+        )?;
+        let mut new_state = self.clone();
+        let (reserve0_mut, reserve1_mut) = (&mut new_state.reserve0, &mut new_state.reserve1);
+        if zero2one {
+            *reserve0_mut = safe_add_u256(self.reserve0, amount_in)?;
+            *reserve1_mut = safe_sub_u256(self.reserve1, amount_out)?;
+        } else {
+            *reserve0_mut = safe_sub_u256(self.reserve0, amount_out)?;
+            *reserve1_mut = safe_add_u256(self.reserve1, amount_in)?;
+        };
+        Ok(GetAmountOutResult::new(
+            u256_to_biguint(amount_out),
+            120_000
+                .to_biguint()
+                .expect("Expected an unsigned integer as gas value"),
+            Box::new(new_state),
+        ))
     }
 
-    fn new(reserve0: U256, reserve1: U256) -> Self {
-        Self::new(reserve0, reserve1)
+    fn get_limits(
+        &self,
+        sell_token: Bytes,
+        buy_token: Bytes,
+    ) -> Result<(BigUint, BigUint), SimulationError> {
+        cpmm_get_limits(sell_token, buy_token, self.reserve0, self.reserve1)
+    }
+
+    fn delta_transition(
+        &mut self,
+        delta: ProtocolStateDelta,
+        _tokens: &HashMap<Bytes, Token>,
+        _balances: &Balances,
+    ) -> Result<(), TransitionError<String>> {
+        let (reserve0_mut, reserve1_mut) = (&mut self.reserve0, &mut self.reserve1);
+        cpmm_delta_transition(delta, reserve0_mut, reserve1_mut)
+    }
+
+    fn clone_box(&self) -> Box<dyn ProtocolSim> {
+        Box::new(self.clone())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn eq(&self, other: &dyn ProtocolSim) -> bool {
+        if let Some(other_state) = other.as_any().downcast_ref::<Self>() {
+            let (self_reserve0, self_reserve1) = (self.reserve0, self.reserve1);
+            let (other_reserve0, other_reserve1) = (other_state.reserve0, other_state.reserve1);
+            self_reserve0 == other_reserve0 &&
+                self_reserve1 == other_reserve1 &&
+                self.fee() == other_state.fee()
+        } else {
+            false
+        }
     }
 }
 
@@ -55,17 +140,14 @@ mod tests {
         dto::ProtocolStateDelta,
         hex_bytes::Bytes,
         models::{token::Token, Chain},
+        simulation::{
+            errors::{SimulationError, TransitionError},
+            protocol_sim::{Balances, ProtocolSim},
+        },
     };
 
     use super::*;
-    use crate::{
-        evm::protocol::u256_num::biguint_to_u256,
-        models::Balances,
-        protocol::{
-            errors::{SimulationError, TransitionError},
-            state::ProtocolSim,
-        },
-    };
+    use crate::evm::protocol::u256_num::biguint_to_u256;
 
     #[rstest]
     #[case::same_dec(

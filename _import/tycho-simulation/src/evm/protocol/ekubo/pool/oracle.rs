@@ -8,10 +8,13 @@ use evm_ekubo_sdk::{
         types::{NodeKey, Pool, QuoteParams, TokenAmount},
     },
 };
-use tycho_common::Bytes;
+use tycho_common::{
+    simulation::errors::{SimulationError, TransitionError},
+    Bytes,
+};
 
 use super::{full_range::FullRangePool, EkuboPool, EkuboPoolQuote};
-use crate::protocol::errors::{InvalidSnapshotError, SimulationError, TransitionError};
+use crate::protocol::errors::InvalidSnapshotError;
 
 #[derive(Debug, Eq, Clone)]
 pub struct OraclePool {

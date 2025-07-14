@@ -1,9 +1,7 @@
 pub mod uniswap;
 
 use alloy::primitives::Address;
-use tycho_common::Bytes;
-
-use crate::protocol::errors::SimulationError;
+use tycho_common::{simulation::errors::SimulationError, Bytes};
 
 /// Safely converts a `Bytes` object to an `Address` object.
 ///

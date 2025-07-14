@@ -17,11 +17,8 @@ use ratatui::{
 };
 use tokio::{select, sync::mpsc::Receiver};
 use tracing::warn;
-use tycho_common::Bytes;
-use tycho_simulation::protocol::{
-    models::{BlockUpdate, ProtocolComponent},
-    state::ProtocolSim,
-};
+use tycho_common::{simulation::protocol_sim::ProtocolSim, Bytes};
+use tycho_simulation::protocol::models::{BlockUpdate, ProtocolComponent};
 
 const INFO_TEXT: [&str; 2] = [
     "(Esc) quit | (↑) move up | (↓) move down | (↵) Toggle Quote | (+) Increase Quote Amount",

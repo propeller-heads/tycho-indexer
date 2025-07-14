@@ -385,15 +385,13 @@ mod tests {
             Account, AccountInfo, AccountStatus, Bytecode, EvmState as rState, EvmStorageSlot,
         },
     };
+    use tycho_common::simulation::errors::SimulationError;
 
     use super::*;
-    use crate::{
-        evm::engine_db::{
-            engine_db_interface::EngineDatabaseInterface,
-            simulation_db::{EVMProvider, SimulationDB},
-            utils::{get_client, get_runtime},
-        },
-        protocol::errors::SimulationError,
+    use crate::evm::engine_db::{
+        engine_db_interface::EngineDatabaseInterface,
+        simulation_db::{EVMProvider, SimulationDB},
+        utils::{get_client, get_runtime},
     };
 
     #[test]

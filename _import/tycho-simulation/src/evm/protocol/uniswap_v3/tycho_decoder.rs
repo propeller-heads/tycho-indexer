@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use alloy::primitives::U256;
-use tycho_client::feed::{synchronizer::ComponentWithState, Header};
+use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{models::token::Token, Bytes};
 
 use super::{enums::FeeAmount, state::UniswapV3State};
@@ -17,7 +17,7 @@ impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
     /// if the snapshot is missing any required attributes or if the fee amount is not supported.
     async fn try_from_with_block(
         snapshot: ComponentWithState,
-        _block: Header,
+        _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
@@ -166,8 +166,8 @@ mod tests {
         .collect::<HashMap<String, Bytes>>()
     }
 
-    fn header() -> Header {
-        Header {
+    fn header() -> BlockHeader {
+        BlockHeader {
             number: 1,
             hash: Bytes::from(vec![0; 32]),
             parent_hash: Bytes::from(vec![0; 32]),

@@ -9,6 +9,7 @@ use tycho_client::{
 };
 use tycho_common::{
     models::{token::Token, Chain},
+    simulation::protocol_sim::ProtocolSim,
     Bytes,
 };
 
@@ -17,7 +18,6 @@ use crate::{
     protocol::{
         errors::InvalidSnapshotError,
         models::{BlockUpdate, TryFromWithBlock},
-        state::ProtocolSim,
     },
 };
 

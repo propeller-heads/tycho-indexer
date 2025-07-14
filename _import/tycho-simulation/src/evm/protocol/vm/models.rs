@@ -1,7 +1,6 @@
 use alloy::primitives::U256;
 use strum_macros::Display;
-
-use crate::protocol::errors::SimulationError;
+use tycho_common::simulation::errors::SimulationError;
 
 /// Represents a distinct functionality or feature that an `EVMPoolState` can support.
 ///

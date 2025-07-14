@@ -10,11 +10,9 @@ use hex::FromHex;
 use num_bigint::BigInt;
 use revm::state::Bytecode;
 use serde_json::Value;
+use tycho_common::simulation::errors::SimulationError;
 
-use crate::{
-    evm::{simulation::SimulationEngineError, ContractCompiler, SlotId},
-    protocol::errors::SimulationError,
-};
+use crate::evm::{simulation::SimulationEngineError, ContractCompiler, SlotId};
 
 pub(crate) fn coerce_error(
     err: &SimulationEngineError,

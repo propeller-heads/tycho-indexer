@@ -6,8 +6,7 @@
 //! will be returned.
 //! Functions for the types I256, U256, U512 are available.
 use alloy::primitives::{I256, U256, U512};
-
-use crate::protocol::errors::SimulationError;
+use tycho_common::simulation::errors::SimulationError;
 
 pub fn safe_mul_u256(a: U256, b: U256) -> Result<U256, SimulationError> {
     let res = a.checked_mul(b);

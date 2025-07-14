@@ -9,20 +9,20 @@ use evm_ekubo_sdk::{
     quoting::types::{NodeKey, TokenAmount},
 };
 use num_bigint::BigUint;
-use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
+use tycho_common::{
+    dto::ProtocolStateDelta,
+    models::token::Token,
+    simulation::{
+        errors::{SimulationError, TransitionError},
+        protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
+    },
+    Bytes,
+};
 
 use super::pool::{
     base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool, EkuboPool,
 };
-use crate::{
-    evm::protocol::{ekubo::pool::mev_resist::MevResistPool, u256_num::u256_to_f64},
-    models::Balances,
-    protocol::{
-        errors::{SimulationError, TransitionError},
-        models::GetAmountOutResult,
-        state::ProtocolSim,
-    },
-};
+use crate::evm::protocol::{ekubo::pool::mev_resist::MevResistPool, u256_num::u256_to_f64};
 
 #[enum_delegate::implement(EkuboPool)]
 #[derive(Debug, Clone, PartialEq, Eq)]

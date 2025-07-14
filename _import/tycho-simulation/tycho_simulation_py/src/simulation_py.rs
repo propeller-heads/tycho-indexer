@@ -12,7 +12,7 @@ use tycho_simulation::{
         },
         simulation,
     },
-    tycho_client::feed::Header,
+    tycho_client::feed::BlockHeader as TychoHeader,
 };
 
 use crate::structs_py::{
@@ -69,7 +69,7 @@ impl SimulationEngineInner {
     fn update_state(
         &mut self,
         updates: &HashMap<Address, account_storage::StateUpdate>,
-        block: Header,
+        block: TychoHeader,
     ) -> HashMap<Address, account_storage::StateUpdate> {
         match self {
             SimulationEngineInner::SimulationDB(engine) => engine
@@ -210,7 +210,7 @@ impl SimulationEngine {
         updates: HashMap<String, StateUpdate>,
         block: BlockHeader,
     ) -> PyResult<HashMap<String, StateUpdate>> {
-        let block = Header::from(block);
+        let block = TychoHeader::from(block);
         let mut rust_updates: HashMap<Address, account_storage::StateUpdate> = HashMap::new();
         for (key, value) in updates {
             rust_updates.insert(

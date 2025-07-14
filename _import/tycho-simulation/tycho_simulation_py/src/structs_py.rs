@@ -17,7 +17,7 @@ use tycho_simulation::{
         },
         simulation, tycho_models,
     },
-    tycho_client::feed::Header,
+    tycho_client::feed::BlockHeader as TychoHeader,
     tycho_common::Bytes,
 };
 
@@ -411,9 +411,9 @@ impl BlockHeader {
     }
 }
 
-impl From<BlockHeader> for Header {
+impl From<BlockHeader> for TychoHeader {
     fn from(py_header: BlockHeader) -> Self {
-        Header {
+        TychoHeader {
             number: py_header.number,
             hash: Bytes::from_str(&py_header.hash).unwrap(),
             timestamp: py_header.timestamp,
@@ -533,7 +533,7 @@ impl TychoDB {
             .map(Into::into)
             .collect();
 
-        let block = block.map(Header::from);
+        let block = block.map(TychoHeader::from);
 
         self_
             .inner

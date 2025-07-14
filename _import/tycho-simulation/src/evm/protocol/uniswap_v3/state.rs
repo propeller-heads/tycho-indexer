@@ -4,32 +4,33 @@ use alloy::primitives::{Sign, I256, U256};
 use num_bigint::BigUint;
 use num_traits::Zero;
 use tracing::trace;
-use tycho_common::{dto::ProtocolStateDelta, models::token::Token, Bytes};
+use tycho_common::{
+    dto::ProtocolStateDelta,
+    models::token::Token,
+    simulation::{
+        errors::{SimulationError, TransitionError},
+        protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
+    },
+    Bytes,
+};
 
 use super::enums::FeeAmount;
-use crate::{
-    evm::protocol::{
-        safe_math::{safe_add_u256, safe_sub_u256},
-        u256_num::u256_to_biguint,
-        utils::uniswap::{
-            i24_be_bytes_to_i32, liquidity_math,
-            sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
-            swap_math,
-            tick_list::{TickInfo, TickList, TickListErrorKind},
-            tick_math::{
-                get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
-                MIN_SQRT_RATIO, MIN_TICK,
-            },
-            StepComputation, SwapResults, SwapState,
+use crate::evm::protocol::{
+    safe_math::{safe_add_u256, safe_sub_u256},
+    u256_num::u256_to_biguint,
+    utils::uniswap::{
+        i24_be_bytes_to_i32, liquidity_math,
+        sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
+        swap_math,
+        tick_list::{TickInfo, TickList, TickListErrorKind},
+        tick_math::{
+            get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
+            MIN_SQRT_RATIO, MIN_TICK,
         },
-    },
-    models::Balances,
-    protocol::{
-        errors::{SimulationError, TransitionError},
-        models::GetAmountOutResult,
-        state::ProtocolSim,
+        StepComputation, SwapResults, SwapState,
     },
 };
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UniswapV3State {
     liquidity: u128,

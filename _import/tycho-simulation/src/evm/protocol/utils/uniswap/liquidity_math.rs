@@ -1,4 +1,4 @@
-use crate::protocol::errors::SimulationError;
+use tycho_common::simulation::errors::SimulationError;
 
 // Solidity spec: function addDelta(uint128 x, int128 y) internal pure returns (uint128 z) {
 pub(crate) fn add_liquidity_delta(x: u128, y: i128) -> Result<u128, SimulationError> {
