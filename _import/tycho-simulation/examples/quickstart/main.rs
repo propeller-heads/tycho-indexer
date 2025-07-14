@@ -534,7 +534,7 @@ fn get_best_swap(
 ) -> Option<(String, BigUint)> {
     println!(
         "\n==================== Received block {block:?} ====================",
-        block = message.marker
+        block = message.block_number_or_timestamp
     );
     for (id, comp) in message.new_pairs.iter() {
         pairs
