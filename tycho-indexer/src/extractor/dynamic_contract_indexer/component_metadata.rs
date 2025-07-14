@@ -4,6 +4,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use thiserror::Error;
 use tycho_common::{
     models::{
@@ -25,6 +26,7 @@ type Balances = HashMap<Address, Bytes>;
 // every block.
 type Limits = Vec<((Address, Address), (Bytes, Bytes, Option<EntryPointWithTracingParams>))>;
 type Tvl = f64;
+pub(crate) type DeduplicationId = String;
 
 type RoutingKey = String;
 
@@ -413,7 +415,10 @@ pub trait RequestProvider: Send + Sync {
     /// 3. Batch into multicall or JSON-RPC batch requests
     /// 4. Execute with connection pooling
     /// 5. Map results back to original requests
-    async fn execute_batch(&self, requests: &[Box<dyn RequestTransport>]) -> Vec<MetadataResult>;
+    async fn execute_batch(
+        &self,
+        requests: &[Box<dyn RequestTransport>],
+    ) -> Vec<(DeduplicationId, Result<Value, MetadataError>)>;
 
     /// Groups requests into optimal batches for execution.
     ///
@@ -434,9 +439,10 @@ pub trait RequestProvider: Send + Sync {
     /// - **API Providers**: Group by API endpoint and rate limits
     /// - **Default**: Each request in its own group (no batching)
     /// ```
-    fn can_group_requests(
+    fn group_requests(
         &self,
         requests: &[Box<dyn RequestTransport>],
+        _batch_size_limit: usize,
     ) -> Vec<Vec<Box<dyn RequestTransport>>> {
         // Default: no grouping, one request per call
         requests
@@ -595,7 +601,7 @@ impl BlockMetadataOrchestrator {
 }
 
 // Error types
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone, PartialEq)]
 pub enum MetadataError {
     #[error("Metadata generation failed: {0}")]
     GenerationFailed(String),
@@ -702,7 +708,7 @@ impl RpcTransport {
         // separation between RPC requests and providers, we will use a default routing key.
         let routing_key = "rpc_default".to_string();
 
-        Self { endpoint, method, params, id: rand::random::<u64>() % 10000, routing_key }
+        Self { endpoint, method, params, id: rand::random::<u64>() % 10000, routing_key } //TODO: use a better id that ensure no collisions at all
     }
 
     pub fn eth_call(

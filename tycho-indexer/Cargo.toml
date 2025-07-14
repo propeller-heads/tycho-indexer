@@ -81,6 +81,7 @@ alloy-primitives.workspace = true
 pretty_assertions.workspace = true
 tokio-tungstenite.workspace = true
 rstest.workspace = true
+mockito.workspace = true
 actix-rt = "2.9.0"
 actix-test = "0.1.2"
 test-log = { version = "0.2.14", features = ["trace"] }
