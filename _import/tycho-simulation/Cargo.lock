@@ -8321,19 +8321,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "tycho-rfq"
-version = "0.1.0"
-dependencies = [
- "tycho-simulation",
-]
-
-[[package]]
 name = "tycho-simulation"
 version = "0.126.0"
 dependencies = [
  "alloy",
  "anyhow",
  "approx",
+ "async-trait",
  "chrono",
  "clap",
  "crossterm",
@@ -8352,6 +8346,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "ratatui",
+ "reqwest",
  "revm",
  "revm-inspectors",
  "rstest",

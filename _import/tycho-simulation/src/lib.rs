@@ -16,5 +16,7 @@ pub use tycho_common as tycho_core; // Use `tycho_common` directly instead of `t
 #[cfg(feature = "evm")]
 pub mod evm;
 pub mod protocol;
+#[cfg(feature = "rfq")]
+pub mod rfq;
 pub mod serde_helpers;
 pub mod utils;
