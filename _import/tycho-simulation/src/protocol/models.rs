@@ -138,8 +138,8 @@ pub trait TryFromWithBlock<T> {
 }
 
 #[derive(Debug, Clone)]
-pub struct BlockUpdate {
-    pub block_number: u64,
+pub struct Update {
+    pub block_number_or_timestamp: u64,
     /// The new and updated states of this block
     pub states: HashMap<String, Box<dyn ProtocolSim>>,
     /// The new pairs that were added in this block
@@ -148,13 +148,18 @@ pub struct BlockUpdate {
     pub removed_pairs: HashMap<String, ProtocolComponent>,
 }
 
-impl BlockUpdate {
+impl Update {
     pub fn new(
         block_number: u64,
         states: HashMap<String, Box<dyn ProtocolSim>>,
         new_pairs: HashMap<String, ProtocolComponent>,
     ) -> Self {
-        BlockUpdate { block_number, states, new_pairs, removed_pairs: HashMap::new() }
+        Update {
+            block_number_or_timestamp: block_number,
+            states,
+            new_pairs,
+            removed_pairs: HashMap::new(),
+        }
     }
 
     pub fn set_removed_pairs(mut self, pairs: HashMap<String, ProtocolComponent>) -> Self {

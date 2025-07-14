@@ -52,7 +52,7 @@ use tycho_simulation::{
         },
         stream::ProtocolStreamBuilder,
     },
-    protocol::models::{BlockUpdate, ProtocolComponent},
+    protocol::models::{ProtocolComponent, Update},
     tycho_client::feed::component_tracker::ComponentFilter,
     tycho_common::models::Chain,
     utils::load_all_tokens,
@@ -525,7 +525,7 @@ async fn main() {
 }
 
 fn get_best_swap(
-    message: BlockUpdate,
+    message: Update,
     pairs: &mut HashMap<String, ProtocolComponent>,
     amount_in: BigUint,
     sell_token: Token,
@@ -534,7 +534,7 @@ fn get_best_swap(
 ) -> Option<(String, BigUint)> {
     println!(
         "\n==================== Received block {block:?} ====================",
-        block = message.block_number
+        block = message.block_number_or_timestamp
     );
     for (id, comp) in message.new_pairs.iter() {
         pairs

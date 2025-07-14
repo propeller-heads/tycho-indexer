@@ -24,7 +24,7 @@ use tycho_simulation::{
         },
         stream::ProtocolStreamBuilder,
     },
-    protocol::models::BlockUpdate,
+    protocol::models::Update,
     utils::load_all_tokens,
 };
 use utils::get_default_url;
@@ -114,7 +114,7 @@ async fn main() {
     env::var("RPC_URL").expect("RPC_URL env variable should be set");
 
     // Create communication channels for inter-thread communication
-    let (tick_tx, tick_rx) = mpsc::channel::<BlockUpdate>(12);
+    let (tick_tx, tick_rx) = mpsc::channel::<Update>(12);
 
     let tycho_message_processor: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
         let all_tokens = load_all_tokens(
