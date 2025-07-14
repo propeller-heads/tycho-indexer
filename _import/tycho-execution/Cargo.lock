@@ -4634,15 +4634,16 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tycho-common"
-version = "0.70.7"
+version = "0.76.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4da82c4239c76011b8edc19b5d2a2db989c9ff1f74ae6a3dea21486e9b53234"
+checksum = "e72ed04dc9d41942c886fc3d58af5b0e23a3e4783ac7294ed7cea61e022a5c4d"
 dependencies = [
  "anyhow",
  "async-trait",
  "bytes",
  "chrono",
  "hex",
+ "num-bigint",
  "rand 0.8.5",
  "serde",
  "serde_json",
@@ -4658,7 +4659,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.106.0"
+version = "0.108.0"
 dependencies = [
  "alloy",
  "chrono",

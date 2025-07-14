@@ -1,7 +1,7 @@
 use std::{collections::HashSet, str::FromStr};
 
 use alloy::signers::local::PrivateKeySigner;
-use tycho_common::Bytes;
+use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -16,7 +16,7 @@ use crate::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
     },
     models::{
-        Chain, EncodedSolution, EncodingContext, NativeAction, Solution, Transaction, TransferType,
+        EncodedSolution, EncodingContext, NativeAction, Solution, Transaction, TransferType,
         UserTransferType,
     },
     strategy_encoder::StrategyEncoder,
@@ -61,19 +61,19 @@ impl TychoRouterEncoder {
         };
         Ok(TychoRouterEncoder {
             single_swap_strategy: SingleSwapStrategyEncoder::new(
-                chain.clone(),
+                chain,
                 swap_encoder_registry.clone(),
                 user_transfer_type.clone(),
                 router_address.clone(),
             )?,
             sequential_swap_strategy: SequentialSwapStrategyEncoder::new(
-                chain.clone(),
+                chain,
                 swap_encoder_registry.clone(),
                 user_transfer_type.clone(),
                 router_address.clone(),
             )?,
             split_swap_strategy: SplitSwapStrategyEncoder::new(
-                chain.clone(),
+                chain,
                 swap_encoder_registry,
                 user_transfer_type.clone(),
                 router_address.clone(),
@@ -153,11 +153,11 @@ impl TychoEncoder for TychoRouterEncoder {
             let encoded_solution = self.encode_solution(solution)?;
 
             let transaction = encode_tycho_router_call(
-                self.chain.id,
+                self.chain.id(),
                 encoded_solution,
                 solution,
                 &self.user_transfer_type,
-                &self.chain.native_token()?,
+                &self.chain.native_token().address,
                 self.signer.clone(),
             )?;
 
@@ -186,8 +186,11 @@ impl TychoEncoder for TychoRouterEncoder {
         if solution.swaps.is_empty() {
             return Err(EncodingError::FatalError("No swaps found in solution".to_string()));
         }
-        let native_address = self.chain.native_token()?;
-        let wrapped_address = self.chain.wrapped_token()?;
+        let native_address = self.chain.native_token().address;
+        let wrapped_address = self
+            .chain
+            .wrapped_native_token()
+            .address;
         if let Some(native_action) = &solution.native_action {
             if native_action == &NativeAction::Wrap {
                 if solution.given_token != native_address {
@@ -387,7 +390,7 @@ mod tests {
     use std::{collections::HashMap, str::FromStr};
 
     use num_bigint::{BigInt, BigUint};
-    use tycho_common::models::{protocol::ProtocolComponent, Chain as TychoCommonChain};
+    use tycho_common::models::{protocol::ProtocolComponent, Chain};
 
     use super::*;
     use crate::encoding::models::Swap;
@@ -466,7 +469,7 @@ mod tests {
     }
 
     fn eth_chain() -> Chain {
-        TychoCommonChain::Ethereum.into()
+        Chain::Ethereum
     }
 
     fn get_swap_encoder_registry() -> SwapEncoderRegistry {
