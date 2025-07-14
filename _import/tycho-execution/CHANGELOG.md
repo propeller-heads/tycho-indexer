@@ -1,3 +1,16 @@
+## [0.109.0](https://github.com/propeller-heads/tycho-execution/compare/0.108.0...0.109.0) (2025-07-14)
+
+
+### Features
+
+* add testExecuteIntegration ([4ba5919](https://github.com/propeller-heads/tycho-execution/commit/4ba59192fcfe60d6d4f95b9540a2a7d4da202952))
+
+
+### Bug Fixes
+
+* chain id call after main update ([e775238](https://github.com/propeller-heads/tycho-execution/commit/e775238b0816e71d383193bfdb0cbbfe64e37b7a))
+* Replicate a real Uniswap X order in integration test ([96d0bf4](https://github.com/propeller-heads/tycho-execution/commit/96d0bf4ba545e4ae369c292aec6b56a32cf77db0))
+
 ## [0.108.0](https://github.com/propeller-heads/tycho-execution/compare/0.107.0...0.108.0) (2025-07-11)
 
 
