@@ -1,3 +1,10 @@
+## [0.126.0](https://github.com/propeller-heads/tycho-simulation/compare/0.125.0...0.126.0) (2025-07-14)
+
+
+### Features
+
+* Rename BlockUpdate to Update and block_number to marker ([09df270](https://github.com/propeller-heads/tycho-simulation/commit/09df270f669ae96a1f25343523fa0cd9957cf6e7))
+
 ## [0.125.0](https://github.com/propeller-heads/tycho-simulation/compare/0.124.0...0.125.0) (2025-07-14)
 
 
