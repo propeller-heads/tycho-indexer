@@ -1,3 +1,13 @@
+## [0.125.0](https://github.com/propeller-heads/tycho-simulation/compare/0.124.0...0.125.0) (2025-07-14)
+
+
+### Features
+
+* Refactor CPMMProtocol trait into util functions ([3d290d4](https://github.com/propeller-heads/tycho-simulation/commit/3d290d4f835a36fcfc114bd115e0c2c2b98bedb4))
+* Rename Header to BlockHeader from tycho-common ([88ae9fe](https://github.com/propeller-heads/tycho-simulation/commit/88ae9fe4965f706902f9eb4e359baac8180056df))
+* upgrade tycho-common and tycho-client ([33376d7](https://github.com/propeller-heads/tycho-simulation/commit/33376d7df690a942a79e74df3cfc63fb5e691b89))
+* Use ProtocolSim from tycho-common ([a1b5242](https://github.com/propeller-heads/tycho-simulation/commit/a1b52427e00d7dbc623afc69bbcdcc7aecc5bce6))
+
 ## [0.124.0](https://github.com/propeller-heads/tycho-simulation/compare/0.123.0...0.124.0) (2025-07-11)
 
 
