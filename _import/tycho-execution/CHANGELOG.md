@@ -1,3 +1,10 @@
+## [0.110.0](https://github.com/propeller-heads/tycho-execution/compare/0.109.0...0.110.0) (2025-07-14)
+
+
+### Features
+
+* UniswapX encoding example ([2d4b0b9](https://github.com/propeller-heads/tycho-execution/commit/2d4b0b995b903e42c8b48f499cf406c8d5e46254))
+
 ## [0.109.0](https://github.com/propeller-heads/tycho-execution/compare/0.108.0...0.109.0) (2025-07-14)
 
 
