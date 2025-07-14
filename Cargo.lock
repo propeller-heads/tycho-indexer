@@ -8668,6 +8668,7 @@ dependencies = [
  "metrics-exporter-prometheus",
  "mini-moka",
  "mockall",
+ "mockito",
  "num-bigint",
  "num-traits",
  "num_cpus",
