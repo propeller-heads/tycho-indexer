@@ -39,7 +39,7 @@ use crate::{
     },
     protocol::{
         errors::InvalidSnapshotError,
-        models::{BlockUpdate, ProtocolComponent, TryFromWithBlock},
+        models::{ProtocolComponent, TryFromWithBlock, Update},
     },
 };
 
@@ -168,7 +168,7 @@ impl TychoStreamDecoder {
 
     /// Decodes a `FeedMessage` into a `BlockUpdate` containing the updated states of protocol
     /// components
-    pub async fn decode(&self, msg: FeedMessage) -> Result<BlockUpdate, StreamDecodeError> {
+    pub async fn decode(&self, msg: FeedMessage) -> Result<Update, StreamDecodeError> {
         // stores all states updated in this tick/msg
         let mut updated_states = HashMap::new();
         let mut new_pairs = HashMap::new();
@@ -640,8 +640,7 @@ impl TychoStreamDecoder {
         }
 
         // Send the tick with all updated states
-        Ok(BlockUpdate::new(block.number, updated_states, new_pairs)
-            .set_removed_pairs(removed_pairs))
+        Ok(Update::new(block.number, updated_states, new_pairs).set_removed_pairs(removed_pairs))
     }
 
     fn apply_update(

@@ -17,7 +17,7 @@ use crate::{
     evm::decoder::{StreamDecodeError, TychoStreamDecoder},
     protocol::{
         errors::InvalidSnapshotError,
-        models::{BlockUpdate, TryFromWithBlock},
+        models::{TryFromWithBlock, Update},
     },
 };
 
@@ -145,7 +145,7 @@ impl ProtocolStreamBuilder {
 
     pub async fn build(
         self,
-    ) -> Result<impl Stream<Item = Result<BlockUpdate, StreamDecodeError>>, StreamError> {
+    ) -> Result<impl Stream<Item = Result<Update, StreamDecodeError>>, StreamError> {
         let (_, rx) = self.stream_builder.build().await?;
         let decoder = Arc::new(self.decoder);
 
