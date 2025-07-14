@@ -1,5 +1,4 @@
 use std::{
-    any::Any,
     collections::{hash_map::Entry, HashMap, HashSet},
     future::Future,
     pin::Pin,
@@ -8,8 +7,6 @@ use std::{
 };
 
 use alloy::primitives::{Address, U256};
-use mockall::mock;
-use num_bigint::BigUint;
 use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{debug, error, info, warn};
@@ -17,11 +14,18 @@ use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader, FeedMess
 use tycho_common::{
     dto::{ChangeType, ProtocolStateDelta},
     models::{token::Token, Chain},
-    simulation::{
-        errors::{SimulationError, TransitionError},
-        protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
-    },
+    simulation::protocol_sim::{Balances, ProtocolSim},
     Bytes,
+};
+#[cfg(test)]
+use {
+    mockall::mock,
+    num_bigint::BigUint,
+    std::any::Any,
+    tycho_common::simulation::{
+        errors::{SimulationError, TransitionError},
+        protocol_sim::GetAmountOutResult,
+    },
 };
 
 use crate::{

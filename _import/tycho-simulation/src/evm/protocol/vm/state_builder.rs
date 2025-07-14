@@ -48,11 +48,11 @@ use crate::evm::{
 /// use tycho_simulation::evm::protocol::vm::state_builder::EVMPoolStateBuilder;
 /// use tycho_simulation::evm::protocol::vm::constants::BALANCER_V2;
 /// use tycho_client::feed::BlockHeader;
+/// use tycho_common::simulation::errors::SimulationError;
+/// use revm::state::Bytecode;
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), SimulationError> {
-///     use revm::state::Bytecode;
-/// use tycho_common::simulation::errors::SimulationError;
 /// let pool_id: String = "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
 ///
 ///     let tokens = vec![
