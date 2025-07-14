@@ -89,7 +89,7 @@ fn test_sequential_swap_usx() {
         .clone();
 
     let tycho_calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,

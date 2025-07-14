@@ -1,3 +1,27 @@
+## [0.108.0](https://github.com/propeller-heads/tycho-execution/compare/0.107.0...0.108.0) (2025-07-11)
+
+
+### Features
+
+* Upgrade tycho-common ([8458b46](https://github.com/propeller-heads/tycho-execution/commit/8458b4628e351daaf4d4a639afc5099903107ff6))
+* Upgrade tycho-common ([effc25c](https://github.com/propeller-heads/tycho-execution/commit/effc25c2d723107a56260190d6f7b5c7b8c42e4e))
+* Upgrade tycho-common ([cb6042e](https://github.com/propeller-heads/tycho-execution/commit/cb6042ea7974faee93c1a87ca84fc6677c999548))
+* Use Chain from tycho-core and remove current implementation ([2c25b5a](https://github.com/propeller-heads/tycho-execution/commit/2c25b5a18f06beb61d93530660d9530bf0c46b36))
+
+## [0.107.0](https://github.com/propeller-heads/tycho-execution/compare/0.106.0...0.107.0) (2025-07-10)
+
+
+### Features
+
+* (WIP) Handle approvals in UniswapXFiller ([e243667](https://github.com/propeller-heads/tycho-execution/commit/e243667f9ee8ec8e79fc5196da6960b19cd120b7))
+* Handle native ETH outputs ([3752c15](https://github.com/propeller-heads/tycho-execution/commit/3752c155ea89d4d2d91be98f2c5fa79264a45999))
+
+
+### Bug Fixes
+
+* silence slither on native address setting ([1b6a24f](https://github.com/propeller-heads/tycho-execution/commit/1b6a24fd75b91de7570f110e87d81ed081639bb7))
+* use encodePacked to encode if approval needed ([9e2f228](https://github.com/propeller-heads/tycho-execution/commit/9e2f228a470d163b71cac22a0f95116716490772))
+
 ## [0.106.0](https://github.com/propeller-heads/tycho-execution/compare/0.105.0...0.106.0) (2025-07-09)
 
 

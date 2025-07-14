@@ -4,10 +4,9 @@ pub mod encoding;
 use std::str::FromStr;
 
 use alloy::{primitives::B256, signers::local::PrivateKeySigner};
-use tycho_common::{models::Chain as TychoCommonChain, Bytes};
+use tycho_common::{models::Chain, Bytes};
 use tycho_execution::encoding::{
-    evm::encoder_builders::TychoRouterEncoderBuilder,
-    models::{Chain, UserTransferType},
+    evm::encoder_builders::TychoRouterEncoderBuilder, models::UserTransferType,
     tycho_encoder::TychoEncoder,
 };
 
@@ -16,7 +15,7 @@ pub fn router_address() -> Bytes {
 }
 
 pub fn eth_chain() -> Chain {
-    TychoCommonChain::Ethereum.into()
+    Chain::Ethereum
 }
 
 pub fn eth() -> Bytes {
