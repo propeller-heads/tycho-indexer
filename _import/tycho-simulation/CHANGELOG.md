@@ -1,3 +1,16 @@
+## [0.127.0](https://github.com/propeller-heads/tycho-simulation/compare/0.126.0...0.127.0) (2025-07-14)
+
+
+### Features
+
+* Add tycho-rfq crate ([9af9800](https://github.com/propeller-heads/tycho-simulation/commit/9af9800639747cd99067d61b9376e8eb2eafa17d))
+* Create a feature gate rfq ([3fdec2e](https://github.com/propeller-heads/tycho-simulation/commit/3fdec2eeb8261c70519efd28ace7ae86711d12e3))
+
+
+### Bug Fixes
+
+* Convert main.rs into a lib.rs ([4350197](https://github.com/propeller-heads/tycho-simulation/commit/4350197be015aaa3e9e20d9f566116aa5e0de589))
+
 ## [0.126.0](https://github.com/propeller-heads/tycho-simulation/compare/0.125.0...0.126.0) (2025-07-14)
 
 
