@@ -5,3 +5,4 @@ mod entrypoint_generator;
 mod euler;
 mod hook_dci;
 mod hook_orchestrator;
+mod rpc_metadata_provider;
