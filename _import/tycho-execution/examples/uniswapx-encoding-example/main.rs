@@ -46,7 +46,6 @@ fn main() {
     let encoder = TychoRouterEncoderBuilder::new()
         .chain(tycho_common::models::Chain::Ethereum)
         .user_transfer_type(UserTransferType::TransferFrom)
-        .executors_file_path("config/test_executor_addresses.json".to_string())
         .router_address(router_address.clone())
         .build()
         .expect("Failed to build encoder");
@@ -163,7 +162,7 @@ fn main() {
 
     let hex_calldata = encode(&full_calldata);
 
-    println!(" ====== Simple swap WETH -> USDC ======");
+    println!(" ====== Simple swap DAI -> USDT ======");
     println!(
         "The following callback data should be sent to the filler contract, along with the \
         encoded order and signature: {:?}",
