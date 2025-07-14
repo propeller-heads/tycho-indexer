@@ -1,0 +1,48 @@
+# Table of contents
+
+* [Quickstart](README.md)
+* [Overview](overview.md)
+* [Motivation](motivation.md)
+* [Concepts](concepts.md)
+* [How to Contribute](how-to-contribute/README.md)
+  * [Bounties](how-to-contribute/bounties.md)
+
+## For Solvers
+
+* [Indexer](for-solvers/indexer/README.md)
+  * [Tycho RPC](for-solvers/indexer/tycho-rpc.md)
+  * [Tycho Client](for-solvers/indexer/tycho-client/README.md)
+    * [Binary / CLI](for-solvers/indexer/tycho-client/binary-cli.md)
+    * [Rust Client](for-solvers/indexer/tycho-client/rust-client.md)
+    * [Python Client](for-solvers/indexer/tycho-client/python-client.md)
+* [Simulation](for-solvers/simulation.md)
+* [Execution](for-solvers/execution/README.md)
+  * [Encoding](for-solvers/execution/encoding.md)
+  * [Executing](for-solvers/execution/executing.md)
+  * [Contract Addresses](for-solvers/execution/contract-addresses.md)
+  * [Execution Venues](for-solvers/execution/execution-venues.md)
+* [Hosted Endpoints](for-solvers/hosted-endpoints.md)
+* [Supported Protocols](for-solvers/supported-protocols.md)
+
+## For DEXs
+
+* [Protocol Integration](for-dexs/protocol-integration/README.md)
+  * [Indexing](for-dexs/protocol-integration/indexing/README.md)
+    * [1. Setup](for-dexs/protocol-integration/indexing/1.-setup.md)
+    * [2. Implementation](for-dexs/protocol-integration/indexing/2.-implementation.md)
+    * [Common Patterns & Problems](for-dexs/protocol-integration/indexing/common-problems-and-patterns/README.md)
+      * [Tracking Components](for-dexs/protocol-integration/indexing/common-problems-and-patterns/tracking-components.md)
+      * [Tracking Contract Storage](for-dexs/protocol-integration/indexing/common-problems-and-patterns/tracking-contract-storage.md)
+      * [Dynamic Contract Indexing (DCI)](for-dexs/protocol-integration/indexing/common-problems-and-patterns/dynamic-contract-indexing-dci.md)
+      * [Normalizing relative ERC20 Balances](for-dexs/protocol-integration/indexing/common-problems-and-patterns/normalizing-relative-erc20-balances.md)
+      * [Tracking Contract Balances](for-dexs/protocol-integration/indexing/common-problems-and-patterns/tracking-contract-balances.md)
+      * [Custom protobuf models](for-dexs/protocol-integration/indexing/common-problems-and-patterns/custom-protobuf-models.md)
+    * [Best Practices](for-dexs/protocol-integration/indexing/best-practices.md)
+    * [Reserved Attributes](for-dexs/protocol-integration/indexing/reserved-attributes.md)
+  * [Simulation](for-dexs/protocol-integration/simulation/README.md)
+    * [Ethereum: Solidity](for-dexs/protocol-integration/simulation/ethereum-solidity.md)
+  * [Execution](for-dexs/protocol-integration/execution/README.md)
+    * [Code Architecture](for-dexs/protocol-integration/execution/code-architecture.md)
+  * [Testing](for-dexs/protocol-integration/3.-testing/README.md)
+    * [How to Run](for-dexs/protocol-integration/3.-testing/how-to-run.md)
+  * [Contributing guidelines](for-dexs/protocol-integration/contributing-guidelines.md)
