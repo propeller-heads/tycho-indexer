@@ -10,7 +10,7 @@ use crate::{
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 
-impl TryFromWithBlock<ComponentWithState> for UniswapV3State {
+impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV3State {
     type Error = InvalidSnapshotError;
 
     /// Decodes a `ComponentWithState` into a `UniswapV3State`. Errors with a `InvalidSnapshotError`

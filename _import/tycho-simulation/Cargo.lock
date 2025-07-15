@@ -8236,8 +8236,7 @@ dependencies = [
 [[package]]
 name = "tycho-client"
 version = "0.77.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9aea9bfdeda81cb4efdc7ceec4c54e01952593978567a072a7e67cf6d92f9196"
+source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=58a012848295bf748c1bed277f9557f1b1ede46c#58a012848295bf748c1bed277f9557f1b1ede46c"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8263,8 +8262,7 @@ dependencies = [
 [[package]]
 name = "tycho-common"
 version = "0.77.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ccbaa0c3005454bc4220020f6176a661ee35139c6df0e72e6999e5991bbe912"
+source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=58a012848295bf748c1bed277f9557f1b1ede46c#58a012848295bf748c1bed277f9557f1b1ede46c"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8287,9 +8285,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.108.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbd1c555cba24a27f20a90231c01fe75aa47a19ae414d6839097237422eef3cd"
+version = "0.110.0"
+source = "git+https://github.com/propeller-heads/tycho-execution.git?rev=7a7641eb5a46c1ded4c7986dce8486d61355a7f1#7a7641eb5a46c1ded4c7986dce8486d61355a7f1"
 dependencies = [
  "alloy",
  "chrono",

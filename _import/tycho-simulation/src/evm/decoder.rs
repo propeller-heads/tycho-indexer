@@ -10,7 +10,7 @@ use alloy::primitives::{Address, U256};
 use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{debug, error, info, warn};
-use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader, FeedMessage};
+use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage, HeaderLike};
 use tycho_common::{
     dto::{ChangeType, ProtocolStateDelta},
     models::{token::Token, Chain},
@@ -62,7 +62,7 @@ struct DecoderState {
 type DecodeFut =
     Pin<Box<dyn Future<Output = Result<Box<dyn ProtocolSim>, InvalidSnapshotError>> + Send + Sync>>;
 type AccountBalances = HashMap<Bytes, HashMap<Bytes, Bytes>>;
-type RegistryFn = dyn Fn(ComponentWithState, BlockHeader, AccountBalances, Arc<RwLock<DecoderState>>) -> DecodeFut
+type RegistryFn<H> = dyn Fn(ComponentWithState, H, AccountBalances, Arc<RwLock<DecoderState>>) -> DecodeFut
     + Send
     + Sync;
 type FilterFn = fn(&ComponentWithState) -> bool;
@@ -79,15 +79,30 @@ type FilterFn = fn(&ComponentWithState) -> bool;
 /// **Note:** The tokens provided during configuration will be used for decoding, ensuring
 /// efficient handling of protocol components. Protocol components containing tokens which are not
 /// included in this initial list, or added when applying deltas, will not be decoded.
-pub(super) struct TychoStreamDecoder {
+pub struct TychoStreamDecoder<H>
+where
+    H: HeaderLike,
+{
     state: Arc<RwLock<DecoderState>>,
     skip_state_decode_failures: bool,
     min_token_quality: u32,
-    registry: HashMap<String, Box<RegistryFn>>,
+    registry: HashMap<String, Box<RegistryFn<H>>>,
     inclusion_filters: HashMap<String, FilterFn>,
 }
 
-impl TychoStreamDecoder {
+impl<H> Default for TychoStreamDecoder<H>
+where
+    H: HeaderLike + Clone + Sync + Send + 'static,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<H> TychoStreamDecoder<H>
+where
+    H: HeaderLike + Clone + Sync + Send + 'static,
+{
     pub fn new() -> Self {
         Self {
             state: Arc::new(RwLock::new(DecoderState::default())),
@@ -125,13 +140,13 @@ impl TychoStreamDecoder {
     pub fn register_decoder<T>(&mut self, exchange: &str)
     where
         T: ProtocolSim
-            + TryFromWithBlock<ComponentWithState, Error = InvalidSnapshotError>
+            + TryFromWithBlock<ComponentWithState, H, Error = InvalidSnapshotError>
             + Send
             + 'static,
     {
         let decoder = Box::new(
             move |component: ComponentWithState,
-                  header: BlockHeader,
+                  header: H,
                   account_balances: AccountBalances,
                   state: Arc<RwLock<DecoderState>>| {
                 Box::pin(async move {
@@ -168,14 +183,14 @@ impl TychoStreamDecoder {
 
     /// Decodes a `FeedMessage` into a `BlockUpdate` containing the updated states of protocol
     /// components
-    pub async fn decode(&self, msg: FeedMessage) -> Result<Update, StreamDecodeError> {
+    pub async fn decode(&self, msg: FeedMessage<H>) -> Result<Update, StreamDecodeError> {
         // stores all states updated in this tick/msg
         let mut updated_states = HashMap::new();
         let mut new_pairs = HashMap::new();
         let mut removed_pairs = HashMap::new();
         let mut contracts_map = HashMap::new();
 
-        let block = msg
+        let header = msg
             .state_msgs
             .values()
             .next()
@@ -336,7 +351,7 @@ impl TychoStreamDecoder {
             info!("Updating engine with {} contracts from snapshots", storage_by_address.len());
             update_engine(
                 SHARED_TYCHO_DB.clone(),
-                block.clone(),
+                header.clone().block(),
                 Some(storage_by_address),
                 token_proxy_accounts,
             )
@@ -416,7 +431,7 @@ impl TychoStreamDecoder {
                     if !new_tokens_accounts.is_empty() {
                         update_engine(
                             SHARED_TYCHO_DB.clone(),
-                            block.clone(),
+                            header.clone().block(),
                             None,
                             new_tokens_accounts,
                         )
@@ -444,7 +459,7 @@ impl TychoStreamDecoder {
                     if let Some(state_decode_f) = self.registry.get(protocol.as_str()) {
                         match state_decode_f(
                             snapshot,
-                            block.clone(),
+                            header.clone(),
                             account_balances.clone(),
                             self.state.clone(),
                         )
@@ -544,8 +559,13 @@ impl TychoStreamDecoder {
 
                 let state_guard = self.state.read().await;
                 info!("Updating engine with {} contract deltas", deltas.account_updates.len());
-                update_engine(SHARED_TYCHO_DB.clone(), block.clone(), None, token_proxy_accounts)
-                    .await;
+                update_engine(
+                    SHARED_TYCHO_DB.clone(),
+                    header.clone().block(),
+                    None,
+                    token_proxy_accounts,
+                )
+                .await;
                 info!("Engine updated");
 
                 // Collect all pools related to the updated accounts
@@ -640,7 +660,8 @@ impl TychoStreamDecoder {
         }
 
         // Send the tick with all updated states
-        Ok(Update::new(block.number, updated_states, new_pairs).set_removed_pairs(removed_pairs))
+        Ok(Update::new(header.block_number_or_timestamp(), updated_states, new_pairs)
+            .set_removed_pairs(removed_pairs))
     }
 
     fn apply_update(
@@ -803,12 +824,13 @@ mod tests {
     use alloy::primitives::address;
     use mockall::predicate::*;
     use rstest::*;
+    use tycho_client::feed::BlockHeader;
     use tycho_common::{models::Chain, Bytes};
 
     use super::*;
     use crate::evm::protocol::uniswap_v2::state::UniswapV2State;
 
-    async fn setup_decoder(set_tokens: bool) -> TychoStreamDecoder {
+    async fn setup_decoder(set_tokens: bool) -> TychoStreamDecoder<BlockHeader> {
         let mut decoder = TychoStreamDecoder::new();
         decoder.register_decoder::<UniswapV2State>("uniswap_v2");
         if set_tokens {
@@ -830,7 +852,7 @@ mod tests {
         decoder
     }
 
-    fn load_test_msg(name: &str) -> FeedMessage {
+    fn load_test_msg(name: &str) -> FeedMessage<BlockHeader> {
         let project_root = env!("CARGO_MANIFEST_DIR");
         let asset_path = Path::new(project_root).join(format!("tests/assets/decoder/{name}.json"));
         let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
