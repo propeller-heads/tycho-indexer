@@ -83,5 +83,6 @@ export PRIVATE_KEY=<deploy-wallet-private-key>
 export BLOCKCHAIN_EXPLORER_API_KEY=<blockchain-explorer-api-key>
 ```
 
-2. Confirm that the variables `tychoRouter`, `uniswapXReactor` and `nativeToken` are correctly set in the script.
+2. Confirm that the variables `tychoRouter`, `uniswapXReactor` and `nativeToken` are correctly set in the script. Make
+   sure that the Uniswap X Reactor address matches the reactor you are targeting.
 3. Run `npx hardhat run scripts/deploy-uniswap-x-filler.js --network NETWORK`.
