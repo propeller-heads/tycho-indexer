@@ -244,6 +244,30 @@ pub trait MetadataRequestGenerator: Send + Sync {
     fn supported_metadata_types(&self) -> Vec<MetadataRequestType>;
 }
 
+pub trait MetadataResponseParser: Send + Sync {
+    /// Parses the response from the provider and returns the metadata value.
+    ///
+    /// # Arguments
+    ///
+    /// * `component` - The protocol component that the request is for
+    /// * `request_type` - The type of request that was made
+    /// * `response` - The response from the provider
+    ///
+    /// # Returns
+    ///
+    /// A `MetadataValue` that represents the parsed metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `MetadataError` if the response cannot be parsed.
+    fn parse_response(
+        &self,
+        component: &ProtocolComponent,
+        request_type: &MetadataRequestType,
+        response: &Value,
+    ) -> Result<MetadataValue, MetadataError>;
+}
+
 /// Registry that manages the mapping between protocol components and their metadata generators.
 ///
 /// This registry is the central configuration point for determining which generator should
