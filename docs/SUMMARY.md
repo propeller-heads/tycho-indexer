@@ -20,7 +20,7 @@
   * [Encoding](for-solvers/execution/encoding.md)
   * [Executing](for-solvers/execution/executing.md)
   * [Contract Addresses](for-solvers/execution/contract-addresses.md)
-  * [Execution Venues](for-solvers/execution/execution-venues.md)
+  * [Execution Venues](../tycho/for-solvers/execution/execution-venues.md)
 * [Hosted Endpoints](for-solvers/hosted-endpoints.md)
 * [Supported Protocols](for-solvers/supported-protocols.md)
 
