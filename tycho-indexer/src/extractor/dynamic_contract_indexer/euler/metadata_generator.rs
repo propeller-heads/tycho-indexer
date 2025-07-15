@@ -1,7 +1,14 @@
-use tycho_common::models::{blockchain::Block, protocol::ProtocolComponent};
+use std::collections::HashMap;
+
+use serde_json::{json, Value};
+use tycho_common::{
+    models::{blockchain::Block, protocol::ProtocolComponent},
+    Bytes,
+};
 
 use crate::extractor::dynamic_contract_indexer::component_metadata::{
-    MetadataError, MetadataRequest, MetadataRequestGenerator, MetadataRequestType, RpcTransport,
+    MetadataError, MetadataRequest, MetadataRequestGenerator, MetadataRequestType,
+    MetadataResponseParser, MetadataValue, RpcTransport,
 };
 
 pub struct EulerMetadataGenerator {
@@ -31,16 +38,23 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
 
         requests.push(balance_request);
 
+        let token_0 = component.tokens[0]
+            .to_string()
+            .split_off(2);
+        let token_1 = component.tokens[1]
+            .to_string()
+            .split_off(2);
+
         let limits_transport_0to1 = RpcTransport::new(
             self.rpc_url.clone(),
             "eth_call".to_string(),
-            vec![serde_json::json!([
-              {
-                "data": format!("0xaaed87a3000000000000000000000000{}000000000000000000000000{}", component.tokens[0], component.tokens[1]),
-                "to": component.id
-              },
-              format!("0x{:x}", block.number)
-            ])],
+            vec![
+                json!({
+                    "data": format!("0xaaed87a3000000000000000000000000{}000000000000000000000000{}", token_0, token_1),
+                    "to": component.id
+                }),
+                json!(format!("0x{:x}", block.number)),
+            ],
         );
         requests.push(MetadataRequest::new(
             format!(
@@ -58,13 +72,13 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
         let limits_transport_1to0 = RpcTransport::new(
             self.rpc_url.clone(),
             "eth_call".to_string(),
-            vec![serde_json::json!([
-              {
-                "data": format!("0xaaed87a3000000000000000000000000{}000000000000000000000000{}", component.tokens[1], component.tokens[0]),
-                "to": component.id
-              },
-              format!("0x{:x}", block.number)
-            ])],
+            vec![
+                json!({
+                  "data": format!("0xaaed87a3000000000000000000000000{}000000000000000000000000{}", token_1, token_0),
+                  "to": component.id
+                }),
+                json!(format!("0x{:x}", block.number)),
+            ],
         );
         requests.push(MetadataRequest::new(
             format!(
@@ -92,14 +106,13 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
         let balance_transport = RpcTransport::new(
             self.rpc_url.clone(),
             "eth_call".to_string(),
-            vec![serde_json::json!([
-                  {
+            vec![
+                json!({
                     "data": "0x0902f1ac", // getReserves()
                     "to": component.id
-                  },
-                  format!("0x{:x}", block.number)
-                ]
-            )],
+                }),
+                json!(format!("0x{:x}", block.number)),
+            ],
         );
         requests.push(MetadataRequest::new(
             format!("euler_balance_{}", component.id),
@@ -118,12 +131,83 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
     }
 }
 
+#[allow(dead_code)] //TODO: remove this once it's used
+struct EulerMetadataResponseParser;
+
+impl MetadataResponseParser for EulerMetadataResponseParser {
+    fn parse_response(
+        &self,
+        component: &ProtocolComponent,
+        request_type: &MetadataRequestType,
+        response: &Value,
+    ) -> Result<MetadataValue, MetadataError> {
+        match request_type {
+            MetadataRequestType::ComponentBalance { .. } => {
+                let token_0 = component
+                    .static_attributes
+                    .get("token_0")
+                    .ok_or(MetadataError::MissingData(
+                        "token_0 static attribute".to_string(),
+                        component.id.clone(),
+                    ))?;
+
+                let token_1 = component
+                    .static_attributes
+                    .get("token_1")
+                    .ok_or(MetadataError::MissingData(
+                        "token_1 static attribute".to_string(),
+                        component.id.clone(),
+                    ))?;
+
+                let res_string = serde_json::from_value::<String>(response.clone()).unwrap();
+                let res_str = res_string
+                    .strip_prefix("0x")
+                    .unwrap_or(&res_string);
+
+                let balance_0 = Bytes::from(&res_str[0..64]);
+                let balance_1 = Bytes::from(&res_str[64..128]);
+
+                let mut balances = HashMap::new();
+                balances.insert(token_0.clone(), balance_0);
+                balances.insert(token_1.clone(), balance_1);
+
+                let res = MetadataValue::Balances(balances);
+                Ok(res)
+            }
+            MetadataRequestType::Tvl => {
+                Err(MetadataError::GenerationFailed("Tvl is not supported for Euler".to_string()))
+            }
+            MetadataRequestType::Limits { token_pair } => {
+                let res_string = serde_json::from_value::<String>(response.clone()).unwrap();
+                let res_str = res_string
+                    .strip_prefix("0x")
+                    .unwrap_or(&res_string);
+
+                let limit_0 = Bytes::from(&res_str[0..64]);
+                let limit_1 = Bytes::from(&res_str[64..128]);
+
+                Ok(MetadataValue::Limits(vec![(token_pair[0].clone(), (limit_0, limit_1))]))
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use chrono::NaiveDateTime;
-    use tycho_common::{models::Chain, Bytes};
+    use mockito::Server;
+    use tycho_common::{
+        models::{Chain, ChangeType},
+        Bytes,
+    };
 
     use super::*;
+    use crate::extractor::dynamic_contract_indexer::{
+        component_metadata::{RequestProvider, RequestTransport},
+        rpc_metadata_provider::RPCMetadataProvider,
+    };
 
     fn create_test_component() -> ProtocolComponent {
         ProtocolComponent {
@@ -169,7 +253,7 @@ mod tests {
         assert_eq!(requests[0].transport.routing_key(), "rpc_default".to_string());
         assert_eq!(
             requests[0].transport.deduplication_id(),
-            "eth_call_[[{\"data\":\"0x0902f1ac\",\"to\":\"0xbeef\"},\"0x3039\"]]".to_string()
+            "eth_call_[{\"data\":\"0x0902f1ac\",\"to\":\"0xbeef\"},\"0x3039\"]".to_string()
         );
 
         // Limits request 0 to 1
@@ -187,7 +271,7 @@ mod tests {
         assert_eq!(requests[1].transport.routing_key(), "rpc_default".to_string());
         assert_eq!(
             requests[1].transport.deduplication_id(),
-            "eth_call_[[{\"data\":\"0xaaed87a30000000000000000000000000xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\",\"to\":\"0xbeef\"},\"0x3039\"]]".to_string()
+            "eth_call_[{\"data\":\"0xaaed87a3000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\",\"to\":\"0xbeef\"},\"0x3039\"]".to_string()
         );
 
         // Limits request 1 to 0
@@ -205,7 +289,7 @@ mod tests {
         assert_eq!(requests[2].transport.routing_key(), "rpc_default".to_string());
         assert_eq!(
             requests[2].transport.deduplication_id(),
-            "eth_call_[[{\"data\":\"0xaaed87a30000000000000000000000000xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000000xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\",\"to\":\"0xbeef\"},\"0x3039\"]]".to_string()
+            "eth_call_[{\"data\":\"0xaaed87a3000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\",\"to\":\"0xbeef\"},\"0x3039\"]".to_string()
         );
     }
 
@@ -230,7 +314,7 @@ mod tests {
         assert_eq!(requests[0].transport.routing_key(), "rpc_default".to_string());
         assert_eq!(
             requests[0].transport.deduplication_id(),
-            "eth_call_[[{\"data\":\"0x0902f1ac\",\"to\":\"0xbeef\"},\"0x3039\"]]".to_string()
+            "eth_call_[{\"data\":\"0x0902f1ac\",\"to\":\"0xbeef\"},\"0x3039\"]".to_string()
         );
     }
 
@@ -248,5 +332,294 @@ mod tests {
         assert_eq!(supported_types, expected_types);
     }
 
-    //TODO: add RPC execution tests when the orchestrator logic is implemented
+    #[tokio::test]
+    #[ignore = "This test requires a real RPC connection"]
+    async fn test_euler_metadata_roundtrip() {
+        let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
+        let generator = EulerMetadataGenerator::new(rpc_url);
+        let rpc_provider = RPCMetadataProvider::new(10);
+        let parser = EulerMetadataResponseParser;
+
+        let component = ProtocolComponent {
+            id: "0xc88b618c2c670c2e2a42e06b466b6f0e82a6e8a8".to_string(),
+            protocol_system: "euler_swap".to_string(),
+            protocol_type_name: "swap".to_string(),
+            chain: Chain::Ethereum,
+            tokens: vec![
+                Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
+                Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
+            ],
+            contract_addresses: vec![],
+            static_attributes: HashMap::from([
+                ("token_0".to_string(), Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")),
+                ("token_1".to_string(), Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")),
+            ]),
+            change: ChangeType::Creation,
+            creation_tx: Bytes::from(
+                "0x316209797c061712713d61cfa30c200dbe0211bec67d8ef3ddfef38c733bb1c0",
+            ),
+            created_at: NaiveDateTime::parse_from_str("2025-07-07T08:42:47", "%Y-%m-%dT%H:%M:%S")
+                .unwrap(),
+        };
+        let block = Block {
+            number: 22923196,
+            chain: Chain::Ethereum,
+            hash: Bytes::from("0x5dae08576aa4a6d8a84a677b93f6892c82e53bb05f6df6a2f968fc012b37136e"),
+            parent_hash: Bytes::from(
+                "0x274607019d5d34329809c455db8230c3ef2cf038c15ddacc79e36beb645da02d",
+            ),
+            ts: NaiveDateTime::parse_from_str("2025-07-15T07:49:59", "%Y-%m-%dT%H:%M:%S").unwrap(),
+        };
+
+        let requests = generator
+            .generate_requests(&component, &block)
+            .unwrap();
+
+        let id_to_request = requests
+            .iter()
+            .map(|request| (request.transport.deduplication_id(), request.clone()))
+            .collect::<HashMap<String, MetadataRequest>>();
+
+        let rpc_requests: Vec<Box<dyn RequestTransport>> = requests
+            .iter()
+            .map(|request| request.transport.clone_box())
+            .collect();
+
+        let results = rpc_provider
+            .execute_batch(&rpc_requests)
+            .await;
+
+        assert_eq!(results.len(), requests.len());
+
+        let mut parsed_results = vec![];
+        for (request_id, result) in results {
+            let request = id_to_request
+                .get(&request_id)
+                .expect("Request ID should be present in the request map");
+
+            let parsed_result = parser
+                .parse_response(
+                    &component,
+                    &request.request_type,
+                    &result.expect("Request should be successful"),
+                )
+                .unwrap();
+
+            parsed_results.push(parsed_result);
+        }
+
+        assert_eq!(parsed_results.len(), requests.len());
+
+        let expected_balances = {
+            let mut map = HashMap::new();
+            map.insert(
+                Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
+                Bytes::from("0x0000000000000000000000000000000000000000000000000000000030598d13"),
+            );
+            map.insert(
+                Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
+                Bytes::from("0x00000000000000000000000000000000000000000000000000013ccb6410e36b"),
+            );
+            map
+        };
+
+        let expected_value = MetadataValue::Balances(expected_balances);
+
+        assert!(
+            parsed_results.contains(&expected_value),
+            "Expected balances not found in parsed_results"
+        );
+
+        assert!(parsed_results.contains(&MetadataValue::Limits(vec![(
+            (
+                Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
+                Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
+            ),
+            (
+                Bytes::from("0x0000000000000000000000000000000000000000000000000000267d3cdc9cbf"),
+                Bytes::from("0x00000000000000000000000000000000000000000000000000013ccb6410e36b"),
+            )
+        )]),));
+
+        assert!(parsed_results.contains(&MetadataValue::Limits(vec![(
+            (
+                Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
+                Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
+            ),
+            (
+                Bytes::from("0x000000000000000000000000000000000000000000000ecaa543f127a7d92880"),
+                Bytes::from("0x0000000000000000000000000000000000000000000000000000000030598d13"),
+            )
+        )]),));
+    }
+
+    #[tokio::test]
+    async fn test_euler_metadata_roundtrip_mock() {
+        let mut server = Server::new_async().await;
+        let endpoint = server.url();
+
+        let generator = EulerMetadataGenerator::new(endpoint);
+        let rpc_provider = RPCMetadataProvider::new(10);
+        let parser = EulerMetadataResponseParser;
+
+        let component = ProtocolComponent {
+            id: "0xc88b618c2c670c2e2a42e06b466b6f0e82a6e8a8".to_string(),
+            protocol_system: "euler_swap".to_string(),
+            protocol_type_name: "swap".to_string(),
+            chain: Chain::Ethereum,
+            tokens: vec![
+                Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
+                Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
+            ],
+            contract_addresses: vec![],
+            static_attributes: HashMap::from([
+                ("token_0".to_string(), Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")),
+                ("token_1".to_string(), Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")),
+            ]),
+            change: ChangeType::Creation,
+            creation_tx: Bytes::from(
+                "0x316209797c061712713d61cfa30c200dbe0211bec67d8ef3ddfef38c733bb1c0",
+            ),
+            created_at: NaiveDateTime::parse_from_str("2025-07-07T08:42:47", "%Y-%m-%dT%H:%M:%S")
+                .unwrap(),
+        };
+        let block = Block {
+            number: 22923196,
+            chain: Chain::Ethereum,
+            hash: Bytes::from("0x5dae08576aa4a6d8a84a677b93f6892c82e53bb05f6df6a2f968fc012b37136e"),
+            parent_hash: Bytes::from(
+                "0x274607019d5d34329809c455db8230c3ef2cf038c15ddacc79e36beb645da02d",
+            ),
+            ts: NaiveDateTime::parse_from_str("2025-07-15T07:49:59", "%Y-%m-%dT%H:%M:%S").unwrap(),
+        };
+
+        let requests = generator
+            .generate_requests(&component, &block)
+            .unwrap();
+
+        // Create mock responses for each request
+        let mut mock_responses = vec![];
+        for request in &requests {
+            let transport = request
+                .transport
+                .as_any()
+                .downcast_ref::<RpcTransport>()
+                .unwrap();
+            let id = transport.id;
+
+            let response = match request.request_id.as_str() {
+                "euler_balance_0xc88b618c2c670c2e2a42e06b466b6f0e82a6e8a8" => {
+                    json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": "0x0000000000000000000000000000000000000000000000000000000030598d1300000000000000000000000000000000000000000000000000013ccb6410e36b0000000000000000000000000000000000000000000000000000000000000001"
+                    })
+                }
+                "euler_limits_0xc88b618c2c670c2e2a42e06b466b6f0e82a6e8a8_0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48_to_0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" => {
+                    // Mock limits response - empty for now
+                    json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": "0x0000000000000000000000000000000000000000000000000000267d3cdc9cbf00000000000000000000000000000000000000000000000000013ccb6410e36b"
+                    })
+                }
+                "euler_limits_0xc88b618c2c670c2e2a42e06b466b6f0e82a6e8a8_0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2_to_0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" => {
+                    json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": "0x000000000000000000000000000000000000000000000ecaa543f127a7d928800000000000000000000000000000000000000000000000000000000030598d13"
+                    })
+                }
+                _ => panic!("Unexpected request ID: {}", request.request_id),
+            };
+
+            mock_responses.push(response);
+        }
+        let batch_responses: Vec<serde_json::Value> = mock_responses;
+
+        let mock = server
+            .mock("POST", "/")
+            .with_body(serde_json::to_string(&batch_responses).unwrap())
+            .expect(1)
+            .create_async()
+            .await;
+
+        let id_to_request = requests
+            .iter()
+            .map(|request| (request.transport.deduplication_id(), request.clone()))
+            .collect::<HashMap<String, MetadataRequest>>();
+
+        let rpc_requests: Vec<Box<dyn RequestTransport>> = requests
+            .iter()
+            .map(|request| request.transport.clone_box())
+            .collect();
+
+        let results = rpc_provider
+            .execute_batch(&rpc_requests)
+            .await;
+
+        // Assertions
+        mock.assert();
+
+        let mut parsed_results = vec![];
+        for (request_id, result) in results {
+            let request = id_to_request
+                .get(&request_id)
+                .expect("Request ID should be present in the request map");
+
+            let parsed_result = parser
+                .parse_response(
+                    &component,
+                    &request.request_type,
+                    &result.expect("Request should be successful"),
+                )
+                .unwrap();
+
+            parsed_results.push(parsed_result);
+        }
+
+        assert_eq!(parsed_results.len(), requests.len());
+
+        let expected_balances = {
+            let mut map = HashMap::new();
+            map.insert(
+                Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
+                Bytes::from("0x0000000000000000000000000000000000000000000000000000000030598d13"),
+            );
+            map.insert(
+                Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
+                Bytes::from("0x00000000000000000000000000000000000000000000000000013ccb6410e36b"),
+            );
+            map
+        };
+
+        let expected_value = MetadataValue::Balances(expected_balances);
+
+        assert!(
+            parsed_results.contains(&expected_value),
+            "Expected balances not found in parsed_results"
+        );
+
+        assert!(parsed_results.contains(&MetadataValue::Limits(vec![(
+            (
+                Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
+                Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
+            ),
+            (
+                Bytes::from("0x0000000000000000000000000000000000000000000000000000267d3cdc9cbf"),
+                Bytes::from("0x00000000000000000000000000000000000000000000000000013ccb6410e36b"),
+            )
+        )]),));
+
+        assert!(parsed_results.contains(&MetadataValue::Limits(vec![(
+            (
+                Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
+                Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
+            ),
+            (
+                Bytes::from("0x000000000000000000000000000000000000000000000ecaa543f127a7d92880"),
+                Bytes::from("0x0000000000000000000000000000000000000000000000000000000030598d13"),
+            )
+        )]),));
+    }
 }

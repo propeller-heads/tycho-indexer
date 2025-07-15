@@ -1,6 +1,6 @@
 #![allow(dead_code)] // TODO: Remove when implementation is complete
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -43,6 +43,7 @@ pub struct ComponentTracingMetadata {
 
 type RequestId = String;
 // Represents a request to a provider.
+#[cfg_attr(test, derive(Debug))]
 pub struct MetadataRequest {
     pub request_id: RequestId,
     pub component_id: ComponentId,
@@ -93,7 +94,7 @@ pub enum MetadataRequestType {
 /// Common implementations include:
 /// - `DefiLLamaHttpTransport`: For REST API calls to Defillama API (e.g., DeFiLlama TVL data)
 /// - `RpcTransport`: For JSON-RPC calls to blockchain nodes
-pub trait RequestTransport: Send + Sync {
+pub trait RequestTransport: Send + Sync + Debug {
     /// Returns a routing key that identifies which provider should handle this request.
     ///
     /// The routing key groups requests by their destination provider, enabling efficient
@@ -484,7 +485,7 @@ pub struct MetadataResult {
 }
 
 // Simple enum for actual metadata values
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum MetadataValue {
     Balances(HashMap<Address, Bytes>),
     Limits(Vec<((Address, Address), (Bytes, Bytes))>),
