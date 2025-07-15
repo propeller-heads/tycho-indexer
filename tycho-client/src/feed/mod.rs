@@ -35,7 +35,7 @@ pub mod synchronizer;
 /// or simplified structures that only provide a timestamp (e.g., for RFQ logic).
 pub trait HeaderLike {
     fn block(self) -> Option<BlockHeader>;
-    fn ts(self) -> u64;
+    fn block_number_or_timestamp(self) -> u64;
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Eq, Hash)]
@@ -64,8 +64,8 @@ impl HeaderLike for BlockHeader {
         Some(self)
     }
 
-    fn ts(self) -> u64 {
-        self.timestamp
+    fn block_number_or_timestamp(self) -> u64 {
+        self.number
     }
 }
 
