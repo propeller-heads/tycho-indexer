@@ -13,7 +13,7 @@ pub struct GetAmountOutParams {
 }
 
 pub struct TimestampHeader {
-    timestamp: u64,
+    pub timestamp: u64,
 }
 
 impl HeaderLike for TimestampHeader {
