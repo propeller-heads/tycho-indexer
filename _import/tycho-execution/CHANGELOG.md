@@ -1,3 +1,15 @@
+## [0.111.0](https://github.com/propeller-heads/tycho-execution/compare/0.110.0...0.111.0) (2025-07-15)
+
+
+### Features
+
+* Uniswap X deployment script ([efa6fae](https://github.com/propeller-heads/tycho-execution/commit/efa6fae0e8f3884849dc7ec51f0e32483b483836))
+
+
+### Bug Fixes
+
+* Read Tycho Router addresses from file ([d2d8b29](https://github.com/propeller-heads/tycho-execution/commit/d2d8b290560a435e4b1cac1e3293fe8fd6878091))
+
 ## [0.110.0](https://github.com/propeller-heads/tycho-execution/compare/0.109.0...0.110.0) (2025-07-14)
 
 
