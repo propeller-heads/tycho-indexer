@@ -13,7 +13,7 @@ use tycho_common::dto::{Chain, ExtractorIdentity, PaginationParams, ProtocolSyst
 use crate::{
     deltas::DeltasClient,
     feed::{
-        component_tracker::ComponentFilter, synchronizer::ProtocolStateSynchronizer,
+        component_tracker::ComponentFilter, synchronizer::ProtocolStateSynchronizer, BlockHeader,
         BlockSynchronizer, FeedMessage,
     },
     rpc::RPCClient,
@@ -133,7 +133,9 @@ impl TychoStreamBuilder {
 
     /// Builds and starts the Tycho client, connecting to the Tycho server and
     /// setting up the synchronization of exchange components.
-    pub async fn build(self) -> Result<(JoinHandle<()>, Receiver<FeedMessage>), StreamError> {
+    pub async fn build(
+        self,
+    ) -> Result<(JoinHandle<()>, Receiver<FeedMessage<BlockHeader>>), StreamError> {
         if self.exchanges.is_empty() {
             return Err(StreamError::SetUpError(
                 "At least one exchange must be registered.".to_string(),
