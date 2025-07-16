@@ -11,7 +11,9 @@ use crate::rfq::{
 #[async_trait]
 pub trait RFQClient: Send + Sync {
     /// Returns a stream of updates tagged with the provider name.
-    fn stream(&self) -> BoxStream<'static, (String, StateSyncMessage<TimestampHeader>)>;
+    fn stream(
+        &self,
+    ) -> BoxStream<'static, Result<(String, StateSyncMessage<TimestampHeader>), RFQError>>;
 
     // This method is responsible for fetching the binding quote from the RFQ API. Use sender and
     // receiver from GetAmountOutParams to ask for the quote

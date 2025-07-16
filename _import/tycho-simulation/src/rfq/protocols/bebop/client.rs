@@ -136,7 +136,9 @@ impl BebopClient {
 
 #[async_trait]
 impl RFQClient for BebopClient {
-    fn stream(&self) -> BoxStream<'static, (String, StateSyncMessage<TimestampHeader>)> {
+    fn stream(
+        &self,
+    ) -> BoxStream<'static, Result<(String, StateSyncMessage<TimestampHeader>), RFQError>> {
         let pairs = self.pairs.clone();
         let url = self.url.clone();
         let tvl_threshold = self.tvl;
@@ -147,97 +149,146 @@ impl RFQClient for BebopClient {
         Box::pin(async_stream::stream! {
             use http::Request;
             use tokio_tungstenite::tungstenite::handshake::client::generate_key;
-
-            let request = Request::builder()
-                .method("GET")
-                .uri(&url)
-                .header("Host", "api.bebop.xyz")
-                .header("Upgrade", "websocket")
-                .header("Connection", "Upgrade")
-                .header("Sec-WebSocket-Key", generate_key())
-                .header("Sec-WebSocket-Version", "13")
-                .header("name", &name)
-                .header("Authorization", &authorization)
-                .body(())
-                .expect("Failed to build request");
-
-            // Connect to Bebop WebSocket with custom headers
-            let (ws_stream, _) = match connect_async_with_config(request, None, false).await {
-                Ok(connection) => connection,
-                Err(e) => {
-                    tracing::error!("Failed to connect to Bebop WebSocket: {}", e);
-                    return;
-                }
-            };
-
-            let (_, mut ws_receiver) = ws_stream.split();
+            use tokio::time::{sleep, Duration};
 
             let mut current_components: HashMap<String, ComponentWithState> = HashMap::new();
+            let mut reconnect_attempts = 0;
+            const MAX_RECONNECT_ATTEMPTS: u32 = 10;
 
-            while let Some(msg) = ws_receiver.next().await {
-                match msg {
-                    Ok(Message::Text(text)) => {
-                        if let Ok(price_data_map) = serde_json::from_str::<BebopPriceMessage>(&text) {
-                            for (pair, price_data) in price_data_map {
-                                if pairs.contains(&pair) {
+            loop {
+                let request = Request::builder()
+                    .method("GET")
+                    .uri(&url)
+                    .header("Host", "api.bebop.xyz")
+                    .header("Upgrade", "websocket")
+                    .header("Connection", "Upgrade")
+                    .header("Sec-WebSocket-Key", generate_key())
+                    .header("Sec-WebSocket-Version", "13")
+                    .header("name", &name)
+                    .header("Authorization", &authorization)
+                    .body(())
+                    .expect("Failed to build request");
 
-                                    let tvl = client.calculate_tvl(&price_data);
-                                    if tvl < tvl_threshold {
-                                        continue;
+                // Connect to Bebop WebSocket with custom headers
+                let (ws_stream, _) = match connect_async_with_config(request, None, false).await {
+                    Ok(connection) => {
+                        tracing::info!("Successfully connected to Bebop WebSocket");
+                        reconnect_attempts = 0; // Reset counter on successful connection
+                        connection
+                    },
+                    Err(e) => {
+                        reconnect_attempts += 1;
+                        tracing::error!("Failed to connect to Bebop WebSocket (attempt {}): {}", reconnect_attempts, e);
+
+                        if reconnect_attempts >= MAX_RECONNECT_ATTEMPTS {
+                            yield Err(RFQError::ConnectionError(format!("Failed to connect after {} attempts: {}", MAX_RECONNECT_ATTEMPTS, e)));
+                            return;
+                        }
+
+                        let backoff_duration = Duration::from_secs(2_u64.pow(reconnect_attempts.min(5)));
+                        tracing::info!("Retrying connection in {} seconds...", backoff_duration.as_secs());
+                        sleep(backoff_duration).await;
+                        continue;
+                    }
+                };
+
+                let (_, mut ws_receiver) = ws_stream.split();
+
+                // Message processing loop
+                while let Some(msg) = ws_receiver.next().await {
+                    match msg {
+                        Ok(Message::Text(text)) => {
+                            match serde_json::from_str::<BebopPriceMessage>(&text) {
+                                Ok(price_data_map) => {
+                                    let mut new_components = HashMap::new();
+                                    let mut latest_timestamp = 0u64;
+
+                                    // Process all pairs from this WebSocket message
+                                    for (pair, price_data) in price_data_map {
+                                        if pairs.contains(&pair) {
+                                            let tvl = client.calculate_tvl(&price_data);
+                                            if tvl < tvl_threshold {
+                                                continue;
+                                            }
+
+                                            let component_id = format!("bebop_{}", pair.replace("/", "_"));
+
+                                            let tokens;
+                                            if let Some((token0, token1)) = pair.split_once('/') {
+                                                tokens = vec![token0.as_bytes().to_vec().into(), token1.as_bytes().to_vec().into()]
+                                            } else {
+                                                continue;
+                                            };
+
+                                            let component_with_state = client.create_component_with_state(component_id.clone(), tokens, &price_data, tvl);
+                                            new_components.insert(component_id, component_with_state);
+
+                                            // Track the latest timestamp across all pairs
+                                            let timestamp = price_data.last_update_ts as u64;
+                                            if timestamp > latest_timestamp {
+                                                latest_timestamp = timestamp;
+                                            }
+                                        }
                                     }
 
-                                    let component_id = format!("bebop_{}", pair.replace("/", "_"));
+                                    // Only yield a message if we have components to update
+                                    if !new_components.is_empty() {
+                                        // Find components that were removed (existed before but not in this update)
+                                        // TODO also check for components with no bids or asks here
+                                        let removed_components: Vec<String> = current_components.keys()
+                                            .filter(|id| !new_components.contains_key(*id))
+                                            .cloned()
+                                            .collect();
 
-                                    let tokens;
-                                    if let Some((token0, token1)) = pair.split_once('/') {
-                                        tokens = vec![token0.as_bytes().to_vec().into(), token1.as_bytes().to_vec().into()]
-                                    } else {
-                                        tokens = vec![] // TODO raise error?
-                                    };
+                                        // Update our current state
+                                        current_components = new_components.clone();
 
-                                    let component_with_state = client.create_component_with_state(component_id.clone(), tokens, &price_data, tvl);
+                                        let snapshot = Snapshot {
+                                            states: new_components,
+                                            vm_storage: HashMap::new(),
+                                        };
 
-                                    let new_components = HashMap::from([(component_id.clone(), component_with_state)]);
+                                        let msg = StateSyncMessage::<TimestampHeader> {
+                                            header: TimestampHeader { timestamp: latest_timestamp },
+                                            snapshots: snapshot,
+                                            deltas: None,
+                                            removed_components: removed_components.into_iter().map(|id| (id, Default::default())).collect(),
+                                        };
 
-                                    let removed_components: Vec<String> = current_components.keys()
-                                        .filter(|id| !new_components.contains_key(*id))
-                                        .cloned()
-                                        .collect();
-
-                                    current_components = new_components.clone();
-
-                                    let snapshot = Snapshot {
-                                        states: new_components,
-                                        vm_storage: HashMap::new(),
-                                    };
-
-                                    let timestamp = price_data.last_update_ts as u64;
-                                    let msg = StateSyncMessage::<TimestampHeader> {
-                                        header: TimestampHeader { timestamp },
-                                        snapshots: snapshot,
-                                        deltas: None,
-                                        removed_components: removed_components.into_iter().map(|id| (id, Default::default())).collect(),
-                                    };
-
-                                    yield (component_id, msg);
+                                        // Yield one message containing all updated pairs
+                                        yield Ok(("bebop_all_pairs".to_string(), msg));
+                                    }
+                                },
+                                Err(e) => {
+                                    tracing::error!("Failed to parse websocket message: {}", e);
+                                    yield Err(RFQError::ParsingError(format!("Failed to parse message: {}", e)));
+                                    break;
                                 }
                             }
-                        } else {
-                            // TODO use proper error handling instead of tracing
-                            tracing::error!("Failed to parse websocket message.");
+                        }
+                        Ok(Message::Close(_)) => {
+                            tracing::info!("WebSocket connection closed by server");
                             break;
                         }
+                        Err(e) => {
+                            tracing::error!("WebSocket error: {}", e);
+                            break;
+                        }
+                        _ => {} // Ignore other message types
                     }
-                    Ok(Message::Close(_)) => {
-                        tracing::info!("WebSocket connection closed");
-                        break;
-                    }
-                    Err(e) => {
-                        tracing::error!("WebSocket error: {}", e);
-                        break;
-                    }
-                    _ => {} // Ignore other message types
                 }
+
+                // If we're here, the message loop exited - always attempt to reconnect
+                reconnect_attempts += 1;
+                if reconnect_attempts >= MAX_RECONNECT_ATTEMPTS {
+                    yield Err(RFQError::ConnectionError(format!("Connection failed after {} attempts", MAX_RECONNECT_ATTEMPTS)));
+                    return;
+                }
+
+                let backoff_duration = Duration::from_secs(2_u64.pow(reconnect_attempts.min(5)));
+                tracing::info!("Reconnecting in {} seconds (attempt {})...", backoff_duration.as_secs(), reconnect_attempts);
+                sleep(backoff_duration).await;
+                // Continue to the next iteration of the main loop
             }
         })
     }
@@ -289,69 +340,75 @@ mod tests {
             let mut message_count = 0;
             let max_messages = 5;
 
-            while let Some((component_id, msg)) = stream.next().await {
-                println!("Received message for component: {}", component_id);
-                println!("Timestamp: {}", msg.header.timestamp);
-                println!("Snapshots states count: {}", msg.snapshots.states.len());
+            while let Some(result) = stream.next().await {
+                match result {
+                    Ok((component_id, msg)) => {
+                        println!("Received message with ID: {component_id}");
 
-                assert!(!component_id.is_empty());
-                assert_eq!(component_id, "bebop_0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2_0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
-                assert!(msg.header.timestamp > 0);
-                assert!(!msg.snapshots.states.is_empty());
+                        assert!(!component_id.is_empty());
+                        assert_eq!(component_id, "bebop_all_pairs");
+                        assert!(msg.header.timestamp > 0);
+                        assert!(!msg.snapshots.states.is_empty());
 
-                let snapshot = &msg.snapshots;
-                assert!(!snapshot.states.is_empty());
+                        let snapshot = &msg.snapshots;
+                        assert!(!snapshot.states.is_empty());
 
-                for (id, component_with_state) in &snapshot.states {
-                    assert_eq!(id, &component_id);
-                    assert_eq!(
-                        component_with_state
-                            .component
-                            .protocol_system,
-                        "rfq:bebop"
-                    );
-                    assert_eq!(
-                        component_with_state
-                            .component
-                            .protocol_type_name,
-                        "bebop_pool"
-                    );
-                    assert_eq!(component_with_state.component.chain, Chain::Ethereum);
+                        println!("Received {} components in this message", snapshot.states.len());
 
-                    let attributes = &component_with_state.state.attributes;
-                    if attributes.contains_key("best_bid_price") {
-                        assert!(attributes.contains_key("best_bid_size"));
+                        for (id, component_with_state) in &snapshot.states {
+                            // Expect component ID to be in format "bebop_{pair}"
+                            assert!(id.starts_with("bebop_"));
+                            assert_eq!(
+                                component_with_state
+                                    .component
+                                    .protocol_system,
+                                "rfq:bebop"
+                            );
+                            assert_eq!(
+                                component_with_state
+                                    .component
+                                    .protocol_type_name,
+                                "bebop_pool"
+                            );
+                            assert_eq!(component_with_state.component.chain, Chain::Ethereum);
+
+                            let attributes = &component_with_state.state.attributes;
+
+                            // TODO check that byte string is nonempty
+                            assert!(attributes.contains_key("bids"));
+                            assert!(attributes.contains_key("asks"));
+
+                            if let Some(tvl) = component_with_state.component_tvl {
+                                assert!(tvl >= 0.0);
+                                println!("Component {id} TVL: ${tvl:.2}");
+                            }
+                        }
+
+                        message_count += 1;
+                        if message_count >= max_messages {
+                            break;
+                        }
                     }
-                    if attributes.contains_key("best_ask_price") {
-                        assert!(attributes.contains_key("best_ask_size"));
+                    Err(e) => {
+                        panic!("Stream error: {}", e);
                     }
-
-                    if let Some(tvl) = component_with_state.component_tvl {
-                        assert!(tvl >= 0.0);
-                        println!("Component TVL: ${:.2}", tvl);
-                    }
-                }
-
-                message_count += 1;
-                if message_count >= max_messages {
-                    break;
                 }
             }
 
             assert!(message_count > 0, "Should have received at least one message");
-            println!("Successfully received {} messages", message_count);
+            println!("Successfully received {message_count} messages");
         })
         .await;
 
         match result {
             Ok(_) => println!("Test completed successfully"),
-            Err(_) => panic!("Test timed out - no messages received within 30 seconds"),
+            Err(_) => panic!("Test timed out - no messages received within 10 seconds"),
         }
     }
 
     #[test]
     fn test_calculate_tvl() {
-        let ws_user = String::from("propellerheads");
+        let ws_user = String::from("tycho");
         let ws_key = String::from("mock-key");
         let client = BebopClient::new(Chain::Ethereum, vec![], 0.0, ws_user, ws_key);
 
