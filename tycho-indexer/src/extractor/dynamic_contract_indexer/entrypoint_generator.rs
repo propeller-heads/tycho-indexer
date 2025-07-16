@@ -2,17 +2,26 @@
 
 // This struct already exists, duplicated here for convenience.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
-use alloy_primitives::U256;
-use alloy_sol_types::sol;
+use alloy_primitives::{hex, U256};
+use alloy_sol_types::{
+    private::{
+        primitives::aliases::{I24, U24},
+        Address as SolAddress, Bytes as SolBytes,
+    },
+    sol, SolValue,
+};
 use num_bigint::BigInt;
 use num_traits::Zero;
 use tonic::async_trait;
 use tycho_common::{
     keccak256,
     models::{
-        blockchain::{Block, EntryPointWithTracingParams},
+        blockchain::{
+            AccountOverrides, Block, EntryPoint, EntryPointWithTracingParams, RPCTracerParams,
+            StorageOverride, TracingParams,
+        },
         protocol::ProtocolComponent,
         Address,
     },
@@ -49,7 +58,7 @@ sol! {
 
 pub struct HookEntrypointConfig {
     // Ideal number of entrypoints to generate for each component.
-    pub sample_size: Option<usize>,
+    pub max_sample_size: Option<usize>,
     // Minimum number of entrypoints to generate for each component.
     pub min_samples: usize,
     // Router address to use for the entrypoints.
@@ -57,6 +66,10 @@ pub struct HookEntrypointConfig {
     // If not provided, should use a default address. Could be defined by a custom Hook
     // Orchestrator.
     pub sender: Option<Address>,
+    // Router bytecode to use for state overrides. If not provided, uses a placeholder.
+    pub router_code: Option<Bytes>,
+    // Pool manager address
+    pub pool_manager: Option<Address>,
 }
 pub struct HookEntrypointData {
     pub hook_address: Address,
@@ -71,7 +84,7 @@ pub struct HookTracerContext {
     block: Block,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EntrypointGenerationError {
     AmountsEstimationFailed(String),
     EntrypointGenerationFailed(String),
@@ -297,11 +310,223 @@ impl SwapAmountEstimator for DefaultSwapAmountEstimator {
     }
 }
 
+pub struct DefaultHookEntrypointGenerator<E: SwapAmountEstimator> {
+    config: HookEntrypointConfig,
+    estimator: E,
+}
+
+impl<E: SwapAmountEstimator> DefaultHookEntrypointGenerator<E> {
+    pub fn new(estimator: E) -> Self {
+        Self {
+            config: HookEntrypointConfig {
+                max_sample_size: Some(4),
+                min_samples: 1,
+                router_address: None,
+                sender: None,
+                router_code: None,
+                pool_manager: None,
+            },
+            estimator,
+        }
+    }
+}
+
+#[async_trait]
+impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
+    for DefaultHookEntrypointGenerator<E>
+{
+    fn set_config(&mut self, config: HookEntrypointConfig) {
+        self.config = config;
+    }
+
+    async fn generate_entrypoints(
+        &self,
+        data: &HookEntrypointData,
+        _context: &HookTracerContext,
+    ) -> Result<Vec<EntryPointWithTracingParams>, EntrypointGenerationError> {
+        let tokens = data.component.tokens.clone();
+
+        let router_address = self
+            .config
+            .router_address
+            .clone()
+            .unwrap_or_else(|| Address::from(hex!("1f31095ECb8dD97f7133cC9a4dD208b8645c4E24")));
+
+        let max_sample_size = self.config.max_sample_size.unwrap_or(4);
+        let min_samples = self.config.min_samples;
+
+        let mut entrypoints = Vec::new();
+
+        let swap_amounts = self
+            .estimator
+            .estimate_swap_amounts(&data.component_metadata, &tokens)
+            .await?;
+
+        for ((token0, token1), amounts) in swap_amounts.iter() {
+            let currency0 = SolAddress::from_slice(token0.as_ref());
+            let currency1 = SolAddress::from_slice(token1.as_ref());
+            let hooks = SolAddress::from_slice(data.hook_address.as_ref());
+
+            let fee = u32::from(
+                data.component
+                    .static_attributes
+                    .get("fee")
+                    .expect("Fee attribute not found for component")
+                    .clone(),
+            );
+
+            let tick_spacing = i32::from(
+                data.component
+                    .static_attributes
+                    .get("tickSpacing")
+                    .expect("TickSpacing attribute not found for component")
+                    .clone(),
+            );
+
+            let pool_key = PoolKey {
+                currency0,
+                currency1,
+                fee: U24::try_from(fee).expect("Fee value too large for U24"),
+                tickSpacing: I24::try_from(tick_spacing)
+                    .expect("TickSpacing value out of range for I24"),
+                hooks,
+            };
+
+            let is_zero_for_one = token0 < token1;
+
+            let amounts_to_use = if amounts.len() >= max_sample_size {
+                amounts
+                    .iter()
+                    .take(max_sample_size)
+                    .collect::<Vec<_>>()
+            } else if amounts.len() >= min_samples {
+                amounts.iter().collect::<Vec<_>>()
+            } else {
+                // TODO: Raise error?
+                continue;
+            };
+
+            for amount_bytes in amounts_to_use {
+                let amount_u256 = U256::from_be_slice(amount_bytes.as_ref());
+                let amount_in = u128::try_from(amount_u256).map_err(|_| {
+                    EntrypointGenerationError::EntrypointGenerationFailed(
+                        "Amount too large for u128".to_string(),
+                    )
+                })?;
+
+                let swap_params = ExactInputSingleParams {
+                    poolKey: pool_key.clone(),
+                    zeroForOne: is_zero_for_one,
+                    amountIn: amount_in,
+                    amountOutMinimum: 0,
+                    // We only support composable hooks, meaning hook data is not supported atm.
+                    hookData: Default::default(),
+                };
+
+                let plan = Plan {
+                    actions: SolBytes::from(vec![6u8, 12u8, 15u8]),
+                    params: vec![
+                        SolBytes::from(swap_params.abi_encode()),
+                        // Token In // amount in
+                        SolBytes::from((currency0, amount_in).abi_encode()),
+                        // Token Out // amount out
+                        SolBytes::from((currency1, 0u128).abi_encode()),
+                    ],
+                };
+
+                let mut calldata = vec![0x09, 0xc5, 0xea, 0xbe];
+                calldata.extend(plan.abi_encode());
+
+                let overwrites = ERC6909Overwrites::default();
+                let balance_slot = overwrites.balance_slot(router_address.clone(), token0.clone());
+
+                let pool_manager = self
+                    .config
+                    .pool_manager
+                    .clone()
+                    .unwrap_or_else(|| {
+                        Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90"))
+                    });
+
+                let router_code = self
+                    .config
+                    .router_code
+                    .clone()
+                    .unwrap_or_else(|| {
+                        // Default placeholder bytecode when no router code is provided
+                        // This should be replaced with actual compiled V4MiniRouter bytecode
+                        Bytes::from(vec![
+                            0x60, 0x80, 0x60, 0x40, 0x52, 0x34, 0x80, 0x15, 0x61, 0x00, 0x10, 0x57,
+                            0x60, 0x00, 0x80, 0xfd,
+                        ])
+                    });
+
+                let mut state_overrides = BTreeMap::new();
+
+                state_overrides.insert(
+                    router_address.clone(),
+                    AccountOverrides { slots: None, native_balance: None, code: Some(router_code) },
+                );
+
+                let mut storage_diff = BTreeMap::new();
+                storage_diff.insert(
+                    Bytes::from(
+                        balance_slot
+                            .to_be_bytes::<32>()
+                            .as_slice(),
+                    ),
+                    Bytes::from(
+                        U256::from(amount_in)
+                            .to_be_bytes::<32>()
+                            .as_slice(),
+                    ),
+                );
+
+                state_overrides.insert(
+                    pool_manager,
+                    AccountOverrides {
+                        slots: Some(StorageOverride::Diff(storage_diff)),
+                        native_balance: None,
+                        code: None,
+                    },
+                );
+
+                let entry_point = EntryPointWithTracingParams::new(
+                    EntryPoint::new(
+                        // TODO: Properly set Entrypoint external_id - maybe there's a helper for
+                        // that
+                        format!("hook_{}_{}", data.hook_address, amount_in),
+                        router_address.clone(),
+                        "0x09c5eabe".to_string(),
+                    ),
+                    TracingParams::RPCTracer(
+                        RPCTracerParams::new(None, Bytes::from(calldata))
+                            .with_state_overrides(state_overrides),
+                    ),
+                );
+
+                entrypoints.push(entry_point);
+            }
+        }
+
+        if entrypoints.is_empty() {
+            return Err(EntrypointGenerationError::NoDataAvailable(
+                "No entrypoints could be generated".to_string(),
+            ));
+        }
+
+        Ok(entrypoints)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
-    use tycho_common::{models::TxHash, Bytes};
+    use tycho_common::{
+        models::{protocol::ProtocolComponent, TxHash},
+        Bytes,
+    };
 
     use super::*;
 
@@ -411,6 +636,152 @@ mod tests {
 
         let result = estimator
             .estimate_swap_amounts(&metadata, &tokens)
+            .await;
+
+        assert!(matches!(result, Err(EntrypointGenerationError::NoDataAvailable(_))));
+    }
+
+    fn create_test_component() -> ProtocolComponent {
+        use chrono::NaiveDateTime;
+        use tycho_common::models::{Chain, ChangeType, TxHash};
+
+        ProtocolComponent {
+            id: "test_component".to_string(),
+            protocol_system: "uniswap_v4".to_string(),
+            protocol_type_name: "pool".to_string(),
+            chain: Chain::Ethereum,
+            tokens: create_test_tokens(),
+            contract_addresses: vec![Address::from([3u8; 20])],
+            static_attributes: [
+                ("fee".to_string(), Bytes::from(3000u32.to_be_bytes())),
+                ("tickSpacing".to_string(), Bytes::from(60i32.to_be_bytes())),
+            ]
+            .into_iter()
+            .collect(),
+            change: ChangeType::Creation,
+            creation_tx: TxHash::from([0u8; 32]),
+            created_at: NaiveDateTime::from_timestamp_opt(1640995200, 0).unwrap(),
+        }
+    }
+
+    fn create_test_hook_data() -> HookEntrypointData {
+        HookEntrypointData {
+            hook_address: Address::from([4u8; 20]),
+            component: create_test_component(),
+            component_metadata: create_metadata_with_limits(vec![(
+                (Address::from([1u8; 20]), Address::from([2u8; 20])),
+                (
+                    Bytes::from(U256::from(1000u64).to_be_bytes_vec()),
+                    Bytes::from(U256::from(1000u64).to_be_bytes_vec()),
+                ),
+            )]),
+        }
+    }
+
+    fn create_test_context() -> HookTracerContext {
+        use chrono::NaiveDateTime;
+        use tycho_common::models::{blockchain::Block, BlockHash, Chain};
+
+        HookTracerContext {
+            block: Block {
+                number: 1000,
+                hash: BlockHash::from([0u8; 32]),
+                parent_hash: BlockHash::from([0u8; 32]),
+                chain: Chain::Ethereum,
+                ts: NaiveDateTime::from_timestamp_opt(1640995200, 0).unwrap(),
+            },
+        }
+    }
+
+    struct MockEstimator {
+        result: Result<HashMap<(Address, Address), Vec<Bytes>>, EntrypointGenerationError>,
+    }
+
+    #[async_trait]
+    impl SwapAmountEstimator for MockEstimator {
+        async fn estimate_swap_amounts(
+            &self,
+            _metadata: &ComponentTracingMetadata,
+            _tokens: &[Address],
+        ) -> Result<HashMap<(Address, Address), Vec<Bytes>>, EntrypointGenerationError> {
+            self.result.clone()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_hook_entrypoint_generator_success() {
+        let mut amounts = HashMap::new();
+        amounts.insert(
+            (Address::from([1u8; 20]), Address::from([2u8; 20])),
+            vec![
+                Bytes::from(U256::from(100u64).to_be_bytes_vec()),
+                Bytes::from(U256::from(200u64).to_be_bytes_vec()),
+            ],
+        );
+
+        let estimator = MockEstimator { result: Ok(amounts) };
+        let mut generator = DefaultHookEntrypointGenerator::new(estimator);
+
+        let config = HookEntrypointConfig {
+            max_sample_size: Some(2),
+            min_samples: 1,
+            router_address: Some(Address::from([5u8; 20])),
+            sender: Some(Address::from([6u8; 20])),
+            router_code: None,
+            pool_manager: None,
+        };
+        generator.set_config(config);
+
+        let hook_data = create_test_hook_data();
+        let context = create_test_context();
+
+        let result = generator
+            .generate_entrypoints(&hook_data, &context)
+            .await;
+
+        match result {
+            Ok(entrypoints) => {
+                assert!(!entrypoints.is_empty());
+                assert_eq!(entrypoints.len(), 2); // 2 amounts
+                for entrypoint in entrypoints {
+                    assert_eq!(entrypoint.entry_point.signature, "0x09c5eabe");
+                    assert_eq!(entrypoint.entry_point.target, Address::from([5u8; 20]));
+                }
+            }
+            Err(EntrypointGenerationError::EntrypointGenerationFailed(_)) => {
+                // This is expected when router code file doesn't exist
+            }
+            Err(e) => panic!("Unexpected error: {e:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_hook_entrypoint_generator_no_amounts() {
+        let estimator = MockEstimator {
+            result: Err(EntrypointGenerationError::NoDataAvailable("No data".to_string())),
+        };
+        let generator = DefaultHookEntrypointGenerator::new(estimator);
+
+        let hook_data = create_test_hook_data();
+        let context = create_test_context();
+
+        let result = generator
+            .generate_entrypoints(&hook_data, &context)
+            .await;
+
+        assert!(matches!(result, Err(EntrypointGenerationError::NoDataAvailable(_))));
+    }
+
+    #[tokio::test]
+    async fn test_hook_entrypoint_generator_empty_amounts() {
+        let estimator = MockEstimator { result: Ok(HashMap::new()) };
+        let generator = DefaultHookEntrypointGenerator::new(estimator);
+
+        let hook_data = create_test_hook_data();
+        let context = create_test_context();
+
+        let result = generator
+            .generate_entrypoints(&hook_data, &context)
             .await;
 
         assert!(matches!(result, Err(EntrypointGenerationError::NoDataAvailable(_))));
