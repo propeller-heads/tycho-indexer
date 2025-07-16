@@ -1,3 +1,10 @@
+## [0.77.1](https://github.com/propeller-heads/tycho-indexer/compare/0.77.0...0.77.1) (2025-07-16)
+
+
+### Bug Fixes
+
+* Revert: "fix: Correctly set Url scheme in TychoStreamBuilder" ([#627](https://github.com/propeller-heads/tycho-indexer/issues/627)) ([d8f2b0b](https://github.com/propeller-heads/tycho-indexer/commit/d8f2b0b83fde53b1a47e0d8b4f4f6b7caa96aa94))
+
 ## [0.77.0](https://github.com/propeller-heads/tycho-indexer/compare/0.76.1...0.77.0) (2025-07-14)
 
 
