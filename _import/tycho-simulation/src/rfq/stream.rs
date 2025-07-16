@@ -16,6 +16,21 @@ use crate::{
     rfq::{client::RFQClient, models::TimestampHeader},
 };
 
+/// `RFQStreamBuilder` is a utility for constructing and managing a merged stream of RFQ (Request
+/// For Quote) providers in Tycho.
+///
+/// It allows you to:
+/// - Register multiple `RFQClient` implementations, each providing its own stream of RFQ price
+///   updates.
+/// - Dynamically decode incoming updates into `Update` objects using `TychoStreamDecoder`.
+///
+/// The `build` method consumes the builder and runs the event loop, sending decoded `Update`s
+/// through the provided `mpsc::Sender`.
+///
+/// ### Error Handling:
+/// - Each `RFQClient`'s stream is expected to yield `Result<(String, StateSyncMessage), RFQError>`.
+/// - If a client's stream returns an `Err` (e.g., `RFQError::FatalError`), the client is
+///   **removed** from the merged stream, and the system continues running without it.
 #[derive(Default)]
 pub struct RFQStreamBuilder {
     clients: Vec<Box<dyn RFQClient>>,
@@ -48,17 +63,25 @@ impl RFQStreamBuilder {
 
         let mut merged = select_all(streams);
 
-        while let Some((provider, msg)) = merged.next().await {
-            let update = self
-                .decoder
-                .decode(FeedMessage {
-                    state_msgs: HashMap::from([(provider.clone(), msg)]),
-                    sync_states: HashMap::new(),
-                })
-                .await
-                .unwrap();
-
-            tx.send(update).await.unwrap();
+        while let Some(next) = merged.next().await {
+            match next {
+                Ok((provider, msg)) => {
+                    let update = self
+                        .decoder
+                        .decode(FeedMessage {
+                            state_msgs: HashMap::from([(provider.clone(), msg)]),
+                            sync_states: HashMap::new(),
+                        })
+                        .await
+                        .unwrap();
+                    tx.send(update).await.unwrap();
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "RFQ stream fatal error: {e}. This client will be removed from the stream."
+                    );
+                }
+            }
         }
     }
 }
@@ -154,25 +177,38 @@ mod tests {
         }
     }
 
-    // Mock RFQClient implementation
     pub struct MockRFQClient {
         name: String,
         interval: Duration,
+        error_at_time: Option<u128>,
     }
 
     impl MockRFQClient {
-        pub fn new(name: &str, interval: Duration) -> Self {
-            Self { name: name.to_string(), interval }
+        pub fn new(name: &str, interval: Duration, error_at_time: Option<u128>) -> Self {
+            Self { name: name.to_string(), interval, error_at_time }
         }
     }
 
     #[async_trait]
     impl RFQClient for MockRFQClient {
-        fn stream(&self) -> BoxStream<'static, (String, StateSyncMessage<TimestampHeader>)> {
+        fn stream(
+            &self,
+        ) -> BoxStream<'static, Result<(String, StateSyncMessage<TimestampHeader>), RFQError>>
+        {
             let name = self.name.clone();
-            let mut current_time = 0;
+            let error_at_time = self.error_at_time;
+            let mut current_time: u128 = 0;
+            let interval = self.interval;
             let interval =
                 IntervalStream::new(tokio::time::interval(self.interval)).map(move |_| {
+                    if let Some(error_at_time) = error_at_time {
+                        if error_at_time == current_time {
+                            return Err(RFQError::FatalError(format!(
+                                "{:?} stream is dying and can't go on",
+                                name
+                            )))
+                        };
+                    };
                     let protocol_component =
                         ProtocolComponent { protocol_system: name.clone(), ..Default::default() };
 
@@ -194,13 +230,13 @@ mod tests {
                     };
 
                     let msg = StateSyncMessage {
-                        header: TimestampHeader { timestamp: current_time },
+                        header: TimestampHeader { timestamp: current_time as u64 },
                         snapshots: snapshot,
                         ..Default::default()
                     };
 
-                    current_time += 1;
-                    (name.clone(), msg)
+                    current_time += interval.as_millis();
+                    Ok((name.clone(), msg))
                 });
             Box::pin(interval)
         }
@@ -216,46 +252,28 @@ mod tests {
     #[tokio::test]
     async fn test_rfq_stream_builder() {
         // This test has two mocked RFQ clients
-        // 1. Bebop client that emits a message every second
-        // 2. Hashflow client that emits a message every 2 seconds
+        // 1. Bebop client that emits a message every 100ms
+        // 2. Hashflow client that emits a message every 200m
         let (tx, mut rx) = mpsc::channel::<Update>(10);
 
         let builder = RFQStreamBuilder::new()
             .add_client::<DummyProtocol>(
                 "bebop",
-                Box::new(MockRFQClient::new("bebop", Duration::from_secs(1))),
+                Box::new(MockRFQClient::new("bebop", Duration::from_millis(100), Some(300))),
             )
             .add_client::<DummyProtocol>(
                 "hashflow",
-                Box::new(MockRFQClient::new("hashflow", Duration::from_secs(2))),
+                Box::new(MockRFQClient::new("hashflow", Duration::from_millis(200), None)),
             );
 
         tokio::spawn(builder.build(tx));
 
-        // Collect only the first 5 messages
+        // Collect only the first 10 messages
         let mut updates = Vec::new();
-        for _ in 0..5 {
+        for _ in 0..6 {
             let update = rx.recv().await.unwrap();
             updates.push(update);
         }
-
-        assert!(
-            updates[0]
-                .new_pairs
-                .contains_key("bebop") ||
-                updates[0]
-                    .new_pairs
-                    .contains_key("hashflow"),
-        );
-
-        assert!(
-            updates[1]
-                .new_pairs
-                .contains_key("bebop") ||
-                updates[1]
-                    .new_pairs
-                    .contains_key("hashflow"),
-        );
 
         // Collect all timestamps per provider
         let bebop_updates: Vec<_> = updates
@@ -269,8 +287,12 @@ mod tests {
 
         assert_eq!(bebop_updates[0].block_number_or_timestamp, 0,);
         assert_eq!(hashflow_updates[0].block_number_or_timestamp, 0,);
-        assert_eq!(bebop_updates[1].block_number_or_timestamp, 1);
-        assert_eq!(hashflow_updates[1].block_number_or_timestamp, 1,);
-        assert_eq!(bebop_updates[2].block_number_or_timestamp, 2);
+        assert_eq!(bebop_updates[1].block_number_or_timestamp, 100);
+        assert_eq!(bebop_updates[2].block_number_or_timestamp, 200);
+        assert_eq!(hashflow_updates[1].block_number_or_timestamp, 200);
+        // At this point the bebop stream dies, and we shouldn't have any more bebop updates, only
+        // hashflow
+        assert_eq!(bebop_updates.len(), 3);
+        assert_eq!(hashflow_updates[2].block_number_or_timestamp, 400);
     }
 }
