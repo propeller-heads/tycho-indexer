@@ -204,8 +204,7 @@ mod tests {
                     if let Some(error_at_time) = error_at_time {
                         if error_at_time == current_time {
                             return Err(RFQError::FatalError(format!(
-                                "{:?} stream is dying and can't go on",
-                                name
+                                "{name} stream is dying and can't go on"
                             )))
                         };
                     };
