@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    env,
-};
+use std::collections::{HashMap, HashSet};
 
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt};
@@ -20,7 +17,6 @@ use crate::{
     tycho_common::dto::{ProtocolComponent, ResponseProtocolState},
     tycho_core::dto::Chain,
 };
-
 
 type BebopPriceMessage = HashMap<String, BebopPriceData>;
 
@@ -42,9 +38,9 @@ pub struct BebopClient {
     // Min tvl value.
     tvl: f64,
     // name header for authentication
-    name: String,
-    // authorization header for authentication
-    authorization: String,
+    ws_user: String,
+    // key header for authentication
+    ws_key: String,
 }
 
 fn pair_to_bebop_format(pair: &(String, String)) -> String {
@@ -52,22 +48,23 @@ fn pair_to_bebop_format(pair: &(String, String)) -> String {
 }
 
 impl BebopClient {
-    pub fn new(chain: Chain, pairs: Vec<(String, String)>, tvl: f64) -> Self {
+    pub fn new(
+        chain: Chain,
+        pairs: Vec<(String, String)>,
+        tvl: f64,
+        ws_user: String,
+        ws_key: String,
+    ) -> Self {
         // TODO should I specify protobuf serialization here? Is that even possible?
         // https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/rfq-api-endpoints/pricing#interpreting-price-levels
 
         let url = "wss://api.bebop.xyz/pmm/ethereum/v3/pricing".to_string();
 
-        // TODO should we pass this as an init param instead of reading from env?
-        let name = env::var("BEBOP_NAME").expect("BEBOP_NAME environment variable is required");
-        let authorization = env::var("BEBOP_AUTHORIZATION")
-            .expect("BEBOP_AUTHORIZATION environment variable is required");
-
         let mut pair_names: HashSet<String> = HashSet::new();
         for pair in pairs {
             pair_names.insert(pair_to_bebop_format(&pair));
         }
-        Self { url, pairs: pair_names, chain, tvl, name, authorization }
+        Self { url, pairs: pair_names, chain, tvl, ws_user, ws_key }
     }
 
     // TVL is calculated using https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/rfq-api-endpoints/pricing#interpreting-price-levels
@@ -174,8 +171,8 @@ impl RFQClient for BebopClient {
         let pairs = self.pairs.clone();
         let url = self.url.clone();
         let tvl_threshold = self.tvl;
-        let name = self.name.clone();
-        let authorization = self.authorization.clone();
+        let name = self.ws_user.clone();
+        let authorization = self.ws_key.clone();
         let client = self.clone();
 
         Box::pin(async_stream::stream! {
@@ -285,7 +282,7 @@ impl RFQClient for BebopClient {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{env, time::Duration};
 
     use futures::StreamExt;
     use tokio::time::timeout;
@@ -293,17 +290,22 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore] // Requires network access
+    #[ignore] // Requires network access and setting proper env vars
     async fn test_bebop_websocket_connection() {
         tracing_subscriber::fmt::init();
 
         let usdc = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string();
         let weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string();
 
+        let ws_user = String::from("propellerheads");
+        let ws_key = env::var("BEBOP_KEY").expect("BEBOP_KEY environment variable is required");
+
         let client = BebopClient::new(
             Chain::Ethereum,
             vec![(weth.to_string(), usdc.to_string())],
             1000.0, // $1000 minimum TVL
+            ws_user,
+            ws_key,
         );
 
         let mut stream = client.stream();
@@ -374,9 +376,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO figure out the env variable situation then remove this ignore
     fn test_calculate_tvl() {
-        let client = BebopClient::new(Chain::Ethereum, vec![], 0.0);
+        let ws_user = String::from("propellerheads");
+        let ws_key = String::from("mock-key");
+        let client = BebopClient::new(Chain::Ethereum, vec![], 0.0, ws_user, ws_key);
 
         let price_data = BebopPriceData {
             last_update_ts: 1234567890.0,
@@ -389,7 +392,7 @@ mod tests {
         // Expected calculation:
         // Bid TVL: (2000.0 * 1.0) + (1999.0 * 2.0) = 2000.0 + 3998.0 = 5998.0
         // Ask TVL: (2001.0 * 1.5) + (2002.0 * 1.0) = 3001.5 + 2002.0 = 5003.5
-        // Total TVL: (5998.0 + 5003.5) / 2 = 4500.75
-        assert!((tvl - 4500.75).abs() < 0.01);
+        // Total TVL: (5998.0 + 5003.5) / 2 = 5500.75
+        assert!((tvl - 5500.75).abs() < 0.01);
     }
 }
