@@ -55,9 +55,6 @@ impl BebopClient {
         ws_user: String,
         ws_key: String,
     ) -> Self {
-        // TODO should I specify protobuf serialization here? Is that even possible?
-        // https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/rfq-api-endpoints/pricing#interpreting-price-levels
-
         let url = "wss://api.bebop.xyz/pmm/ethereum/v3/pricing".to_string();
 
         let mut pair_names: HashSet<String> = HashSet::new();
@@ -67,24 +64,25 @@ impl BebopClient {
         Self { url, pairs: pair_names, chain, tvl, ws_user, ws_key }
     }
 
-    // TVL is calculated using https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/rfq-api-endpoints/pricing#interpreting-price-levels
-    // TODO make a proper docstring here
+    /// Calculates Total Value Locked (TVL) based on bid/ask levels.
+    ///
+    /// TVL is calculated using the formula from Bebop's documentation:
+    /// https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/rfq-api-endpoints/pricing#interpreting-price-levels
+    ///
+    /// Returns the average of bid and ask TVLs across all price levels.
+    ///
+    /// Note: This calculation assumes all pairs use the same quote token.
+    /// For cross-pair comparisons, token prices should be normalized to a common denomination.
     fn calculate_tvl(&self, price_data: &BebopPriceData) -> f64 {
-        // TODO this only works if the quote token is the same for each token pair - which I think
-        //  is not the case. Should we get token prices at this point to translate everything to
-        //  ETH or USD?
-
         let bid_tvl: f64 = price_data
             .bids
             .iter()
-            .take(5) // Consider top 5 levels
             .map(|(price, size)| price * size)
             .sum();
 
         let ask_tvl: f64 = price_data
             .asks
             .iter()
-            .take(5) // Consider top 5 levels
             .map(|(price, size)| price * size)
             .sum();
 
@@ -93,17 +91,17 @@ impl BebopClient {
 
     fn create_component_with_state(
         &self,
-        pair: &str,
+        component_id: String,
+        tokens: Vec<tycho_common::Bytes>,
         price_data: &BebopPriceData,
+        tvl: f64,
     ) -> ComponentWithState {
-        let id = format!("bebop_{}", pair.replace("/", "_"));
-
         let protocol_component = ProtocolComponent {
-            id: id.clone(),
+            id: component_id.clone(),
             protocol_system: "rfq:bebop".to_string(),
             protocol_type_name: "bebop_pool".to_string(),
             chain: self.chain,
-            tokens: vec![],       // TODO: Extract from pair
+            tokens,
             contract_ids: vec![], // empty for RFQ
             static_attributes: Default::default(),
             change: Default::default(),
@@ -113,53 +111,24 @@ impl BebopClient {
 
         let mut attributes = HashMap::new();
 
-        // TODO should we put all of the bids and asks here - not just the best price?
-        if let Some(&(price, size)) = price_data.bids.first() {
-            attributes.insert(
-                "best_bid_price".to_string(),
-                price
-                    .to_string()
-                    .as_bytes()
-                    .to_vec()
-                    .into(),
-            );
-            attributes.insert(
-                "best_bid_size".to_string(),
-                size.to_string()
-                    .as_bytes()
-                    .to_vec()
-                    .into(),
-            );
+        // Store all bids and asks as JSON strings, since we cannot store arrays
+        if !price_data.bids.is_empty() {
+            let bids_json = serde_json::to_string(&price_data.bids).unwrap_or_default();
+            attributes.insert("bids".to_string(), bids_json.as_bytes().to_vec().into());
         }
-        // TODO what if no bids or asks? Error?
-
-        if let Some(&(price, size)) = price_data.asks.first() {
-            attributes.insert(
-                "best_ask_price".to_string(),
-                price
-                    .to_string()
-                    .as_bytes()
-                    .to_vec()
-                    .into(),
-            );
-            attributes.insert(
-                "best_ask_size".to_string(),
-                size.to_string()
-                    .as_bytes()
-                    .to_vec()
-                    .into(),
-            );
+        if !price_data.asks.is_empty() {
+            let asks_json = serde_json::to_string(&price_data.asks).unwrap_or_default();
+            attributes.insert("asks".to_string(), asks_json.as_bytes().to_vec().into());
         }
 
         ComponentWithState {
             state: ResponseProtocolState {
-                component_id: id.clone(),
+                component_id: component_id.clone(),
                 attributes,
                 balances: HashMap::new(),
             },
             component: protocol_component,
-            // TODO pass tvl instead of calculating it twice
-            component_tvl: Some(self.calculate_tvl(price_data)),
+            component_tvl: Some(tvl),
             entrypoints: vec![],
         }
     }
@@ -176,7 +145,6 @@ impl RFQClient for BebopClient {
         let client = self.clone();
 
         Box::pin(async_stream::stream! {
-            // Create WebSocket request with custom headers
             use http::Request;
             use tokio_tungstenite::tungstenite::handshake::client::generate_key;
 
@@ -204,8 +172,6 @@ impl RFQClient for BebopClient {
 
             let (_, mut ws_receiver) = ws_stream.split();
 
-            // TODO: What to do if the program crashes and restarts? Should we be retrieving these components
-            // from the database?
             let mut current_components: HashMap<String, ComponentWithState> = HashMap::new();
 
             while let Some(msg) = ws_receiver.next().await {
@@ -221,7 +187,15 @@ impl RFQClient for BebopClient {
                                     }
 
                                     let component_id = format!("bebop_{}", pair.replace("/", "_"));
-                                    let component_with_state = client.create_component_with_state(&pair, &price_data);
+
+                                    let tokens;
+                                    if let Some((token0, token1)) = pair.split_once('/') {
+                                        tokens = vec![token0.as_bytes().to_vec().into(), token1.as_bytes().to_vec().into()]
+                                    } else {
+                                        tokens = vec![] // TODO raise error?
+                                    };
+
+                                    let component_with_state = client.create_component_with_state(component_id.clone(), tokens, &price_data, tvl);
 
                                     let new_components = HashMap::from([(component_id.clone(), component_with_state)]);
 
@@ -297,7 +271,7 @@ mod tests {
         let usdc = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string();
         let weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string();
 
-        let ws_user = String::from("propellerheads");
+        let ws_user = String::from("tycho");
         let ws_key = env::var("BEBOP_KEY").expect("BEBOP_KEY environment variable is required");
 
         let client = BebopClient::new(
