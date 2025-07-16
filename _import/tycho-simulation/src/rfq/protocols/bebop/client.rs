@@ -231,33 +231,31 @@ impl RFQClient for BebopClient {
                                         }
                                     }
 
-                                    // Only yield a message if we have components to update
-                                    if !new_components.is_empty() {
-                                        // Find components that were removed (existed before but not in this update)
-                                        // TODO also check for components with no bids or asks here
-                                        let removed_components: Vec<String> = current_components.keys()
-                                            .filter(|id| !new_components.contains_key(*id))
-                                            .cloned()
-                                            .collect();
+                                    // Find components that were removed (existed before but not in this update)
+                                    // This includes components with no bids or asks, since they are filtered
+                                    // out by the tvl threshold.
+                                    let removed_components: Vec<String> = current_components.keys()
+                                        .filter(|id| !new_components.contains_key(*id))
+                                        .cloned()
+                                        .collect();
 
-                                        // Update our current state
-                                        current_components = new_components.clone();
+                                    // Update our current state
+                                    current_components = new_components.clone();
 
-                                        let snapshot = Snapshot {
-                                            states: new_components,
-                                            vm_storage: HashMap::new(),
-                                        };
+                                    let snapshot = Snapshot {
+                                        states: new_components,
+                                        vm_storage: HashMap::new(),
+                                    };
 
-                                        let msg = StateSyncMessage::<TimestampHeader> {
-                                            header: TimestampHeader { timestamp: latest_timestamp },
-                                            snapshots: snapshot,
-                                            deltas: None,
-                                            removed_components: removed_components.into_iter().map(|id| (id, Default::default())).collect(),
-                                        };
+                                    let msg = StateSyncMessage::<TimestampHeader> {
+                                        header: TimestampHeader { timestamp: latest_timestamp },
+                                        snapshots: snapshot,
+                                        deltas: None, // Deltas are always None - all the changes are absolute
+                                        removed_components: removed_components.into_iter().map(|id| (id, Default::default())).collect(),
+                                    };
 
-                                        // Yield one message containing all updated pairs
-                                        yield Ok(("bebop_all_pairs".to_string(), msg));
-                                    }
+                                    // Yield one message containing all updated pairs
+                                    yield Ok(("bebop_all_pairs".to_string(), msg));
                                 },
                                 Err(e) => {
                                     tracing::error!("Failed to parse websocket message: {}", e);
@@ -351,10 +349,12 @@ mod tests {
                         assert!(!msg.snapshots.states.is_empty());
 
                         let snapshot = &msg.snapshots;
-                        assert!(!snapshot.states.is_empty());
 
+                        // We got at least one component
+                        assert!(!snapshot.states.is_empty());
                         println!("Received {} components in this message", snapshot.states.len());
 
+                        println!("Received {} components in this message", snapshot.states.len());
                         for (id, component_with_state) in &snapshot.states {
                             // Expect component ID to be in format "bebop_{pair}"
                             assert!(id.starts_with("bebop_"));
@@ -374,9 +374,19 @@ mod tests {
 
                             let attributes = &component_with_state.state.attributes;
 
-                            // TODO check that byte string is nonempty
+                            // Check that bids and asks exist and have non-empty byte strings
                             assert!(attributes.contains_key("bids"));
                             assert!(attributes.contains_key("asks"));
+                            assert!(
+                                attributes["bids"].len() > 0,
+                                "Bids byte string should not be empty for component {}",
+                                id
+                            );
+                            assert!(
+                                attributes["asks"].len() > 0,
+                                "Asks byte string should not be empty for component {}",
+                                id
+                            );
 
                             if let Some(tvl) = component_with_state.component_tvl {
                                 assert!(tvl >= 0.0);
