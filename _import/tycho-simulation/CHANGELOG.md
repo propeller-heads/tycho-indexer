@@ -1,3 +1,10 @@
+## [0.127.1](https://github.com/propeller-heads/tycho-simulation/compare/0.127.0...0.127.1) (2025-07-16)
+
+
+### Bug Fixes
+
+* update alloy version to `1.0.22` ([0850d74](https://github.com/propeller-heads/tycho-simulation/commit/0850d743409867e858f6f8d90ce29c9596cacdd2))
+
 ## [0.127.0](https://github.com/propeller-heads/tycho-simulation/compare/0.126.0...0.127.0) (2025-07-14)
 
 
