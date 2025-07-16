@@ -370,6 +370,39 @@ pub struct ComponentBalance {
     pub valid_to: NaiveDateTime,
 }
 
+#[derive(Identifiable, Queryable, Selectable, Debug)]
+#[diesel(table_name = component_balance_default)]
+#[diesel(belongs_to(ProtocolComponent))]
+#[diesel(primary_key(protocol_component_id, token_id, modify_tx))]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct ComponentBalanceDefault {
+    pub token_id: i64,
+    pub new_balance: Balance,
+    pub balance_float: f64,
+    pub previous_value: Balance,
+    pub modify_tx: i64,
+    pub protocol_component_id: i64,
+    pub inserted_ts: NaiveDateTime,
+    pub valid_from: NaiveDateTime,
+    pub valid_to: NaiveDateTime,
+}
+
+impl From<ComponentBalanceDefault> for ComponentBalance {
+    fn from(value: ComponentBalanceDefault) -> Self {
+        Self {
+            token_id: value.token_id,
+            new_balance: value.new_balance,
+            balance_float: value.balance_float,
+            previous_value: value.previous_value,
+            modify_tx: value.modify_tx,
+            protocol_component_id: value.protocol_component_id,
+            inserted_ts: value.inserted_ts,
+            valid_from: value.valid_from,
+            valid_to: value.valid_to,
+        }
+    }
+}
+
 #[derive(AsChangeset, Insertable, Clone, Debug)]
 #[diesel(table_name = component_balance)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -460,18 +493,22 @@ impl PartitionedVersionedRow for NewComponentBalance {
             .zip(token_ids.iter())
             .collect::<HashSet<_>>();
 
-        let mut results: Vec<ComponentBalance> = component_balance::table
-            .select(ComponentBalance::as_select())
+        let results: Vec<ComponentBalanceDefault> = component_balance_default::table
+            .select(ComponentBalanceDefault::as_select())
             .into_boxed()
             .filter(
-                component_balance::protocol_component_id
+                component_balance_default::protocol_component_id
                     .eq_any(&component_ids)
-                    .and(component_balance::token_id.eq_any(&token_ids))
-                    .and(component_balance::valid_to.eq(MAX_TS)),
+                    .and(component_balance_default::token_id.eq_any(&token_ids)),
             )
             .get_results(conn)
             .await
             .map_err(PostgresError::from)?;
+
+        let mut results: Vec<ComponentBalance> = results
+            .into_iter()
+            .map(ComponentBalance::from)
+            .collect();
 
         let found_ids: HashSet<_> = results
             .iter()
@@ -676,6 +713,39 @@ pub struct ProtocolState {
     pub valid_to: NaiveDateTime,
     pub inserted_ts: NaiveDateTime,
     pub modified_ts: NaiveDateTime,
+}
+
+#[derive(Identifiable, Queryable, Associations, Selectable, Clone, Debug)]
+#[diesel(belongs_to(ProtocolComponent))]
+#[diesel(table_name = protocol_state_default)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+#[diesel(primary_key(protocol_component_id, attribute_name, modify_tx))]
+pub struct ProtocolStateDefault {
+    pub protocol_component_id: i64,
+    pub attribute_name: String,
+    pub attribute_value: Bytes,
+    pub previous_value: Option<Bytes>,
+    pub modify_tx: i64,
+    pub valid_from: NaiveDateTime,
+    pub valid_to: NaiveDateTime,
+    pub inserted_ts: NaiveDateTime,
+    pub modified_ts: NaiveDateTime,
+}
+
+impl From<ProtocolStateDefault> for ProtocolState {
+    fn from(value: ProtocolStateDefault) -> Self {
+        Self {
+            protocol_component_id: value.protocol_component_id,
+            attribute_name: value.attribute_name,
+            attribute_value: value.attribute_value,
+            previous_value: value.previous_value,
+            modify_tx: value.modify_tx,
+            valid_from: value.valid_from,
+            valid_to: value.valid_to,
+            inserted_ts: value.inserted_ts,
+            modified_ts: value.modified_ts,
+        }
+    }
 }
 
 impl ProtocolState {
@@ -1145,18 +1215,23 @@ impl PartitionedVersionedRow for NewProtocolState {
             .zip(attr_name.iter())
             .collect::<HashSet<_>>();
 
-        let mut results: Vec<ProtocolState> = protocol_state::table
-            .select(ProtocolState::as_select())
+        // TODO: See if there there is any better way to handle this
+        let results: Vec<ProtocolStateDefault> = protocol_state_default::table
+            .select(ProtocolStateDefault::as_select())
             .into_boxed()
             .filter(
-                protocol_state::protocol_component_id
+                protocol_state_default::protocol_component_id
                     .eq_any(&pc_id)
-                    .and(protocol_state::attribute_name.eq_any(&attr_name))
-                    .and(protocol_state::valid_to.eq(MAX_TS)),
+                    .and(protocol_state_default::attribute_name.eq_any(&attr_name)),
             )
             .get_results(conn)
             .await
             .map_err(PostgresError::from)?;
+
+        let mut results: Vec<ProtocolState> = results
+            .into_iter()
+            .map(ProtocolState::from)
+            .collect();
 
         let found_ids: HashSet<_> = results
             .iter()
@@ -1650,6 +1725,41 @@ pub struct ContractStorage {
     pub modified_ts: NaiveDateTime,
 }
 
+#[derive(Identifiable, Queryable, Associations, Selectable, Debug)]
+#[diesel(belongs_to(Account))]
+#[diesel(table_name = contract_storage_default)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+#[diesel(primary_key(account_id, slot, modify_tx))]
+pub struct ContractStorageDefault {
+    pub slot: Bytes,
+    pub value: Option<Bytes>,
+    pub previous_value: Option<Bytes>,
+    pub account_id: i64,
+    pub modify_tx: i64,
+    pub ordinal: i64,
+    pub valid_from: NaiveDateTime,
+    pub valid_to: NaiveDateTime,
+    pub inserted_ts: NaiveDateTime,
+    pub modified_ts: NaiveDateTime,
+}
+
+impl From<ContractStorageDefault> for ContractStorage {
+    fn from(value: ContractStorageDefault) -> Self {
+        Self {
+            slot: value.slot,
+            value: value.value,
+            previous_value: value.previous_value,
+            account_id: value.account_id,
+            modify_tx: value.modify_tx,
+            ordinal: value.ordinal,
+            valid_from: value.valid_from,
+            valid_to: value.valid_to,
+            inserted_ts: value.inserted_ts,
+            modified_ts: value.modified_ts,
+        }
+    }
+}
+
 #[derive(Insertable, Debug, Clone)]
 #[diesel(table_name = contract_storage)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
@@ -1704,22 +1814,27 @@ impl PartitionedVersionedRow for NewSlot {
             .zip(slots.iter())
             .collect::<HashSet<_>>();
 
+        // Stale comment?
         // PERF: The removal of the filter 'valid_to = MAX_TS' means we now search in archived
         // tables as well. A possible optimisation would be to add the valid_to filter back
         // and then use a second query for storage still missing that will access the
         // archived tables. Therefore, performance is not impacted in the common case.
-        let mut results: Vec<ContractStorage> = contract_storage::table
-            .select(ContractStorage::as_select())
+        let results: Vec<ContractStorageDefault> = contract_storage_default::table
+            .select(ContractStorageDefault::as_select())
             .into_boxed()
             .filter(
-                contract_storage::account_id
+                contract_storage_default::account_id
                     .eq_any(&accounts)
-                    .and(contract_storage::slot.eq_any(&slots))
-                    .and(contract_storage::valid_to.eq(MAX_TS)),
+                    .and(contract_storage_default::slot.eq_any(&slots)),
             )
             .get_results(conn)
             .await
             .map_err(PostgresError::from)?;
+
+        let mut results: Vec<ContractStorage> = results
+            .into_iter()
+            .map(ContractStorage::from)
+            .collect();
 
         let found_ids: HashSet<_> = results
             .iter()

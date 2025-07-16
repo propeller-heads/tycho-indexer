@@ -2554,9 +2554,11 @@ mod test {
             .unwrap();
 
         // Query the stored slots from the database
-        let fetched_slot_data = schema::contract_storage::table
-            .select((schema::contract_storage::slot, schema::contract_storage::value))
-            .filter(schema::contract_storage::valid_to.eq(MAX_TS))
+        let fetched_slot_data = schema::contract_storage_default::table
+            .select((
+                schema::contract_storage_default::slot,
+                schema::contract_storage_default::value,
+            ))
             .get_results(&mut conn)
             .await
             .unwrap()
@@ -2633,9 +2635,11 @@ mod test {
             .unwrap();
 
         // Query the stored slots from the database
-        let fetched_slot_data = schema::contract_storage::table
-            .select((schema::contract_storage::slot, schema::contract_storage::value))
-            .filter(schema::contract_storage::valid_to.eq(MAX_TS))
+        let fetched_slot_data = schema::contract_storage_default::table
+            .select((
+                schema::contract_storage_default::slot,
+                schema::contract_storage_default::value,
+            ))
             .get_results(&mut conn)
             .await
             .unwrap()

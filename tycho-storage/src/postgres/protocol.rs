@@ -26,7 +26,7 @@ use super::{
     maybe_lookup_block_ts, maybe_lookup_version_ts, orm, schema, storage_error_from_diesel,
     truncate_to_byte_limit,
     versioning::{apply_partitioned_versioning, VersioningEntry},
-    PostgresError, PostgresGateway, WithOrdinal, WithTxHash, MAX_TS, MAX_VERSION_TS,
+    PostgresError, PostgresGateway, WithOrdinal, WithTxHash, MAX_VERSION_TS,
 };
 
 // Private methods
@@ -380,16 +380,17 @@ impl PostgresGateway {
         let mut res: HashMap<Address, (String, Bytes)> = HashMap::new();
         schema::protocol_component::table
             .inner_join(schema::protocol_component_holds_token::table)
-            .inner_join(schema::component_balance::table)
+            .inner_join(schema::component_balance_default::table)
             .select((
-                schema::component_balance::token_id,
+                schema::component_balance_default::token_id,
                 schema::protocol_component::external_id,
-                schema::component_balance::new_balance,
+                schema::component_balance_default::new_balance,
             ))
             .filter(schema::protocol_component::chain_id.eq(chain_id))
-            .filter(schema::component_balance::balance_float.ge(min_balance.unwrap_or(0f64)))
-            .filter(schema::component_balance::valid_to.eq(MAX_TS))
-            .filter(schema::component_balance::token_id.eq_any(token_ids.keys()))
+            .filter(
+                schema::component_balance_default::balance_float.ge(min_balance.unwrap_or(0f64)),
+            )
+            .filter(schema::component_balance_default::token_id.eq_any(token_ids.keys()))
             .get_results::<(i64, String, Bytes)>(conn)
             .await
             .map_err(PostgresError::from)?
@@ -3239,16 +3240,15 @@ mod test {
             .unwrap();
 
         // Obtain newest inserted value
-        let new_inserted_data = schema::component_balance::table
+        let new_inserted_data = schema::component_balance_default::table
             .inner_join(schema::protocol_component::table)
-            .select(orm::ComponentBalance::as_select())
+            .select(orm::ComponentBalanceDefault::as_select())
             .filter(
-                schema::component_balance::valid_to
-                    .eq(MAX_TS)
-                    .and(schema::protocol_component::external_id.eq(&component_external_id))
-                    .and(schema::component_balance::token_id.eq(referenced_token.id)),
+                schema::protocol_component::external_id
+                    .eq(&component_external_id)
+                    .and(schema::component_balance_default::token_id.eq(referenced_token.id)),
             )
-            .first::<orm::ComponentBalance>(&mut conn)
+            .first::<orm::ComponentBalanceDefault>(&mut conn)
             .await
             .expect("retrieving inserted balance failed!");
 
