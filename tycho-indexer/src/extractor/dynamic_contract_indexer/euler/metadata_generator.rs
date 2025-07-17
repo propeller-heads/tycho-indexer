@@ -57,10 +57,8 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
             ],
         );
         requests.push(MetadataRequest::new(
-            format!(
-                "euler_limits_{}_{}_to_{}",
-                component.id, component.tokens[0], component.tokens[1]
-            ),
+            "euler".to_string(),
+            format!("limits_{}_{}_to_{}", component.id, component.tokens[0], component.tokens[1]),
             component.id.clone(),
             // Euler swap only has pools with 2 tokens
             MetadataRequestType::Limits {
@@ -81,10 +79,8 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
             ],
         );
         requests.push(MetadataRequest::new(
-            format!(
-                "euler_limits_{}_{}_to_{}",
-                component.id, component.tokens[1], component.tokens[0]
-            ),
+            "euler".to_string(),
+            format!("limits_{}_{}_to_{}", component.id, component.tokens[1], component.tokens[0]),
             component.id.clone(),
             // Euler swap only has pools with 2 tokens
             MetadataRequestType::Limits {
@@ -115,7 +111,8 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
             ],
         );
         requests.push(MetadataRequest::new(
-            format!("euler_balance_{}", component.id),
+            "euler".to_string(),
+            format!("balance_{}", component.id),
             component.id.clone(),
             MetadataRequestType::ComponentBalance { token_addresses: component.tokens.clone() },
             Box::new(balance_transport),
