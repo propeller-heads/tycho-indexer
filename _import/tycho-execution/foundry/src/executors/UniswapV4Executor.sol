@@ -9,6 +9,7 @@ import {
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {
     Currency, CurrencyLibrary
 } from "@uniswap/v4-core/src/types/Currency.sol";
@@ -330,7 +331,7 @@ contract UniswapV4Executor is
             // slither-disable-next-line calls-loop
             BalanceDelta delta = poolManager.swap(
                 poolKey,
-                IPoolManager.SwapParams(
+                SwapParams(
                     zeroForOne,
                     amountSpecified,
                     zeroForOne
