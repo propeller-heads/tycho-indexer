@@ -1,3 +1,12 @@
+## [0.77.2](https://github.com/propeller-heads/tycho-indexer/compare/0.77.1...0.77.2) (2025-07-17)
+
+
+### Bug Fixes
+
+* Generalise FeedMessage to hold a HeaderLike and not a BlockHeader ([8394336](https://github.com/propeller-heads/tycho-indexer/commit/839433620169c764aa27cacdb79f791cd96daa71))
+* Generalise FeedMessage to hold a HeaderLike and not a BlockHeader ([#624](https://github.com/propeller-heads/tycho-indexer/issues/624)) ([85ae669](https://github.com/propeller-heads/tycho-indexer/commit/85ae669a6441ed4ecedac9d79ade35fa63d0edb8))
+* Rename ts to block_number_or_timestamp ([58a0128](https://github.com/propeller-heads/tycho-indexer/commit/58a012848295bf748c1bed277f9557f1b1ede46c))
+
 ## [0.77.1](https://github.com/propeller-heads/tycho-indexer/compare/0.77.0...0.77.1) (2025-07-16)
 
 
