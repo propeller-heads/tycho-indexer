@@ -166,4 +166,12 @@ impl Update {
         self.removed_pairs = pairs;
         self
     }
+
+    pub fn merge(mut self, other: Update) -> Self {
+        self.states.extend(other.states);
+        self.new_pairs.extend(other.new_pairs);
+        self.removed_pairs
+            .extend(other.removed_pairs);
+        self
+    }
 }
