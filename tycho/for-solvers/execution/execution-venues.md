@@ -63,6 +63,8 @@ export BLOCKCHAIN_EXPLORER_API_KEY=<blockchain-explorer-api-key>
 
 </details>
 
+For more on filling Uniswap X orders, see their [docs](https://docs.uniswap.org/contracts/uniswapx/guides/mainnet/createfiller) and [examples](https://github.com/marktoda/uniswapx-artemis).
+
 ## Other competition venues
 
 For other venues, like 1inch Fusion, please contact us.
