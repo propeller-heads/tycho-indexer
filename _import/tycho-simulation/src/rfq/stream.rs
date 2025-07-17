@@ -78,7 +78,7 @@ impl RFQStreamBuilder {
                 }
                 Err(e) => {
                     tracing::error!(
-                        "RFQ stream fatal error: {e}. This client will be removed from the stream."
+                        "RFQ stream fatal error: {e}. Assuming this stream will not emit more messages."
                     );
                 }
             }
