@@ -21,7 +21,7 @@ use crate::{
 
 type BebopPriceMessage = HashMap<String, BebopPriceData>;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct BebopPriceData {
     last_update_ts: f64,
     /// Vec where each tuple is (price, size)
@@ -31,6 +31,42 @@ struct BebopPriceData {
 }
 
 impl BebopPriceData {
+    /// Calculates Total Value Locked (TVL) based on bid/ask levels.
+    ///
+    /// TVL is calculated using the formula from Bebop's documentation:
+    /// https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/rfq-api-endpoints/pricing#interpreting-price-levels
+    ///
+    /// Returns the average of bid and ask TVLs across all price levels.
+    ///
+    /// Note: This calculation assumes all pairs use the same quote token.
+    /// For cross-pair comparisons, token prices should be normalized to a common denomination.
+    fn calculate_tvl(&self, quote_price_data: Option<BebopPriceData>) -> f64 {
+        let bid_tvl: f64 = self
+            .bids
+            .iter()
+            .map(|(price, size)| price * size)
+            .sum();
+
+        let ask_tvl: f64 = self
+            .asks
+            .iter()
+            .map(|(price, size)| price * size)
+            .sum();
+
+        let mut total_tvl = (bid_tvl + ask_tvl) / 2.0;
+
+        // If quote price data is provided, we need to normalize the tvl
+        if let Some(quote_data) = quote_price_data {
+            if let Some(quote_price_usd) = quote_data.get_mid_usd_price(total_tvl) {
+                total_tvl *= quote_price_usd;
+            } else {
+                // Quote token has no TVL is USD - return 0
+                return 0.0;
+            }
+        }
+        total_tvl
+    }
+
     /// Gets the mid price of the given token with USDC as the quote token
     ///
     /// # Parameters
@@ -39,12 +75,12 @@ impl BebopPriceData {
     ///
     /// # Returns
     /// The USDC amount at mid price, or None if insufficient liquidity on either side
-    fn get_mid_usdc_price(&self, token_amount: f64) -> Option<f64> {
-        let sell_usdc = self.calculate_usdc_amount(token_amount, true)?;
-        let buy_usdc = self.calculate_usdc_amount(token_amount, false)?;
+    fn get_mid_usd_price(&self, token_amount: f64) -> Option<f64> {
+        let sell_usd = self.calculate_usd_amount(token_amount, true)? / token_amount;
+        let buy_usd = self.calculate_usd_amount(token_amount, false)? / token_amount;
 
         // Return average (mid price)
-        Some((sell_usdc + buy_usdc) / 2.0)
+        Some((sell_usd + buy_usd) / 2.0)
     }
 
     /// Calculate USDC amount for trading tokens through price levels
@@ -56,7 +92,7 @@ impl BebopPriceData {
     ///
     /// # Returns
     /// Total USDC amount, or None if insufficient liquidity
-    fn calculate_usdc_amount(&self, token_amount: f64, sell: bool) -> Option<f64> {
+    fn calculate_usd_amount(&self, token_amount: f64, sell: bool) -> Option<f64> {
         // Price levels are already sorted: https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/rfq-api-endpoints/pricing#interpreting-price-levels
 
         // If selling AAA for USDC, we need to look at [AAA/USDC].bids
@@ -64,7 +100,7 @@ impl BebopPriceData {
         let price_levels = if sell { self.bids.clone() } else { self.asks.clone() };
 
         let mut remaining_tokens = token_amount;
-        let mut total_usdc = 0.0;
+        let mut total_usd = 0.0;
 
         for (price, tokens_available) in price_levels.iter() {
             if remaining_tokens <= 0.0 {
@@ -73,7 +109,7 @@ impl BebopPriceData {
 
             let tokens_to_trade = remaining_tokens.min(*tokens_available);
 
-            total_usdc += tokens_to_trade * price;
+            total_usd += tokens_to_trade * price;
             remaining_tokens -= tokens_to_trade;
         }
 
@@ -81,7 +117,7 @@ impl BebopPriceData {
         if remaining_tokens > 0.0 {
             None
         } else {
-            Some(total_usdc)
+            Some(total_usd)
         }
     }
 }
@@ -102,6 +138,8 @@ pub struct BebopClient {
     ws_user: String,
     // key header for authentication
     ws_key: String,
+    // quote tokens to normalize to for TVL purposes
+    quote_tokens: HashSet<String>,
 }
 
 impl BebopClient {
@@ -118,32 +156,11 @@ impl BebopClient {
         for pair in pairs {
             pair_names.insert(pair_to_bebop_format(&pair));
         }
-        Self { url, pairs: pair_names, chain, tvl, ws_user, ws_key }
-    }
-
-    /// Calculates Total Value Locked (TVL) based on bid/ask levels.
-    ///
-    /// TVL is calculated using the formula from Bebop's documentation:
-    /// https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/rfq-api-endpoints/pricing#interpreting-price-levels
-    ///
-    /// Returns the average of bid and ask TVLs across all price levels.
-    ///
-    /// Note: This calculation assumes all pairs use the same quote token.
-    /// For cross-pair comparisons, token prices should be normalized to a common denomination.
-    fn calculate_tvl(&self, price_data: &BebopPriceData) -> f64 {
-        let bid_tvl: f64 = price_data
-            .bids
-            .iter()
-            .map(|(price, size)| price * size)
-            .sum();
-
-        let ask_tvl: f64 = price_data
-            .asks
-            .iter()
-            .map(|(price, size)| price * size)
-            .sum();
-
-        (bid_tvl + ask_tvl) / 2.0
+        let quote_tokens = HashSet::from([
+            String::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"), // USDC
+            String::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"), // USDT
+        ]);
+        Self { url, pairs: pair_names, chain, tvl, ws_user, ws_key, quote_tokens }
     }
 
     fn create_component_with_state(
@@ -261,23 +278,49 @@ impl RFQClient for BebopClient {
                                     let mut latest_timestamp = 0u64;
 
                                     // Process all pairs from this WebSocket message
-                                    for (pair, price_data) in price_data_map {
-                                        if pairs.contains(&pair) {
-                                            let tvl = client.calculate_tvl(&price_data);
+                                    for (pair, price_data) in price_data_map.iter() {
+                                        if pairs.contains(pair) {
+                                            let component_id = format!("bebop_{}", pair.replace("/", "_"));
+
+                                            let (token0, token1);
+                                            if let Some((t0, t1)) = pair.split_once('/') {
+                                                token0 = t0;
+                                                token1 = t1;
+                                            } else {
+                                                // Tokens improperly formatted. Skip.
+                                                continue;
+                                            };
+
+                                            let tokens = vec![
+                                                tycho_common::Bytes::from(token0.as_bytes().to_vec()),
+                                                tycho_common::Bytes::from(token1.as_bytes().to_vec())
+                                            ];
+
+                                            let mut quote_price_data: Option<BebopPriceData> = None;
+                                            // The quote token is not one of the approved quote tokens
+                                            // Get the price, so we can normalize our TVL calculation
+                                            if !client.quote_tokens.contains(token1) {
+                                                for quote_token in &client.quote_tokens {
+                                                    let quote_pair_name = format!("{}/{}", token1, quote_token);
+                                                    if let Some(data) = price_data_map.get(&quote_pair_name) {
+                                                        quote_price_data = Some(data.clone());
+                                                        break;
+                                                    };
+                                                }
+
+                                                // Quote token doesn't have price levels in approved quote tokens.
+                                                // Skip.
+                                                if quote_price_data.is_none() {
+                                                    continue;
+                                                }
+                                            }
+
+                                            let tvl = price_data.calculate_tvl(quote_price_data);
                                             if tvl < tvl_threshold {
                                                 continue;
                                             }
 
-                                            let component_id = format!("bebop_{}", pair.replace("/", "_"));
-
-                                            let tokens;
-                                            if let Some((token0, token1)) = pair.split_once('/') {
-                                                tokens = vec![token0.as_bytes().to_vec().into(), token1.as_bytes().to_vec().into()]
-                                            } else {
-                                                continue;
-                                            };
-
-                                            let component_with_state = client.create_component_with_state(component_id.clone(), tokens, &price_data, tvl);
+                                            let component_with_state = client.create_component_with_state(component_id.clone(), tokens, price_data, tvl);
                                             new_components.insert(component_id, component_with_state);
 
                                             // Track the latest timestamp across all pairs
@@ -374,7 +417,7 @@ mod tests {
     async fn test_bebop_websocket_connection() {
         tracing_subscriber::fmt::init();
 
-        let usdc = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string();
+        let usd = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string();
         let weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string();
 
         let ws_user = String::from("tycho");
@@ -382,7 +425,7 @@ mod tests {
 
         let client = BebopClient::new(
             Chain::Ethereum,
-            vec![(weth.to_string(), usdc.to_string())],
+            vec![(weth.to_string(), usd.to_string())],
             1000.0, // $1000 minimum TVL
             ws_user,
             ws_key,
@@ -401,7 +444,7 @@ mod tests {
                         println!("Received message with ID: {component_id}");
 
                         assert!(!component_id.is_empty());
-                        assert_eq!(component_id, "bebop_all_pairs");
+                        assert_eq!(component_id, "bebop");
                         assert!(msg.header.timestamp > 0);
                         assert!(!msg.snapshots.states.is_empty());
 
@@ -466,18 +509,14 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_tvl() {
-        let ws_user = String::from("tycho");
-        let ws_key = String::from("mock-key");
-        let client = BebopClient::new(Chain::Ethereum, vec![], 0.0, ws_user, ws_key);
-
+    fn test_calculate_tvl_no_normalization() {
         let price_data = BebopPriceData {
             last_update_ts: 1234567890.0,
             bids: vec![(2000.0, 1.0), (1999.0, 2.0)],
             asks: vec![(2001.0, 1.5), (2002.0, 1.0)],
         };
 
-        let tvl = client.calculate_tvl(&price_data);
+        let tvl = price_data.calculate_tvl(None);
 
         // Expected calculation:
         // Bid TVL: (2000.0 * 1.0) + (1999.0 * 2.0) = 2000.0 + 3998.0 = 5998.0
@@ -487,7 +526,31 @@ mod tests {
     }
 
     #[test]
-    fn test_get_mid_usdc_price() {
+    fn test_calculate_tvl_with_normalization() {
+        // Scenario: We have price data for ETH/TAMARA. One ETH is normally around 100 TAMARA,
+        // and one TAMARA is around 10 USDC.
+        let price_data_eth_tamara = BebopPriceData {
+            last_update_ts: 1234567890.0,
+            bids: vec![(99.0, 1.0), (98.0, 2.0)],
+            asks: vec![(101.0, 1.0), (102.0, 2.0)],
+        };
+        let price_data_tamara_usdc = BebopPriceData {
+            last_update_ts: 1234567890.0,
+            bids: vec![(9.0, 300.0), (8.0, 300.0)],
+            asks: vec![(11.0, 300.0), (12.0, 300.0)],
+        };
+
+        let tvl = price_data_eth_tamara.calculate_tvl(Some(price_data_tamara_usdc));
+
+        // Expected calculation:
+        // TVL of ETH in TAMARA = (99 * 1 + 98 * 2 + 101 * 1 + 102 * 2) / 2 = 300
+        // Price of TAMARA in USDC = around 10
+        // TVL of ETH in USDC = 300 * 10 = 3000
+        assert_eq!(tvl, 3000.0);
+    }
+
+    #[test]
+    fn test_get_mid_usd_price() {
         let price_data = BebopPriceData {
             last_update_ts: 1234567890.0,
             bids: vec![(2000.0, 2.0), (1999.0, 3.0)],
@@ -495,7 +558,7 @@ mod tests {
         };
 
         // Test mid price for larger amount spanning multiple levels
-        let mid_price_large = price_data.get_mid_usdc_price(3.0);
+        let mid_price_large = price_data.get_mid_usd_price(3.0);
         // Sell 3.0 tokens: 2.0 at 2000.0 + 1.0 at 1999.0 = 4000.0 + 1999.0 = 5999.0
         // Buy 3.0 tokens: 3.0 at 2001.0 = 6003.0
         // Mid = (5999.0 + 6003.0) / 2 = 6001.0
@@ -507,7 +570,7 @@ mod tests {
             bids: vec![],
             asks: vec![(2001.0, 3.0), (2002.0, 1.0)],
         };
-        assert_eq!(price_data.get_mid_usdc_price(3.0), None);
+        assert_eq!(price_data.get_mid_usd_price(3.0), None);
 
         // Test missing asks
         let price_data = BebopPriceData {
@@ -515,7 +578,7 @@ mod tests {
             bids: vec![(2000.0, 2.0), (1999.0, 3.0)],
             asks: vec![],
         };
-        assert_eq!(price_data.get_mid_usdc_price(3.0), None);
+        assert_eq!(price_data.get_mid_usd_price(3.0), None);
 
         // Test insufficient liquidity
         let price_data = BebopPriceData {
@@ -523,7 +586,7 @@ mod tests {
             bids: vec![(2000.0, 2.0), (1999.0, 3.0)],
             asks: vec![(2001.0, 3.0), (2002.0, 1.0)],
         };
-        let insufficient_mid = price_data.get_mid_usdc_price(10.0);
+        let insufficient_mid = price_data.get_mid_usd_price(10.0);
         assert_eq!(insufficient_mid, None); // Not enough liquidity for 10 tokens
     }
 }
