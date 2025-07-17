@@ -181,7 +181,7 @@ impl RFQClient for BebopClient {
                         tracing::error!("Failed to connect to Bebop WebSocket (attempt {}): {}", reconnect_attempts, e);
 
                         if reconnect_attempts >= MAX_RECONNECT_ATTEMPTS {
-                            yield Err(RFQError::ConnectionError(format!("Failed to connect after {} attempts: {}", MAX_RECONNECT_ATTEMPTS, e)));
+                            yield Err(RFQError::ConnectionError(format!("Failed to connect after {MAX_RECONNECT_ATTEMPTS} attempts: {e}")));
                             return;
                         }
 
@@ -259,7 +259,7 @@ impl RFQClient for BebopClient {
                                 },
                                 Err(e) => {
                                     tracing::error!("Failed to parse websocket message: {}", e);
-                                    yield Err(RFQError::ParsingError(format!("Failed to parse message: {}", e)));
+                                    yield Err(RFQError::ParsingError(format!("Failed to parse message: {e}")));
                                     break;
                                 }
                             }
@@ -279,7 +279,7 @@ impl RFQClient for BebopClient {
                 // If we're here, the message loop exited - always attempt to reconnect
                 reconnect_attempts += 1;
                 if reconnect_attempts >= MAX_RECONNECT_ATTEMPTS {
-                    yield Err(RFQError::ConnectionError(format!("Connection failed after {} attempts", MAX_RECONNECT_ATTEMPTS)));
+                    yield Err(RFQError::ConnectionError(format!("Connection failed after {MAX_RECONNECT_ATTEMPTS} attempts")));
                     return;
                 }
 
@@ -377,16 +377,8 @@ mod tests {
                             // Check that bids and asks exist and have non-empty byte strings
                             assert!(attributes.contains_key("bids"));
                             assert!(attributes.contains_key("asks"));
-                            assert!(
-                                attributes["bids"].len() > 0,
-                                "Bids byte string should not be empty for component {}",
-                                id
-                            );
-                            assert!(
-                                attributes["asks"].len() > 0,
-                                "Asks byte string should not be empty for component {}",
-                                id
-                            );
+                            assert!(!attributes["bids"].is_empty());
+                            assert!(!attributes["asks"].is_empty());
 
                             if let Some(tvl) = component_with_state.component_tvl {
                                 assert!(tvl >= 0.0);
@@ -400,7 +392,7 @@ mod tests {
                         }
                     }
                     Err(e) => {
-                        panic!("Stream error: {}", e);
+                        panic!("Stream error: {e}");
                     }
                 }
             }
