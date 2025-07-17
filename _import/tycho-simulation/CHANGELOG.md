@@ -1,3 +1,10 @@
+## [0.128.1](https://github.com/propeller-heads/tycho-simulation/compare/0.128.0...0.128.1) (2025-07-17)
+
+
+### Bug Fixes
+
+* Add a merge method to Update ([500e757](https://github.com/propeller-heads/tycho-simulation/commit/500e757cf6726f015e28646039f3774677b5104d))
+
 ## [0.128.0](https://github.com/propeller-heads/tycho-simulation/compare/0.127.1...0.128.0) (2025-07-17)
 
 
