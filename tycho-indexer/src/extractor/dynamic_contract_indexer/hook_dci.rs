@@ -3,15 +3,16 @@
 
 use tonic::async_trait;
 use tycho_common::{
-    models::{protocol::ProtocolComponent, Address, BlockHash, ComponentId},
+    models::{protocol::ProtocolComponent, Address, BlockHash, ComponentId, TxHash},
     storage::EntryPointGateway,
     traits::{AccountExtractor, EntryPointTracer},
 };
 
 use crate::extractor::{
     dynamic_contract_indexer::{
-        cache::VersionedCache, component_metadata::BlockMetadataOrchestrator,
-        dci::DynamicContractIndexer, hook_orchestrator::HookOrchestratorRegistry,
+        cache::VersionedCache, dci::DynamicContractIndexer,
+        hook_orchestrator::HookOrchestratorRegistry,
+        metadata_orchestrator::BlockMetadataOrchestrator,
     },
     models::BlockChanges,
     ExtractionError, ExtractorExtension,
@@ -34,6 +35,9 @@ where
     // Pause after a certain number of retries to avoid failed simulations.
     pause_after_retries: u32,
 }
+
+type ComponentWithTxHash = (TxHash, ProtocolComponent); // TODO: See if it makes sens to make this a struct
+
 impl<AE, T, G> UniswapV4HookDCI<AE, T, G>
 where
     AE: AccountExtractor + Send + Sync,
@@ -55,7 +59,7 @@ where
         &self,
         components: &[ProtocolComponent],
         block_changes: &mut BlockChanges,
-    ) -> Result<(Vec<ProtocolComponent>, Vec<ProtocolComponent>), ExtractionError> {
+    ) -> Result<(Vec<ComponentWithTxHash>, Vec<ComponentWithTxHash>), ExtractionError> {
         todo!()
     }
 
