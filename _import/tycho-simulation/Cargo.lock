@@ -637,7 +637,7 @@ dependencies = [
  "alloy-rlp",
  "alloy-serde",
  "alloy-sol-types",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "serde",
  "serde_json",
  "serde_with",
@@ -3274,7 +3274,7 @@ dependencies = [
  "foundry-compilers-core",
  "futures-util",
  "home",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "path-slash",
  "rayon",
  "semver 1.0.26",
@@ -5755,7 +5755,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.104",
@@ -7273,7 +7273,7 @@ dependencies = [
  "derive_builder",
  "derive_more 2.0.1",
  "dunce",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "itoa",
  "lasso",
  "match_cfg",
@@ -7308,7 +7308,7 @@ dependencies = [
  "alloy-primitives",
  "bitflags 2.9.1",
  "bumpalo",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "memchr",
  "num-bigint",
  "num-rational",
@@ -8235,9 +8235,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.77.0"
+version = "0.77.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9aea9bfdeda81cb4efdc7ceec4c54e01952593978567a072a7e67cf6d92f9196"
+checksum = "9195ad727ae3230a7afa002f6ef98699babdd375f9e3b40c8ba3324ef9591553"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8262,9 +8262,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.77.0"
+version = "0.77.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7ccbaa0c3005454bc4220020f6176a661ee35139c6df0e72e6999e5991bbe912"
+checksum = "fa1544bae6eb83b5e941fbe8c585f72c485f2877151c9592dce5a1e3873dbf6b"
 dependencies = [
  "anyhow",
  "async-trait",

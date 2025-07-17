@@ -7,7 +7,10 @@ pub enum RFQError {
     ConnectionError(String),
     #[error("RFQ parsing error: {0}")]
     ParsingError(String),
+    #[error("RFQ fatal error: {0}")]
+    FatalError(String),
 }
+
 impl From<reqwest::Error> for RFQError {
     fn from(err: reqwest::Error) -> Self {
         RFQError::ConnectionError(err.to_string())
