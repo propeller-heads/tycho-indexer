@@ -47,6 +47,63 @@ fn pair_to_bebop_format(pair: &(String, String)) -> String {
     format!("{}/{}", pair.0, pair.1)
 }
 
+/// Gets the mid price of the given token with USDC as the quote token
+///
+/// # Parameters
+/// - `token_amount`: The amount of tokens to price
+/// - `price_data`: The price data containing bids and asks
+///
+/// # Returns
+/// The USDC amount at mid price, or None if insufficient liquidity on either side
+fn get_mid_usdc_price(token_amount: f64, price_data: &BebopPriceData) -> Option<f64> {
+    let sell_usdc = calculate_usdc_amount(token_amount, price_data, true)?;
+    let buy_usdc = calculate_usdc_amount(token_amount, price_data, false)?;
+
+    // Return average (mid price)
+    Some((sell_usdc + buy_usdc) / 2.0)
+}
+
+/// Calculate USDC amount for trading tokens through price levels
+///
+/// # Parameters
+/// - `token_amount`: The amount of tokens to trade
+/// - `price_data`: The price data containing bids and asks
+/// - `is_selling`: True for selling tokens (use bids), false for buying tokens (use asks)
+///
+/// # Returns
+/// Total USDC amount, or None if insufficient liquidity
+fn calculate_usdc_amount(
+    token_amount: f64,
+    price_data: &BebopPriceData,
+    sell: bool,
+) -> Option<f64> {
+    // Price levels are already sorted: https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/rfq-api-endpoints/pricing#interpreting-price-levels
+    let price_levels = if sell { price_data.bids.clone() } else { price_data.asks.clone() };
+
+    let mut remaining_tokens = token_amount;
+    let mut total_usdc = 0.0;
+
+    for (price, usdc_size) in price_levels.iter() {
+        if remaining_tokens <= 0.0 {
+            break;
+        }
+
+        // Convert USDC size to token quantity available at this level
+        let tokens_available = usdc_size / price;
+        let tokens_to_trade = remaining_tokens.min(tokens_available);
+
+        total_usdc += tokens_to_trade * price;
+        remaining_tokens -= tokens_to_trade;
+    }
+
+    // Return None if we couldn't fill the entire order
+    if remaining_tokens > 0.0 {
+        None
+    } else {
+        Some(total_usdc)
+    }
+}
+
 impl BebopClient {
     pub fn new(
         chain: Chain,
@@ -427,5 +484,27 @@ mod tests {
         // Ask TVL: (2001.0 * 1.5) + (2002.0 * 1.0) = 3001.5 + 2002.0 = 5003.5
         // Total TVL: (5998.0 + 5003.5) / 2 = 5500.75
         assert!((tvl - 5500.75).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_get_mid_usdc_price() {
+        let price_data = BebopPriceData {
+            last_update_ts: 1234567890.0,
+            // You can buy 2000 USDC for 1 of token X, up to 4000 USDC worth
+            // and then 1999 USDC for 1 of token X after that, up to an additional 3998 USDC worth
+            bids: vec![(2000.0, 4000.0), (1999.0, 3998.0)],
+            asks: vec![(2001.0, 6003.0), (2002.0, 2002.0)],
+        };
+
+        // Test mid price for larger amount spanning multiple levels
+        let mid_price_large = get_mid_usdc_price(3.0, &price_data);
+        // Sell 3.0 tokens: 2.0 at 2000.0 + 1.0 at 1999.0 = 4000.0 + 1999.0 = 5999.0
+        // Buy 3.0 tokens: 3.0 at 2001.0 = 6003.0
+        // Mid = (5999.0 + 6003.0) / 2 = 6001.0
+        assert_eq!(mid_price_large, Some(6001.0));
+
+        // Test insufficient liquidity
+        let insufficient_mid = get_mid_usdc_price(10.0, &price_data);
+        assert_eq!(insufficient_mid, None); // Not enough liquidity for 10 tokens
     }
 }
