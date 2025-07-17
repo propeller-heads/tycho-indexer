@@ -1,4 +1,5 @@
 pub mod client;
 pub mod errors;
 pub mod indicatively_priced;
-mod models;
+pub mod models;
+pub mod stream;

@@ -1,3 +1,13 @@
+## [0.128.0](https://github.com/propeller-heads/tycho-simulation/compare/0.127.1...0.128.0) (2025-07-17)
+
+
+### Features
+
+* Generalise TychoStreamDecoder to take a HeaderLike trait impl ([2a3125a](https://github.com/propeller-heads/tycho-simulation/commit/2a3125aac56dd5cd8b09b6f3a299b033f88a2504))
+* Implement error handling in RFQStreamBuilder anc change RFQClient ([9cc115c](https://github.com/propeller-heads/tycho-simulation/commit/9cc115cfaffad1f881743324c2c4e30d069e1d1d))
+* Implement RFQStreamBuilder with a mocked test ([05f31d9](https://github.com/propeller-heads/tycho-simulation/commit/05f31d9decc1d4b2f3e229c47ce4086ea2432c93))
+* Upgrade tycho-common ([647954d](https://github.com/propeller-heads/tycho-simulation/commit/647954d8bc9ef8d1f2704b56d541e5d9df43b8af))
+
 ## [0.127.1](https://github.com/propeller-heads/tycho-simulation/compare/0.127.0...0.127.1) (2025-07-16)
 
 

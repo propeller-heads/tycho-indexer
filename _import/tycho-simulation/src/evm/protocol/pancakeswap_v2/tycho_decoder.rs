@@ -10,7 +10,7 @@ use crate::{
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 
-impl TryFromWithBlock<ComponentWithState> for PancakeswapV2State {
+impl TryFromWithBlock<ComponentWithState, BlockHeader> for PancakeswapV2State {
     type Error = InvalidSnapshotError;
 
     /// Decodes a `ComponentWithState` into a `PancakeswapV2State`. Errors with a

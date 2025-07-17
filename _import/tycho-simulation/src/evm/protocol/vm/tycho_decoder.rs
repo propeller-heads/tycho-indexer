@@ -17,7 +17,7 @@ use crate::{
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 
-impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
+impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCachedDB> {
     type Error = InvalidSnapshotError;
 
     /// Decodes a `ComponentWithState`, block `BlockHeader` and HashMap of all available tokens into
