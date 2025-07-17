@@ -35,7 +35,7 @@ pub mod synchronizer;
 /// or simplified structures that only provide a timestamp (e.g., for RFQ logic).
 pub trait HeaderLike {
     fn block(self) -> Option<BlockHeader>;
-    fn ts(self) -> u64;
+    fn block_number_or_timestamp(self) -> u64;
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, Eq, Hash)]
@@ -64,8 +64,8 @@ impl HeaderLike for BlockHeader {
         Some(self)
     }
 
-    fn ts(self) -> u64 {
-        self.timestamp
+    fn block_number_or_timestamp(self) -> u64 {
+        self.number
     }
 }
 
@@ -375,14 +375,20 @@ impl SynchronizerStream {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct FeedMessage {
-    pub state_msgs: HashMap<String, StateSyncMessage<BlockHeader>>,
+pub struct FeedMessage<H>
+where
+    H: HeaderLike,
+{
+    pub state_msgs: HashMap<String, StateSyncMessage<H>>,
     pub sync_states: HashMap<String, SynchronizerState>,
 }
 
-impl FeedMessage {
+impl<H> FeedMessage<H>
+where
+    H: HeaderLike,
+{
     fn new(
-        state_msgs: HashMap<String, StateSyncMessage<BlockHeader>>,
+        state_msgs: HashMap<String, StateSyncMessage<H>>,
         sync_states: HashMap<String, SynchronizerState>,
     ) -> Self {
         Self { state_msgs, sync_states }
@@ -411,7 +417,9 @@ where
         self.synchronizers = Some(registered);
         self
     }
-    pub async fn run(mut self) -> BlockSyncResult<(JoinHandle<()>, Receiver<FeedMessage>)> {
+    pub async fn run(
+        mut self,
+    ) -> BlockSyncResult<(JoinHandle<()>, Receiver<FeedMessage<BlockHeader>>)> {
         trace!("Starting BlockSynchronizer...");
         let mut state_sync_tasks = FuturesUnordered::new();
         let mut synchronizers = self
