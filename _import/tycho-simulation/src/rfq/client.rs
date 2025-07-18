@@ -1,12 +1,11 @@
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use tycho_client::feed::synchronizer::StateSyncMessage;
-
-use crate::rfq::{
-    errors::RFQError,
-    indicatively_priced::SignedQuote,
-    models::{GetAmountOutParams, TimestampHeader},
+use tycho_common::{
+    models::protocol::GetAmountOutParams, simulation::indicatively_priced::SignedQuote,
 };
+
+use crate::rfq::{errors::RFQError, models::TimestampHeader};
 
 #[async_trait]
 pub trait RFQClient: Send + Sync {
