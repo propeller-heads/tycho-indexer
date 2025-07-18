@@ -1,9 +1,11 @@
 #![allow(dead_code)] // TODO remove this
 use std::{
     collections::{HashMap, HashSet},
+    str::FromStr,
     time::SystemTime,
 };
 
+use alloy::primitives::Address;
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt};
 use tokio_tungstenite::{connect_async_with_config, tungstenite::Message};
@@ -24,8 +26,12 @@ use crate::{
 
 type BebopPriceMessage = HashMap<String, BebopPriceData>;
 
-fn pair_to_bebop_format(pair: &(String, String)) -> String {
-    format!("{}/{}", pair.0, pair.1)
+fn pair_to_bebop_format(pair: &(String, String)) -> Result<String, RFQError> {
+    let token0 = Address::from_str(&pair.0)
+        .map_err(|_| RFQError::ParsingError(format!("Invalid token address: {}.", pair.0)))?;
+    let token1 = Address::from_str(&pair.1)
+        .map_err(|_| RFQError::ParsingError(format!("Invalid token address: {}.", pair.1)))?;
+    Ok(format!("{}/{}", token0, token1))
 }
 
 /// Maps a Chain to its corresponding Bebop WebSocket URL
@@ -33,9 +39,10 @@ fn chain_to_bebop_url(chain: Chain) -> Result<String, RFQError> {
     let chain_path = match chain {
         Chain::Ethereum => "ethereum",
         Chain::Base => "base",
-        _ => return Err(RFQError::FatalError(format!("Unsupported chain: {:?}", chain))),
+        _ => return Err(RFQError::FatalError(format!("Unsupported chain: {chain:?}"))),
     };
-    Ok(format!("wss://api.bebop.xyz/pmm/{}/v3/pricing", chain_path))
+    let ws_url = format!("wss://api.bebop.xyz/pmm/{chain_path}/v3/pricing");
+    Ok(ws_url)
 }
 
 #[derive(Clone)]
@@ -67,7 +74,7 @@ impl BebopClient {
 
         let mut pair_names: HashSet<String> = HashSet::new();
         for pair in pairs {
-            pair_names.insert(pair_to_bebop_format(&pair));
+            pair_names.insert(pair_to_bebop_format(&pair)?);
         }
 
         Ok(Self { url, pairs: pair_names, chain, tvl, ws_user, ws_key, quote_tokens })
@@ -189,7 +196,7 @@ impl RFQClient for BebopClient {
                                     // Process all pairs from this WebSocket message
                                     for (pair, price_data) in price_data_map.iter() {
                                         if pairs.contains(pair) {
-                                            let component_id = format!("bebop_{}", pair);
+                                            let component_id = format!("bebop_{pair}");
 
                                             let (token0, token1);
                                             if let Some((t0, t1)) = pair.split_once('/') {
@@ -210,7 +217,7 @@ impl RFQClient for BebopClient {
                                             // Get the price, so we can normalize our TVL calculation
                                             if !client.quote_tokens.contains(token1) {
                                                 for quote_token in &client.quote_tokens {
-                                                    let quote_pair_name = pair_to_bebop_format(&(token1.into(), quote_token.into()));
+                                                    let quote_pair_name = pair_to_bebop_format(&(token1.into(), quote_token.into()))?;
                                                     if let Some(data) = price_data_map.get(&quote_pair_name) {
                                                         quote_price_data = Some(data.clone());
                                                         break;
@@ -337,7 +344,8 @@ mod tests {
 
         let quote_tokens = HashSet::from([
             String::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"), // USDC
-            String::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"), // USDT
+            // Test with address we forgot to checksum
+            String::from("0xdac17f958d2ee523a2206206994597c13d831ec7"), // USDT
         ]);
 
         let client = BebopClient::new(
