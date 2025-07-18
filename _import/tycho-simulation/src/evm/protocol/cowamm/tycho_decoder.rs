@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
 use alloy_primitives::U256;
-use rstest::rstest;
 use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_common::{dto::ResponseProtocolState, Bytes};
+use tycho_common::{dto::{ResponseProtocolState, ProtocolComponent}, Bytes};
 
 use crate::{
     evm::protocol::{
@@ -39,14 +38,45 @@ impl TryFromWithBlock<ComponentWithState> for CowAMMState {
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
-       //technically all of these attributes can't change so they are static
-        //so change this code to attributes not tokens
+        let address = snapshot
+                .component
+                .static_attributes
+                .get("address")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("address".to_string()))?
+                .clone();
+
         let token_a = snapshot
                 .component
                 .static_attributes
                 .get("token_a")
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("token_a".to_string()))?
                 .clone();
+
+        let liquidity_a = U256::from_be_bytes::<BYTES>(
+            snapshot
+                .component
+                .static_attributes
+                .get("liquidity_a")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity_a".to_string()))?
+                .as_ref()
+                .try_into()
+                .map_err(|err| {
+                    InvalidSnapshotError::ValueError(format!("liquidity_a length mismatch: {err:?}"))
+                })?,
+        );
+
+        let liquidity_b = U256::from_be_bytes::<BYTES>(
+            snapshot
+                .component
+                .static_attributes
+                .get("liquidity_b")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity_b".to_string()))?
+                .as_ref()
+                .try_into()
+                .map_err(|err| {
+                    InvalidSnapshotError::ValueError(format!("liquidity_b length mismatch: {err:?}"))
+                })?,
+        );
 
         let token_b = snapshot
                 .component
@@ -61,10 +91,24 @@ impl TryFromWithBlock<ComponentWithState> for CowAMMState {
                 .get("lp_token")
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("lp_token".to_string()))?
                 .clone();
+        
+       let lp_token_supply = U256::from_be_bytes::<BYTES>(
+            snapshot
+                .component
+                .static_attributes
+                .get("lp_token_supply")
+                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("lp_token_supply".to_string()))?
+                .as_ref()
+                .try_into()
+                .map_err(|err| {
+                    InvalidSnapshotError::ValueError(format!("lp_token_supply length mismatch: {err:?}"))
+                })?,
+        );
 
         let fee = 0u64;
 
-        //weight_a and weight_b are left padded big endian numbers of 32 bytes
+        //weight_a and weight_b are left padded big endian numbers of 32 bytes 
+        //we want a U256 number from the hex representation
         let weight_a =  U256::from_be_bytes::<BYTES>(
             snapshot
                 .component
@@ -91,41 +135,36 @@ impl TryFromWithBlock<ComponentWithState> for CowAMMState {
                 })?,
         );
 
-        Ok(Self::new(token_a, token_b, lp_token, weight_a, weight_b, fee))
+        Ok(Self::new(address, token_a, token_b, liquidity_a, liquidity_b, lp_token, lp_token_supply, weight_a, weight_b, fee))
     }
 }
 
-//what is a static attribute?
-//saw it as input in the integration.test.tycho.yaml
-//add something as a static attribute through the integration.test.tycho.yaml
-
-//what is an attribute?
-// the one we specify as part of the component 
-//where do we get them from surely ? tokens?
-//why are there some that are attributes and some that are static attributes \
-
-//understanding delta transitions?
-//delta transition fn does not return anything
-
-//snapshot.state
-
-//snapshot.component 
-
-//so we have to make the three tokens both tokens and attributes 
-//reason is because of the simulation
-//https://github.com/propeller-heads/tycho-protocol-sdk/blob/main/substreams/ethereum-ekubo-v2/src/modules/2_map_components.rs#L66
-
+//why am i using U256 again
 pub fn component() -> ProtocolComponent {
     ProtocolComponent {
         static_attributes: HashMap::from([
-            ("token_a".to_string(), U256([1, 0, 0, 0]).to_big_endian().into()),
-            ("token_b".to_string(), U256([2, 0, 0, 0]).to_big_endian().into()),
-            ("lp_token".to_string(), U256([2, 0, 0, 0]).to_big_endian().into()), // Base pool
+            ("weight_a".to_string(), Bytes::from(vec![0; 32])),
+            ("weight_b".to_string(), Bytes::from(vec![0; 32])),
+            ("token_a".to_string(),  Bytes::from(vec![0; 32])),
+            ("token_b".to_string(),  Bytes::from(vec![0; 32])),
+            ("liquidity_a".to_string(),  Bytes::from(vec![0; 32])),
+            ("liquidity_b".to_string(),  Bytes::from(vec![0; 32])),
+            ("lp_token".to_string(), Bytes::from(vec![0; 32])), 
+            ("lp_token_supply".to_string(), Bytes::from(vec![0; 32])), 
+            ("fee".to_string(), 0u64.into()), 
         ]),
         ..Default::default()
     }
 }
-#[tokio::test]
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+    use tycho_common::dto::ResponseProtocolState;
+    
+    use super::*;
+
+    #[tokio::test]
     async fn test_cowamm_try_from() {
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
@@ -192,6 +231,7 @@ pub fn component() -> ProtocolComponent {
 //             InvalidSnapshotError::MissingAttribute(ref x) if x == missing_attribute 
 //         ));
 // }
+}
 
 //where is the snapshot coming from ? Will investigate 
 
@@ -220,3 +260,7 @@ pub fn component() -> ProtocolComponent {
 //There are some attributes that are static attributes, and some are just attributes 
 
 //add something as a 
+
+
+// i need to create a mermaid visualization for the simulation layer in tycho, i actually do not understand it at all 
+

@@ -1,6 +1,8 @@
 use alloy::primitives::U256;
 use super::constants::{BONE, U256_1, U256_10E_10, U256_2};
 use super::error::CowAMMError;
+use crate::protocol::errors::SimulationError;
+use crate::tycho_common::Bytes;
 
 // https://github.com/darkforestry/amms-rs/blob/main/src/amms/balancer/bmath.rs
 pub fn btoi(a: U256) -> U256 {

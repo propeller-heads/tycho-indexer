@@ -1,14 +1,12 @@
 use std::{collections::HashMap, fmt::Debug};
 use std::any::Any;
 use alloy_primitives::{Address, U256};
-use num_bigint::BigUint;
-// use rug::{float::Round, Float};
+use num_bigint::{BigUint,ToBigUint};
 use tycho_common::{dto::ProtocolStateDelta, Bytes};
-
 use crate::{
     evm::protocol::{
         cowamm::{
-            bmath,
+            bmath::*,
             error::CowAMMError,
             constants::BONE,
         },
@@ -28,39 +26,23 @@ const MAX_IN_FACTOR: u64 = 50;
 const MAX_OUT_FACTOR: u64 = 33;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TokenState {
-    pub token: Token, // should it be Token 
-    pub weight: U256,
-    pub liquidity: U256, 
-}
-
-
-impl TokenState {
-    /// Creates a new `TokenState` instance.
-    ///
-    /// # Arguments
-    /// - `token`: The token associated with this state.
-    /// - `weight`: The normalized weight of the token.
-    /// - `liquidity`: The current liquidity of the token in the pool.
-    ///
-    /// # Returns
-    /// A new `TokenState` instance.
-    pub fn new(token: Token, weight: U256, liquidity: U256) -> Self {
-        Self {
-            token,
-            weight,
-            liquidity,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CowAMMState {
-     /// The Pool Address.
+     /// The Pool Address
     address: Bytes,
-    state: HashMap<Bytes, TokenState>, 
-    /// The Swap Fee on the Pool.
+    /// The Swap Fee on the Pool
     fee: u64,
+    /// Liquidity of token a
+    liquidity_a: U256,
+    /// Liquidity of token b
+    liquidity_b: U256,
+    /// Weight of token a
+    weight_a: U256,
+    /// Weight of token b
+    weight_b: U256,
+    ///The lp token of the pool
+    lp_token: Bytes,
+    /// The Supply of the lp token 
+    lp_token_supply: U256
 }
 
 impl CowAMMState {
@@ -69,35 +51,80 @@ impl CowAMMState {
     /// # Arguments
     /// - `token_a`: The first token in the pair.
     /// - `token_b`: The second token in the pair.
+    /// - `liquidity_a`: The first token in the pair.
+    /// - `liquidity_b`: The second token in the pair.
     /// - `lp_token`: The pool address (usually the LP token address).
-    /// - `fee`: The swap fee for the pool.
+    /// - `lp_token_supply`: The supply of the lp_token in the pool 
     /// - `weight_a`: The normalized weight of `token_a`.
     /// - `weight_b`: The normalized weight of `token_b`.
+    /// - `fee`: The swap fee for the pool.
     ///
     /// # Returns
     /// A new `CowAMMState` with token states initialized.
     pub fn new(
+        address: Bytes,
         token_a: Bytes,
         token_b: Bytes,
+        liquidity_a: U256,
+        liquidity_b: U256,
         lp_token: Bytes,
+        lp_token_supply: U256,
         weight_a: U256,
         weight_b: U256,
         fee: u64,
     ) -> Self {
-        let mut state = HashMap::new();
-  
-        let t1 = format!("0x{encoded}", encoded = hex::encode::<Vec<u8>>(token_a.clone().to_vec()));
-        let t2 = format!("0x{encoded}", encoded = hex::encode::<Vec<u8>>(token_b.clone().to_vec()));
-
-        //default values
-        state.insert(token_a, TokenState::new(Token::new(&t1, 18, "", BigUint::from(21_000u32)), weight_a, U256::from(0)));
-        state.insert(token_b, TokenState::new(Token::new(&t2, 18, "", BigUint::from(21_000u32)), weight_b, U256::from(0)));
-
-        CowAMMState {
-            address: lp_token, // address of pool and lp_token are the same
-            state,
+        Self {
+            address,
+            liquidity_a,
+            liquidity_b,
+            lp_token,
+            lp_token_supply,
+            weight_a,
+            weight_b,
             fee,
         }
+    }
+    
+    /// Calculates the proportion of tokens a user receives when exiting the pool by burning LP tokens,
+    ///
+    ///
+    /// Solidity reference:
+    /// https://github.com/balancer/balancer-v2-monorepo/blob/master/pkg/core/contracts/pools/weighted/WeightedMath.sol#L299
+    ///
+    /// Formula:
+    /// amountOut[i] = balances[i] * (lpTokenAmountIn / totalLpToken)
+    ///
+    /// # Arguments
+    /// * `pool` - Reference to the pool containing balances and LP supply
+    /// * `lp_token_in` - Amount of LP tokens to burn
+    ///
+    /// # Returns
+    /// Tuple of `(amountOut_tokenA, amountOut_tokenB)`
+    pub fn calc_tokens_out_given_exact_lp_token_in(
+        &self,
+        lp_token_in: U256,
+    ) -> Result<(U256, U256), SimulationError> {
+        // Collect balances
+        let balances = vec![
+            self.liquidity_a, 
+            self.liquidity_b
+        ];
+
+        let total_lp_token = self.lp_token_supply;
+
+        // lpTokenRatio = lp_token_in / total_lp_token
+        let lp_token_ratio = bdiv(lp_token_in, total_lp_token)       
+        .map_err(|err| SimulationError::FatalError(format!("Error in calculating LP token ratio {err:?}")))?;
+
+        // amountsOut[i] = balances[i] * lp_token_ratio
+        let mut amounts_out = Vec::with_capacity(balances.len());
+        for balance in balances.iter() {
+            let amount = bmul(*balance, lp_token_ratio)
+            .map_err(|err| SimulationError::FatalError(format!("Total LP token supply missing {err:?}")))?;
+            amounts_out.push(amount);
+        }
+
+        Ok((amounts_out[0], amounts_out[1]))
     }
 }
 
@@ -121,139 +148,152 @@ impl ProtocolSim for CowAMMState {
         let norm_base = 10_f64.powi((18i32 - base.decimals as i32).max(0));
         let norm_quote = 10_f64.powi((18i32 - quote.decimals as i32).max(0));
 
-        let base_token = self
-            .state
-            .get(&base.address)
-            .ok_or(CowAMMError::TokenInDoesNotExist)
-            .map_err(|err| SimulationError::FatalError(format!("token not found: {err:?}")))?;
-        let quote_token = self
-            .state
-            .get(&quote.address)
-            .ok_or(CowAMMError::TokenOutDoesNotExist)
-            .map_err(|err| SimulationError::FatalError(format!("token not found: {err:?}")))?;
-
         // Normalize weights
-        let norm_weight_base = u256_to_f64(base_token.weight) / norm_base;
-        let norm_weight_quote = u256_to_f64(quote_token.weight) / norm_quote;
+        let norm_weight_base = u256_to_f64(self.weight_a) / norm_base;
+        let norm_weight_quote = u256_to_f64(self.weight_b) / norm_quote;
 
         // Get balances (liquidity)
-        let balance_base = u256_to_f64(base_token.liquidity); 
-        let balance_quote = u256_to_f64(quote_token.liquidity);
+        let balance_base = u256_to_f64(self.liquidity_a); 
+        let balance_quote = u256_to_f64(self.liquidity_b);
         
         // Fee as fraction: assume fee is in wei (1e18 = 100%)
         let fee_fraction = (self.fee as f64) / bone;
         
-        // Apply spot price formula
+        // Apply spot price formula 
         let dividend = (balance_quote / norm_weight_quote) * bone;
         let divisor = (balance_base / norm_weight_base) * (bone * (1.0 - fee_fraction));
         
-        let ratio = dividend / divisor;
+        let ratio = dividend / divisor; //swap this to match solidity version 
 
         Ok(ratio)
     }
-    // handle lp_token case too, where we calculate the expected amount of both tokens 
-    // both tokens cannot be lp_token -> CHECK
-    // exitPool
-    // if token_in is an lp_token compute the lp redemption , get both the other token in pair and token_out (double sided liquidity pool)
-        // get the proportional amount of both tokens
-            // get_amount_out of superfluous token we want to swap
-    //joinPool
-    // if token_out 
+
     fn get_amount_out(
         &self,
         amount_in: BigUint,
-        token_in: &Token,
-        token_out: &Token,
+        token_in: &Token, //sell_token
+        token_out: &Token, //buy_token
     ) -> Result<GetAmountOutResult, SimulationError> {
         let amount_in = biguint_to_u256(&amount_in);
-        if amount_in == U256::from(0u64) {
+        
+        if amount_in.is_zero() {
             return Err(SimulationError::InvalidInput("Amount in cannot be zero".to_string(), None));
-        }
-        //how would we be able to tell its the address of a pool
-        if token_in.address == self.address && token_out.address == self.address{
-            return Err(SimulationError::InvalidInput("cannot exchange LP token for LP token".to_string(), None));
-        }
-        let token_in_state =  self
-            .state
-            .get(&token_in.address)
-            .ok_or(CowAMMError::TokenInDoesNotExist)
-            .map_err(|err| SimulationError::FatalError(format!("token not found: {err:?}")))?;
+        } 
 
-        let token_out_state = self
-            .state
-            .get(&token_out.address)
-            .ok_or(CowAMMError::TokenOutDoesNotExist)
-            .map_err(|err| SimulationError::FatalError(format!("token not found: {err:?}")))?;
+        let is_lp_in = token_in.address == self.address;
+        let is_lp_out = token_out.address == self.address;
 
-  
-        let amount_out = bmath::calculate_out_given_in(
-            token_in_state.liquidity,
-            token_in_state.weight,
-            token_out_state.liquidity,
-            token_out_state.weight,
+        if is_lp_in && is_lp_out {
+            return Err(SimulationError::InvalidInput("Cannot swap LP token for LP token".into(), None));
+        }
+
+        let mut new_state = self.clone();
+
+        if is_lp_in && !is_lp_out {
+            // Exit Pool (selling LP tokens for token_out)
+            let (proportional_token_amount_a, proportional_token_amount_b) = self.calc_tokens_out_given_exact_lp_token_in(
+                amount_in
+            ).map_err(|e| SimulationError::RecoverableError(format!("failed to calculate token proportions out error: {e:?}")))?;
+            // Think of it from the pools perspective , when a user exits the pool, they get their tokens back and redeems the lp_token (lp token gets burnt)
+
+            // The liquidity provision is double sided hence both reserves reduce by the proportional amounts for both tokens
+            new_state.liquidity_a = safe_sub_u256(self.liquidity_a, proportional_token_amount_a)?;
+            new_state.liquidity_b = safe_sub_u256(self.liquidity_b, proportional_token_amount_b)?;
+
+            // When a user redeems LP tokens, those tokens are effectively burned, the internal lp_token_supply will decrease by the amount they send
+            new_state.lp_token_supply = safe_sub_u256(self.lp_token_supply, amount_in)?;
+
+            //we have to compute the amount of the superfluous token we want to swap out
+            let amount_out = calculate_out_given_in(
+                self.liquidity_a,
+                self.weight_a,
+                self.liquidity_b,
+                self.weight_b,
+                proportional_token_amount_b,
+                U256::from(self.fee),
+            )
+            .map_err(|e| SimulationError::RecoverableError(format!("amount_out error: {e:?}")))?;
+            
+            new_state.liquidity_a = safe_sub_u256(self.liquidity_a, amount_in)?;
+            new_state.liquidity_b = safe_add_u256(self.liquidity_b, amount_out)?;
+
+            return Ok(GetAmountOutResult {
+                amount: u256_to_biguint(amount_out),
+                gas: 120_000u64.to_biguint().unwrap(), //change this 
+                new_state: Box::new(new_state),
+            });
+        }
+
+        if is_lp_out && !is_lp_in {
+            let (proportional_token_amount_a, proportional_token_amount_b) = self.calc_tokens_out_given_exact_lp_token_in(
+                amount_in
+            ).map_err(|e| SimulationError::RecoverableError(format!("failed to calculate token proportions out error: {e:?}")))?;
+            //Think of it from the pools perspective , when a user exits the pool, they get their tokens back and redeems the lp_token (lp token gets burnt)
+
+            // The liquidity provision is double sided hence both reserves reduce by the proportional amounts for both tokens
+            new_state.liquidity_a = safe_add_u256(self.liquidity_a, proportional_token_amount_a)?;
+            new_state.liquidity_b = safe_add_u256(self.liquidity_b, proportional_token_amount_b)?;
+
+            // When a user joins the pool, the LP tokens are transferred to the user, so the internal lp_token_supply will decrease by the amount that is sent to the user
+            new_state.lp_token_supply = safe_sub_u256(self.lp_token_supply, amount_in)?;
+
+            //we have to compute the final swap result of the superfluous token 
+            let amount_out = calculate_out_given_in(
+                self.liquidity_a,
+                self.weight_a,
+                self.liquidity_b,
+                self.weight_b,
+                proportional_token_amount_a,
+                U256::from(self.fee),
+            )
+            .map_err(|e| SimulationError::RecoverableError(format!("amount_out error: {e:?}")))?;
+
+            new_state.liquidity_a = safe_sub_u256(self.liquidity_a, amount_in)?;
+            new_state.liquidity_b = safe_add_u256(self.liquidity_b, amount_out)?;
+
+            return Ok(GetAmountOutResult {
+                amount: u256_to_biguint(amount_out),
+                gas: 120_000u64.to_biguint().unwrap(),
+                new_state: Box::new(new_state),
+            });
+        }
+
+        let amount_out = calculate_out_given_in(
+            self.liquidity_a,
+            self.weight_a,
+            self.liquidity_b,
+            self.weight_b,
             amount_in,
             U256::from(self.fee),
-        ).map_err(|err| SimulationError::RecoverableError(format!("amount out calculation error: {err:?}")))?;
+        )
+        .map_err(|e| SimulationError::RecoverableError(format!("amount_out error: {e:?}")))?;
 
-        let bal1 = token_in_state.liquidity;
-        let bal2 = token_out_state.liquidity;
-        
-        let gas_used = U256::from(120000); //how can we determine the actual gas used? ans - (probably have to check calcInGivenOut() method when i run those unit test with -vvvvv in foundry)
-        let mut new_state = self.clone();
-        //chatgpt said this actually works because of the mutable hashmap borrow? loll okay will test it
-          { 
-            let new_token_in_state = new_state
-                .state
-                .get_mut(&token_in.address)
-                .ok_or(CowAMMError::TokenOutDoesNotExist)
-                .map_err(|err| SimulationError::FatalError(format!("token not found: {err:?}")))?;
-                 new_token_in_state.liquidity = safe_add_u256(bal1, amount_in)?;
-          }
-          {
-            let new_token_out_state = new_state
-                .state
-                .get_mut(&token_out.address)
-                .ok_or(CowAMMError::TokenOutDoesNotExist)
-                .map_err(|err| SimulationError::FatalError(format!("token not found: {err:?}")))?;
-                 new_token_out_state.liquidity = safe_sub_u256(bal2, amount_out)?;
-          }
+        new_state.liquidity_a = safe_sub_u256(self.liquidity_a, amount_in)?;
+        new_state.liquidity_b = safe_add_u256(self.liquidity_b, amount_out)?;
 
-        let res = GetAmountOutResult {
+        Ok(GetAmountOutResult {
             amount: u256_to_biguint(amount_out),
-            gas: u256_to_biguint(gas_used),
+            gas: 120_000u64.to_biguint().unwrap(),
             new_state: Box::new(new_state),
-        };
-
-        Ok(res)
+        })
     }
 
     fn get_limits(
         &self,
-        sell_token: Address,
-        buy_token: Address,
+        _sell_token: Address,
+        _buy_token: Address,
     ) -> Result<(BigUint, BigUint), SimulationError> {
-        let sell_token = self
-            .state
-            .get(&Bytes::from(sell_token.as_slice()))
-            .ok_or(CowAMMError::TokenInDoesNotExist) //sell token does not exist
-            .map_err(|err| SimulationError::FatalError(format!("token not found: {err:?}")))?; 
-        let buy_token = self
-            .state
-            .get(&Bytes::from(buy_token.as_slice()))
-            .ok_or(CowAMMError::TokenInDoesNotExist) //buy token does not exist 
-            .map_err(|err| SimulationError::FatalError(format!("token not found: {err:?}")))?;
-
-        if sell_token.liquidity.is_zero() || buy_token.liquidity.is_zero() {
+        if self.liquidity_a.is_zero() || self.liquidity_b.is_zero() {
             return Ok((BigUint::ZERO, BigUint::ZERO));
         }
 
         let max_in = safe_div_u256(
-            safe_mul_u256(sell_token.liquidity, U256::from(MAX_IN_FACTOR))?,
+            safe_mul_u256(self.liquidity_a, U256::from(MAX_IN_FACTOR))?,
             U256::from(100),
         )?;
 
         let max_out = safe_div_u256(
-            safe_mul_u256(buy_token.liquidity, U256::from(MAX_OUT_FACTOR))?,
+            safe_mul_u256(self.liquidity_b, U256::from(MAX_OUT_FACTOR))?,
             U256::from(100),
         )?;
 
@@ -263,20 +303,32 @@ impl ProtocolSim for CowAMMState {
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
-        tokens: &HashMap<Bytes, Token>,
-        balances: &Balances,
+        _tokens: &HashMap<Bytes, Token>,
+        _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
-        //where are we getting tokens from
-        //where are we getting balances from 
-        // balances.
-        //where would this delta_transition be used where its input will be fe
-        //okay we can see it in line 484 of evm > decoder.rs
-         if let Some(component_balances) = balances.component_balances.get(&delta.component_id) {
-            for (token_addr, balance_bytes) in component_balances {
-                let liquidity = U256::from_be_slice(balance_bytes);
-                self.state.get_mut(token_addr).map(|s| s.liquidity = liquidity);
-            }
-        }
+        // Apply attribute changes
+        if let Some(liquidity) = delta
+            .updated_attributes
+            .get("liquidity_a")
+        {
+            self.liquidity_a =  U256::from_be_slice(liquidity);
+        };
+
+        if let Some(liquidity) = delta
+            .updated_attributes
+            .get("liquidity_b")
+        {
+            self.liquidity_b = U256::from_be_slice(liquidity);
+        };
+
+        if let Some(supply) = delta
+            .updated_attributes
+            .get("lp_token_supply")
+        {
+            self.lp_token_supply = U256::from_be_slice(supply);
+        };
+
+        Ok(())
     }
     
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
@@ -298,7 +350,6 @@ impl ProtocolSim for CowAMMState {
             .is_some_and(|other_state| self == other_state)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -349,15 +400,32 @@ mod tests {
           // Prepare token addresses (Bytes) once
         let t0_bytes = Bytes::from(t0.clone().address);
         let t1_bytes = Bytes::from(t1.clone().address);
-
+pub struct CowAMMState {
+     /// The Pool Address
+    address: Bytes,
+    /// The Swap Fee on the Pool
+    fee: u64,
+    /// Liquidity of token a
+    liquidity_a: U256,
+    /// Liquidity of token b
+    liquidity_b: U256,
+    /// Weight of token a
+    weight_a: U256,
+    /// Weight of token b
+    weight_b: U256,
+    ///The lp token of the pool
+    lp_token: Bytes,
+    /// The Supply of the lp token 
+    lp_token_supply: U256
+}
         let mut state = CowAMMState {
             address: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            state: {
-                let mut m = HashMap::new();
-                m.insert(t0_bytes.clone(), TokenState { liquidity: r0, weight: U256::from(1u8), token: t0.clone() });
-                m.insert(t1_bytes.clone(), TokenState { liquidity: r1, weight: U256::from(1u8), token: t1.clone() });
-                m
-            },
+            liquidity_a: U256::from_str(),
+            liquidity_b: U256::from_str(),
+            weight_a: U256::from_str(),
+            weight_b: U256::from_str(),
+            lp_token: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
+            lp_token_supply: U256::from_str(),
             fee: 0,
         };
 
@@ -365,11 +433,11 @@ mod tests {
         assert_eq!(res.amount, expected_out);
 
         let new_state = res.new_state.as_any().downcast_ref::<CowAMMState>().unwrap();
-        assert_eq!(new_state.state[&t0_bytes].liquidity, r0 + biguint_to_u256(&amount_in));
-        assert_eq!(new_state.state[&t1_bytes].liquidity, r1 - biguint_to_u256(&expected_out));
+        assert_eq!(new_state.liquidity_a, r0 + biguint_to_u256(&amount_in));
+        assert_eq!(new_state.liquidity_b, r1 - biguint_to_u256(&expected_out));
         // Original state unchanged
-        assert_eq!(state.state[&t0_bytes].liquidity, r0);
-        assert_eq!(state.state[&t1_bytes].liquidity, r1);
+        assert_eq!(state.liquidity_a, r0);
+        assert_eq!(state.liquidity_b, r1);
     }
 
     #[test]
@@ -386,12 +454,12 @@ mod tests {
 
         let mut state = CowAMMState {
             address: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            state: {
-                let mut m = HashMap::new();
-                m.insert(t0_bytes.clone(), TokenState { liquidity: r0, weight: U256::from(1u8), token: t0.clone() });
-                m.insert(t1_bytes.clone(), TokenState { liquidity: r1, weight: U256::from(1u8), token: t1.clone() });
-                m
-            },
+            liquidity_a: U256::from_str(),
+            liquidity_b: U256::from_str(),
+            weight_a: U256::from_str(),
+            weight_b: U256::from_str(),
+            lp_token: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
+            lp_token_supply: U256::from_str(),
             fee: 0,
         };
 
@@ -412,14 +480,14 @@ mod tests {
         let t0_bytes = Bytes::from(t0.clone().address);
         let t1_bytes = Bytes::from(t1.clone().address);
 
-        let state = CowAMMState {
+        let mut state = CowAMMState {
             address: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            state: {
-                let mut m = HashMap::new();
-                m.insert(t0_bytes.clone(), TokenState { liquidity: r0, weight: U256::from(1u8), token: t0.clone() });
-                m.insert(t1_bytes.clone(), TokenState { liquidity: r1, weight: U256::from(1u8), token: t1.clone() });
-                m
-            },
+            liquidity_a: U256::from_str(),
+            liquidity_b: U256::from_str(),
+            weight_a: U256::from_str(),
+            weight_b: U256::from_str(),
+            lp_token: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
+            lp_token_supply: U256::from_str(),
             fee: 0,
         };
 
@@ -443,47 +511,58 @@ mod tests {
 
         assert_ulps_eq!(res, 0.0);
     }
-    //   #[test]
-    // fn test_delta_transition() { // chane the internal logic here lol
-    //     let mut state = CowAMMState {
-    //         address: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-    //         state: HashMap::new(),
-    //         fee: 0,
-    //     };
+      #[test]
+    fn test_delta_transition() { // chane the internal logic here lol
+        let mut state = CowAMMState {
+            address: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
+            liquidity_a: U256::from_str(),
+            liquidity_b: U256::from_str(),
+            weight_a: U256::from_str(),
+            weight_b: U256::from_str(),
+            lp_token: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
+            lp_token_supply: U256::from_str(),
+            fee: 0,
+        };
 
-    //     let mut attrs = HashMap::new();
-    //     attrs.insert("some".to_string(), Bytes::from(vec![0u8]));
+        let mut attrs = HashMap::new();
+        attrs.insert("some".to_string(), Bytes::from(vec![0u8]));
 
-    //     let delta = ProtocolStateDelta {
-    //         component_id: "foo".to_string(),
-    //         updated_attributes: attrs,
-    //         deleted_attributes: HashSet::new(),
-    //     };
+        let delta = ProtocolStateDelta {
+            component_id: "foo".to_string(),
+            updated_attributes: attrs,
+            deleted_attributes: HashSet::new(),
+        };
 
-    //     let err = state.delta_transition(delta, &HashMap::new(), &Balances::default());
-    //     assert!(matches!(err, Err(TransitionError::MissingAttribute(_))));
-    // }
+        let err = state.delta_transition(delta, &HashMap::new(), &Balances::default());
+        assert!(matches!(err, Err(TransitionError::MissingAttribute(_))));
+    }
 
-    // #[test]
-    // fn test_delta_transition_missing() {
-    //     let mut state = CowAMMState {
-    //         address: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-    //         state: HashMap::new(),
-    //         fee: 0,
-    //     };
+    #[test]
+    fn test_delta_transition_missing() {
+         let mut state = CowAMMState {
+            address: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
+            liquidity_a: U256::from_str(),
+            liquidity_b: U256::from_str(),
+            weight_a: U256::from_str(),
+            weight_b: U256::from_str(),
+            lp_token: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
+            lp_token_supply: U256::from_str(),
+            fee: 0,
+        };
 
-    //     let mut attrs = HashMap::new();
-    //     attrs.insert("some".to_string(), Bytes::from(vec![0u8]));
 
-    //     let delta = ProtocolStateDelta {
-    //         component_id: "foo".to_string(),
-    //         updated_attributes: attrs,
-    //         deleted_attributes: HashSet::new(),
-    //     };
+        let mut attrs = HashMap::new();
+        attrs.insert("some".to_string(), Bytes::from(vec![0u8]));
 
-    //     let err = state.delta_transition(delta, &HashMap::new(), &Balances::default());
-    //     assert!(matches!(err, Err(TransitionError::MissingAttribute(_))));
-    // }
+        let delta = ProtocolStateDelta {
+            component_id: "foo".to_string(),
+            updated_attributes: attrs,
+            deleted_attributes: HashSet::new(),
+        };
+
+        let err = state.delta_transition(delta, &HashMap::new(), &Balances::default());
+        assert!(matches!(err, Err(TransitionError::MissingAttribute(_))));
+    }
         #[test]
     fn test_get_limits_price_impact() {
          let state = CowAMMState::new(
