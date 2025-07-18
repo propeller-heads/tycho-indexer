@@ -28,19 +28,29 @@ fn pair_to_bebop_format(pair: &(String, String)) -> String {
     format!("{}/{}", pair.0, pair.1)
 }
 
+/// Maps a Chain to its corresponding Bebop WebSocket URL
+fn chain_to_bebop_url(chain: Chain) -> Result<String, RFQError> {
+    let chain_path = match chain {
+        Chain::Ethereum => "ethereum",
+        Chain::Base => "base",
+        _ => return Err(RFQError::FatalError(format!("Unsupported chain: {:?}", chain))),
+    };
+    Ok(format!("wss://api.bebop.xyz/pmm/{}/v3/pricing", chain_path))
+}
+
 #[derive(Clone)]
 pub struct BebopClient {
     chain: Chain,
     url: String,
     // Pairs that we want prices for
     pairs: HashSet<String>,
-    // Min tvl value in USD.
+    // Min tvl value in the quote token.
     tvl: f64,
     // name header for authentication
     ws_user: String,
     // key header for authentication
     ws_key: String,
-    // quote tokens to normalize to for TVL purposes
+    // quote tokens to normalize to for TVL purposes. Should have the same prices.
     quote_tokens: HashSet<String>,
 }
 
@@ -51,18 +61,16 @@ impl BebopClient {
         tvl: f64,
         ws_user: String,
         ws_key: String,
-    ) -> Self {
-        let url = "wss://api.bebop.xyz/pmm/ethereum/v3/pricing".to_string();
+        quote_tokens: HashSet<String>,
+    ) -> Result<Self, RFQError> {
+        let url = chain_to_bebop_url(chain)?;
 
         let mut pair_names: HashSet<String> = HashSet::new();
         for pair in pairs {
             pair_names.insert(pair_to_bebop_format(&pair));
         }
-        let quote_tokens = HashSet::from([
-            String::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"), // USDC
-            String::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"), // USDT
-        ]);
-        Self { url, pairs: pair_names, chain, tvl, ws_user, ws_key, quote_tokens }
+
+        Ok(Self { url, pairs: pair_names, chain, tvl, ws_user, ws_key, quote_tokens })
     }
 
     fn create_component_with_state(
@@ -181,7 +189,7 @@ impl RFQClient for BebopClient {
                                     // Process all pairs from this WebSocket message
                                     for (pair, price_data) in price_data_map.iter() {
                                         if pairs.contains(pair) {
-                                            let component_id = format!("bebop_{}", pair.replace("/", "_"));
+                                            let component_id = format!("bebop_{}", pair);
 
                                             let (token0, token1);
                                             if let Some((t0, t1)) = pair.split_once('/') {
@@ -327,18 +335,25 @@ mod tests {
         let ws_user = String::from("tycho");
         let ws_key = env::var("BEBOP_KEY").expect("BEBOP_KEY environment variable is required");
 
+        let quote_tokens = HashSet::from([
+            String::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"), // USDC
+            String::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"), // USDT
+        ]);
+
         let client = BebopClient::new(
             Chain::Ethereum,
             HashSet::from_iter(vec![(weth.to_string(), wbtc.to_string())]),
             10.0, // $10 minimum TVL
             ws_user,
             ws_key,
-        );
+            quote_tokens,
+        )
+        .unwrap();
 
         let mut stream = client.stream();
 
         // Test connection and message reception with timeout
-        let result = timeout(Duration::from_secs(30), async {
+        let result = timeout(Duration::from_secs(10), async {
             let mut message_count = 0;
             let max_messages = 5;
 
