@@ -7,7 +7,7 @@ use std::{
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt};
 use tokio_tungstenite::{connect_async_with_config, tungstenite::Message};
-use tracing;
+use tracing::{error, info, warn};
 
 use crate::{
     rfq::{
@@ -34,7 +34,7 @@ pub struct BebopClient {
     url: String,
     // Pairs that we want prices for
     pairs: HashSet<String>,
-    // Min tvl value.
+    // Min tvl value in USD.
     tvl: f64,
     // name header for authentication
     ws_user: String,
@@ -47,7 +47,7 @@ pub struct BebopClient {
 impl BebopClient {
     pub fn new(
         chain: Chain,
-        pairs: Vec<(String, String)>,
+        pairs: HashSet<(String, String)>,
         tvl: f64,
         ws_user: String,
         ws_key: String,
@@ -148,13 +148,13 @@ impl RFQClient for BebopClient {
                 // Connect to Bebop WebSocket with custom headers
                 let (ws_stream, _) = match connect_async_with_config(request, None, false).await {
                     Ok(connection) => {
-                        tracing::info!("Successfully connected to Bebop WebSocket");
+                        info!("Successfully connected to Bebop WebSocket");
                         reconnect_attempts = 0; // Reset counter on successful connection
                         connection
                     },
                     Err(e) => {
                         reconnect_attempts += 1;
-                        tracing::error!("Failed to connect to Bebop WebSocket (attempt {}): {}", reconnect_attempts, e);
+                        error!("Failed to connect to Bebop WebSocket (attempt {}): {}", reconnect_attempts, e);
 
                         if reconnect_attempts >= MAX_RECONNECT_ATTEMPTS {
                             yield Err(RFQError::ConnectionError(format!("Failed to connect after {MAX_RECONNECT_ATTEMPTS} attempts: {e}")));
@@ -162,7 +162,7 @@ impl RFQClient for BebopClient {
                         }
 
                         let backoff_duration = Duration::from_secs(2_u64.pow(reconnect_attempts.min(5)));
-                        tracing::info!("Retrying connection in {} seconds...", backoff_duration.as_secs());
+                        info!("Retrying connection in {} seconds...", backoff_duration.as_secs());
                         sleep(backoff_duration).await;
                         continue;
                     }
@@ -188,8 +188,7 @@ impl RFQClient for BebopClient {
                                                 token0 = t0;
                                                 token1 = t1;
                                             } else {
-                                                // Tokens improperly formatted. Skip.
-                                                tracing::warn!("Tokens improperly formatted. Skipping.");
+                                                warn!("Tokens improperly formatted: {}. Skipping.", pair);
                                                 continue;
                                             };
 
@@ -213,12 +212,12 @@ impl RFQClient for BebopClient {
                                                 // Quote token doesn't have price levels in approved quote tokens.
                                                 // Skip.
                                                 if quote_price_data.is_none() {
-                                                    tracing::warn!("Quote token does not have price levels in approved quote token. Skipping.");
+                                                    warn!("Quote token does not have price levels in approved quote token. Skipping.");
                                                     continue;
                                                 }
                                             }
 
-                                            let tvl = price_data.calculate_tvl(quote_price_data.clone());
+                                            let tvl = price_data.calculate_tvl(quote_price_data);
                                             if tvl < tvl_threshold {
                                                 continue;
                                             }
@@ -236,9 +235,10 @@ impl RFQClient for BebopClient {
                                     // Find components that were removed (existed before but not in this update)
                                     // This includes components with no bids or asks, since they are filtered
                                     // out by the tvl threshold.
-                                    let removed_components: Vec<String> = current_components.keys()
-                                        .filter(|id| !new_components.contains_key(*id))
-                                        .cloned()
+                                    let removed_components: HashMap<String, ProtocolComponent> = current_components
+                                        .iter()
+                                        .filter(|&(id, _)| !new_components.contains_key(id))
+                                        .map(|(k, v)| (k.clone(), v.component.clone()))
                                         .collect();
 
                                     // Update our current state
@@ -258,25 +258,24 @@ impl RFQClient for BebopClient {
                                         header: TimestampHeader { timestamp },
                                         snapshots: snapshot,
                                         deltas: None, // Deltas are always None - all the changes are absolute
-                                        removed_components: removed_components.into_iter().map(|id| (id, Default::default())).collect(),
+                                        removed_components,
                                     };
 
                                     // Yield one message containing all updated pairs
                                     yield Ok(("bebop".to_string(), msg));
                                 },
                                 Err(e) => {
-                                    tracing::error!("Failed to parse websocket message: {}", e);
-                                    yield Err(RFQError::ParsingError(format!("Failed to parse message: {e}")));
+                                    error!("Failed to parse websocket message: {}", e);
                                     break;
                                 }
                             }
                         }
                         Ok(Message::Close(_)) => {
-                            tracing::info!("WebSocket connection closed by server");
+                            info!("WebSocket connection closed by server");
                             break;
                         }
                         Err(e) => {
-                            tracing::error!("WebSocket error: {}", e);
+                            error!("WebSocket error: {}", e);
                             break;
                         }
                         _ => {} // Ignore other message types
@@ -291,7 +290,7 @@ impl RFQClient for BebopClient {
                 }
 
                 let backoff_duration = Duration::from_secs(2_u64.pow(reconnect_attempts.min(5)));
-                tracing::info!("Reconnecting in {} seconds (attempt {})...", backoff_duration.as_secs(), reconnect_attempts);
+                info!("Reconnecting in {} seconds (attempt {})...", backoff_duration.as_secs(), reconnect_attempts);
                 sleep(backoff_duration).await;
                 // Continue to the next iteration of the main loop
             }
@@ -334,7 +333,7 @@ mod tests {
 
         let client = BebopClient::new(
             Chain::Ethereum,
-            vec![(weth.to_string(), wbtc.to_string())],
+            HashSet::from_iter(vec![(weth.to_string(), wbtc.to_string())]),
             10.0, // $10 minimum TVL
             ws_user,
             ws_key,
