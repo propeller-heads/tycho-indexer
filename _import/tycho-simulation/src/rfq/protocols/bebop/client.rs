@@ -27,11 +27,12 @@ use crate::{
 type BebopPriceMessage = HashMap<String, BebopPriceData>;
 
 fn pair_to_bebop_format(pair: &(String, String)) -> Result<String, RFQError> {
+    // Checksum addresses to match websocket output
     let token0 = Address::from_str(&pair.0)
         .map_err(|_| RFQError::ParsingError(format!("Invalid token address: {}.", pair.0)))?;
     let token1 = Address::from_str(&pair.1)
         .map_err(|_| RFQError::ParsingError(format!("Invalid token address: {}.", pair.1)))?;
-    Ok(format!("{token0}/{token1}"))
+    Ok(format!("{}/{}", token0, token1))
 }
 
 /// Maps a Chain to its corresponding Bebop WebSocket URL
@@ -330,7 +331,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore] // Requires network access and setting proper env vars
+    // #[ignore] // Requires network access and setting proper env vars
     async fn test_bebop_websocket_connection() {
         tracing_subscriber::fmt::init();
 
@@ -343,8 +344,8 @@ mod tests {
         let ws_key = env::var("BEBOP_KEY").expect("BEBOP_KEY environment variable is required");
 
         let quote_tokens = HashSet::from([
-            String::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"), // USDC
-            // Test with address we forgot to checksum
+            // Use addresses we forgot to checksum (to test checksumming)
+            String::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"), // USDC
             String::from("0xdac17f958d2ee523a2206206994597c13d831ec7"), // USDT
         ]);
 
