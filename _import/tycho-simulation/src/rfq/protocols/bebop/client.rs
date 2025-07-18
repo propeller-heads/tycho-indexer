@@ -143,7 +143,7 @@ impl RFQClient for BebopClient {
                     .header("name", &name)
                     .header("Authorization", &authorization)
                     .body(())
-                    .map_err(|_| RFQError::ConnectionError("Failed to build request".into()))?;
+                    .map_err(|_| RFQError::FatalError("Failed to build request".into()))?;
 
                 // Connect to Bebop WebSocket with custom headers
                 let (ws_stream, _) = match connect_async_with_config(request, None, false).await {
