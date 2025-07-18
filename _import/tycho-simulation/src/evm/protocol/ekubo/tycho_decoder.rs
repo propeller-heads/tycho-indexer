@@ -217,7 +217,7 @@ mod tests {
         .await
         .expect("reconstructing state");
 
-        assert_eq!(result, case.state);
+        assert_eq!(result, case.state_before_transition);
     }
 
     #[apply(all_cases)]
