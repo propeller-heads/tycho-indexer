@@ -1,3 +1,15 @@
+## [0.130.0](https://github.com/propeller-heads/tycho-simulation/compare/0.129.0...0.130.0) (2025-07-18)
+
+
+### Features
+
+* Add BebopState skeleton ([a87cbcb](https://github.com/propeller-heads/tycho-simulation/commit/a87cbcb18483d9b7d663732e2b9b6a7bd4a9a27e))
+
+
+### Bug Fixes
+
+* After rebase with main fixes ([5c8324f](https://github.com/propeller-heads/tycho-simulation/commit/5c8324fddb7f1742078c724f61b8ce961b81e413))
+
 ## [0.129.0](https://github.com/propeller-heads/tycho-simulation/compare/0.128.2...0.129.0) (2025-07-18)
 
 
