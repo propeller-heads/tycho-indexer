@@ -15,7 +15,7 @@ use tokio::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        BlockChanges, BlockParam, ComponentTvlRequestBody, EntryPointWithTracingParams,
+        BlockChanges, BlockParam, Chain, ComponentTvlRequestBody, EntryPointWithTracingParams,
         ExtractorIdentity, ProtocolComponent, ResponseAccount, ResponseProtocolState,
         TracingResult, VersionParam,
     },
@@ -274,18 +274,25 @@ where
             HashMap::new()
         };
 
-        // Fetch entrypoints
-        let entrypoints_result = self
-            .rpc_client
-            .get_traced_entry_points_paginated(
-                self.extractor_id.chain,
-                &self.extractor_id.name,
-                &component_ids,
-                100,
-                4,
-            )
-            .await?;
-        tracked_components.process_entrypoints(&entrypoints_result.clone().into())?;
+        //TODO: Improve this, we should not query for every component, but only for the ones that
+        // could have entrypoints. Maybe apply a filter per protocol?
+        let entrypoints_result = if self.extractor_id.chain == Chain::Ethereum {
+            // Fetch entrypoints
+            let result = self
+                .rpc_client
+                .get_traced_entry_points_paginated(
+                    self.extractor_id.chain,
+                    &self.extractor_id.name,
+                    &component_ids,
+                    100,
+                    4,
+                )
+                .await?;
+            tracked_components.process_entrypoints(&result.clone().into())?;
+            Some(result)
+        } else {
+            None
+        };
 
         // Fetch protocol states
         let mut protocol_states = self
@@ -320,9 +327,13 @@ where
                                 .get(&component.id)
                                 .cloned(),
                             entrypoints: entrypoints_result
-                                .traced_entry_points
-                                .get(&component.id)
-                                .cloned()
+                                .as_ref()
+                                .map(|r| {
+                                    r.traced_entry_points
+                                        .get(&component.id)
+                                        .cloned()
+                                        .unwrap_or_default()
+                                })
                                 .unwrap_or_default(),
                         },
                     ))
