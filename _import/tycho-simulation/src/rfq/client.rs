@@ -21,6 +21,4 @@ pub trait RFQClient: Send + Sync {
         &self,
         params: &GetAmountOutParams,
     ) -> Result<SignedQuote, RFQError>;
-
-    fn clone_box(&self) -> Box<dyn RFQClient>;
 }

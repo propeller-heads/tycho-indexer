@@ -28,7 +28,7 @@ use std::{collections::HashMap, default::Default, future::Future};
 
 use chrono::NaiveDateTime;
 use serde::Serialize;
-use tycho_client::feed::BlockHeader;
+use tycho_client::feed::HeaderLike;
 use tycho_common::{
     models::{token::Token, Chain},
     simulation::protocol_sim::ProtocolSim,
@@ -124,12 +124,15 @@ impl From<ProtocolComponent> for tycho_common::models::protocol::ProtocolCompone
     }
 }
 
-pub trait TryFromWithBlock<T> {
+pub trait TryFromWithBlock<T, H>
+where
+    H: HeaderLike,
+{
     type Error;
 
     fn try_from_with_block(
         value: T,
-        block: BlockHeader,
+        block: H,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send + Sync
@@ -164,6 +167,14 @@ impl Update {
 
     pub fn set_removed_pairs(mut self, pairs: HashMap<String, ProtocolComponent>) -> Self {
         self.removed_pairs = pairs;
+        self
+    }
+
+    pub fn merge(mut self, other: Update) -> Self {
+        self.states.extend(other.states);
+        self.new_pairs.extend(other.new_pairs);
+        self.removed_pairs
+            .extend(other.removed_pairs);
         self
     }
 }

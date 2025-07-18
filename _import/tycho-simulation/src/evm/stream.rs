@@ -4,7 +4,7 @@ use futures::{Stream, StreamExt};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::warn;
 use tycho_client::{
-    feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState},
+    feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState, BlockHeader},
     stream::{StreamError, TychoStreamBuilder},
 };
 use tycho_common::{
@@ -51,7 +51,7 @@ use crate::{
 /// # Errors
 /// Returns a `StreamError` if the underlying stream builder fails to initialize.
 pub struct ProtocolStreamBuilder {
-    decoder: TychoStreamDecoder,
+    decoder: TychoStreamDecoder<BlockHeader>,
     stream_builder: TychoStreamBuilder,
 }
 
@@ -74,7 +74,7 @@ impl ProtocolStreamBuilder {
     ) -> Self
     where
         T: ProtocolSim
-            + TryFromWithBlock<ComponentWithState, Error = InvalidSnapshotError>
+            + TryFromWithBlock<ComponentWithState, BlockHeader, Error = InvalidSnapshotError>
             + Send
             + 'static,
     {

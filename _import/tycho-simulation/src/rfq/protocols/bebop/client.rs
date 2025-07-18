@@ -303,10 +303,6 @@ impl RFQClient for BebopClient {
     ) -> Result<SignedQuote, RFQError> {
         todo!()
     }
-
-    fn clone_box(&self) -> Box<dyn RFQClient> {
-        Box::new(self.clone())
-    }
 }
 
 #[cfg(test)]

@@ -1,3 +1,34 @@
+## [0.128.2](https://github.com/propeller-heads/tycho-simulation/compare/0.128.1...0.128.2) (2025-07-18)
+
+
+### Bug Fixes
+
+* Handle delta state update errors on decoder ([6ac34da](https://github.com/propeller-heads/tycho-simulation/commit/6ac34da5b539133e8763b227813e5438a84ba407))
+
+## [0.128.1](https://github.com/propeller-heads/tycho-simulation/compare/0.128.0...0.128.1) (2025-07-17)
+
+
+### Bug Fixes
+
+* Add a merge method to Update ([500e757](https://github.com/propeller-heads/tycho-simulation/commit/500e757cf6726f015e28646039f3774677b5104d))
+
+## [0.128.0](https://github.com/propeller-heads/tycho-simulation/compare/0.127.1...0.128.0) (2025-07-17)
+
+
+### Features
+
+* Generalise TychoStreamDecoder to take a HeaderLike trait impl ([2a3125a](https://github.com/propeller-heads/tycho-simulation/commit/2a3125aac56dd5cd8b09b6f3a299b033f88a2504))
+* Implement error handling in RFQStreamBuilder anc change RFQClient ([9cc115c](https://github.com/propeller-heads/tycho-simulation/commit/9cc115cfaffad1f881743324c2c4e30d069e1d1d))
+* Implement RFQStreamBuilder with a mocked test ([05f31d9](https://github.com/propeller-heads/tycho-simulation/commit/05f31d9decc1d4b2f3e229c47ce4086ea2432c93))
+* Upgrade tycho-common ([647954d](https://github.com/propeller-heads/tycho-simulation/commit/647954d8bc9ef8d1f2704b56d541e5d9df43b8af))
+
+## [0.127.1](https://github.com/propeller-heads/tycho-simulation/compare/0.127.0...0.127.1) (2025-07-16)
+
+
+### Bug Fixes
+
+* update alloy version to `1.0.22` ([0850d74](https://github.com/propeller-heads/tycho-simulation/commit/0850d743409867e858f6f8d90ce29c9596cacdd2))
+
 ## [0.127.0](https://github.com/propeller-heads/tycho-simulation/compare/0.126.0...0.127.0) (2025-07-14)
 
 

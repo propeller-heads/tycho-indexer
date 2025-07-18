@@ -12,6 +12,7 @@ pub struct GetAmountOutParams {
     pub receiver: Bytes,
 }
 
+#[derive(Clone, Default)]
 pub struct TimestampHeader {
     pub timestamp: u64,
 }
@@ -21,7 +22,7 @@ impl HeaderLike for TimestampHeader {
         None
     }
 
-    fn ts(self) -> u64 {
+    fn block_number_or_timestamp(self) -> u64 {
         self.timestamp
     }
 }

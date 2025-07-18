@@ -49,7 +49,7 @@ impl TryFrom<Bytes> for EkuboExtension {
     }
 }
 
-impl TryFromWithBlock<ComponentWithState> for EkuboState {
+impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboState {
     type Error = InvalidSnapshotError;
 
     async fn try_from_with_block(
