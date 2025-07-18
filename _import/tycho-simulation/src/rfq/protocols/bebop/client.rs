@@ -10,13 +10,13 @@ use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt};
 use tokio_tungstenite::{connect_async_with_config, tungstenite::Message};
 use tracing::{error, info, warn};
+use tycho_common::{
+    models::protocol::GetAmountOutParams, simulation::indicatively_priced::SignedQuote,
+};
 
 use crate::{
     rfq::{
-        client::RFQClient,
-        errors::RFQError,
-        indicatively_priced::SignedQuote,
-        models::{GetAmountOutParams, TimestampHeader},
+        client::RFQClient, errors::RFQError, models::TimestampHeader,
         protocols::bebop::models::BebopPriceData,
     },
     tycho_client::feed::synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
