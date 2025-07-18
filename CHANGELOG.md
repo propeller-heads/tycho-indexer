@@ -1,3 +1,11 @@
+## [0.78.0](https://github.com/propeller-heads/tycho-indexer/compare/0.77.2...0.78.0) (2025-07-18)
+
+
+### Features
+
+* Add IndicativelyPriced trait ([14d4b47](https://github.com/propeller-heads/tycho-indexer/commit/14d4b4760c3886c30bdbe8d4e7d7e0c3ed7401ca))
+* Add IndicativelyPriced trait ([#631](https://github.com/propeller-heads/tycho-indexer/issues/631)) ([60fa7b2](https://github.com/propeller-heads/tycho-indexer/commit/60fa7b2a46385200e49d58cc0958ccc9642cb1f8))
+
 ## [0.77.2](https://github.com/propeller-heads/tycho-indexer/compare/0.77.1...0.77.2) (2025-07-17)
 
 
