@@ -1,3 +1,10 @@
+## [0.128.2](https://github.com/propeller-heads/tycho-simulation/compare/0.128.1...0.128.2) (2025-07-18)
+
+
+### Bug Fixes
+
+* Handle delta state update errors on decoder ([6ac34da](https://github.com/propeller-heads/tycho-simulation/commit/6ac34da5b539133e8763b227813e5438a84ba407))
+
 ## [0.128.1](https://github.com/propeller-heads/tycho-simulation/compare/0.128.0...0.128.1) (2025-07-17)
 
 
