@@ -1,13 +1,14 @@
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use chrono::NaiveDateTime;
+use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use crate::{
     models::{
-        blockchain::Transaction, Address, AttrStoreKey, Balance, Chain, ChangeType, ComponentId,
-        MergeError, StoreVal, TxHash,
+        blockchain::Transaction, token::Token, Address, AttrStoreKey, Balance, Chain, ChangeType,
+        ComponentId, MergeError, StoreVal, TxHash,
     },
     Bytes,
 };
@@ -314,6 +315,14 @@ impl ProtocolChangesWithTx {
 
         Ok(())
     }
+}
+
+pub struct GetAmountOutParams {
+    pub amount_in: BigUint,
+    pub token_in: Token,
+    pub token_out: Token,
+    pub sender: Bytes,
+    pub receiver: Bytes,
 }
 
 #[cfg(test)]
