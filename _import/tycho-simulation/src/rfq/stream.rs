@@ -98,18 +98,17 @@ mod tests {
     use tycho_client::feed::synchronizer::{Snapshot, StateSyncMessage};
     use tycho_common::{
         dto::{ProtocolComponent, ProtocolStateDelta, ResponseProtocolState},
-        models::token::Token,
+        models::{protocol::GetAmountOutParams, token::Token},
         simulation::{
             errors::{SimulationError, TransitionError},
+            indicatively_priced::SignedQuote,
             protocol_sim::{Balances, GetAmountOutResult},
         },
         Bytes,
     };
 
     use super::*;
-    use crate::rfq::{
-        errors::RFQError, indicatively_priced::SignedQuote, models::GetAmountOutParams,
-    };
+    use crate::rfq::errors::RFQError;
 
     #[derive(Clone, Debug)]
     pub struct DummyProtocol;
