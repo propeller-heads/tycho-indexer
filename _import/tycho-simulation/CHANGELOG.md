@@ -1,3 +1,26 @@
+## [0.129.0](https://github.com/propeller-heads/tycho-simulation/compare/0.128.2...0.129.0) (2025-07-18)
+
+
+### Features
+
+* (WIP) BebopClient stream method ([9bf905f](https://github.com/propeller-heads/tycho-simulation/commit/9bf905f2526b77054b7e09f8adb37d278e58bb41))
+* Error handling + retry if connection closed ([52f4162](https://github.com/propeller-heads/tycho-simulation/commit/52f41627dbd614b4e2e3390dda62b5c1e8fbe771))
+* Generalize BebopClient to all chains ([f1f55f2](https://github.com/propeller-heads/tycho-simulation/commit/f1f55f23f78fad4456a8b90125af98434e3d100b))
+* pass ws user and key to BebopClient init ([9fa26fb](https://github.com/propeller-heads/tycho-simulation/commit/9fa26fba6c9b83b97c7ed23aedeefca95e802462))
+* Prepare methods for getting mid price in usdc ([9866c45](https://github.com/propeller-heads/tycho-simulation/commit/9866c4510a27e49e2ae93927d8fadd6fda8b4eac))
+
+
+### Bug Fixes
+
+* Checksum token addresses ([afd8fdb](https://github.com/propeller-heads/tycho-simulation/commit/afd8fdb7833cf629594ca13929047fda11a2a5b9))
+* Don't return none for price if insufficient liquidity ([3b9bea8](https://github.com/propeller-heads/tycho-simulation/commit/3b9bea833d57eae76b84910e8a5410e2d03467c5))
+* Emit one message per bebop message, not per component ([7293c6a](https://github.com/propeller-heads/tycho-simulation/commit/7293c6a705a983088b51de7ee8f281c9b7e2e755))
+* Normalize TVL calculation ([33746fc](https://github.com/propeller-heads/tycho-simulation/commit/33746fc3156461b4c57b826a114508a625597331))
+* Return FatalError if connection fails ([03ad05b](https://github.com/propeller-heads/tycho-simulation/commit/03ad05b883ce7fb768d2157c4caaa70be238e793))
+* Use base token for size in mid price calc ([e9a5cec](https://github.com/propeller-heads/tycho-simulation/commit/e9a5cece4c34461d825d7957a3764515d734aea8))
+* various minor fixes... ([7b42160](https://github.com/propeller-heads/tycho-simulation/commit/7b4216097e749e39ef3a6adf108f9242a9781ba4))
+* various small issues... ([6da4e14](https://github.com/propeller-heads/tycho-simulation/commit/6da4e145d70fdfa4f3602751cd4ec84079d4207e))
+
 ## [0.128.2](https://github.com/propeller-heads/tycho-simulation/compare/0.128.1...0.128.2) (2025-07-18)
 
 
