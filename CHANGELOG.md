@@ -1,3 +1,11 @@
+## [0.78.1](https://github.com/propeller-heads/tycho-indexer/compare/0.78.0...0.78.1) (2025-07-18)
+
+
+### Bug Fixes
+
+* disable DCI queries on Base and Unichain ([7cbc552](https://github.com/propeller-heads/tycho-indexer/commit/7cbc55250367c65872d4213e9538ccbb3875d56f))
+* disable DCI queries on Base and Unichain ([#632](https://github.com/propeller-heads/tycho-indexer/issues/632)) ([7d94b96](https://github.com/propeller-heads/tycho-indexer/commit/7d94b96996de5c8dcec182d9cc92e5bb5cb8888f))
+
 ## [0.78.0](https://github.com/propeller-heads/tycho-indexer/compare/0.77.2...0.78.0) (2025-07-18)
 
 
