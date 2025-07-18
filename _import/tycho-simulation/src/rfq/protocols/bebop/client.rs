@@ -32,7 +32,7 @@ fn pair_to_bebop_format(pair: &(String, String)) -> Result<String, RFQError> {
         .map_err(|_| RFQError::ParsingError(format!("Invalid token address: {}.", pair.0)))?;
     let token1 = Address::from_str(&pair.1)
         .map_err(|_| RFQError::ParsingError(format!("Invalid token address: {}.", pair.1)))?;
-    Ok(format!("{}/{}", token0, token1))
+    Ok(format!("{token0}/{token1}"))
 }
 
 /// Maps a Chain to its corresponding Bebop WebSocket URL
