@@ -331,7 +331,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    // #[ignore] // Requires network access and setting proper env vars
+    #[ignore] // Requires network access and setting proper env vars
     async fn test_bebop_websocket_connection() {
         tracing_subscriber::fmt::init();
 
