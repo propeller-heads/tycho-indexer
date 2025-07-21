@@ -139,10 +139,9 @@ impl TryFromWithBlock<ComponentWithState> for CowAMMState {
     }
 }
 
-//why am i using U256 again
-pub fn component() -> ProtocolComponent {
-    ProtocolComponent {
-        static_attributes: HashMap::from([
+pub fn attributes() -> HashMap<String, Bytes> {
+     HashMap::from([
+            ("address".to_string(), Bytes::from(vec![0; 32])),
             ("weight_a".to_string(), Bytes::from(vec![0; 32])),
             ("weight_b".to_string(), Bytes::from(vec![0; 32])),
             ("token_a".to_string(),  Bytes::from(vec![0; 32])),
@@ -152,9 +151,29 @@ pub fn component() -> ProtocolComponent {
             ("lp_token".to_string(), Bytes::from(vec![0; 32])), 
             ("lp_token_supply".to_string(), Bytes::from(vec![0; 32])), 
             ("fee".to_string(), 0u64.into()), 
-        ]),
+        ])
+}
+
+pub fn component() -> ProtocolComponent {
+    ProtocolComponent {
+        static_attributes: attributes(),
         ..Default::default()
     }
+}
+
+pub fn state() -> CowAMMState {
+     CowAMMState::new(
+        Bytes::from(vec![0; 32]),
+        Bytes::from(vec![0; 32]), 
+        Bytes::from(vec![0; 32]),
+        U256::from(0), 
+        U256::from(0),
+        Bytes::from(vec![0; 32]),
+        U256::from(0),
+        U256::from(0),
+        U256::from(0), 
+        0u64
+    )
 }
 
 #[cfg(test)]
@@ -165,16 +184,11 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_cowamm_try_from() {
+    async fn test_cowamm_try_from_with_block() {
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
-                component_id: "State1".to_owned(),
-                attributes: HashMap::from([
-                    ("weight_a".to_string(), Bytes::from(vec![0; 32])),
-                    ("weight_b".to_string(), Bytes::from(vec![0; 32])),
-                    ("fee".to_string(), Bytes::from(vec![0; 32])),
-                ]),
-                balances: HashMap::new(),
+                attributes: attributes(),
+               ..Default::default()
             },
             component: component(),
             component_tvl: None,
@@ -183,84 +197,59 @@ mod tests {
         let result = CowAMMState::try_from_with_block(
             snapshot,
             header(),
-            &HashMap::new(),
-            &HashMap::new(),
+            &HashMap::default(),
+            &HashMap::default(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(state(), result);
+    }
+
+    #[tokio::test]
+    #[rstest]
+    #[case::missing_weight_a("address")]
+    #[case::missing_weight_a("weight_a")]
+    #[case::missing_weight_b("weight_b")]
+    #[case::missing_token_a("token_a")]
+    #[case::missing_token_b("token_b")]
+    #[case::missing_liquidity_a("liquidity_a")]
+    #[case::missing_liquidity_b("liquidity_b")]
+    #[case::missing_lp_token("lp_token")]
+    #[case::missing_lp_token_supply("lp_token_supply")]
+
+    async fn test_cowamm_try_from_missing_attribute(#[case] missing_attribute: String) {
+        let mut component = component();
+        let mut attributes = attributes();
+
+        component
+            .static_attributes
+            .remove(&missing_attribute);
+        attributes.remove(&missing_attribute);
+
+        let snapshot = ComponentWithState {
+            state: ResponseProtocolState {
+                component_id: "State1".to_owned(),
+                attributes,
+                balances: HashMap::new(),
+            },
+            component,
+            component_tvl: None,
+        };
+
+        let result = CowAMMState::try_from_with_block(
+            snapshot,
+            header(),
+            &HashMap::default(),
+            &HashMap::default(),
         )
         .await;
 
-        println!("result {:?}", result);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), CowAMMState::new(Bytes::from(vec![0; 32]), Bytes::from(vec![0; 32]), Bytes::from(vec![0; 32]),U256::from(0), U256::from(0), 0u64));
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            InvalidSnapshotError::MissingAttribute(attr) if attr == missing_attribute 
+        ));
     }
-
-//     #[tokio::test]
-//     #[rstest]
-//     #[case::missing_fee("fee")]
-//     #[case::missing_weight_a("weight_a")]
-//     #[case::missing_weight_b("weight_b")]
-//     async fn test_cowamm_try_from_missing_attribute(#[case] missing_attribute: &str) {
-//         let mut attributes = HashMap::from([
-//             ("fee".to_string(), Bytes::from()),
-//             ("weight_a".to_string(), Bytes::from(vec![0; 32])),
-//             ("weight_b".to_string(), Bytes::from(vec![0; 32])),
-//         ]);
-
-//         attributes.remove(&missing_attribute);
-
-//         let snapshot = ComponentWithState {
-//             state: ResponseProtocolState {
-//                 component_id: "State1".to_owned(),
-//                 attributes,
-//                 balances: HashMap::new(),
-//             },
-//             component: Default::default(),
-//             component_tvl: None,
-//         };
-
-//         let result = CowAMMState::try_from_with_block(
-//             snapshot,
-//             header(),
-//             &HashMap::new(),
-//             &HashMap::new(),
-//         )
-//         .await;
-
-//         assert!(result.is_err());
-//         assert!(matches!(
-//             result.unwrap_err(),
-//             InvalidSnapshotError::MissingAttribute(ref x) if x == missing_attribute 
-//         ));
-// }
 }
-
-//where is the snapshot coming from ? Will investigate 
-
-//current test failure :
-
-// failures:
-
-// ---- evm::protocol::cowamm::tycho_decoder::test_cowamm_try_from stdout ----
-// result Err(MissingAttribute("token_a"))
-
-// thread 'evm::protocol::cowamm::tycho_decoder::test_cowamm_try_from' panicked at src/evm/protocol/cowamm/tycho_decoder.rs:124:9:
-// assertion failed: result.is_ok()
-
-// So its either you use an actual snapshot like in uniswap v4
-// let project_root = env!("CARGO_MANIFEST_DIR");
-// let asset_path = Path::new(project_root)
-//     .join("tests/assets/decoder/uniswap_v4_snapshot_sepolia_block_7239119.json");
-// let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
-// let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
-
-// let state: ComponentWithState = serde_json::from_value(data)
-//   .expect("Expected json to match ComponentWithState structure");
-
-// or just use a snapshot object like we did above
-
-//There are some attributes that are static attributes, and some are just attributes 
-
-//add something as a 
-
-
-// i need to create a mermaid visualization for the simulation layer in tycho, i actually do not understand it at all 
 

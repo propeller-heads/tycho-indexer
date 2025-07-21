@@ -306,27 +306,32 @@ impl ProtocolSim for CowAMMState {
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
-        // Apply attribute changes
-        if let Some(liquidity) = delta
-            .updated_attributes
-            .get("liquidity_a")
-        {
-            self.liquidity_a =  U256::from_be_slice(liquidity);
-        };
+         // liquidity_a and liquidity_b are considered required attributes and are expected in every delta
+        // we process
+        let liquidity_a = U256::from_be_slice(
+            delta
+                .updated_attributes
+                .get("liquidity_a")
+                .ok_or(TransitionError::MissingAttribute("liquidity_a".to_string()))?,
+        );
 
-        if let Some(liquidity) = delta
-            .updated_attributes
-            .get("liquidity_b")
-        {
-            self.liquidity_b = U256::from_be_slice(liquidity);
-        };
+        let liquidity_b = U256::from_be_slice(
+            delta
+                .updated_attributes
+                .get("liquidity_b")
+                .ok_or(TransitionError::MissingAttribute("liquidity_b".to_string()))?,
+        );
 
-        if let Some(supply) = delta
-            .updated_attributes
-            .get("lp_token_supply")
-        {
-            self.lp_token_supply = U256::from_be_slice(supply);
-        };
+        let lp_token_supply = U256::from_be_slice(
+            delta
+                .updated_attributes
+                .get("lp_token_supply")
+                .ok_or(TransitionError::MissingAttribute("lp_token_supply".to_string()))?,
+        );
+       
+        self.liquidity_a = liquidity_a;
+        self.liquidity_b = liquidity_b;
+        self.lp_token_supply = lp_token_supply;
 
         Ok(())
     }
@@ -386,6 +391,9 @@ mod tests {
         BigUint::from_str("10000000000000000000").unwrap(),
         BigUint::from_str("12949029867").unwrap()
     )]
+
+    //also add cases for lp_token buying and selling
+    // i think its fuzzing here
     fn test_get_amount_out(
         #[case] r0: U256,
         #[case] r1: U256,
@@ -395,37 +403,20 @@ mod tests {
         #[case] expected_out: BigUint,
     ) {
         let t0 = Token::new("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB", dec0, "COW", BigUint::from(10_000u32));
-        let t1 = Token::new("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0", dec1, "wstETH", BigUint::from(10_000u32));
+        let t1 = Token::new("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0", dec1, "wstETH", BigUint::from(1_000u32));
 
           // Prepare token addresses (Bytes) once
         let t0_bytes = Bytes::from(t0.clone().address);
         let t1_bytes = Bytes::from(t1.clone().address);
-pub struct CowAMMState {
-     /// The Pool Address
-    address: Bytes,
-    /// The Swap Fee on the Pool
-    fee: u64,
-    /// Liquidity of token a
-    liquidity_a: U256,
-    /// Liquidity of token b
-    liquidity_b: U256,
-    /// Weight of token a
-    weight_a: U256,
-    /// Weight of token b
-    weight_b: U256,
-    ///The lp token of the pool
-    lp_token: Bytes,
-    /// The Supply of the lp token 
-    lp_token_supply: U256
-}
+
         let mut state = CowAMMState {
             address: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            liquidity_a: U256::from_str(),
-            liquidity_b: U256::from_str(),
-            weight_a: U256::from_str(),
-            weight_b: U256::from_str(),
+            liquidity_a: U256::from_str("886800000000000000").unwrap(),
+            liquidity_b: U256::from_str("50000000000000000").unwrap(),
+            weight_a: U256::from_str("1000000000000000000").unwrap(),
+            weight_b: U256::from_str("1000000000000000000").unwrap(),
             lp_token: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            lp_token_supply: U256::from_str(),
+            lp_token_supply: U256::from_str("1000000000000000000").unwrap(),
             fee: 0,
         };
 
@@ -454,17 +445,17 @@ pub struct CowAMMState {
 
         let mut state = CowAMMState {
             address: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            liquidity_a: U256::from_str(),
-            liquidity_b: U256::from_str(),
-            weight_a: U256::from_str(),
-            weight_b: U256::from_str(),
+            liquidity_a: U256::from_str("886800000000000000").unwrap(),
+            liquidity_b: U256::from_str("50000000000000000").unwrap(),
+            weight_a: U256::from_str("1000000000000000000").unwrap(),
+            weight_b: U256::from_str("1000000000000000000").unwrap(),
             lp_token: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            lp_token_supply: U256::from_str(),
+            lp_token_supply: U256::from_str("1000000000000000000").unwrap(),
             fee: 0,
         };
 
         let res = state.get_amount_out(max, &t0.clone(), &t1.clone());
-        assert!(matches!(res, Err(SimulationError::FatalError(_))));
+        assert!(matches!(res, Err(SimulationError::FatalError(_)))); //huh
     }
 
     #[rstest]
@@ -480,14 +471,14 @@ pub struct CowAMMState {
         let t0_bytes = Bytes::from(t0.clone().address);
         let t1_bytes = Bytes::from(t1.clone().address);
 
-        let mut state = CowAMMState {
+        let state = CowAMMState {
             address: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            liquidity_a: U256::from_str(),
-            liquidity_b: U256::from_str(),
-            weight_a: U256::from_str(),
-            weight_b: U256::from_str(),
+            liquidity_a: U256::from_str("886800000000000000").unwrap(),
+            liquidity_b: U256::from_str("50000000000000000").unwrap(),
+            weight_a: U256::from_str("1000000000000000000").unwrap(),
+            weight_b: U256::from_str("1000000000000000000").unwrap(),
             lp_token: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            lp_token_supply: U256::from_str(),
+            lp_token_supply: U256::from_str("1000000000000000000").unwrap(),
             fee: 0,
         };
 
@@ -504,6 +495,10 @@ pub struct CowAMMState {
             Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
             U256::from_str("36925554990922").unwrap(),
             U256::from_str("30314846538607556521556").unwrap(),
+            Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
+            U256::from_str("36925554990922").unwrap(),
+            U256::from_str("30314846538607556521556").unwrap(),
+            U256::from_str("30314846538607556521556").unwrap(),
             0
         );
 
@@ -512,56 +507,74 @@ pub struct CowAMMState {
         assert_ulps_eq!(res, 0.0);
     }
       #[test]
-    fn test_delta_transition() { // chane the internal logic here lol
-        let mut state = CowAMMState {
-            address: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            liquidity_a: U256::from_str(),
-            liquidity_b: U256::from_str(),
-            weight_a: U256::from_str(),
-            weight_b: U256::from_str(),
-            lp_token: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            lp_token_supply: U256::from_str(),
-            fee: 0,
-        };
-
-        let mut attrs = HashMap::new();
-        attrs.insert("some".to_string(), Bytes::from(vec![0u8]));
-
+    fn test_delta_transition() { 
+        let mut state = CowAMMState::new(
+            Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
+            Bytes::from("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB"),
+            Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
+            U256::from_str("36925554990922").unwrap(),
+            U256::from_str("30314846538607556521556").unwrap(),
+            Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
+            U256::from_str("36925554990922").unwrap(),
+            U256::from_str("30314846538607556521556").unwrap(),
+            U256::from_str("30314846538607556521556").unwrap(),
+            0
+        );
+        let attributes: HashMap<String, Bytes> = vec![
+            ("liquidity_a".to_string(), Bytes::from(15000_u64.to_be_bytes().to_vec())),
+            ("liquidity_b".to_string(), Bytes::from(20000_u64.to_be_bytes().to_vec())),
+            ("lp_token_supply".to_string(), Bytes::from(250000_u64.to_be_bytes().to_vec())),
+        ]
+        .into_iter()
+        .collect();
         let delta = ProtocolStateDelta {
-            component_id: "foo".to_string(),
-            updated_attributes: attrs,
+            component_id: "State1".to_owned(),
+            updated_attributes: attributes,
             deleted_attributes: HashSet::new(),
         };
 
-        let err = state.delta_transition(delta, &HashMap::new(), &Balances::default());
-        assert!(matches!(err, Err(TransitionError::MissingAttribute(_))));
+        let res = state.delta_transition(delta, &HashMap::new(), &Balances::default());
+
+        assert!(res.is_ok());
+        assert_eq!(state.liquidity_a, U256::from_str("15000").unwrap());
+        assert_eq!(state.liquidity_b, U256::from_str("20000").unwrap());
+        assert_eq!(state.lp_token_supply, U256::from_str("250000").unwrap());
     }
 
     #[test]
-    fn test_delta_transition_missing() {
-         let mut state = CowAMMState {
-            address: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            liquidity_a: U256::from_str(),
-            liquidity_b: U256::from_str(),
-            weight_a: U256::from_str(),
-            weight_b: U256::from_str(),
-            lp_token: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            lp_token_supply: U256::from_str(),
-            fee: 0,
-        };
-
-
-        let mut attrs = HashMap::new();
-        attrs.insert("some".to_string(), Bytes::from(vec![0u8]));
-
+    fn test_delta_transition_missing_attribute() {
+        let mut state = CowAMMState::new(
+            Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
+            Bytes::from("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB"),
+            Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
+            U256::from_str("36925554990922").unwrap(),
+            U256::from_str("30314846538607556521556").unwrap(),
+            Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
+            U256::from_str("36928554990972").unwrap(),
+            U256::from_str("30314846538607556521556").unwrap(),
+            U256::from_str("30314846538607556521556").unwrap(),
+            0
+        );
+        let attributes: HashMap<String, Bytes> =
+            vec![("liquidity_a".to_string(), Bytes::from(1500000000000000_u64.to_be_bytes().to_vec()))]
+                .into_iter()
+                .collect();
+        
         let delta = ProtocolStateDelta {
-            component_id: "foo".to_string(),
-            updated_attributes: attrs,
+            component_id: "State1".to_owned(),
+            updated_attributes: attributes,
             deleted_attributes: HashSet::new(),
         };
 
-        let err = state.delta_transition(delta, &HashMap::new(), &Balances::default());
-        assert!(matches!(err, Err(TransitionError::MissingAttribute(_))));
+        let res = state.delta_transition(delta, &HashMap::new(), &Balances::default());
+
+        assert!(res.is_err());
+        match res {
+            Err(e) => {
+                assert!(matches!(e, TransitionError::MissingAttribute(ref x) if x== "liquidity_b"))
+            }
+            _ => panic!("Test failed: was expecting an Err value"),
+        };
     }
         #[test]
     fn test_get_limits_price_impact() {
@@ -570,6 +583,10 @@ pub struct CowAMMState {
             Bytes::from("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB"),
             Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
             U256::from_str("36925554990922").unwrap(),
+            U256::from_str("30314846538607556521556").unwrap(),
+            Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
+            U256::from_str("36925554990922").unwrap(),
+            U256::from_str("30314846538607556521556").unwrap(),
             U256::from_str("30314846538607556521556").unwrap(),
             0
         );
