@@ -252,7 +252,11 @@ impl SwapAmountEstimator for DefaultSwapAmountEstimator {
                     if !balance.is_zero() {
                         let one_hundred = BigInt::from(100);
                         let amounts = vec![
-                            Bytes::from((&balance / &one_hundred).to_bytes_be().1), // 1%
+                            Bytes::from(
+                                (&balance / &one_hundred)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 1%
                             Bytes::from(
                                 (&balance / BigInt::from(10))
                                     .to_bytes_be()
