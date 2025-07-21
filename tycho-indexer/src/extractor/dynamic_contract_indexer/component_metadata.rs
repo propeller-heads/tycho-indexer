@@ -31,6 +31,7 @@ pub(crate) type DeduplicationId = String;
 
 type RoutingKey = String;
 
+#[cfg_attr(test, derive(Debug))]
 pub struct ComponentTracingMetadata {
     // Here we need to link the each metadata field with the transaction hash that triggered the
     // fetching so we can modify the Block data with the new balances - and link the generated
@@ -40,12 +41,43 @@ pub struct ComponentTracingMetadata {
     pub tvl: Option<Result<(TxHash, Tvl), MetadataError>>,
 }
 
+impl ComponentTracingMetadata {
+    pub fn new() -> Self {
+        Self { balances: None, limits: None, tvl: None }
+    }
+
+    pub fn add_result(&mut self, tx_hash: TxHash, result: MetadataResult) {
+        match result.result {
+            Ok(MetadataValue::Balances(balances)) => {
+                self.balances = Some(Ok((tx_hash, balances)));
+            }
+            Ok(MetadataValue::Limits(limits)) => {
+                self.limits = Some(Ok((tx_hash, limits)));
+            }
+            Ok(MetadataValue::Tvl(tvl)) => {
+                self.tvl = Some(Ok((tx_hash, tvl)));
+            }
+            Err(e) => match result.request_type {
+                MetadataRequestType::ComponentBalance { .. } => {
+                    self.balances = Some(Err(e));
+                }
+                MetadataRequestType::Limits { .. } => {
+                    self.limits = Some(Err(e));
+                }
+                MetadataRequestType::Tvl => {
+                    self.tvl = Some(Err(e));
+                }
+            },
+        }
+    }
+}
+
 // Request Generation Types
 
 type RequestId = String;
 // Represents a request to a provider.
-#[cfg_attr(test, derive(Debug))]
 pub struct MetadataRequest {
+    pub generator_name: String,
     pub request_id: RequestId,
     pub component_id: ComponentId,
     pub request_type: MetadataRequestType,
@@ -55,6 +87,7 @@ pub struct MetadataRequest {
 impl Clone for MetadataRequest {
     fn clone(&self) -> Self {
         Self {
+            generator_name: self.generator_name.clone(),
             request_id: self.request_id.clone(),
             component_id: self.component_id.clone(),
             request_type: self.request_type.clone(),
@@ -65,12 +98,17 @@ impl Clone for MetadataRequest {
 
 impl MetadataRequest {
     pub fn new(
+        generator_name: String,
         request_id: RequestId,
         component_id: ComponentId,
         request_type: MetadataRequestType,
         transport: Box<dyn RequestTransport>,
     ) -> Self {
-        Self { request_id, component_id, request_type, transport }
+        Self { generator_name, request_id, component_id, request_type, transport }
+    }
+
+    pub fn get_generator_name(&self) -> &str {
+        &self.generator_name
     }
 }
 
@@ -246,6 +284,7 @@ pub trait MetadataRequestGenerator: Send + Sync {
     fn supported_metadata_types(&self) -> Vec<MetadataRequestType>;
 }
 
+#[cfg_attr(test, mockall::automock)]
 pub trait MetadataResponseParser: Send + Sync {
     /// Parses the response from the provider and returns the metadata value.
     ///
@@ -265,11 +304,36 @@ pub trait MetadataResponseParser: Send + Sync {
     fn parse_response(
         &self,
         component: &ProtocolComponent,
-        request_type: &MetadataRequestType,
+        request: &MetadataRequest,
         response: &Value,
     ) -> Result<MetadataValue, MetadataError>;
 }
 
+pub struct MetadataResponseParserRegistry {
+    // Map of protocol name to responseparser
+    parsers: HashMap<String, Box<dyn MetadataResponseParser>>,
+}
+
+impl MetadataResponseParserRegistry {
+    pub fn new() -> Self {
+        Self { parsers: HashMap::new() }
+    }
+
+    pub fn register_parser(
+        &mut self,
+        protocol_name: String,
+        parser: Box<dyn MetadataResponseParser>,
+    ) {
+        self.parsers
+            .insert(protocol_name, parser);
+    }
+
+    pub fn get_parser(&self, generator_name: &str) -> Option<&dyn MetadataResponseParser> {
+        self.parsers
+            .get(generator_name)
+            .map(|boxed_parser| boxed_parser.as_ref())
+    }
+}
 /// Registry that manages the mapping between protocol components and their metadata generators.
 ///
 /// This registry is the central configuration point for determining which generator should
@@ -489,7 +553,7 @@ pub struct MetadataResult {
 #[derive(Debug, Clone, PartialEq)]
 pub enum MetadataValue {
     Balances(HashMap<Address, Bytes>),
-    Limits(Vec<((Address, Address), (Bytes, Bytes))>),
+    Limits(Limits),
     Tvl(f64),
 }
 
@@ -516,113 +580,12 @@ impl ProviderRegistry {
             .get(&transport.routing_key())
             .cloned()
     }
-}
 
-pub struct BlockMetadataOrchestrator {
-    generator_registry: MetadataGeneratorRegistry,
-    provider_registry: ProviderRegistry,
-}
-
-impl BlockMetadataOrchestrator {
-    pub async fn collect_metadata_for_block(
+    pub fn get_provider_by_routing_key(
         &self,
-        balance_only_components: &[ProtocolComponent],
-        full_processing_components: &[ProtocolComponent],
-        block: &Block,
-    ) -> Result<HashMap<ProtocolComponent, ComponentTracingMetadata>, MetadataError> {
-        // 1. Generate all requests using component-to-generator mapping
-        let mut all_requests =
-            self.generate_requests_for_components(full_processing_components, block)?;
-
-        let balance_only_requests =
-            self.generate_balance_only_requests(balance_only_components, block)?;
-        all_requests.extend(balance_only_requests);
-
-        // 2. Group requests by provider routing key
-        let requests_by_provider = self.group_requests_by_routing_key(&all_requests);
-
-        // 3. Execute all provider batches in parallel
-        // Each provider handles its own deduplication and request grouping
-        let all_results = self
-            .execute_provider_batches(requests_by_provider)
-            .await;
-
-        // 4. Assemble ComponentTracingMetadata. Request deduplication is done here - also linking
-        //    back
-        // Balance requests to the transaction hash that triggered the balance fetching.
-        self.assemble_component_metadata(&all_requests, all_results)
-    }
-
-    fn generate_requests_for_components(
-        &self,
-        components: &[ProtocolComponent],
-        block: &Block,
-    ) -> Result<Vec<MetadataRequest>, MetadataError> {
-        let mut all_requests = Vec::new();
-
-        for component in components {
-            if let Some(generator) = self
-                .generator_registry
-                .get_generator_for_component(component)?
-            {
-                let requests = generator.generate_requests(component, block)?;
-                all_requests.extend(requests);
-            }
-        }
-
-        Ok(all_requests)
-    }
-
-    fn generate_balance_only_requests(
-        &self,
-        components: &[ProtocolComponent],
-        block: &Block,
-    ) -> Result<Vec<MetadataRequest>, MetadataError> {
-        let mut all_requests = Vec::new();
-
-        for component in components {
-            if let Some(generator) = self
-                .generator_registry
-                .get_generator_for_component(component)?
-            {
-                let requests = generator.generate_balance_only_requests(component, block)?;
-                all_requests.extend(requests);
-            }
-        }
-
-        Ok(all_requests)
-    }
-
-    fn group_requests_by_routing_key(
-        &self,
-        requests: &[MetadataRequest],
-    ) -> HashMap<String, Vec<MetadataRequest>> {
-        let mut grouped = HashMap::new();
-
-        for request in requests {
-            let routing_key = request.transport.routing_key();
-            grouped
-                .entry(routing_key)
-                .or_insert_with(Vec::new)
-                .push(request.clone());
-        }
-
-        grouped
-    }
-
-    async fn execute_provider_batches(
-        &self,
-        _requests_by_provider: HashMap<String, Vec<MetadataRequest>>,
-    ) -> Vec<MetadataResult> {
-        todo!()
-    }
-
-    fn assemble_component_metadata(
-        &self,
-        _all_requests: &[MetadataRequest],
-        _results: Vec<MetadataResult>,
-    ) -> Result<HashMap<ProtocolComponent, ComponentTracingMetadata>, MetadataError> {
-        todo!()
+        routing_key: &str,
+    ) -> Option<Arc<dyn RequestProvider>> {
+        self.providers.get(routing_key).cloned()
     }
 }
 
