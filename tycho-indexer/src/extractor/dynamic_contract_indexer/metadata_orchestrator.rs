@@ -168,9 +168,7 @@ impl BlockMetadataOrchestrator {
                         .expect("All components should contain every relevant component");
 
                     let metadata_value = match &result {
-                        Ok(success) => {
-                            parser.parse_response(&component.1, &request.request_type, success)
-                        }
+                        Ok(success) => parser.parse_response(&component.1, request, success),
                         Err(e) => Err(e.clone()),
                     };
 

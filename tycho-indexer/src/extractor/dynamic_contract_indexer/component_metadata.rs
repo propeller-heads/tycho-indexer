@@ -7,7 +7,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 use tycho_common::{
-    models::{blockchain::Block, protocol::ProtocolComponent, Address, ComponentId, TxHash},
+    models::{
+        blockchain::{Block, EntryPointWithTracingParams},
+        protocol::ProtocolComponent,
+        Address, ComponentId, TxHash,
+    },
     Bytes,
 };
 
@@ -20,7 +24,7 @@ type Balances = HashMap<Address, Bytes>;
 // Here we link the limits to the entrypoint that triggered the limit fetching. This is necessary
 // so that Tycho Simulation can use this information to calculate the limits for the component on
 // every block.
-type Limits = Vec<((Address, Address), (Bytes, Bytes))>;
+type Limits = Vec<((Address, Address), (Bytes, Bytes, Option<EntryPointWithTracingParams>))>;
 type Tvl = f64;
 pub(crate) type DeduplicationId = String;
 
@@ -299,7 +303,7 @@ pub trait MetadataResponseParser: Send + Sync {
     fn parse_response(
         &self,
         component: &ProtocolComponent,
-        request_type: &MetadataRequestType,
+        request: &MetadataRequest,
         response: &Value,
     ) -> Result<MetadataValue, MetadataError>;
 }
@@ -548,7 +552,7 @@ pub struct MetadataResult {
 #[derive(Debug, Clone, PartialEq)]
 pub enum MetadataValue {
     Balances(HashMap<Address, Bytes>),
-    Limits(Vec<((Address, Address), (Bytes, Bytes))>),
+    Limits(Limits),
     Tvl(f64),
 }
 
