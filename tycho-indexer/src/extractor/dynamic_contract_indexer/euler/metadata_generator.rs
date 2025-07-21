@@ -1,8 +1,14 @@
 use std::collections::HashMap;
 
 use serde_json::{json, Value};
+use tracing::warn;
 use tycho_common::{
-    models::{blockchain::Block, protocol::ProtocolComponent},
+    models::{
+        blockchain::{
+            Block, EntryPoint, EntryPointWithTracingParams, RPCTracerParams, TracingParams,
+        },
+        protocol::ProtocolComponent,
+    },
     Bytes,
 };
 
@@ -141,10 +147,10 @@ impl MetadataResponseParser for EulerMetadataResponseParser {
     fn parse_response(
         &self,
         component: &ProtocolComponent,
-        request_type: &MetadataRequestType,
+        request: &MetadataRequest,
         response: &Value,
     ) -> Result<MetadataValue, MetadataError> {
-        match request_type {
+        match &request.request_type {
             MetadataRequestType::ComponentBalance { .. } => {
                 let token_0 = component
                     .static_attributes
@@ -186,15 +192,53 @@ impl MetadataResponseParser for EulerMetadataResponseParser {
                     .strip_prefix("0x")
                     .unwrap_or(&res_string);
 
+                let entrypoint = (|| {
+                    let request = request
+                        .transport
+                        .as_any()
+                        .downcast_ref::<RpcTransport>()
+                        .ok_or(MetadataError::UnknownError("Not RpcTransport".to_string()))?;
+
+                    let params = &request.params[0];
+                    let target = params["to"]
+                        .as_str()
+                        .ok_or(MetadataError::UnknownError("target not found".to_string()))?;
+
+                    let calldata = params["data"]
+                        .as_str()
+                        .ok_or(MetadataError::UnknownError("calldata not found".to_string()))?;
+
+                    Ok(EntryPointWithTracingParams {
+                        entry_point: EntryPoint {
+                            external_id: format!("{target}:getLimits(address,address)"),
+                            target: Bytes::from(target),
+                            signature: "getLimits(address,address)".into(),
+                        },
+                        params: TracingParams::RPCTracer(RPCTracerParams {
+                            calldata: Bytes::from(calldata),
+                            caller: None,
+                            state_overrides: None,
+                            prune_addresses: None,
+                        }),
+                    })
+                })()
+                .map_err(|e: MetadataError| {
+                    warn!("Entrypoint error for {}: {}", component.id, e);
+                    e
+                })
+                .ok();
+
                 let limit_0 = Bytes::from(&res_str[0..64]);
                 let limit_1 = Bytes::from(&res_str[64..128]);
 
-                Ok(MetadataValue::Limits(vec![(token_pair[0].clone(), (limit_0, limit_1))]))
+                Ok(MetadataValue::Limits(vec![(
+                    token_pair[0].clone(),
+                    (limit_0, limit_1, entrypoint),
+                )]))
             }
         }
     }
 }
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -401,11 +445,7 @@ mod tests {
                 .expect("Request ID should be present in the request map");
 
             let parsed_result = parser
-                .parse_response(
-                    &component,
-                    &request.request_type,
-                    &result.expect("Request should be successful"),
-                )
+                .parse_response(&component, request, &result.expect("Request should be successful"))
                 .unwrap();
 
             parsed_results.push(parsed_result);
@@ -441,6 +481,21 @@ mod tests {
             (
                 Bytes::from("0x0000000000000000000000000000000000000000000000000000267d3cdc9cbf"),
                 Bytes::from("0x00000000000000000000000000000000000000000000000000013ccb6410e36b"),
+                Some(EntryPointWithTracingParams {
+                    entry_point: EntryPoint {
+                        external_id: "0x0000000000000000000000000000000000000000000000000000000000000000:getLimits(address,address)".to_string(),
+                        target: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000000"),
+                        signature: "getLimits(address,address)".to_string(),
+                    },
+                    params: tycho_common::models::blockchain::TracingParams::RPCTracer(
+                        RPCTracerParams {
+                            caller: None,
+                            calldata: Bytes::from("0xaaed87a3000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
+                            state_overrides: None,
+                            prune_addresses: None,
+                        },
+                    ),
+                }),
             )
         )]),));
 
@@ -452,6 +507,21 @@ mod tests {
             (
                 Bytes::from("0x000000000000000000000000000000000000000000000ecaa543f127a7d92880"),
                 Bytes::from("0x0000000000000000000000000000000000000000000000000000000030598d13"),
+                Some(EntryPointWithTracingParams {
+                    entry_point: EntryPoint {
+                        external_id: "0x0000000000000000000000000000000000000000000000000000000000000000:getLimits(address,address)".to_string(),
+                        target: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000000"),
+                        signature: "getLimits(address,address)".to_string(),
+                    },
+                    params: tycho_common::models::blockchain::TracingParams::RPCTracer(
+                        RPCTracerParams {
+                            caller: None,
+                            calldata: Bytes::from("0xaaed87a3000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
+                            state_overrides: None,
+                            prune_addresses: None,
+                        },
+                    ),
+                }),
             )
         )]),));
     }
@@ -571,11 +641,7 @@ mod tests {
                 .expect("Request ID should be present in the request map");
 
             let parsed_result = parser
-                .parse_response(
-                    &component,
-                    &request.request_type,
-                    &result.expect("Request should be successful"),
-                )
+                .parse_response(&component, request, &result.expect("Request should be successful"))
                 .unwrap();
 
             parsed_results.push(parsed_result);
@@ -611,6 +677,21 @@ mod tests {
             (
                 Bytes::from("0x0000000000000000000000000000000000000000000000000000267d3cdc9cbf"),
                 Bytes::from("0x00000000000000000000000000000000000000000000000000013ccb6410e36b"),
+                Some(EntryPointWithTracingParams {
+                    entry_point: EntryPoint {
+                        external_id: "0xc88b618c2c670c2e2a42e06b466b6f0e82a6e8a8:getLimits(address,address)".to_string(),
+                        target: Bytes::from("0xc88b618c2c670c2e2a42e06b466b6f0e82a6e8a8"),
+                        signature: "getLimits(address,address)".to_string(),
+                    },
+                    params: tycho_common::models::blockchain::TracingParams::RPCTracer(
+                        RPCTracerParams {
+                            caller: None,
+                            calldata: Bytes::from("0xaaed87a3000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
+                            state_overrides: None,
+                            prune_addresses: None,
+                        },
+                    ),
+                }),
             )
         )]),));
 
@@ -622,6 +703,21 @@ mod tests {
             (
                 Bytes::from("0x000000000000000000000000000000000000000000000ecaa543f127a7d92880"),
                 Bytes::from("0x0000000000000000000000000000000000000000000000000000000030598d13"),
+                Some(EntryPointWithTracingParams {
+                    entry_point: EntryPoint {
+                        external_id: "0xc88b618c2c670c2e2a42e06b466b6f0e82a6e8a8:getLimits(address,address)".to_string(),
+                        target: Bytes::from("0xc88b618c2c670c2e2a42e06b466b6f0e82a6e8a8"),
+                        signature: "getLimits(address,address)".to_string(),
+                    },
+                    params: tycho_common::models::blockchain::TracingParams::RPCTracer(
+                        RPCTracerParams {
+                            caller: None,
+                            calldata: Bytes::from("0xaaed87a3000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
+                            state_overrides: None,
+                            prune_addresses: None,
+                        },
+                    ),
+                }),
             )
         )]),));
     }
