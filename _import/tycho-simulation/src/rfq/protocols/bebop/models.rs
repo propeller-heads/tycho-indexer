@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BebopPriceData {
     pub last_update_ts: f64,
     /// Vec where each tuple is (price, size)
@@ -87,23 +87,33 @@ impl BebopPriceData {
             return None;
         }
 
-        let mut remaining_base_token = base_token_amount;
-        let mut total_quote_token = 0.0;
-
-        for (price, tokens_available) in price_levels.iter() {
-            if remaining_base_token <= 0.0 {
-                break;
-            }
-
-            let base_tokens_to_trade = remaining_base_token.min(*tokens_available);
-
-            total_quote_token += base_tokens_to_trade * price;
-            remaining_base_token -= base_tokens_to_trade;
-        }
+        let (total_quote_token, remaining_base_token) =
+            self.get_amount_out_from_levels(base_token_amount, price_levels);
 
         // If we can't fill the whole order (ran out of liquidity), calculate the price based on
         // the amount that we could fill, in order to have at least some price estimate
         Some(total_quote_token / (base_token_amount - remaining_base_token))
+    }
+
+    pub fn get_amount_out_from_levels(
+        &self,
+        amount_in: f64,
+        price_levels: Vec<(f64, f64)>,
+    ) -> (f64, f64) {
+        let mut remaining_amount_in = amount_in;
+        let mut amount_out = 0.0;
+
+        for (price, tokens_available) in price_levels.iter() {
+            if remaining_amount_in <= 0.0 {
+                break;
+            }
+
+            let amount_in_available_to_trade = remaining_amount_in.min(*tokens_available);
+
+            amount_out += amount_in_available_to_trade * price;
+            remaining_amount_in -= amount_in_available_to_trade;
+        }
+        (amount_out, remaining_amount_in)
     }
 }
 

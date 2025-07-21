@@ -2,6 +2,7 @@ use std::{any::Any, collections::HashMap};
 
 use num_bigint::BigUint;
 use num_traits::Pow;
+use num_traits::{FromPrimitive, ToPrimitive};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -68,11 +69,45 @@ impl ProtocolSim for BebopState {
 
     fn get_amount_out(
         &self,
-        _amount_in: BigUint,
-        _token_in: &Token,
-        _token_out: &Token,
+        amount_in: BigUint,
+        token_in: &Token,
+        token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
-        todo!()
+        let sell_base = token_in.address == self.base_token;
+        // if sell base is true -> use bids
+        // if sell base is false -> use asks AND amount is in quote token so the levels need to be
+        // adjusted
+
+        let price_levels = if sell_base {
+            self.price_data.bids.clone()
+        } else {
+            let levels = self.price_data.asks.clone();
+            let mut levels_in_quote = vec![];
+            for (price, size) in levels.iter() {
+                levels_in_quote.push((1.0 / price, price * size))
+            }
+            levels_in_quote
+        };
+
+        if price_levels.is_empty() {
+            return Err(SimulationError::RecoverableError("No liquidity".into()));
+        }
+
+        let amount_in = amount_in.to_f64().ok_or_else(|| {
+            SimulationError::RecoverableError("Can't convert amount in to f64".into())
+        })? / 10f64.powi(token_in.decimals as i32);
+        let (amount_out, _remaining_amount_in) = self
+            .price_data
+            .get_amount_out_from_levels(amount_in, price_levels);
+
+        Ok(GetAmountOutResult {
+            amount: BigUint::from_f64(amount_out * 10f64.powi(token_out.decimals as i32))
+                .ok_or_else(|| {
+                    SimulationError::RecoverableError("Can't convert amount out to BigUInt".into())
+                })?,
+            gas: Default::default(),     // TODO: estimate gas??
+            new_state: self.clone_box(), // The state doesn't change after a swap
+        })
     }
 
     fn get_limits(
@@ -132,19 +167,81 @@ impl ProtocolSim for BebopState {
     }
 
     fn clone_box(&self) -> Box<dyn ProtocolSim> {
-        todo!()
+        Box::new(self.clone())
     }
 
     fn as_any(&self) -> &dyn Any {
-        todo!()
+        self
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
-        todo!()
+        self
     }
 
-    fn eq(&self, _other: &dyn ProtocolSim) -> bool {
-        todo!()
+    fn eq(&self, other: &dyn ProtocolSim) -> bool {
+        if let Some(other_state) = other
+            .as_any()
+            .downcast_ref::<BebopState>()
+        {
+            self.base_token == other_state.base_token &&
+                self.quote_token == other_state.quote_token &&
+                self.price_data == other_state.price_data
+        } else {
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+    #[test]
+    fn test_get_amount_out() {
+        // WETH/USDC
+        let price_data = BebopPriceData {
+            last_update_ts: 1234567890.0,
+            bids: vec![(3000.0, 2.0), (2900.0, 2.5)],
+            asks: vec![(3100.0, 1.5), (3000.0, 3.0)],
+        };
+
+        let weth = Token::new(
+            &Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+            "WETH",
+            18,
+            0,
+            &[],
+            Default::default(),
+            100,
+        );
+        let usdc = Token::new(
+            &Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+            "USDC",
+            6,
+            0,
+            &[],
+            Default::default(),
+            100,
+        );
+
+        let state = BebopState::new(weth.address.clone(), usdc.address.clone(), price_data);
+
+        // swap 3 WETH -> USDC
+        let amount_out_result = state
+            .get_amount_out(BigUint::from_str("3_000000000000000000").unwrap(), &weth, &usdc)
+            .unwrap();
+
+        // 6000 from level 1 + 2900 from level 2 = 8900 USDC
+        assert_eq!(amount_out_result.amount, BigUint::from_str("8900_000_000").unwrap());
+
+        // swap 7000 USDC -> WETH
+        let amount_out_result = state
+            .get_amount_out(BigUint::from_str("7000_000_000").unwrap(), &usdc, &weth)
+            .unwrap();
+
+        // 1.5 from level 1 + 0.78333 from level 2 = 2.283333 WETH
+        assert_eq!(amount_out_result.amount, BigUint::from_str("2_283333333333333248").unwrap());
     }
 }
 
