@@ -105,8 +105,8 @@ impl ProtocolSim for BebopState {
                 .ok_or_else(|| {
                     SimulationError::RecoverableError("Can't convert amount out to BigUInt".into())
                 })?,
-            gas: Default::default(),     // TODO: estimate gas??
-            new_state: self.clone_box(), // The state doesn't change after a swap
+            gas: BigUint::from(70_000u64), // Rough gas estimation
+            new_state: self.clone_box(),   // The state doesn't change after a swap
         })
     }
 
