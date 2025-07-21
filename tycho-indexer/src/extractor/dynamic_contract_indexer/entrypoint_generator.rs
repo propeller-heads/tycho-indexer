@@ -1,6 +1,6 @@
 #![allow(dead_code)] // TODO: Remove this
 
-// This struct already exists, duplicated here for convenience.
+// This module provides hook entrypoint generation for Uniswap V4 hooks.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -14,6 +14,7 @@ use alloy_sol_types::{
 };
 use num_bigint::BigInt;
 use num_traits::Zero;
+use thiserror::Error;
 use tonic::async_trait;
 use tycho_common::{
     keccak256,
@@ -30,6 +31,23 @@ use tycho_common::{
 
 use crate::extractor::dynamic_contract_indexer::component_metadata::ComponentTracingMetadata;
 type SlotId = U256;
+
+// V4MiniRouter compiled bytecode
+// The V4MiniRouter is a simple wrapper around V4Router that:
+// - Overrides msgSender() to return address(this)
+// - Implements _pay() to burn tokens from the payer
+// - Exposes execute(bytes calldata params) to call _executeActions
+const V4_MINI_ROUTER_BYTECODE: &[u8] = include_bytes!("assets/V4MiniRouter.evm.runtime");
+
+// V4Router action constants
+// These correspond to the actions enum in V4Router
+const ACTION_SWAP_EXACT_IN_SINGLE: u8 = 6; // SWAP_EXACT_IN_SINGLE = 0x06
+const ACTION_SETTLE_ALL: u8 = 12; // SETTLE_ALL = 0x0c
+const ACTION_TAKE_ALL: u8 = 15; // TAKE_ALL = 0x0f
+
+// V4Router function selector for execute(bytes calldata params)
+// This is the keccak256 hash of "execute(bytes)" truncated to 4 bytes: 0x09c5eabe
+const EXECUTE_FUNCTION_SELECTOR: [u8; 4] = [0x09, 0xc5, 0xea, 0xbe];
 
 sol! {
     struct PoolKey {
@@ -56,53 +74,58 @@ sol! {
     function execute(bytes calldata params) public;
 }
 
-// V4Router action constants
-// These correspond to the actions enum in V4Router
-const ACTION_SWAP_EXACT_IN_SINGLE: u8 = 6; // SWAP_EXACT_IN_SINGLE = 0x06
-const ACTION_SETTLE_ALL: u8 = 12; // SETTLE_ALL = 0x0c
-const ACTION_TAKE_ALL: u8 = 15; // TAKE_ALL = 0x0f
-
-// V4Router function selector for execute(bytes calldata params)
-// This is the keccak256 hash of "execute(bytes)" truncated to 4 bytes: 0x09c5eabe
-const EXECUTE_FUNCTION_SELECTOR: [u8; 4] = [0x09, 0xc5, 0xea, 0xbe];
-
+/// Configuration for hook entrypoint generation
 pub struct HookEntrypointConfig {
-    // Ideal number of entrypoints to generate for each component.
+    /// Ideal number of entrypoints to generate for each component.
     pub max_sample_size: Option<usize>,
-    // Minimum number of entrypoints to generate for each component.
+    /// Minimum number of entrypoints to generate for each component.
     pub min_samples: usize,
-    // Router address to use for the entrypoints. If not provided, uses a random address.
+    /// Router address to use for the entrypoints. If not provided, uses a random address.
     pub router_address: Option<Address>,
-    // If not provided, should use a default address. Could be defined by a custom Hook
-    // Orchestrator.
+    /// Sender address for transactions. If not provided, uses a default address.
+    /// Could be defined by a custom Hook Orchestrator.
     pub sender: Option<Address>,
-    // Router bytecode to use for state overrides. If not provided, uses a default implementation.
+    /// Router bytecode to use for state overrides. If not provided, uses V4MiniRouter bytecode.
     pub router_code: Option<Bytes>,
     /// Pool manager address (required)
     pub pool_manager: Address,
 }
+/// Data required for generating hook entrypoints
 pub struct HookEntrypointData {
+    /// The address of the hook contract
     pub hook_address: Address,
-    // Component should provide, via static attributes - all the information required for PoolKey.
-    // PoolKey is generated from tokens, LPfee, tickSpacing and hooks address.
-    // https://github.com/Uniswap/v4-core/blob/main/src/types/PoolKey.sol
+    /// Component should provide, via static attributes - all the information required for PoolKey.
+    /// PoolKey is generated from tokens, LPfee, tickSpacing and hooks address.
+    /// https://github.com/Uniswap/v4-core/blob/main/src/types/PoolKey.sol
     pub component: ProtocolComponent,
+    /// Metadata for component tracing (balances, limits, etc.)
     pub component_metadata: ComponentTracingMetadata,
 }
 
+/// Context for hook tracing
 pub struct HookTracerContext {
+    /// The block at which to trace
     block: Block,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum EntrypointGenerationError {
+    /// Failed to estimate swap amounts
+    #[error("Failed to estimate swap amounts: {0}")]
     AmountsEstimationFailed(String),
+    /// Failed to generate entrypoints
+    #[error("Failed to generate entrypoints: {0}")]
     EntrypointGenerationFailed(String),
+    /// No data available for generation
+    #[error("No data available: {0}")]
     NoDataAvailable(String),
 }
 
+/// Trait for generating hook entrypoints
 #[async_trait]
+#[allow(dead_code)]
 pub trait HookEntrypointGenerator {
+    /// Set the configuration for the generator
     fn set_config(&mut self, config: HookEntrypointConfig);
 
     /// Generate entrypoints for a given component.
@@ -116,6 +139,7 @@ pub trait HookEntrypointGenerator {
     ) -> Result<Vec<EntryPointWithTracingParams>, EntrypointGenerationError>;
 }
 
+/// Trait for estimating swap amounts for entrypoint generation
 #[async_trait]
 pub trait SwapAmountEstimator {
     /// Estimate the swap amounts for a given component.
@@ -214,6 +238,8 @@ impl ERC6909Overwrites {
     }
 }
 
+/// Default implementation of SwapAmountEstimator
+/// Uses limits when available, falls back to balances
 pub struct DefaultSwapAmountEstimator;
 
 #[async_trait]
@@ -415,8 +441,12 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
             } else if amounts.len() >= min_samples {
                 amounts.iter().collect::<Vec<_>>()
             } else {
-                // TODO: Raise error?
-                continue;
+                return Err(EntrypointGenerationError::AmountsEstimationFailed(
+                    format!(
+                        "Insufficient swap amounts for token pair {:?} -> {:?}: got {}, need at least {}",
+                        token0, token1, amounts.len(), min_samples
+                    ),
+                ));
             };
 
             for amount_bytes in amounts_to_use {
@@ -464,14 +494,7 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                     .config
                     .router_code
                     .clone()
-                    .unwrap_or_else(|| {
-                        // Default placeholder bytecode when no router code is provided
-                        // This should be replaced with actual compiled V4MiniRouter bytecode
-                        Bytes::from(vec![
-                            0x60, 0x80, 0x60, 0x40, 0x52, 0x34, 0x80, 0x15, 0x61, 0x00, 0x10, 0x57,
-                            0x60, 0x00, 0x80, 0xfd,
-                        ])
-                    });
+                    .unwrap_or_else(|| Bytes::from(V4_MINI_ROUTER_BYTECODE));
 
                 let mut state_overrides = BTreeMap::new();
 
@@ -663,8 +686,8 @@ mod tests {
             tokens: create_test_tokens(),
             contract_addresses: vec![Address::from([3u8; 20])],
             static_attributes: [
-                ("fee".to_string(), Bytes::from(3000u32.to_be_bytes())),
-                ("tickSpacing".to_string(), Bytes::from(60i32.to_be_bytes())),
+                ("key_lp_fee".to_string(), Bytes::from(3000u32.to_be_bytes())),
+                ("tick_spacing".to_string(), Bytes::from(60i32.to_be_bytes())),
             ]
             .into_iter()
             .collect(),
@@ -757,7 +780,7 @@ mod tests {
                 assert!(!entrypoints.is_empty());
                 assert_eq!(entrypoints.len(), 2); // 2 amounts
                 for entrypoint in entrypoints {
-                    assert_eq!(entrypoint.entry_point.signature, "0x09c5eabe");
+                    assert_eq!(entrypoint.entry_point.signature, "execute(bytes)");
                     assert_eq!(entrypoint.entry_point.target, Address::from([5u8; 20]));
                 }
             }
