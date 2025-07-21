@@ -373,7 +373,7 @@ mod tests {
         generator_registry.set_default_generator(Some(Box::new(mock_generator)));
 
         let mut parser_registry = MetadataResponseParserRegistry::new();
-        parser_registry.register_parser("test".to_string(), Box::new(mock_parser));
+        parser_registry.register_parser("test_protocol".to_string(), Box::new(mock_parser));
 
         let mut provider_registry = ProviderRegistry::new();
         provider_registry.register_provider("rpc_mainnet".to_string(), Arc::new(mock_provider));
@@ -493,8 +493,10 @@ mod tests {
         generator_registry.set_default_generator(Some(Box::new(mock_generator)));
 
         let mut parser_registry = MetadataResponseParserRegistry::new();
-        parser_registry
-            .register_parser("test".to_string(), Box::new(MockMetadataResponseParser::new()));
+        parser_registry.register_parser(
+            "test_protocol".to_string(),
+            Box::new(MockMetadataResponseParser::new()),
+        );
 
         let mut provider_registry = ProviderRegistry::new();
         provider_registry.register_provider("rpc_mainnet".to_string(), Arc::new(mock_provider));
