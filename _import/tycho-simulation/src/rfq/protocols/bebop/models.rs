@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BebopPriceData {
-    last_update_ts: f64,
+    pub last_update_ts: f64,
     /// Vec where each tuple is (price, size)
     pub bids: Vec<(f64, f64)>,
     /// Vec where each tuple is (price, size)
