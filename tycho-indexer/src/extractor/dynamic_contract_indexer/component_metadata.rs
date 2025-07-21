@@ -24,6 +24,7 @@ type Balances = HashMap<Address, Bytes>;
 // Here we link the limits to the entrypoint that triggered the limit fetching. This is necessary
 // so that Tycho Simulation can use this information to calculate the limits for the component on
 // every block.
+// Represented by (tokenIn, tokenOut), (maxAmountIn, maxAmountOut, Entrypoint)
 type Limits = Vec<((Address, Address), (Bytes, Bytes, Option<EntryPointWithTracingParams>))>;
 type Tvl = f64;
 pub(crate) type DeduplicationId = String;
