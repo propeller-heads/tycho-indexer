@@ -6,6 +6,8 @@ use std::collections::HashMap;
 
 use alloy_primitives::U256;
 use alloy_sol_types::sol;
+use num_bigint::BigInt;
+use num_traits::Zero;
 use tonic::async_trait;
 use tycho_common::{
     keccak256,
@@ -97,6 +99,9 @@ pub trait SwapAmountEstimator {
     /// If limits are available, use different fractions of it; use 1, 10, 50 and 95% of the limits,
     /// to cover different bands. Else, use fractions of balances.
     /// Else, raise a custom Error.
+    ///
+    /// Returns a combination of TokenIn and Token Out and an array of swap amounts, encoded in
+    /// bytes
     async fn estimate_swap_amounts(
         &self,
         metadata: &ComponentTracingMetadata,
@@ -201,16 +206,31 @@ impl SwapAmountEstimator for DefaultSwapAmountEstimator {
         if let Some(Ok((_, limits))) = &metadata.limits {
             if !limits.is_empty() {
                 for ((token0, token1), (limit0, _limit1, _)) in limits {
-                    // limit0 is the max amount of token0 that can be sold
-                    let limit_amount = U256::from_be_slice(limit0.as_ref());
-                    if limit_amount > U256::ZERO {
+                    let limit_amount =
+                        BigInt::from_bytes_be(num_bigint::Sign::Plus, limit0.as_ref());
+
+                    if !limit_amount.is_zero() {
+                        let one_hundred = BigInt::from(100);
                         let amounts = vec![
-                            Bytes::from((limit_amount / U256::from(100)).to_be_bytes_vec()), // 1%
-                            Bytes::from((limit_amount / U256::from(10)).to_be_bytes_vec()),  // 10%
-                            Bytes::from((limit_amount / U256::from(2)).to_be_bytes_vec()),   // 50%
                             Bytes::from(
-                                ((limit_amount * U256::from(95)) / U256::from(100))
-                                    .to_be_bytes_vec(),
+                                (&limit_amount / &one_hundred)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 1%
+                            Bytes::from(
+                                (&limit_amount / BigInt::from(10))
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 10%
+                            Bytes::from(
+                                (&limit_amount / BigInt::from(2))
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 50%
+                            Bytes::from(
+                                ((&limit_amount * BigInt::from(95)) / &one_hundred)
+                                    .to_bytes_be()
+                                    .1,
                             ), // 95%
                         ];
                         result.insert((token0.clone(), token1.clone()), amounts);
@@ -227,14 +247,26 @@ impl SwapAmountEstimator for DefaultSwapAmountEstimator {
         if let Some(Ok((_, balances))) = &metadata.balances {
             for sell_token in tokens {
                 if let Some(balance_bytes) = balances.get(sell_token) {
-                    let balance = U256::from_be_slice(balance_bytes.as_ref());
-                    if balance > U256::ZERO {
+                    let balance =
+                        BigInt::from_bytes_be(num_bigint::Sign::Plus, balance_bytes.as_ref());
+                    if !balance.is_zero() {
+                        let one_hundred = BigInt::from(100);
                         let amounts = vec![
-                            Bytes::from((balance / U256::from(100)).to_be_bytes_vec()), // 1%
-                            Bytes::from((balance / U256::from(10)).to_be_bytes_vec()),  // 10%
-                            Bytes::from((balance / U256::from(2)).to_be_bytes_vec()),   // 50%
+                            Bytes::from((&balance / &one_hundred).to_bytes_be().1), // 1%
                             Bytes::from(
-                                ((balance * U256::from(95)) / U256::from(100)).to_be_bytes_vec(),
+                                (&balance / BigInt::from(10))
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 10%
+                            Bytes::from(
+                                (&balance / BigInt::from(2))
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 50%
+                            Bytes::from(
+                                ((&balance * BigInt::from(95)) / &one_hundred)
+                                    .to_bytes_be()
+                                    .1,
                             ), // 95%
                         ];
                         // Create entries for each possible buy token
@@ -304,13 +336,10 @@ mod tests {
         let estimator = DefaultSwapAmountEstimator;
         let tokens = create_test_tokens();
 
-        let limit_value = U256::from(1000u64);
+        let limit_value = BigInt::from(1000u64);
         let limits = vec![(
             (tokens[0].clone(), tokens[1].clone()),
-            (
-                Bytes::from(limit_value.to_be_bytes_vec()),
-                Bytes::from(limit_value.to_be_bytes_vec()),
-            ),
+            (Bytes::from(limit_value.to_bytes_be().1), Bytes::from(limit_value.to_bytes_be().1)),
         )];
         let metadata = create_metadata_with_limits(limits);
 
@@ -325,10 +354,10 @@ mod tests {
             .get(&(tokens[0].clone(), tokens[1].clone()))
             .unwrap();
         assert_eq!(amounts.len(), 4);
-        assert_eq!(amounts[0], Bytes::from(U256::from(10u64).to_be_bytes_vec())); // 1%
-        assert_eq!(amounts[1], Bytes::from(U256::from(100u64).to_be_bytes_vec())); // 10%
-        assert_eq!(amounts[2], Bytes::from(U256::from(500u64).to_be_bytes_vec())); // 50%
-        assert_eq!(amounts[3], Bytes::from(U256::from(950u64).to_be_bytes_vec())); // 95%
+        assert_eq!(amounts[0], Bytes::from(BigInt::from(10u64).to_bytes_be().1)); // 1%
+        assert_eq!(amounts[1], Bytes::from(BigInt::from(100u64).to_bytes_be().1)); // 10%
+        assert_eq!(amounts[2], Bytes::from(BigInt::from(500u64).to_bytes_be().1)); // 50%
+        assert_eq!(amounts[3], Bytes::from(BigInt::from(950u64).to_bytes_be().1)); // 95%
     }
 
     #[tokio::test]
@@ -336,10 +365,10 @@ mod tests {
         let estimator = DefaultSwapAmountEstimator;
         let tokens = create_test_tokens();
 
-        let balance_value = U256::from(2000u64);
+        let balance_value = BigInt::from(2000u64);
         let mut balances = HashMap::new();
-        balances.insert(tokens[0].clone(), Bytes::from(balance_value.to_be_bytes_vec()));
-        balances.insert(tokens[1].clone(), Bytes::from(balance_value.to_be_bytes_vec()));
+        balances.insert(tokens[0].clone(), Bytes::from(balance_value.to_bytes_be().1));
+        balances.insert(tokens[1].clone(), Bytes::from(balance_value.to_bytes_be().1));
 
         let metadata = create_metadata_with_balances(balances);
 
@@ -354,19 +383,19 @@ mod tests {
             .get(&(tokens[0].clone(), tokens[1].clone()))
             .unwrap();
         assert_eq!(amounts01.len(), 4);
-        assert_eq!(amounts01[0], Bytes::from(U256::from(20u64).to_be_bytes_vec())); // 1%
-        assert_eq!(amounts01[1], Bytes::from(U256::from(200u64).to_be_bytes_vec())); // 10%
-        assert_eq!(amounts01[2], Bytes::from(U256::from(1000u64).to_be_bytes_vec())); // 50%
-        assert_eq!(amounts01[3], Bytes::from(U256::from(1900u64).to_be_bytes_vec())); // 95%
+        assert_eq!(amounts01[0], Bytes::from(BigInt::from(20u64).to_bytes_be().1)); // 1%
+        assert_eq!(amounts01[1], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 10%
+        assert_eq!(amounts01[2], Bytes::from(BigInt::from(1000u64).to_bytes_be().1)); // 50%
+        assert_eq!(amounts01[3], Bytes::from(BigInt::from(1900u64).to_bytes_be().1)); // 95%
 
         let amounts10 = result
             .get(&(tokens[1].clone(), tokens[0].clone()))
             .unwrap();
         assert_eq!(amounts10.len(), 4);
-        assert_eq!(amounts10[0], Bytes::from(U256::from(20u64).to_be_bytes_vec())); // 1%
-        assert_eq!(amounts10[1], Bytes::from(U256::from(200u64).to_be_bytes_vec())); // 10%
-        assert_eq!(amounts10[2], Bytes::from(U256::from(1000u64).to_be_bytes_vec())); // 50%
-        assert_eq!(amounts10[3], Bytes::from(U256::from(1900u64).to_be_bytes_vec())); // 95%
+        assert_eq!(amounts10[0], Bytes::from(BigInt::from(20u64).to_bytes_be().1)); // 1%
+        assert_eq!(amounts10[1], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 10%
+        assert_eq!(amounts10[2], Bytes::from(BigInt::from(1000u64).to_bytes_be().1)); // 50%
+        assert_eq!(amounts10[3], Bytes::from(BigInt::from(1900u64).to_bytes_be().1)); // 95%
     }
 
     #[tokio::test]
