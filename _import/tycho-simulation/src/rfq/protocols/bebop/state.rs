@@ -1,7 +1,7 @@
 use std::{any::Any, collections::HashMap};
 
-use alloy::primitives::Address;
 use num_bigint::BigUint;
+use num_traits::Pow;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -14,8 +14,8 @@ use tycho_common::{
 
 #[derive(Debug)]
 pub struct BebopState {
-    pub base_token: String,
-    pub quote_token: String,
+    pub base_token: Token,
+    pub quote_token: Token,
     pub last_update_ts: u64,
     pub bids: Vec<(f64, f64)>,
     pub asks: Vec<(f64, f64)>,
@@ -27,9 +27,6 @@ impl ProtocolSim for BebopState {
     }
 
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
-        let base_address = Address::from_slice(&base.address).to_string();
-        let quote_address = Address::from_slice(&quote.address).to_string();
-
         // Since this method does not care about sell direction, we average the price of the best
         // bid and ask
         let best_bid = self
@@ -53,17 +50,16 @@ impl ProtocolSim for BebopState {
 
         // If the base/quote token addresses are the opposite of the pool tokens, we need to invert
         // the price
-        if base_address.to_lowercase() == self.quote_token.to_lowercase() &&
-            quote_address.to_lowercase() == self.base_token.to_lowercase()
-        {
+        if base.address == self.quote_token.address && quote.address == self.base_token.address {
             Ok(1.0 / average_price)
-        } else if quote_address.to_lowercase() == self.quote_token.to_lowercase() &&
-            base_address.to_lowercase() == self.base_token.to_lowercase()
+        } else if quote.address == self.quote_token.address &&
+            base.address == self.base_token.address
         {
             Ok(average_price)
         } else {
             Err(SimulationError::RecoverableError(format!(
-                "Invalid token addresses: {base_address}, {quote_address}"
+                "Invalid token addresses: {}, {}",
+                base.address, quote.address
             )))
         }
     }
@@ -82,22 +78,17 @@ impl ProtocolSim for BebopState {
         sell_token: Bytes,
         buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
-        let sell_token_address = Address::from_slice(&sell_token).to_string();
-        let buy_token_address = Address::from_slice(&buy_token).to_string();
-
         // If selling BASE for QUOTE, we need to look at [BASE/QUOTE].bids
         // If buying BASE with QUOTE, we need to look at [BASE/QUOTE].asks
-        let price_levels = if sell_token_address.to_lowercase() == self.base_token.to_lowercase() &&
-            buy_token_address.to_lowercase() == self.quote_token.to_lowercase()
+        let (sell_decimals, buy_decimals, price_levels) = if sell_token == self.base_token.address &&
+            buy_token == self.quote_token.address
         {
-            self.bids.clone()
-        } else if buy_token_address.to_lowercase() == self.base_token.to_lowercase() &&
-            sell_token_address.to_lowercase() == self.quote_token.to_lowercase()
-        {
-            self.asks.clone()
+            (self.base_token.decimals, self.quote_token.decimals, self.bids.clone())
+        } else if buy_token == self.base_token.address && sell_token == self.quote_token.address {
+            (self.quote_token.decimals, self.base_token.decimals, self.asks.clone())
         } else {
             return Err(SimulationError::RecoverableError(format!(
-                "Invalid token addresses: {sell_token_address}, {buy_token_address}"
+                "Invalid token addresses: {sell_token}, {buy_token}"
             )))
         };
 
@@ -106,21 +97,27 @@ impl ProtocolSim for BebopState {
             return Ok((BigUint::from(0u64), BigUint::from(0u64)));
         }
 
-        let total_input_amount: f64 = price_levels
+        let total_base_amount: f64 = price_levels
             .iter()
             .map(|(_, amount)| amount)
             .sum();
-        let total_output_amount: f64 = price_levels
+        let total_quote_amount: f64 = price_levels
             .iter()
             .map(|(price, amount)| price * amount)
             .sum();
 
-        // TODO we need decimals to properly convert to BigUint - should we store the whole Token
-        //  struct when creating the state?
-        let token_limit = BigUint::from((total_input_amount * 1e18) as u128);
-        let quote_limit = BigUint::from((total_output_amount * 1e18) as u128);
+        let (total_sell_amount, total_buy_amount) =
+            if sell_token == self.base_token.address && buy_token == self.quote_token.address {
+                (total_base_amount, total_quote_amount)
+            } else {
+                (total_quote_amount, total_base_amount)
+            };
 
-        Ok((token_limit, quote_limit))
+        let sell_limit =
+            BigUint::from((total_sell_amount * 10_f64.pow(sell_decimals as f64)) as u128);
+        let buy_limit = BigUint::from((total_buy_amount * 10_f64.pow(buy_decimals as f64)) as u128);
+
+        Ok((sell_limit, buy_limit))
     }
 
     fn delta_transition(
@@ -151,7 +148,6 @@ impl ProtocolSim for BebopState {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
 
     use tycho_common::models::Chain;
 
@@ -185,51 +181,13 @@ mod tests {
         )
     }
 
-    fn eth() -> Token {
-        Token::new(
-            &hex::decode("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
-                .unwrap()
-                .into(),
-            "ETH",
-            18,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        )
-    }
-
-    fn dai() -> Token {
-        Token::new(
-            &hex::decode("6b175474e89094c44da98b954eedeac495271d0f")
-                .unwrap()
-                .into(),
-            "DAI",
-            18,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        )
-    }
-
     fn create_test_bebop_state() -> BebopState {
         BebopState {
-            base_token: "0x2260FAC5E5542a773Aa44fBCfeDF7C193bc2C599".to_string(), // WBTC
-            quote_token: "0xA0b86991c6218a76c1d19D4a2e9Eb0cE3606eB48".to_string(), // USDC
+            base_token: wbtc(),
+            quote_token: usdc(),
             last_update_ts: 1703097600,
             bids: vec![(65000.0, 1.5), (64950.0, 2.0), (64900.0, 0.5)],
             asks: vec![(65100.0, 1.0), (65150.0, 2.5), (65200.0, 1.5)],
-        }
-    }
-
-    fn create_eth_dai_state() -> BebopState {
-        BebopState {
-            base_token: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".to_string(), // ETH
-            quote_token: "0x6b175474e89094c44da98b954eedeac495271d0f".to_string(), // DAI
-            last_update_ts: 1703097600,
-            bids: vec![(2000.0, 10.0), (1995.0, 20.0), (1990.0, 5.0)],
-            asks: vec![(2010.0, 15.0), (2015.0, 25.0), (2020.0, 10.0)],
         }
     }
 
@@ -291,50 +249,56 @@ mod tests {
 
     #[test]
     fn test_get_limits_sell_base_for_quote() {
-        let state = create_eth_dai_state();
+        let state = create_test_bebop_state();
 
-        // Test selling ETH for DAI (should use bids)
-        let (token_limit, quote_limit) = state
-            .get_limits(eth().address.clone(), dai().address.clone())
+        // Test selling WBTC for USDC (should use bids)
+        let (wbtc_limit, usdc_limit) = state
+            .get_limits(wbtc().address.clone(), usdc().address.clone())
             .unwrap();
 
-        // Total ETH available: 10.0 + 20.0 + 5.0 = 35.0 ETH
-        let expected_token_limit = BigUint::from(35u64) * BigUint::from(10u64).pow(18);
+        // Use bids: vec![(65000.0, 1.5), (64950.0, 2.0), (64900.0, 0.5)]
 
-        // Total DAI value: (2000*10) + (1995*20) + (1990*5) = 20000 + 39900 + 9950 = 69850
-        let expected_quote_limit = BigUint::from_str("69849999999999997378560").unwrap();
+        // Total WBTC available: 1.5 + 2.0 + 0.5 = 4.0 WBTC
+        let expected_wbtc_limit = BigUint::from(4u64) * BigUint::from(10u64).pow(8u32);
 
-        assert_eq!(token_limit, expected_token_limit);
-        assert_eq!(quote_limit, expected_quote_limit);
+        // Total USDC value: (65000*1.5) + (64950*2.0) + (64900*0.5) = 97500 + 129900 + 32450 =
+        // 259850
+        let expected_usdc_limit = BigUint::from(259850u64) * BigUint::from(10u64).pow(6u32);
+
+        assert_eq!(wbtc_limit, expected_wbtc_limit);
+        assert_eq!(usdc_limit, expected_usdc_limit);
     }
 
     #[test]
     fn test_get_limits_buy_base_with_quote() {
-        let state = create_eth_dai_state();
+        let state = create_test_bebop_state();
 
-        // Test buying ETH with DAI (should use asks)
-        let (token_limit, quote_limit) = state
-            .get_limits(dai().address.clone(), eth().address.clone())
+        // Test buying WBTC with USDC (should use asks)
+        let (usdc_limit, wbtc_limit) = state
+            .get_limits(usdc().address.clone(), wbtc().address.clone())
             .unwrap();
 
-        // Total ETH available: 15.0 + 25.0 + 10.0 = 50.0 ETH
-        let expected_token_limit = BigUint::from(50u64) * BigUint::from(10u64).pow(18);
+        // Use asks: vec![(65100.0, 1.0), (65150.0, 2.5), (65200.0, 1.5)]
 
-        // Total DAI value: (2010*15) + (2015*25) + (2020*10) = 30150 + 50375 + 20200 = 100725
-        let expected_quote_limit = BigUint::from_str("100725000000000004980736").unwrap();
+        // Total USDC needed: (65100*1.0) + (65150*2.5) + (65200*1.5) = 65100 + 162875 + 97800 =
+        // 325775
+        let expected_usdc_limit = BigUint::from(325775u64) * BigUint::from(10u64).pow(6u32);
 
-        assert_eq!(token_limit, expected_token_limit);
-        assert_eq!(quote_limit, expected_quote_limit);
+        // Total WBTC available: 1.0 + 2.5 + 1.5 = 5.0 WBTC
+        let expected_wbtc_limit = BigUint::from(5u64) * BigUint::from(10u64).pow(8u32);
+
+        assert_eq!(usdc_limit, expected_usdc_limit);
+        assert_eq!(wbtc_limit, expected_wbtc_limit);
     }
 
     #[test]
     fn test_get_limits_no_bids() {
-        let mut state = create_eth_dai_state();
+        let mut state = create_test_bebop_state();
         state.bids = vec![]; // Remove all bids
 
-        // Test selling ETH for DAI with no bids - should return 0
+        // Test selling WBTC for USDC with no bids - should return 0
         let (token_limit, quote_limit) = state
-            .get_limits(eth().address.clone(), dai().address.clone())
+            .get_limits(wbtc().address.clone(), usdc().address.clone())
             .unwrap();
 
         assert_eq!(token_limit, BigUint::from(0u64));
@@ -343,12 +307,12 @@ mod tests {
 
     #[test]
     fn test_get_limits_no_asks() {
-        let mut state = create_eth_dai_state();
+        let mut state = create_test_bebop_state();
         state.asks = vec![]; // Remove all asks
 
-        // Test buying ETH with DAI with no asks - should return 0
+        // Test buying WBTC with USDC with no asks - should return 0
         let (token_limit, quote_limit) = state
-            .get_limits(dai().address.clone(), eth().address.clone())
+            .get_limits(usdc().address.clone(), wbtc().address.clone())
             .unwrap();
 
         assert_eq!(token_limit, BigUint::from(0u64));
@@ -357,10 +321,23 @@ mod tests {
 
     #[test]
     fn test_get_limits_invalid_token_pair() {
-        let state = create_eth_dai_state();
+        let state = create_test_bebop_state();
 
-        // Test with invalid token pair (WBTC not in ETH/DAI pool) - should return error
-        let result = state.get_limits(wbtc().address.clone(), dai().address.clone());
+        // Create a different token (not WBTC or USDC)
+        let eth = Token::new(
+            &hex::decode("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+                .unwrap()
+                .into(),
+            "ETH",
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
+
+        // Test with invalid token pair (ETH not in WBTC/USDC pool) - should return error
+        let result = state.get_limits(eth.address.clone(), usdc().address.clone());
         assert!(result.is_err());
 
         if let Err(SimulationError::RecoverableError(msg)) = result {
