@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 
-use tracing::warn;
 use tycho_common::models::{blockchain::Block, protocol::ProtocolComponent, TxHash};
 
 use crate::extractor::dynamic_contract_indexer::component_metadata::{
@@ -56,7 +55,7 @@ impl BlockMetadataOrchestrator {
         let requests_by_provider = self.group_requests_by_routing_key(&all_requests);
         let all_results = self
             .execute_provider_batches(&all_components, requests_by_provider)
-            .await;
+            .await?;
 
         self.assemble_component_metadata(&all_components, all_results)
     }
@@ -107,7 +106,7 @@ impl BlockMetadataOrchestrator {
         &self,
         all_components: &HashMap<String, (TxHash, ProtocolComponent)>,
         requests_by_provider: HashMap<String, Vec<MetadataRequest>>,
-    ) -> Vec<MetadataResult> {
+    ) -> Result<Vec<MetadataResult>, MetadataError> {
         let mut all_results = Vec::new();
 
         for (routing_key, requests) in requests_by_provider {
@@ -141,43 +140,51 @@ impl BlockMetadataOrchestrator {
             let results = provider
                 .execute_batch(&transports)
                 .await;
+
             for (dedup_id, result) in results {
-                if let Some(request) = ids_to_requests.get(&dedup_id) {
-                    if let Some(parser) = self
-                        .response_parser_registry
-                        .get_parser(request.get_protocol_name())
-                    {
-                        if let Some(component_ids) = component_ids_by_dedup_id.get(&dedup_id) {
-                            for comp_id in component_ids {
-                                let component = all_components.get(comp_id).expect(
-                                    "All components should contain every relevant component",
-                                );
+                let request = ids_to_requests
+                    .get(&dedup_id)
+                    .ok_or(MetadataError::UnknownError(format!(
+                        "Received result for unknown deduplication id: {dedup_id}"
+                    )))?;
 
-                                let metadata_value = match &result {
-                                    Ok(success) => parser.parse_response(
-                                        &component.1,
-                                        &request.request_type,
-                                        success,
-                                    ),
-                                    Err(e) => Err(e.clone()),
-                                };
+                let parser = self
+                    .response_parser_registry
+                    .get_parser(request.get_generator_name())
+                    .ok_or(MetadataError::UnknownError(format!(
+                        "No parser found for {}",
+                        request.get_generator_name()
+                    )))?;
 
-                                all_results.push(MetadataResult {
-                                    request_id: request.request_id.clone(),
-                                    component_id: component.1.id.clone(),
-                                    request_type: request.request_type.clone(),
-                                    result: metadata_value,
-                                });
-                            }
+                let component_ids = component_ids_by_dedup_id
+                    .get(&dedup_id)
+                    .ok_or(MetadataError::UnknownError(format!(
+                        "Received result for unknown deduplication id: {dedup_id}"
+                    )))?;
+
+                for comp_id in component_ids {
+                    let component = all_components
+                        .get(comp_id)
+                        .expect("All components should contain every relevant component");
+
+                    let metadata_value = match &result {
+                        Ok(success) => {
+                            parser.parse_response(&component.1, &request.request_type, success)
                         }
-                    } else {
-                        warn!("No parser found for protocol {}", request.get_protocol_name());
-                    }
+                        Err(e) => Err(e.clone()),
+                    };
+
+                    all_results.push(MetadataResult {
+                        request_id: request.request_id.clone(),
+                        component_id: component.1.id.clone(),
+                        request_type: request.request_type.clone(),
+                        result: metadata_value,
+                    });
                 }
             }
         }
 
-        all_results
+        Ok(all_results)
     }
 
     fn assemble_component_metadata(
