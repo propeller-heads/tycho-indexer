@@ -12,13 +12,13 @@ use tycho_common::{
     Bytes,
 };
 
-#[derive(Debug)]
+use crate::rfq::protocols::bebop::models::BebopPriceData;
+
+#[derive(Debug, Clone)]
 pub struct BebopState {
     pub base_token: Token,
     pub quote_token: Token,
-    pub last_update_ts: u64,
-    pub bids: Vec<(f64, f64)>,
-    pub asks: Vec<(f64, f64)>,
+    pub price_data: BebopPriceData,
 }
 
 impl ProtocolSim for BebopState {
@@ -30,10 +30,12 @@ impl ProtocolSim for BebopState {
         // Since this method does not care about sell direction, we average the price of the best
         // bid and ask
         let best_bid = self
+            .price_data
             .bids
             .first()
             .map(|(price, _)| *price);
         let best_ask = self
+            .price_data
             .asks
             .first()
             .map(|(price, _)| *price);
@@ -83,9 +85,9 @@ impl ProtocolSim for BebopState {
         let (sell_decimals, buy_decimals, price_levels) = if sell_token == self.base_token.address &&
             buy_token == self.quote_token.address
         {
-            (self.base_token.decimals, self.quote_token.decimals, self.bids.clone())
+            (self.base_token.decimals, self.quote_token.decimals, self.price_data.bids.clone())
         } else if buy_token == self.base_token.address && sell_token == self.quote_token.address {
-            (self.quote_token.decimals, self.base_token.decimals, self.asks.clone())
+            (self.quote_token.decimals, self.base_token.decimals, self.price_data.asks.clone())
         } else {
             return Err(SimulationError::RecoverableError(format!(
                 "Invalid token addresses: {sell_token}, {buy_token}"
@@ -185,9 +187,11 @@ mod tests {
         BebopState {
             base_token: wbtc(),
             quote_token: usdc(),
-            last_update_ts: 1703097600,
-            bids: vec![(65000.0, 1.5), (64950.0, 2.0), (64900.0, 0.5)],
-            asks: vec![(65100.0, 1.0), (65150.0, 2.5), (65200.0, 1.5)],
+            price_data: BebopPriceData {
+                last_update_ts: 1703097600.0,
+                bids: vec![(65000.0, 1.5), (64950.0, 2.0), (64900.0, 0.5)],
+                asks: vec![(65100.0, 1.0), (65150.0, 2.5), (65200.0, 1.5)],
+            },
         }
     }
 
@@ -217,7 +221,7 @@ mod tests {
     #[test]
     fn test_spot_price_empty_asks() {
         let mut state = create_test_bebop_state();
-        state.asks = vec![]; // Remove all asks
+        state.price_data.asks = vec![]; // Remove all asks
 
         // Test WBTC/USDC with no asks - should use only best bid
         let price = state
@@ -229,8 +233,8 @@ mod tests {
     #[test]
     fn test_spot_price_empty_bids() {
         let mut state = create_test_bebop_state();
-        state.bids = vec![]; // Remove all bids
-                             // Test WBTC/USDC with no bids - should use only best ask
+        state.price_data.bids = vec![]; // Remove all bids
+                                        // Test WBTC/USDC with no bids - should use only best ask
         let price = state
             .spot_price(&wbtc(), &usdc())
             .unwrap();
@@ -240,9 +244,9 @@ mod tests {
     #[test]
     fn test_spot_price_no_liquidity() {
         let mut state = create_test_bebop_state();
-        state.bids = vec![]; // Remove all bids
-        state.asks = vec![]; // Remove all asks
-                             // Test with no liquidity at all - should return error
+        state.price_data.bids = vec![]; // Remove all bids
+        state.price_data.asks = vec![]; // Remove all asks
+                                        // Test with no liquidity at all - should return error
         let result = state.spot_price(&wbtc(), &usdc());
         assert!(result.is_err());
     }
@@ -294,7 +298,7 @@ mod tests {
     #[test]
     fn test_get_limits_no_bids() {
         let mut state = create_test_bebop_state();
-        state.bids = vec![]; // Remove all bids
+        state.price_data.bids = vec![]; // Remove all bids
 
         // Test selling WBTC for USDC with no bids - should return 0
         let (token_limit, quote_limit) = state
@@ -308,7 +312,7 @@ mod tests {
     #[test]
     fn test_get_limits_no_asks() {
         let mut state = create_test_bebop_state();
-        state.asks = vec![]; // Remove all asks
+        state.price_data.asks = vec![]; // Remove all asks
 
         // Test buying WBTC with USDC with no asks - should return 0
         let (token_limit, quote_limit) = state
