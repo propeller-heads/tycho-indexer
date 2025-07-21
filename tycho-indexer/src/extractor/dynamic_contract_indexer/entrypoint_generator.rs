@@ -56,20 +56,30 @@ sol! {
     function execute(bytes calldata params) public;
 }
 
+// V4Router action constants
+// These correspond to the actions enum in V4Router
+const ACTION_SWAP_EXACT_IN_SINGLE: u8 = 6; // SWAP_EXACT_IN_SINGLE = 0x06
+const ACTION_SETTLE_ALL: u8 = 12; // SETTLE_ALL = 0x0c
+const ACTION_TAKE_ALL: u8 = 15; // TAKE_ALL = 0x0f
+
+// V4Router function selector for execute(bytes calldata params)
+// This is the keccak256 hash of "execute(bytes)" truncated to 4 bytes: 0x09c5eabe
+const EXECUTE_FUNCTION_SELECTOR: [u8; 4] = [0x09, 0xc5, 0xea, 0xbe];
+
 pub struct HookEntrypointConfig {
     // Ideal number of entrypoints to generate for each component.
     pub max_sample_size: Option<usize>,
     // Minimum number of entrypoints to generate for each component.
     pub min_samples: usize,
-    // Router address to use for the entrypoints.
+    // Router address to use for the entrypoints. If not provided, uses a random address.
     pub router_address: Option<Address>,
     // If not provided, should use a default address. Could be defined by a custom Hook
     // Orchestrator.
     pub sender: Option<Address>,
-    // Router bytecode to use for state overrides. If not provided, uses a placeholder.
+    // Router bytecode to use for state overrides. If not provided, uses a default implementation.
     pub router_code: Option<Bytes>,
-    // Pool manager address
-    pub pool_manager: Option<Address>,
+    /// Pool manager address (required)
+    pub pool_manager: Address,
 }
 pub struct HookEntrypointData {
     pub hook_address: Address,
@@ -310,13 +320,15 @@ impl SwapAmountEstimator for DefaultSwapAmountEstimator {
     }
 }
 
-pub struct DefaultHookEntrypointGenerator<E: SwapAmountEstimator> {
+/// Default implementation of HookEntrypointGenerator for Uniswap V4 hooks
+/// Generates entrypoints using V4MiniRouter for tracing hook interactions
+pub struct UniswapV4DefaultHookEntrypointGenerator<E: SwapAmountEstimator> {
     config: HookEntrypointConfig,
     estimator: E,
 }
 
-impl<E: SwapAmountEstimator> DefaultHookEntrypointGenerator<E> {
-    pub fn new(estimator: E) -> Self {
+impl<E: SwapAmountEstimator> UniswapV4DefaultHookEntrypointGenerator<E> {
+    pub fn new(estimator: E, pool_manager: Address) -> Self {
         Self {
             config: HookEntrypointConfig {
                 max_sample_size: Some(4),
@@ -324,7 +336,7 @@ impl<E: SwapAmountEstimator> DefaultHookEntrypointGenerator<E> {
                 router_address: None,
                 sender: None,
                 router_code: None,
-                pool_manager: None,
+                pool_manager,
             },
             estimator,
         }
@@ -333,7 +345,7 @@ impl<E: SwapAmountEstimator> DefaultHookEntrypointGenerator<E> {
 
 #[async_trait]
 impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
-    for DefaultHookEntrypointGenerator<E>
+    for UniswapV4DefaultHookEntrypointGenerator<E>
 {
     fn set_config(&mut self, config: HookEntrypointConfig) {
         self.config = config;
@@ -346,6 +358,7 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
     ) -> Result<Vec<EntryPointWithTracingParams>, EntrypointGenerationError> {
         let tokens = data.component.tokens.clone();
 
+        // Defaults to random predefined address.
         let router_address = self
             .config
             .router_address
@@ -370,7 +383,7 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
             let fee = u32::from(
                 data.component
                     .static_attributes
-                    .get("fee")
+                    .get("key_lp_fee")
                     .expect("Fee attribute not found for component")
                     .clone(),
             );
@@ -378,8 +391,8 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
             let tick_spacing = i32::from(
                 data.component
                     .static_attributes
-                    .get("tickSpacing")
-                    .expect("TickSpacing attribute not found for component")
+                    .get("tick_spacing")
+                    .expect("tick_spacing attribute not found for component")
                     .clone(),
             );
 
@@ -388,7 +401,7 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                 currency1,
                 fee: U24::try_from(fee).expect("Fee value too large for U24"),
                 tickSpacing: I24::try_from(tick_spacing)
-                    .expect("TickSpacing value out of range for I24"),
+                    .expect("tick_spacing value out of range for I24"),
                 hooks,
             };
 
@@ -424,7 +437,11 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                 };
 
                 let plan = Plan {
-                    actions: SolBytes::from(vec![6u8, 12u8, 15u8]),
+                    actions: SolBytes::from(vec![
+                        ACTION_SWAP_EXACT_IN_SINGLE,
+                        ACTION_SETTLE_ALL,
+                        ACTION_TAKE_ALL,
+                    ]),
                     params: vec![
                         SolBytes::from(swap_params.abi_encode()),
                         // Token In // amount in
@@ -434,19 +451,14 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                     ],
                 };
 
-                let mut calldata = vec![0x09, 0xc5, 0xea, 0xbe];
+                // Build calldata for execute(bytes) function call
+                let mut calldata = EXECUTE_FUNCTION_SELECTOR.to_vec();
                 calldata.extend(plan.abi_encode());
 
                 let overwrites = ERC6909Overwrites::default();
                 let balance_slot = overwrites.balance_slot(router_address.clone(), token0.clone());
 
-                let pool_manager = self
-                    .config
-                    .pool_manager
-                    .clone()
-                    .unwrap_or_else(|| {
-                        Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90"))
-                    });
+                let pool_manager = self.config.pool_manager.clone();
 
                 let router_code = self
                     .config
@@ -493,11 +505,9 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
 
                 let entry_point = EntryPointWithTracingParams::new(
                     EntryPoint::new(
-                        // TODO: Properly set Entrypoint external_id - maybe there's a helper for
-                        // that
-                        format!("hook_{}_{}", data.hook_address, amount_in),
+                        format!("{router_address}:execute(bytes)"),
                         router_address.clone(),
-                        "0x09c5eabe".to_string(),
+                        "execute(bytes)".to_string(),
                     ),
                     TracingParams::RPCTracer(
                         RPCTracerParams::new(None, Bytes::from(calldata))
@@ -720,7 +730,10 @@ mod tests {
         );
 
         let estimator = MockEstimator { result: Ok(amounts) };
-        let mut generator = DefaultHookEntrypointGenerator::new(estimator);
+        let mut generator = UniswapV4DefaultHookEntrypointGenerator::new(
+            estimator,
+            Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90")),
+        );
 
         let config = HookEntrypointConfig {
             max_sample_size: Some(2),
@@ -728,7 +741,7 @@ mod tests {
             router_address: Some(Address::from([5u8; 20])),
             sender: Some(Address::from([6u8; 20])),
             router_code: None,
-            pool_manager: None,
+            pool_manager: Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90")),
         };
         generator.set_config(config);
 
@@ -760,7 +773,10 @@ mod tests {
         let estimator = MockEstimator {
             result: Err(EntrypointGenerationError::NoDataAvailable("No data".to_string())),
         };
-        let generator = DefaultHookEntrypointGenerator::new(estimator);
+        let generator = UniswapV4DefaultHookEntrypointGenerator::new(
+            estimator,
+            Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90")),
+        );
 
         let hook_data = create_test_hook_data();
         let context = create_test_context();
@@ -775,7 +791,10 @@ mod tests {
     #[tokio::test]
     async fn test_hook_entrypoint_generator_empty_amounts() {
         let estimator = MockEstimator { result: Ok(HashMap::new()) };
-        let generator = DefaultHookEntrypointGenerator::new(estimator);
+        let generator = UniswapV4DefaultHookEntrypointGenerator::new(
+            estimator,
+            Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90")),
+        );
 
         let hook_data = create_test_hook_data();
         let context = create_test_context();
