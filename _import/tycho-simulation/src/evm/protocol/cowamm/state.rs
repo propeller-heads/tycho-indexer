@@ -131,8 +131,8 @@ impl CowAMMState {
 impl ProtocolSim for CowAMMState {
     fn fee(&self) -> f64 {
         COWAMM_FEE
-    } //handle lp_token case too
-     /// Calculates a f64 representation of base token price in the AMM. 
+    } 
+    /// Calculates a f64 representation of base token price in the AMM. 
     /// **********************************************************************************************
     /// calcSpotPrice                                                                             //
     /// sP = spotPrice                                                                            //
@@ -273,7 +273,7 @@ impl ProtocolSim for CowAMMState {
 
         Ok(GetAmountOutResult {
             amount: u256_to_biguint(amount_out),
-            gas: 120_000u64.to_biguint().unwrap(),
+            gas: 120_000u64.to_biguint().unwrap(), //change this
             new_state: Box::new(new_state),
         })
     }
@@ -461,7 +461,7 @@ mod tests {
     #[rstest]
     #[case(true, 0.0)]
     #[case(false, 1.0)]
-    fn test_spot_price(#[case] zero_to_one: bool, #[case] expected: f64) {
+    fn test_spot_price(#[case] expected: f64) {
         let r0 = U256::from_str("1000").unwrap();
         let r1 = U256::from_str("100000").unwrap();
 
@@ -470,7 +470,9 @@ mod tests {
 
         let t0_bytes = Bytes::from(t0.clone().address);
         let t1_bytes = Bytes::from(t1.clone().address);
-
+        //if it is COW / wstETH we want to express price of COW in terms of wstETH
+        //that is, how many wstETH equals one COW -> and that is 
+        // 0.4646 / 4,572 Cow/USDC / wstETH/USDC = COW wstETH
         let state = CowAMMState {
             address: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
             liquidity_a: U256::from_str("886800000000000000").unwrap(),
@@ -478,7 +480,7 @@ mod tests {
             weight_a: U256::from_str("1000000000000000000").unwrap(),
             weight_b: U256::from_str("1000000000000000000").unwrap(),
             lp_token: Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
-            lp_token_supply: U256::from_str("1000000000000000000").unwrap(),
+            lp_token_supply: U256::from_str("100000000000000000000").unwrap(),
             fee: 0,
         };
 
