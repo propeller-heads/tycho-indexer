@@ -72,6 +72,7 @@ impl ComponentTracingMetadata {
 type RequestId = String;
 // Represents a request to a provider.
 pub struct MetadataRequest {
+    pub generator_name: String,
     pub request_id: RequestId,
     pub component_id: ComponentId,
     pub request_type: MetadataRequestType,
@@ -81,6 +82,7 @@ pub struct MetadataRequest {
 impl Clone for MetadataRequest {
     fn clone(&self) -> Self {
         Self {
+            generator_name: self.generator_name.clone(),
             request_id: self.request_id.clone(),
             component_id: self.component_id.clone(),
             request_type: self.request_type.clone(),
@@ -91,26 +93,17 @@ impl Clone for MetadataRequest {
 
 impl MetadataRequest {
     pub fn new(
-        protocol_name: String,
-        request_name: String,
+        generator_name: String,
+        request_id: RequestId,
         component_id: ComponentId,
         request_type: MetadataRequestType,
         transport: Box<dyn RequestTransport>,
     ) -> Self {
-        Self {
-            request_id: format!("{protocol_name}_{request_name}"),
-            component_id,
-            request_type,
-            transport,
-        }
+        Self { generator_name, request_id, component_id, request_type, transport }
     }
 
-    pub fn get_protocol_name(&self) -> String {
-        self.request_id
-            .split('_')
-            .next()
-            .expect("Request ID should start with protocol name")
-            .to_string()
+    pub fn get_generator_name(&self) -> &str {
+        &self.generator_name
     }
 }
 
@@ -330,9 +323,9 @@ impl MetadataResponseParserRegistry {
             .insert(protocol_name, parser);
     }
 
-    pub fn get_parser(&self, protocol_name: String) -> Option<&dyn MetadataResponseParser> {
+    pub fn get_parser(&self, generator_name: &str) -> Option<&dyn MetadataResponseParser> {
         self.parsers
-            .get(&protocol_name)
+            .get(generator_name)
             .map(|boxed_parser| boxed_parser.as_ref())
     }
 }
