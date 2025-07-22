@@ -1,3 +1,18 @@
+## [0.132.0](https://github.com/propeller-heads/tycho-simulation/compare/0.131.0...0.132.0) (2025-07-22)
+
+
+### Features
+
+* (WIP) ProtocolSim.get_limits implementation ([d72b482](https://github.com/propeller-heads/tycho-simulation/commit/d72b482fa35ac37e436079ed412b6ebc50623df3))
+* ProtocolSim.spot_price implementation ([dac3349](https://github.com/propeller-heads/tycho-simulation/commit/dac3349409eb7c57ff0f41fc84fd3e5e747c247f))
+* Use BebopPriceData in BebopState ([fe6ed10](https://github.com/propeller-heads/tycho-simulation/commit/fe6ed109a546f707eda4ae257b8d72394ee32675))
+
+
+### Bug Fixes
+
+* Bebop limit calculation ([b698338](https://github.com/propeller-heads/tycho-simulation/commit/b698338c83eae8a81308068385292b808e5d7b4c))
+* Make last_update_ts public ([85d8130](https://github.com/propeller-heads/tycho-simulation/commit/85d8130bf5fef418a5dcae69eb73daf3e2e5cc5c))
+
 ## [0.131.0](https://github.com/propeller-heads/tycho-simulation/compare/0.130.0...0.131.0) (2025-07-19)
 
 
