@@ -1,3 +1,10 @@
+## [0.133.1](https://github.com/propeller-heads/tycho-simulation/compare/0.133.0...0.133.1) (2025-07-22)
+
+
+### Bug Fixes
+
+* correctly insert balances updates ([4c3ce82](https://github.com/propeller-heads/tycho-simulation/commit/4c3ce8203922efd7c7dd7d72a67a0d8b76a6240c))
+
 ## [0.133.0](https://github.com/propeller-heads/tycho-simulation/compare/0.132.0...0.133.0) (2025-07-22)
 
 
