@@ -483,72 +483,79 @@ where
             shared.last_synced_block = Some(header.clone());
         }
 
-        loop {
-            if let Some(mut deltas) = msg_rx.recv().await {
-                let header = BlockHeader::from_block(deltas.get_block(), deltas.is_revert());
-                debug!(block_number=?header.number, "Received delta message");
+        let result = async {
+            loop {
+                if let Some(mut deltas) = msg_rx.recv().await {
+                    let header = BlockHeader::from_block(deltas.get_block(), deltas.is_revert());
+                    debug!(block_number=?header.number, "Received delta message");
 
-                let (snapshots, removed_components) = {
-                    // 1. Remove components based on latest changes
-                    // 2. Add components based on latest changes, query those for snapshots
-                    let (to_add, to_remove) = tracker.filter_updated_components(&deltas);
+                    let (snapshots, removed_components) = {
+                        // 1. Remove components based on latest changes
+                        // 2. Add components based on latest changes, query those for snapshots
+                        let (to_add, to_remove) = tracker.filter_updated_components(&deltas);
 
-                    // Only components we don't track yet need a snapshot,
-                    let requiring_snapshot: Vec<_> = to_add
-                        .iter()
-                        .filter(|id| {
-                            !tracker
-                                .components
-                                .contains_key(id.as_str())
-                        })
-                        .collect();
-                    debug!(components=?requiring_snapshot, "SnapshotRequest");
-                    tracker
-                        .start_tracking(requiring_snapshot.as_slice())
-                        .await?;
-                    let snapshots = self
-                        .get_snapshots(header.clone(), &mut tracker, Some(requiring_snapshot))
-                        .await?
-                        .snapshots;
+                        // Only components we don't track yet need a snapshot,
+                        let requiring_snapshot: Vec<_> = to_add
+                            .iter()
+                            .filter(|id| {
+                                !tracker
+                                    .components
+                                    .contains_key(id.as_str())
+                            })
+                            .collect();
+                        debug!(components=?requiring_snapshot, "SnapshotRequest");
+                        tracker
+                            .start_tracking(requiring_snapshot.as_slice())
+                            .await?;
+                        let snapshots = self
+                            .get_snapshots(header.clone(), &mut tracker, Some(requiring_snapshot))
+                            .await?
+                            .snapshots;
 
-                    let removed_components = if !to_remove.is_empty() {
-                        tracker.stop_tracking(&to_remove)
-                    } else {
-                        Default::default()
+                        let removed_components = if !to_remove.is_empty() {
+                            tracker.stop_tracking(&to_remove)
+                        } else {
+                            Default::default()
+                        };
+
+                        (snapshots, removed_components)
                     };
 
-                    (snapshots, removed_components)
-                };
+                    // 3. Update entrypoints on the tracker (affects which contracts are tracked)
+                    tracker.process_entrypoints(&deltas.dci_update);
 
-                // 3. Update entrypoints on the tracker (affects which contracts are tracked)
-                tracker.process_entrypoints(&deltas.dci_update);
+                    // 4. Filter deltas by currently tracked components / contracts
+                    self.filter_deltas(&mut deltas, &tracker);
+                    let n_changes = deltas.n_changes();
 
-                // 4. Filter deltas by currently tracked components / contracts
-                self.filter_deltas(&mut deltas, &tracker);
-                let n_changes = deltas.n_changes();
+                    // 5. Send the message
+                    let next = StateSyncMessage {
+                        header: header.clone(),
+                        snapshots,
+                        deltas: Some(deltas),
+                        removed_components,
+                    };
+                    block_tx.send(next).await?;
+                    {
+                        let mut shared = self.shared.lock().await;
+                        shared.last_synced_block = Some(header.clone());
+                    }
 
-                // 5. Send the message
-                let next = StateSyncMessage {
-                    header: header.clone(),
-                    snapshots,
-                    deltas: Some(deltas),
-                    removed_components,
-                };
-                block_tx.send(next).await?;
-                {
-                    let mut shared = self.shared.lock().await;
-                    shared.last_synced_block = Some(header.clone());
+                    debug!(block_number=?header.number, n_changes, "Finished processing delta message");
+                } else {
+                    return Err(SynchronizerError::ConnectionError("Deltas channel closed".to_string()));
                 }
-
-                debug!(block_number=?header.number, n_changes, "Finished processing delta message");
-            } else {
-                let mut shared = self.shared.lock().await;
-                warn!(shared = ?&shared, "Deltas channel closed, resetting shared state.");
-                shared.last_synced_block = None;
-
-                return Err(SynchronizerError::ConnectionError("Deltas channel closed".to_string()));
             }
+        }.await;
+
+        // This cleanup code now runs regardless of how the function exits (error or channel close)
+        {
+            let mut shared = self.shared.lock().await;
+            warn!(shared = ?&shared, "Deltas processing ended, resetting shared state.");
+            shared.last_synced_block = None;
         }
+
+        result
     }
 
     fn filter_deltas(&self, second_msg: &mut BlockChanges, tracker: &ComponentTracker<R>) {
@@ -1726,5 +1733,190 @@ mod test {
 
         assert_eq!(second_msg, expected_second_msg);
         assert!(exit.is_ok());
+    }
+
+    #[test(tokio::test)]
+    async fn test_close_functionality() {
+        // This test verifies that close() works correctly during normal operation
+
+        let mut rpc_client = MockRPCClient::new();
+        let mut deltas_client = MockDeltasClient::new();
+
+        // Mock the initial components call
+        rpc_client
+            .expect_get_protocol_components()
+            .returning(|_| {
+                Ok(ProtocolComponentRequestResponse {
+                    protocol_components: vec![],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 0 },
+                })
+            });
+
+        // Set up deltas client that will wait for messages (blocking in state_sync)
+        let (_tx, rx) = channel(1);
+        deltas_client
+            .expect_subscribe()
+            .return_once(move |_, _| Ok((Uuid::default(), rx)));
+
+        let mut state_sync = ProtocolStateSynchronizer::new(
+            ExtractorIdentity::new(Chain::Ethereum, "test-protocol"),
+            true,
+            ComponentFilter::with_tvl_range(0.0, 0.0),
+            5, // Enough retries
+            true,
+            false,
+            ArcRPCClient(Arc::new(rpc_client)),
+            ArcDeltasClient(Arc::new(deltas_client)),
+            10000_u64, // Long timeout so task doesn't exit on its own
+        );
+
+        state_sync
+            .initialize()
+            .await
+            .expect("Init should succeed");
+
+        // Test close before start - should fail
+        let close_result = state_sync.close().await;
+        assert!(close_result.is_err(), "Close should fail before start");
+        match close_result.unwrap_err() {
+            SynchronizerError::CloseError(msg) => {
+                assert!(msg.contains("not started"));
+            }
+            e => panic!("Unexpected error: {:?}", e),
+        }
+
+        // Start the synchronizer
+        let (jh, _rx) = state_sync
+            .start()
+            .await
+            .expect("Failed to start state synchronizer");
+
+        // Give it time to start up and enter state_sync
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Close should now succeed
+        let close_result = state_sync.close().await;
+        assert!(close_result.is_ok(), "Close should succeed while running: {:?}", close_result);
+
+        // Task should stop cleanly
+        let task_result = jh.await.expect("Task should not panic");
+        assert!(task_result.is_ok(), "Task should exit cleanly after close: {:?}", task_result);
+
+        // Close again should fail
+        let close_result = state_sync.close().await;
+        assert!(close_result.is_err(), "Second close should fail");
+    }
+
+    #[test(tokio::test)]
+    async fn test_cleanup_runs_on_state_sync_processing_error() {
+        // This test verifies that the cleanup code (shared.last_synced_block = None)
+        // runs when state_sync errors during processing, not just when channel closes
+
+        let mut rpc_client = MockRPCClient::new();
+        let mut deltas_client = MockDeltasClient::new();
+
+        // Mock the initial components call
+        rpc_client
+            .expect_get_protocol_components()
+            .returning(|_| {
+                Ok(ProtocolComponentRequestResponse {
+                    protocol_components: vec![],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 0 },
+                })
+            });
+
+        // Mock to fail during snapshot retrieval (this will cause an error during processing)
+        rpc_client
+            .expect_get_protocol_states()
+            .returning(|_| {
+                Err(RPCError::HttpClient("Test error during snapshot retrieval".to_string()))
+            });
+
+        // Set up deltas client to send one message that will trigger snapshot retrieval
+        let (tx, rx) = channel(10);
+        deltas_client
+            .expect_subscribe()
+            .return_once(move |_, _| {
+                // Send a delta message that will require a snapshot
+                let delta = BlockChanges {
+                    extractor: "test".to_string(),
+                    chain: Chain::Ethereum,
+                    block: Block {
+                        hash: Bytes::from("0x0123"),
+                        number: 1,
+                        parent_hash: Bytes::from("0x0000"),
+                        chain: Chain::Ethereum,
+                        ts: chrono::NaiveDateTime::from_timestamp_opt(1234567890, 0).unwrap(),
+                    },
+                    revert: false,
+                    // Add a new component to trigger snapshot request
+                    new_protocol_components: [("new_component".to_string(), ProtocolComponent {
+                        id: "new_component".to_string(),
+                        protocol_system: "test_protocol".to_string(),
+                        protocol_type_name: "test".to_string(),
+                        chain: Chain::Ethereum,
+                        tokens: vec![Bytes::from("0x0badc0ffee")],
+                        contract_ids: vec![Bytes::from("0x0badc0ffee")],
+                        static_attributes: Default::default(),
+                        creation_tx: Default::default(),
+                        created_at: Default::default(),
+                        change: Default::default(),
+                    })].into_iter().collect(),
+                    component_tvl: [("new_component".to_string(), 100.0)].into_iter().collect(),
+                    ..Default::default()
+                };
+
+                tokio::spawn(async move {
+                    let _ = tx.send(delta).await;
+                    // Close the channel after sending one message
+                });
+
+                Ok((Uuid::default(), rx))
+            });
+
+        let state_sync = ProtocolStateSynchronizer::new(
+            ExtractorIdentity::new(Chain::Ethereum, "test-protocol"),
+            true,
+            ComponentFilter::with_tvl_range(0.0, 1000.0), // Include the component
+            1,
+            true,
+            false,
+            ArcRPCClient(Arc::new(rpc_client)),
+            ArcDeltasClient(Arc::new(deltas_client)),
+            5000_u64,
+        );
+
+        state_sync
+            .initialize()
+            .await
+            .expect("Init should succeed");
+
+        // Before calling state_sync, set a value in shared state
+        {
+            let mut shared = state_sync.shared.lock().await;
+            shared.last_synced_block = Some(BlockHeader {
+                hash: Bytes::from("0x0badc0ffee"),
+                number: 42,
+                parent_hash: Bytes::from("0xbadbeef0"),
+                revert: false,
+                timestamp: 123456789,
+            });
+        }
+
+        // Create a channel for state_sync to send messages to
+        let (mut block_tx, _block_rx) = channel(10);
+
+        // Call state_sync directly - this should error during processing
+        let result = state_sync.clone().state_sync(&mut block_tx).await;
+
+        // Verify that state_sync returned an error
+        assert!(result.is_err(), "state_sync should have errored during processing");
+
+        // The key test: verify that cleanup code ran and reset the shared state
+        {
+            let shared = state_sync.shared.lock().await;
+            assert_eq!(shared.last_synced_block, None,
+                "Cleanup code should have reset last_synced_block to None even when processing errored");
+        }
     }
 }
