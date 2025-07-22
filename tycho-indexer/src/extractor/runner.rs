@@ -667,37 +667,8 @@ async fn download_file_from_s3(
 
 #[cfg(test)]
 mod test {
-    use serde::Serialize;
-    use tycho_common::models::NormalisedMessage;
-
     use super::*;
     use crate::extractor::MockExtractor;
-
-    #[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
-    struct DummyMessage {
-        extractor_id: ExtractorIdentity,
-    }
-
-    impl std::fmt::Display for DummyMessage {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}", self.extractor_id)
-        }
-    }
-
-    #[typetag::serde]
-    impl NormalisedMessage for DummyMessage {
-        fn source(&self) -> ExtractorIdentity {
-            self.extractor_id.clone()
-        }
-
-        fn drop_state(&self) -> Arc<dyn NormalisedMessage> {
-            Arc::new(self.clone())
-        }
-
-        fn as_any(&self) -> &dyn std::any::Any {
-            self
-        }
-    }
 
     #[tokio::test]
     async fn test_extractor_runner_builder() {

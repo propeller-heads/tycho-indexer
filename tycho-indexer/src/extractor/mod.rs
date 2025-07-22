@@ -6,10 +6,10 @@ use prost::DecodeError;
 use thiserror::Error;
 use tycho_common::{
     models::{
-        blockchain::{Block, BlockScoped},
+        blockchain::{Block, BlockAggregatedChanges, BlockScoped},
         contract::AccountBalance,
         protocol::ComponentBalance,
-        Address, BlockHash, ExtractorIdentity, MergeError, NormalisedMessage,
+        Address, BlockHash, ExtractorIdentity, MergeError,
     },
     storage::StorageError,
     Bytes,
@@ -77,7 +77,7 @@ pub enum RPCError {
     RequestError(String),
 }
 
-pub type ExtractorMsg = Arc<dyn NormalisedMessage>;
+pub type ExtractorMsg = Arc<BlockAggregatedChanges>;
 
 #[automock]
 #[async_trait]

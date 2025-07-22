@@ -12,7 +12,7 @@ use tycho_common::{
         blockchain::BlockAggregatedChanges,
         contract::Account,
         protocol::{ProtocolComponent, ProtocolComponentState},
-        MergeError, NormalisedMessage,
+        MergeError,
     },
     storage::StorageError,
     Bytes,
@@ -43,8 +43,6 @@ pub enum PendingDeltasError {
     LockError(String, String),
     #[error("ReorgBufferError: {0}")]
     ReorgBufferError(#[from] StorageError),
-    #[error("Downcast failed: Unknown message type")]
-    UnknownMessageType,
     #[error("Unknown extractor: {0}")]
     UnknownExtractor(String),
     #[error("Failed applying deltas: {0}")]
@@ -104,44 +102,34 @@ impl PendingDeltas {
         }
     }
 
-    fn insert(&self, message: Arc<dyn NormalisedMessage>) -> Result<()> {
-        let maybe_convert: Option<BlockAggregatedChanges> = message
-            .as_any()
-            .downcast_ref::<BlockAggregatedChanges>()
-            .cloned();
-        match maybe_convert {
-            Some(msg) => {
-                let maybe_buffer = self.buffers.get(&msg.extractor);
+    fn insert(&self, message: Arc<BlockAggregatedChanges>) -> Result<()> {
+        let maybe_buffer = self.buffers.get(&message.extractor);
 
-                match maybe_buffer {
-                    Some(buffer) => {
-                        let mut guard = buffer.lock().map_err(|e| {
-                            PendingDeltasError::LockError(msg.extractor.to_string(), e.to_string())
-                        })?;
-                        if msg.revert {
-                            trace!(
-                                block_number = msg.block.number,
-                                extractor = msg.extractor,
-                                "DeltaBufferPurge"
-                            );
-                            guard.purge(msg.block.hash.clone())?;
-                        } else {
-                            trace!(
-                                block_number = msg.block.number,
-                                finality = msg.finalized_block_height,
-                                extractor = msg.extractor,
-                                "DeltaBufferInsertion"
-                            );
-                            guard.insert_block(msg.clone())?;
-                            guard.drain_new_finalized_blocks(msg.finalized_block_height)?;
-                        }
-                    }
-                    _ => return Err(PendingDeltasError::UnknownExtractor(msg.extractor.clone())),
+        match maybe_buffer {
+            Some(buffer) => {
+                let mut guard = buffer.lock().map_err(|e| {
+                    PendingDeltasError::LockError(message.extractor.to_string(), e.to_string())
+                })?;
+                if message.revert {
+                    trace!(
+                        block_number = message.block.number,
+                        extractor = message.extractor,
+                        "DeltaBufferPurge"
+                    );
+                    guard.purge(message.block.hash.clone())?;
+                } else {
+                    trace!(
+                        block_number = message.block.number,
+                        finality = message.finalized_block_height,
+                        extractor = message.extractor,
+                        "DeltaBufferInsertion"
+                    );
+                    guard.insert_block((*message).clone())?;
+                    guard.drain_new_finalized_blocks(message.finalized_block_height)?;
                 }
             }
-            None => return Err(PendingDeltasError::UnknownMessageType),
+            _ => return Err(PendingDeltasError::UnknownExtractor(message.extractor.clone())),
         }
-
         Ok(())
     }
 
