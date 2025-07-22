@@ -1,3 +1,41 @@
+## [0.133.1](https://github.com/propeller-heads/tycho-simulation/compare/0.133.0...0.133.1) (2025-07-22)
+
+
+### Bug Fixes
+
+* correctly insert balances updates ([4c3ce82](https://github.com/propeller-heads/tycho-simulation/commit/4c3ce8203922efd7c7dd7d72a67a0d8b76a6240c))
+
+## [0.133.0](https://github.com/propeller-heads/tycho-simulation/compare/0.132.0...0.133.0) (2025-07-22)
+
+
+### Features
+
+* **Bebop:** Implement get_amount_out ([660fbe4](https://github.com/propeller-heads/tycho-simulation/commit/660fbe4521be933b8d68df211b72d2b09a259588))
+* **Bebop:** Return errors nicely in get_amount_out ([a28bc58](https://github.com/propeller-heads/tycho-simulation/commit/a28bc586a157c3906724223d157ac7c4431307bd))
+* **Bebop:** Roughly estimate gas for a Bebop swap ([a0a9354](https://github.com/propeller-heads/tycho-simulation/commit/a0a93542a8925208eb129e6ae396b17f9bb9f649))
+
+## [0.132.0](https://github.com/propeller-heads/tycho-simulation/compare/0.131.0...0.132.0) (2025-07-22)
+
+
+### Features
+
+* (WIP) ProtocolSim.get_limits implementation ([d72b482](https://github.com/propeller-heads/tycho-simulation/commit/d72b482fa35ac37e436079ed412b6ebc50623df3))
+* ProtocolSim.spot_price implementation ([dac3349](https://github.com/propeller-heads/tycho-simulation/commit/dac3349409eb7c57ff0f41fc84fd3e5e747c247f))
+* Use BebopPriceData in BebopState ([fe6ed10](https://github.com/propeller-heads/tycho-simulation/commit/fe6ed109a546f707eda4ae257b8d72394ee32675))
+
+
+### Bug Fixes
+
+* Bebop limit calculation ([b698338](https://github.com/propeller-heads/tycho-simulation/commit/b698338c83eae8a81308068385292b808e5d7b4c))
+* Make last_update_ts public ([85d8130](https://github.com/propeller-heads/tycho-simulation/commit/85d8130bf5fef418a5dcae69eb73daf3e2e5cc5c))
+
+## [0.131.0](https://github.com/propeller-heads/tycho-simulation/compare/0.130.0...0.131.0) (2025-07-19)
+
+
+### Features
+
+* empty commit to upgrade version ([d7bdaff](https://github.com/propeller-heads/tycho-simulation/commit/d7bdaff460c1e9fc13444092289520affad36e4c))
+
 ## [0.130.0](https://github.com/propeller-heads/tycho-simulation/compare/0.129.0...0.130.0) (2025-07-18)
 
 

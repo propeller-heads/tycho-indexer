@@ -98,6 +98,7 @@ async fn main() {
     utils::setup_tracing();
     // Parse command-line arguments into a Cli struct
     let cli = Cli::parse();
+
     let chain =
         Chain::from_str(&cli.chain).unwrap_or_else(|_| panic!("Unknown chain {}", cli.chain));
 
