@@ -95,6 +95,27 @@ impl BebopPriceData {
         Some(total_quote_token / (base_token_amount - remaining_base_token))
     }
 
+    /// Calculates the total token output for a given token input using provided price levels.
+    ///
+    /// Iterates over the given `price_levels`, consuming as much liquidity as available at each
+    /// price level until the input amount is fully consumed or liquidity runs out.
+    ///
+    /// This method assumes that the size of the price levels is already in the same token
+    /// denomination as the `amount_in`. It does not return an error if liquidity is
+    /// insufficient to fill the entire `amount_in`. Instead, it returns the partially filled
+    /// `amount_out` along with the `remaining_amount_in`.
+    ///
+    ///
+    /// # Parameters
+    /// - `amount_in`: The amount of base tokens to trade.
+    /// - `price_levels`: A vector of `(price, size)` tuples representing available liquidity at
+    ///   each price level.
+    ///
+    /// # Returns
+    /// A tuple `(amount_out, remaining_amount_in)`:
+    /// - `amount_out`: The total quote token output from the trade.
+    /// - `remaining_amount_in`: The portion of `amount_in` that could not be filled due to lack of
+    ///   liquidity.
     pub fn get_amount_out_from_levels(
         &self,
         amount_in: f64,
