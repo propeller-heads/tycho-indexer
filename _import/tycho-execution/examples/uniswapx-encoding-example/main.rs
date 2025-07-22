@@ -167,7 +167,6 @@ fn main() {
     println!(" ====== Simple swap DAI -> USDT ======");
     println!(
         "The following callback data should be sent to the filler contract, along with the \
-        encoded order and signature: {:?}",
-        hex_calldata
+        encoded order and signature: {hex_calldata:?}"
     );
 }

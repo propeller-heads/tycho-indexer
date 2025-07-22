@@ -88,7 +88,7 @@ pub struct Swap<'a> {
     pub user_data: Option<Bytes>,
     /// Optional protocol state used to perform the swap.
     #[serde(skip)]
-    pub protocol_state: Option<&'a Box<dyn ProtocolSim>>,
+    pub protocol_state: Option<&'a dyn ProtocolSim>,
 }
 
 impl<'a> Swap<'a> {
@@ -98,7 +98,7 @@ impl<'a> Swap<'a> {
         token_out: Bytes,
         split: f64,
         user_data: Option<Bytes>,
-        protocol_state: Option<&'a Box<dyn ProtocolSim>>,
+        protocol_state: Option<&'a dyn ProtocolSim>,
     ) -> Self {
         Self { component: component.into(), token_in, token_out, split, user_data, protocol_state }
     }
