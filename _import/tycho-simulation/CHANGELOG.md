@@ -1,3 +1,12 @@
+## [0.133.0](https://github.com/propeller-heads/tycho-simulation/compare/0.132.0...0.133.0) (2025-07-22)
+
+
+### Features
+
+* **Bebop:** Implement get_amount_out ([660fbe4](https://github.com/propeller-heads/tycho-simulation/commit/660fbe4521be933b8d68df211b72d2b09a259588))
+* **Bebop:** Return errors nicely in get_amount_out ([a28bc58](https://github.com/propeller-heads/tycho-simulation/commit/a28bc586a157c3906724223d157ac7c4431307bd))
+* **Bebop:** Roughly estimate gas for a Bebop swap ([a0a9354](https://github.com/propeller-heads/tycho-simulation/commit/a0a93542a8925208eb129e6ae396b17f9bb9f649))
+
 ## [0.132.0](https://github.com/propeller-heads/tycho-simulation/compare/0.131.0...0.132.0) (2025-07-22)
 
 
