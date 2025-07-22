@@ -8,10 +8,12 @@ use std::{
 use alloy::primitives::Address;
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt};
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use tokio_tungstenite::{connect_async_with_config, tungstenite::Message};
 use tracing::{error, info, warn};
 use tycho_common::{
-    models::protocol::GetAmountOutParams, simulation::indicatively_priced::SignedQuote,
+    models::protocol::GetAmountOutParams, simulation::indicatively_priced::SignedQuote, Bytes,
 };
 
 use crate::{
@@ -35,6 +37,14 @@ fn pair_to_bebop_format(pair: &(String, String)) -> Result<String, RFQError> {
     Ok(format!("{token0}/{token1}"))
 }
 
+fn bytes_to_address(address: &Bytes) -> Result<Address, RFQError> {
+    if address.len() == 20 {
+        Ok(Address::from_slice(address))
+    } else {
+        Err(RFQError::InvalidInput(format!("Invalid ERC20 token address: {address:?}")))
+    }
+}
+
 /// Maps a Chain to its corresponding Bebop WebSocket URL
 fn chain_to_bebop_url(chain: Chain) -> Result<String, RFQError> {
     let chain_path = match chain {
@@ -42,7 +52,7 @@ fn chain_to_bebop_url(chain: Chain) -> Result<String, RFQError> {
         Chain::Base => "base",
         _ => return Err(RFQError::FatalError(format!("Unsupported chain: {chain:?}"))),
     };
-    let ws_url = format!("wss://api.bebop.xyz/pmm/{chain_path}/v3/pricing");
+    let ws_url = format!("api.bebop.xyz/pmm/{chain_path}/v3");
     Ok(ws_url)
 }
 
@@ -132,7 +142,7 @@ impl RFQClient for BebopClient {
         &self,
     ) -> BoxStream<'static, Result<(String, StateSyncMessage<TimestampHeader>), RFQError>> {
         let pairs = self.pairs.clone();
-        let url = self.url.clone();
+        let url = "wss://".to_string() + &self.url + "/pricing";
         let tvl_threshold = self.tvl;
         let name = self.ws_user.clone();
         let authorization = self.ws_key.clone();
@@ -315,10 +325,121 @@ impl RFQClient for BebopClient {
 
     async fn request_binding_quote(
         &self,
-        _params: &GetAmountOutParams,
+        params: &GetAmountOutParams,
     ) -> Result<SignedQuote, RFQError> {
-        todo!()
+        let sell_token = bytes_to_address(&params.token_in.address)?.to_string();
+        let buy_token = bytes_to_address(&params.token_out.address)?.to_string();
+        let sell_amount = params.amount_in.to_string();
+        let sender = bytes_to_address(&params.sender)?.to_string();
+        let receiver = bytes_to_address(&params.receiver)?.to_string();
+
+        let url = "https://".to_string() + &self.url + "/quote";
+
+        let client = Client::new();
+
+        let request = client
+            .get(&url)
+            .query(&[
+                ("sell_tokens", sell_token),
+                ("buy_tokens", buy_token),
+                ("sell_amounts", sell_amount),
+                ("taker_address", sender),
+                ("receiver_address", receiver),
+                ("approval_type", "Standard".into()),
+                ("skip_validation", "true".into()),
+                ("skip_taker_checks", "true".into()),
+                ("gasless", "false".into()),
+                ("expiry_type", "standard".into()),
+                ("fee", "0".into()),
+                ("is_ui", "false".into()),
+            ])
+            .header("accept", "application/json")
+            .header("name", &self.ws_user)
+            .header("Authorization", &self.ws_key);
+
+        println!("{:?}", request);
+        let response = request
+            .send()
+            .await
+            .map_err(|e| RFQError::ConnectionError(format!("Failed to send quote request: {e}")))?;
+
+        let quote_response = response
+            .json::<BebopQuoteResponse>()
+            .await
+            .map_err(|e| RFQError::ParsingError(format!("Failed to parse quote response: {e}")))?;
+
+        match quote_response {
+            BebopQuoteResponse::Success(quote) => {
+                println!("{quote:?}");
+                // TODO: transform into SignedQuote
+                todo!()
+            }
+            BebopQuoteResponse::Error(err) => {
+                return Err(RFQError::FatalError(format!(
+                    "Bebop API error: code {} - {} (requestId: {})",
+                    err.error.error_code, err.error.message, err.error.request_id
+                )));
+            }
+        }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum BebopQuoteResponse {
+    Success(BebopQuotePartial),
+    Error(BebopApiError),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BebopApiError {
+    pub error: BebopErrorDetail,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BebopErrorDetail {
+    #[serde(rename = "errorCode")]
+    pub error_code: u32,
+    pub message: String,
+    #[serde(rename = "requestId")]
+    pub request_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BebopQuotePartial {
+    pub status: String,
+    #[serde(rename = "settlementAddress")]
+    pub settlement_address: Bytes,
+    pub tx: TxData,
+    #[serde(rename = "toSign")]
+    pub to_sign: SingleOrderToSign,
+    #[serde(rename = "partialFillOffset")]
+    pub partial_fill_offset: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TxData {
+    pub to: Bytes,
+    pub data: String,
+    pub value: String,
+    pub from: Bytes,
+    pub gas: u64,
+    #[serde(rename = "gasPrice")]
+    pub gas_price: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SingleOrderToSign {
+    pub maker_address: Bytes,
+    pub taker_address: Bytes,
+    pub maker_token: Bytes,
+    pub taker_token: Bytes,
+    pub maker_amount: String,
+    pub taker_amount: String,
+    pub maker_nonce: String,
+    pub expiry: u64,
+    pub receiver: Bytes,
+    pub packed_commands: String,
 }
 
 #[cfg(test)]
@@ -329,6 +450,10 @@ mod tests {
         time::Duration,
     };
 
+    use dotenv::dotenv;
+    use num_bigint::BigUint;
+    use tokio::time::timeout;
+    use tycho_common::{models::token::Token, Bytes};
     use futures::{SinkExt, StreamExt};
     use tokio::{net::TcpListener, time::timeout};
     use tokio_tungstenite::accept_async;
@@ -338,6 +463,7 @@ mod tests {
     #[tokio::test]
     #[ignore] // Requires network access and setting proper env vars
     async fn test_bebop_websocket_connection() {
+        // TODO: is this needed?
         tracing_subscriber::fmt::init();
 
         // We test with quote tokens that are not USDC in order to ensure our normalization works
@@ -563,5 +689,55 @@ mod tests {
         assert!(second_message_received);
         assert_eq!(connection_errors, 0);
         assert_eq!(successful_messages, 2);
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires network access and setting proper env vars
+    async fn test_bebop_quote() {
+        let wbtc = Token {
+            address: Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap(),
+            symbol: "WBTC".to_string(),
+            decimals: 8,
+            tax: 0,
+            gas: vec![],
+            chain: Default::default(),
+            quality: 100,
+        };
+        let weth = Token {
+            address: Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
+            symbol: "WETH".to_string(),
+            decimals: 18,
+            tax: 0,
+            gas: vec![],
+            chain: Default::default(),
+            quality: 100,
+        };
+        let ws_user = String::from("tycho");
+        dotenv().expect("Missing .env file");
+        let ws_key = env::var("BEBOP_KEY").expect("BEBOP_KEY environment variable is required");
+
+        let client = BebopClient::new(
+            Chain::Ethereum,
+            HashSet::from_iter(vec![(weth.address.to_string(), wbtc.address.to_string())]),
+            10.0, // $10 minimum TVL
+            ws_user,
+            ws_key,
+            HashSet::new(),
+        )
+        .unwrap();
+
+        let router = Bytes::from_str("0xfD0b31d2E955fA55e3fa641Fe90e08b677188d35").unwrap();
+
+        let params = GetAmountOutParams {
+            amount_in: BigUint::from(1_000000000000000000u64),
+            token_in: weth,
+            token_out: wbtc,
+            sender: router.clone(),
+            receiver: router,
+        };
+        let quote = client
+            .request_binding_quote(&params)
+            .await
+            .unwrap();
     }
 }

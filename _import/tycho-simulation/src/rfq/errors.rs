@@ -9,6 +9,8 @@ pub enum RFQError {
     ParsingError(String),
     #[error("RFQ fatal error: {0}")]
     FatalError(String),
+    #[error("RFQ invalid input error: {0}")]
+    InvalidInput(String),
 }
 
 impl From<reqwest::Error> for RFQError {
