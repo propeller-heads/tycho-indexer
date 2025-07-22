@@ -26,11 +26,11 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
             ));
         }
 
-        let base_token_address = snapshot.component.tokens[0].clone();
-        let quote_token_address = snapshot.component.tokens[1].clone();
+        let base_token_address = &snapshot.component.tokens[0];
+        let quote_token_address = &snapshot.component.tokens[1];
 
         let base_token = all_tokens
-            .get(&base_token_address)
+            .get(base_token_address)
             .ok_or_else(|| {
                 InvalidSnapshotError::ValueError(format!(
                     "Base token not found: {base_token_address}"
@@ -39,7 +39,7 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
             .clone();
 
         let quote_token = all_tokens
-            .get(&quote_token_address)
+            .get(quote_token_address)
             .ok_or_else(|| {
                 InvalidSnapshotError::ValueError(format!(
                     "Quote token not found: {quote_token_address}"
@@ -47,12 +47,13 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
             })?
             .clone();
 
+        let empty_array_bytes: Bytes = "[]".as_bytes().to_vec().into();
         let bids_json = state_attrs
             .get("bids")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("bids".to_string()))?;
+            .unwrap_or(&empty_array_bytes);
         let asks_json = state_attrs
             .get("asks")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("asks".to_string()))?;
+            .unwrap_or(&empty_array_bytes);
 
         // Parse bids and asks from JSON
         let bids: Vec<(f64, f64)> = serde_json::from_slice(bids_json)
@@ -176,7 +177,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_try_from_missing_attributes() {
+    async fn test_try_from_missing_token() {
         // Test missing second token (only one token in array)
         let (mut snapshot, tokens) = create_test_snapshot();
         snapshot.component.tokens.pop(); // Remove the second token
@@ -188,8 +189,11 @@ mod tests {
         )
         .await;
         assert!(result.is_err());
+    }
 
-        // Test missing state attributes
+    #[tokio::test]
+    async fn test_try_from_missing_bids() {
+        // Should decode an empty array of bids
         let (mut snapshot, tokens) = create_test_snapshot();
         snapshot.state.attributes.remove("bids");
         let result = BebopState::try_from_with_header(
@@ -198,8 +202,9 @@ mod tests {
             &HashMap::new(),
             &tokens,
         )
-        .await;
-        assert!(result.is_err());
+        .await
+        .expect("create state from snapshot");
+        assert_eq!(result.price_data.bids.len(), 0);
     }
 
     #[tokio::test]
