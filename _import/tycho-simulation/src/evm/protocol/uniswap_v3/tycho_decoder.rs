@@ -15,7 +15,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV3State {
 
     /// Decodes a `ComponentWithState` into a `UniswapV3State`. Errors with a `InvalidSnapshotError`
     /// if the snapshot is missing any required attributes or if the fee amount is not supported.
-    async fn try_from_with_block(
+    async fn try_from_with_header(
         snapshot: ComponentWithState,
         _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
@@ -189,7 +189,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = UniswapV3State::try_from_with_block(
+        let result = UniswapV3State::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),
@@ -246,7 +246,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = UniswapV3State::try_from_with_block(
+        let result = UniswapV3State::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),
@@ -280,7 +280,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = UniswapV3State::try_from_with_block(
+        let result = UniswapV3State::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),

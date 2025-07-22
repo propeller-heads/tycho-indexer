@@ -130,7 +130,7 @@ where
 {
     type Error;
 
-    fn try_from_with_block(
+    fn try_from_with_header(
         value: T,
         block: H,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,

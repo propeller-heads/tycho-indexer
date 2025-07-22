@@ -542,7 +542,7 @@ mod tests {
         let state: ComponentWithState = serde_json::from_value(data)
             .expect("Expected json to match ComponentWithState structure");
 
-        let usv4_state = UniswapV4State::try_from_with_block(
+        let usv4_state = UniswapV4State::try_from_with_header(
             state,
             Default::default(),
             &Default::default(),
@@ -612,7 +612,7 @@ mod tests {
         let state: ComponentWithState = serde_json::from_value(data)
             .expect("Expected json to match ComponentWithState structure");
 
-        let usv4_state = UniswapV4State::try_from_with_block(
+        let usv4_state = UniswapV4State::try_from_with_header(
             state,
             Default::default(),
             &Default::default(),

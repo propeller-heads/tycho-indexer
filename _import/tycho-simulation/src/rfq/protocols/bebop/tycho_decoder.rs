@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use tycho_client::feed::{synchronizer::ComponentWithState};
+use tycho_client::feed::synchronizer::ComponentWithState;
 use tycho_common::{models::token::Token, Bytes};
 
 use super::{models::BebopPriceData, state::BebopState};
@@ -12,7 +12,7 @@ use crate::{
 impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
     type Error = InvalidSnapshotError;
 
-    async fn try_from_with_block(
+    async fn try_from_with_header(
         snapshot: ComponentWithState,
         timestamp_header: TimestampHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
@@ -33,8 +33,7 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
             .get(&base_token_address)
             .ok_or_else(|| {
                 InvalidSnapshotError::ValueError(format!(
-                    "Base token not found: {}",
-                    hex::encode(&base_token_address)
+                    "Base token not found: {base_token_address}"
                 ))
             })?
             .clone();
@@ -43,8 +42,7 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
             .get(&quote_token_address)
             .ok_or_else(|| {
                 InvalidSnapshotError::ValueError(format!(
-                    "Quote token not found: {}",
-                    hex::encode(&quote_token_address)
+                    "Quote token not found: {quote_token_address}"
                 ))
             })?
             .clone();
@@ -156,10 +154,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_try_from_with_block() {
+    async fn test_try_from_with_header() {
         let (snapshot, tokens) = create_test_snapshot();
 
-        let result = BebopState::try_from_with_block(
+        let result = BebopState::try_from_with_header(
             snapshot,
             TimestampHeader { timestamp: 1703097600u64 },
             &HashMap::new(),
@@ -182,7 +180,7 @@ mod tests {
         // Test missing second token (only one token in array)
         let (mut snapshot, tokens) = create_test_snapshot();
         snapshot.component.tokens.pop(); // Remove the second token
-        let result = BebopState::try_from_with_block(
+        let result = BebopState::try_from_with_header(
             snapshot,
             TimestampHeader::default(),
             &HashMap::new(),
@@ -194,7 +192,7 @@ mod tests {
         // Test missing state attributes
         let (mut snapshot, tokens) = create_test_snapshot();
         snapshot.state.attributes.remove("bids");
-        let result = BebopState::try_from_with_block(
+        let result = BebopState::try_from_with_header(
             snapshot,
             TimestampHeader::default(),
             &HashMap::new(),
@@ -216,7 +214,7 @@ mod tests {
                 .to_vec()
                 .into(),
         );
-        let result = BebopState::try_from_with_block(
+        let result = BebopState::try_from_with_header(
             snapshot,
             TimestampHeader::default(),
             &HashMap::new(),

@@ -18,7 +18,7 @@ use crate::{
     protocol::errors::InvalidSnapshotError,
 };
 
-pub fn cpmm_try_from_with_block(
+pub fn cpmm_try_from_with_header(
     snapshot: ComponentWithState,
 ) -> Result<(U256, U256), InvalidSnapshotError> {
     let reserve0 = U256::from_be_slice(

@@ -52,7 +52,7 @@ impl TryFrom<Bytes> for EkuboExtension {
 impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboState {
     type Error = InvalidSnapshotError;
 
-    async fn try_from_with_block(
+    async fn try_from_with_header(
         snapshot: ComponentWithState,
         _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
@@ -197,7 +197,7 @@ mod tests {
 
     #[apply(all_cases)]
     #[tokio::test]
-    async fn test_try_from_with_block(case: TestCase) {
+    async fn test_try_from_with_header(case: TestCase) {
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
                 attributes: case.state_attributes,
@@ -208,7 +208,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = EkuboState::try_from_with_block(
+        let result = EkuboState::try_from_with_header(
             snapshot,
             BlockHeader::default(),
             &HashMap::new(),
@@ -243,7 +243,7 @@ mod tests {
                 entrypoints: Vec::new(),
             };
 
-            let result = EkuboState::try_from_with_block(
+            let result = EkuboState::try_from_with_header(
                 snapshot,
                 BlockHeader::default(),
                 &HashMap::default(),
