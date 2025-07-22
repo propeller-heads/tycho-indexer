@@ -82,6 +82,7 @@ fn main() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let swap_usdc_usdt = Swap {
         component: ProtocolComponent {
@@ -99,6 +100,7 @@ fn main() {
         token_out: usdt.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     // Then we create a solution object with the previous swap

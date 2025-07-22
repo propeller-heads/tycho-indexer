@@ -179,6 +179,7 @@ mod tests {
             token_out: dai(),
             split: 0f64,
             user_data: None,
+            protocol_state: None,
         }];
         let swap = SwapGroup {
             protocol_system: protocol,
@@ -241,6 +242,7 @@ mod tests {
                     token_out: dai(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 }],
             })
         };
