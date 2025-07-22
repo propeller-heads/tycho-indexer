@@ -182,10 +182,12 @@ where
                 {
                     let sell_token_address = bytes_to_address(sell_token_address)?;
                     let buy_token_address = bytes_to_address(buy_token_address)?;
+
                     let overwrites = Some(self.get_overwrites(
                         vec![sell_token_address, buy_token_address],
                         *MAX_BALANCE / U256::from(100),
                     )?);
+
                     let (sell_amount_limit, _) = self.get_amount_limits(
                         vec![sell_token_address, buy_token_address],
                         overwrites.clone(),
@@ -278,6 +280,7 @@ where
             }
             Err(e) => return Err(e),
         }
+
         Ok(())
     }
 
@@ -357,17 +360,17 @@ where
                 .component_balances
                 .get(&self.id)
             {
-                self.balances = bals
-                    .iter()
-                    .map(|(token, bal)| {
-                        let addr = bytes_to_address(token).map_err(|_| {
-                            SimulationError::FatalError(format!(
-                                "Invalid token address in balance update: {token:?}"
-                            ))
-                        })?;
-                        Ok((addr, U256::from_be_slice(bal)))
-                    })
-                    .collect::<Result<HashMap<_, _>, SimulationError>>()?;
+                // Merge delta balances with existing balances instead of replacing them
+                // Prevents errors when delta balance changes do not affect all the pool tokens.
+                for (token, bal) in bals {
+                    let addr = bytes_to_address(token).map_err(|_| {
+                        SimulationError::FatalError(format!(
+                            "Invalid token address in balance update: {token:?}"
+                        ))
+                    })?;
+                    self.balances
+                        .insert(addr, U256::from_be_slice(bal));
+                }
             }
         } else {
             // Pool uses contract balances for overwrites
@@ -463,7 +466,10 @@ where
                 )
             })?),
         };
+
         if let Some(address) = address {
+            // Only override balances that are explicitly provided in self.balances
+            // This preserves existing balances for tokens not updated in delta transitions
             for (token, bal) in &self.balances {
                 let mut overwrites = TokenProxyOverwriteFactory::new(*token, None);
                 overwrites.set_balance(*bal, address);
@@ -1129,5 +1135,98 @@ mod tests {
 
         assert!(overwrites.contains_key(&dai_address));
         assert!(overwrites.contains_key(&bal_address));
+    }
+
+    #[tokio::test]
+    async fn test_balance_merging_during_delta_transition() {
+        use std::str::FromStr;
+
+        let mut pool_state = setup_pool_state().await;
+        let pool_id = pool_state.id.clone();
+
+        // Test the balance merging logic more directly
+        // Setup initial balances including DAI and BAL (which the pool already knows about)
+        let dai_addr = dai_addr();
+        let bal_addr = bal_addr();
+        let new_token = Address::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(); // WETH
+
+        // Clear and setup clean initial state
+        pool_state.balances.clear();
+        pool_state
+            .balances
+            .insert(dai_addr, U256::from(1000000000u64));
+        pool_state
+            .balances
+            .insert(bal_addr, U256::from(2000000000u64));
+        pool_state
+            .balances
+            .insert(new_token, U256::from(3000000000u64));
+
+        // Create tokens mapping including the existing DAI and BAL
+        let mut tokens = HashMap::new();
+        tokens.insert(dai().address.clone(), dai());
+        tokens.insert(bal().address.clone(), bal());
+
+        // Simulate a delta transition with only DAI balance update (missing BAL and new_token)
+        let mut component_balances = HashMap::new();
+        let mut delta_balances = HashMap::new();
+        // Only update DAI balance, leave others unchanged in delta
+        delta_balances.insert(dai().address.clone(), Bytes::from(vec![0x77, 0x35, 0x94, 0x00])); // 2000000000 (updated value)
+        component_balances.insert(pool_id.clone(), delta_balances);
+
+        let balances = Balances { component_balances, account_balances: HashMap::new() };
+
+        // Record initial balance count
+        let initial_balance_count = pool_state.balances.len();
+        assert_eq!(initial_balance_count, 3);
+
+        // Apply delta transition
+        pool_state
+            .update_pool_state(&tokens, &balances)
+            .unwrap();
+
+        // Verify that all 3 balances are preserved (BAL and new_token should still be there)
+        assert_eq!(
+            pool_state.balances.len(),
+            3,
+            "All balances should be preserved after delta transition"
+        );
+        assert!(
+            pool_state
+                .balances
+                .contains_key(&dai_addr),
+            "DAI balance should be present"
+        );
+        assert!(
+            pool_state
+                .balances
+                .contains_key(&bal_addr),
+            "BAL balance should be present"
+        );
+        assert!(
+            pool_state
+                .balances
+                .contains_key(&new_token),
+            "New token balance should be preserved from before delta"
+        );
+
+        // Verify that updated token (DAI) has new value
+        assert_eq!(
+            pool_state.balances[&dai_addr],
+            U256::from(2000000000u64),
+            "DAI balance should be updated"
+        );
+
+        // Verify that non-updated tokens retain their original values
+        assert_eq!(
+            pool_state.balances[&bal_addr],
+            U256::from(2000000000u64),
+            "BAL balance should be unchanged"
+        );
+        assert_eq!(
+            pool_state.balances[&new_token],
+            U256::from(3000000000u64),
+            "New token balance should be unchanged"
+        );
     }
 }
