@@ -1,3 +1,15 @@
+## [0.112.0](https://github.com/propeller-heads/tycho-execution/compare/0.111.0...0.112.0) (2025-07-22)
+
+
+### Features
+
+* Add protocol state to Swap object ([c217702](https://github.com/propeller-heads/tycho-execution/commit/c21770256045b3fdaddb889effa09b839f59755e))
+
+
+### Bug Fixes
+
+* Replace smart pointer with regular pointer ([95c5124](https://github.com/propeller-heads/tycho-execution/commit/95c51247f73516f387e2169e63a22311b4343b8d))
+
 ## [0.111.0](https://github.com/propeller-heads/tycho-execution/compare/0.110.0...0.111.0) (2025-07-15)
 
 
