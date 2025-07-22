@@ -1,3 +1,10 @@
+## [0.131.0](https://github.com/propeller-heads/tycho-simulation/compare/0.130.0...0.131.0) (2025-07-19)
+
+
+### Features
+
+* empty commit to upgrade version ([d7bdaff](https://github.com/propeller-heads/tycho-simulation/commit/d7bdaff460c1e9fc13444092289520affad36e4c))
+
 ## [0.130.0](https://github.com/propeller-heads/tycho-simulation/compare/0.129.0...0.130.0) (2025-07-18)
 
 
