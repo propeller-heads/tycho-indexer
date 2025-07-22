@@ -422,7 +422,7 @@ mod tests {
     // Fee and tick spacing information for this test is obtained by querying the
     // USV4 Position Manager contract: 0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e
     // Using the poolKeys function with the first 25 bytes of the pool id
-    fn swap_usdc_eth_univ4() -> Swap {
+    fn swap_usdc_eth_univ4() -> Swap<'static> {
         let pool_fee_usdc_eth = Bytes::from(BigInt::from(3000).to_signed_bytes_be());
         let tick_spacing_usdc_eth = Bytes::from(BigInt::from(60).to_signed_bytes_be());
         let mut static_attributes_usdc_eth: HashMap<String, Bytes> = HashMap::new();
@@ -440,10 +440,11 @@ mod tests {
             token_out: eth().clone(),
             split: 0f64,
             user_data: None,
+            protocol_state: None,
         }
     }
 
-    fn swap_eth_pepe_univ4() -> Swap {
+    fn swap_eth_pepe_univ4() -> Swap<'static> {
         let pool_fee_eth_pepe = Bytes::from(BigInt::from(25000).to_signed_bytes_be());
         let tick_spacing_eth_pepe = Bytes::from(BigInt::from(500).to_signed_bytes_be());
         let mut static_attributes_eth_pepe: HashMap<String, Bytes> = HashMap::new();
@@ -461,6 +462,7 @@ mod tests {
             token_out: pepe().clone(),
             split: 0f64,
             user_data: None,
+            protocol_state: None,
         }
     }
 
@@ -509,6 +511,7 @@ mod tests {
                 token_out: dai(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -574,6 +577,7 @@ mod tests {
                 token_out: dai(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let swap_dai_usdc = Swap {
@@ -586,6 +590,7 @@ mod tests {
                 token_out: usdc(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -666,6 +671,7 @@ mod tests {
                 token_out: dai(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -695,6 +701,7 @@ mod tests {
                 token_out: dai(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -729,6 +736,7 @@ mod tests {
                 token_out: dai(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -783,6 +791,7 @@ mod tests {
                 token_out: weth(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -811,6 +820,7 @@ mod tests {
                 token_out: weth(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -846,6 +856,7 @@ mod tests {
                 token_out: eth(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -886,6 +897,7 @@ mod tests {
                     token_out: weth(),
                     split: 0.5f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -897,6 +909,7 @@ mod tests {
                     token_out: weth(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -908,6 +921,7 @@ mod tests {
                     token_out: dai(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
             ];
 
@@ -941,6 +955,7 @@ mod tests {
                     token_out: weth(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -952,6 +967,7 @@ mod tests {
                     token_out: usdc(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -963,6 +979,7 @@ mod tests {
                     token_out: dai(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -974,6 +991,7 @@ mod tests {
                     token_out: wbtc(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
             ];
 
@@ -1014,6 +1032,7 @@ mod tests {
                     token_out: dai(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -1025,6 +1044,7 @@ mod tests {
                     token_out: weth(),
                     split: 0.5f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -1036,6 +1056,7 @@ mod tests {
                     token_out: weth(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
             ];
 
@@ -1069,6 +1090,7 @@ mod tests {
                     token_out: dai(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -1080,6 +1102,7 @@ mod tests {
                     token_out: weth(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
             ];
 
@@ -1134,6 +1157,7 @@ mod tests {
                 token_out: token_out.clone(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -1194,6 +1218,7 @@ mod tests {
                 token_out: token_out.clone(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {

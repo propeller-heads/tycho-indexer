@@ -37,6 +37,7 @@ fn test_sequential_swap_strategy_encoder() {
         token_out: wbtc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let swap_wbtc_usdc = Swap {
         component: ProtocolComponent {
@@ -48,6 +49,7 @@ fn test_sequential_swap_strategy_encoder() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
@@ -103,6 +105,7 @@ fn test_sequential_swap_strategy_encoder_no_permit2() {
         token_out: wbtc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let swap_wbtc_usdc = Swap {
         component: ProtocolComponent {
@@ -114,6 +117,7 @@ fn test_sequential_swap_strategy_encoder_no_permit2() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -215,6 +219,7 @@ fn test_sequential_strategy_cyclic_swap() {
         token_out: weth.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     // WETH -> USDC (Pool 2)
@@ -237,6 +242,7 @@ fn test_sequential_strategy_cyclic_swap() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);

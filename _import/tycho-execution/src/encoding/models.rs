@@ -1,7 +1,9 @@
 use clap::ValueEnum;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
-use tycho_common::{models::protocol::ProtocolComponent, Bytes};
+use tycho_common::{
+    models::protocol::ProtocolComponent, simulation::protocol_sim::ProtocolSim, Bytes,
+};
 
 use crate::encoding::serde_primitives::biguint_string;
 
@@ -33,7 +35,7 @@ pub enum UserTransferType {
 /// Represents a solution containing details describing an order, and  instructions for filling
 /// the order.
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
-pub struct Solution {
+pub struct Solution<'a> {
     /// Address of the sender.
     pub sender: Bytes,
     /// Address of the receiver.
@@ -53,7 +55,7 @@ pub struct Solution {
     #[serde(with = "biguint_string")]
     pub checked_amount: BigUint,
     /// List of swaps to fulfill the solution.
-    pub swaps: Vec<Swap>,
+    pub swaps: Vec<Swap<'a>>,
     /// If set, the corresponding native action will be executed.
     pub native_action: Option<NativeAction>,
 }
@@ -71,8 +73,8 @@ pub enum NativeAction {
 }
 
 /// Represents a swap operation to be performed on a pool.
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-pub struct Swap {
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Swap<'a> {
     /// Protocol component from tycho indexer
     pub component: ProtocolComponent,
     /// Token being input into the pool.
@@ -84,17 +86,32 @@ pub struct Swap {
     pub split: f64,
     /// Optional user data to be passed to encoding.
     pub user_data: Option<Bytes>,
+    /// Optional protocol state used to perform the swap.
+    #[serde(skip)]
+    pub protocol_state: Option<&'a dyn ProtocolSim>,
 }
 
-impl Swap {
+impl<'a> Swap<'a> {
     pub fn new<T: Into<ProtocolComponent>>(
         component: T,
         token_in: Bytes,
         token_out: Bytes,
         split: f64,
         user_data: Option<Bytes>,
+        protocol_state: Option<&'a dyn ProtocolSim>,
     ) -> Self {
-        Self { component: component.into(), token_in, token_out, split, user_data }
+        Self { component: component.into(), token_in, token_out, split, user_data, protocol_state }
+    }
+}
+
+impl<'a> PartialEq for Swap<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.component == other.component &&
+            self.token_in == other.token_in &&
+            self.token_out == other.token_out &&
+            self.split == other.split &&
+            self.user_data == other.user_data
+        // Skip protocol_state comparison since trait objects don't implement PartialEq
     }
 }
 
@@ -238,8 +255,14 @@ mod tests {
             protocol_system: "uniswap_v2".to_string(),
         };
         let user_data = Some(Bytes::from("0x1234"));
-        let swap =
-            Swap::new(component, Bytes::from("0x12"), Bytes::from("34"), 0.5, user_data.clone());
+        let swap = Swap::new(
+            component,
+            Bytes::from("0x12"),
+            Bytes::from("34"),
+            0.5,
+            user_data.clone(),
+            None,
+        );
         assert_eq!(swap.token_in, Bytes::from("0x12"));
         assert_eq!(swap.token_out, Bytes::from("0x34"));
         assert_eq!(swap.component.protocol_system, "uniswap_v2");

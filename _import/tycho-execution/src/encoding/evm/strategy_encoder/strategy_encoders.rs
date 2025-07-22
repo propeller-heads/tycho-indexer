@@ -558,6 +558,7 @@ mod tests {
                 token_out: dai.clone(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SingleSwapStrategyEncoder::new(
@@ -619,6 +620,7 @@ mod tests {
                 token_out: dai.clone(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SingleSwapStrategyEncoder::new(
@@ -690,6 +692,7 @@ mod tests {
                 token_out: wbtc.clone(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
             let swap_wbtc_usdc = Swap {
                 component: ProtocolComponent {
@@ -701,6 +704,7 @@ mod tests {
                 token_out: usdc.clone(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SequentialSwapStrategyEncoder::new(
@@ -793,6 +797,7 @@ mod tests {
                 token_out: weth.clone(),
                 split: 0.6f64, // 60% of input
                 user_data: None,
+                protocol_state: None,
             };
 
             // USDC -> WETH (Pool 2) - 40% of input (remaining)
@@ -815,6 +820,7 @@ mod tests {
                 token_out: weth.clone(),
                 split: 0f64,
                 user_data: None, // Remaining 40%
+                protocol_state: None,
             };
 
             // WETH -> USDC (Pool 2)
@@ -837,6 +843,7 @@ mod tests {
                 token_out: usdc.clone(),
                 split: 0.0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let swap_encoder_registry = get_swap_encoder_registry();
@@ -945,6 +952,7 @@ mod tests {
                 token_out: weth.clone(),
                 split: 0.0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let swap_weth_usdc_v3_pool1 = Swap {
@@ -966,6 +974,7 @@ mod tests {
                 token_out: usdc.clone(),
                 split: 0.6f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let swap_weth_usdc_v3_pool2 = Swap {
@@ -987,6 +996,7 @@ mod tests {
                 token_out: usdc.clone(),
                 split: 0.0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let swap_encoder_registry = get_swap_encoder_registry();
