@@ -18,7 +18,7 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::{
-    models::{self, Address, ComponentId, StoreKey, StoreVal},
+    models::{self, blockchain::BlockAggregatedChanges, Address, ComponentId, StoreKey, StoreVal},
     serde_primitives::{
         hex_bytes, hex_bytes_option, hex_hashmap_key, hex_hashmap_key_value, hex_hashmap_value,
     },
@@ -145,7 +145,7 @@ pub enum Command {
 }
 
 /// A response sent from the server to the client
-#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
 #[serde(tag = "method", rename_all = "lowercase")]
 pub enum Response {
     NewSubscription { extractor_id: ExtractorIdentity, subscription_id: Uuid },
@@ -154,7 +154,7 @@ pub enum Response {
 
 /// A message sent from the server to the client
 #[allow(clippy::large_enum_variant)]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Display, Clone)]
 #[serde(untagged)]
 pub enum WebSocketMessage {
     BlockChanges { subscription_id: Uuid, deltas: BlockChanges },
@@ -364,6 +364,122 @@ impl BlockChanges {
 
     pub fn n_changes(&self) -> usize {
         self.account_updates.len() + self.state_updates.len()
+    }
+
+    pub fn drop_state(&self) -> Self {
+        Self {
+            extractor: self.extractor.clone(),
+            chain: self.chain,
+            block: self.block.clone(),
+            finalized_block_height: self.finalized_block_height,
+            revert: self.revert,
+            new_tokens: self.new_tokens.clone(),
+            account_updates: HashMap::new(),
+            state_updates: HashMap::new(),
+            new_protocol_components: self.new_protocol_components.clone(),
+            deleted_protocol_components: self.deleted_protocol_components.clone(),
+            component_balances: self.component_balances.clone(),
+            account_balances: self.account_balances.clone(),
+            component_tvl: self.component_tvl.clone(),
+            dci_update: self.dci_update.clone(),
+        }
+    }
+}
+
+impl From<models::blockchain::Block> for Block {
+    fn from(value: models::blockchain::Block) -> Self {
+        Self {
+            number: value.number,
+            hash: value.hash,
+            parent_hash: value.parent_hash,
+            chain: value.chain.into(),
+            ts: value.ts,
+        }
+    }
+}
+
+impl From<models::protocol::ComponentBalance> for ComponentBalance {
+    fn from(value: models::protocol::ComponentBalance) -> Self {
+        Self {
+            token: value.token,
+            balance: value.balance,
+            balance_float: value.balance_float,
+            modify_tx: value.modify_tx,
+            component_id: value.component_id,
+        }
+    }
+}
+
+impl From<models::contract::AccountBalance> for AccountBalance {
+    fn from(value: models::contract::AccountBalance) -> Self {
+        Self {
+            account: value.account,
+            token: value.token,
+            balance: value.balance,
+            modify_tx: value.modify_tx,
+        }
+    }
+}
+
+impl From<BlockAggregatedChanges> for BlockChanges {
+    fn from(value: BlockAggregatedChanges) -> Self {
+        Self {
+            extractor: value.extractor,
+            chain: value.chain.into(),
+            block: value.block.into(),
+            finalized_block_height: value.finalized_block_height,
+            revert: value.revert,
+            account_updates: value
+                .account_deltas
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            state_updates: value
+                .state_deltas
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            new_protocol_components: value
+                .new_protocol_components
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            deleted_protocol_components: value
+                .deleted_protocol_components
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            component_balances: value
+                .component_balances
+                .into_iter()
+                .map(|(component_id, v)| {
+                    let balances: HashMap<Bytes, ComponentBalance> = v
+                        .into_iter()
+                        .map(|(k, v)| (k, ComponentBalance::from(v)))
+                        .collect();
+                    (component_id, balances.into())
+                })
+                .collect(),
+            account_balances: value
+                .account_balances
+                .into_iter()
+                .map(|(k, v)| {
+                    (
+                        k,
+                        v.into_iter()
+                            .map(|(k, v)| (k, v.into()))
+                            .collect(),
+                    )
+                })
+                .collect(),
+            dci_update: value.dci_update.into(),
+            new_tokens: value
+                .new_tokens
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            component_tvl: value.component_tvl,
+        }
     }
 }
 
@@ -1336,6 +1452,42 @@ pub struct DCIUpdate {
     pub new_entrypoint_params: HashMap<String, HashSet<(TracingParams, Option<String>)>>,
     /// Map of entrypoint id to its trace result
     pub trace_results: HashMap<String, TracingResult>,
+}
+
+impl From<models::blockchain::DCIUpdate> for DCIUpdate {
+    fn from(value: models::blockchain::DCIUpdate) -> Self {
+        Self {
+            new_entrypoints: value
+                .new_entrypoints
+                .into_iter()
+                .map(|(k, v)| {
+                    (
+                        k,
+                        v.into_iter()
+                            .map(|v| v.into())
+                            .collect(),
+                    )
+                })
+                .collect(),
+            new_entrypoint_params: value
+                .new_entrypoint_params
+                .into_iter()
+                .map(|(k, v)| {
+                    (
+                        k,
+                        v.into_iter()
+                            .map(|(params, i)| (params.into(), i))
+                            .collect(),
+                    )
+                })
+                .collect(),
+            trace_results: value
+                .trace_results
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Hash, Clone)]

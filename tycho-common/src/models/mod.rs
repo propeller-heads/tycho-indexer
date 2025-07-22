@@ -3,7 +3,7 @@ pub mod contract;
 pub mod protocol;
 pub mod token;
 
-use std::{collections::HashMap, fmt::Display, str::FromStr, sync::Arc};
+use std::{collections::HashMap, fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
@@ -173,6 +173,18 @@ impl std::fmt::Display for ExtractorIdentity {
     }
 }
 
+impl From<ExtractorIdentity> for dto::ExtractorIdentity {
+    fn from(value: ExtractorIdentity) -> Self {
+        dto::ExtractorIdentity { chain: value.chain.into(), name: value.name }
+    }
+}
+
+impl From<dto::ExtractorIdentity> for ExtractorIdentity {
+    fn from(value: dto::ExtractorIdentity) -> Self {
+        Self { chain: value.chain.into(), name: value.name }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct ExtractionState {
     pub name: String,
@@ -198,18 +210,6 @@ impl ExtractionState {
             block_hash,
         }
     }
-}
-
-// TODO: replace with types from dto on extractor
-#[typetag::serde(tag = "type")]
-pub trait NormalisedMessage:
-    std::any::Any + std::fmt::Debug + std::fmt::Display + Send + Sync + 'static
-{
-    fn source(&self) -> ExtractorIdentity;
-
-    fn drop_state(&self) -> Arc<dyn NormalisedMessage>;
-
-    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 #[derive(PartialEq, Debug, Clone, Default, Deserialize, Serialize)]

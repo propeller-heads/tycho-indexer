@@ -288,7 +288,7 @@ where
                     4,
                 )
                 .await?;
-            tracked_components.process_entrypoints(&result.clone().into())?;
+            tracked_components.process_entrypoints(&result.clone().into());
             Some(result)
         } else {
             None
@@ -521,7 +521,7 @@ where
                 };
 
                 // 3. Update entrypoints on the tracker (affects which contracts are tracked)
-                tracker.process_entrypoints(&deltas.dci_update)?;
+                tracker.process_entrypoints(&deltas.dci_update);
 
                 // 4. Filter deltas by currently tracked components / contracts
                 self.filter_deltas(&mut deltas, &tracker);

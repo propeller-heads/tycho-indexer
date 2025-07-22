@@ -1,8 +1,4 @@
-use std::{
-    any::Any,
-    collections::{hash_map::Entry, HashMap, HashSet},
-    sync::Arc,
-};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use chrono::NaiveDateTime;
 use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
@@ -16,8 +12,7 @@ use crate::{
             ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
         },
         token::Token,
-        Address, BlockHash, Chain, ComponentId, EntryPointId, ExtractorIdentity, MergeError,
-        NormalisedMessage, StoreKey,
+        Address, BlockHash, Chain, ComponentId, EntryPointId, MergeError, StoreKey,
     },
     Bytes,
 };
@@ -136,14 +131,9 @@ impl std::fmt::Display for BlockAggregatedChanges {
     }
 }
 
-#[typetag::serde]
-impl NormalisedMessage for BlockAggregatedChanges {
-    fn source(&self) -> ExtractorIdentity {
-        ExtractorIdentity::new(self.chain, &self.extractor)
-    }
-
-    fn drop_state(&self) -> Arc<dyn NormalisedMessage> {
-        Arc::new(Self {
+impl BlockAggregatedChanges {
+    pub fn drop_state(&self) -> Self {
+        Self {
             extractor: self.extractor.clone(),
             chain: self.chain,
             block: self.block.clone(),
@@ -158,11 +148,7 @@ impl NormalisedMessage for BlockAggregatedChanges {
             account_balances: self.account_balances.clone(),
             component_tvl: self.component_tvl.clone(),
             dci_update: self.dci_update.clone(),
-        })
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
+        }
     }
 }
 
@@ -173,6 +159,18 @@ pub trait BlockScoped {
 impl BlockScoped for BlockAggregatedChanges {
     fn block(&self) -> Block {
         self.block.clone()
+    }
+}
+
+impl From<dto::Block> for Block {
+    fn from(value: dto::Block) -> Self {
+        Self {
+            number: value.number,
+            chain: value.chain.into(),
+            hash: value.hash,
+            parent_hash: value.parent_hash,
+            ts: value.ts,
+        }
     }
 }
 

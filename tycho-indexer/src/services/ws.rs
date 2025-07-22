@@ -11,13 +11,16 @@ use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use futures03::executor::block_on;
 use metrics::{counter, gauge};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
-use tycho_common::models::ExtractorIdentity;
+use tycho_common::{
+    dto::{BlockChanges, Command, Response, WebSocketMessage},
+    models::ExtractorIdentity,
+};
 use uuid::Uuid;
 
-use crate::extractor::{runner::MessageSender, ExtractorMsg};
+use crate::extractor::runner::MessageSender;
 
 /// How often heartbeat pings are sent
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
@@ -193,12 +196,12 @@ impl WsActor {
                         // The `rx` variable is a `Result<String, String>`.
                         let stream = async_stream::stream! {
                             while let Some(item) = rx.recv().await {
-                                if !include_state {
-                                    let light = item.drop_state();
-                                    yield Ok((subscription_id, light));
+                                let result = if include_state {
+                                    (*item).clone().into()
                                 } else {
-                                    yield Ok((subscription_id, item));
-                                }
+                                    item.drop_state().into()
+                                };
+                                yield Ok((subscription_id, result));
                             }
                         };
 
@@ -217,7 +220,7 @@ impl WsActor {
                         .increment(1);
 
                         let message = Response::NewSubscription {
-                            extractor_id: extractor_id.clone(),
+                            extractor_id: extractor_id.clone().into(),
                             subscription_id,
                         };
                         ctx.text(serde_json::to_string(&message).unwrap());
@@ -296,41 +299,19 @@ impl Actor for WsActor {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
-#[serde(tag = "method", rename_all = "lowercase")]
-pub enum Command {
-    Subscribe { extractor_id: ExtractorIdentity, include_state: bool },
-    Unsubscribe { subscription_id: Uuid },
-}
-
-#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
-#[serde(tag = "method", rename_all = "lowercase")]
-pub enum Response {
-    NewSubscription { extractor_id: ExtractorIdentity, subscription_id: Uuid },
-    SubscriptionEnded { subscription_id: Uuid },
-}
-
-// Consider unifying with dto::BlockChanges message, certainly we'd need a more structured
-// output type from extractors first.
-#[derive(Serialize)]
-struct DeltasMessage {
-    subscription_id: Uuid,
-    deltas: ExtractorMsg,
-}
-
 /// Handle incoming messages from the extractor and forward them to the WS connection
-impl StreamHandler<Result<(Uuid, ExtractorMsg), ws::ProtocolError>> for WsActor {
+impl StreamHandler<Result<(Uuid, BlockChanges), ws::ProtocolError>> for WsActor {
     #[instrument(skip_all, fields(WsActor.id = %self.id))]
     fn handle(
         &mut self,
-        msg: Result<(Uuid, ExtractorMsg), ws::ProtocolError>,
+        msg: Result<(Uuid, BlockChanges), ws::ProtocolError>,
         ctx: &mut Self::Context,
     ) {
         trace!("Message received from extractor");
         match msg {
             Ok((subscription_id, deltas)) => {
                 trace!("Forwarding message to client");
-                let msg = DeltasMessage { subscription_id, deltas };
+                let msg = WebSocketMessage::BlockChanges { deltas, subscription_id };
                 ctx.text(serde_json::to_string(&msg).unwrap());
             }
             Err(e) => {
@@ -364,7 +345,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsActor {
                         match message {
                             Command::Subscribe { extractor_id, include_state } => {
                                 debug!(%extractor_id, "Subscribing to extractor");
-                                self.subscribe(ctx, &extractor_id, include_state);
+                                self.subscribe(ctx, &extractor_id.clone().into(), include_state);
                             }
                             Command::Unsubscribe { subscription_id } => {
                                 debug!(%subscription_id, "Unsubscribing from subscription");
@@ -406,7 +387,9 @@ mod tests {
     use actix_web::App;
     use actix_web_opentelemetry::RequestTracing;
     use async_trait::async_trait;
+    use chrono::NaiveDateTime;
     use futures03::SinkExt;
+    use serde::Deserialize;
     use tokio::{
         net::TcpStream,
         sync::mpsc::{self, error::SendError, Receiver},
@@ -420,42 +403,17 @@ mod tests {
         MaybeTlsStream, WebSocketStream,
     };
     use tracing::{debug, info_span, Instrument};
-    use tycho_common::models::{Chain, NormalisedMessage};
+    use tycho_common::{
+        dto::{BlockChanges, Response},
+        models::{
+            blockchain::{Block, BlockAggregatedChanges},
+            Chain,
+        },
+        Bytes,
+    };
 
     use super::*;
-    use crate::extractor::runner::ControlMessage;
-
-    #[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
-    struct DummyMessage {
-        extractor_id: ExtractorIdentity,
-    }
-
-    impl std::fmt::Display for DummyMessage {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}", self.extractor_id)
-        }
-    }
-
-    impl DummyMessage {
-        pub fn new(extractor_id: ExtractorIdentity) -> Self {
-            Self { extractor_id }
-        }
-    }
-
-    #[typetag::serde]
-    impl NormalisedMessage for DummyMessage {
-        fn source(&self) -> ExtractorIdentity {
-            self.extractor_id.clone()
-        }
-
-        fn drop_state(&self) -> Arc<dyn NormalisedMessage> {
-            Arc::new(self.clone())
-        }
-
-        fn as_any(&self) -> &dyn std::any::Any {
-            self
-        }
-    }
+    use crate::extractor::{runner::ControlMessage, ExtractorMsg};
 
     pub struct MyMessageSender {
         extractor_id: ExtractorIdentity,
@@ -480,9 +438,20 @@ mod tests {
                 loop {
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     debug!("Sending DummyMessage");
-                    let dummy_message = DummyMessage::new(extractor_id.clone());
                     if tx
-                        .send(Arc::new(dummy_message))
+                        .send(Arc::new(BlockAggregatedChanges {
+                            extractor: extractor_id.name.clone(),
+                            block: Block::new(
+                                1,
+                                Chain::Ethereum,
+                                Bytes::zero(32),
+                                Bytes::zero(32),
+                                NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+                            ),
+                            finalized_block_height: 1,
+                            revert: false,
+                            ..Default::default()
+                        }))
                         .await
                         .is_err()
                     {
@@ -580,7 +549,7 @@ mod tests {
     struct DummyDelta {
         #[allow(dead_code)]
         subscription_id: Uuid,
-        deltas: DummyMessage,
+        deltas: BlockChanges,
     }
 
     async fn wait_for_dummy_message(
@@ -592,7 +561,8 @@ mod tests {
                 if let Ok(DummyDelta { subscription_id: _, deltas }) =
                     serde_json::from_str::<DummyDelta>(text)
                 {
-                    return deltas.extractor_id == extractor_id;
+                    debug!(extractor_id = %extractor_id, "Received dummy message");
+                    return deltas.extractor == extractor_id.name;
                 }
             }
             false
@@ -696,7 +666,8 @@ mod tests {
         debug!("Connected to test server");
 
         // Create and send a subscribe message from the client
-        let action = Command::Subscribe { extractor_id: extractor_id.clone(), include_state: true };
+        let action =
+            Command::Subscribe { extractor_id: extractor_id.clone().into(), include_state: true };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
             .await
@@ -726,7 +697,7 @@ mod tests {
 
         // Create and send a second subscribe message from the client
         let action =
-            Command::Subscribe { extractor_id: extractor_id2.clone(), include_state: true };
+            Command::Subscribe { extractor_id: extractor_id2.clone().into(), include_state: true };
         connection
             .send(Message::Text(serde_json::to_string(&action).unwrap()))
             .await
@@ -798,7 +769,7 @@ mod tests {
         // Create and send a subscribe message from the client
         let extractor_id =
             ExtractorIdentity { chain: Chain::Ethereum, name: "vm:ambient".to_owned() };
-        let action = Command::Subscribe { extractor_id, include_state: true };
+        let action = Command::Subscribe { extractor_id: extractor_id.into(), include_state: true };
         let res = serde_json::to_string(&action).unwrap();
         println!("{res}");
     }

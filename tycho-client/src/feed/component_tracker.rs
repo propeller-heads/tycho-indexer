@@ -272,7 +272,7 @@ where
     }
 
     /// Updates the tracked entrypoints and contracts based on the given DCI data.
-    pub fn process_entrypoints(&mut self, dci_update: &DCIUpdate) -> Result<(), RPCError> {
+    pub fn process_entrypoints(&mut self, dci_update: &DCIUpdate) {
         // Update detected contracts for entrypoints
         for (entrypoint, traces) in &dci_update.trace_results {
             self.entrypoints
@@ -303,8 +303,6 @@ where
                 }
             }
         }
-
-        Ok(())
     }
 
     /// Get related contracts for the given component ids. Assumes that the components are already

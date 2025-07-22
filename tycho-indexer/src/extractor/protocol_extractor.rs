@@ -2876,10 +2876,6 @@ mod test_serial_db {
                 .unwrap();
 
 
-            let res = client_msg
-                .as_any()
-                .downcast_ref::<BlockAggregatedChanges>()
-                .expect("not good type");
             let base_ts = db_fixtures::yesterday_midnight().timestamp();
             let block_entity_changes_result = BlockAggregatedChanges {
                 extractor: "native_name".to_string(),
@@ -2959,8 +2955,8 @@ mod test_serial_db {
             };
 
             assert_eq!(
-                res,
-                &block_entity_changes_result
+                *client_msg,
+                block_entity_changes_result
             );
         })
             .await;
@@ -3057,10 +3053,6 @@ mod test_serial_db {
                 .unwrap()
                 .unwrap();
 
-            let res = client_msg
-                .as_any()
-                .downcast_ref::<BlockAggregatedChanges>()
-                .expect("not good type");
 
             let base_ts = db_fixtures::yesterday_midnight().timestamp();
             let account1 = Bytes::from_str("0000000000000000000000000000000000000001").unwrap();
@@ -3165,8 +3157,8 @@ mod test_serial_db {
             };
 
             assert_eq!(
-                res,
-                &block_account_expected
+                *client_msg,
+                block_account_expected
             );
         })
             .await;
