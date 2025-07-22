@@ -25,7 +25,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
     ///
     /// Errors with a `InvalidSnapshotError`.
     #[allow(deprecated)]
-    async fn try_from_with_block(
+    async fn try_from_with_header(
         snapshot: ComponentWithState,
         block: BlockHeader,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
@@ -228,7 +228,7 @@ mod tests {
 
     #[allow(deprecated)]
     #[tokio::test]
-    async fn test_try_from_with_block() {
+    async fn test_try_from_with_header() {
         let attributes: HashMap<String, Bytes> = vec![
             (
                 "balance_owner".to_string(),
@@ -308,9 +308,10 @@ mod tests {
             ]),
         )]);
 
-        let res = EVMPoolState::try_from_with_block(snapshot, header(), &account_balances, &tokens)
-            .await
-            .unwrap();
+        let res =
+            EVMPoolState::try_from_with_header(snapshot, header(), &account_balances, &tokens)
+                .await
+                .unwrap();
 
         let res_pool = res;
 

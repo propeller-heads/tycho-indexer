@@ -166,7 +166,7 @@ mod tests {
 
     impl TryFromWithBlock<ComponentWithState, TimestampHeader> for DummyProtocol {
         type Error = InvalidSnapshotError;
-        async fn try_from_with_block(
+        async fn try_from_with_header(
             _value: ComponentWithState,
             _header: TimestampHeader,
             _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,

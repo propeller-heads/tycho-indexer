@@ -5,7 +5,7 @@ use tycho_common::{models::token::Token, Bytes};
 
 use crate::{
     evm::protocol::{
-        cpmm::protocol::cpmm_try_from_with_block, pancakeswap_v2::state::PancakeswapV2State,
+        cpmm::protocol::cpmm_try_from_with_header, pancakeswap_v2::state::PancakeswapV2State,
     },
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
@@ -15,13 +15,13 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for PancakeswapV2State {
 
     /// Decodes a `ComponentWithState` into a `PancakeswapV2State`. Errors with a
     /// `InvalidSnapshotError` if either reserve0 or reserve1 attributes are missing.
-    async fn try_from_with_block(
+    async fn try_from_with_header(
         snapshot: ComponentWithState,
         _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
-        let (reserve0, reserve1) = cpmm_try_from_with_block(snapshot)?;
+        let (reserve0, reserve1) = cpmm_try_from_with_header(snapshot)?;
         Ok(Self::new(reserve0, reserve1))
     }
 }
@@ -64,7 +64,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = PancakeswapV2State::try_from_with_block(
+        let result = PancakeswapV2State::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),
@@ -98,7 +98,7 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let result = PancakeswapV2State::try_from_with_block(
+        let result = PancakeswapV2State::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),

@@ -152,7 +152,7 @@ where
                   state: Arc<RwLock<DecoderState>>| {
                 Box::pin(async move {
                     let guard = state.read().await;
-                    T::try_from_with_block(component, header, &account_balances, &guard.tokens)
+                    T::try_from_with_header(component, header, &account_balances, &guard.tokens)
                         .await
                         .map(|c| Box::new(c) as Box<dyn ProtocolSim>)
                 }) as DecodeFut
