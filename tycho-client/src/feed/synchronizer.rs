@@ -433,7 +433,7 @@ where
         let mut tracker = self.component_tracker.lock().await;
 
         let subscription_options = SubscriptionOptions::new().with_state(self.include_snapshots);
-        let (_, mut msg_rx) = self
+        let (subscription_id, mut msg_rx) = self
             .deltas_client
             .subscribe(self.extractor_id.clone(), subscription_options)
             .await?;
@@ -553,6 +553,10 @@ where
             let mut shared = self.shared.lock().await;
             warn!(shared = ?&shared, "Deltas processing ended, resetting shared state.");
             shared.last_synced_block = None;
+            //Ignore error
+            let _ = self.deltas_client.unsubscribe(subscription_id).await.map_err(|err| {
+                warn!(err=?err, "Unsubscribing from deltas on cleanup failed!");
+            });
         }
 
         result
@@ -1757,6 +1761,11 @@ mod test {
         deltas_client
             .expect_subscribe()
             .return_once(move |_, _| Ok((Uuid::default(), rx)));
+        
+        // Expect unsubscribe call during cleanup
+        deltas_client
+            .expect_unsubscribe()
+            .return_once(|_| Ok(()));
 
         let mut state_sync = ProtocolStateSynchronizer::new(
             ExtractorIdentity::new(Chain::Ethereum, "test-protocol"),
@@ -1873,6 +1882,11 @@ mod test {
 
                 Ok((Uuid::default(), rx))
             });
+        
+        // Expect unsubscribe call during cleanup
+        deltas_client
+            .expect_unsubscribe()
+            .return_once(|_| Ok(()));
 
         let state_sync = ProtocolStateSynchronizer::new(
             ExtractorIdentity::new(Chain::Ethereum, "test-protocol"),
