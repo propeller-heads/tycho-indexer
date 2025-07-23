@@ -323,10 +323,15 @@ impl RFQClient for BebopClient {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, time::Duration};
+    use std::{
+        env,
+        sync::{Arc, Mutex},
+        time::Duration,
+    };
 
-    use futures::StreamExt;
-    use tokio::time::timeout;
+    use futures::{SinkExt, StreamExt};
+    use tokio::{net::TcpListener, time::timeout};
+    use tokio_tungstenite::accept_async;
 
     use super::*;
 
@@ -433,5 +438,130 @@ mod tests {
             Ok(_) => println!("Test completed successfully"),
             Err(_) => panic!("Test timed out - no messages received within 10 seconds"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_websocket_reconnection() {
+        // Start a mock WebSocket server that will drop connections intermittently
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        // Creates a thread-safe counter.
+        let connection_count = Arc::new(Mutex::new(0u32));
+
+        // We must clone - since we want to read the original value at the end of the test.
+        let connection_count_clone = connection_count.clone();
+
+        tokio::spawn(async move {
+            while let Ok((stream, _)) = listener.accept().await {
+                *connection_count_clone.lock().unwrap() += 1;
+                let count = *connection_count_clone.lock().unwrap();
+                println!("Mock server: Connection #{count} established");
+
+                tokio::spawn(async move {
+                    if let Ok(ws_stream) = accept_async(stream).await {
+                        let (mut ws_sender, _ws_receiver) = ws_stream.split();
+
+                        let test_message = r#"{"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48":{"last_update_ts":1752617378.3278632,"bids":[[3070.0499326485206,0.3257174307952456]],"asks":[[3070.527058081382,0.3257174307952456]]}}"#;
+
+                        if count == 1 {
+                            // First connection: Send message successfully, then drop
+                            println!("Mock server: Connection #1 - sending message then dropping.");
+                            let _ = ws_sender
+                                .send(Message::Text(test_message.into()))
+                                .await;
+
+                            // Give time for message to be processed, then drop the connection.
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                            println!("Mock server: Dropping connection #1");
+                            let _ = ws_sender.close().await;
+                        } else if count == 2 {
+                            // Second connection: Send message successfully and maintain connection
+                            println!("Mock server: Connection #2 - maintaining stable connection.");
+                            let _ = ws_sender
+                                .send(Message::Text(test_message.into()))
+                                .await;
+                        }
+                    }
+                });
+            }
+        });
+
+        // Wait a moment for the server to start
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let mut test_quote_tokens = HashSet::new();
+        test_quote_tokens.insert("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string());
+
+        let pairs_formatted = vec![
+            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+                .to_string(),
+        ];
+
+        // Bypass the new() constructor to mock the URL to point to our mock server.
+        let client = BebopClient {
+            chain: Chain::Ethereum,
+            url: format!("ws://127.0.0.1:{}", addr.port()),
+            pairs: pairs_formatted.into_iter().collect(),
+            tvl: 1000.0,
+            ws_user: "test_user".to_string(),
+            ws_key: "test_key".to_string(),
+            quote_tokens: test_quote_tokens,
+        };
+
+        let start_time = std::time::Instant::now();
+        let mut successful_messages = 0;
+        let mut connection_errors = 0;
+        let mut first_message_received = false;
+        let mut second_message_received = false;
+
+        // Expected flow:
+        // 1. Receive first message successfully
+        // 2. Connection drops
+        // 3. Client reconnects
+        // 4. Receive second message successfully
+        // Timeout if two messages are not received within 5 seconds.
+        while start_time.elapsed() < Duration::from_secs(5) && successful_messages < 2 {
+            match timeout(Duration::from_millis(1000), client.stream().next()).await {
+                Ok(Some(result)) => match result {
+                    Ok((_component_id, _message)) => {
+                        successful_messages += 1;
+                        println!("Received successful message {successful_messages}");
+
+                        if successful_messages == 1 {
+                            first_message_received = true;
+                            println!("First message received - connection should drop after this.");
+                        } else if successful_messages == 2 {
+                            second_message_received = true;
+                            println!("Second message received after reconnection.");
+                        }
+                    }
+                    Err(e) => {
+                        connection_errors += 1;
+                        println!("Connection error during reconnection: {e:?}");
+                    }
+                },
+                Ok(None) => {
+                    panic!("Stream ended unexpectedly");
+                }
+                Err(_) => {
+                    println!("Timeout waiting for message (normal during reconnections)");
+                    continue;
+                }
+            }
+        }
+
+        let final_connection_count = *connection_count.lock().unwrap();
+
+        // 1. Exactly 2 connection attempts (initial + reconnect)
+        // 2. Exactly 2 successful messages (one before drop, one after reconnect)
+
+        assert_eq!(final_connection_count, 2);
+        assert!(first_message_received);
+        assert!(second_message_received);
+        assert_eq!(connection_errors, 0);
+        assert_eq!(successful_messages, 2);
     }
 }
