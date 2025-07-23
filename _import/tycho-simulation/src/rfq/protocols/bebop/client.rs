@@ -5,7 +5,7 @@ use std::{
     time::SystemTime,
 };
 
-use alloy::primitives::Address;
+use alloy::primitives::{utils::keccak256, Address};
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt};
 use num_bigint::BigUint;
@@ -30,12 +30,16 @@ use crate::{
 
 type BebopPriceMessage = HashMap<String, BebopPriceData>;
 
+fn checksum(address: &String) -> Result<String, RFQError> {
+    let checksum = Address::from_str(address)
+        .map_err(|_| RFQError::ParsingError(format!("Invalid token address: {address}.")))?;
+    Ok(checksum.to_checksum(None))
+}
+
 fn pair_to_bebop_format(pair: &(String, String)) -> Result<String, RFQError> {
     // Checksum addresses to match websocket output
-    let token0 = Address::from_str(&pair.0)
-        .map_err(|_| RFQError::ParsingError(format!("Invalid token address: {}.", pair.0)))?;
-    let token1 = Address::from_str(&pair.1)
-        .map_err(|_| RFQError::ParsingError(format!("Invalid token address: {}.", pair.1)))?;
+    let token0 = checksum(&pair.0)?;
+    let token1 = checksum(&pair.1)?;
     Ok(format!("{token0}/{token1}"))
 }
 
@@ -90,6 +94,11 @@ impl BebopClient {
         for pair in pairs {
             pair_names.insert(pair_to_bebop_format(&pair)?);
         }
+        let mut quote_tokens_checksummed: HashSet<String> = HashSet::new();
+
+        for token in quote_tokens.iter() {
+            quote_tokens_checksummed.insert(checksum(token)?.to_string());
+        }
 
         Ok(Self {
             price_ws: "wss://".to_string() + &url + "/pricing",
@@ -99,7 +108,7 @@ impl BebopClient {
             tvl,
             ws_user,
             ws_key,
-            quote_tokens,
+            quote_tokens: quote_tokens_checksummed,
         })
     }
 
@@ -219,7 +228,8 @@ impl RFQClient for BebopClient {
                                     // Process all pairs from this WebSocket message
                                     for (pair, price_data) in price_data_map.iter() {
                                         if pairs.contains(pair) {
-                                            let component_id = format!("bebop_{pair}");
+                                            // Hash the tokens, since component id must be valid hex string
+                                            let component_id = format!("{}", keccak256(pair));
 
                                             let (token0, token1);
                                             if let Some((t0, t1)) = pair.split_once('/') {
@@ -229,10 +239,11 @@ impl RFQClient for BebopClient {
                                                 warn!("Tokens improperly formatted: {}. Skipping.", pair);
                                                 continue;
                                             };
+                                            let token_0_bytes = Bytes::from_str(token0).map_err(|_| RFQError::ParsingError(format!("String cannot be converted to bytes {token0}")))?;
+                                            let token_1_bytes = Bytes::from_str(token1).map_err(|_| RFQError::ParsingError(format!("String cannot be converted to bytes {token1}")))?;
 
                                             let tokens = vec![
-                                                tycho_common::Bytes::from(token0.as_bytes().to_vec()),
-                                                tycho_common::Bytes::from(token1.as_bytes().to_vec())
+                                                token_0_bytes, token_1_bytes
                                             ];
 
                                             let mut quote_price_data: Option<BebopPriceData> = None;
@@ -494,8 +505,6 @@ mod tests {
 
                         println!("Received {} components in this message", snapshot.states.len());
                         for (id, component_with_state) in &snapshot.states {
-                            // Expect component ID to be in format "bebop_{pair}"
-                            assert!(id.starts_with("bebop_"));
                             assert_eq!(
                                 component_with_state
                                     .component
