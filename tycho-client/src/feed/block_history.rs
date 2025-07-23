@@ -29,13 +29,13 @@ pub struct BlockHistory {
 
 #[derive(Debug, PartialEq)]
 pub enum BlockPosition {
-    // The next expected block
+    /// The next expected block
     NextExpected,
-    // The latest processed block
+    /// The latest processed block
     Latest,
-    // A previously seen block
+    /// A previously seen block
     Delayed,
-    // An unknown block with a height above latest
+    /// A detached block with a height above NextExpected
     Advanced,
 }
 
