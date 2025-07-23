@@ -12,6 +12,7 @@ use diesel::{
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use diesel_derive_enum::DbEnum;
+use tracing::trace;
 use tycho_common::{
     models::{
         self,
@@ -460,7 +461,7 @@ impl PartitionedVersionedRow for NewComponentBalance {
             .zip(token_ids.iter())
             .collect::<HashSet<_>>();
 
-        let mut results: Vec<ComponentBalance> = component_balance::table
+        let results: Vec<ComponentBalance> = component_balance::table
             .select(ComponentBalance::as_select())
             .into_boxed()
             .filter(
@@ -484,32 +485,10 @@ impl PartitionedVersionedRow for NewComponentBalance {
             .filter(|id| !found_ids.contains(id))
             .collect();
 
-        // If we have missing ids, we need to query the archived tables as well. This is necessary
-        // when entries are deleted
         if !missing_ids.is_empty() {
-            let (missing_component_ids, missing_token_ids): (Vec<&i64>, Vec<&i64>) =
-                missing_ids.into_iter().unzip();
-            let deleted_results = component_balance::table
-                .select(ComponentBalance::as_select())
-                .filter(
-                    component_balance::protocol_component_id
-                        .eq_any(&missing_component_ids)
-                        .and(component_balance::token_id.eq_any(&missing_token_ids)),
-                )
-                .distinct_on((
-                    component_balance::protocol_component_id,
-                    component_balance::token_id,
-                ))
-                .order_by((
-                    component_balance::protocol_component_id,
-                    component_balance::token_id,
-                    component_balance::valid_to.desc(),
-                ))
-                .get_results(conn)
-                .await
-                .map_err(PostgresError::from)?;
-            results.extend(deleted_results);
+            trace!(n_missing_ids=?missing_ids.len(), "Got potentially missing IDs. Skipping query");
         }
+
         Ok(results
             .into_iter()
             .filter(|cb| tuple_ids.contains(&(&cb.protocol_component_id, &cb.token_id)))
@@ -1145,7 +1124,7 @@ impl PartitionedVersionedRow for NewProtocolState {
             .zip(attr_name.iter())
             .collect::<HashSet<_>>();
 
-        let mut results: Vec<ProtocolState> = protocol_state::table
+        let results: Vec<ProtocolState> = protocol_state::table
             .select(ProtocolState::as_select())
             .into_boxed()
             .filter(
@@ -1169,33 +1148,8 @@ impl PartitionedVersionedRow for NewProtocolState {
             .filter(|id| !found_ids.contains(id))
             .collect();
 
-        // If we have missing ids, we need to query the archived tables as well. This is necessary
-        // when entries are deleted
         if !missing_ids.is_empty() {
-            let (missing_protocol_component_ids, missing_attribute_names): (
-                Vec<&i64>,
-                Vec<&String>,
-            ) = missing_ids.into_iter().unzip();
-            let deleted_results: Vec<ProtocolState> = protocol_state::table
-                .select(ProtocolState::as_select())
-                .filter(
-                    protocol_state::protocol_component_id
-                        .eq_any(&missing_protocol_component_ids)
-                        .and(protocol_state::attribute_name.eq_any(&missing_attribute_names)),
-                )
-                .distinct_on((
-                    protocol_state::protocol_component_id,
-                    protocol_state::attribute_name,
-                ))
-                .order_by((
-                    protocol_state::protocol_component_id,
-                    protocol_state::attribute_name,
-                    protocol_state::valid_to.desc(),
-                ))
-                .get_results(conn)
-                .await
-                .map_err(PostgresError::from)?;
-            results.extend(deleted_results);
+            trace!(n_missing_ids=?missing_ids.len(), "Got potentially missing IDs. Skipping query");
         }
 
         Ok(results
@@ -1708,7 +1662,7 @@ impl PartitionedVersionedRow for NewSlot {
         // tables as well. A possible optimisation would be to add the valid_to filter back
         // and then use a second query for storage still missing that will access the
         // archived tables. Therefore, performance is not impacted in the common case.
-        let mut results: Vec<ContractStorage> = contract_storage::table
+        let results: Vec<ContractStorage> = contract_storage::table
             .select(ContractStorage::as_select())
             .into_boxed()
             .filter(
@@ -1732,28 +1686,8 @@ impl PartitionedVersionedRow for NewSlot {
             .filter(|id| !found_ids.contains(id))
             .collect();
 
-        // If we have missing ids, we need to query the archived tables as well. This is necessary
-        // when entries are deleted
         if !missing_ids.is_empty() {
-            let (missing_accounts, missing_slots): (Vec<&i64>, Vec<&Bytes>) =
-                missing_ids.into_iter().unzip();
-            let deleted_results: Vec<ContractStorage> = contract_storage::table
-                .select(ContractStorage::as_select())
-                .filter(
-                    contract_storage::account_id
-                        .eq_any(&missing_accounts)
-                        .and(contract_storage::slot.eq_any(&missing_slots)),
-                )
-                .distinct_on((contract_storage::account_id, contract_storage::slot))
-                .order_by((
-                    contract_storage::account_id,
-                    contract_storage::slot,
-                    contract_storage::valid_to.desc(),
-                ))
-                .get_results(conn)
-                .await
-                .map_err(PostgresError::from)?;
-            results.extend(deleted_results);
+            trace!(n_missing_ids=?missing_ids.len(), "Got potentially missing IDs. Skipping query");
         }
 
         Ok(results

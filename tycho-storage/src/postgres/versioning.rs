@@ -662,12 +662,6 @@ mod test {
             valid_from: NaiveDateTime::from_timestamp_micros(1).unwrap(),
             valid_to: NaiveDateTime::from_timestamp_micros(999).unwrap(),
         });
-        // re-delete previously deleted row - should get filtered out and not be part of the
-        // returned versioning
-        let outdated_delete = VersioningEntry::Deletion((
-            (component_id, "fee".to_string()),
-            NaiveDateTime::from_timestamp_micros(1).unwrap(),
-        ));
 
         let delete_row1 = VersioningEntry::Deletion((
             (0i64, "tick".to_string()),
@@ -675,7 +669,7 @@ mod test {
         ));
 
         let (latest, to_archive, to_delete) = apply_partitioned_versioning(
-            &[row1, delete_row1, row2, row3, outdated_row, outdated_row_repeat, outdated_delete],
+            &[row1, delete_row1, row2, row3, outdated_row, outdated_row_repeat],
             NaiveDateTime::from_timestamp_micros(0).unwrap(),
             &mut conn,
         )
