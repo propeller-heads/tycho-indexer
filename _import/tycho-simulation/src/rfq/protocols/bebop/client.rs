@@ -8,6 +8,7 @@ use std::{
 use alloy::primitives::Address;
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt};
+use num_bigint::BigUint;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tokio_tungstenite::{connect_async_with_config, tungstenite::Message};
@@ -371,8 +372,31 @@ impl RFQClient for BebopClient {
         match quote_response {
             BebopQuoteResponse::Success(quote) => {
                 println!("{quote:?}");
-                // TODO: transform into SignedQuote
-                todo!()
+                let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
+                quote_attributes.insert(
+                    "calldata".into(),
+                    Bytes::from_str(&quote.tx.data).map_err(|_| {
+                        RFQError::ParsingError("Failed to parse quote result's calldata".into())
+                    })?,
+                );
+                let signed_quote = SignedQuote {
+                    base_token: params.token_in.address.clone(),
+                    quote_token: params.token_out.address.clone(),
+                    amount_in: BigUint::from_str(&quote.to_sign.taker_amount).map_err(|_| {
+                        RFQError::ParsingError(format!(
+                            "Failed to parse amount in string: {}",
+                            quote.to_sign.taker_amount
+                        ))
+                    })?,
+                    amount_out: BigUint::from_str(&quote.to_sign.maker_amount).map_err(|_| {
+                        RFQError::ParsingError(format!(
+                            "Failed to parse amount out string: {}",
+                            quote.to_sign.maker_amount
+                        ))
+                    })?,
+                    quote_attributes,
+                };
+                Ok(signed_quote)
             }
             BebopQuoteResponse::Error(err) => {
                 return Err(RFQError::FatalError(format!(
@@ -387,7 +411,7 @@ impl RFQClient for BebopClient {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum BebopQuoteResponse {
-    Success(BebopQuotePartial),
+    Success(Box<BebopQuotePartial>),
     Error(BebopApiError),
 }
 
@@ -463,9 +487,6 @@ mod tests {
     #[tokio::test]
     #[ignore] // Requires network access and setting proper env vars
     async fn test_bebop_websocket_connection() {
-        // TODO: is this needed?
-        tracing_subscriber::fmt::init();
-
         // We test with quote tokens that are not USDC in order to ensure our normalization works
         // fine
         let wbtc = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599".to_string();
@@ -730,8 +751,8 @@ mod tests {
 
         let params = GetAmountOutParams {
             amount_in: BigUint::from(1_000000000000000000u64),
-            token_in: weth,
-            token_out: wbtc,
+            token_in: weth.clone(),
+            token_out: wbtc.clone(),
             sender: router.clone(),
             receiver: router,
         };
@@ -739,5 +760,22 @@ mod tests {
             .request_binding_quote(&params)
             .await
             .unwrap();
+
+        assert_eq!(quote.base_token, weth.address);
+        assert_eq!(quote.quote_token, wbtc.address);
+        assert_eq!(quote.amount_in, BigUint::from(1_000000000000000000u64));
+
+        // Assuming the BTC - WETH price doesn't change too much at the time of running this
+        assert!(quote.amount_out > BigUint::from(3000000u64));
+
+        // At least contains the fn signature
+        assert!(
+            quote
+                .quote_attributes
+                .get("calldata")
+                .unwrap()
+                .len() >
+                4
+        )
     }
 }
