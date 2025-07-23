@@ -1,8 +1,16 @@
 use std::{collections::HashMap, fmt::Debug};
 use std::any::Any;
-use alloy_primitives::{Address, U256};
+use alloy::primitives::{Address, U256};
 use num_bigint::{BigUint,ToBigUint};
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{
+    dto::{ProtocolStateDelta},
+    models::{Chain, token::Token},
+    simulation::{
+        protocol_sim::{GetAmountOutResult, Balances, ProtocolSim},
+        errors::{SimulationError,TransitionError}
+    },
+    Bytes
+}; 
 use crate::{
     evm::protocol::{
         cowamm::{
@@ -12,12 +20,6 @@ use crate::{
         },
         u256_num::{u256_to_f64, u256_to_biguint, biguint_to_u256}, 
         safe_math::{div_mod_u256, safe_div_u256, safe_mul_u256, safe_add_u256, safe_sub_u256}
-    },
-    models::{Balances, Token},
-    protocol::{
-        errors::{SimulationError, TransitionError},
-        models::GetAmountOutResult,
-        state::{ProtocolSim},
     },
 };
 
@@ -280,8 +282,8 @@ impl ProtocolSim for CowAMMState {
 
     fn get_limits(
         &self,
-        _sell_token: Address,
-        _buy_token: Address,
+        _sell_token: Bytes,
+        _buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         if self.liquidity_a.is_zero() || self.liquidity_b.is_zero() {
             return Ok((BigUint::ZERO, BigUint::ZERO));
@@ -361,19 +363,21 @@ mod tests {
     use std::{collections::{HashMap, HashSet}};
     use std::str::FromStr;
 
-    use alloy_primitives::{Address, U256};
+    use alloy::primitives::{Address, U256};
     use approx::assert_ulps_eq;
     use num_bigint::{BigUint, ToBigUint};
     use num_traits::One;
     use rstest::rstest;
-    use tycho_common::{dto::ProtocolStateDelta, hex_bytes::Bytes};
+    use tycho_common::{
+        simulation::errors::{SimulationError, TransitionError},
+        models::token::Token, dto::ProtocolStateDelta, 
+        Bytes,
+    };
 
     use super::*;
     use crate::{
         evm::protocol::cowamm::state::{CowAMMState, ProtocolSim},
         evm::protocol::u256_num::{biguint_to_u256, u256_to_biguint},
-        models::{Token, Balances },
-        protocol::{errors::{SimulationError, TransitionError}}
     };
 
     #[rstest]
@@ -402,8 +406,25 @@ mod tests {
         #[case] amount_in: BigUint,
         #[case] expected_out: BigUint,
     ) {
-        let t0 = Token::new("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB", dec0, "COW", BigUint::from(10_000u32));
-        let t1 = Token::new("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0", dec1, "wstETH", BigUint::from(1_000u32));
+ let t0 = Token::new(
+            &Bytes::from_str("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB").unwrap(),
+            "COW",
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
+
+        let t1 = Token::new(
+            &Bytes::from_str("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0").unwrap(),
+            "wstETH",
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
 
           // Prepare token addresses (Bytes) once
         let t0_bytes = Bytes::from(t0.clone().address);
@@ -437,8 +458,26 @@ mod tests {
         let r1 = U256::from_str("43356945776493").unwrap();
         let max = (BigUint::one() << 256) - BigUint::one();
 
-        let t0 = Token::new("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB", 18, "COW", BigUint::one());
-        let t1 = Token::new("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0", 16, "wstETH", BigUint::one());
+
+        let t0 = Token::new(
+            &Bytes::from_str("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB").unwrap(),
+            "COW",
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
+
+        let t1 = Token::new(
+            &Bytes::from_str("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0").unwrap(),
+            "wstETH",
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
 
         let t0_bytes = Bytes::from(t0.clone().address);
         let t1_bytes = Bytes::from(t1.clone().address);
@@ -465,8 +504,25 @@ mod tests {
         let r0 = U256::from_str("1000").unwrap();
         let r1 = U256::from_str("100000").unwrap();
 
-        let t0 = Token::new("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB", 18, "COW", BigUint::one());
-        let t1 = Token::new("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0", 18, "wstETH", BigUint::one());
+        let t0 = Token::new(
+            &Bytes::from_str("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB").unwrap(),
+            "COW",
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
+
+        let t1 = Token::new(
+            &Bytes::from_str("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0").unwrap(),
+            "wstETH",
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
 
         let t0_bytes = Bytes::from(t0.clone().address);
         let t1_bytes = Bytes::from(t1.clone().address);
@@ -483,7 +539,7 @@ mod tests {
             lp_token_supply: U256::from_str("100000000000000000000").unwrap(),
             fee: 0,
         };
-
+        //remove this zero to one
         let price = if zero_to_one { state.spot_price(&t0, &t1).unwrap() } else { state.spot_price(&t1, &t0).unwrap() };
         let expected = expected;
         assert_ulps_eq!(price, expected);
@@ -595,26 +651,33 @@ mod tests {
 
         let (amount_in, _) = state
             .get_limits(
-                Address::from_str("0x0000000000000000000000000000000000000000").unwrap(),
-                Address::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+                Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+                Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
             )
             .unwrap();
-
-        let token_0 = Token::new(
-            "0x0000000000000000000000000000000000000000",
+        
+        let t0 = Token::new(
+            &Bytes::from_str("0xDEf1CA1fb7FBcDC777520aa7f396b4E015F497aB").unwrap(),
+            "COW",
             18,
-            "T0",
-            10_000.to_biguint().unwrap(),
-        );
-        let token_1 = Token::new(
-            "0x0000000000000000000000000000000000000001",
-            18,
-            "T1",
-            10_000.to_biguint().unwrap(),
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
 
+        let t1 = Token::new(
+            &Bytes::from_str("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0").unwrap(),
+            "wstETH",
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
+        
         let result = state
-            .get_amount_out(amount_in.clone(), &token_0, &token_1)
+            .get_amount_out(amount_in.clone(), &t0, &t1)
             .unwrap();
         let new_state = result
             .new_state
@@ -623,10 +686,10 @@ mod tests {
             .unwrap();
 
         let initial_price = state
-            .spot_price(&token_0, &token_1)
+            .spot_price(&t0, &t1)
             .unwrap();
         let new_price = new_state
-            .spot_price(&token_0, &token_1)
+            .spot_price(&t0, &t1)
             .unwrap()
             .floor();
 

@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
-use alloy_primitives::U256;
-use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_common::{dto::{ResponseProtocolState, ProtocolComponent}, Bytes};
-
+use alloy::primitives::{U256};
+use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
+use tycho_common::{models::token::Token, simulation::errors::{SimulationError,TransitionError}, dto::{ResponseProtocolState, ProtocolComponent}, Bytes};
 use crate::{
     evm::protocol::{
         cowamm::{
@@ -11,30 +10,27 @@ use crate::{
             bmath,
         },
     },
-    models::{Balances, Token},
-    protocol::{
-        errors::{SimulationError, TransitionError, InvalidSnapshotError},
-        models::TryFromWithBlock
-    },
+    protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 
 const BYTES: usize = 32;
 
-fn header() -> Header {
-    Header {
+fn header() -> BlockHeader {
+    BlockHeader {
         number: 1,
         hash: Bytes::from(vec![0; 32]),
         parent_hash: Bytes::from(vec![0; 32]),
         revert: false,
+        timestamp: 0,
     }
 }
 
-impl TryFromWithBlock<ComponentWithState> for CowAMMState {
+impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
     type Error = InvalidSnapshotError;
 
     async fn try_from_with_block(
         snapshot: ComponentWithState,
-        _block: Header,
+        _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
@@ -192,6 +188,7 @@ mod tests {
             },
             component: component(),
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
 
         let result = CowAMMState::try_from_with_block(
@@ -235,6 +232,7 @@ mod tests {
             },
             component,
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
 
         let result = CowAMMState::try_from_with_block(
