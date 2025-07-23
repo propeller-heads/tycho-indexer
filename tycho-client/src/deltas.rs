@@ -450,13 +450,26 @@ impl WsDeltasClient {
                                         ?subscription_id,
                                         "Receiver for has gone away, unsubscribing!"
                                     );
-                                    let (tx, _) = oneshot::channel();
-                                    let _ = WsDeltasClient::unsubscribe_inner(
+                                    let (tx, rx) = oneshot::channel();
+                                    if let Err(e) = WsDeltasClient::unsubscribe_inner(
                                         inner,
                                         subscription_id,
                                         tx,
                                     )
-                                    .await;
+                                    .await
+                                    {
+                                        warn!(?e, ?subscription_id, "Failed to send unsubscribe command");
+                                    } else {
+                                        // Wait for unsubscribe completion with timeout
+                                        match tokio::time::timeout(Duration::from_secs(5), rx).await {
+                                            Ok(_) => {
+                                                debug!(?subscription_id, "Unsubscribe completed successfully");
+                                            }
+                                            Err(_) => {
+                                                warn!(?subscription_id, "Unsubscribe completion timed out");
+                                            }
+                                        }
+                                    }
                                 }
                                 _ => { /* Do nothing */ }
                             }
