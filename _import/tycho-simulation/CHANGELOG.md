@@ -1,3 +1,16 @@
+## [0.134.0](https://github.com/propeller-heads/tycho-simulation/compare/0.133.1...0.134.0) (2025-07-22)
+
+
+### Features
+
+* Bebop Decoder ([13506c0](https://github.com/propeller-heads/tycho-simulation/commit/13506c01dcaa770b6bd89498e8489c61961a08b7))
+* Rename try_from_with_block -> try_from_with_header ([01d3241](https://github.com/propeller-heads/tycho-simulation/commit/01d32411a4250d3061dc8b3e96958babf98b8b8f))
+
+
+### Bug Fixes
+
+* Don't error if bids/asks not found ([43b782c](https://github.com/propeller-heads/tycho-simulation/commit/43b782ce22c8c40728af878d98a1fb80d5dfb3f1))
+
 ## [0.133.1](https://github.com/propeller-heads/tycho-simulation/compare/0.133.0...0.133.1) (2025-07-22)
 
 
