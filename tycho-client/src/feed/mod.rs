@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use chrono::{Duration as ChronoDuration, Local, NaiveDateTime};
 use futures03::{
@@ -428,17 +431,18 @@ where
             .ok_or(BlockSynchronizerError::NoSynchronizers)?;
         // init synchronizers
         let init_tasks = synchronizers
-            .values()
+            .values_mut()
             .map(|s| s.initialize())
             .collect::<Vec<_>>();
         try_join_all(init_tasks).await?;
 
         let mut sync_streams = HashMap::with_capacity(synchronizers.len());
-        let mut sync_handles = Vec::new();
+        let mut sync_close_senders = Vec::new();
         for (extractor_id, synchronizer) in synchronizers.drain() {
-            let (jh, rx) = synchronizer.start().await?;
-            state_sync_tasks.push(jh);
-            sync_handles.push(synchronizer);
+            let (handle, rx) = synchronizer.start().await?;
+            let (join_handle, close_sender) = handle.split();
+            state_sync_tasks.push(join_handle);
+            sync_close_senders.push(close_sender);
 
             sync_streams.insert(
                 extractor_id.clone(),
@@ -617,11 +621,16 @@ where
         let nanny_jh = tokio::spawn(async move {
             select! {
                 error = state_sync_tasks.select_next_some() => {
-                    for s in sync_handles.iter_mut() {
-                        if let Err(e) = s.close().await {
-                            error!(error=?e, "Failed to close synchronizer: was not started!");
-                        }
+                    // Send close signals to all remaining synchronizers
+                    for close_sender in sync_close_senders {
+                        let _ = close_sender.send(());
                     }
+
+                    // Await remaining tasks with timeout
+                    while let Ok(Some(_)) = timeout(Duration::from_secs(5), state_sync_tasks.next()).await {
+                        // Continue until all tasks are finished or timeout
+                    }
+
                     error!(?error, "State synchronizer exited");
                 },
                 error = main_loop_jh => {
@@ -642,8 +651,8 @@ mod tests {
     use tokio::sync::{oneshot, Mutex};
     use tycho_common::dto::Chain;
 
-    use super::{synchronizer::SynchronizerError, *};
-    use crate::feed::synchronizer::SyncResult;
+    use super::*;
+    use crate::feed::synchronizer::{SyncResult, SynchronizerTaskHandle};
 
     #[derive(Clone)]
     struct MockStateSync {
@@ -671,14 +680,13 @@ mod tests {
 
     #[async_trait]
     impl StateSynchronizer for MockStateSync {
-        async fn initialize(&self) -> SyncResult<()> {
+        async fn initialize(&mut self) -> SyncResult<()> {
             Ok(())
         }
 
         async fn start(
-            &self,
-        ) -> SyncResult<(JoinHandle<SyncResult<()>>, Receiver<StateSyncMessage<BlockHeader>>)>
-        {
+            mut self,
+        ) -> SyncResult<(SynchronizerTaskHandle, Receiver<StateSyncMessage<BlockHeader>>)> {
             let block_rx = {
                 let mut guard = self.header_rx.lock().await;
                 guard
@@ -686,30 +694,20 @@ mod tests {
                     .expect("Block receiver was not set!")
             };
 
-            let end_rx = {
-                let (end_tx, end_rx) = oneshot::channel();
+            let (end_tx_for_mock, end_rx) = oneshot::channel();
+            let (end_tx_for_handle, _end_rx_for_handle) = oneshot::channel();
+            {
                 let mut guard = self.end_tx.lock().await;
-                *guard = Some(end_tx);
-                end_rx
-            };
+                *guard = Some(end_tx_for_mock);
+            }
 
             let jh = tokio::spawn(async move {
                 let _ = end_rx.await;
                 SyncResult::Ok(())
             });
 
-            Ok((jh, block_rx))
-        }
-
-        async fn close(&mut self) -> SyncResult<()> {
-            let mut guard = self.end_tx.lock().await;
-            if let Some(tx) = guard.take() {
-                tx.send(())
-                    .expect("end channel closed!");
-                Ok(())
-            } else {
-                Err(SynchronizerError::CloseError("Not Started".to_string()))
-            }
+            let handle = SynchronizerTaskHandle::new(jh, end_tx_for_handle);
+            Ok((handle, block_rx))
         }
     }
 
