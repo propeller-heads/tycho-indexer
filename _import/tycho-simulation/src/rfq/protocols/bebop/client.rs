@@ -8,16 +8,20 @@ use std::{
 use alloy::primitives::Address;
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt};
+use num_bigint::BigUint;
+use reqwest::Client;
 use tokio_tungstenite::{connect_async_with_config, tungstenite::Message};
 use tracing::{error, info, warn};
 use tycho_common::{
-    models::protocol::GetAmountOutParams, simulation::indicatively_priced::SignedQuote,
+    models::protocol::GetAmountOutParams, simulation::indicatively_priced::SignedQuote, Bytes,
 };
 
 use crate::{
     rfq::{
-        client::RFQClient, errors::RFQError, models::TimestampHeader,
-        protocols::bebop::models::BebopPriceData,
+        client::RFQClient,
+        errors::RFQError,
+        models::TimestampHeader,
+        protocols::bebop::models::{BebopPriceData, BebopQuoteResponse},
     },
     tycho_client::feed::synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
     tycho_common::dto::{ProtocolComponent, ResponseProtocolState},
@@ -35,6 +39,14 @@ fn pair_to_bebop_format(pair: &(String, String)) -> Result<String, RFQError> {
     Ok(format!("{token0}/{token1}"))
 }
 
+fn bytes_to_address(address: &Bytes) -> Result<Address, RFQError> {
+    if address.len() == 20 {
+        Ok(Address::from_slice(address))
+    } else {
+        Err(RFQError::InvalidInput(format!("Invalid ERC20 token address: {address:?}")))
+    }
+}
+
 /// Maps a Chain to its corresponding Bebop WebSocket URL
 fn chain_to_bebop_url(chain: Chain) -> Result<String, RFQError> {
     let chain_path = match chain {
@@ -42,14 +54,15 @@ fn chain_to_bebop_url(chain: Chain) -> Result<String, RFQError> {
         Chain::Base => "base",
         _ => return Err(RFQError::FatalError(format!("Unsupported chain: {chain:?}"))),
     };
-    let ws_url = format!("wss://api.bebop.xyz/pmm/{chain_path}/v3/pricing");
-    Ok(ws_url)
+    let url = format!("api.bebop.xyz/pmm/{chain_path}/v3");
+    Ok(url)
 }
 
 #[derive(Clone)]
 pub struct BebopClient {
     chain: Chain,
-    url: String,
+    price_ws: String,
+    quote_endpoint: String,
     // Pairs that we want prices for
     pairs: HashSet<String>,
     // Min tvl value in the quote token.
@@ -78,7 +91,16 @@ impl BebopClient {
             pair_names.insert(pair_to_bebop_format(&pair)?);
         }
 
-        Ok(Self { url, pairs: pair_names, chain, tvl, ws_user, ws_key, quote_tokens })
+        Ok(Self {
+            price_ws: "wss://".to_string() + &url + "/pricing",
+            quote_endpoint: "https://".to_string() + &url + "/quote",
+            pairs: pair_names,
+            chain,
+            tvl,
+            ws_user,
+            ws_key,
+            quote_tokens,
+        })
     }
 
     fn create_component_with_state(
@@ -132,7 +154,7 @@ impl RFQClient for BebopClient {
         &self,
     ) -> BoxStream<'static, Result<(String, StateSyncMessage<TimestampHeader>), RFQError>> {
         let pairs = self.pairs.clone();
-        let url = self.url.clone();
+        let url = self.price_ws.clone();
         let tvl_threshold = self.tvl;
         let name = self.ws_user.clone();
         let authorization = self.ws_key.clone();
@@ -315,9 +337,92 @@ impl RFQClient for BebopClient {
 
     async fn request_binding_quote(
         &self,
-        _params: &GetAmountOutParams,
+        params: &GetAmountOutParams,
     ) -> Result<SignedQuote, RFQError> {
-        todo!()
+        let sell_token = bytes_to_address(&params.token_in.address)?.to_string();
+        let buy_token = bytes_to_address(&params.token_out.address)?.to_string();
+        let sell_amount = params.amount_in.to_string();
+        let sender = bytes_to_address(&params.sender)?.to_string();
+        let receiver = bytes_to_address(&params.receiver)?.to_string();
+
+        let url = self.quote_endpoint.clone();
+
+        let client = Client::new();
+
+        let request = client
+            .get(&url)
+            .query(&[
+                ("sell_tokens", sell_token),
+                ("buy_tokens", buy_token),
+                ("sell_amounts", sell_amount),
+                ("taker_address", sender),
+                ("receiver_address", receiver),
+                ("approval_type", "Standard".into()),
+                ("skip_validation", "true".into()),
+                ("skip_taker_checks", "true".into()),
+                ("gasless", "false".into()),
+                ("expiry_type", "standard".into()),
+                ("fee", "0".into()),
+                ("is_ui", "false".into()),
+            ])
+            .header("accept", "application/json")
+            .header("name", &self.ws_user)
+            .header("Authorization", &self.ws_key);
+
+        let response = request
+            .send()
+            .await
+            .map_err(|e| RFQError::ConnectionError(format!("Failed to send quote request: {e}")))?;
+
+        let quote_response = response
+            .json::<BebopQuoteResponse>()
+            .await
+            .map_err(|e| RFQError::ParsingError(format!("Failed to parse quote response: {e}")))?;
+
+        match quote_response {
+            BebopQuoteResponse::Success(quote) => {
+                let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
+                quote_attributes.insert(
+                    "calldata".into(),
+                    Bytes::from_str(&quote.tx.data).map_err(|_| {
+                        RFQError::ParsingError("Failed to parse quote result's calldata".into())
+                    })?,
+                );
+                quote_attributes.insert(
+                    "partial_fill_offset".into(),
+                    Bytes::from(
+                        quote
+                            .partial_fill_offset
+                            .to_be_bytes()
+                            .to_vec(),
+                    ),
+                );
+                let signed_quote = SignedQuote {
+                    base_token: params.token_in.address.clone(),
+                    quote_token: params.token_out.address.clone(),
+                    amount_in: BigUint::from_str(&quote.to_sign.taker_amount).map_err(|_| {
+                        RFQError::ParsingError(format!(
+                            "Failed to parse amount in string: {}",
+                            quote.to_sign.taker_amount
+                        ))
+                    })?,
+                    amount_out: BigUint::from_str(&quote.to_sign.maker_amount).map_err(|_| {
+                        RFQError::ParsingError(format!(
+                            "Failed to parse amount out string: {}",
+                            quote.to_sign.maker_amount
+                        ))
+                    })?,
+                    quote_attributes,
+                };
+                Ok(signed_quote)
+            }
+            BebopQuoteResponse::Error(err) => {
+                return Err(RFQError::FatalError(format!(
+                    "Bebop API error: code {} - {} (requestId: {})",
+                    err.error.error_code, err.error.message, err.error.request_id
+                )));
+            }
+        }
     }
 }
 
@@ -329,23 +434,24 @@ mod tests {
         time::Duration,
     };
 
-    use futures::{SinkExt, StreamExt};
+    use dotenv::dotenv;
+    use futures::SinkExt;
     use tokio::{net::TcpListener, time::timeout};
     use tokio_tungstenite::accept_async;
+    use tycho_common::models::token::Token;
 
     use super::*;
 
     #[tokio::test]
     #[ignore] // Requires network access and setting proper env vars
     async fn test_bebop_websocket_connection() {
-        tracing_subscriber::fmt::init();
-
         // We test with quote tokens that are not USDC in order to ensure our normalization works
         // fine
         let wbtc = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599".to_string();
         let weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string();
 
         let ws_user = String::from("tycho");
+        dotenv().expect("Missing .env file");
         let ws_key = env::var("BEBOP_KEY").expect("BEBOP_KEY environment variable is required");
 
         let quote_tokens = HashSet::from([
@@ -503,12 +609,13 @@ mod tests {
         // Bypass the new() constructor to mock the URL to point to our mock server.
         let client = BebopClient {
             chain: Chain::Ethereum,
-            url: format!("ws://127.0.0.1:{}", addr.port()),
+            price_ws: format!("ws://127.0.0.1:{}", addr.port()),
             pairs: pairs_formatted.into_iter().collect(),
             tvl: 1000.0,
             ws_user: "test_user".to_string(),
             ws_key: "test_key".to_string(),
             quote_tokens: test_quote_tokens,
+            quote_endpoint: "".to_string(),
         };
 
         let start_time = std::time::Instant::now();
@@ -563,5 +670,81 @@ mod tests {
         assert!(second_message_received);
         assert_eq!(connection_errors, 0);
         assert_eq!(successful_messages, 2);
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires network access and setting proper env vars
+    async fn test_bebop_quote() {
+        let wbtc = Token {
+            address: Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap(),
+            symbol: "WBTC".to_string(),
+            decimals: 8,
+            tax: 0,
+            gas: vec![],
+            chain: Default::default(),
+            quality: 100,
+        };
+        let weth = Token {
+            address: Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
+            symbol: "WETH".to_string(),
+            decimals: 18,
+            tax: 0,
+            gas: vec![],
+            chain: Default::default(),
+            quality: 100,
+        };
+        let ws_user = String::from("tycho");
+        dotenv().expect("Missing .env file");
+        let ws_key = env::var("BEBOP_KEY").expect("BEBOP_KEY environment variable is required");
+
+        let client = BebopClient::new(
+            Chain::Ethereum,
+            HashSet::from_iter(vec![(weth.address.to_string(), wbtc.address.to_string())]),
+            10.0, // $10 minimum TVL
+            ws_user,
+            ws_key,
+            HashSet::new(),
+        )
+        .unwrap();
+
+        let router = Bytes::from_str("0xfD0b31d2E955fA55e3fa641Fe90e08b677188d35").unwrap();
+
+        let params = GetAmountOutParams {
+            amount_in: BigUint::from(1_000000000000000000u64),
+            token_in: weth.clone(),
+            token_out: wbtc.clone(),
+            sender: router.clone(),
+            receiver: router,
+        };
+        let quote = client
+            .request_binding_quote(&params)
+            .await
+            .unwrap();
+
+        assert_eq!(quote.base_token, weth.address);
+        assert_eq!(quote.quote_token, wbtc.address);
+        assert_eq!(quote.amount_in, BigUint::from(1_000000000000000000u64));
+
+        // Assuming the BTC - WETH price doesn't change too much at the time of running this
+        assert!(quote.amount_out > BigUint::from(3000000u64));
+
+        // At least contains the fn signature
+        assert!(
+            quote
+                .quote_attributes
+                .get("calldata")
+                .unwrap()
+                .len() >
+                4
+        );
+        let partial_fill_offset_slice = quote
+            .quote_attributes
+            .get("partial_fill_offset")
+            .unwrap()
+            .as_ref();
+        let mut partial_fill_offset_array = [0u8; 8];
+        partial_fill_offset_array.copy_from_slice(partial_fill_offset_slice);
+
+        assert_eq!(u64::from_be_bytes(partial_fill_offset_array), 12);
     }
 }

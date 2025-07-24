@@ -247,6 +247,18 @@ mod tests {
         )
     }
 
+    fn weth() -> Token {
+        Token::new(
+            &Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+            "WETH",
+            18,
+            0,
+            &[],
+            Default::default(),
+            100,
+        )
+    }
+
     fn create_test_bebop_state() -> BebopState {
         BebopState {
             base_token: wbtc(),
@@ -424,25 +436,8 @@ mod tests {
             asks: vec![(3100.0, 1.5), (3000.0, 3.0)],
         };
 
-        let weth = Token::new(
-            &Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
-            "WETH",
-            18,
-            0,
-            &[],
-            Default::default(),
-            100,
-        );
-        let usdc = Token::new(
-            &Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
-            "USDC",
-            6,
-            0,
-            &[],
-            Default::default(),
-            100,
-        );
-
+        let weth = weth();
+        let usdc = usdc();
         let state = BebopState::new(weth.clone(), usdc.clone(), price_data);
 
         // swap 3 WETH -> USDC
