@@ -204,8 +204,8 @@ impl BlockMetadataOrchestrator {
 
             metadata_map
                 .entry(result.component_id.clone())
-                .or_insert_with(ComponentTracingMetadata::new)
-                .add_result(tx_hash.clone(), result);
+                .or_insert_with(|| ComponentTracingMetadata::new(tx_hash.clone()))
+                .add_result(result);
         }
 
         Ok(metadata_map
