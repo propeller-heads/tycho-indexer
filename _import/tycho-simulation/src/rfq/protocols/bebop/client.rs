@@ -54,14 +54,15 @@ fn chain_to_bebop_url(chain: Chain) -> Result<String, RFQError> {
         Chain::Base => "base",
         _ => return Err(RFQError::FatalError(format!("Unsupported chain: {chain:?}"))),
     };
-    let ws_url = format!("api.bebop.xyz/pmm/{chain_path}/v3");
-    Ok(ws_url)
+    let url = format!("api.bebop.xyz/pmm/{chain_path}/v3");
+    Ok(url)
 }
 
 #[derive(Clone)]
 pub struct BebopClient {
     chain: Chain,
-    url: String,
+    price_ws: String,
+    quote_endpoint: String,
     // Pairs that we want prices for
     pairs: HashSet<String>,
     // Min tvl value in the quote token.
@@ -90,7 +91,16 @@ impl BebopClient {
             pair_names.insert(pair_to_bebop_format(&pair)?);
         }
 
-        Ok(Self { url, pairs: pair_names, chain, tvl, ws_user, ws_key, quote_tokens })
+        Ok(Self {
+            price_ws: "wss://".to_string() + &url + "/pricing",
+            quote_endpoint: "https://".to_string() + &url + "/quote",
+            pairs: pair_names,
+            chain,
+            tvl,
+            ws_user,
+            ws_key,
+            quote_tokens,
+        })
     }
 
     fn create_component_with_state(
@@ -144,7 +154,7 @@ impl RFQClient for BebopClient {
         &self,
     ) -> BoxStream<'static, Result<(String, StateSyncMessage<TimestampHeader>), RFQError>> {
         let pairs = self.pairs.clone();
-        let url = "wss://".to_string() + &self.url + "/pricing";
+        let url = self.price_ws.clone();
         let tvl_threshold = self.tvl;
         let name = self.ws_user.clone();
         let authorization = self.ws_key.clone();
@@ -335,7 +345,7 @@ impl RFQClient for BebopClient {
         let sender = bytes_to_address(&params.sender)?.to_string();
         let receiver = bytes_to_address(&params.receiver)?.to_string();
 
-        let url = "https://".to_string() + &self.url + "/quote";
+        let url = self.quote_endpoint.clone();
 
         let client = Client::new();
 
@@ -441,6 +451,7 @@ mod tests {
         let weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string();
 
         let ws_user = String::from("tycho");
+        dotenv().expect("Missing .env file");
         let ws_key = env::var("BEBOP_KEY").expect("BEBOP_KEY environment variable is required");
 
         let quote_tokens = HashSet::from([
@@ -598,12 +609,13 @@ mod tests {
         // Bypass the new() constructor to mock the URL to point to our mock server.
         let client = BebopClient {
             chain: Chain::Ethereum,
-            url: format!("ws://127.0.0.1:{}", addr.port()),
+            price_ws: format!("ws://127.0.0.1:{}", addr.port()),
             pairs: pairs_formatted.into_iter().collect(),
             tvl: 1000.0,
             ws_user: "test_user".to_string(),
             ws_key: "test_key".to_string(),
             quote_tokens: test_quote_tokens,
+            quote_endpoint: "".to_string(),
         };
 
         let start_time = std::time::Instant::now();
