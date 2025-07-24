@@ -165,7 +165,7 @@ impl EntryPointTracer for EVMEntrypointService {
                     // involve using the structure of callframes. So basically iterate the call
                     // tree in a parent child manner then search the
                     // childs address in the prestate of parent.
-                    let retriggers = if let GethTrace::Known(GethTraceFrame::PreStateTracer(
+                    let mut retriggers = if let GethTrace::Known(GethTraceFrame::PreStateTracer(
                         PreStateFrame::Default(PreStateMode(frame)),
                     )) = pre_state_trace
                     {
@@ -200,6 +200,13 @@ impl EntryPointTracer for EVMEntrypointService {
                             "invalid trace result for PreStateTracer".to_string(),
                         ));
                     };
+
+                    //Prune addresses
+                    if let Some(prune_addresses) = &rpc_entry_point.prune_addresses {
+                        retriggers.retain(|(address, slot)| !prune_addresses.contains(address));
+                        accessed_slots.retain(|address, slots| !prune_addresses.contains(address));
+                    }
+
                     results.push(TracedEntryPoint::new(
                         entry_point.clone(),
                         block_hash.clone(),
@@ -278,71 +285,9 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(
-            traced_entry_points,
-            vec![
-                TracedEntryPoint {
-                    entry_point_with_params: entry_points[0].clone(),
-                    detection_block_hash: Bytes::from_str("0x283666c6c90091fa168ebf52c0c61043d6ada7a2ffe10dc303b0e4ff111e172e").unwrap(),
-                    tracing_result: TracingResult::new(
-                        HashSet::from([
-                        (
-                            Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
-                        ),
-                        (
-                            Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
-                        ),
-                    ]),
-                    HashMap::from([
-                        (Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(), HashSet::from([
-                            Bytes::from_str("0xca6decca4edae0c692b2b0c41376a54b812edb060282d36e07a7060ccb58244d").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
-                            Bytes::from_str("0xca6decca4edae0c692b2b0c41376a54b812edb060282d36e07a7060ccb58244f").unwrap(),
-                        ])),
-                        (Bytes::from_str("0x487c2c53c0866f0a73ae317bd1a28f63adcd9ad1").unwrap(), HashSet::new()),
-                        (Bytes::from_str("0x9aeb8aaa1ca38634aa8c0c8933e7fb4d61091327").unwrap(), HashSet::new()),
-                        (Bytes::from_str("0xedf63cce4ba70cbe74064b7687882e71ebb0e988").unwrap(), HashSet::new()),
-                        (Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(), HashSet::from([
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
-                            Bytes::from_str("0x0773e532dfede91f04b12a73d3d2acd361424f41f76b4fb79f090161e36b4e00").unwrap(),
-                        ])),
-                        ]),
-                    ),
-                },
-                TracedEntryPoint {
-                    entry_point_with_params: entry_points[1].clone(),
-                    detection_block_hash: Bytes::from_str("0x283666c6c90091fa168ebf52c0c61043d6ada7a2ffe10dc303b0e4ff111e172e").unwrap(),
-                    tracing_result: TracingResult::new(
-                        HashSet::from([
-                            (
-                            Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
-                        ),
-                        (
-                            Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
-                        ),
-                    ]),
-                    HashMap::from([
-                        (Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(), HashSet::from([
-                            Bytes::from_str("0xed960c71bd5fa1333658850f076b35ec5565086b606556c3dd36a916b43ddf23").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
-                            Bytes::from_str("0xed960c71bd5fa1333658850f076b35ec5565086b606556c3dd36a916b43ddf21").unwrap(),
-                        ])),
-                        (Bytes::from_str("0x487c2c53c0866f0a73ae317bd1a28f63adcd9ad1").unwrap(), HashSet::new()),
-                        (Bytes::from_str("0x9aeb8aaa1ca38634aa8c0c8933e7fb4d61091327").unwrap(), HashSet::new()),
-                        (Bytes::from_str("0x8f4e8439b970363648421c692dd897fb9c0bd1d9").unwrap(), HashSet::new()),
-                        (Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(), HashSet::from([
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
-                            Bytes::from_str("0x0773e532dfede91f04b12a73d3d2acd361424f41f76b4fb79f090161e36b4e00").unwrap(),
-                        ])),
-                        ]),
-                    ),
-                },
-            ],
-        );
+        let mut expected = get_expected_balancer_v3_results(&entry_points);
+
+        assert_eq!(traced_entry_points, expected);
     }
 
     #[tokio::test]
@@ -515,5 +460,130 @@ mod tests {
             .unwrap();
 
         assert_eq!(traced_entry_points, vec![]);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires a RPC connection"]
+    async fn test_trace_balancer_v3_stable_pool_with_prune() {
+        let url = env::var("RPC_URL").expect("RPC_URL is not set");
+        let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
+        let prune_address = "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2";
+        let entry_points = vec![
+            EntryPointWithTracingParams::new(
+                EntryPoint::new(
+                    "0xEdf63cce4bA70cbE74064b7687882E71ebB0e988:getRate()".to_string(),
+                    Bytes::from_str("0xEdf63cce4bA70cbE74064b7687882E71ebB0e988").unwrap(),
+                    "getRate()".to_string(),
+                ),
+                TracingParams::RPCTracer(RPCTracerParams::new(
+                    None,
+                    Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
+                )),
+            ),
+            EntryPointWithTracingParams::new(
+                EntryPoint::new(
+                    "0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9:getRate()".to_string(),
+                    Bytes::from_str("0x8f4E8439b970363648421C692dd897Fb9c0Bd1D9").unwrap(),
+                    "getRate()".to_string(),
+                ),
+                TracingParams::RPCTracer(
+                    RPCTracerParams::new(None, Bytes::from(&keccak256("getRate()")[0..4]))
+                        .with_prune_addresses(vec![Bytes::from_str(prune_address).unwrap()]),
+                ),
+            ),
+        ];
+        let traced_entry_points = tracer
+            .trace(
+                // Block 22589134 hash
+                Bytes::from_str(
+                    "0x283666c6c90091fa168ebf52c0c61043d6ada7a2ffe10dc303b0e4ff111e172e",
+                )
+                .unwrap(),
+                entry_points.clone(),
+            )
+            .await
+            .unwrap();
+
+        let mut expected = get_expected_balancer_v3_results(&entry_points);
+
+        assert_ne!(traced_entry_points, expected);
+
+        expected[1]
+            .tracing_result
+            .retriggers
+            .retain(|(address, _)| address.to_string().to_lowercase() != prune_address);
+        expected[1]
+            .tracing_result
+            .accessed_slots
+            .retain(|address, _| address.to_string().to_lowercase() != prune_address);
+
+        assert_eq!(traced_entry_points, expected);
+    }
+
+    fn get_expected_balancer_v3_results(
+        entry_points: &[EntryPointWithTracingParams],
+    ) -> Vec<TracedEntryPoint> {
+        vec![
+                TracedEntryPoint {
+                    entry_point_with_params: entry_points[0].clone(),
+                    detection_block_hash: Bytes::from_str("0x283666c6c90091fa168ebf52c0c61043d6ada7a2ffe10dc303b0e4ff111e172e").unwrap(),
+                    tracing_result: TracingResult::new(
+                        HashSet::from([
+                        (
+                            Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(),
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                        ),
+                        (
+                            Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                        ),
+                    ]),
+                    HashMap::from([
+                        (Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(), HashSet::from([
+                            Bytes::from_str("0xca6decca4edae0c692b2b0c41376a54b812edb060282d36e07a7060ccb58244d").unwrap(),
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            Bytes::from_str("0xca6decca4edae0c692b2b0c41376a54b812edb060282d36e07a7060ccb58244f").unwrap(),
+                        ])),
+                        (Bytes::from_str("0x487c2c53c0866f0a73ae317bd1a28f63adcd9ad1").unwrap(), HashSet::new()),
+                        (Bytes::from_str("0x9aeb8aaa1ca38634aa8c0c8933e7fb4d61091327").unwrap(), HashSet::new()),
+                        (Bytes::from_str("0xedf63cce4ba70cbe74064b7687882e71ebb0e988").unwrap(), HashSet::new()),
+                        (Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(), HashSet::from([
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            Bytes::from_str("0x0773e532dfede91f04b12a73d3d2acd361424f41f76b4fb79f090161e36b4e00").unwrap(),
+                        ])),
+                        ]),
+                    ),
+                },
+                TracedEntryPoint {
+                    entry_point_with_params: entry_points[1].clone(),
+                    detection_block_hash: Bytes::from_str("0x283666c6c90091fa168ebf52c0c61043d6ada7a2ffe10dc303b0e4ff111e172e").unwrap(),
+                    tracing_result: TracingResult::new(
+                        HashSet::from([
+                            (
+                            Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(),
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                        ),
+                        (
+                            Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                        ),
+                    ]),
+                    HashMap::from([
+                        (Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(), HashSet::from([
+                            Bytes::from_str("0xed960c71bd5fa1333658850f076b35ec5565086b606556c3dd36a916b43ddf23").unwrap(),
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            Bytes::from_str("0xed960c71bd5fa1333658850f076b35ec5565086b606556c3dd36a916b43ddf21").unwrap(),
+                        ])),
+                        (Bytes::from_str("0x487c2c53c0866f0a73ae317bd1a28f63adcd9ad1").unwrap(), HashSet::new()),
+                        (Bytes::from_str("0x9aeb8aaa1ca38634aa8c0c8933e7fb4d61091327").unwrap(), HashSet::new()),
+                        (Bytes::from_str("0x8f4e8439b970363648421c692dd897fb9c0bd1d9").unwrap(), HashSet::new()),
+                        (Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(), HashSet::from([
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            Bytes::from_str("0x0773e532dfede91f04b12a73d3d2acd361424f41f76b4fb79f090161e36b4e00").unwrap(),
+                        ])),
+                        ]),
+                    ),
+                },
+            ]
     }
 }
