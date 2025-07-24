@@ -131,7 +131,18 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
                 })?,
         );
 
-        Ok(Self::new(address, token_a, token_b, liquidity_a, liquidity_b, lp_token, lp_token_supply, weight_a, weight_b, fee))
+        Ok(Self::new(
+            address, 
+            token_a, 
+            token_b, 
+            liquidity_a, 
+            liquidity_b, 
+            lp_token, 
+            lp_token_supply, 
+            weight_a, 
+            weight_b, 
+            fee
+        ))
     }
 }
 
