@@ -76,6 +76,8 @@ pub struct BlockAggregatedChanges {
     pub chain: Chain,
     pub block: Block,
     pub finalized_block_height: u64,
+    /// Internal field for database commit coordination - not exposed to clients
+    pub committed_block_height: u64,
     pub revert: bool,
     pub state_deltas: HashMap<String, ProtocolComponentStateDelta>,
     pub account_deltas: HashMap<Bytes, AccountDelta>,
@@ -95,6 +97,7 @@ impl BlockAggregatedChanges {
         chain: Chain,
         block: Block,
         finalized_block_height: u64,
+        committed_block_height: u64,
         revert: bool,
         state_deltas: HashMap<String, ProtocolComponentStateDelta>,
         account_deltas: HashMap<Bytes, AccountDelta>,
@@ -111,6 +114,7 @@ impl BlockAggregatedChanges {
             chain,
             block,
             finalized_block_height,
+            committed_block_height,
             revert,
             state_deltas,
             account_deltas,
@@ -138,6 +142,7 @@ impl BlockAggregatedChanges {
             chain: self.chain,
             block: self.block.clone(),
             finalized_block_height: self.finalized_block_height,
+            committed_block_height: 0, // Internal field - not exposed to clients
             revert: self.revert,
             account_deltas: HashMap::new(),
             state_deltas: HashMap::new(),
