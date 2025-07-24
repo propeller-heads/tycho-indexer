@@ -425,12 +425,10 @@ mod tests {
     };
 
     use dotenv::dotenv;
-    use num_bigint::BigUint;
-    use tokio::time::timeout;
-    use tycho_common::{models::token::Token, Bytes};
-    use futures::{SinkExt, StreamExt};
+    use futures::SinkExt;
     use tokio::{net::TcpListener, time::timeout};
     use tokio_tungstenite::accept_async;
+    use tycho_common::models::token::Token;
 
     use super::*;
 
