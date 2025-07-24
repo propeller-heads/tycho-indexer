@@ -1,3 +1,11 @@
+## [0.78.4](https://github.com/propeller-heads/tycho-indexer/compare/0.78.3...0.78.4) (2025-07-24)
+
+
+### Bug Fixes
+
+* Specify minimum rust version ([de37e86](https://github.com/propeller-heads/tycho-indexer/commit/de37e86220d32f678a77082cfe377d01402ca125))
+* Specify minimum rust version ([#638](https://github.com/propeller-heads/tycho-indexer/issues/638)) ([a052d76](https://github.com/propeller-heads/tycho-indexer/commit/a052d76b883228532f1d7f00d67231e90c4da02e))
+
 ## [0.78.3](https://github.com/propeller-heads/tycho-indexer/compare/0.78.2...0.78.3) (2025-07-22)
 
 ## [0.78.2](https://github.com/propeller-heads/tycho-indexer/compare/0.78.1...0.78.2) (2025-07-21)
