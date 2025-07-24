@@ -177,7 +177,7 @@ where
         }
         //
         // Here, we need to group components per-orchestrator. Then, we call
-        // orchestrator.generate_entrypoint_params
+        // orchestrator.update_components
         // 5. Call HookOrchestrator to generate entrypoints.
 
         // 6. Delegate to standard DCI (handles tracing + pruning)

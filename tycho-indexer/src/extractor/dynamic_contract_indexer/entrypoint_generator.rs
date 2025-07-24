@@ -15,7 +15,6 @@ use alloy_sol_types::{
 use num_bigint::BigInt;
 use num_traits::Zero;
 use thiserror::Error;
-use tonic::async_trait;
 use tycho_common::{
     keccak256,
     models::{
@@ -108,6 +107,12 @@ pub struct HookTracerContext {
     block: Block,
 }
 
+impl HookTracerContext {
+    pub fn new(block: Block) -> Self {
+        Self { block }
+    }
+}
+
 #[derive(Debug, Clone, Error)]
 pub enum EntrypointGenerationError {
     /// Failed to estimate swap amounts
@@ -122,7 +127,6 @@ pub enum EntrypointGenerationError {
 }
 
 /// Trait for generating hook entrypoints
-#[async_trait]
 #[allow(dead_code)]
 pub trait HookEntrypointGenerator {
     /// Set the configuration for the generator
@@ -132,7 +136,7 @@ pub trait HookEntrypointGenerator {
     /// First, it should call the SwapAmountEstimator to estimate the swap amounts.
     /// Then, using the ERC6909Overwrites and the custom Router code, we should generate
     /// the Entrypoints for tracing the router's 0x09c5eabe function.
-    async fn generate_entrypoints(
+    fn generate_entrypoints(
         &self,
         data: &HookEntrypointData,
         context: &HookTracerContext,
@@ -140,7 +144,6 @@ pub trait HookEntrypointGenerator {
 }
 
 /// Trait for estimating swap amounts for entrypoint generation
-#[async_trait]
 pub trait SwapAmountEstimator {
     /// Estimate the swap amounts for a given component.
     /// If limits are available, use different fractions of it; use 1, 10, 50 and 95% of the limits,
@@ -149,7 +152,7 @@ pub trait SwapAmountEstimator {
     ///
     /// Returns a combination of TokenIn and Token Out and an array of swap amounts, encoded in
     /// bytes
-    async fn estimate_swap_amounts(
+    fn estimate_swap_amounts(
         &self,
         metadata: &ComponentTracingMetadata,
         tokens: &[Address],
@@ -242,9 +245,8 @@ impl ERC6909Overwrites {
 /// Uses limits when available, falls back to balances
 pub struct DefaultSwapAmountEstimator;
 
-#[async_trait]
 impl SwapAmountEstimator for DefaultSwapAmountEstimator {
-    async fn estimate_swap_amounts(
+    fn estimate_swap_amounts(
         &self,
         metadata: &ComponentTracingMetadata,
         tokens: &[Address],
@@ -252,7 +254,7 @@ impl SwapAmountEstimator for DefaultSwapAmountEstimator {
         let mut result = HashMap::new();
 
         // Try to use limits first (preferred)
-        if let Some(Ok((_, limits))) = &metadata.limits {
+        if let Some(Ok(limits)) = &metadata.limits {
             if !limits.is_empty() {
                 for ((token0, token1), (limit0, _limit1, _)) in limits {
                     let limit_amount =
@@ -293,7 +295,7 @@ impl SwapAmountEstimator for DefaultSwapAmountEstimator {
 
         // Fallback to using balances if no limits available
         // For each token that has a balance, create amounts for all possible sell->buy pairs
-        if let Some(Ok((_, balances))) = &metadata.balances {
+        if let Some(Ok(balances)) = &metadata.balances {
             for sell_token in tokens {
                 if let Some(balance_bytes) = balances.get(sell_token) {
                     let balance =
@@ -369,7 +371,6 @@ impl<E: SwapAmountEstimator> UniswapV4DefaultHookEntrypointGenerator<E> {
     }
 }
 
-#[async_trait]
 impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
     for UniswapV4DefaultHookEntrypointGenerator<E>
 {
@@ -377,7 +378,7 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
         self.config = config;
     }
 
-    async fn generate_entrypoints(
+    fn generate_entrypoints(
         &self,
         data: &HookEntrypointData,
         _context: &HookTracerContext,
@@ -398,8 +399,7 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
 
         let swap_amounts = self
             .estimator
-            .estimate_swap_amounts(&data.component_metadata, &tokens)
-            .await?;
+            .estimate_swap_amounts(&data.component_metadata, &tokens)?;
 
         for ((token0, token1), amounts) in swap_amounts.iter() {
             let currency0 = SolAddress::from_slice(token0.as_ref());
@@ -571,14 +571,12 @@ mod tests {
         limits: Vec<((Address, Address), (Bytes, Bytes))>,
     ) -> ComponentTracingMetadata {
         ComponentTracingMetadata {
+            tx_hash: TxHash::from([0u8; 32]),
             balances: None,
-            limits: Some(Ok((
-                TxHash::from([0u8; 32]),
-                limits
-                    .into_iter()
-                    .map(|(tokens, (l0, l1))| (tokens, (l0, l1, None)))
-                    .collect(),
-            ))),
+            limits: Some(Ok(limits
+                .into_iter()
+                .map(|(tokens, (l0, l1))| (tokens, (l0, l1, None)))
+                .collect())),
             tvl: None,
         }
     }
@@ -587,7 +585,8 @@ mod tests {
         balances: HashMap<Address, Bytes>,
     ) -> ComponentTracingMetadata {
         ComponentTracingMetadata {
-            balances: Some(Ok((TxHash::from([0u8; 32]), balances))),
+            tx_hash: TxHash::from([0u8; 32]),
+            balances: Some(Ok(balances)),
             limits: None,
             tvl: None,
         }
@@ -607,7 +606,6 @@ mod tests {
 
         let result = estimator
             .estimate_swap_amounts(&metadata, &tokens)
-            .await
             .unwrap();
 
         assert_eq!(result.len(), 1);
@@ -636,7 +634,6 @@ mod tests {
 
         let result = estimator
             .estimate_swap_amounts(&metadata, &tokens)
-            .await
             .unwrap();
 
         assert_eq!(result.len(), 2); // 2 pairs: token0->token1, token1->token0
@@ -665,11 +662,14 @@ mod tests {
         let estimator = DefaultSwapAmountEstimator;
         let tokens = create_test_tokens();
 
-        let metadata = ComponentTracingMetadata { balances: None, limits: None, tvl: None };
+        let metadata = ComponentTracingMetadata {
+            tx_hash: TxHash::from([0u8; 32]),
+            balances: None,
+            limits: None,
+            tvl: None,
+        };
 
-        let result = estimator
-            .estimate_swap_amounts(&metadata, &tokens)
-            .await;
+        let result = estimator.estimate_swap_amounts(&metadata, &tokens);
 
         assert!(matches!(result, Err(EntrypointGenerationError::NoDataAvailable(_))));
     }
@@ -730,9 +730,8 @@ mod tests {
         result: Result<HashMap<(Address, Address), Vec<Bytes>>, EntrypointGenerationError>,
     }
 
-    #[async_trait]
     impl SwapAmountEstimator for MockEstimator {
-        async fn estimate_swap_amounts(
+        fn estimate_swap_amounts(
             &self,
             _metadata: &ComponentTracingMetadata,
             _tokens: &[Address],
@@ -771,9 +770,7 @@ mod tests {
         let hook_data = create_test_hook_data();
         let context = create_test_context();
 
-        let result = generator
-            .generate_entrypoints(&hook_data, &context)
-            .await;
+        let result = generator.generate_entrypoints(&hook_data, &context);
 
         match result {
             Ok(entrypoints) => {
@@ -804,9 +801,7 @@ mod tests {
         let hook_data = create_test_hook_data();
         let context = create_test_context();
 
-        let result = generator
-            .generate_entrypoints(&hook_data, &context)
-            .await;
+        let result = generator.generate_entrypoints(&hook_data, &context);
 
         assert!(matches!(result, Err(EntrypointGenerationError::NoDataAvailable(_))));
     }
@@ -822,9 +817,7 @@ mod tests {
         let hook_data = create_test_hook_data();
         let context = create_test_context();
 
-        let result = generator
-            .generate_entrypoints(&hook_data, &context)
-            .await;
+        let result = generator.generate_entrypoints(&hook_data, &context);
 
         assert!(matches!(result, Err(EntrypointGenerationError::NoDataAvailable(_))));
     }
