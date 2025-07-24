@@ -1,3 +1,11 @@
+## [0.78.5](https://github.com/propeller-heads/tycho-indexer/compare/0.78.4...0.78.5) (2025-07-24)
+
+
+### Bug Fixes
+
+* Remove missing state query on versioning ([e0db7c0](https://github.com/propeller-heads/tycho-indexer/commit/e0db7c088f70d0d2af54ccad0a42b09b10ed520f))
+* Remove missing state query on versioning ([#636](https://github.com/propeller-heads/tycho-indexer/issues/636)) ([df08a88](https://github.com/propeller-heads/tycho-indexer/commit/df08a88e8c622d7b9f82ef75e1424ca1d65c6fb7))
+
 ## [0.78.4](https://github.com/propeller-heads/tycho-indexer/compare/0.78.3...0.78.4) (2025-07-24)
 
 
