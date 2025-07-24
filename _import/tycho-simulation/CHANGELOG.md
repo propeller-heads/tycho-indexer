@@ -1,3 +1,18 @@
+## [0.135.0](https://github.com/propeller-heads/tycho-simulation/compare/0.134.0...0.135.0) (2025-07-24)
+
+
+### Features
+
+* **Bebop:** Implement request_binding_quote (WIP) ([902cdbd](https://github.com/propeller-heads/tycho-simulation/commit/902cdbdb2c6cc88799b870607061a01ddb2a3df9))
+* Create/assert SignedQuote from raw quote obj ([705232b](https://github.com/propeller-heads/tycho-simulation/commit/705232b47c525fdf3b0c90f5a40e308d47762707))
+
+
+### Bug Fixes
+
+* Add partial_fill_offset to quote attributes ([326133e](https://github.com/propeller-heads/tycho-simulation/commit/326133e4a3a36684bb9e6674edbd82f8ea3d2e85))
+* After rebase fixes ([174dcbf](https://github.com/propeller-heads/tycho-simulation/commit/174dcbf946b3167bcf6ae2d23e054ac3311a5008))
+* Define Bebop urls at new() ([5c81364](https://github.com/propeller-heads/tycho-simulation/commit/5c813648ec58687169ee6e332b87bfd7b90a6ef6))
+
 ## [0.134.0](https://github.com/propeller-heads/tycho-simulation/compare/0.133.1...0.134.0) (2025-07-22)
 
 
