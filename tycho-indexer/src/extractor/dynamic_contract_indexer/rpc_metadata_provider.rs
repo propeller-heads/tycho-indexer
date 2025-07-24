@@ -1,7 +1,10 @@
 #![allow(unused_variables)] // TODO: Remove this once the provider is implemented
 #![allow(dead_code)] // TODO: Remove this once the provider is implemented
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use reqwest::Client;
 use serde_json::{json, Value};
@@ -189,14 +192,20 @@ impl RequestProvider for RPCMetadataProvider {
         requests: &[Box<dyn RequestTransport>],
         batch_size_limit: usize,
     ) -> Vec<Vec<Box<dyn RequestTransport>>> {
+        let mut seen_ids = HashSet::new();
         let mut grouped_batches = Vec::new();
         let mut current_batch = Vec::new();
 
         for request in requests {
-            current_batch.push(request.clone_box());
+            let id = request.deduplication_id();
+            if seen_ids.insert(id) {
+                // Only add request if the ID hasn't been seen before
+                // This is to avoid duplicate requests
+                current_batch.push(request.clone_box());
 
-            if current_batch.len() >= batch_size_limit {
-                grouped_batches.push(std::mem::take(&mut current_batch));
+                if current_batch.len() >= batch_size_limit {
+                    grouped_batches.push(std::mem::take(&mut current_batch));
+                }
             }
         }
 
