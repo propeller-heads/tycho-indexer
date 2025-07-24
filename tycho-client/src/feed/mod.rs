@@ -425,11 +425,8 @@ where
     }
 
     #[cfg(test)]
-    pub fn with_short_timeouts(mut self) -> Self {
-        self.block_time = Duration::from_millis(10);
-        self.max_wait = Duration::from_millis(10);
-        self.max_missed_blocks = 3;
-        self
+    pub fn with_short_timeouts() -> Self {
+        Self::new(Duration::from_millis(10), Duration::from_millis(10), 3)
     }
 
     /// Cleanup function for shutting down remaining synchronizers when the nanny detects an error.
@@ -730,7 +727,7 @@ mod tests {
                 .await
                 .expect("sending header failed");
         }
-        
+
         // For testing: trigger a close signal to make the synchronizer exit
         async fn trigger_close(&self) {
             if let Some(close_tx) = self.close_tx.lock().await.take() {
@@ -755,10 +752,11 @@ mod tests {
                     .expect("Block receiver was not set!")
             };
 
-            // Create close channel - we need to store one sender for testing and give one to the handle
+            // Create close channel - we need to store one sender for testing and give one to the
+            // handle
             let (close_tx_for_handle, close_rx) = oneshot::channel();
             let (close_tx_for_test, close_rx_for_test) = oneshot::channel();
-            
+
             // Store the test close sender
             {
                 let mut guard = self.close_tx.lock().await;
@@ -784,12 +782,13 @@ mod tests {
                         ))
                     }
                     MockBehavior::Normal | MockBehavior::FailOnExit => {
-                        // Wait for close signal from either handle or test, then respond based on behavior
+                        // Wait for close signal from either handle or test, then respond based on
+                        // behavior
                         let result = tokio::select! {
                             result = close_rx => result,
                             result = close_rx_for_test => result,
                         };
-                        
+
                         match result {
                             Ok(()) => {
                                 // Mark that close signal was received
@@ -833,19 +832,15 @@ mod tests {
     async fn test_two_ready_synchronizers() {
         let v2_sync = MockStateSync::new();
         let v3_sync = MockStateSync::new();
-        let block_sync = BlockSynchronizer::new(
-            std::time::Duration::from_millis(500),
-            std::time::Duration::from_millis(50),
-            10,
-        )
-        .register_synchronizer(
-            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-            v2_sync.clone(),
-        )
-        .register_synchronizer(
-            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-            v3_sync.clone(),
-        );
+        let block_sync = BlockSynchronizer::with_short_timeouts()
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+                v2_sync.clone(),
+            )
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+                v3_sync.clone(),
+            );
         let start_msg = StateSyncMessage {
             header: BlockHeader { number: 1, ..Default::default() },
             ..Default::default()
@@ -916,19 +911,15 @@ mod tests {
     async fn test_delayed_synchronizer_catches_up() {
         let v2_sync = MockStateSync::new();
         let v3_sync = MockStateSync::new();
-        let block_sync = BlockSynchronizer::new(
-            std::time::Duration::from_millis(500),
-            std::time::Duration::from_millis(50),
-            10,
-        )
-        .register_synchronizer(
-            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-            v2_sync.clone(),
-        )
-        .register_synchronizer(
-            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-            v3_sync.clone(),
-        );
+        let block_sync = BlockSynchronizer::with_short_timeouts()
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+                v2_sync.clone(),
+            )
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+                v3_sync.clone(),
+            );
 
         // Initial messages - both synchronizers are at block 1
         let block1_msg = StateSyncMessage {
@@ -1056,19 +1047,15 @@ mod tests {
     async fn test_different_start_blocks() {
         let v2_sync = MockStateSync::new();
         let v3_sync = MockStateSync::new();
-        let block_sync = BlockSynchronizer::new(
-            std::time::Duration::from_millis(500),
-            std::time::Duration::from_millis(50),
-            10,
-        )
-        .register_synchronizer(
-            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-            v2_sync.clone(),
-        )
-        .register_synchronizer(
-            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-            v3_sync.clone(),
-        );
+        let block_sync = BlockSynchronizer::with_short_timeouts()
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+                v2_sync.clone(),
+            )
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+                v3_sync.clone(),
+            );
 
         // Initial messages - synchronizers at different blocks
         let block1_msg = StateSyncMessage {
@@ -1166,13 +1153,8 @@ mod tests {
         let v2_sync = MockStateSync::with_behavior(MockBehavior::ExitImmediately);
         let v3_sync = MockStateSync::new(); // Normal behavior
 
-        let block_sync = BlockSynchronizer::new(
-            Duration::from_millis(20),
-            Duration::from_millis(10),
-            3,
-        )
-        .with_short_timeouts()
-        .register_synchronizer(
+        let block_sync = BlockSynchronizer::with_short_timeouts()
+            .register_synchronizer(
                 ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
                 v2_sync.clone(),
             )
@@ -1229,13 +1211,8 @@ mod tests {
         let v2_sync = MockStateSync::with_behavior(MockBehavior::FailOnExit);
         let v3_sync = MockStateSync::new();
 
-        let block_sync = BlockSynchronizer::new(
-            Duration::from_millis(20),
-            Duration::from_millis(10),
-            3,
-        )
-        .with_short_timeouts()
-        .register_synchronizer(
+        let block_sync = BlockSynchronizer::with_short_timeouts()
+            .register_synchronizer(
                 ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
                 v2_sync.clone(),
             )
@@ -1295,13 +1272,8 @@ mod tests {
         let v2_sync = MockStateSync::new();
         let v3_sync = MockStateSync::new();
 
-        let block_sync = BlockSynchronizer::new(
-            Duration::from_millis(20),
-            Duration::from_millis(10),
-            3,
-        )
-        .with_short_timeouts()
-        .register_synchronizer(
+        let block_sync = BlockSynchronizer::with_short_timeouts()
+            .register_synchronizer(
                 ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
                 v2_sync.clone(),
             )
@@ -1367,17 +1339,15 @@ mod tests {
         let v2_sync = MockStateSync::with_behavior(MockBehavior::ExitImmediately);
         let v3_sync = MockStateSync::with_behavior(MockBehavior::IgnoreClose);
 
-        let block_sync =
-            BlockSynchronizer::new(Duration::from_millis(20), Duration::from_millis(10), 3)
-                .with_short_timeouts()
-                .register_synchronizer(
-                    ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-                    v2_sync.clone(),
-                )
-                .register_synchronizer(
-                    ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-                    v3_sync.clone(),
-                );
+        let block_sync = BlockSynchronizer::with_short_timeouts()
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+                v2_sync.clone(),
+            )
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+                v3_sync.clone(),
+            );
 
         // Send initial messages
         let start_msg = StateSyncMessage {

@@ -165,14 +165,6 @@ where
     }
 }
 
-/// StateSynchronizer
-///
-/// Used to synchronize the state of a single protocol. The synchronizer is responsible for
-/// delivering messages to the client that let him reconstruct subsets of the protocol state.
-///
-/// This involves deciding which components to track according to the clients preferences,
-/// retrieving & emitting snapshots of components which the client has not seen yet and subsequently
-/// delivering delta messages for the components that have changed.
 /// Handle for controlling a running synchronizer task.
 ///
 /// This handle provides methods to gracefully shut down the synchronizer
@@ -182,6 +174,14 @@ pub struct SynchronizerTaskHandle {
     close_tx: oneshot::Sender<()>,
 }
 
+/// StateSynchronizer
+///
+/// Used to synchronize the state of a single protocol. The synchronizer is responsible for
+/// delivering messages to the client that let him reconstruct subsets of the protocol state.
+///
+/// This involves deciding which components to track according to the clients preferences,
+/// retrieving & emitting snapshots of components which the client has not seen yet and subsequently
+/// delivering delta messages for the components that have changed.
 impl SynchronizerTaskHandle {
     pub fn new(join_handle: JoinHandle<SyncResult<()>>, close_tx: oneshot::Sender<()>) -> Self {
         Self { join_handle, close_tx }
@@ -617,8 +617,16 @@ where
     }
 
     fn filter_deltas(&self, deltas: &mut BlockChanges) {
-        deltas.filter_by_component(|id| self.component_tracker.components.contains_key(id));
-        deltas.filter_by_contract(|id| self.component_tracker.contracts.contains(id));
+        deltas.filter_by_component(|id| {
+            self.component_tracker
+                .components
+                .contains_key(id)
+        });
+        deltas.filter_by_contract(|id| {
+            self.component_tracker
+                .contracts
+                .contains(id)
+        });
     }
 }
 
