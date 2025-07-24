@@ -214,6 +214,9 @@ impl TychoStreamBuilder {
                     res.map_err(|e| StreamError::BlockSynchronizerError(e.to_string())).unwrap();
                 }
             }
+            if let Err(e) = ws_client.close().await {
+                warn!(?e, "Failed to close WebSocket client");
+            }
         });
 
         Ok((handle, rx))
