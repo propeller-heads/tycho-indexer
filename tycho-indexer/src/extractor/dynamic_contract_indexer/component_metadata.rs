@@ -32,30 +32,32 @@ pub(crate) type DeduplicationId = String;
 type RoutingKey = String;
 
 #[cfg_attr(test, derive(Debug))]
+#[derive(Clone)]
 pub struct ComponentTracingMetadata {
     // Here we need to link the each metadata field with the transaction hash that triggered the
     // fetching so we can modify the Block data with the new balances - and link the generated
     // Entrypoints to the correct transaction hash.
-    pub balances: Option<Result<(TxHash, Balances), MetadataError>>,
-    pub limits: Option<Result<(TxHash, Limits), MetadataError>>,
-    pub tvl: Option<Result<(TxHash, Tvl), MetadataError>>,
+    pub tx_hash: TxHash,
+    pub balances: Option<Result<Balances, MetadataError>>,
+    pub limits: Option<Result<Limits, MetadataError>>,
+    pub tvl: Option<Result<Tvl, MetadataError>>,
 }
 
 impl ComponentTracingMetadata {
-    pub fn new() -> Self {
-        Self { balances: None, limits: None, tvl: None }
+    pub fn new(tx_hash: TxHash) -> Self {
+        Self { tx_hash, balances: None, limits: None, tvl: None }
     }
 
-    pub fn add_result(&mut self, tx_hash: TxHash, result: MetadataResult) {
+    pub fn add_result(&mut self, result: MetadataResult) {
         match result.result {
             Ok(MetadataValue::Balances(balances)) => {
-                self.balances = Some(Ok((tx_hash, balances)));
+                self.balances = Some(Ok(balances));
             }
             Ok(MetadataValue::Limits(limits)) => {
-                self.limits = Some(Ok((tx_hash, limits)));
+                self.limits = Some(Ok(limits));
             }
             Ok(MetadataValue::Tvl(tvl)) => {
-                self.tvl = Some(Ok((tx_hash, tvl)));
+                self.tvl = Some(Ok(tvl));
             }
             Err(e) => match result.request_type {
                 MetadataRequestType::ComponentBalance { .. } => {
