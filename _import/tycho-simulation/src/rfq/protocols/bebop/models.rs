@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use tycho_common::Bytes;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BebopPriceData {
@@ -136,6 +137,64 @@ impl BebopPriceData {
         }
         (amount_out, remaining_amount_in)
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum BebopQuoteResponse {
+    Success(Box<BebopQuotePartial>),
+    Error(BebopApiError),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BebopApiError {
+    pub error: BebopErrorDetail,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BebopErrorDetail {
+    #[serde(rename = "errorCode")]
+    pub error_code: u32,
+    pub message: String,
+    #[serde(rename = "requestId")]
+    pub request_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BebopQuotePartial {
+    pub status: String,
+    #[serde(rename = "settlementAddress")]
+    pub settlement_address: Bytes,
+    pub tx: TxData,
+    #[serde(rename = "toSign")]
+    pub to_sign: SingleOrderToSign,
+    #[serde(rename = "partialFillOffset")]
+    pub partial_fill_offset: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TxData {
+    pub to: Bytes,
+    pub data: String,
+    pub value: String,
+    pub from: Bytes,
+    pub gas: u64,
+    #[serde(rename = "gasPrice")]
+    pub gas_price: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SingleOrderToSign {
+    pub maker_address: Bytes,
+    pub taker_address: Bytes,
+    pub maker_token: Bytes,
+    pub taker_token: Bytes,
+    pub maker_amount: String,
+    pub taker_amount: String,
+    pub maker_nonce: String,
+    pub expiry: u64,
+    pub receiver: Bytes,
+    pub packed_commands: String,
 }
 
 #[cfg(test)]

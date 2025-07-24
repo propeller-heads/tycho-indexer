@@ -10,7 +10,6 @@ use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt};
 use num_bigint::BigUint;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use tokio_tungstenite::{connect_async_with_config, tungstenite::Message};
 use tracing::{error, info, warn};
 use tycho_common::{
@@ -19,8 +18,10 @@ use tycho_common::{
 
 use crate::{
     rfq::{
-        client::RFQClient, errors::RFQError, models::TimestampHeader,
-        protocols::bebop::models::BebopPriceData,
+        client::RFQClient,
+        errors::RFQError,
+        models::TimestampHeader,
+        protocols::bebop::models::{BebopPriceData, BebopQuoteResponse},
     },
     tycho_client::feed::synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
     tycho_common::dto::{ProtocolComponent, ResponseProtocolState},
@@ -358,7 +359,6 @@ impl RFQClient for BebopClient {
             .header("name", &self.ws_user)
             .header("Authorization", &self.ws_key);
 
-        println!("{:?}", request);
         let response = request
             .send()
             .await
@@ -371,13 +371,21 @@ impl RFQClient for BebopClient {
 
         match quote_response {
             BebopQuoteResponse::Success(quote) => {
-                println!("{quote:?}");
                 let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
                 quote_attributes.insert(
                     "calldata".into(),
                     Bytes::from_str(&quote.tx.data).map_err(|_| {
                         RFQError::ParsingError("Failed to parse quote result's calldata".into())
                     })?,
+                );
+                quote_attributes.insert(
+                    "partial_fill_offset".into(),
+                    Bytes::from(
+                        quote
+                            .partial_fill_offset
+                            .to_be_bytes()
+                            .to_vec(),
+                    ),
                 );
                 let signed_quote = SignedQuote {
                     base_token: params.token_in.address.clone(),
@@ -406,64 +414,6 @@ impl RFQClient for BebopClient {
             }
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum BebopQuoteResponse {
-    Success(Box<BebopQuotePartial>),
-    Error(BebopApiError),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BebopApiError {
-    pub error: BebopErrorDetail,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BebopErrorDetail {
-    #[serde(rename = "errorCode")]
-    pub error_code: u32,
-    pub message: String,
-    #[serde(rename = "requestId")]
-    pub request_id: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BebopQuotePartial {
-    pub status: String,
-    #[serde(rename = "settlementAddress")]
-    pub settlement_address: Bytes,
-    pub tx: TxData,
-    #[serde(rename = "toSign")]
-    pub to_sign: SingleOrderToSign,
-    #[serde(rename = "partialFillOffset")]
-    pub partial_fill_offset: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TxData {
-    pub to: Bytes,
-    pub data: String,
-    pub value: String,
-    pub from: Bytes,
-    pub gas: u64,
-    #[serde(rename = "gasPrice")]
-    pub gas_price: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SingleOrderToSign {
-    pub maker_address: Bytes,
-    pub taker_address: Bytes,
-    pub maker_token: Bytes,
-    pub taker_token: Bytes,
-    pub maker_amount: String,
-    pub taker_amount: String,
-    pub maker_nonce: String,
-    pub expiry: u64,
-    pub receiver: Bytes,
-    pub packed_commands: String,
 }
 
 #[cfg(test)]
@@ -776,6 +726,15 @@ mod tests {
                 .unwrap()
                 .len() >
                 4
-        )
+        );
+        let partial_fill_offset_slice = quote
+            .quote_attributes
+            .get("partial_fill_offset")
+            .unwrap()
+            .as_ref();
+        let mut partial_fill_offset_array = [0u8; 8];
+        partial_fill_offset_array.copy_from_slice(partial_fill_offset_slice);
+
+        assert_eq!(u64::from_be_bytes(partial_fill_offset_array), 12);
     }
 }
