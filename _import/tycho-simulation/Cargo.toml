@@ -48,15 +48,15 @@ mini-moka = "0.10"
 lazy_static = "1.4.0"
 
 # Tycho dependencies
-tycho-common = "0.78.1"
-tycho-client = "0.78.1"
+tycho-common = "0.79.0"
+tycho-client = "0.79.0"
 
 # EVM dependencies
-foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "ab753e9", optional = true }
-foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "ab753e9", optional = true }
+foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "5a552bb0de7126fa35170fd84532bbd3d40cd348", optional = true }
+foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "5a552bb0de7126fa35170fd84532bbd3d40cd348", optional = true }
 alloy = { version = "1.0.6", features = ["providers", "signer-local", "rpc-types-eth"], optional = true }
-revm = { version = "24.0.0", features = ["alloydb", "serde"], optional = true }
-revm-inspectors = { version = "0.23", features = ["serde"], optional = true }
+revm = { version = "27.0.3", features = ["alloydb", "serde"], optional = true }
+revm-inspectors = { version = "0.26.5", features = ["serde"], optional = true }
 num-bigint = { version = "0.4", features = ["serde"] }
 tokio-stream = "0.1.16"
 
