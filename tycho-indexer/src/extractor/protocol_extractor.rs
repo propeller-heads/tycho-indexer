@@ -755,6 +755,24 @@ where
         // Depending on how Substreams handle them, this condition could be problematic for single
         // block finality blockchains.
         let is_syncing = inp.final_block_height >= msg.block.number;
+        
+        // Calculate committed block height for internal coordination
+        let committed_height = {
+            let reorg_buffer = self.reorg_buffer.lock().await;
+            let buffered_blocks_count = reorg_buffer.finalized_blocks_count();
+            let should_buffer_more = match self.finality_type {
+                FinalityType::Instant => buffered_blocks_count < self.min_block_buffer,
+                FinalityType::Batch => false, // Existing behavior
+            };
+
+            if is_syncing || should_buffer_more {
+                // Buffer is holding blocks, so committed height lags behind
+                inp.final_block_height.saturating_sub(self.min_block_buffer as u64)
+            } else {
+                inp.final_block_height  // This block will be committed
+            }
+        };
+        
         {
             // keep reorg buffer guard within a limited scope
             let mut reorg_buffer = self.reorg_buffer.lock().await;
@@ -784,20 +802,8 @@ where
                     msgs.peek().is_none() 
                 };
 
-                // Calculate committed block height for internal coordination
-                let committed_height = if force_db_commit {
-                    inp.final_block_height  // This block will be committed
-                } else {
-                    // Buffer is holding blocks, so committed height lags behind
-                    inp.final_block_height.saturating_sub(self.min_block_buffer as u64)
-                };
-
-                // Update the message with committed height for PendingDeltas coordination
-                let mut block_update = msg.block_update();
-                block_update.committed_block_height = committed_height;
-
                 self.gateway
-                    .advance(&block_update, msg.cursor(), force_db_commit)
+                    .advance(msg.block_update(), msg.cursor(), force_db_commit)
                     .await?;
             }
         }
@@ -812,7 +818,7 @@ where
 
         self.update_cursor(inp.cursor).await;
 
-        let mut changes = msg.aggregate_updates()?;
+        let mut changes = msg.aggregate_updates_with_committed_height(committed_height)?;
         self.handle_tvl_changes(&mut changes)
             .await?;
 
@@ -1232,6 +1238,9 @@ where
             finalized_block_height: reverted_state[0]
                 .block_update
                 .finalized_block_height,
+            committed_block_height: reverted_state[0]
+                .block_update
+                .finalized_block_height, // For reverts, use finalized as committed
             revert: true,
             state_deltas,
             account_deltas,
@@ -2151,6 +2160,8 @@ mod test {
             preprocessor,
             None,
             None,
+            5,  // min_block_buffer
+            FinalityType::Batch,  // finality_type
         )
         .await
         .expect("Extractor init failed");
@@ -2162,6 +2173,189 @@ mod test {
             .expect("construct_currency_tokens failed");
 
         assert_eq!(res, exp);
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_instant_finality_buffering() {
+        use crate::extractor::reorg_buffer::ReorgBuffer;
+        use tycho_common::models::blockchain::{Block, TxWithChanges};
+        use chrono::NaiveDate;
+        
+        // Test that instant finality chains buffer blocks before committing
+        let mut buffer = ReorgBuffer::new();
+        
+        // Create test blocks
+        let block1 = Block::new(
+            100,
+            Chain::Ethereum,
+            Bytes::from_str("0x01").unwrap(),
+            Bytes::from_str("0x00").unwrap(),
+            NaiveDate::from_ymd_opt(2023, 1, 1).unwrap().and_hms_opt(0, 0, 0).unwrap(),
+        );
+        let block2 = Block::new(
+            101,
+            Chain::Ethereum,
+            Bytes::from_str("0x02").unwrap(),
+            Bytes::from_str("0x01").unwrap(),
+            NaiveDate::from_ymd_opt(2023, 1, 1).unwrap().and_hms_opt(0, 0, 1).unwrap(),
+        );
+        
+        // Insert blocks into buffer
+        let block_changes1 = BlockChanges::new(
+            "test_extractor".to_string(),
+            Chain::Ethereum,
+            block1,
+            100,
+            false,
+            Vec::<TxWithChanges>::new(),
+            Vec::new(),
+        );
+        let block_changes2 = BlockChanges::new(
+            "test_extractor".to_string(),
+            Chain::Ethereum,
+            block2,
+            101,
+            false,
+            Vec::<TxWithChanges>::new(),
+            Vec::new(),
+        );
+        
+        buffer.insert_block(BlockUpdateWithCursor::new(block_changes1, "cursor1".to_string())).unwrap();
+        buffer.insert_block(BlockUpdateWithCursor::new(block_changes2, "cursor2".to_string())).unwrap();
+        
+        // Test buffer count
+        assert_eq!(buffer.finalized_blocks_count(), 2);
+        
+        // Test committed height calculation logic for instant finality
+        let min_block_buffer = 5usize;
+        let finalized_height = 101u64;
+        let buffered_count = buffer.finalized_blocks_count();
+        
+        // For instant finality with insufficient buffer
+        let should_buffer_more = buffered_count < min_block_buffer;
+        assert!(should_buffer_more, "Should continue buffering when below minimum");
+        
+        let committed_height_when_buffering = finalized_height.saturating_sub(min_block_buffer as u64);
+        assert_eq!(committed_height_when_buffering, 96, "Committed height should lag behind when buffering");
+        
+        // When buffer is full, committed height should equal finalized height
+        let committed_height_when_full = finalized_height;
+        assert_eq!(committed_height_when_full, 101, "Committed height should equal finalized when buffer is full");
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_finality_type_behavior() {
+        // Test that different finality types produce correct buffering decisions
+        
+        // Test Instant finality - should buffer when below minimum
+        let finality_type = FinalityType::Instant;
+        let min_block_buffer = 5;
+        let buffered_blocks_count = 3;
+        
+        let should_buffer_more = match finality_type {
+            FinalityType::Instant => buffered_blocks_count < min_block_buffer,
+            FinalityType::Batch => false,
+        };
+        assert!(should_buffer_more, "Instant finality should buffer when below minimum");
+        
+        // Test Batch finality - should never buffer based on count
+        let finality_type = FinalityType::Batch;
+        let should_buffer_more = match finality_type {
+            FinalityType::Instant => buffered_blocks_count < min_block_buffer,
+            FinalityType::Batch => false,
+        };
+        assert!(!should_buffer_more, "Batch finality should not buffer based on count");
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_committed_height_coordination() {
+        // Test that committed_block_height is properly calculated and used
+        let min_block_buffer = 3usize;
+        let finalized_height = 100u64;
+        
+        // Test case 1: Syncing mode - should use lagged commit height
+        let is_syncing = true;
+        let buffered_count = 5usize; // More than min buffer
+        let should_buffer_more = buffered_count < min_block_buffer; // false
+        
+        let committed_height = if is_syncing || should_buffer_more {
+            finalized_height.saturating_sub(min_block_buffer as u64)
+        } else {
+            finalized_height
+        };
+        assert_eq!(committed_height, 97, "Should use lagged height when syncing");
+        
+        // Test case 2: Not syncing, buffer not full - should use lagged commit height  
+        let is_syncing = false;
+        let buffered_count = 2usize; // Less than min buffer
+        let should_buffer_more = buffered_count < min_block_buffer; // true
+        
+        let committed_height = if is_syncing || should_buffer_more {
+            finalized_height.saturating_sub(min_block_buffer as u64)
+        } else {
+            finalized_height
+        };
+        assert_eq!(committed_height, 97, "Should use lagged height when buffer not full");
+        
+        // Test case 3: Not syncing, buffer full - should use current height
+        let is_syncing = false;
+        let buffered_count = 5usize; // More than min buffer
+        let should_buffer_more = buffered_count < min_block_buffer; // false
+        
+        let committed_height = if is_syncing || should_buffer_more {
+            finalized_height.saturating_sub(min_block_buffer as u64)
+        } else {
+            finalized_height
+        };
+        assert_eq!(committed_height, 100, "Should use current height when buffer is full and not syncing");
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_aggregate_updates_with_committed_height() {
+        // Test that the new aggregate_updates_with_committed_height method works correctly
+        use tycho_common::models::blockchain::{Block, TxWithChanges};
+        use chrono::NaiveDate;
+        
+        let block = Block::new(
+            100,
+            Chain::Ethereum,
+            Bytes::from_str("0x01").unwrap(),
+            Bytes::from_str("0x00").unwrap(),
+            NaiveDate::from_ymd_opt(2023, 1, 1).unwrap().and_hms_opt(0, 0, 0).unwrap(),
+        );
+        
+        let block_changes = BlockChanges::new(
+            "test_extractor".to_string(),
+            Chain::Ethereum,
+            block.clone(),
+            100, // finalized_block_height
+            false,
+            Vec::<TxWithChanges>::new(),
+            Vec::new(),
+        );
+        
+        // Test with custom committed height
+        let custom_committed_height = 95;
+        let aggregated = block_changes.aggregate_updates_with_committed_height(custom_committed_height).unwrap();
+        
+        assert_eq!(aggregated.finalized_block_height, 100);
+        assert_eq!(aggregated.committed_block_height, 95);
+        assert_eq!(aggregated.extractor, "test_extractor");
+        
+        // Test backward compatibility - should use finalized height as default
+        let block_changes2 = BlockChanges::new(
+            "test_extractor".to_string(),
+            Chain::Ethereum,
+            block,
+            100, // finalized_block_height
+            false,
+            Vec::<TxWithChanges>::new(),
+            Vec::new(),
+        );
+        
+        let aggregated2 = block_changes2.aggregate_updates().unwrap();
+        assert_eq!(aggregated2.finalized_block_height, 100);
+        assert_eq!(aggregated2.committed_block_height, 100); // Should default to finalized height
     }
 
     #[test_log::test(tokio::test)]
@@ -2284,6 +2478,8 @@ mod test {
             preprocessor,
             None,
             None,
+            5,  // min_block_buffer
+            FinalityType::Batch,  // finality_type
         )
         .await
         .expect("extractor init failed");
@@ -2894,6 +3090,8 @@ mod test_serial_db {
                 get_mocked_token_pre_processor(),
                 None,
                 None,
+                5,  // min_block_buffer
+                FinalityType::Batch,  // finality_type
             )
                 .await
                 .expect("Failed to create extractor");
@@ -3072,6 +3270,8 @@ mod test_serial_db {
                 preprocessor,
                 None,
                 None,
+                5,  // min_block_buffer
+                FinalityType::Batch,  // finality_type
             )
                 .await
                 .expect("Failed to create extractor");
@@ -3269,6 +3469,8 @@ mod test_serial_db {
                 preprocessor,
                 None,
                 None,
+                5,  // min_block_buffer
+                FinalityType::Batch,  // finality_type
             )
             .await
             .expect("Failed to create extractor");

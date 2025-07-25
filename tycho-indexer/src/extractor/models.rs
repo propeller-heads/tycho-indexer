@@ -199,6 +199,11 @@ impl BlockChanges {
     ///
     /// This returns an `ExtractionError` if there was a problem during merge.
     pub fn aggregate_updates(self) -> Result<BlockAggregatedChanges, ExtractionError> {
+        let finalized_height = self.finalized_block_height;
+        self.aggregate_updates_with_committed_height(finalized_height)
+    }
+
+    pub fn aggregate_updates_with_committed_height(self, committed_block_height: u64) -> Result<BlockAggregatedChanges, ExtractionError> {
         let mut iter = self.txs_with_update.into_iter();
 
         // Use unwrap_or_else to provide a default state if iter.next() is None
@@ -229,6 +234,7 @@ impl BlockChanges {
             chain: self.chain,
             block: self.block,
             finalized_block_height: self.finalized_block_height,
+            committed_block_height,
             revert: self.revert,
             new_protocol_components: aggregated_changes.protocol_components,
             new_tokens: self.new_tokens,

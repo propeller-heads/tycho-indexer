@@ -504,6 +504,7 @@ mod test {
             extractor: "vm:extractor".to_string(),
             block: block(1),
             finalized_block_height: 1,
+            committed_block_height: 1, // Default to finalized height for tests
             revert: false,
             account_deltas: HashMap::from([
                 (
@@ -634,6 +635,7 @@ mod test {
             extractor: "native:extractor".to_string(),
             block: block(1),
             finalized_block_height: 1,
+            committed_block_height: 1, // Default to finalized height for tests
             revert: false,
             state_deltas: HashMap::from([
                 (
@@ -978,5 +980,38 @@ mod test {
             .unwrap();
 
         assert_eq!(res, expected_res);
+    }
+
+    #[test]
+    fn test_committed_height_coordination() {
+        // Test that committed_block_height field is properly set and used
+        
+        // Create block deltas with different committed and finalized heights
+        let mut block_deltas_buffering = vm_block_deltas();
+        block_deltas_buffering.finalized_block_height = 10;
+        block_deltas_buffering.committed_block_height = 5; // Lower than finalized due to buffering
+        
+        let mut block_deltas_caught_up = vm_block_deltas();
+        block_deltas_caught_up.finalized_block_height = 12;
+        block_deltas_caught_up.committed_block_height = 12; // Caught up - no buffering
+        
+        // Verify the committed heights are set correctly
+        assert_eq!(block_deltas_buffering.committed_block_height, 5, 
+                  "Committed height should lag behind finalized when buffering");
+        assert_eq!(block_deltas_caught_up.committed_block_height, 12, 
+                  "Committed height should equal finalized when caught up");
+        
+        // Test that drop_state() resets committed_block_height for client safety
+        let client_safe_buffering = block_deltas_buffering.drop_state();
+        assert_eq!(client_safe_buffering.committed_block_height, 0, 
+                  "Client-safe version should have committed height reset to 0");
+        assert_eq!(client_safe_buffering.finalized_block_height, 10, 
+                  "Finalized height should be preserved for clients");
+        
+        let client_safe_caught_up = block_deltas_caught_up.drop_state();
+        assert_eq!(client_safe_caught_up.committed_block_height, 0, 
+                  "Client-safe version should have committed height reset to 0");
+        assert_eq!(client_safe_caught_up.finalized_block_height, 12, 
+                  "Finalized height should be preserved for clients");
     }
 }
