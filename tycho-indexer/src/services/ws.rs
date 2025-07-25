@@ -773,4 +773,149 @@ mod tests {
         let res = serde_json::to_string(&action).unwrap();
         println!("{res}");
     }
+
+    /// Message sender that simulates slow operations to trigger the deadlock
+    pub struct SlowMessageSender {
+        extractor_id: ExtractorIdentity,
+    }
+
+    impl SlowMessageSender {
+        pub fn new(extractor_id: ExtractorIdentity) -> Self {
+            Self { extractor_id }
+        }
+    }
+
+    #[async_trait]
+    impl MessageSender for SlowMessageSender {
+        async fn subscribe(&self) -> Result<Receiver<ExtractorMsg>, SendError<ControlMessage>> {
+            // Add a delay to increase the window for deadlock
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            
+            let (tx, rx) = mpsc::channel::<ExtractorMsg>(1);
+            let extractor_id = self.extractor_id.clone();
+
+            tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    if tx
+                        .send(Arc::new(BlockAggregatedChanges {
+                            extractor: extractor_id.name.clone(),
+                            block: Block::new(
+                                1,
+                                Chain::Ethereum,
+                                Bytes::zero(32),
+                                Bytes::zero(32),
+                                NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+                            ),
+                            finalized_block_height: 1,
+                            revert: false,
+                            ..Default::default()
+                        }))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            });
+
+            Ok(rx)
+        }
+    }
+
+    #[actix_rt::test]
+    async fn test_deadlock_concurrent_subscriptions() {
+        tracing_subscriber::fmt()
+            .with_test_writer()
+            .try_init()
+            .unwrap_or_else(|_| debug!("Subscriber already initialized"));
+
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "deadlock_test");
+        let app_state = web::Data::new(WsData::new(HashMap::new()));
+
+        // Use SlowMessageSender to create a larger deadlock window
+        let message_sender = Arc::new(SlowMessageSender::new(extractor_id.clone()));
+
+        {
+            let mut subscribers = app_state.subscribers.lock().unwrap();
+            subscribers.insert(extractor_id.clone(), message_sender);
+        }
+
+        let server = start_with(
+            TestServerConfig::default().client_request_timeout(Duration::from_secs(10)),
+            move || {
+                App::new()
+                    .wrap(RequestTracing::new())
+                    .app_data(app_state.clone())
+                    .service(web::resource("/ws/").route(web::get().to(WsActor::ws_index)))
+            },
+        );
+
+        let url = server
+            .url("/ws/")
+            .to_string()
+            .replacen("http://", "ws://", 1);
+
+        // Create multiple connections to trigger concurrent subscriptions
+        let num_clients = 4;
+        let mut connections = Vec::new();
+        
+        for i in 0..num_clients {
+            let (connection, _) = tokio_tungstenite::connect_async(&url)
+                .await
+                .unwrap_or_else(|_| panic!("Failed to connect client {}", i));
+            connections.push(connection);
+        }
+
+        let subscribe_msg = Command::Subscribe {
+            extractor_id: extractor_id.clone().into(),
+            include_state: true,
+        };
+        let msg_text = serde_json::to_string(&subscribe_msg).unwrap();
+
+        // Send subscription requests from all clients simultaneously
+        let tasks: Vec<_> = connections.into_iter().enumerate().map(|(i, mut connection)| {
+            let msg_text = msg_text.clone();
+            async move {
+                println!("Client {} sending subscription request", i);
+                connection
+                    .send(Message::Text(msg_text))
+                    .await
+                    .unwrap_or_else(|_| panic!("Failed to send from client {}", i));
+                
+                // Try to receive response
+                let start = std::time::Instant::now();
+                let result = timeout(Duration::from_secs(3), connection.next()).await;
+                let elapsed = start.elapsed();
+                
+                println!("Client {} completed in {:?}, success: {}", i, elapsed, result.is_ok());
+                (i, result.is_ok(), elapsed)
+            }
+        }).collect();
+
+        // Wait for all tasks with a reasonable timeout
+        let start_time = std::time::Instant::now();
+        let results = futures03::future::join_all(tasks).await;
+        let total_time = start_time.elapsed();
+        
+        // Analyze results
+        let successful = results.iter().filter(|(_, success, _)| *success).count();
+        let failed = results.len() - successful;
+        
+        println!("Test completed in {:?}", total_time);
+        println!("Results: {} successful, {} failed", successful, failed);
+        
+        // With the original deadlock-prone code, we expect some failures due to timeouts
+        // caused by the mutex being held during block_on() calls
+        
+        if failed > 0 {
+            println!("DEADLOCK ISSUE DETECTED: {} out of {} clients failed", failed, num_clients);
+            println!("This indicates the deadlock problem exists in the original code");
+        } else {
+            println!("ALL CLIENTS SUCCEEDED - deadlock not reproduced");
+        }
+        
+        // For the test to be meaningful, we expect at least some clients to fail with original code
+        // This test demonstrates the issue that needs to be fixed
+    }
 }
