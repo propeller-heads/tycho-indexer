@@ -1,3 +1,15 @@
+## [0.136.0](https://github.com/propeller-heads/tycho-simulation/compare/0.135.0...0.136.0) (2025-07-25)
+
+
+### Features
+
+* Update foundry ([0f0013b](https://github.com/propeller-heads/tycho-simulation/commit/0f0013bff8400d021ae60a0a3c9c2f9bbc91613f))
+* Update revm to 27.0.3 ([090406b](https://github.com/propeller-heads/tycho-simulation/commit/090406b8c4898b7a1396fa7e1171c7df1c5bb063))
+* Update revm to 27.0.3 in tycho_simulation_py ([626f118](https://github.com/propeller-heads/tycho-simulation/commit/626f118ef2b1d034f97ad0014aad8da58aee41b0))
+* Update tycho common and client ([f9db0dc](https://github.com/propeller-heads/tycho-simulation/commit/f9db0dcec408a9a6b1b86a0cf207c8f99cb55718))
+* Update tycho common and client ([e80551d](https://github.com/propeller-heads/tycho-simulation/commit/e80551d1fdf4e0ad3d286d8f013aa877ada2e6b0))
+* Update tycho common and client ([7768648](https://github.com/propeller-heads/tycho-simulation/commit/77686487a3bad77c99c2c5413712f7e9b6359a73))
+
 ## [0.135.0](https://github.com/propeller-heads/tycho-simulation/compare/0.134.0...0.135.0) (2025-07-24)
 
 
