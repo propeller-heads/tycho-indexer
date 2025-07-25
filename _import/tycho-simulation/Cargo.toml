@@ -52,11 +52,11 @@ tycho-common = "0.78.1"
 tycho-client = "0.78.1"
 
 # EVM dependencies
-foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "ab753e9", optional = true }
-foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "ab753e9", optional = true }
+foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "920ee3a1bfb3669f215201bf8a06f0bf8e9327c8", optional = true }
+foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "920ee3a1bfb3669f215201bf8a06f0bf8e9327c8", optional = true }
 alloy = { version = "1.0.6", features = ["providers", "signer-local", "rpc-types-eth"], optional = true }
-revm = { version = "24.0.0", features = ["alloydb", "serde"], optional = true }
-revm-inspectors = { version = "0.23", features = ["serde"], optional = true }
+revm = { version = "27.0.3", features = ["alloydb", "serde"], optional = true }
+revm-inspectors = { version = "0.26.5", features = ["serde"], optional = true }
 num-bigint = { version = "0.4", features = ["serde"] }
 tokio-stream = "0.1.16"
 
