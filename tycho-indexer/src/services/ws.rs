@@ -2,7 +2,7 @@
 use std::{
     collections::HashMap,
     fmt::Debug,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -65,15 +65,15 @@ impl Serialize for WebsocketError {
 pub type MessageSenderMap = HashMap<ExtractorIdentity, Arc<dyn MessageSender + Send + Sync>>;
 
 /// Shared application data between all connections
-/// Parameters are hidden behind a Mutex to allow for sharing between threads
+/// The subscribers map is read-only after initialization, so no mutex is needed
 pub struct WsData {
     /// There is one extractor subscriber per extractor identity
-    pub subscribers: Arc<Mutex<MessageSenderMap>>,
+    pub subscribers: Arc<MessageSenderMap>,
 }
 
 impl WsData {
     pub fn new(extractors: MessageSenderMap) -> Self {
-        Self { subscribers: Arc::new(Mutex::new(extractors)) }
+        Self { subscribers: Arc::new(extractors) }
     }
 }
 
@@ -175,14 +175,16 @@ impl WsActor {
     /// entire Actix runtime thread, preventing other actors from processing messages and even
     /// preventing the async operation itself from completing.
     /// 
-    /// ## Current Approach: Fire-and-Forget Async
+    /// ## Current Approach: Lock-Free Async
     /// 
-    /// We now use `ctx.spawn()` to handle the subscription asynchronously. This approach:
+    /// We now use `ctx.spawn()` to handle the subscription asynchronously with direct HashMap
+    /// access (no mutex needed since the subscribers map is read-only after initialization).
+    /// This approach:
     /// 
     /// **Advantages:**
     /// - Prevents runtime deadlocks by not blocking the actor's message processing
-    /// - Allows multiple concurrent subscriptions without mutual blocking
-    /// - Maintains proper separation between sync mutex operations and async extractor calls
+    /// - Allows unlimited concurrent subscriptions with zero lock contention
+    /// - Eliminates all mutex-related performance overhead and deadlock possibilities
     /// 
     /// **Trade-offs:**
     /// - The subscription setup is fire-and-forget - we don't wait for completion
@@ -196,7 +198,7 @@ impl WsActor {
     /// 
     /// ## Implementation Notes:
     /// 
-    /// 1. We acquire and release the mutex quickly to get the MessageSender reference
+    /// 1. We access the subscribers HashMap directly (no mutex needed - it's read-only)
     /// 2. We spawn an async future that handles the extractor subscription 
     /// 3. The future's completion handler updates actor state and sends the response to the client
     /// 4. If the future fails, an error response is sent instead
@@ -208,20 +210,14 @@ impl WsActor {
         include_state: bool,
     ) {
         let extractor_id = extractor_id.clone();
-        // Step 1: Quickly acquire the mutex, clone the MessageSender, and release the mutex
-        // This minimizes the time we hold the mutex to avoid blocking other actors
+        // Step 1: Direct HashMap access (no mutex needed since map is read-only after initialization)
         let message_sender = {
-            debug!(extractor=?extractor_id, "Acquire lock for subscribing..");
-            let extractors_guard = self
-                .app_state
-                .subscribers
-                .lock()
-                .unwrap();
-
-            if let Some(message_sender) = extractors_guard.get(&extractor_id) {
+            debug!(extractor=?extractor_id, "Looking up extractor in subscribers map..");
+            
+            if let Some(message_sender) = self.app_state.subscribers.get(&extractor_id) {
                 message_sender.clone()
             } else {
-                let available = extractors_guard
+                let available = self.app_state.subscribers
                     .keys()
                     .map(|id| id.to_string())
                     .collect::<Vec<_>>();
@@ -233,7 +229,6 @@ impl WsActor {
                 return;
             }
         };
-        // Mutex is now released - we can safely proceed with async operations
 
         // Step 2: Generate subscription ID and prepare for async operation
         // Generate a unique ID for this subscription
@@ -705,16 +700,14 @@ mod tests {
         let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "dummy");
         let extractor_id2 = ExtractorIdentity::new(Chain::Ethereum, "dummy2");
 
-        let app_state = web::Data::new(WsData::new(HashMap::new()));
-
         let message_sender = Arc::new(MyMessageSender::new(extractor_id.clone()));
         let message_sender2 = Arc::new(MyMessageSender::new(extractor_id2.clone()));
 
-        {
-            let mut subscribers = app_state.subscribers.lock().unwrap();
-            subscribers.insert(extractor_id.clone(), message_sender);
-            subscribers.insert(extractor_id2.clone(), message_sender2);
-        }
+        let mut subscribers_map = HashMap::new();
+        subscribers_map.insert(extractor_id.clone(), message_sender as Arc<dyn MessageSender + Send + Sync>);
+        subscribers_map.insert(extractor_id2.clone(), message_sender2 as Arc<dyn MessageSender + Send + Sync>);
+        
+        let app_state = web::Data::new(WsData::new(subscribers_map));
 
         // Setup WebSocket server and client, similar to existing test
         let server = start_with(
@@ -909,15 +902,14 @@ mod tests {
             .unwrap_or_else(|_| debug!("Subscriber already initialized"));
 
         let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "deadlock_test");
-        let app_state = web::Data::new(WsData::new(HashMap::new()));
-
+        
         // Use SlowMessageSender to recreate the deadlock scenario
         let message_sender = Arc::new(SlowMessageSender::new(extractor_id.clone()));
 
-        {
-            let mut subscribers = app_state.subscribers.lock().unwrap();
-            subscribers.insert(extractor_id.clone(), message_sender);
-        }
+        let mut subscribers_map = HashMap::new();
+        subscribers_map.insert(extractor_id.clone(), message_sender as Arc<dyn MessageSender + Send + Sync>);
+        
+        let app_state = web::Data::new(WsData::new(subscribers_map));
 
         let server = start_with(
             TestServerConfig::default().client_request_timeout(Duration::from_secs(10)),
