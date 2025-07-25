@@ -3,7 +3,7 @@
 
 use tonic::async_trait;
 use tycho_common::{
-    models::{protocol::ProtocolComponent, Address, BlockHash, ComponentId, TxHash},
+    models::{protocol::ProtocolComponent, BlockHash, ComponentId, TxHash},
     storage::EntryPointGateway,
     traits::{AccountExtractor, EntryPointTracer},
 };
@@ -12,6 +12,7 @@ use crate::extractor::{
     dynamic_contract_indexer::{
         cache::VersionedCache, dci::DynamicContractIndexer,
         hook_orchestrator::HookOrchestratorRegistry,
+        // hook_permissions_detector::HookPermissionsDetector, // TODO: Uncomment when used
         metadata_orchestrator::BlockMetadataOrchestrator,
     },
     models::BlockChanges,
@@ -90,46 +91,6 @@ pub enum ProcessingError {
     TracingError(String),  // During/after entrypoint generation
 }
 
-// Hook permission detection from address bit flags
-pub struct HookPermissions {
-    pub before_swap: bool,
-    pub after_swap: bool,
-}
-
-impl HookPermissions {
-    const BEFORE_SWAP_FLAG: u32 = 1 << 7;
-    const AFTER_SWAP_FLAG: u32 = 1 << 6;
-
-    /// Extract the least significant 32 bits from address for hook flag checking
-    fn get_address_flags(address: &Address) -> u32 {
-        let bytes = address.as_ref();
-        // Take the last 4 bytes (32 bits) of the address and convert to u32
-        // Ethereum addresses are 20 bytes, so we take bytes 16-19 (0-indexed)
-        let flag_bytes = &bytes[16..20];
-        u32::from_be_bytes([flag_bytes[0], flag_bytes[1], flag_bytes[2], flag_bytes[3]])
-    }
-
-    /// Check if a specific hook flag is set in the address
-    fn has_permission(address: &Address, flag: u32) -> bool {
-        (Self::get_address_flags(address) & flag) != 0
-    }
-
-    /// Check if the hook address has before_swap hook enabled
-    pub fn has_before_swap_hook(address: &Address) -> bool {
-        Self::has_permission(address, Self::BEFORE_SWAP_FLAG)
-    }
-
-    /// Check if the hook address has after_swap hook enabled  
-    pub fn has_after_swap_hook(address: &Address) -> bool {
-        Self::has_permission(address, Self::AFTER_SWAP_FLAG)
-    }
-
-    /// Check if the hook address has either before_swap or after_swap hooks
-    pub fn has_swap_hooks(address: &Address) -> bool {
-        Self::has_before_swap_hook(address) || Self::has_after_swap_hook(address)
-    }
-}
-
 #[async_trait]
 impl<AE, T, G> ExtractorExtension for UniswapV4HookDCI<AE, T, G>
 where
@@ -198,16 +159,5 @@ where
     /// inner_dci's process_revert.
     async fn process_revert(&mut self, target_block: &BlockHash) -> Result<(), ExtractionError> {
         todo!();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_hook_permissions() {
-        let hook_address = Address::from("0x1234567890123456789012345678901234567890");
-        assert!(HookPermissions::has_before_swap_hook(&hook_address));
     }
 }
