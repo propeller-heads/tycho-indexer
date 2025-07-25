@@ -1,3 +1,16 @@
+## [0.79.0](https://github.com/propeller-heads/tycho-indexer/compare/0.78.6...0.79.0) (2025-07-25)
+
+
+### Features
+
+* Add default to FeedMessage ([cedc469](https://github.com/propeller-heads/tycho-indexer/commit/cedc469222ccf75912ef2a6a6258f9141b817d7f))
+* Add default to FeedMessage ([#639](https://github.com/propeller-heads/tycho-indexer/issues/639)) ([b120186](https://github.com/propeller-heads/tycho-indexer/commit/b120186dcfaefe7f6469976dd506920724d1f9e4))
+
+
+### Bug Fixes
+
+* Add gas_usage to Token ([66a91b5](https://github.com/propeller-heads/tycho-indexer/commit/66a91b5b18446b69c5490a68f6e0025ab2cb4bdf))
+
 ## [0.78.6](https://github.com/propeller-heads/tycho-indexer/compare/0.78.5...0.78.6) (2025-07-25)
 
 ## [0.78.5](https://github.com/propeller-heads/tycho-indexer/compare/0.78.4...0.78.5) (2025-07-24)
