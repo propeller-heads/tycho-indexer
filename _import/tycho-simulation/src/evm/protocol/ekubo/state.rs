@@ -171,7 +171,7 @@ mod tests {
             )
             .expect("executing transition");
 
-        assert_eq!(state, case.state);
+        assert_eq!(state, case.state_after_transition);
     }
 
     #[apply(all_cases)]
@@ -180,7 +180,7 @@ mod tests {
         let (amount_in, expected_out) = case.swap_token0;
 
         let res = case
-            .state
+            .state_after_transition
             .get_amount_out(amount_in, &token0, &token1)
             .expect("computing quote");
 
@@ -192,7 +192,7 @@ mod tests {
         use std::ops::Deref;
 
         let (token0, token1) = (case.token0(), case.token1());
-        let state = case.state;
+        let state = case.state_after_transition;
 
         let max_amount_in = state
             .get_limits(token0.address.deref().into(), token1.address.deref().into())
