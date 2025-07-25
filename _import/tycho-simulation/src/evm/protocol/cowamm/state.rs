@@ -217,15 +217,44 @@ impl ProtocolSim for CowAMMState {
             let (proportional_token_amount_a, proportional_token_amount_b) = self.calc_tokens_out_given_exact_lp_token_in(
                 amount_in
             ).map_err(|e| SimulationError::FatalError(format!("failed to calculate token proportions out error: {e:?}")))?;
+            println!("PROP A {}, PROP B {}", proportional_token_amount_a, proportional_token_amount_b);
             // Think of it from the pools perspective , when a user exits the pool, they get their tokens back and redeems the lp_token (lp token gets burnt)
-
+            // HERE
             // The liquidity provision is double sided hence both reserves reduce by the proportional amounts for both tokens
-            new_state.token_a.1 = safe_sub_u256(self.liquidity_a(), proportional_token_amount_a)?;
-            new_state.token_b.1 = safe_sub_u256(self.liquidity_b(), proportional_token_amount_b)?;
+            // new_state.token_a.1 = safe_sub_u256(self.liquidity_a(), proportional_token_amount_a)?;
+            // new_state.token_b.1 = safe_sub_u256(self.liquidity_b(), proportional_token_amount_b)?;
 
-            // When a user redeems LP tokens, those tokens are effectively burned, the internal lp_token_supply will decrease by the amount they redeem
-            new_state.lp_token_supply = safe_sub_u256(self.lp_token_supply, amount_in)?;
+            // // When a user redeems LP tokens, those tokens are effectively burned, the internal lp_token_supply will decrease by the amount they redeem
+            // new_state.lp_token_supply = safe_sub_u256(self.lp_token_supply, amount_in)?;
 
+            // ******************************************************
+            println!("--- LP Redemption Debug ---");
+
+            // Print original state values
+            println!("Original liquidity A: {}", self.liquidity_a());
+            println!("Original liquidity B: {}", self.liquidity_b());
+            println!("Original LP token supply: {}", self.lp_token_supply);
+
+            // Print proportional amounts being removed
+            println!("Proportional token amount A (to be subtracted): {}", proportional_token_amount_a);
+            println!("Proportional token amount B (to be subtracted): {}", proportional_token_amount_b);
+            println!("Amount of LP tokens redeemed (to be subtracted): {}", amount_in);
+
+            // Compute and print resulting new values
+            let new_liq_a = safe_sub_u256(self.liquidity_a(), proportional_token_amount_a)?;
+            let new_liq_b = safe_sub_u256(self.liquidity_b(), proportional_token_amount_b)?;
+            let new_lp_supply = safe_sub_u256(self.lp_token_supply, amount_in)?;
+
+            println!("New liquidity A after redemption: {}", new_liq_a);
+            println!("New liquidity B after redemption: {}", new_liq_b);
+            println!("New LP token supply after redemption: {}", new_lp_supply);
+
+            // Assign to new_state
+            new_state.token_a.1 = new_liq_a;
+            new_state.token_b.1 = new_liq_b;
+            new_state.lp_token_supply = new_lp_supply;
+
+            // ******************************************************
             //we have to compute the amount of the superfluous token we want to swap out
             //isn't it possible that the buy_token is proportional_amount_a ? we need a way to tell if it is liquidity_a 
             // the token address is not stored in the state, so we can't even use the logic in the solidity we made to determine the 
@@ -233,33 +262,44 @@ impl ProtocolSim for CowAMMState {
             //uint256 amountToSell = tokens[0] == sellToken ? maxTokenAmountsIn[1] : maxTokenAmountsIn[0];
 
            // Determine which token to swap out based on token_out address
-            let (amount_to_swap, is_token_a_swap) = if token_out.address == *self.token_a_addr() {
-                (proportional_token_amount_b, false) // Swap token B for token A
+            println!("this is token a address {}", self.token_a_addr());
+            // the token_a_addr is that because of the pool state assignment
+            // isn't there a helper method to get the pool tokens? -> we'll have to make a binding to allow probably and we cant maek
+            // api calls during simulation
+            //we can't set toekn_a as pool token a during lp token removal it makes the wieght and liquidity invalid
+            //thats why theres a lp_token field 
+            // we need to make a separate test for lp token addition and removal
+            // we can use lp token for comparison, but now we need to fix our approach in the state 
+            let (amount_to_swap, is_token_a_swap) = if token_out.address == *self.token_a_addr() { //if we are redeeming lp_token for COW (out address is COW), (if the token we want to receive and get the other one swapped to) from the redemption is 
+                (proportional_token_amount_b, false) // Swap token B for token A // then swap the proportional amount of wstETH we received for COW 
             } else {
                 (proportional_token_amount_a, true) // Swap token A for token B
             };
-            
+            println!(
+            "amount_to_swap: {}, is_token_a_swap: {}",
+                 amount_to_swap, is_token_a_swap
+            );
             let amount_out = if is_token_a_swap {
-                calculate_out_given_in(
-                    self.liquidity_b(),
-                    self.weight_b(),
+                 calculate_out_given_in(
                     self.liquidity_a(),
                     self.weight_a(),
+                    self.liquidity_b(),
+                    self.weight_b(),
                     amount_to_swap,
                     U256::from(self.fee),
                 )
             } else {
                 calculate_out_given_in(
-                    self.liquidity_a(),
-                    self.weight_a(),
                     self.liquidity_b(),
                     self.weight_b(),
+                    self.liquidity_a(),
+                    self.weight_a(),
                     amount_to_swap,
                     U256::from(self.fee),
                 )
             }
             .map_err(|e| SimulationError::FatalError(format!("amount_out error: {e:?}")))?;
-            
+            println!("Amount out {}", amount_out);
             // Update state for the swap
             if is_token_a_swap {
                 new_state.token_b.1 = safe_sub_u256(new_state.liquidity_b(), amount_to_swap)?;
@@ -268,10 +308,17 @@ impl ProtocolSim for CowAMMState {
                 new_state.token_a.1 = safe_sub_u256(new_state.liquidity_a(), amount_to_swap)?;
                 new_state.token_b.1 = safe_add_u256(new_state.liquidity_b(), amount_out)?;
             }
+            println!("amount_out:               {}", amount_out);
+            println!("proportional_token_amount_a: {}", proportional_token_amount_a);
+
+            let total_trade_amount = safe_add_u256(amount_out, proportional_token_amount_a)?;
+            println!("total_trade_amount:       {}", total_trade_amount);
+
 
             return Ok(GetAmountOutResult {
-                amount: u256_to_biguint(amount_out),
-                gas: 120_000u64.to_biguint().unwrap(), //change this 
+                amount: u256_to_biguint(total_trade_amount), //total amount out is amount of COW out from the superfluous swap + the COW from the proportional
+                // are we doing it from the pool or users perspective ? reserves -> pool, amount_out -> user 
+                gas: 194140u64.to_biguint().unwrap(), //gas price for one trade i just
                 new_state: Box::new(new_state),
             });
         }
@@ -295,7 +342,7 @@ impl ProtocolSim for CowAMMState {
             } else {
                 (proportional_token_amount_b, false) // Swap extra token B for token A
             };
-
+            //change this to use calcOutGivenIn
             let amount_out = if is_token_a_swap {
                 calculate_out_given_in(
                     self.liquidity_a(),
@@ -325,7 +372,7 @@ impl ProtocolSim for CowAMMState {
                 new_state.token_b.1 = safe_sub_u256(new_state.liquidity_b(), amount_to_swap)?;
                 new_state.token_a.1 = safe_add_u256(new_state.liquidity_a(), amount_out)?;
             }
-
+            // let total_trade_amount = safe_add_u256(amount_out, proportional_token_amount_a)?;
             return Ok(GetAmountOutResult {
                 amount: u256_to_biguint(amount_out),
                 gas: 120_000u64.to_biguint().unwrap(),
@@ -347,7 +394,7 @@ impl ProtocolSim for CowAMMState {
         new_state.token_b.1 = safe_add_u256(self.liquidity_b(), amount_out)?;
 
         Ok(GetAmountOutResult {
-            amount: u256_to_biguint(amount_out),
+            amount: u256_to_biguint(amount_out), //add the other proportion too
             gas: 120_000u64.to_biguint().unwrap(), //change this
             new_state: Box::new(new_state),
         })
@@ -479,7 +526,7 @@ mod tests {
             "BCoW-50CoW-50wstETH",
             18,
             0,
-            &[Some(10_000_000)],
+            &[Some(199_999_999_999_999_990)], //removed _999
             Chain::Ethereum,
             100,
         );
@@ -519,20 +566,6 @@ mod tests {
         BigUint::from_str("217679081735374278").unwrap(),
         BigUint::from_str("527964550").unwrap(), //WETH in USDC out (≈ 0.2177 WETH) for 527964550 USDC (≈ 527.96 USDC) remember taking the decimals into consideration
     )]
-    // #[case::buy_lp_token( //buying lp token with COW == joining pool and convert excess wstETH to COW
-    //     U256::from_str("1547000000000000000000").unwrap(),
-    //     U256::from_str("100000000000000000").unwrap(),
-    //     0, 2, // token indices: t0 -> t2
-    //     BigUint::from_str("5205849666").unwrap(),
-    //     BigUint::from_str("336513").unwrap(),
-    // )]
-    // #[case::sell_lp_token( //selling (redeeming) lp_token for COW == exiting pool and converting excess COW to wstETH
-    //     U256::from_str("1547000000000000000000").unwrap(),
-    //     U256::from_str("100000000000000000").unwrap(),
-    //     2, 1, // token indices: t2 -> t1
-    //     BigUint::from_str("2539285736").unwrap(), //amount of lp_token being sold (redeeemd) 
-    //     BigUint::from_str("7696325000000000000").unwrap(), //COW as output
-    // )]
     fn test_get_amount_out(
         #[case] liq_a: U256,
         #[case] liq_b: U256,
@@ -550,8 +583,8 @@ mod tests {
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
             Bytes::from(token_in.address.clone()),
             Bytes::from(token_out.address.clone()),
-            liq_a,
-            liq_b,
+            liq_a, //COW
+            liq_b, //wstETH
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
             U256::from_str("199999999999999999990").unwrap(),
             U256::from_str("1000000000000000000").unwrap(),
@@ -561,55 +594,76 @@ mod tests {
 
         let res = state.get_amount_out(amount_in.clone(), &token_in, &token_out).unwrap();
 
-        //it updates the liquidity internally in the get_amount_out 
-        println!("RESULT AMOUNT {}", res.amount); //calculation is right na
-        println!("EXPECTED OUT {}", expected_out);
-        // RESULT AMOUNT 336513
-        // EXPECTED OUT 336513
+        println!("RES AMOUNT {}", res.amount);
+        println!("EXPECTED AMOUNT {}", expected_out);
 
         assert_eq!(res.amount, expected_out);
 
         let new_state = res.new_state.as_any().downcast_ref::<CowAMMState>().unwrap();
-        //same_dec:
-        //left: 1546999999994794150334 right: 1547000000005205849666 So the difference is 10,411,653,332, 
-        // which is about 0.00067% relative to the original value (~1.546e21). That's a very small relative error.
-        // and that causes the assertion to fail
-        //diff_dec:
-        //left: 170069100431922691907 right: 170504458595393440463 So the difference is 435,358,163,470,748,556
-        //which is 0.2553% relative to the original value (right). This is quite significant
-
-        //the solidity getPriceAt() implementation is the marginal price to because of the large swap there would be a
-        //price difference, and also slippage 
-        //so let me change the expected assertion to the spot price of the assets before the swap 
-
-        //wait its not price, its the amount, and what we are comparing in the assertions is the new balances of each token
-        //so that means we are getting different amounts out from what it ought to be 
-        println!("--- Swap Operation Debug ---");
-
-        // Print initial balances
-        println!("Initial liquidity A: {}", liq_a);
-        println!("Initial liquidity B: {}", liq_b);
-
-        // Print expected changes
-        println!("Amount In (A): {}", amount_in);
-        println!("Expected Out (B): {}", expected_out);
         
-        // assert_eq!(new_state.liquidity_a(), safe_add_u256(liq_a, biguint_to_u256(&amount_in)).unwrap());  
-        // assert_eq!(new_state.liquidity_b(), safe_sub_u256(liq_b, biguint_to_u256(&expected_out)).unwrap());
-        // Print computed new balances
-        let expected_liq_a = safe_sub_u256(liq_a, biguint_to_u256(&amount_in)).unwrap();
-        let expected_liq_b = safe_add_u256(liq_b, biguint_to_u256(&expected_out)).unwrap();
+        assert_eq!(new_state.liquidity_a(), safe_sub_u256(liq_a, biguint_to_u256(&amount_in)).unwrap());  
+        assert_eq!(new_state.liquidity_b(), safe_add_u256(liq_b, biguint_to_u256(&expected_out)).unwrap());
+        // Original state unchanged
+        assert_eq!(state.liquidity_a(), liq_a);
+        assert_eq!(state.liquidity_b(), liq_b);
+    }
 
-        println!("Expected new liquidity A (liq_a + amount_in): {}", expected_liq_a);
-        println!("Expected new liquidity B (liq_b - expected_out): {}", expected_liq_b);
+    // #[case::buy_lp_token( //buying lp token with COW == joining pool and convert excess wstETH to COW
+    //     U256::from_str("1547000000000000000000").unwrap(),
+    //     U256::from_str("100000000000000000").unwrap(),
+    //     0, 2, // token indices: t0 -> t2
+    //     BigUint::from_str("5205849666").unwrap(),
+    //     BigUint::from_str("336513").unwrap(),
+    // )]
+    #[rstest]
+    #[case::sell_lp_token( //selling (redeeming) lp_token for COW == exiting pool and converting excess COW to wstETH
+        U256::from_str("1547000000000000000000").unwrap(),
+        U256::from_str("100000000000000000").unwrap(),
+        2, 0, // token indices: t2 -> t0
+        BigUint::from_str("1000000000000000000").unwrap(), //amount of lp_token being sold (redeeemd) 
+        BigUint::from_str("15431325000000000000").unwrap(), //COW as output
+    )] 
+    // we have to account for two assertions 
+    // the superfluous wstETH we swap plus the 
+    // the total amount of COW we get -> the COW sent to us + the result of the superfluous wstETH swapped
+    fn test_get_amount_out_lp_token(
+        #[case] liq_a: U256,
+        #[case] liq_b: U256,
+        #[case] token_in_idx: usize,
+        #[case] token_out_idx: usize,
+        #[case] amount_in: BigUint,
+        #[case] expected_out: BigUint,
+    ) {
+       let (t0, t1, t2, t3, t4) = create_test_tokens();
+       let tokens = [&t0, &t1, &t2, &t3, &t4];
 
-        // Print actual new state balances
-        println!("Actual new liquidity A: {}", new_state.liquidity_a());
-        println!("Actual new liquidity B: {}", new_state.liquidity_b());
+       let token_a = tokens[token_in_idx]; 
+       let token_b = tokens[token_out_idx];  
 
-        // Print original state again to confirm unchanged
-        println!("Original state liquidity A (should be unchanged): {}", state.liquidity_a());
-        println!("Original state liquidity B (should be unchanged): {}", state.liquidity_b());
+       let state = CowAMMState::new(
+            Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
+            Bytes::from(t0.address.clone()), //COW
+            Bytes::from(t1.address.clone()), //wstETH
+            liq_a, //COW
+            liq_b, //wstETH
+            Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
+            U256::from_str("199999999999999999990").unwrap(),
+            U256::from_str("1000000000000000000").unwrap(),
+            U256::from_str("1000000000000000000").unwrap(),
+            0,
+        );
+
+        let res = state.get_amount_out(amount_in.clone(), &token_a, &token_b).unwrap();
+
+        println!("RES AMOUNT {}", res.amount);
+        println!("EXPECTED AMOUNT {}", expected_out);
+
+        assert_eq!(res.amount, expected_out);
+
+        let new_state = res.new_state.as_any().downcast_ref::<CowAMMState>().unwrap();
+        
+        assert_eq!(new_state.liquidity_a(), safe_sub_u256(liq_a, biguint_to_u256(&amount_in)).unwrap());  
+        assert_eq!(new_state.liquidity_b(), safe_add_u256(liq_b, biguint_to_u256(&expected_out)).unwrap());
         // Original state unchanged
         assert_eq!(state.liquidity_a(), liq_a);
         assert_eq!(state.liquidity_b(), liq_b);
@@ -621,7 +675,7 @@ mod tests {
 
         let (t0, t1, _, _, _,) = create_test_tokens();
       
-        let mut state = CowAMMState::new(
+        let state = CowAMMState::new(
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
             Bytes::from(t0.address.clone()),
             Bytes::from(t1.address.clone()),
