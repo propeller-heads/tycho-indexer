@@ -62,6 +62,20 @@ impl Token {
     pub fn one(&self) -> BigUint {
         BigUint::from((1.0 * 10f64.powi(self.decimals as i32)) as u128)
     }
+
+    pub fn gas_usage(&self) -> BigUint {
+        BigUint::from(
+            self.gas
+                .clone()
+                .into_iter()
+                .flatten()
+                .collect::<Vec<u64>>()
+                .iter()
+                .min()
+                .copied()
+                .unwrap_or(0u64),
+        )
+    }
 }
 
 impl PartialOrd for Token {

@@ -375,7 +375,7 @@ impl SynchronizerStream {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct FeedMessage<H>
+pub struct FeedMessage<H = BlockHeader>
 where
     H: HeaderLike,
 {
