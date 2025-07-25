@@ -34,7 +34,7 @@ use crate::{
         dynamic_contract_indexer::dci::DynamicContractIndexer,
         post_processors::POST_PROCESSOR_REGISTRY,
         protocol_cache::ProtocolMemoryCache,
-        protocol_extractor::{ExtractorPgGateway, ProtocolExtractor},
+        protocol_extractor::{ExtractorPgGateway, FinalityType, ProtocolExtractor},
         ExtractionError, Extractor, ExtractorMsg,
     },
     pb::sf::substreams::v1::Package,
@@ -43,6 +43,15 @@ use crate::{
         SubstreamsEndpoint,
     },
 };
+
+fn default_min_block_buffer() -> usize {
+    1 // Default to existing behavior (immediate commit)
+}
+
+fn default_finality_type() -> String {
+    "batch".to_string() // Default to existing behavior
+}
+
 pub enum ControlMessage {
     Stop,
     Subscribe(Sender<ExtractorMsg>),
@@ -328,6 +337,10 @@ pub struct ExtractorConfig {
     pub post_processor: Option<String>,
     #[serde(default)]
     pub dci_plugin: Option<DCIType>,
+    #[serde(default = "default_min_block_buffer")]
+    pub min_block_buffer: usize,
+    #[serde(default = "default_finality_type")]
+    pub finality_type: String,
 }
 
 impl ExtractorConfig {
@@ -361,6 +374,8 @@ impl ExtractorConfig {
             initialized_accounts_block,
             post_processor,
             dci_plugin,
+            min_block_buffer: default_min_block_buffer(),
+            finality_type: default_finality_type(),
         }
     }
 }
@@ -572,6 +587,11 @@ impl ExtractorBuilder {
                 token_pre_processor.clone(),
                 post_processor,
                 dci_plugin,
+                self.config.min_block_buffer,
+                match self.config.finality_type.as_str() {
+                    "instant" => FinalityType::Instant,
+                    "batch" | _ => FinalityType::Batch,
+                },
             )
             .await?,
         ));

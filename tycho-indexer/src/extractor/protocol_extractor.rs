@@ -49,6 +49,15 @@ use crate::{
     pb::sf::substreams::rpc::v2::{BlockScopedData, BlockUndoSignal, ModulesProgress},
 };
 
+/// Chain finality characteristics for buffering strategy
+#[derive(Clone, Debug)]
+pub enum FinalityType {
+    /// Instant finality (like Base, Polygon) - needs buffering to reduce DB load
+    Instant,
+    /// Batch finality (like Ethereum mainnet) - existing behavior
+    Batch,
+}
+
 pub struct Inner {
     cursor: Vec<u8>,
     last_processed_block: Option<Block>,
@@ -72,6 +81,10 @@ pub struct ProtocolExtractor<G, T, E> {
     post_processor: Option<fn(BlockChanges) -> BlockChanges>,
     reorg_buffer: Mutex<ReorgBuffer<BlockUpdateWithCursor<BlockChanges>>>,
     dci_plugin: Option<Arc<Mutex<E>>>,
+    /// Minimum number of blocks to buffer before committing for instant finality chains
+    min_block_buffer: usize,
+    /// Type of finality for this blockchain  
+    finality_type: FinalityType,
 }
 
 impl<G, T, E> ProtocolExtractor<G, T, E>
@@ -92,6 +105,8 @@ where
         token_pre_processor: T,
         post_processor: Option<fn(BlockChanges) -> BlockChanges>,
         dci_plugin: Option<E>,
+        min_block_buffer: usize,
+        finality_type: FinalityType,
     ) -> Result<Self, ExtractionError> {
         let dci_plugin = dci_plugin.map(|plugin| Arc::new(Mutex::new(plugin)));
 
@@ -118,6 +133,8 @@ where
                     post_processor,
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
                     dci_plugin,
+                    min_block_buffer,
+                    finality_type: finality_type.clone(),
                 }
             }
             Ok((cursor, block_hash)) => {
@@ -154,6 +171,8 @@ where
                     post_processor,
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
                     dci_plugin,
+                    min_block_buffer,
+                    finality_type,
                 }
             }
             Err(err) => return Err(ExtractionError::Setup(err.to_string())),
@@ -750,13 +769,35 @@ where
                 .peekable();
 
             while let Some(msg) = msgs.next() {
-                // Force a database commit if we're not syncing and this is the last block to be
-                // sent. Otherwise, wait to accumulate a full batch before
-                // committing.
-                let force_db_commit = if is_syncing { false } else { msgs.peek().is_none() };
+                // Enhanced buffering logic for instant finality chains
+                let buffered_blocks_count = reorg_buffer.finalized_blocks_count();
+                let should_buffer_more = match self.finality_type {
+                    FinalityType::Instant => buffered_blocks_count < self.min_block_buffer,
+                    FinalityType::Batch => false, // Existing behavior
+                };
+
+                let force_db_commit = if is_syncing { 
+                    false 
+                } else if should_buffer_more {
+                    false  // Continue buffering until min_block_buffer reached
+                } else { 
+                    msgs.peek().is_none() 
+                };
+
+                // Calculate committed block height for internal coordination
+                let committed_height = if force_db_commit {
+                    inp.final_block_height  // This block will be committed
+                } else {
+                    // Buffer is holding blocks, so committed height lags behind
+                    inp.final_block_height.saturating_sub(self.min_block_buffer as u64)
+                };
+
+                // Update the message with committed height for PendingDeltas coordination
+                let mut block_update = msg.block_update();
+                block_update.committed_block_height = committed_height;
 
                 self.gateway
-                    .advance(msg.block_update(), msg.cursor(), force_db_commit)
+                    .advance(&block_update, msg.cursor(), force_db_commit)
                     .await?;
             }
         }
@@ -1623,6 +1664,8 @@ mod test {
             preprocessor,
             None,
             None,
+            1, // min_block_buffer
+            FinalityType::Batch, // finality_type
         )
         .await
         .expect("Failed to create extractor")

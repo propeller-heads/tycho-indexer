@@ -258,6 +258,12 @@ where
             _ => None,
         }
     }
+
+    /// Returns the count of blocks currently in the buffer
+    /// Used for determining buffering strategy for instant finality chains
+    pub fn finalized_blocks_count(&self) -> usize {
+        self.block_messages.len()
+    }
 }
 
 pub type ProtocolStateIdType = ComponentId;
