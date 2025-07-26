@@ -158,13 +158,13 @@ pub fn calculate_price(
 
 /**********************************************************************************************
 // calcOutGivenIn                                                                            //
-// aO = tokenAmountOut                                                                       //
-// bO = tokenBalanceOut                                                                      //
-// bI = tokenBalanceIn              /      /            bI             \    (wI / wO) \      //
-// aI = tokenAmountIn    aO = bO * |  1 - | --------------------------  | ^            |     //
-// wI = tokenWeightIn               \      \ ( bI + ( aI * ( 1 - sF )) /              /      //
-// wO = tokenWeightOut                                                                       //
-// sF = swapFee                                                                              //
+// aO = token_amount_out                                                                       //
+// bO = token_balance_out                                                                      //
+// bI = token_balance_in              /      /            bI             \    (wI / wO) \      //
+// aI = tokenAmount_in    aO = bO * |  1 - | --------------------------  | ^            |     //
+// wI = token_weight_in               \      \ ( bI + ( aI * ( 1 - sF )) /              /      //
+// wO = token_weight_out                                                                       //
+// sF = swap_fee                                                                              //
  **********************************************************************************************/
 pub fn calculate_out_given_in(
     token_balance_in: U256,
@@ -181,4 +181,43 @@ pub fn calculate_out_given_in(
     let x = bpow(y, weight_ratio)?;
     let z = bsub(BONE, x)?;
     bmul(token_balance_out, z)
+}
+
+/** @dev Computes how many tokens must be sent to a pool in order to take `tokenAmountOut`, given the current balances
+     * and price bounds. */
+      /**
+   * @notice Calculate the amount of token in given the amount of token out for a swap
+   * @param tokenBalanceIn The balance of the input token in the pool
+   * @param tokenWeightIn The weight of the input token in the pool
+   * @param tokenBalanceOut The balance of the output token in the pool
+   * @param tokenWeightOut The weight of the output token in the pool
+   * @param tokenAmountOut The amount of the output token
+   * @param swapFee The swap fee of the pool
+   * @return tokenAmountIn The amount of token in given the amount of token out for a swap
+   * @dev Formula:
+   * aI = tokenAmountIn
+   * bO = tokenBalanceOut               /  /     bO      \    (wO / wI)      \
+   * bI = tokenBalanceIn          bI * |  | ------------  | ^            - 1  |
+   * aO = tokenAmountOut    aI =        \  \ ( bO - aO ) /                   /
+   * wI = tokenWeightIn           --------------------------------------------
+   * wO = tokenWeightOut                          ( 1 - sF )
+   * sF = swapFee
+   */
+
+pub fn calculate_in_given_out(
+    token_balance_in: U256,
+    token_weight_in: U256,
+    token_balance_out: U256,
+    token_weight_out: U256,
+    token_amount_out: U256,
+    swap_fee: U256,
+) -> Result<U256, CowAMMError> {
+    let weight_ratio = bdiv(token_weight_out, token_weight_in)?;
+    let diff = bsub(token_balance_out, token_amount_out)?;
+    let y = bdiv(token_balance_out, diff)?;
+    let mut foo = bpow(y, weight_ratio)?;
+    foo = bsub(foo, BONE)?;
+    let mut token_amount_in = bsub(BONE, swap_fee)?;
+    token_amount_in = bdiv(bmul(token_balance_in, foo)?, token_amount_in)?;
+    Ok(token_amount_in)
 }
