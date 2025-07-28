@@ -6,7 +6,9 @@ use num_traits::ToPrimitive;
 use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
 use tycho_common::{models::token::Token, Bytes};
-pub mod utils;
+#[path = "../shared/utils.rs"]
+mod shared_utils;
+use shared_utils::get_default_url;
 use tycho_simulation::{
     protocol::models::Update,
     rfq::{
@@ -16,7 +18,6 @@ use tycho_simulation::{
     tycho_common::models::Chain,
     utils::load_all_tokens,
 };
-use utils::get_default_url;
 
 #[derive(Parser)]
 struct Cli {

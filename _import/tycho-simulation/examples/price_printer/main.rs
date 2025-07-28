@@ -1,4 +1,6 @@
 extern crate tycho_simulation;
+#[path = "../shared/utils.rs"]
+mod shared_utils;
 mod ui;
 pub mod utils;
 
@@ -6,6 +8,7 @@ use std::{env, str::FromStr};
 
 use clap::Parser;
 use futures::{future::select_all, StreamExt};
+use shared_utils::get_default_url;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tycho_client::feed::component_tracker::ComponentFilter;
 use tycho_common::models::Chain;
@@ -27,7 +30,6 @@ use tycho_simulation::{
     protocol::models::Update,
     utils::load_all_tokens,
 };
-use utils::get_default_url;
 
 #[derive(Parser)]
 struct Cli {

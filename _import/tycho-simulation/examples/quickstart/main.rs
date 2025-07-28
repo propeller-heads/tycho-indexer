@@ -28,7 +28,9 @@ use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use tracing_subscriber::EnvFilter;
 use tycho_common::{models::token::Token, Bytes};
-pub mod utils;
+#[path = "../shared/utils.rs"]
+mod shared_utils;
+use shared_utils::get_default_url;
 use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder},
@@ -57,7 +59,6 @@ use tycho_simulation::{
     tycho_common::models::Chain,
     utils::load_all_tokens,
 };
-use utils::get_default_url;
 
 const FAKE_PK: &str = "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234";
 
