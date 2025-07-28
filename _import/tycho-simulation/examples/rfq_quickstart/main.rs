@@ -12,7 +12,7 @@ use shared_utils::get_default_url;
 use tycho_simulation::{
     protocol::models::Update,
     rfq::{
-        protocols::bebop::{client::BebopClient, state::BebopState},
+        protocols::bebop::{client_builder::BebopClientBuilder, state::BebopState},
         stream::RFQStreamBuilder,
     },
     tycho_common::models::Chain,
@@ -27,7 +27,7 @@ struct Cli {
     buy_token: Option<String>,
     #[arg(short, long, default_value_t = 10.0)]
     sell_amount: f64,
-    /// The minimum TVL threshold for RFQ quotes
+    /// The minimum TVL threshold for RFQ quotes in USD
     #[arg(short, long, default_value_t = 1.0)]
     tvl_threshold: f64,
     #[arg(short, long, default_value = "ethereum")]
@@ -121,24 +121,17 @@ async fn main() {
         buy_symbol = buy_token.symbol
     );
 
-    // Set up RFQ client
+    // Set up RFQ client using the builder pattern
     let mut rfq_pairs = HashSet::new();
     rfq_pairs.insert((sell_token_address.to_string(), buy_token_address.to_string()));
     rfq_pairs.insert((buy_token_address.to_string(), sell_token_address.to_string()));
 
-    let mut bebop_quote_tokens = HashSet::new();
-    bebop_quote_tokens.insert(buy_token_address.to_string());
-
     println!("Connecting to RFQ WebSocket...");
-    let bebop_client = BebopClient::new(
-        chain,
-        rfq_pairs,
-        cli.tvl_threshold,
-        bebop_ws_user,
-        bebop_ws_key,
-        bebop_quote_tokens,
-    )
-    .expect("Failed to create RFQ clients");
+    let bebop_client = BebopClientBuilder::new(chain, bebop_ws_user, bebop_ws_key)
+        .pairs(rfq_pairs)
+        .tvl_threshold(cli.tvl_threshold)
+        .build()
+        .expect("Failed to create RFQ clients");
 
     let (tx, mut rx) = mpsc::channel::<Update>(100);
 
