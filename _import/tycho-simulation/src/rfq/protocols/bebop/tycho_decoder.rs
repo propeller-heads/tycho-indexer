@@ -61,8 +61,19 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
         let asks: Vec<(f64, f64)> = serde_json::from_slice(asks_json)
             .map_err(|e| InvalidSnapshotError::ValueError(format!("Invalid asks JSON: {e}")))?;
 
-        let price_data =
-            BebopPriceData { last_update_ts: timestamp_header.timestamp as f64, bids, asks };
+        let price_data = BebopPriceData {
+            base: base_token.address.to_vec(),
+            quote: quote_token.address.to_vec(),
+            last_update_ts: timestamp_header.timestamp,
+            bids: bids
+                .iter()
+                .flat_map(|(price, size)| [*price as f32, *size as f32])
+                .collect(),
+            asks: asks
+                .iter()
+                .flat_map(|(price, size)| [*price as f32, *size as f32])
+                .collect(),
+        };
 
         Ok(BebopState { base_token, quote_token, price_data })
     }
@@ -169,11 +180,11 @@ mod tests {
 
         assert_eq!(result.base_token.symbol, "WBTC");
         assert_eq!(result.quote_token.symbol, "USDC");
-        assert_eq!(result.price_data.last_update_ts, 1703097600.0);
-        assert_eq!(result.price_data.bids.len(), 3);
-        assert_eq!(result.price_data.asks.len(), 3);
-        assert_eq!(result.price_data.bids[0], (65000.0, 1.5));
-        assert_eq!(result.price_data.asks[0], (65100.0, 1.0));
+        assert_eq!(result.price_data.last_update_ts, 1703097600);
+        assert_eq!(result.price_data.get_bids().len(), 3);
+        assert_eq!(result.price_data.get_asks().len(), 3);
+        assert_eq!(result.price_data.get_bids()[0], (65000.0, 1.5));
+        assert_eq!(result.price_data.get_asks()[0], (65100.0, 1.0));
     }
 
     #[tokio::test]

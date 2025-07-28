@@ -1,16 +1,57 @@
+use alloy::primitives::Address;
+use prost::Message;
 use serde::{Deserialize, Serialize};
 use tycho_common::Bytes;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// Protobuf message for Bebop pricing updates
+#[derive(Clone, PartialEq, Message)]
+pub struct BebopPricingUpdate {
+    #[prost(message, repeated, tag = "1")]
+    pub pairs: Vec<BebopPriceData>,
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Message)]
 pub struct BebopPriceData {
-    pub last_update_ts: f64,
-    /// Vec where each tuple is (price, size)
-    pub bids: Vec<(f64, f64)>,
-    /// Vec where each tuple is (price, size)
-    pub asks: Vec<(f64, f64)>,
+    #[prost(bytes, tag = "1")]
+    pub base: Vec<u8>,
+    #[prost(bytes, tag = "2")]
+    pub quote: Vec<u8>,
+    #[prost(uint64, tag = "3")]
+    pub last_update_ts: u64,
+    /// Flat array: [price1, size1, price2, size2, ...]
+    #[prost(float, repeated, packed = "true", tag = "4")]
+    pub bids: Vec<f32>,
+    /// Flat array: [price1, size1, price2, size2, ...]
+    #[prost(float, repeated, packed = "true", tag = "5")]
+    pub asks: Vec<f32>,
 }
 
 impl BebopPriceData {
+    /// Convert flat array to Vec<(f64, f64)> pairs
+    /// Input: [price1, size1, price2, size2, ...]
+    /// Output: [(price1, size1), (price2, size2), ...]
+    pub fn to_price_size_pairs(array: &[f32]) -> Vec<(f64, f64)> {
+        array
+            .chunks_exact(2)
+            .map(|chunk| (chunk[0] as f64, chunk[1] as f64))
+            .collect()
+    }
+
+    pub fn get_bids(&self) -> Vec<(f64, f64)> {
+        Self::to_price_size_pairs(&self.bids)
+    }
+
+    pub fn get_asks(&self) -> Vec<(f64, f64)> {
+        Self::to_price_size_pairs(&self.asks)
+    }
+
+    pub fn get_pair_key(&self) -> String {
+        // Convert raw bytes to Address (which provides checksum formatting)
+        let base_addr = Address::from_slice(&self.base);
+        let quote_addr = Address::from_slice(&self.quote);
+        format!("{base_addr}/{quote_addr}")
+    }
+
     /// Calculates Total Value Locked (TVL) based on bid/ask levels.
     ///
     /// TVL is calculated using the formula from Bebop's documentation:
@@ -21,13 +62,13 @@ impl BebopPriceData {
     /// Note: This calculation normalizes the quote token in case quote_price_data is passed.
     pub fn calculate_tvl(&self, quote_price_data: Option<BebopPriceData>) -> f64 {
         let bid_tvl: f64 = self
-            .bids
+            .get_bids()
             .iter()
             .map(|(price, size)| price * size)
             .sum();
 
         let ask_tvl: f64 = self
-            .asks
+            .get_asks()
             .iter()
             .map(|(price, size)| price * size)
             .sum();
@@ -71,7 +112,6 @@ impl BebopPriceData {
     ///
     /// # Parameters
     /// - `base_token_amount`: The amount of tokens to trade
-    /// - `price_data`: The price data containing bids and asks
     /// - `is_selling`: True for selling tokens (use bids), false for buying tokens (use asks)
     ///
     /// # Returns
@@ -81,7 +121,7 @@ impl BebopPriceData {
 
         // If selling AAA for USDC, we need to look at [AAA/USDC].bids
         // If buying AAA with USDC, we need to look at [AAA/USDC].asks
-        let price_levels = if sell { self.bids.clone() } else { self.asks.clone() };
+        let price_levels = if sell { self.get_bids() } else { self.get_asks() };
 
         // If there is absolutely no TVL, return None. Price is unavailable.
         if price_levels.is_empty() {
@@ -204,9 +244,11 @@ mod tests {
     #[test]
     fn test_calculate_tvl_no_normalization() {
         let price_data = BebopPriceData {
-            last_update_ts: 1234567890.0,
-            bids: vec![(2000.0, 1.0), (1999.0, 2.0)],
-            asks: vec![(2001.0, 1.5), (2002.0, 1.0)],
+            base: hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(), // WETH
+            quote: hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(), // USDC
+            last_update_ts: 1234567890,
+            bids: vec![2000.0f32, 1.0f32, 1999.0f32, 2.0f32],
+            asks: vec![2001.0f32, 1.5f32, 2002.0f32, 1.0f32],
         };
 
         let tvl = price_data.calculate_tvl(None);
@@ -223,14 +265,18 @@ mod tests {
         // Scenario: We have price data for ETH/TAMARA. One ETH is normally around 100 TAMARA,
         // and one TAMARA is around 10 USDC.
         let price_data_eth_tamara = BebopPriceData {
-            last_update_ts: 1234567890.0,
-            bids: vec![(99.0, 1.0), (98.0, 2.0)],
-            asks: vec![(101.0, 1.0), (102.0, 2.0)],
+            base: hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(), // WETH
+            quote: hex::decode("1234567890123456789012345678901234567890").unwrap(), // Mock TAMARA
+            last_update_ts: 1234567890,
+            bids: vec![99.0f32, 1.0f32, 98.0f32, 2.0f32],
+            asks: vec![101.0f32, 1.0f32, 102.0f32, 2.0f32],
         };
         let price_data_tamara_usdc = BebopPriceData {
-            last_update_ts: 1234567890.0,
-            bids: vec![(9.0, 300.0), (8.0, 300.0)],
-            asks: vec![(11.0, 300.0), (12.0, 300.0)],
+            base: hex::decode("1234567890123456789012345678901234567890").unwrap(), // Mock TAMARA
+            quote: hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(), // USDC
+            last_update_ts: 1234567890,
+            bids: vec![9.0f32, 300.0f32, 8.0f32, 300.0f32],
+            asks: vec![11.0f32, 300.0f32, 12.0f32, 300.0f32],
         };
 
         let tvl = price_data_eth_tamara.calculate_tvl(Some(price_data_tamara_usdc));
@@ -245,9 +291,11 @@ mod tests {
     #[test]
     fn test_get_mid_price() {
         let price_data = BebopPriceData {
-            last_update_ts: 1234567890.0,
-            bids: vec![(2000.0, 2.0), (1999.0, 3.0)],
-            asks: vec![(2001.0, 3.0), (2002.0, 1.0)],
+            base: hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(), // WETH
+            quote: hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(), // USDC
+            last_update_ts: 1234567890,
+            bids: vec![2000.0f32, 2.0f32, 1999.0f32, 3.0f32],
+            asks: vec![2001.0f32, 3.0f32, 2002.0f32, 1.0f32],
         };
 
         // Test mid price for larger amount spanning multiple levels
@@ -259,25 +307,31 @@ mod tests {
 
         // Test missing bids. Token considered untradeable.
         let price_data = BebopPriceData {
-            last_update_ts: 1234567890.0,
+            base: hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(), // WETH
+            quote: hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(), // USDC
+            last_update_ts: 1234567890,
             bids: vec![],
-            asks: vec![(2001.0, 3.0), (2002.0, 1.0)],
+            asks: vec![2001.0f32, 3.0f32, 2002.0f32, 1.0f32],
         };
         assert_eq!(price_data.get_mid_price(3.0), None);
 
         // Test missing asks. Token considered untradeable.
         let price_data = BebopPriceData {
-            last_update_ts: 1234567890.0,
-            bids: vec![(2000.0, 2.0), (1999.0, 3.0)],
+            base: hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(), // WETH
+            quote: hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(), // USDC
+            last_update_ts: 1234567890,
+            bids: vec![2000.0f32, 2.0f32, 1999.0f32, 3.0f32],
             asks: vec![],
         };
         assert_eq!(price_data.get_mid_price(3.0), None);
 
         // Test not enough liquidity (give estimate based on existing liquidity)
         let price_data = BebopPriceData {
-            last_update_ts: 1234567890.0,
-            bids: vec![(2000.0, 2.0), (1999.0, 3.0)],
-            asks: vec![(2001.0, 3.0), (2002.0, 1.0)],
+            base: hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(), // WETH
+            quote: hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(), // USDC
+            last_update_ts: 1234567890,
+            bids: vec![2000.0f32, 2.0f32, 1999.0f32, 3.0f32],
+            asks: vec![2001.0f32, 3.0f32, 2002.0f32, 1.0f32],
         };
         let insufficient_mid = price_data.get_mid_price(10.0);
         assert_eq!(insufficient_mid, Some(2000.325));
