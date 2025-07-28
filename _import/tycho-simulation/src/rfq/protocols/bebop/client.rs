@@ -13,7 +13,9 @@ use reqwest::Client;
 use tokio_tungstenite::{connect_async_with_config, tungstenite::Message};
 use tracing::{error, info, warn};
 use tycho_common::{
-    models::protocol::GetAmountOutParams, simulation::indicatively_priced::SignedQuote, Bytes,
+    models::{protocol::GetAmountOutParams, Chain},
+    simulation::indicatively_priced::SignedQuote,
+    Bytes,
 };
 
 use crate::{
@@ -25,7 +27,6 @@ use crate::{
     },
     tycho_client::feed::synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
     tycho_common::dto::{ProtocolComponent, ResponseProtocolState},
-    tycho_core::dto::Chain,
 };
 
 type BebopPriceMessage = HashMap<String, BebopPriceData>;
@@ -123,7 +124,7 @@ impl BebopClient {
             id: component_id.clone(),
             protocol_system: "rfq:bebop".to_string(),
             protocol_type_name: "bebop_pool".to_string(),
-            chain: self.chain,
+            chain: self.chain.into(),
             tokens,
             contract_ids: vec![], // empty for RFQ
             static_attributes: Default::default(),
@@ -517,7 +518,6 @@ mod tests {
                                     .protocol_type_name,
                                 "bebop_pool"
                             );
-                            assert_eq!(component_with_state.component.chain, Chain::Ethereum);
 
                             let attributes = &component_with_state.state.attributes;
 

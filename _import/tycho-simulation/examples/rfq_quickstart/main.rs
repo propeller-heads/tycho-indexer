@@ -30,7 +30,7 @@ struct Cli {
     #[arg(short, long, default_value_t = 1.0)]
     tvl_threshold: f64,
     #[arg(short, long, default_value = "ethereum")]
-    chain: String,
+    chain: Chain,
 }
 
 impl Cli {
@@ -38,9 +38,9 @@ impl Cli {
         // By default, we request quotes for USDC to WETH on whatever chain we choose
 
         if self.buy_token.is_none() {
-            self.buy_token = Some(match self.chain.as_str() {
-                "ethereum" => "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
-                "base" => "0x4200000000000000000000000000000000000006".to_string(),
+            self.buy_token = Some(match self.chain {
+                Chain::Ethereum => "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
+                Chain::Base => "0x4200000000000000000000000000000000000006".to_string(),
                 _ => {
                     panic!("RFQ quickstart does not yet support chain {chain}", chain = self.chain)
                 }
@@ -48,9 +48,9 @@ impl Cli {
         }
 
         if self.sell_token.is_none() {
-            self.sell_token = Some(match self.chain.as_str() {
-                "base" => "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913".to_string(),
-                "ethereum" => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(),
+            self.sell_token = Some(match self.chain {
+                Chain::Base => "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913".to_string(),
+                Chain::Ethereum => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(),
                 _ => {
                     panic!("RFQ quickstart does not yet support chain {chain}", chain = self.chain)
                 }
@@ -70,8 +70,7 @@ async fn main() {
 
     let cli = Cli::parse().with_defaults();
 
-    let chain = Chain::from_str(&cli.chain)
-        .unwrap_or_else(|_| panic!("Unknown chain {chain}", chain = cli.chain));
+    let chain = cli.chain;
 
     let tycho_url = env::var("TYCHO_URL").unwrap_or_else(|_| {
         get_default_url(&chain)
@@ -131,7 +130,7 @@ async fn main() {
 
     println!("Connecting to RFQ WebSocket...");
     let bebop_client = BebopClient::new(
-        chain.into(), // Convert from models::Chain to dto::Chain
+        chain,
         rfq_pairs,
         cli.tvl_threshold,
         bebop_ws_user,
