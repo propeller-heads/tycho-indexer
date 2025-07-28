@@ -1,3 +1,10 @@
+## [0.137.0](https://github.com/propeller-heads/tycho-simulation/compare/0.136.0...0.137.0) (2025-07-28)
+
+
+### Features
+
+* **Bebop:** Use protobuf for ws connection ([5e049cd](https://github.com/propeller-heads/tycho-simulation/commit/5e049cd6cf0683f8792e187bc7d697b297e66143))
+
 ## [0.136.0](https://github.com/propeller-heads/tycho-simulation/compare/0.135.0...0.136.0) (2025-07-25)
 
 
