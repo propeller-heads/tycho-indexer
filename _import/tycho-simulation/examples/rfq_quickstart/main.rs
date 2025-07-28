@@ -26,7 +26,7 @@ struct Cli {
     buy_token: Option<String>,
     #[arg(short, long, default_value_t = 10.0)]
     sell_amount: f64,
-    /// The minimum TVL threshold for Bebop quotes
+    /// The minimum TVL threshold for RFQ quotes
     #[arg(short, long, default_value_t = 1.0)]
     tvl_threshold: f64,
     #[arg(short, long, default_value = "ethereum")]
@@ -81,7 +81,7 @@ async fn main() {
     let tycho_api_key: String =
         env::var("TYCHO_API_KEY").unwrap_or_else(|_| "sampletoken".to_string());
 
-    // Get Bebop WebSocket credentials
+    // Get WebSocket credentials for any RFQ(s) we are using
     let bebop_ws_user = env::var("BEBOP_WS_USER")
         .expect("BEBOP_WS_USER environment variable is required. Contact Bebop for credentials.");
     let bebop_ws_key = env::var("BEBOP_WS_KEY")
@@ -121,24 +121,24 @@ async fn main() {
         buy_symbol = buy_token.symbol
     );
 
-    // Set up Bebop RFQ client
-    let mut bebop_pairs = HashSet::new();
-    bebop_pairs.insert((sell_token_address.to_string(), buy_token_address.to_string()));
-    bebop_pairs.insert((buy_token_address.to_string(), sell_token_address.to_string()));
+    // Set up RFQ client
+    let mut rfq_pairs = HashSet::new();
+    rfq_pairs.insert((sell_token_address.to_string(), buy_token_address.to_string()));
+    rfq_pairs.insert((buy_token_address.to_string(), sell_token_address.to_string()));
 
     let mut bebop_quote_tokens = HashSet::new();
     bebop_quote_tokens.insert(buy_token_address.to_string());
 
-    println!("Connecting to Bebop RFQ WebSocket...");
+    println!("Connecting to RFQ WebSocket...");
     let bebop_client = BebopClient::new(
         chain.into(), // Convert from models::Chain to dto::Chain
-        bebop_pairs,
+        rfq_pairs,
         cli.tvl_threshold,
         bebop_ws_user,
         bebop_ws_key,
         bebop_quote_tokens,
     )
-    .expect("Failed to create Bebop client");
+    .expect("Failed to create RFQ clients");
 
     let (tx, mut rx) = mpsc::channel::<Update>(100);
 
@@ -147,7 +147,7 @@ async fn main() {
         .set_tokens(all_tokens.clone())
         .await;
 
-    println!("Connected to Bebop RFQ! Streaming live quotes...\n");
+    println!("Connected to RFQs! Streaming live price levels...\n");
 
     // Start the RFQ stream in a background task
     tokio::spawn(rfq_stream_builder.build(tx));
@@ -155,7 +155,7 @@ async fn main() {
     // Stream quotes from RFQ stream
     while let Some(update) = rx.recv().await {
         println!(
-            "Received RFQ quote with {} new pairs for block/timestamp {}",
+            "Received RFQ price levels with {} new pairs for block/timestamp {}",
             &update.states.len(),
             update.block_number_or_timestamp
         );
@@ -176,7 +176,7 @@ async fn main() {
                         let amount_out = amount_out_result.amount;
 
                         println!(
-                            "Quote from {}: {} {} -> {} {}",
+                            "Price levels from {}: {} {} -> {} {}",
                             component.protocol_system,
                             format_token_amount(&amount_in, &sell_token),
                             sell_token.symbol,
@@ -190,7 +190,7 @@ async fn main() {
             }
         }
 
-        println!("\nWaiting for more quotes... (Press Ctrl+C to exit)");
+        println!("\nWaiting for more price levels... (Press Ctrl+C to exit)");
     }
 }
 
