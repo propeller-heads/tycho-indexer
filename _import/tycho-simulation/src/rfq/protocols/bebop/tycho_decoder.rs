@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use tycho_client::feed::synchronizer::ComponentWithState;
 use tycho_common::{models::token::Token, Bytes};
@@ -6,7 +6,7 @@ use tycho_common::{models::token::Token, Bytes};
 use super::{models::BebopPriceData, state::BebopState};
 use crate::{
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
-    rfq::models::TimestampHeader,
+    rfq::{models::TimestampHeader, protocols::bebop::client::BebopClient},
 };
 
 impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
@@ -75,7 +75,22 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
                 .collect(),
         };
 
-        Ok(BebopState { base_token, quote_token, price_data })
+        let ws_user = "".to_string();
+        let ws_key = "".to_string();
+
+        let client = BebopClient::new(
+            snapshot.component.chain.into(),
+            HashSet::new(),
+            0.0,
+            ws_user,
+            ws_key,
+            HashSet::new(),
+        )
+        .map_err(|e| {
+            InvalidSnapshotError::MissingAttribute(format!("Couldn't create BebopClient: {e}"))
+        })?;
+
+        Ok(BebopState { base_token, quote_token, price_data, client })
     }
 }
 
