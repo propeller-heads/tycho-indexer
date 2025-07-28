@@ -9,6 +9,7 @@ use tycho_common::{
     models::token::Token,
     simulation::{
         errors::{SimulationError, TransitionError},
+        indicatively_priced::IndicativelyPriced,
         protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
     },
     Bytes,
@@ -218,6 +219,7 @@ impl UniswapV3State {
     }
 }
 
+impl IndicativelyPriced for UniswapV3State {}
 impl ProtocolSim for UniswapV3State {
     fn fee(&self) -> f64 {
         (self.fee as u32) as f64 / 1_000_000.0

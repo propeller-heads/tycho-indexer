@@ -101,7 +101,7 @@ mod tests {
         models::{protocol::GetAmountOutParams, token::Token},
         simulation::{
             errors::{SimulationError, TransitionError},
-            indicatively_priced::SignedQuote,
+            indicatively_priced::{IndicativelyPriced, SignedQuote},
             protocol_sim::{Balances, GetAmountOutResult},
         },
         Bytes,
@@ -113,6 +113,7 @@ mod tests {
     #[derive(Clone, Debug)]
     pub struct DummyProtocol;
 
+    impl IndicativelyPriced for DummyProtocol {}
     impl ProtocolSim for DummyProtocol {
         fn fee(&self) -> f64 {
             unimplemented!("Not needed for this test")

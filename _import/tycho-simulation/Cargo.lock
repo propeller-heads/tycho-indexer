@@ -5801,7 +5801,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 2.0.104",
@@ -8363,8 +8363,7 @@ dependencies = [
 [[package]]
 name = "tycho-client"
 version = "0.79.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b412490386fe39335cbc4c969abcbc438638957a977fcef170a914182f8dc0d3"
+source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=7bce8048c14b1fa3d6eb99715b19c62ccb4bee07#7bce8048c14b1fa3d6eb99715b19c62ccb4bee07"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8390,8 +8389,7 @@ dependencies = [
 [[package]]
 name = "tycho-common"
 version = "0.79.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e403e0a7c76225150bc739a24317b853ab3b668ab45d692b3776a5d0c3ad39a"
+source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=7bce8048c14b1fa3d6eb99715b19c62ccb4bee07#7bce8048c14b1fa3d6eb99715b19c62ccb4bee07"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8414,9 +8412,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.109.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48667f27ab6e9e74afa2747ad1542216a4b70fe6284c011c0a58299b2cd57655"
+version = "0.112.0"
+source = "git+https://github.com/propeller-heads/tycho-execution.git?rev=c8cee9ad4635ce17f965f5c78326c3be9d291ebf#c8cee9ad4635ce17f965f5c78326c3be9d291ebf"
 dependencies = [
  "alloy",
  "chrono",

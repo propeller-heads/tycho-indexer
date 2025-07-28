@@ -11,6 +11,8 @@ use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{debug, error, info, warn};
 use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage, HeaderLike};
+#[cfg(test)]
+use tycho_common::simulation::indicatively_priced::IndicativelyPriced;
 use tycho_common::{
     dto::{ChangeType, ProtocolStateDelta},
     models::{token::Token, Chain},
@@ -842,6 +844,9 @@ mock! {
         pub fn eq(&self, other: &dyn ProtocolSim) -> bool;
     }
 }
+
+#[cfg(test)]
+impl IndicativelyPriced for MockProtocolSim {}
 
 #[cfg(test)]
 impl ProtocolSim for MockProtocolSim {

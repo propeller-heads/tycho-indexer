@@ -14,6 +14,7 @@ use tycho_common::{
     models::token::Token,
     simulation::{
         errors::{SimulationError, TransitionError},
+        indicatively_priced::IndicativelyPriced,
         protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
     },
     Bytes,
@@ -40,6 +41,8 @@ fn sqrt_price_q128_to_f64(x: U256, (token0_decimals, token1_decimals): (usize, u
     let price = u256_to_f64(alloy::primitives::U256::from_limbs(x.0)) / 2.0f64.powi(128);
     price.powi(2) * token_correction
 }
+
+impl IndicativelyPriced for EkuboState {}
 
 impl ProtocolSim for EkuboState {
     fn fee(&self) -> f64 {
