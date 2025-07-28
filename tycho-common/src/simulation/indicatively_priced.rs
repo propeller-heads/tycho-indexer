@@ -3,11 +3,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use num_bigint::BigUint;
 
-use crate::{
-    models::protocol::GetAmountOutParams,
-    simulation::{errors::SimulationError, protocol_sim::ProtocolSim},
-    Bytes,
-};
+use crate::{models::protocol::GetAmountOutParams, simulation::errors::SimulationError, Bytes};
 
 pub struct SignedQuote {
     pub base_token: Bytes,
@@ -19,9 +15,12 @@ pub struct SignedQuote {
 }
 
 #[async_trait]
-pub trait IndicativelyPriced: ProtocolSim {
+pub trait IndicativelyPriced {
     // this will be true when the price is only an estimation/indicative price
-    fn is_indicatively_priced() -> bool {
+    fn is_indicatively_priced() -> bool
+    where
+        Self: Sized,
+    {
         false
     }
 

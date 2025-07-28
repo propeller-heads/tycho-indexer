@@ -5,7 +5,10 @@ use num_bigint::BigUint;
 use crate::{
     dto::ProtocolStateDelta,
     models::token::Token,
-    simulation::errors::{SimulationError, TransitionError},
+    simulation::{
+        errors::{SimulationError, TransitionError},
+        indicatively_priced::IndicativelyPriced,
+    },
     Bytes,
 };
 
@@ -52,7 +55,7 @@ impl fmt::Display for GetAmountOutResult {
 /// ProtocolSim trait
 /// This trait defines the methods that a protocol state must implement in order to be used
 /// in the trade simulation.
-pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
+pub trait ProtocolSim: IndicativelyPriced + fmt::Debug + Send + Sync + 'static {
     /// Returns the fee of the protocol as ratio
     ///
     /// E.g. if the fee is 1%, the value returned would be 0.01.
