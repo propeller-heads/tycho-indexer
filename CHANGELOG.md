@@ -1,3 +1,11 @@
+## [0.81.0](https://github.com/propeller-heads/tycho-indexer/compare/0.80.0...0.81.0) (2025-07-29)
+
+
+### Features
+
+* Change return of as_indicatively_priced to Result ([c34c6bf](https://github.com/propeller-heads/tycho-indexer/commit/c34c6bf6424af37407926f135545bd76d06525ed))
+* Change return of as_indicatively_priced to Result ([#645](https://github.com/propeller-heads/tycho-indexer/issues/645)) ([803575b](https://github.com/propeller-heads/tycho-indexer/commit/803575bcbd287840c00bcd90516272a1181e0b23))
+
 ## [0.80.0](https://github.com/propeller-heads/tycho-indexer/compare/0.79.0...0.80.0) (2025-07-29)
 
 
