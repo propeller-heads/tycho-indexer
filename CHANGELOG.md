@@ -1,3 +1,13 @@
+## [0.80.0](https://github.com/propeller-heads/tycho-indexer/compare/0.79.0...0.80.0) (2025-07-29)
+
+
+### Features
+
+* Add as_indicatively_priced in ProtocolSim ([1d71bb2](https://github.com/propeller-heads/tycho-indexer/commit/1d71bb2e316d27ef089a81fe4200cbdb476e6c11))
+* Add as_indicatively_priced in ProtocolSim  ([#644](https://github.com/propeller-heads/tycho-indexer/issues/644)) ([30e1d57](https://github.com/propeller-heads/tycho-indexer/commit/30e1d57de680f4cab529e3c844af330e2f181504))
+* Implement IndicativelyPriced for ProtocolSim ([7a3571e](https://github.com/propeller-heads/tycho-indexer/commit/7a3571eadaf3ff95b5180284237a3e952052b06a))
+* Make IndicativelyPriced a super trait of ProtocolSim ([7bce804](https://github.com/propeller-heads/tycho-indexer/commit/7bce8048c14b1fa3d6eb99715b19c62ccb4bee07))
+
 ## [0.79.0](https://github.com/propeller-heads/tycho-indexer/compare/0.78.6...0.79.0) (2025-07-25)
 
 
