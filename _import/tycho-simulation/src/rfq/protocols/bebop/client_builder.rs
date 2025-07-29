@@ -48,7 +48,7 @@ pub struct BebopClientBuilder {
     chain: Chain,
     ws_user: String,
     ws_key: String,
-    pairs: HashSet<(String, String)>,
+    tokens: HashSet<String>,
     tvl: f64,
     quote_tokens: Option<HashSet<String>>,
 }
@@ -59,15 +59,15 @@ impl BebopClientBuilder {
             chain,
             ws_user,
             ws_key,
-            pairs: HashSet::new(),
+            tokens: HashSet::new(),
             tvl: 100.0, // Default $100 minimum TVL
             quote_tokens: None,
         }
     }
 
-    /// Set the token pairs for which to monitor prices
-    pub fn pairs(mut self, pairs: HashSet<(String, String)>) -> Self {
-        self.pairs = pairs;
+    /// Set the tokens for which to monitor prices
+    pub fn tokens(mut self, tokens: HashSet<String>) -> Self {
+        self.tokens = tokens;
         self
     }
 
@@ -85,7 +85,7 @@ impl BebopClientBuilder {
     }
 
     pub fn build(self) -> Result<BebopClient, RFQError> {
-        if self.pairs.is_empty() {
+        if self.tokens.is_empty() {
             return Err(RFQError::InvalidInput(
                 "At least one token pair must be specified".to_string(),
             ));
@@ -95,7 +95,7 @@ impl BebopClientBuilder {
             .quote_tokens
             .unwrap_or_else(|| default_quote_tokens_for_chain(self.chain));
 
-        BebopClient::new(self.chain, self.pairs, self.tvl, self.ws_user, self.ws_key, quote_tokens)
+        BebopClient::new(self.chain, self.tokens, self.tvl, self.ws_user, self.ws_key, quote_tokens)
     }
 }
 
@@ -105,18 +105,16 @@ mod tests {
 
     #[test]
     fn test_bebop_client_builder_basic_config() {
-        let mut pairs = HashSet::new();
-        pairs.insert((
-            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(),
-            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
-        ));
+        let mut tokens = HashSet::new();
+        tokens.insert("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string());
+        tokens.insert("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string());
 
         let result = BebopClientBuilder::new(
             Chain::Ethereum,
             "test_user".to_string(),
             "test_key".to_string(),
         )
-        .pairs(pairs)
+        .tokens(tokens)
         .build();
         assert!(result.is_ok());
     }
@@ -126,18 +124,16 @@ mod tests {
         let mut custom_quote_tokens = HashSet::new();
         custom_quote_tokens.insert("0x1234567890123456789012345678901234567890".to_string());
 
-        let mut pairs = HashSet::new();
-        pairs.insert((
-            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(),
-            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
-        ));
+        let mut tokens = HashSet::new();
+        tokens.insert("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string());
+        tokens.insert("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string());
 
         let result = BebopClientBuilder::new(
             Chain::Ethereum,
             "test_user".to_string(),
             "test_key".to_string(),
         )
-        .pairs(pairs)
+        .tokens(tokens)
         .tvl_threshold(500.0)
         .quote_tokens(custom_quote_tokens.clone())
         .build();

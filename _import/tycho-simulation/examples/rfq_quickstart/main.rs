@@ -119,13 +119,13 @@ async fn main() {
     );
 
     // Set up RFQ client using the builder pattern
-    let mut rfq_pairs = HashSet::new();
-    rfq_pairs.insert((sell_token_address.to_string(), buy_token_address.to_string()));
-    rfq_pairs.insert((buy_token_address.to_string(), sell_token_address.to_string()));
+    let mut rfq_tokens = HashSet::new();
+    rfq_tokens.insert(sell_token_address.to_string());
+    rfq_tokens.insert(buy_token_address.to_string());
 
     println!("Connecting to RFQ WebSocket...");
     let bebop_client = BebopClientBuilder::new(chain, bebop_ws_user, bebop_ws_key)
-        .pairs(rfq_pairs)
+        .tokens(rfq_tokens)
         .tvl_threshold(cli.tvl_threshold)
         .build()
         .expect("Failed to create RFQ clients");

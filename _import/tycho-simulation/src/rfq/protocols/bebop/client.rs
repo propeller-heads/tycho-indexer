@@ -68,8 +68,8 @@ pub struct BebopClient {
     chain: Chain,
     price_ws: String,
     quote_endpoint: String,
-    // Pairs that we want prices for
-    pairs: HashSet<String>,
+    // Tokens that we want prices for
+    tokens: HashSet<String>,
     // Min tvl value in the quote token.
     tvl: f64,
     // name header for authentication
@@ -83,7 +83,7 @@ pub struct BebopClient {
 impl BebopClient {
     pub fn new(
         chain: Chain,
-        pairs: HashSet<(String, String)>,
+        tokens: HashSet<String>,
         tvl: f64,
         ws_user: String,
         ws_key: String,
@@ -91,20 +91,20 @@ impl BebopClient {
     ) -> Result<Self, RFQError> {
         let url = chain_to_bebop_url(chain)?;
 
-        let mut pair_names: HashSet<String> = HashSet::new();
-        for pair in pairs {
-            pair_names.insert(pair_to_bebop_format(&pair)?);
-        }
         let mut quote_tokens_checksummed: HashSet<String> = HashSet::new();
+        let mut tokens_checksummed: HashSet<String> = HashSet::new();
 
         for token in quote_tokens.iter() {
             quote_tokens_checksummed.insert(checksum(token)?.to_string());
+        }
+        for token in tokens.iter() {
+            tokens_checksummed.insert(checksum(token)?.to_string());
         }
 
         Ok(Self {
             price_ws: "wss://".to_string() + &url + "/pricing",
             quote_endpoint: "https://".to_string() + &url + "/quote",
-            pairs: pair_names,
+            tokens: tokens_checksummed,
             chain,
             tvl,
             ws_user,
@@ -163,7 +163,7 @@ impl RFQClient for BebopClient {
     fn stream(
         &self,
     ) -> BoxStream<'static, Result<(String, StateSyncMessage<TimestampHeader>), RFQError>> {
-        let pairs = self.pairs.clone();
+        let tokens = self.tokens.clone();
         let url = self.price_ws.clone();
         let tvl_threshold = self.tvl;
         let name = self.ws_user.clone();
@@ -228,22 +228,20 @@ impl RFQClient for BebopClient {
 
                                     // Process all pairs from this WebSocket message
                                     for (pair, price_data) in price_data_map.iter() {
-                                        if pairs.contains(pair) {
-                                            // Hash the tokens, since component id must be valid hex string
-                                            let component_id = format!("{}", keccak256(pair));
+                                        let (token0, token1);
+                                        if let Some((t0, t1)) = pair.split_once('/') {
+                                            token0 = t0;
+                                            token1 = t1;
+                                        } else {
+                                            warn!("Tokens improperly formatted: {}. Skipping.", pair);
+                                            continue;
+                                        };
+                                        if tokens.contains(token0) && tokens.contains(token1) {
 
-                                            let (token0, token1);
-                                            if let Some((t0, t1)) = pair.split_once('/') {
-                                                token0 = t0;
-                                                token1 = t1;
-                                            } else {
-                                                warn!("Tokens improperly formatted: {}. Skipping.", pair);
-                                                continue;
-                                            };
                                             let token_0_bytes = Bytes::from_str(token0).map_err(|_| RFQError::ParsingError(format!("String cannot be converted to bytes {token0}")))?;
                                             let token_1_bytes = Bytes::from_str(token1).map_err(|_| RFQError::ParsingError(format!("String cannot be converted to bytes {token1}")))?;
 
-                                            let tokens = vec![
+                                            let pair_tokens = vec![
                                                 token_0_bytes, token_1_bytes
                                             ];
 
@@ -272,9 +270,10 @@ impl RFQClient for BebopClient {
                                                 continue;
                                             }
 
+                                            let component_id = format!("{}", keccak256(pair));
                                             let component_with_state = client.create_component_with_state(
                                                 component_id.clone(),
-                                                tokens,
+                                                pair_tokens,
                                                 price_data,
                                                 tvl
                                             );
@@ -474,7 +473,7 @@ mod tests {
 
         let client = BebopClient::new(
             Chain::Ethereum,
-            HashSet::from_iter(vec![(weth.to_string(), wbtc.to_string())]),
+            HashSet::from_iter(vec![weth.to_string(), wbtc.to_string()]),
             10.0, // $10 minimum TVL
             ws_user,
             ws_key,
@@ -610,7 +609,7 @@ mod tests {
         let mut test_quote_tokens = HashSet::new();
         test_quote_tokens.insert("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string());
 
-        let pairs_formatted = vec![
+        let tokens_formatted = vec![
             "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
                 .to_string(),
         ];
@@ -619,7 +618,7 @@ mod tests {
         let client = BebopClient {
             chain: Chain::Ethereum,
             price_ws: format!("ws://127.0.0.1:{}", addr.port()),
-            pairs: pairs_formatted.into_iter().collect(),
+            tokens: tokens_formatted.into_iter().collect(),
             tvl: 1000.0,
             ws_user: "test_user".to_string(),
             ws_key: "test_key".to_string(),
@@ -708,7 +707,7 @@ mod tests {
 
         let client = BebopClient::new(
             Chain::Ethereum,
-            HashSet::from_iter(vec![(weth.address.to_string(), wbtc.address.to_string())]),
+            HashSet::from_iter(vec![weth.address.to_string(), wbtc.address.to_string()]),
             10.0, // $10 minimum TVL
             ws_user,
             ws_key,
