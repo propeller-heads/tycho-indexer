@@ -1,3 +1,19 @@
+## [0.140.0](https://github.com/propeller-heads/tycho-simulation/compare/0.139.0...0.140.0) (2025-07-29)
+
+
+### Features
+
+* **Bebop:** Quickstart example ([a6952d5](https://github.com/propeller-heads/tycho-simulation/commit/a6952d579d68d2b5bcb44f21bbf1848d271d6390))
+* Builder pattern for BebopClient ([5ab147d](https://github.com/propeller-heads/tycho-simulation/commit/5ab147dd73efca936bef75459a5f941019199ea7))
+* Take Bytes as init to BebopClient ([1316cd4](https://github.com/propeller-heads/tycho-simulation/commit/1316cd47916ece596282fbab6f7697ee658ee5f9))
+* Take tokens in BebopClient instead of pairs ([96cc894](https://github.com/propeller-heads/tycho-simulation/commit/96cc894a01745255e0848272ef6077c659fb280d))
+
+
+### Bug Fixes
+
+* Fix BebopClientBuilder example ([ad75f99](https://github.com/propeller-heads/tycho-simulation/commit/ad75f994493a545e4f22974796c18ee92fd6df72))
+* Take models::Chain in BebopClient ([924d9ed](https://github.com/propeller-heads/tycho-simulation/commit/924d9edba67262a56848482ff8d2f766b6eb4946))
+
 ## [0.139.0](https://github.com/propeller-heads/tycho-simulation/compare/0.138.0...0.139.0) (2025-07-29)
 
 
