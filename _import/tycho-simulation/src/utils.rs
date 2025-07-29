@@ -90,3 +90,13 @@ pub async fn load_all_tokens(
         })
         .collect::<HashMap<_, Token>>()
 }
+
+/// Get the default Tycho URL for the given chain.
+pub fn get_default_url(chain: &Chain) -> Option<String> {
+    match chain {
+        Chain::Ethereum => Some("tycho-beta.propellerheads.xyz".to_string()),
+        Chain::Base => Some("tycho-base-beta.propellerheads.xyz".to_string()),
+        Chain::Unichain => Some("tycho-unichain-beta.propellerheads.xyz".to_string()),
+        _ => None,
+    }
+}

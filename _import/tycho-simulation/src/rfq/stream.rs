@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use futures::{stream::select_all, StreamExt};
 use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage};
-use tycho_common::simulation::protocol_sim::ProtocolSim;
+use tycho_common::{models::token::Token, simulation::protocol_sim::ProtocolSim, Bytes};
 
 use crate::{
     evm::decoder::TychoStreamDecoder,
@@ -83,6 +83,15 @@ impl RFQStreamBuilder {
                 }
             }
         }
+    }
+
+    /// Sets the currently known tokens which to be considered during decoding.
+    ///
+    /// Protocol components containing tokens which are not included in this initial list, or
+    /// added when applying deltas, will not be decoded.
+    pub async fn set_tokens(self, tokens: HashMap<Bytes, Token>) -> Self {
+        self.decoder.set_tokens(tokens).await;
+        self
     }
 }
 

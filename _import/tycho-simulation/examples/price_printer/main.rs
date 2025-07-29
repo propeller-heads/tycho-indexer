@@ -1,4 +1,5 @@
 extern crate tycho_simulation;
+
 mod ui;
 pub mod utils;
 
@@ -25,9 +26,8 @@ use tycho_simulation::{
         stream::ProtocolStreamBuilder,
     },
     protocol::models::Update,
-    utils::load_all_tokens,
+    utils::{get_default_url, load_all_tokens},
 };
-use utils::get_default_url;
 
 #[derive(Parser)]
 struct Cli {
