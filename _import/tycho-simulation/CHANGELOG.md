@@ -1,3 +1,10 @@
+## [0.139.0](https://github.com/propeller-heads/tycho-simulation/compare/0.138.0...0.139.0) (2025-07-29)
+
+
+### Features
+
+* Change return of as_indicatively_priced to Result ([6512830](https://github.com/propeller-heads/tycho-simulation/commit/651283086e010dfe0ad12e4cb08e8bf679280852))
+
 ## [0.138.0](https://github.com/propeller-heads/tycho-simulation/compare/0.137.0...0.138.0) (2025-07-29)
 
 
