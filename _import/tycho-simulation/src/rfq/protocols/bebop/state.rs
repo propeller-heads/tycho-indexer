@@ -1,29 +1,40 @@
 use std::{any::Any, collections::HashMap};
 
+use async_trait::async_trait;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Pow, ToPrimitive};
 use tycho_common::{
     dto::ProtocolStateDelta,
-    models::token::Token,
+    models::{protocol::GetAmountOutParams, token::Token},
     simulation::{
         errors::{SimulationError, TransitionError},
+        indicatively_priced::{IndicativelyPriced, SignedQuote},
         protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
     },
     Bytes,
 };
 
-use crate::rfq::protocols::bebop::models::BebopPriceData;
+use crate::rfq::{
+    client::RFQClient,
+    protocols::bebop::{client::BebopClient, models::BebopPriceData},
+};
 
 #[derive(Debug, Clone)]
 pub struct BebopState {
     pub base_token: Token,
     pub quote_token: Token,
     pub price_data: BebopPriceData,
+    pub client: BebopClient,
 }
 
 impl BebopState {
-    pub fn new(base_token: Token, quote_token: Token, price_data: BebopPriceData) -> Self {
-        BebopState { base_token, quote_token, price_data }
+    pub fn new(
+        base_token: Token,
+        quote_token: Token,
+        price_data: BebopPriceData,
+        client: BebopClient,
+    ) -> Self {
+        BebopState { base_token, quote_token, price_data, client }
     }
 }
 
@@ -209,11 +220,28 @@ impl ProtocolSim for BebopState {
             false
         }
     }
+
+    fn as_indicatively_priced(&self) -> Option<&dyn IndicativelyPriced> {
+        Some(self)
+    }
+}
+
+#[async_trait]
+impl IndicativelyPriced for BebopState {
+    async fn request_signed_quote(
+        &self,
+        params: GetAmountOutParams,
+    ) -> Result<SignedQuote, SimulationError> {
+        Ok(self
+            .client
+            .request_binding_quote(&params)
+            .await?)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{collections::HashSet, str::FromStr};
 
     use tycho_common::models::Chain;
 
@@ -259,6 +287,18 @@ mod tests {
         )
     }
 
+    fn empty_bebop_client() -> BebopClient {
+        BebopClient::new(
+            Chain::Ethereum,
+            HashSet::new(),
+            0.0,
+            "".to_string(),
+            "".to_string(),
+            HashSet::new(),
+        )
+        .unwrap()
+    }
+
     fn create_test_bebop_state() -> BebopState {
         BebopState {
             base_token: wbtc(),
@@ -270,6 +310,7 @@ mod tests {
                 bids: vec![65000.0f32, 1.5f32, 64950.0f32, 2.0f32, 64900.0f32, 0.5f32],
                 asks: vec![65100.0f32, 1.0f32, 65150.0f32, 2.5f32, 65200.0f32, 1.5f32],
             },
+            client: empty_bebop_client(),
         }
     }
 
@@ -442,7 +483,7 @@ mod tests {
 
         let weth = weth();
         let usdc = usdc();
-        let state = BebopState::new(weth.clone(), usdc.clone(), price_data);
+        let state = BebopState::new(weth.clone(), usdc.clone(), price_data, empty_bebop_client());
 
         // swap 3 WETH -> USDC
         let amount_out_result = state
