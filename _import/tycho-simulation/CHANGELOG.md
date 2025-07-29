@@ -1,3 +1,13 @@
+## [0.138.0](https://github.com/propeller-heads/tycho-simulation/compare/0.137.0...0.138.0) (2025-07-29)
+
+
+### Features
+
+* Implement as_indicatively_priced for BebopState ([10f8008](https://github.com/propeller-heads/tycho-simulation/commit/10f8008ddabf3b5159114ef24443dd20310b7f28))
+* Implement IndicativelyPriced for BebopState ([b182376](https://github.com/propeller-heads/tycho-simulation/commit/b1823769bcc8c35c71611861731e4312c1f2775b))
+* Update tycho-common: IndicativelyPriced is ProtocolSim super trait ([dd9fac4](https://github.com/propeller-heads/tycho-simulation/commit/dd9fac4561d7e7a7cdbf8835871c8178a5a9c0ff))
+* Upgrade tycho-common and tycho-execution ([86a5536](https://github.com/propeller-heads/tycho-simulation/commit/86a55360a05b7a3dde1cf42d4c4ae0511b1da1f1))
+
 ## [0.137.0](https://github.com/propeller-heads/tycho-simulation/compare/0.136.0...0.137.0) (2025-07-28)
 
 
