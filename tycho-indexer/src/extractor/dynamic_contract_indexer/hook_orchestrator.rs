@@ -2,6 +2,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+#[cfg(test)]
+use mockall::automock;
 use thiserror::Error;
 use tycho_common::{
     models::{
@@ -35,6 +37,7 @@ pub enum HookOrchestratorError {
 }
 
 /// Trait for hook orchestration operations
+#[cfg_attr(test, automock)]
 pub trait HookOrchestrator: Send + Sync {
     /// Main Entrypoint for the orchestrator.
     ///
