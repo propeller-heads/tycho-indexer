@@ -166,8 +166,8 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     fn eq(&self, other: &dyn ProtocolSim) -> bool;
 
     /// Cast as IndicativelyPriced. This is necessary for RFQ protocols
-    fn as_indicatively_priced(&self) -> Option<&dyn IndicativelyPriced> {
-        None
+    fn as_indicatively_priced(&self) -> Result<&dyn IndicativelyPriced, SimulationError> {
+        Err(SimulationError::FatalError("Pool State does not implement IndicativelyPriced".into()))
     }
 }
 
