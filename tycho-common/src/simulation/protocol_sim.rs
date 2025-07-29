@@ -5,7 +5,10 @@ use num_bigint::BigUint;
 use crate::{
     dto::ProtocolStateDelta,
     models::token::Token,
-    simulation::errors::{SimulationError, TransitionError},
+    simulation::{
+        errors::{SimulationError, TransitionError},
+        indicatively_priced::IndicativelyPriced,
+    },
     Bytes,
 };
 
@@ -52,7 +55,7 @@ impl fmt::Display for GetAmountOutResult {
 /// ProtocolSim trait
 /// This trait defines the methods that a protocol state must implement in order to be used
 /// in the trade simulation.
-pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
+pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     /// Returns the fee of the protocol as ratio
     ///
     /// E.g. if the fee is 1%, the value returned would be 0.01.
@@ -161,6 +164,11 @@ pub trait ProtocolSim: std::fmt::Debug + Send + Sync + 'static {
     /// This method must be implemented to define how two protocol states are considered equal
     /// (used for tests).
     fn eq(&self, other: &dyn ProtocolSim) -> bool;
+
+    /// Cast as IndicativelyPriced. This is necessary for RFQ protocols
+    fn as_indicatively_priced(&self) -> Option<&dyn IndicativelyPriced> {
+        None
+    }
 }
 
 impl Clone for Box<dyn ProtocolSim> {

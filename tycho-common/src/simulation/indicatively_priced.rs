@@ -20,12 +20,6 @@ pub struct SignedQuote {
 
 #[async_trait]
 pub trait IndicativelyPriced: ProtocolSim {
-    // this will be true when the price is only an estimation/indicative price
-    fn is_indicatively_priced() -> bool {
-        false
-    }
-
-    // if it is indicatively priced, then we need to request a signed quote for the final price
     async fn request_signed_quote(
         &self,
         _params: GetAmountOutParams,
