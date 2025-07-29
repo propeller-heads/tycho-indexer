@@ -221,8 +221,8 @@ impl ProtocolSim for BebopState {
         }
     }
 
-    fn as_indicatively_priced(&self) -> Option<&dyn IndicativelyPriced> {
-        Some(self)
+    fn as_indicatively_priced(&self) -> Result<&dyn IndicativelyPriced, SimulationError> {
+        Ok(self)
     }
 }
 
