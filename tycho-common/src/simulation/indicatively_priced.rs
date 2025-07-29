@@ -3,7 +3,11 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use num_bigint::BigUint;
 
-use crate::{models::protocol::GetAmountOutParams, simulation::errors::SimulationError, Bytes};
+use crate::{
+    models::protocol::GetAmountOutParams,
+    simulation::{errors::SimulationError, protocol_sim::ProtocolSim},
+    Bytes,
+};
 
 pub struct SignedQuote {
     pub base_token: Bytes,
@@ -32,3 +36,5 @@ pub trait IndicativelyPriced {
         Err(SimulationError::FatalError("request_signed_quote not implemented".into()))
     }
 }
+
+impl IndicativelyPriced for dyn ProtocolSim {}
