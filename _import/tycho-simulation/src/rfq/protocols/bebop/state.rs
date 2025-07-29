@@ -1,29 +1,40 @@
 use std::{any::Any, collections::HashMap};
 
+use async_trait::async_trait;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Pow, ToPrimitive};
 use tycho_common::{
     dto::ProtocolStateDelta,
-    models::token::Token,
+    models::{protocol::GetAmountOutParams, token::Token},
     simulation::{
         errors::{SimulationError, TransitionError},
+        indicatively_priced::{IndicativelyPriced, SignedQuote},
         protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
     },
     Bytes,
 };
 
-use crate::rfq::protocols::bebop::models::BebopPriceData;
+use crate::rfq::{
+    client::RFQClient,
+    protocols::bebop::{client::BebopClient, models::BebopPriceData},
+};
 
 #[derive(Debug, Clone)]
 pub struct BebopState {
     pub base_token: Token,
     pub quote_token: Token,
     pub price_data: BebopPriceData,
+    pub client: BebopClient,
 }
 
 impl BebopState {
-    pub fn new(base_token: Token, quote_token: Token, price_data: BebopPriceData) -> Self {
-        BebopState { base_token, quote_token, price_data }
+    pub fn new(
+        base_token: Token,
+        quote_token: Token,
+        price_data: BebopPriceData,
+        client: BebopClient,
+    ) -> Self {
+        BebopState { base_token, quote_token, price_data, client }
     }
 }
 
@@ -37,12 +48,12 @@ impl ProtocolSim for BebopState {
         // bid and ask
         let best_bid = self
             .price_data
-            .bids
+            .get_bids()
             .first()
             .map(|(price, _)| *price);
         let best_ask = self
             .price_data
-            .asks
+            .get_asks()
             .first()
             .map(|(price, _)| *price);
 
@@ -92,10 +103,10 @@ impl ProtocolSim for BebopState {
         // if sell base is false -> use asks AND amount is in quote token so the levels need to be
         // adjusted
         let price_levels = if sell_base {
-            self.price_data.bids.clone()
+            self.price_data.get_bids()
         } else {
             self.price_data
-                .asks
+                .get_asks()
                 .iter()
                 .map(|(price, size)| (1.0 / price, price * size))
                 .collect()
@@ -139,9 +150,9 @@ impl ProtocolSim for BebopState {
         let (sell_decimals, buy_decimals, price_levels) = if sell_token == self.base_token.address &&
             buy_token == self.quote_token.address
         {
-            (self.base_token.decimals, self.quote_token.decimals, self.price_data.bids.clone())
+            (self.base_token.decimals, self.quote_token.decimals, self.price_data.get_bids())
         } else if buy_token == self.base_token.address && sell_token == self.quote_token.address {
-            (self.quote_token.decimals, self.base_token.decimals, self.price_data.asks.clone())
+            (self.quote_token.decimals, self.base_token.decimals, self.price_data.get_asks())
         } else {
             return Err(SimulationError::RecoverableError(format!(
                 "Invalid token addresses: {sell_token}, {buy_token}"
@@ -209,11 +220,28 @@ impl ProtocolSim for BebopState {
             false
         }
     }
+
+    fn as_indicatively_priced(&self) -> Result<&dyn IndicativelyPriced, SimulationError> {
+        Ok(self)
+    }
+}
+
+#[async_trait]
+impl IndicativelyPriced for BebopState {
+    async fn request_signed_quote(
+        &self,
+        params: GetAmountOutParams,
+    ) -> Result<SignedQuote, SimulationError> {
+        Ok(self
+            .client
+            .request_binding_quote(&params)
+            .await?)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{collections::HashSet, str::FromStr};
 
     use tycho_common::models::Chain;
 
@@ -259,15 +287,30 @@ mod tests {
         )
     }
 
+    fn empty_bebop_client() -> BebopClient {
+        BebopClient::new(
+            Chain::Ethereum,
+            HashSet::new(),
+            0.0,
+            "".to_string(),
+            "".to_string(),
+            HashSet::new(),
+        )
+        .unwrap()
+    }
+
     fn create_test_bebop_state() -> BebopState {
         BebopState {
             base_token: wbtc(),
             quote_token: usdc(),
             price_data: BebopPriceData {
-                last_update_ts: 1703097600.0,
-                bids: vec![(65000.0, 1.5), (64950.0, 2.0), (64900.0, 0.5)],
-                asks: vec![(65100.0, 1.0), (65150.0, 2.5), (65200.0, 1.5)],
+                base: hex::decode("2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap(), // WBTC
+                quote: hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(), // USDC
+                last_update_ts: 1703097600,
+                bids: vec![65000.0f32, 1.5f32, 64950.0f32, 2.0f32, 64900.0f32, 0.5f32],
+                asks: vec![65100.0f32, 1.0f32, 65150.0f32, 2.5f32, 65200.0f32, 1.5f32],
             },
+            client: empty_bebop_client(),
         }
     }
 
@@ -431,14 +474,16 @@ mod tests {
     fn test_get_amount_out() {
         // WETH/USDC
         let price_data = BebopPriceData {
-            last_update_ts: 1234567890.0,
-            bids: vec![(3000.0, 2.0), (2900.0, 2.5)],
-            asks: vec![(3100.0, 1.5), (3000.0, 3.0)],
+            base: hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(), // WETH
+            quote: hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(), // USDC
+            last_update_ts: 1234567890,
+            bids: vec![3000.0f32, 2.0f32, 2900.0f32, 2.5f32],
+            asks: vec![3100.0f32, 1.5f32, 3000.0f32, 3.0f32],
         };
 
         let weth = weth();
         let usdc = usdc();
-        let state = BebopState::new(weth.clone(), usdc.clone(), price_data);
+        let state = BebopState::new(weth.clone(), usdc.clone(), price_data, empty_bebop_client());
 
         // swap 3 WETH -> USDC
         let amount_out_result = state

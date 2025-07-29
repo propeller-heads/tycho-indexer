@@ -1,14 +1,17 @@
-#![allow(dead_code)] // TODO remove this
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
     time::SystemTime,
 };
 
+use http::Request;
+use tokio_tungstenite::tungstenite::handshake::client::generate_key;
+use tokio::time::{sleep, Duration};
 use alloy::primitives::{utils::keccak256, Address};
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt};
 use num_bigint::BigUint;
+use prost::Message as ProstMessage;
 use reqwest::Client;
 use tokio_tungstenite::{connect_async_with_config, tungstenite::Message};
 use tracing::{error, info, warn};
@@ -23,13 +26,11 @@ use crate::{
         client::RFQClient,
         errors::RFQError,
         models::TimestampHeader,
-        protocols::bebop::models::{BebopPriceData, BebopQuoteResponse},
+        protocols::bebop::models::{BebopPriceData, BebopPricingUpdate, BebopQuoteResponse},
     },
     tycho_client::feed::synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
     tycho_common::dto::{ProtocolComponent, ResponseProtocolState},
 };
-
-type BebopPriceMessage = HashMap<String, BebopPriceData>;
 
 fn checksum(address: &String) -> Result<String, RFQError> {
     let checksum = Address::from_str(address)
@@ -63,7 +64,7 @@ fn chain_to_bebop_url(chain: Chain) -> Result<String, RFQError> {
     Ok(url)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct BebopClient {
     chain: Chain,
     price_ws: String,
@@ -102,7 +103,7 @@ impl BebopClient {
         }
 
         Ok(Self {
-            price_ws: "wss://".to_string() + &url + "/pricing",
+            price_ws: "wss://".to_string() + &url + "/pricing?format=protobuf",
             quote_endpoint: "https://".to_string() + &url + "/quote",
             tokens: tokens_checksummed,
             chain,
@@ -171,10 +172,6 @@ impl RFQClient for BebopClient {
         let client = self.clone();
 
         Box::pin(async_stream::stream! {
-            use http::Request;
-            use tokio_tungstenite::tungstenite::handshake::client::generate_key;
-            use tokio::time::{sleep, Duration};
-
             let mut current_components: HashMap<String, ComponentWithState> = HashMap::new();
             let mut reconnect_attempts = 0;
             const MAX_RECONNECT_ATTEMPTS: u32 = 10;
@@ -221,22 +218,24 @@ impl RFQClient for BebopClient {
                 // Message processing loop
                 while let Some(msg) = ws_receiver.next().await {
                     match msg {
-                        Ok(Message::Text(text)) => {
-                            match serde_json::from_str::<BebopPriceMessage>(&text) {
-                                Ok(price_data_map) => {
+                        Ok(Message::Binary(data)) => {
+                            match BebopPricingUpdate::decode(&data[..]) {
+                                Ok(protobuf_update) => {
                                     let mut new_components = HashMap::new();
 
-                                    // Process all pairs from this WebSocket message
-                                    for (pair, price_data) in price_data_map.iter() {
-                                        let (token0, token1);
-                                        if let Some((t0, t1)) = pair.split_once('/') {
-                                            token0 = t0;
-                                            token1 = t1;
-                                        } else {
-                                            warn!("Tokens improperly formatted: {}. Skipping.", pair);
-                                            continue;
-                                        };
-                                        if tokens.contains(token0) && tokens.contains(token1) {
+                                    // Process all pairs directly from protobuf
+                                    for price_data in &protobuf_update.pairs {
+                                        if tokens.contains(&price_data.base.to_bytes()) && tokens.contains(&price_data.quote.to_bytes()) {
+                                            let component_id = format!("bebop_{pair}");
+
+                                            let (token0, token1);
+                                            if let Some((t0, t1)) = pair.split_once('/') {
+                                                token0 = t0;
+                                                token1 = t1;
+                                            } else {
+                                                warn!("Tokens improperly formatted: {}. Skipping.", pair);
+                                                continue;
+                                            };
 
                                             let token_0_bytes = Bytes::from_str(token0).map_err(|_| RFQError::ParsingError(format!("String cannot be converted to bytes {token0}")))?;
                                             let token_1_bytes = Bytes::from_str(token1).map_err(|_| RFQError::ParsingError(format!("String cannot be converted to bytes {token1}")))?;
@@ -251,10 +250,12 @@ impl RFQClient for BebopClient {
                                             if !client.quote_tokens.contains(token1) {
                                                 for quote_token in &client.quote_tokens {
                                                     let quote_pair_name = pair_to_bebop_format(&(token1.into(), quote_token.into()))?;
-                                                    if let Some(data) = price_data_map.get(&quote_pair_name) {
-                                                        quote_price_data = Some(data.clone());
+                                                    // Look for the quote pair in the same protobuf update
+                                                    if let Some(quote_data) = protobuf_update.pairs.iter()
+                                                        .find(|p| p.get_pair_key() == quote_pair_name) {
+                                                        quote_price_data = Some(quote_data.clone());
                                                         break;
-                                                    };
+                                                    }
                                                 }
 
                                                 // Quote token doesn't have price levels in approved quote tokens.
@@ -314,7 +315,7 @@ impl RFQClient for BebopClient {
                                     yield Ok(("bebop".to_string(), msg));
                                 },
                                 Err(e) => {
-                                    error!("Failed to parse websocket message: {}", e);
+                                    error!("Failed to parse protobuf message: {}", e);
                                     break;
                                 }
                             }
@@ -517,6 +518,10 @@ mod tests {
                                     .protocol_type_name,
                                 "bebop_pool"
                             );
+                            assert_eq!(
+                                component_with_state.component.chain,
+                                Chain::Ethereum.into()
+                            );
 
                             let attributes = &component_with_state.state.attributes;
 
@@ -578,13 +583,29 @@ mod tests {
                     if let Ok(ws_stream) = accept_async(stream).await {
                         let (mut ws_sender, _ws_receiver) = ws_stream.split();
 
-                        let test_message = r#"{"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48":{"last_update_ts":1752617378.3278632,"bids":[[3070.0499326485206,0.3257174307952456]],"asks":[[3070.527058081382,0.3257174307952456]]}}"#;
+                        // Create test protobuf message
+                        let weth_addr =
+                            hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
+                        let usdc_addr =
+                            hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
+
+                        let test_price_data = BebopPriceData {
+                            base: weth_addr,
+                            quote: usdc_addr,
+                            last_update_ts: 1752617378,
+                            bids: vec![3070.05f32, 0.325717f32],
+                            asks: vec![3070.527f32, 0.325717f32],
+                        };
+
+                        let pricing_update = BebopPricingUpdate { pairs: vec![test_price_data] };
+
+                        let test_message = pricing_update.encode_to_vec();
 
                         if count == 1 {
                             // First connection: Send message successfully, then drop
                             println!("Mock server: Connection #1 - sending message then dropping.");
                             let _ = ws_sender
-                                .send(Message::Text(test_message.into()))
+                                .send(Message::Binary(test_message.clone().into()))
                                 .await;
 
                             // Give time for message to be processed, then drop the connection.
@@ -595,7 +616,7 @@ mod tests {
                             // Second connection: Send message successfully and maintain connection
                             println!("Mock server: Connection #2 - maintaining stable connection.");
                             let _ = ws_sender
-                                .send(Message::Text(test_message.into()))
+                                .send(Message::Binary(test_message.clone().into()))
                                 .await;
                         }
                     }

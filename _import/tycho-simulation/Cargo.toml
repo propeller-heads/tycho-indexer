@@ -1,6 +1,6 @@
 [package]
 name = "tycho-simulation"
-version = "0.136.0"
+version = "0.139.0"
 edition = "2021"
 description = "Provides tools for interacting with protocol states, calculating spot prices, and quoting token swaps."
 repository = "https://github.com/propeller-heads/tycho-simulation"
@@ -48,8 +48,8 @@ mini-moka = "0.10"
 lazy_static = "1.4.0"
 
 # Tycho dependencies
-tycho-common = "0.79.0"
-tycho-client = "0.79.0"
+tycho-common = "0.81.0"
+tycho-client = "0.81.0"
 
 # EVM dependencies
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "5a552bb0de7126fa35170fd84532bbd3d40cd348", optional = true }
@@ -72,6 +72,7 @@ async-trait = { version = "0.1.88", optional = true }
 tokio-tungstenite = { version = "0.26.2", optional = true }
 async-stream = { version = "0.3.6", optional = true }
 http = { version = "1.0", optional = true }
+prost = { version = "0.13", optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4.4"
@@ -96,7 +97,7 @@ unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
 
 # tycho execution for quickstart
-tycho-execution = "0.109.0"
+tycho-execution = "0.112.0"
 
 [features]
 default = ["evm", "rfq"]
@@ -104,7 +105,7 @@ network_tests = []
 evm = [
     "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors", "dep:alloy",
 ]
-rfq = ["dep:reqwest", "dep:async-trait", "dep:tokio-tungstenite", "dep:async-stream", "dep:http"]
+rfq = ["dep:reqwest", "dep:async-trait", "dep:tokio-tungstenite", "dep:async-stream", "dep:http", "dep:prost"]
 
 [profile.bench]
 debug = true

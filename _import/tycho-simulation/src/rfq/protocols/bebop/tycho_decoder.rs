@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use tycho_client::feed::synchronizer::ComponentWithState;
 use tycho_common::{models::token::Token, Bytes};
@@ -6,7 +6,7 @@ use tycho_common::{models::token::Token, Bytes};
 use super::{models::BebopPriceData, state::BebopState};
 use crate::{
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
-    rfq::models::TimestampHeader,
+    rfq::{models::TimestampHeader, protocols::bebop::client::BebopClient},
 };
 
 impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
@@ -61,10 +61,36 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
         let asks: Vec<(f64, f64)> = serde_json::from_slice(asks_json)
             .map_err(|e| InvalidSnapshotError::ValueError(format!("Invalid asks JSON: {e}")))?;
 
-        let price_data =
-            BebopPriceData { last_update_ts: timestamp_header.timestamp as f64, bids, asks };
+        let price_data = BebopPriceData {
+            base: base_token.address.to_vec(),
+            quote: quote_token.address.to_vec(),
+            last_update_ts: timestamp_header.timestamp,
+            bids: bids
+                .iter()
+                .flat_map(|(price, size)| [*price as f32, *size as f32])
+                .collect(),
+            asks: asks
+                .iter()
+                .flat_map(|(price, size)| [*price as f32, *size as f32])
+                .collect(),
+        };
 
-        Ok(BebopState { base_token, quote_token, price_data })
+        let ws_user = "".to_string();
+        let ws_key = "".to_string();
+
+        let client = BebopClient::new(
+            snapshot.component.chain.into(),
+            HashSet::new(),
+            0.0,
+            ws_user,
+            ws_key,
+            HashSet::new(),
+        )
+        .map_err(|e| {
+            InvalidSnapshotError::MissingAttribute(format!("Couldn't create BebopClient: {e}"))
+        })?;
+
+        Ok(BebopState { base_token, quote_token, price_data, client })
     }
 }
 
@@ -169,11 +195,11 @@ mod tests {
 
         assert_eq!(result.base_token.symbol, "WBTC");
         assert_eq!(result.quote_token.symbol, "USDC");
-        assert_eq!(result.price_data.last_update_ts, 1703097600.0);
-        assert_eq!(result.price_data.bids.len(), 3);
-        assert_eq!(result.price_data.asks.len(), 3);
-        assert_eq!(result.price_data.bids[0], (65000.0, 1.5));
-        assert_eq!(result.price_data.asks[0], (65100.0, 1.0));
+        assert_eq!(result.price_data.last_update_ts, 1703097600);
+        assert_eq!(result.price_data.get_bids().len(), 3);
+        assert_eq!(result.price_data.get_asks().len(), 3);
+        assert_eq!(result.price_data.get_bids()[0], (65000.0, 1.5));
+        assert_eq!(result.price_data.get_asks()[0], (65100.0, 1.0));
     }
 
     #[tokio::test]

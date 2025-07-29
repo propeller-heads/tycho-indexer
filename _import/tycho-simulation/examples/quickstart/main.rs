@@ -606,7 +606,7 @@ fn create_solution(
     sell_amount: BigUint,
     user_address: Bytes,
     expected_amount: BigUint,
-) -> Solution {
+) -> Solution<'static> {
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = Swap::new(
         component,
@@ -615,6 +615,7 @@ fn create_solution(
         // Split defines the fraction of the amount to be swapped. A value of 0 indicates 100% of
         // the amount or the total remaining balance.
         0f64,
+        None,
         None,
     );
 
