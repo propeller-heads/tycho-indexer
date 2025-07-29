@@ -56,9 +56,9 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
             .unwrap_or(&empty_array_bytes);
 
         // Parse bids and asks from JSON
-        let bids: Vec<(f64, f64)> = serde_json::from_slice(bids_json)
+        let bids: Vec<(f32, f32)> = serde_json::from_slice(bids_json)
             .map_err(|e| InvalidSnapshotError::ValueError(format!("Invalid bids JSON: {e}")))?;
-        let asks: Vec<(f64, f64)> = serde_json::from_slice(asks_json)
+        let asks: Vec<(f32, f32)> = serde_json::from_slice(asks_json)
             .map_err(|e| InvalidSnapshotError::ValueError(format!("Invalid asks JSON: {e}")))?;
 
         let price_data = BebopPriceData {
@@ -67,11 +67,11 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
             last_update_ts: timestamp_header.timestamp,
             bids: bids
                 .iter()
-                .flat_map(|(price, size)| [*price as f32, *size as f32])
+                .flat_map(|(price, size)| [*price, *size])
                 .collect(),
             asks: asks
                 .iter()
-                .flat_map(|(price, size)| [*price as f32, *size as f32])
+                .flat_map(|(price, size)| [*price, *size])
                 .collect(),
         };
 

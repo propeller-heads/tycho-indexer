@@ -4,16 +4,18 @@ use std::{
     time::SystemTime,
 };
 
-use http::Request;
-use tokio_tungstenite::tungstenite::handshake::client::generate_key;
-use tokio::time::{sleep, Duration};
 use alloy::primitives::{utils::keccak256, Address};
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt};
+use http::Request;
 use num_bigint::BigUint;
 use prost::Message as ProstMessage;
 use reqwest::Client;
-use tokio_tungstenite::{connect_async_with_config, tungstenite::Message};
+use tokio::time::{sleep, Duration};
+use tokio_tungstenite::{
+    connect_async_with_config,
+    tungstenite::{handshake::client::generate_key, Message},
+};
 use tracing::{error, info, warn};
 use tycho_common::{
     models::{protocol::GetAmountOutParams, Chain},
@@ -31,19 +33,6 @@ use crate::{
     tycho_client::feed::synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
     tycho_common::dto::{ProtocolComponent, ResponseProtocolState},
 };
-
-fn checksum(address: &String) -> Result<String, RFQError> {
-    let checksum = Address::from_str(address)
-        .map_err(|_| RFQError::ParsingError(format!("Invalid token address: {address}.")))?;
-    Ok(checksum.to_checksum(None))
-}
-
-fn pair_to_bebop_format(pair: &(String, String)) -> Result<String, RFQError> {
-    // Checksum addresses to match websocket output
-    let token0 = checksum(&pair.0)?;
-    let token1 = checksum(&pair.1)?;
-    Ok(format!("{token0}/{token1}"))
-}
 
 fn bytes_to_address(address: &Bytes) -> Result<Address, RFQError> {
     if address.len() == 20 {
@@ -70,7 +59,7 @@ pub struct BebopClient {
     price_ws: String,
     quote_endpoint: String,
     // Tokens that we want prices for
-    tokens: HashSet<String>,
+    tokens: HashSet<Bytes>,
     // Min tvl value in the quote token.
     tvl: f64,
     // name header for authentication
@@ -78,39 +67,28 @@ pub struct BebopClient {
     // key header for authentication
     ws_key: String,
     // quote tokens to normalize to for TVL purposes. Should have the same prices.
-    quote_tokens: HashSet<String>,
+    quote_tokens: HashSet<Bytes>,
 }
 
 impl BebopClient {
     pub fn new(
         chain: Chain,
-        tokens: HashSet<String>,
+        tokens: HashSet<Bytes>,
         tvl: f64,
         ws_user: String,
         ws_key: String,
-        quote_tokens: HashSet<String>,
+        quote_tokens: HashSet<Bytes>,
     ) -> Result<Self, RFQError> {
         let url = chain_to_bebop_url(chain)?;
-
-        let mut quote_tokens_checksummed: HashSet<String> = HashSet::new();
-        let mut tokens_checksummed: HashSet<String> = HashSet::new();
-
-        for token in quote_tokens.iter() {
-            quote_tokens_checksummed.insert(checksum(token)?.to_string());
-        }
-        for token in tokens.iter() {
-            tokens_checksummed.insert(checksum(token)?.to_string());
-        }
-
         Ok(Self {
             price_ws: "wss://".to_string() + &url + "/pricing?format=protobuf",
             quote_endpoint: "https://".to_string() + &url + "/quote",
-            tokens: tokens_checksummed,
+            tokens,
             chain,
             tvl,
             ws_user,
             ws_key,
-            quote_tokens: quote_tokens_checksummed,
+            quote_tokens,
         })
     }
 
@@ -137,12 +115,24 @@ impl BebopClient {
         let mut attributes = HashMap::new();
 
         // Store all bids and asks as JSON strings, since we cannot store arrays
+        // Convert flat arrays [price1, size1, price2, size2, ...] to pairs [(price1, size1),
+        // (price2, size2), ...]
         if !price_data.bids.is_empty() {
-            let bids_json = serde_json::to_string(&price_data.bids).unwrap_or_default();
+            let bids_pairs: Vec<(f32, f32)> = price_data
+                .bids
+                .chunks_exact(2)
+                .map(|chunk| (chunk[0], chunk[1]))
+                .collect();
+            let bids_json = serde_json::to_string(&bids_pairs).unwrap_or_default();
             attributes.insert("bids".to_string(), bids_json.as_bytes().to_vec().into());
         }
         if !price_data.asks.is_empty() {
-            let asks_json = serde_json::to_string(&price_data.asks).unwrap_or_default();
+            let asks_pairs: Vec<(f32, f32)> = price_data
+                .asks
+                .chunks_exact(2)
+                .map(|chunk| (chunk[0], chunk[1]))
+                .collect();
+            let asks_json = serde_json::to_string(&asks_pairs).unwrap_or_default();
             attributes.insert("asks".to_string(), asks_json.as_bytes().to_vec().into());
         }
 
@@ -225,34 +215,21 @@ impl RFQClient for BebopClient {
 
                                     // Process all pairs directly from protobuf
                                     for price_data in &protobuf_update.pairs {
-                                        if tokens.contains(&price_data.base.to_bytes()) && tokens.contains(&price_data.quote.to_bytes()) {
-                                            let component_id = format!("bebop_{pair}");
-
-                                            let (token0, token1);
-                                            if let Some((t0, t1)) = pair.split_once('/') {
-                                                token0 = t0;
-                                                token1 = t1;
-                                            } else {
-                                                warn!("Tokens improperly formatted: {}. Skipping.", pair);
-                                                continue;
-                                            };
-
-                                            let token_0_bytes = Bytes::from_str(token0).map_err(|_| RFQError::ParsingError(format!("String cannot be converted to bytes {token0}")))?;
-                                            let token_1_bytes = Bytes::from_str(token1).map_err(|_| RFQError::ParsingError(format!("String cannot be converted to bytes {token1}")))?;
-
+                                        let base_bytes = Bytes::from(price_data.base.clone());
+                                        let quote_bytes = Bytes::from(price_data.quote.clone());
+                                        if tokens.contains(&base_bytes) && tokens.contains(&quote_bytes) {
                                             let pair_tokens = vec![
-                                                token_0_bytes, token_1_bytes
+                                                base_bytes.clone(), quote_bytes.clone()
                                             ];
 
                                             let mut quote_price_data: Option<BebopPriceData> = None;
                                             // The quote token is not one of the approved quote tokens
                                             // Get the price, so we can normalize our TVL calculation
-                                            if !client.quote_tokens.contains(token1) {
-                                                for quote_token in &client.quote_tokens {
-                                                    let quote_pair_name = pair_to_bebop_format(&(token1.into(), quote_token.into()))?;
+                                            if !client.quote_tokens.contains(&quote_bytes) {
+                                                for approved_quote_token in &client.quote_tokens {
                                                     // Look for the quote pair in the same protobuf update
                                                     if let Some(quote_data) = protobuf_update.pairs.iter()
-                                                        .find(|p| p.get_pair_key() == quote_pair_name) {
+                                                        .find(|p| p.base == quote_bytes.as_ref() && p.quote == approved_quote_token.as_ref()) {
                                                         quote_price_data = Some(quote_data.clone());
                                                         break;
                                                     }
@@ -271,7 +248,8 @@ impl RFQClient for BebopClient {
                                                 continue;
                                             }
 
-                                            let component_id = format!("{}", keccak256(pair));
+                                            let pair_str = format!("{}/{}", hex::encode(&base_bytes), hex::encode(&quote_bytes));
+                                            let component_id = format!("{}", keccak256(pair_str.as_bytes()));
                                             let component_with_state = client.create_component_with_state(
                                                 component_id.clone(),
                                                 pair_tokens,
@@ -459,8 +437,8 @@ mod tests {
     async fn test_bebop_websocket_connection() {
         // We test with quote tokens that are not USDC in order to ensure our normalization works
         // fine
-        let wbtc = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599".to_string();
-        let weth = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string();
+        let wbtc = Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap();
+        let weth = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
 
         let ws_user = String::from("tycho");
         dotenv().expect("Missing .env file");
@@ -468,13 +446,13 @@ mod tests {
 
         let quote_tokens = HashSet::from([
             // Use addresses we forgot to checksum (to test checksumming)
-            String::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"), // USDC
-            String::from("0xdac17f958d2ee523a2206206994597c13d831ec7"), // USDT
+            Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(), // USDC
+            Bytes::from_str("0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap(), // USDT
         ]);
 
         let client = BebopClient::new(
             Chain::Ethereum,
-            HashSet::from_iter(vec![weth.to_string(), wbtc.to_string()]),
+            HashSet::from_iter(vec![weth.clone(), wbtc.clone()]),
             10.0, // $10 minimum TVL
             ws_user,
             ws_key,
@@ -628,11 +606,12 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
 
         let mut test_quote_tokens = HashSet::new();
-        test_quote_tokens.insert("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string());
+        test_quote_tokens
+            .insert(Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap());
 
         let tokens_formatted = vec![
-            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-                .to_string(),
+            Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
+            Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
         ];
 
         // Bypass the new() constructor to mock the URL to point to our mock server.
@@ -728,7 +707,7 @@ mod tests {
 
         let client = BebopClient::new(
             Chain::Ethereum,
-            HashSet::from_iter(vec![weth.address.to_string(), wbtc.address.to_string()]),
+            HashSet::from_iter(vec![weth.address.clone(), wbtc.address.clone()]),
             10.0, // $10 minimum TVL
             ws_user,
             ws_key,

@@ -1,23 +1,29 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, str::FromStr};
 
-use tycho_common::models::Chain;
+use tycho_common::{models::Chain, Bytes};
 
 use super::client::BebopClient;
 use crate::rfq::errors::RFQError;
 
+fn str_to_bytes(address: &str) -> Result<Bytes, RFQError> {
+    Bytes::from_str(address).map_err(|_| {
+        RFQError::FatalError(format!("Failed to parse default quote token: {address}"))
+    })
+}
+
 /// Returns default quote tokens for TVL calculation based on the chain
-fn default_quote_tokens_for_chain(chain: Chain) -> HashSet<String> {
+fn default_quote_tokens_for_chain(chain: Chain) -> Result<HashSet<Bytes>, RFQError> {
     match chain {
-        Chain::Ethereum => HashSet::from([
-            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string(), // USDC
-            "0xdac17f958d2ee523a2206206994597c13d831ec7".to_string(), // USDT
-            "0x6b175474e89094c44da98b954eedeac495271d0f".to_string(), // DAI
-        ]),
-        Chain::Base => HashSet::from([
-            "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913".to_string(), // USDC
-            "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2".to_string(), // USDT
-        ]),
-        _ => HashSet::new(),
+        Chain::Ethereum => Ok(HashSet::from([
+            str_to_bytes("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")?, // USDC
+            str_to_bytes("0xdac17f958d2ee523a2206206994597c13d831ec7")?, // USDT
+            str_to_bytes("0x6b175474e89094c44da98b954eedeac495271d0f")?, // DAI
+        ])),
+        Chain::Base => Ok(HashSet::from([
+            str_to_bytes("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913")?, // USDC
+            str_to_bytes("0xfde4c96c8593536e31f229ea8f37b2ada2699bb2")?, // USDT
+        ])),
+        _ => Ok(HashSet::new()),
     }
 }
 
@@ -27,12 +33,12 @@ fn default_quote_tokens_for_chain(chain: Chain) -> HashSet<String> {
 /// # Example
 /// ```rust
 /// use tycho_simulation::rfq::protocols::bebop::client_builder::BebopClientBuilder;
-/// use tycho_common::models::Chain;
-/// use std::collections::HashSet;
+/// use tycho_common::{models::Chain, Bytes};
+/// use std::{collections::HashSet, str::FromStr};
 ///
 /// let mut tokens = HashSet::new();
-/// tokens.insert("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string()); // WETH
-/// tokens.insert("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string()); // USDC
+/// tokens.insert(Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap()); // WETH
+/// tokens.insert(Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap()); // USDC
 ///
 /// let client = BebopClientBuilder::new(
 ///     Chain::Ethereum,
@@ -48,9 +54,9 @@ pub struct BebopClientBuilder {
     chain: Chain,
     ws_user: String,
     ws_key: String,
-    tokens: HashSet<String>,
+    tokens: HashSet<Bytes>,
     tvl: f64,
-    quote_tokens: Option<HashSet<String>>,
+    quote_tokens: Option<HashSet<Bytes>>,
 }
 
 impl BebopClientBuilder {
@@ -66,7 +72,7 @@ impl BebopClientBuilder {
     }
 
     /// Set the tokens for which to monitor prices
-    pub fn tokens(mut self, tokens: HashSet<String>) -> Self {
+    pub fn tokens(mut self, tokens: HashSet<Bytes>) -> Self {
         self.tokens = tokens;
         self
     }
@@ -79,7 +85,7 @@ impl BebopClientBuilder {
 
     /// Set custom quote tokens for TVL calculation
     /// If not set, will use chain-specific defaults
-    pub fn quote_tokens(mut self, quote_tokens: HashSet<String>) -> Self {
+    pub fn quote_tokens(mut self, quote_tokens: HashSet<Bytes>) -> Self {
         self.quote_tokens = Some(quote_tokens);
         self
     }
@@ -90,10 +96,12 @@ impl BebopClientBuilder {
                 "At least one token pair must be specified".to_string(),
             ));
         }
-
-        let quote_tokens = self
-            .quote_tokens
-            .unwrap_or_else(|| default_quote_tokens_for_chain(self.chain));
+        let quote_tokens;
+        if let Some(tokens) = self.quote_tokens {
+            quote_tokens = tokens;
+        } else {
+            quote_tokens = default_quote_tokens_for_chain(self.chain)?
+        }
 
         BebopClient::new(self.chain, self.tokens, self.tvl, self.ws_user, self.ws_key, quote_tokens)
     }
@@ -106,8 +114,8 @@ mod tests {
     #[test]
     fn test_bebop_client_builder_basic_config() {
         let mut tokens = HashSet::new();
-        tokens.insert("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string());
-        tokens.insert("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string());
+        tokens.insert(Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap());
+        tokens.insert(Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap());
 
         let result = BebopClientBuilder::new(
             Chain::Ethereum,
@@ -122,11 +130,12 @@ mod tests {
     #[test]
     fn test_bebop_client_builder_custom_configuration() {
         let mut custom_quote_tokens = HashSet::new();
-        custom_quote_tokens.insert("0x1234567890123456789012345678901234567890".to_string());
+        custom_quote_tokens
+            .insert(Bytes::from_str("0x1234567890123456789012345678901234567890").unwrap());
 
         let mut tokens = HashSet::new();
-        tokens.insert("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string());
-        tokens.insert("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string());
+        tokens.insert(Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap());
+        tokens.insert(Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap());
 
         let result = BebopClientBuilder::new(
             Chain::Ethereum,
