@@ -19,7 +19,7 @@ pub struct SignedQuote {
 }
 
 #[async_trait]
-pub trait IndicativelyPriced {
+pub trait IndicativelyPriced: ProtocolSim {
     // this will be true when the price is only an estimation/indicative price
     fn is_indicatively_priced() -> bool
     where
@@ -36,5 +36,3 @@ pub trait IndicativelyPriced {
         Err(SimulationError::FatalError("request_signed_quote not implemented".into()))
     }
 }
-
-impl IndicativelyPriced for dyn ProtocolSim {}

@@ -5,7 +5,10 @@ use num_bigint::BigUint;
 use crate::{
     dto::ProtocolStateDelta,
     models::token::Token,
-    simulation::errors::{SimulationError, TransitionError},
+    simulation::{
+        errors::{SimulationError, TransitionError},
+        indicatively_priced::IndicativelyPriced,
+    },
     Bytes,
 };
 
@@ -161,6 +164,11 @@ pub trait ProtocolSim: fmt::Debug + Send + Sync + 'static {
     /// This method must be implemented to define how two protocol states are considered equal
     /// (used for tests).
     fn eq(&self, other: &dyn ProtocolSim) -> bool;
+
+    /// Cast as IndicativelyPriced. This is necessary for RFQ protocols
+    fn as_indicatively_priced(&self) -> Option<&dyn IndicativelyPriced> {
+        None
+    }
 }
 
 impl Clone for Box<dyn ProtocolSim> {
