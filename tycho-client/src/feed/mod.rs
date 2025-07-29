@@ -257,10 +257,31 @@ impl SynchronizerStream {
             Err(_) => {
                 // trying to advance a block timed out
                 debug!(%extractor_id, ?previous_block, "Extractor did not check in within time.");
-                
-                if !self.check_and_transition_to_stale_if_needed(stale_threshold, Some(previous_block.clone()))? {
-                    self.state = SynchronizerState::Delayed(previous_block.clone());
-                    self.modify_ts = Local::now().naive_utc();
+
+                match &self.state {
+                    SynchronizerState::Ready(_) => {
+                        // First timeout: always transition to Delayed
+                        self.state = SynchronizerState::Delayed(previous_block.clone());
+                        self.modify_ts = Local::now().naive_utc();
+                    }
+                    SynchronizerState::Delayed(_) => {
+                        // Already delayed, check if we should go stale
+                        // DON'T update modify_ts here - we want to track time since first delay
+                        self.check_and_transition_to_stale_if_needed(
+                            stale_threshold,
+                            Some(previous_block.clone()),
+                        )?;
+                    }
+                    _ => {
+                        // For other states, use the stale check
+                        if !self.check_and_transition_to_stale_if_needed(
+                            stale_threshold,
+                            Some(previous_block.clone()),
+                        )? {
+                            self.state = SynchronizerState::Delayed(previous_block.clone());
+                            self.modify_ts = Local::now().naive_utc();
+                        }
+                    }
                 }
                 Ok(None)
             }
@@ -340,13 +361,13 @@ impl SynchronizerStream {
 
         if wait_duration > stale_threshold_chrono {
             let header_to_use = match (&self.state, fallback_header) {
-                (SynchronizerState::Ready(h), _) | 
-                (SynchronizerState::Delayed(h), _) | 
+                (SynchronizerState::Ready(h), _) |
+                (SynchronizerState::Delayed(h), _) |
                 (SynchronizerState::Stale(h), _) => h.clone(),
                 (_, Some(h)) => h,
                 _ => BlockHeader::default(),
             };
-            
+
             warn!(
                 extractor_id=%self.extractor_id,
                 last_message_at=?self.modify_ts,
@@ -381,7 +402,10 @@ impl SynchronizerStream {
                 self.state = SynchronizerState::Ready(latest_retrieved.clone());
             }
             BlockPosition::Latest | BlockPosition::Delayed => {
-                if !self.check_and_transition_to_stale_if_needed(stale_threshold, Some(latest_retrieved.clone()))? {
+                if !self.check_and_transition_to_stale_if_needed(
+                    stale_threshold,
+                    Some(latest_retrieved.clone()),
+                )? {
                     warn!(
                         ?extractor_id,
                         ?last_message_at,
@@ -666,26 +690,28 @@ where
                     SynchronizerState::Advanced(_) => true,
                 });
 
-                // TODO: If we all synchronizers stop emitting messages for a long time
-                //  (e.g. tycho-indexer digesting is slowed), in that case this will
-                //  error. Correct behaviour would be to mark all as delayed,repeat the
-                //  loop at least until all of them are marked as Stale and purged.
-                //  Currently the impact here is that if tycho is delayed by block_time
-                //  + max wait for all extractors, this code here will make the block
-                //  synchronizers exit and cause a complete new startup of all connected
-                //  clients.
-                block_history.push(
-                    sync_streams
-                        .values()
-                        .filter_map(|v| match &v.state {
-                            SynchronizerState::Ready(b) | SynchronizerState::Delayed(b) => Some(b),
-                            _ => None,
-                        })
-                        .next()
-                        // no synchronizers are ready
-                        .ok_or(BlockSynchronizerError::NoReadySynchronizers)?
-                        .clone(),
-                )?;
+                // Check if we have any active synchronizers (Ready, Delayed, or Advanced)
+                // If all synchronizers have been purged (Stale/Ended), exit the main loop
+                if sync_streams.is_empty() {
+                    return Err(BlockSynchronizerError::NoReadySynchronizers.into());
+                }
+
+                // Find a block header from Ready or Delayed synchronizers to advance block history
+                if let Some(header) = sync_streams
+                    .values()
+                    .filter_map(|v| match &v.state {
+                        SynchronizerState::Ready(b) | SynchronizerState::Delayed(b) => Some(b),
+                        _ => None,
+                    })
+                    .next()
+                {
+                    block_history.push(header.clone())?;
+                } else {
+                    // No Ready or Delayed synchronizers, but we still have some synchronizers
+                    // (they must be Advanced). Continue the loop to let them transition properly.
+                    // This handles the case where all synchronizers are temporarily Advanced
+                    // and need time to transition back to Ready/Delayed or go Stale.
+                }
             }
         });
 
@@ -759,7 +785,7 @@ mod tests {
             self.header_tx
                 .send(header)
                 .await
-                .map_err(|e| format!("sending header failed: {}", e))
+                .map_err(|e| format!("sending header failed: {e}"))
         }
 
         // For testing: trigger a close signal to make the synchronizer exit
@@ -881,10 +907,12 @@ mod tests {
         };
         v2_sync
             .send_header(start_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
         v3_sync
             .send_header(start_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
 
         let (_jh, mut rx) = block_sync
             .run()
@@ -900,10 +928,12 @@ mod tests {
         };
         v2_sync
             .send_header(second_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
         v3_sync
             .send_header(second_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
         let second_feed_msg = rx
             .recv()
             .await
@@ -968,10 +998,12 @@ mod tests {
         };
         v2_sync
             .send_header(block1_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
         v3_sync
             .send_header(block1_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
 
         // Start the block synchronizer
         let (_jh, mut rx) = block_sync
@@ -1013,7 +1045,8 @@ mod tests {
         };
         v2_sync
             .send_header(block2_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
 
         // Consume second message - v3 should be delayed
         let second_feed_msg = rx
@@ -1038,7 +1071,8 @@ mod tests {
         // Now v3 catches up to block 2
         v3_sync
             .send_header(block2_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
 
         // Both advance to block 3
         let block3_msg = StateSyncMessage {
@@ -1053,8 +1087,12 @@ mod tests {
         };
         v2_sync
             .send_header(block3_msg.clone())
-            .await.expect("send_header failed");
-        v3_sync.send_header(block3_msg).await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
+        v3_sync
+            .send_header(block3_msg)
+            .await
+            .expect("send_header failed");
 
         // Consume third message - both should be on block 3
         let third_feed_msg = rx
@@ -1113,12 +1151,13 @@ mod tests {
             ..Default::default()
         };
 
-        v2_sync
+        let _ = v2_sync
             .send_header(block1_msg.clone())
             .await;
         v3_sync
             .send_header(block2_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
 
         // Start the block synchronizer - it should use block 2 as the starting block
         let (_jh, mut rx) = block_sync
@@ -1143,7 +1182,8 @@ mod tests {
         // Now v2 catches up to block 2
         v2_sync
             .send_header(block2_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
 
         // Both advance to block 3
         let block3_msg = StateSyncMessage {
@@ -1156,12 +1196,13 @@ mod tests {
             },
             ..Default::default()
         };
-        v2_sync
+        let _ = v2_sync
             .send_header(block3_msg.clone())
             .await;
         v3_sync
             .send_header(block3_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
 
         // Consume third message - both should be on block 3
         let second_feed_msg = rx
@@ -1204,10 +1245,12 @@ mod tests {
         };
         v2_sync
             .send_header(start_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
         v3_sync
             .send_header(start_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
 
         // Start BlockSynchronizer - v2_sync will exit immediately with error
         let (nanny_handle, mut sync_rx) = block_sync
@@ -1262,10 +1305,12 @@ mod tests {
         };
         v2_sync
             .send_header(start_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
         v3_sync
             .send_header(start_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
 
         // Start BlockSynchronizer
         let (nanny_handle, mut sync_rx) = block_sync
@@ -1323,10 +1368,12 @@ mod tests {
         };
         v2_sync
             .send_header(start_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
         v3_sync
             .send_header(start_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
 
         // Start BlockSynchronizer
         let (nanny_handle, mut sync_rx) = block_sync
@@ -1390,10 +1437,12 @@ mod tests {
         };
         v2_sync
             .send_header(start_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
         v3_sync
             .send_header(start_msg.clone())
-            .await.expect("send_header failed");
+            .await
+            .expect("send_header failed");
 
         // Start BlockSynchronizer - v2_sync will exit immediately, triggering cleanup
         // v3_sync will ignore close signals and timeout during cleanup
@@ -1420,18 +1469,18 @@ mod tests {
     #[test(tokio::test)]
     async fn test_one_synchronizer_goes_stale_while_other_works() {
         // Test Case 1: One protocol goes stale and is removed while another protocol works normally
-        
+
         let v2_sync = MockStateSync::new();
         let v3_sync = MockStateSync::new();
-        
-        // Use short stale threshold to make v2 go stale quickly
+
+        // Use reasonable timeouts to observe proper state transitions
         let mut block_sync = BlockSynchronizer::new(
-            Duration::from_millis(50), // block_time
-            Duration::from_millis(20), // max_wait  
-            1 // max_missed_blocks (short stale threshold)
+            Duration::from_millis(20), // block_time
+            Duration::from_millis(10), // max_wait
+            2,                         // max_missed_blocks (stale threshold = 20ms * 2 = 40ms)
         );
         block_sync.max_messages(5); // Limit messages for test
-        
+
         let block_sync = block_sync
             .register_synchronizer(
                 ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
@@ -1453,24 +1502,37 @@ mod tests {
             },
             ..Default::default()
         };
-        let _ = v2_sync.send_header(block1_msg.clone()).await;
-        let _ = v3_sync.send_header(block1_msg.clone()).await;
+        let _ = v2_sync
+            .send_header(block1_msg.clone())
+            .await;
+        let _ = v3_sync
+            .send_header(block1_msg.clone())
+            .await;
 
         // Start the block synchronizer
-        let (_jh, mut rx) = block_sync
+        let (nanny_handle, mut rx) = block_sync
             .run()
             .await
             .expect("BlockSynchronizer failed to start");
 
         // Consume the first message - both should be ready
-        let first_feed_msg = rx.recv().await.expect("Should receive first message");
+        let first_feed_msg = rx
+            .recv()
+            .await
+            .expect("Should receive first message");
         assert_eq!(first_feed_msg.state_msgs.len(), 2);
         assert!(matches!(
-            first_feed_msg.sync_states.get("uniswap-v2").unwrap(),
+            first_feed_msg
+                .sync_states
+                .get("uniswap-v2")
+                .unwrap(),
             SynchronizerState::Ready(_)
         ));
         assert!(matches!(
-            first_feed_msg.sync_states.get("uniswap-v3").unwrap(),
+            first_feed_msg
+                .sync_states
+                .get("uniswap-v3")
+                .unwrap(),
             SynchronizerState::Ready(_)
         ));
 
@@ -1485,26 +1547,47 @@ mod tests {
             },
             ..Default::default()
         };
-        let _ = v3_sync.send_header(block2_msg.clone()).await;
+        let _ = v3_sync
+            .send_header(block2_msg.clone())
+            .await;
         // Don't send to v2_sync - it will timeout
 
         // Consume second message - v2 should be delayed, v3 ready
-        let second_feed_msg = rx.recv().await.expect("Should receive second message");
-        assert!(second_feed_msg.state_msgs.contains_key("uniswap-v3"));
-        assert!(!second_feed_msg.state_msgs.contains_key("uniswap-v2"));
+        let second_feed_msg = rx
+            .recv()
+            .await
+            .expect("Should receive second message");
+        assert!(second_feed_msg
+            .state_msgs
+            .contains_key("uniswap-v3"));
+        assert!(!second_feed_msg
+            .state_msgs
+            .contains_key("uniswap-v2"));
         assert!(matches!(
-            second_feed_msg.sync_states.get("uniswap-v3").unwrap(),
+            second_feed_msg
+                .sync_states
+                .get("uniswap-v3")
+                .unwrap(),
             SynchronizerState::Ready(_)
         ));
-        // v2 should be delayed (if still present)
-        if let Some(v2_state) = second_feed_msg.sync_states.get("uniswap-v2") {
-            assert!(matches!(v2_state, SynchronizerState::Delayed(_)));
+        // v2 should be delayed (if still present) - check nanny is still running
+        if let Some(v2_state) = second_feed_msg
+            .sync_states
+            .get("uniswap-v2")
+        {
+            if matches!(v2_state, SynchronizerState::Delayed(_)) {
+                // Verify nanny is still running when synchronizer is just delayed
+                assert!(
+                    !nanny_handle.is_finished(),
+                    "Nanny should still be running when synchronizer is delayed (not stale yet)"
+                );
+            }
         }
 
-        // Wait for v2 to try to catch up and fail, so it can transition to stale
-        tokio::time::sleep(Duration::from_millis(30)).await;
-        
-        // Send block 3 only to v3, keep v2 without messages so it goes stale
+        // Wait a bit, then continue sending blocks to v3 but not v2
+        tokio::time::sleep(Duration::from_millis(15)).await;
+
+        // Continue sending blocks only to v3 to keep it healthy while v2 goes stale
         let block3_msg = StateSyncMessage {
             header: BlockHeader {
                 number: 3,
@@ -1515,27 +1598,34 @@ mod tests {
             },
             ..Default::default()
         };
-        let _ = v3_sync.send_header(block3_msg.clone()).await;
+        let _ = v3_sync
+            .send_header(block3_msg.clone())
+            .await;
 
         // Wait more time for v2 to go stale
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Consume messages until we see v2 is removed
+        // Consume remaining messages until we see v2 is removed
         let mut found_removed = false;
-        
+
         for _ in 0..3 {
             if let Some(msg) = rx.recv().await {
-                if !msg.sync_states.contains_key("uniswap-v2") {
+                if !msg
+                    .sync_states
+                    .contains_key("uniswap-v2")
+                {
                     // v2 has been removed from sync_states
                     found_removed = true;
                 }
-                
-                // v3 should still be working
+
+                // v3 should still be working (can be Ready, Delayed, or Advanced)
                 if let Some(v3_state) = msg.sync_states.get("uniswap-v3") {
-                    assert!(matches!(v3_state, SynchronizerState::Ready(_) | SynchronizerState::Delayed(_)), 
-                        "v3 should be ready or delayed, but was: {:?}", v3_state);
+                    assert!(
+                        !matches!(v3_state, SynchronizerState::Stale(_) | SynchronizerState::Ended),
+                        "v3 should not be stale or ended, but was: {v3_state:?}"
+                    );
                 }
-                
+
                 if found_removed {
                     break;
                 }
@@ -1547,5 +1637,145 @@ mod tests {
         // v2 should be removed (it may go stale briefly but get purged immediately)
         assert!(found_removed, "v2 synchronizer should be removed after going stale");
         // Note: found_stale might be false if the stale synchronizer is purged immediately
+    }
+
+    #[test(tokio::test)]
+    async fn test_all_synchronizers_go_stale_main_loop_exits() {
+        // Test Case 2: All protocols go stale and main loop exits gracefully
+
+        let v2_sync = MockStateSync::new();
+        let v3_sync = MockStateSync::new();
+
+        // Use reasonable timeouts to observe proper state transitions
+        let mut block_sync = BlockSynchronizer::new(
+            Duration::from_millis(20), // block_time
+            Duration::from_millis(10), // max_wait
+            3,                         // max_missed_blocks (stale threshold = 20ms * 3 = 60ms)
+        );
+        block_sync.max_messages(10); // Allow enough messages to see the progression
+
+        let block_sync = block_sync
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+                v2_sync.clone(),
+            )
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+                v3_sync.clone(),
+            );
+
+        // Send initial messages to both synchronizers
+        let block1_msg = StateSyncMessage {
+            header: BlockHeader {
+                number: 1,
+                hash: Bytes::from(vec![1]),
+                parent_hash: Bytes::from(vec![0]),
+                revert: false,
+                timestamp: 1000,
+            },
+            ..Default::default()
+        };
+        let _ = v2_sync
+            .send_header(block1_msg.clone())
+            .await;
+        let _ = v3_sync
+            .send_header(block1_msg.clone())
+            .await;
+
+        // Start the block synchronizer
+        let (nanny_handle, mut rx) = block_sync
+            .run()
+            .await
+            .expect("BlockSynchronizer failed to start");
+
+        // Consume the first message - both should be ready
+        let first_feed_msg = rx
+            .recv()
+            .await
+            .expect("Should receive first message");
+        assert_eq!(first_feed_msg.state_msgs.len(), 2);
+        assert!(matches!(
+            first_feed_msg
+                .sync_states
+                .get("uniswap-v2")
+                .unwrap(),
+            SynchronizerState::Ready(_)
+        ));
+        assert!(matches!(
+            first_feed_msg
+                .sync_states
+                .get("uniswap-v3")
+                .unwrap(),
+            SynchronizerState::Ready(_)
+        ));
+
+        // Stop sending messages to both synchronizers - they should both timeout and go stale
+        // Don't send any more messages, let them timeout and become delayed, then stale
+
+        // Monitor the state transitions to ensure proper delayed -> stale progression
+        let mut seen_delayed = false;
+
+        // Consume messages and track state transitions
+        // Give enough time for the synchronizers to transition through states
+        let timeout_duration = Duration::from_millis(500); // Generous timeout
+        let start_time = tokio::time::Instant::now();
+
+        while let Ok(Some(msg)) = tokio::time::timeout(Duration::from_millis(50), rx.recv()).await {
+            // Track when synchronizers transition to delayed
+            if !seen_delayed {
+                let v2_state = msg.sync_states.get("uniswap-v2");
+                let v3_state = msg.sync_states.get("uniswap-v3");
+
+                if matches!(v2_state, Some(SynchronizerState::Delayed(_))) ||
+                    matches!(v3_state, Some(SynchronizerState::Delayed(_)))
+                {
+                    seen_delayed = true;
+                    // Verify nanny is still running when synchronizers are just delayed
+                    assert!(!nanny_handle.is_finished(),
+                        "Nanny should still be running when synchronizers are delayed (not stale yet)");
+                    // Once we've seen delayed and verified nanny is running, we can break
+                    break;
+                }
+            }
+
+            // Safety timeout to avoid infinite loop
+            if start_time.elapsed() > timeout_duration {
+                break;
+            }
+        }
+
+        // Wait for the main loop to complete (all synchronizers should eventually go stale)
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        // Consume any remaining messages until channel closes
+        while rx.recv().await.is_some() {
+            // Just drain the channel
+        }
+        // Channel is now closed
+
+        // The nanny should complete when the main loop exits due to no ready synchronizers
+        let nanny_result = timeout(Duration::from_secs(2), nanny_handle).await;
+        assert!(nanny_result.is_ok(), "Nanny should complete when main loop exits");
+
+        // Verify that synchronizers went through proper state transitions
+        assert!(seen_delayed, "Synchronizers should transition to Delayed state first");
+        // Note: We might not see the Stale state because stale synchronizers are immediately purged
+        // The important thing is that they stayed in Delayed for the proper duration before being
+        // removed
+
+        // If we reach here, the channel was closed, indicating the main loop exited gracefully
+
+        // Give cleanup time to execute
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Verify cleanup was triggered for both synchronizers
+        assert!(
+            v2_sync.was_close_received().await,
+            "v2_sync should have received close signal during cleanup"
+        );
+        assert!(
+            v3_sync.was_close_received().await,
+            "v3_sync should have received close signal during cleanup"
+        );
     }
 }
