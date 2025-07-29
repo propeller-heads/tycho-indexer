@@ -30,16 +30,16 @@ fn default_quote_tokens_for_chain(chain: Chain) -> HashSet<String> {
 /// use tycho_common::models::Chain;
 /// use std::collections::HashSet;
 ///
-/// let mut pairs = HashSet::new();
-/// pairs.insert(("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(), // WETH
-///               "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string())); // USDC
+/// let mut tokens = HashSet::new();
+/// tokens.insert("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string()); // WETH
+/// tokens.insert("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string()); // USDC
 ///
 /// let client = BebopClientBuilder::new(
 ///     Chain::Ethereum,
 ///     "ws_user".to_string(),
 ///     "ws_key".to_string()
 /// )
-/// .pairs(pairs)
+/// .tokens(tokens)
 /// .tvl_threshold(500.0)
 /// .build()
 /// .unwrap();
