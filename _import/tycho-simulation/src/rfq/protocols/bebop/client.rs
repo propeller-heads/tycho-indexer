@@ -29,8 +29,6 @@ use crate::{
     tycho_common::dto::{ProtocolComponent, ResponseProtocolState},
 };
 
-type BebopPriceMessage = HashMap<String, BebopPriceData>;
-
 fn pair_to_bebop_format(pair: &(String, String)) -> Result<String, RFQError> {
     // Checksum addresses to match websocket output
     let token0 = Address::from_str(&pair.0)
