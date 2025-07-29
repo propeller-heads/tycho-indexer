@@ -16,7 +16,6 @@ use tycho_common::{
     models::token::Token,
     simulation::{
         errors::{SimulationError, TransitionError},
-        indicatively_priced::IndicativelyPriced,
         protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
     },
     Bytes,
@@ -523,14 +522,6 @@ where
     pub fn get_balance_owner(&self) -> Option<Address> {
         self.balance_owner
     }
-}
-
-impl<D> IndicativelyPriced for EVMPoolState<D>
-where
-    D: EngineDatabaseInterface + Clone + Debug + 'static,
-    <D as DatabaseRef>::Error: Debug,
-    <D as EngineDatabaseInterface>::Error: Debug,
-{
 }
 
 impl<D> ProtocolSim for EVMPoolState<D>

@@ -220,14 +220,14 @@ impl ProtocolSim for BebopState {
             false
         }
     }
+
+    fn as_indicatively_priced(&self) -> Option<&dyn IndicativelyPriced> {
+        Some(self)
+    }
 }
 
 #[async_trait]
 impl IndicativelyPriced for BebopState {
-    fn is_indicatively_priced() -> bool {
-        true
-    }
-
     async fn request_signed_quote(
         &self,
         params: GetAmountOutParams,

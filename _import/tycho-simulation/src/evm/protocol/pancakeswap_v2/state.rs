@@ -7,7 +7,6 @@ use tycho_common::{
     models::token::Token,
     simulation::{
         errors::{SimulationError, TransitionError},
-        indicatively_priced::IndicativelyPriced,
         protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
     },
     Bytes,
@@ -40,8 +39,6 @@ impl PancakeswapV2State {
         PancakeswapV2State { reserve0, reserve1 }
     }
 }
-
-impl IndicativelyPriced for PancakeswapV2State {}
 
 impl ProtocolSim for PancakeswapV2State {
     fn fee(&self) -> f64 {

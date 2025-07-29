@@ -9,7 +9,6 @@ use tycho_common::{
     models::token::Token,
     simulation::{
         errors::{SimulationError, TransitionError},
-        indicatively_priced::IndicativelyPriced,
         protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
     },
     Bytes,
@@ -229,7 +228,6 @@ impl UniswapV4State {
     }
 }
 
-impl IndicativelyPriced for UniswapV4State {}
 impl ProtocolSim for UniswapV4State {
     // Not possible to implement correctly with the current interface because we need to know the
     // swap direction.
