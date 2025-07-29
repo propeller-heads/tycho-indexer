@@ -7,8 +7,11 @@ use thiserror::Error;
 use tracing::{debug, trace};
 use tycho_common::models::{
     blockchain::{Block, EntryPoint, EntryPointWithTracingParams, TracingParams, TracingResult},
-    Address, BlockHash, EntryPointId, StoreKey,
+    protocol::ProtocolComponent,
+    Address, BlockHash, ComponentId, EntryPointId, StoreKey,
 };
+
+use super::hook_dci::ComponentProcessingState;
 
 /// A unique identifier for a storage location, consisting of an address and a storage key.
 type StorageLocation = (Address, StoreKey);
@@ -95,14 +98,82 @@ impl DCICache {
     ///   order
     pub(super) fn try_insert_block_layer(&mut self, block: &Block) -> Result<(), DCICacheError> {
         self.ep_id_to_entrypoint
-            .validate_and_ensure_block_layer(block)?;
+            .validate_and_ensure_block_layer_internal(block)?;
         self.entrypoint_results
-            .validate_and_ensure_block_layer(block)?;
+            .validate_and_ensure_block_layer_internal(block)?;
         self.retriggers
-            .validate_and_ensure_block_layer(block)?;
+            .validate_and_ensure_block_layer_internal(block)?;
         self.tracked_contracts
-            .validate_and_ensure_block_layer(block)?;
+            .validate_and_ensure_block_layer_internal(block)?;
 
+        Ok(())
+    }
+}
+
+/// Central data cache used by the Hooks Dynamic Contract Indexer (HooksDCI).
+pub(super) struct HooksDCICache {
+    /// Maps component IDs to their processing state.
+    pub(super) component_states: VersionedCache<ComponentId, ComponentProcessingState>,
+    /// Stores ProtocolComponent data for both newly created and mutated components.
+    pub(super) protocol_components: VersionedCache<ComponentId, ProtocolComponent>,
+}
+
+impl HooksDCICache {
+    pub(super) fn new() -> Self {
+        Self { component_states: VersionedCache::new(), protocol_components: VersionedCache::new() }
+    }
+
+    /// Reverts the cache to the state at a specific block hash.
+    ///
+    /// This operation will discard all changes made in blocks after the specified block.
+    /// Errors if the block is not found and is not the parent of the latest pending block.
+    ///
+    /// # Arguments
+    /// * `block` - The block to revert to.
+    ///
+    /// # Returns
+    /// * `Ok(())` - On successful reversion
+    /// * `Err(DCICacheError::RevertToBlockNotFound)` - If the block is not found in one of the
+    ///   pending layers
+    pub(super) fn revert_to(&mut self, block: &BlockHash) -> Result<(), DCICacheError> {
+        self.component_states.revert_to(block)?;
+        self.protocol_components
+            .revert_to(block)?;
+        Ok(())
+    }
+
+    /// Move new finalized blocks state to the permanent layer.
+    ///
+    /// # Arguments
+    /// * `finalized_block_height` - The height of the finalized block.
+    pub(super) fn handle_finality(
+        &mut self,
+        finalized_block_height: u64,
+    ) -> Result<(), DCICacheError> {
+        self.component_states
+            .handle_finality(finalized_block_height)?;
+        self.protocol_components
+            .handle_finality(finalized_block_height)?;
+        Ok(())
+    }
+
+    /// Tries to insert a block layer for the given block.
+    /// If the block already exists, no-op.
+    /// If the block does not exist, we check if it's the next block in the chain. If it's not it
+    /// returns an error.
+    ///
+    /// # Arguments
+    /// * `block` - The block to validate and ensure the layer for.
+    ///
+    /// # Returns
+    /// * `Ok(())` - On successful layer creation
+    /// * `Err(DCICacheError::UnexpectedBlockOrder)` - If the inserted block is not the correct
+    ///   order
+    pub(super) fn try_insert_block_layer(&mut self, block: &Block) -> Result<(), DCICacheError> {
+        self.component_states
+            .validate_and_ensure_block_layer_internal(block)?;
+        self.protocol_components
+            .validate_and_ensure_block_layer_internal(block)?;
         Ok(())
     }
 }
@@ -143,7 +214,7 @@ where
     K: Eq + Hash + Clone + std::fmt::Debug,
     V: Clone + std::fmt::Debug,
 {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self { permanent: HashMap::new(), pending: VecDeque::new() }
     }
 
@@ -369,7 +440,10 @@ where
     /// # Returns
     /// * `Ok(())` - On successful validation and layer creation
     /// * `Err(DCICacheError::UnexpectedBlockOrder)` - On invalid chain progression
-    fn validate_and_ensure_block_layer(&mut self, block: &Block) -> Result<(), DCICacheError> {
+    fn validate_and_ensure_block_layer_internal(
+        &mut self,
+        block: &Block,
+    ) -> Result<(), DCICacheError> {
         match self.pending.back() {
             None => {
                 self.pending
@@ -414,6 +488,16 @@ where
     #[cfg(test)]
     pub fn get_full_permanent_state(&self) -> &HashMap<K, V> {
         &self.permanent
+    }
+
+    /// Validates block order and ensures the corresponding block layer exists (only available in
+    /// tests).
+    #[cfg(test)]
+    pub fn validate_and_ensure_block_layer_test(
+        &mut self,
+        block: &Block,
+    ) -> Result<(), DCICacheError> {
+        self.validate_and_ensure_block_layer_internal(block)
     }
 }
 
@@ -501,10 +585,10 @@ mod tests {
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
         cache
-            .validate_and_ensure_block_layer(&block1)
+            .validate_and_ensure_block_layer_test(&block1)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block2)
+            .validate_and_ensure_block_layer_test(&block2)
             .unwrap();
 
         // Test pending insert
@@ -548,16 +632,16 @@ mod tests {
         let block3 = create_test_block(3, "0x03", "0x02");
         let block4 = create_test_block(4, "0x04", "0x03");
         cache
-            .validate_and_ensure_block_layer(&block1)
+            .validate_and_ensure_block_layer_test(&block1)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block2)
+            .validate_and_ensure_block_layer_test(&block2)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block3)
+            .validate_and_ensure_block_layer_test(&block3)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block4)
+            .validate_and_ensure_block_layer_test(&block4)
             .unwrap();
 
         // Insert data in both blocks
@@ -582,10 +666,10 @@ mod tests {
 
         // Make sure we can insert correct new layers after reverting
         cache
-            .validate_and_ensure_block_layer(&block2)
+            .validate_and_ensure_block_layer_test(&block2)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block3)
+            .validate_and_ensure_block_layer_test(&block3)
             .unwrap();
     }
 
@@ -692,13 +776,13 @@ mod tests {
         let block2 = create_test_block(2, "0x02", "0x01");
         let block3 = create_test_block(3, "0x03", "0x02");
         cache
-            .validate_and_ensure_block_layer(&block1)
+            .validate_and_ensure_block_layer_test(&block1)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block2)
+            .validate_and_ensure_block_layer_test(&block2)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block3)
+            .validate_and_ensure_block_layer_test(&block3)
             .unwrap();
 
         // Insert data in block1
@@ -735,10 +819,10 @@ mod tests {
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
         cache
-            .validate_and_ensure_block_layer(&block1)
+            .validate_and_ensure_block_layer_test(&block1)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block2)
+            .validate_and_ensure_block_layer_test(&block2)
             .unwrap();
 
         // Insert same key with different values in different blocks
@@ -772,10 +856,10 @@ mod tests {
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
         cache
-            .validate_and_ensure_block_layer(&block1)
+            .validate_and_ensure_block_layer_test(&block1)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block2)
+            .validate_and_ensure_block_layer_test(&block2)
             .unwrap();
 
         // Insert same key with different values in different blocks
@@ -807,10 +891,10 @@ mod tests {
         let block1 = create_test_block(1, "0x01", "0x00");
         let block2 = create_test_block(2, "0x02", "0x01");
         cache
-            .validate_and_ensure_block_layer(&block1)
+            .validate_and_ensure_block_layer_test(&block1)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block2)
+            .validate_and_ensure_block_layer_test(&block2)
             .unwrap();
 
         // Insert initial values
