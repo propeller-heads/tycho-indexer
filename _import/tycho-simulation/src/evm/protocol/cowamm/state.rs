@@ -224,7 +224,7 @@ impl ProtocolSim for CowAMMState {
             new_state.token_a.1 = safe_sub_u256(self.liquidity_a(), proportional_token_amount_a)?;
             new_state.token_b.1 = safe_sub_u256(self.liquidity_b(), proportional_token_amount_b)?;
 
-            // // When a user redeems LP tokens, those tokens are effectively burned, the internal lp_token_supply will decrease by the amount they redeem
+            // When a user redeems LP tokens, those tokens are effectively burned, the internal lp_token_supply will decrease by the amount they redeem
             new_state.lp_token_supply = safe_sub_u256(self.lp_token_supply, amount_in)?;
 
             let (amount_to_swap, is_token_a_swap) = if token_out.address == *self.token_a_addr() { //if we are redeeming lp_token for COW (out address is COW), (if the token we want to receive and get the other one swapped to) from the redemption is 
@@ -272,6 +272,7 @@ impl ProtocolSim for CowAMMState {
         }
 
         if is_lp_out && !is_lp_in {
+            //JOIN POOL
             let (proportional_token_amount_a, proportional_token_amount_b) = self.calc_tokens_out_given_exact_lp_token_in(
                 amount_in
             ).map_err(|e| SimulationError::FatalError(format!("failed to calculate token proportions out error: {e:?}")))?;
@@ -280,10 +281,11 @@ impl ProtocolSim for CowAMMState {
             // The liquidity provision is double sided hence both reserves reduce by the proportional amounts for both tokens
             new_state.token_a.1 = safe_add_u256(new_state.liquidity_a(), proportional_token_amount_a)?;
             new_state.token_b.1 = safe_add_u256(new_state.liquidity_b(), proportional_token_amount_b)?;
+            // supply changes only happens when tokens are minted are burned 
 
-            // When a user joins the pool, the LP tokens are transferred to the user, so the internal lp_token_supply will decrease by the amount that is sent to the user
-            new_state.lp_token_supply = safe_sub_u256(new_state.lp_token_supply, amount_in)?;
-
+            // When a user joins the pool, the LP tokens are minted to the user , total lp_token supply increases
+            new_state.lp_token_supply = safe_add_u256(new_state.lp_token_supply, amount_in)?;
+            
             // Determine which token to swap based on token_in address
             let (amount_to_swap, is_token_a_swap) = if token_in.address == *new_state.token_a_addr() {
                 (proportional_token_amount_b, false) // Swap extra token B for token A
@@ -553,9 +555,6 @@ mod tests {
         assert_eq!(new_state.liquidity_a(), safe_sub_u256(liq_a, biguint_to_u256(&amount_in)).unwrap());  
         assert_eq!(new_state.liquidity_b(), safe_add_u256(liq_b, biguint_to_u256(&expected_out)).unwrap());
 
-        //lp token supply reduced 
-        assert!(new_state.lp_token_supply < state.lp_token_supply, "LP token supply did not reduce");
-
         // Original state unchanged
         assert_eq!(state.liquidity_a(), liq_a);
         assert_eq!(state.liquidity_b(), liq_b);
@@ -609,8 +608,14 @@ mod tests {
         // println!("EXPECTED AMOUNT {}", expected_out);
 
         assert_eq!(res.amount, expected_out);
-
+        //lp token supply reduced 
         let new_state = res.new_state.as_any().downcast_ref::<CowAMMState>().unwrap();
+
+        if token_a.address == t2.address {
+            assert!(new_state.lp_token_supply < state.lp_token_supply, "LP token supply did not reduce");
+        }  else {
+            assert!(new_state.lp_token_supply > state.lp_token_supply, "LP token supply did not reduce");
+        }
 
         // Original state unchanged
         assert_eq!(state.liquidity_a(), liq_a);
@@ -767,15 +772,15 @@ mod tests {
             Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
             Bytes::from(t0.address.clone()),
             Bytes::from(t1.address.clone()),
-            U256::from_str("36925554990922").unwrap(),
-            U256::from_str("30314846538607556521556").unwrap(),
-            Bytes::from("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"),
-            U256::from_str("36925554990922").unwrap(),
-            U256::from_str("30314846538607556521556").unwrap(),
-            U256::from_str("30314846538607556521556").unwrap(),
-            0
+            U256::from_str("886800000000000000").unwrap(),
+            U256::from_str("50000000000000000").unwrap(),
+            Bytes::from("0x9bd702E05B9c97E4A4a3E47Df1e0fe7A0C26d2F1"),
+            U256::from_str("100000000000000000000").unwrap(),
+            U256::from_str("1000000000000000000").unwrap(),
+            U256::from_str("1000000000000000000").unwrap(),
+            0,
         );
-
+        
         let (amount_in, _) = state
             .get_limits(
                 Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
@@ -804,23 +809,27 @@ mod tests {
         );
         
         let result = state
-            .get_amount_out(amount_in.clone(), &t0, &t1)
+            .get_amount_out(amount_in.clone(), &t1, &t0)
             .unwrap();
         let new_state = result
             .new_state
             .as_any()
             .downcast_ref::<CowAMMState>()
             .unwrap();
-
+        println!("Amount in: {}", amount_in);
+        println!("Result amount out: {}", result.amount);
+        println!("New state: {:?}", new_state); // Make sure CowAMMState implements Debug
         let initial_price = state
-            .spot_price(&t0, &t1)
+            .spot_price(&t1, &t0)
             .unwrap();
+        println!("Initial spot price (t0 -> t1): {}", initial_price);
         let new_price = new_state
-            .spot_price(&t0, &t1)
-            .unwrap()
-            .floor();
-
+            .spot_price(&t1, &t0)
+            .unwrap();
+            // .floor();
+        println!("New spot price (t0 -> t1), floored: {}", new_price);
         let expected_price = initial_price / 10.0;
+        println!("Expected price (90% impact): {}", expected_price);
         assert!(expected_price == new_price, "Price impact not 90%.");
     }
 }

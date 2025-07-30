@@ -50,8 +50,8 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
 
         let liquidity_a = U256::from_be_bytes::<BYTES>(
             snapshot
-                .component
-                .static_attributes
+                .state
+                .attributes
                 .get("liquidity_a")
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity_a".to_string()))?
                 .as_ref()
@@ -63,8 +63,8 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
 
         let liquidity_b = U256::from_be_bytes::<BYTES>(
             snapshot
-                .component
-                .static_attributes
+                .state
+                .attributes
                 .get("liquidity_b")
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("liquidity_b".to_string()))?
                 .as_ref()
@@ -90,8 +90,8 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
         
        let lp_token_supply = U256::from_be_bytes::<BYTES>(
             snapshot
-                .component
-                .static_attributes
+                .state
+                .attributes
                 .get("lp_token_supply")
                 .ok_or_else(|| InvalidSnapshotError::MissingAttribute("lp_token_supply".to_string()))?
                 .as_ref()
@@ -148,22 +148,27 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
 
 pub fn attributes() -> HashMap<String, Bytes> {
      HashMap::from([
+            ("liquidity_a".to_string(),  Bytes::from(vec![0; 32])),
+            ("liquidity_b".to_string(),  Bytes::from(vec![0; 32])),
+            ("lp_token_supply".to_string(), Bytes::from(vec![0; 32])), 
+        ])
+}
+pub fn static_attributes() -> HashMap<String, Bytes> {
+     HashMap::from([
             ("address".to_string(), Bytes::from(vec![0; 32])),
             ("weight_a".to_string(), Bytes::from(vec![0; 32])),
             ("weight_b".to_string(), Bytes::from(vec![0; 32])),
             ("token_a".to_string(),  Bytes::from(vec![0; 32])),
             ("token_b".to_string(),  Bytes::from(vec![0; 32])),
-            ("liquidity_a".to_string(),  Bytes::from(vec![0; 32])),
-            ("liquidity_b".to_string(),  Bytes::from(vec![0; 32])),
             ("lp_token".to_string(), Bytes::from(vec![0; 32])), 
-            ("lp_token_supply".to_string(), Bytes::from(vec![0; 32])), 
             ("fee".to_string(), 0u64.into()), 
         ])
 }
 
+
 pub fn component() -> ProtocolComponent {
     ProtocolComponent {
-        static_attributes: attributes(),
+        static_attributes: static_attributes(),
         ..Default::default()
     }
 }
@@ -226,14 +231,23 @@ mod tests {
     #[case::missing_lp_token("lp_token")]
     #[case::missing_lp_token_supply("lp_token_supply")]
 
-    async fn test_cowamm_try_from_missing_attribute(#[case] missing_attribute: String) {
+    async fn test_cowamm_try_from_missing_attribute(#[case] missing_attribute: &str) {
         let mut component = component();
         let mut attributes = attributes();
 
-        component
-            .static_attributes
-            .remove(&missing_attribute);
-        attributes.remove(&missing_attribute);
+        let _ = match missing_attribute {
+            "liquidity_a" | "liquidity_b" |"lp_token_supply" => {
+                attributes
+                    .remove(missing_attribute)
+            },
+            "address" | "weight_a" | "weight_b" | "token_a" | "token_b" |  "lp_token" => {
+                component
+                    .static_attributes
+                    .remove(missing_attribute)
+            },
+            &_ => None
+        };
+      
 
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
@@ -257,7 +271,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            InvalidSnapshotError::MissingAttribute(attr) if attr == missing_attribute 
+            InvalidSnapshotError::MissingAttribute(ref attr) if attr == missing_attribute 
         ));
     }
 }
