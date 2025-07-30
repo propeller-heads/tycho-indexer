@@ -18,7 +18,7 @@ use tokio::{
 use tokio_stream::StreamExt;
 use tracing::{debug, error, info, instrument, trace, warn, Instrument};
 use tycho_common::{
-    models::{Chain, ExtractorIdentity, FinancialType, ImplementationType, ProtocolType},
+    models::{Address, Chain, ExtractorIdentity, FinancialType, ImplementationType, ProtocolType},
     Bytes,
 };
 use tycho_ethereum::{
@@ -31,11 +31,14 @@ use tycho_storage::postgres::cache::CachedGateway;
 use crate::{
     extractor::{
         chain_state::ChainState,
-        dynamic_contract_indexer::dci::DynamicContractIndexer,
+        dynamic_contract_indexer::{
+            dci::DynamicContractIndexer, hook_dci::UniswapV4HookDCI,
+            hooks_dci_setup::create_testing_hooks_dci,
+        },
         post_processors::POST_PROCESSOR_REGISTRY,
         protocol_cache::ProtocolMemoryCache,
         protocol_extractor::{ExtractorPgGateway, ProtocolExtractor},
-        ExtractionError, Extractor, ExtractorMsg,
+        ExtractionError, Extractor, ExtractorExtension, ExtractorMsg,
     },
     pb::sf::substreams::v1::Package,
     substreams::{
@@ -43,6 +46,49 @@ use crate::{
         SubstreamsEndpoint,
     },
 };
+
+/// Enum to handle both standard DCI and UniswapV4 Hook DCI
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum DCIPlugin {
+    Standard(DynamicContractIndexer<EVMBatchAccountExtractor, EVMEntrypointService, CachedGateway>),
+    UniswapV4Hooks(
+        Box<UniswapV4HookDCI<EVMBatchAccountExtractor, EVMEntrypointService, CachedGateway>>,
+    ),
+}
+
+#[async_trait]
+impl ExtractorExtension for DCIPlugin {
+    async fn process_block_update(
+        &mut self,
+        block_changes: &mut crate::extractor::models::BlockChanges,
+    ) -> Result<(), ExtractionError> {
+        match self {
+            DCIPlugin::Standard(dci) => {
+                dci.process_block_update(block_changes)
+                    .await
+            }
+            DCIPlugin::UniswapV4Hooks(hooks_dci) => {
+                hooks_dci
+                    .process_block_update(block_changes)
+                    .await
+            }
+        }
+    }
+
+    async fn process_revert(
+        &mut self,
+        target_block: &tycho_common::models::BlockHash,
+    ) -> Result<(), ExtractionError> {
+        match self {
+            DCIPlugin::Standard(dci) => dci.process_revert(target_block).await,
+            DCIPlugin::UniswapV4Hooks(hooks_dci) => {
+                hooks_dci
+                    .process_revert(target_block)
+                    .await
+            }
+        }
+    }
+}
 pub enum ControlMessage {
     Stop,
     Subscribe(Sender<ExtractorMsg>),
@@ -541,15 +587,49 @@ impl ExtractorBuilder {
                             "Failed to create entrypoint tracer for {rpc_url}: {err}"
                         ))
                     })?;
-                    let mut plugin = DynamicContractIndexer::new(
+                    let mut base_dci = DynamicContractIndexer::new(
                         self.config.chain,
                         self.config.name.clone(),
                         cached_gw.clone(),
                         account_extractor,
                         tracer,
                     );
-                    plugin.initialize().await?;
-                    plugin
+                    base_dci.initialize().await?;
+
+                    // Check if this is a UniswapV4 extractor
+                    let is_uniswap_v4 = self
+                        .config
+                        .protocol_types
+                        .iter()
+                        .any(|pt| {
+                            pt.name
+                                .to_lowercase()
+                                .contains("uniswap_v4")
+                        });
+
+                    if is_uniswap_v4 {
+                        // Wrap the base DCI with UniswapV4HookDCI for UniswapV4 extractors
+                        // Default UniswapV4 addresses - these should ideally be configurable
+                        let router_address =
+                            Address::from("0x2e234DAe75C793f67A35089C9d99245E1C58470b"); // V4Router
+                        let pool_manager =
+                            Address::from("0x000000000004444c5dc75cB358380D2e3dE08A90"); // PoolManager
+
+                        let mut hooks_dci = create_testing_hooks_dci(
+                            base_dci,
+                            rpc_url.clone(),
+                            router_address,
+                            pool_manager,
+                            cached_gw.clone(),
+                            self.config.chain,
+                            3, // pause_after_retries
+                            5, // max_retries
+                        );
+                        hooks_dci.initialize().await?;
+                        DCIPlugin::UniswapV4Hooks(Box::new(hooks_dci))
+                    } else {
+                        DCIPlugin::Standard(base_dci)
+                    }
                 }
             })
         } else {
@@ -557,15 +637,7 @@ impl ExtractorBuilder {
         };
 
         self.extractor = Some(Arc::new(
-            ProtocolExtractor::<
-                ExtractorPgGateway,
-                EthereumTokenPreProcessor,
-                DynamicContractIndexer<
-                    EVMBatchAccountExtractor,
-                    EVMEntrypointService,
-                    CachedGateway,
-                >,
-            >::new(
+            ProtocolExtractor::<ExtractorPgGateway, EthereumTokenPreProcessor, DCIPlugin>::new(
                 gw,
                 &self.config.name,
                 self.config.chain,
