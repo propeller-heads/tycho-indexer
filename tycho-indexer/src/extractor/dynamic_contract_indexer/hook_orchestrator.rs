@@ -66,6 +66,14 @@ pub struct DefaultUniswapV4HookOrchestrator {
 }
 
 impl DefaultUniswapV4HookOrchestrator {
+    pub fn new(
+        router_address: Address,
+        config: HookEntrypointConfig,
+        entrypoint_generator: UniswapV4DefaultHookEntrypointGenerator<DefaultSwapAmountEstimator>,
+    ) -> Self {
+        Self { router_address, config, entrypoint_generator }
+    }
+
     fn prepare_components(
         &self,
         block_changes: &mut BlockChanges,
