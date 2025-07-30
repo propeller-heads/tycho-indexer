@@ -316,6 +316,12 @@ pub struct MetadataResponseParserRegistry {
     parsers: HashMap<String, Box<dyn MetadataResponseParser>>,
 }
 
+impl Default for MetadataResponseParserRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetadataResponseParserRegistry {
     pub fn new() -> Self {
         Self { parsers: HashMap::new() }
@@ -380,6 +386,12 @@ pub struct MetadataGeneratorRegistry {
     /// use an unknown or new hook type. The default generator should implement
     /// conservative, generic metadata collection strategies.
     default_generator: Option<Box<dyn MetadataRequestGenerator>>,
+}
+
+impl Default for MetadataGeneratorRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MetadataGeneratorRegistry {
@@ -562,6 +574,12 @@ pub enum MetadataValue {
 // Provider registry with configurable routing keys
 pub struct ProviderRegistry {
     providers: HashMap<RoutingKey, Arc<dyn RequestProvider>>,
+}
+
+impl Default for ProviderRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ProviderRegistry {
