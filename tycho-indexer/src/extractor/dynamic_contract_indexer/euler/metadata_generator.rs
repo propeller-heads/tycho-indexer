@@ -141,7 +141,7 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
 }
 
 #[allow(dead_code)] //TODO: remove this once it's used
-struct EulerMetadataResponseParser;
+pub struct EulerMetadataResponseParser;
 
 impl MetadataResponseParser for EulerMetadataResponseParser {
     fn parse_response(
