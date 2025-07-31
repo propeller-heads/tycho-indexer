@@ -251,24 +251,19 @@ impl RFQClient for HashflowClient {
         Box::pin(async_stream::stream! {
             let mut current_components: HashMap<String, ComponentWithState> = HashMap::new();
             let mut ticker = interval(Duration::from_secs(client.poll_time));
-            let mut market_makers_fetched = false;
 
-            info!("Starting Hashflow price levels polling every 10 seconds");
+            info!("Starting Hashflow price levels polling every {} seconds", client.poll_time);
             info!("TVL threshold: {:.2}", client.tvl);
 
             loop {
                 ticker.tick().await;
-                // Fetch market makers on first iteration
-                if !market_makers_fetched {
-                    match client.fetch_market_makers().await {
-                        Ok(()) => {
-                            market_makers_fetched = true;
-                            info!("Successfully fetched market makers");
-                        }
-                        Err(e) => {
-                            error!("Failed to fetch market makers: {}", e);
-                            continue;
-                        }
+                match client.fetch_market_makers().await {
+                    Ok(()) => {
+                        info!("Successfully fetched market makers");
+                    }
+                    Err(e) => {
+                        info!("Failed to fetch market makers: {}", e);
+                        continue;
                     }
                 }
 
@@ -444,7 +439,7 @@ mod tests {
     }
 
     #[tokio::test]
-    // #[ignore] // Requires network access and HASHFLOW_KEY environment variable
+    #[ignore] // Requires network access and HASHFLOW_KEY environment variable
     async fn test_hashflow_api_polling() {
         use std::env;
         let hashflow_key = env::var("HASHFLOW_KEY").unwrap();
@@ -466,13 +461,13 @@ mod tests {
             quote_tokens,
             "propellerheads".to_string(),
             hashflow_key,
-            5,
+            1,
         )
         .unwrap();
 
         let mut stream = client.stream();
 
-        let result = timeout(Duration::from_secs(30), async {
+        let result = timeout(Duration::from_secs(5), async {
             let mut message_count = 0;
             let max_messages = 3;
             let mut total_components_received = 0;
@@ -502,7 +497,6 @@ mod tests {
                             // Check that mm name exist
                             if attributes.contains_key("mm") {
                                 assert!(!attributes["mm"].is_empty());
-                                println!("MM name: {}:", attributes["mm"]);
                             }
 
                             if let Some(tvl) = component_with_state.component_tvl {
@@ -530,7 +524,7 @@ mod tests {
 
         match result {
             Ok(_) => println!("Test completed successfully"),
-            Err(_) => panic!("Test timed out - no messages received within 30 seconds"),
+            Err(_) => panic!("Test timed out - no messages received within 5 seconds"),
         }
     }
 }

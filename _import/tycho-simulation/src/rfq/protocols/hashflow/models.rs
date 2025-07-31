@@ -76,8 +76,7 @@ impl HashflowMarketMakerLevels {
     /// # Returns
     /// Estimated price based on available liquidity
     pub fn get_price(&self, base_token_amount: f64) -> Option<f64> {
-        // For Hashflow, we don't have separate bid/ask levels
-        // We treat all levels as available liquidity regardless of direction
+        // We treat all levels as available liquidity regardless of sell/buy direction
         if self.levels.is_empty() {
             return None;
         }

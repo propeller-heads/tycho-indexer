@@ -18,16 +18,16 @@ use tycho_simulation::{
 
 #[derive(Parser)]
 struct Cli {
-    #[arg(short, long)]
+    #[arg(long)]
     sell_token: Option<String>,
-    #[arg(short, long)]
+    #[arg(long)]
     buy_token: Option<String>,
-    #[arg(short, long, default_value_t = 10.0)]
+    #[arg(long, default_value_t = 10.0)]
     sell_amount: f64,
     /// The minimum TVL threshold for RFQ quotes in USD
-    #[arg(short, long, default_value_t = 1.0)]
+    #[arg(long, default_value_t = 1.0)]
     tvl_threshold: f64,
-    #[arg(short, long, default_value = "ethereum")]
+    #[arg(long, default_value = "ethereum")]
     chain: Chain,
 }
 

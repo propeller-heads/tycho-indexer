@@ -32,7 +32,7 @@ use tycho_simulation::{
 #[derive(Parser)]
 struct Cli {
     /// The tvl threshold to filter the graph by
-    #[arg(short, long, default_value_t = 1000.0)]
+    #[arg(long, default_value_t = 1000.0)]
     tvl_threshold: f64,
     /// The target blockchain
     #[clap(long, default_value = "ethereum")]
