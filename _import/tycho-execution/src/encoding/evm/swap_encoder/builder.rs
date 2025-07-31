@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
+use tycho_common::models::Chain;
+
 use crate::encoding::{
     errors::EncodingError,
     evm::swap_encoder::swap_encoders::{
         BalancerV2SwapEncoder, BalancerV3SwapEncoder, CurveSwapEncoder, EkuboSwapEncoder,
         MaverickV2SwapEncoder, UniswapV2SwapEncoder, UniswapV3SwapEncoder, UniswapV4SwapEncoder,
     },
-    models::Chain,
     swap_encoder::SwapEncoder,
 };
 

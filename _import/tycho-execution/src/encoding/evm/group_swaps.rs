@@ -11,20 +11,30 @@ use crate::encoding::{evm::constants::GROUPABLE_PROTOCOLS, models::Swap};
 /// * `protocol_system`: String, the protocol system of the swaps
 /// * `swaps`: Vec<Swap>, the sequence of swaps to be executed as a group
 /// * `split`: f64, the split percentage of the first swap in the group
-#[derive(Clone, PartialEq, Debug)]
-pub struct SwapGroup {
+#[derive(Clone, Debug)]
+pub struct SwapGroup<'a> {
     pub token_in: Bytes,
     pub token_out: Bytes,
     pub protocol_system: String,
-    pub swaps: Vec<Swap>,
+    pub swaps: Vec<Swap<'a>>,
     pub split: f64,
+}
+
+impl<'a> PartialEq for SwapGroup<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.token_in == other.token_in &&
+            self.token_out == other.token_out &&
+            self.protocol_system == other.protocol_system &&
+            self.swaps == other.swaps &&
+            self.split == other.split
+    }
 }
 
 /// Group consecutive swaps which can be encoded into one swap execution for gas optimization.
 ///
 /// An example where this applies is the case of USV4, which uses a PoolManager contract
 /// to save token transfers on consecutive swaps.
-pub fn group_swaps(swaps: &Vec<Swap>) -> Vec<SwapGroup> {
+pub fn group_swaps<'a>(swaps: &'a Vec<Swap<'a>>) -> Vec<SwapGroup<'a>> {
     let mut grouped_swaps: Vec<SwapGroup> = Vec::new();
     let mut current_group: Option<SwapGroup> = None;
     let mut last_swap_protocol = "".to_string();
@@ -106,6 +116,7 @@ mod tests {
             // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
             split: 0f64,
             user_data: None,
+            protocol_state: None,
         };
         let swap_wbtc_usdc = Swap {
             component: ProtocolComponent {
@@ -116,6 +127,7 @@ mod tests {
             token_out: usdc.clone(),
             split: 0f64,
             user_data: None,
+            protocol_state: None,
         };
         let swap_usdc_dai = Swap {
             component: ProtocolComponent {
@@ -126,12 +138,10 @@ mod tests {
             token_out: dai.clone(),
             split: 0f64,
             user_data: None,
+            protocol_state: None,
         };
-        let grouped_swaps = group_swaps(&vec![
-            swap_weth_wbtc.clone(),
-            swap_wbtc_usdc.clone(),
-            swap_usdc_dai.clone(),
-        ]);
+        let swaps = vec![swap_weth_wbtc.clone(), swap_wbtc_usdc.clone(), swap_usdc_dai.clone()];
+        let grouped_swaps = group_swaps(&swaps);
 
         assert_eq!(
             grouped_swaps,
@@ -178,6 +188,7 @@ mod tests {
             token_out: weth.clone(),
             split: 0f64,
             user_data: None,
+            protocol_state: None,
         };
         let swap_weth_usdc = Swap {
             component: ProtocolComponent {
@@ -188,6 +199,7 @@ mod tests {
             token_out: usdc.clone(),
             split: 0.5f64,
             user_data: None,
+            protocol_state: None,
         };
         let swap_weth_dai = Swap {
             component: ProtocolComponent {
@@ -200,6 +212,7 @@ mod tests {
             // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
             split: 0f64,
             user_data: None,
+            protocol_state: None,
         };
         let swap_dai_usdc = Swap {
             component: ProtocolComponent {
@@ -210,13 +223,15 @@ mod tests {
             token_out: usdc.clone(),
             split: 0f64,
             user_data: None,
+            protocol_state: None,
         };
-        let grouped_swaps = group_swaps(&vec![
+        let swaps = vec![
             swap_wbtc_weth.clone(),
             swap_weth_usdc.clone(),
             swap_weth_dai.clone(),
             swap_dai_usdc.clone(),
-        ]);
+        ];
+        let grouped_swaps = group_swaps(&swaps);
 
         assert_eq!(
             grouped_swaps,
@@ -269,6 +284,7 @@ mod tests {
             token_out: wbtc.clone(),
             split: 0.5f64,
             user_data: None,
+            protocol_state: None,
         };
         let swap_wbtc_usdc = Swap {
             component: ProtocolComponent {
@@ -279,6 +295,7 @@ mod tests {
             token_out: usdc.clone(),
             split: 0f64,
             user_data: None,
+            protocol_state: None,
         };
         let swap_weth_dai = Swap {
             component: ProtocolComponent {
@@ -291,6 +308,7 @@ mod tests {
             // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
             split: 0f64,
             user_data: None,
+            protocol_state: None,
         };
         let swap_dai_usdc = Swap {
             component: ProtocolComponent {
@@ -301,14 +319,16 @@ mod tests {
             token_out: usdc.clone(),
             split: 0f64,
             user_data: None,
+            protocol_state: None,
         };
 
-        let grouped_swaps = group_swaps(&vec![
+        let swaps = vec![
             swap_weth_wbtc.clone(),
             swap_wbtc_usdc.clone(),
             swap_weth_dai.clone(),
             swap_dai_usdc.clone(),
-        ]);
+        ];
+        let grouped_swaps = group_swaps(&swaps);
 
         assert_eq!(
             grouped_swaps,

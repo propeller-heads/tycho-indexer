@@ -1,18 +1,25 @@
 require('dotenv').config();
 const {ethers} = require("hardhat");
-const path = require('path');
 const fs = require('fs');
-const hre = require("hardhat");
+const path = require('path');
+const {proposeOrSendTransaction} = require("./utils");
 const prompt = require('prompt-sync')();
 
 async function main() {
     const network = hre.network.name;
     const routerAddress = process.env.ROUTER_ADDRESS;
+    const safeAddress = process.env.SAFE_ADDRESS;
+    if (!routerAddress) {
+        throw new Error("Missing ROUTER_ADDRESS");
+    }
+
     console.log(`Setting executors on TychoRouter at ${routerAddress} on ${network}`);
 
-    const [deployer] = await ethers.getSigners();
-    console.log(`Setting executors with account: ${deployer.address}`);
-    console.log(`Account balance: ${ethers.utils.formatEther(await deployer.getBalance())} ETH`);
+    const [signer] = await ethers.getSigners();
+    const balance = await signer.getBalance();
+
+    console.log(`Using signer: ${signer.address}`);
+    console.log(`Account balance: ${ethers.utils.formatEther(balance)} ETH`);
 
     const TychoRouter = await ethers.getContractFactory("TychoRouter");
     const router = TychoRouter.attach(routerAddress);
@@ -48,13 +55,16 @@ async function main() {
         return;
     }
 
-    // Set executors
-    const executorAddresses = executorsToSet.map(executor => executor.executor);
-    const tx = await router.setExecutors(executorAddresses, {
-        gasLimit: 300000 // should be around 50k per executor
-    });
-    await tx.wait(); // Wait for the transaction to be mined
-    console.log(`Executors set at transaction: ${tx.hash}`);
+    const executorAddresses = executorsToSet.map(({executor}) => executor);
+    const txData = {
+        to: router.address,
+        data: router.interface.encodeFunctionData("setExecutors", [executorAddresses]),
+        value: "0",
+        gasLimit: 300000
+    };
+
+    const txHash = await proposeOrSendTransaction(safeAddress, txData, signer, "setExecutors");
+    console.log(`TX hash: ${txHash}`);
 }
 
 main()

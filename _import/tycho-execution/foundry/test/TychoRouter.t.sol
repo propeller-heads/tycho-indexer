@@ -96,7 +96,6 @@ contract TychoRouterTest is TychoRouterTestSetup {
         }
 
         vm.startPrank(FUND_RESCUER);
-
         tychoRouter.withdraw(tokens, FUND_RESCUER);
 
         // Check balances after withdrawing

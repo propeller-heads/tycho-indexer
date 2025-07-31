@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
+use tycho_common::models::Chain;
+
 use crate::encoding::{
     errors::EncodingError,
-    models::{Chain, EncodingContext, Swap},
+    models::{EncodingContext, Swap},
 };
 
 /// A trait for protocol-specific swap encoding, where each implementation should handle the

@@ -1,3 +1,136 @@
+## [0.112.0](https://github.com/propeller-heads/tycho-execution/compare/0.111.0...0.112.0) (2025-07-22)
+
+
+### Features
+
+* Add protocol state to Swap object ([c217702](https://github.com/propeller-heads/tycho-execution/commit/c21770256045b3fdaddb889effa09b839f59755e))
+
+
+### Bug Fixes
+
+* Replace smart pointer with regular pointer ([95c5124](https://github.com/propeller-heads/tycho-execution/commit/95c51247f73516f387e2169e63a22311b4343b8d))
+
+## [0.111.0](https://github.com/propeller-heads/tycho-execution/compare/0.110.0...0.111.0) (2025-07-15)
+
+
+### Features
+
+* Uniswap X deployment script ([efa6fae](https://github.com/propeller-heads/tycho-execution/commit/efa6fae0e8f3884849dc7ec51f0e32483b483836))
+
+
+### Bug Fixes
+
+* Read Tycho Router addresses from file ([d2d8b29](https://github.com/propeller-heads/tycho-execution/commit/d2d8b290560a435e4b1cac1e3293fe8fd6878091))
+
+## [0.110.0](https://github.com/propeller-heads/tycho-execution/compare/0.109.0...0.110.0) (2025-07-14)
+
+
+### Features
+
+* UniswapX encoding example ([2d4b0b9](https://github.com/propeller-heads/tycho-execution/commit/2d4b0b995b903e42c8b48f499cf406c8d5e46254))
+
+## [0.109.0](https://github.com/propeller-heads/tycho-execution/compare/0.108.0...0.109.0) (2025-07-14)
+
+
+### Features
+
+* add testExecuteIntegration ([4ba5919](https://github.com/propeller-heads/tycho-execution/commit/4ba59192fcfe60d6d4f95b9540a2a7d4da202952))
+
+
+### Bug Fixes
+
+* chain id call after main update ([e775238](https://github.com/propeller-heads/tycho-execution/commit/e775238b0816e71d383193bfdb0cbbfe64e37b7a))
+* Replicate a real Uniswap X order in integration test ([96d0bf4](https://github.com/propeller-heads/tycho-execution/commit/96d0bf4ba545e4ae369c292aec6b56a32cf77db0))
+
+## [0.108.0](https://github.com/propeller-heads/tycho-execution/compare/0.107.0...0.108.0) (2025-07-11)
+
+
+### Features
+
+* Upgrade tycho-common ([8458b46](https://github.com/propeller-heads/tycho-execution/commit/8458b4628e351daaf4d4a639afc5099903107ff6))
+* Upgrade tycho-common ([effc25c](https://github.com/propeller-heads/tycho-execution/commit/effc25c2d723107a56260190d6f7b5c7b8c42e4e))
+* Upgrade tycho-common ([cb6042e](https://github.com/propeller-heads/tycho-execution/commit/cb6042ea7974faee93c1a87ca84fc6677c999548))
+* Use Chain from tycho-core and remove current implementation ([2c25b5a](https://github.com/propeller-heads/tycho-execution/commit/2c25b5a18f06beb61d93530660d9530bf0c46b36))
+
+## [0.107.0](https://github.com/propeller-heads/tycho-execution/compare/0.106.0...0.107.0) (2025-07-10)
+
+
+### Features
+
+* (WIP) Handle approvals in UniswapXFiller ([e243667](https://github.com/propeller-heads/tycho-execution/commit/e243667f9ee8ec8e79fc5196da6960b19cd120b7))
+* Handle native ETH outputs ([3752c15](https://github.com/propeller-heads/tycho-execution/commit/3752c155ea89d4d2d91be98f2c5fa79264a45999))
+
+
+### Bug Fixes
+
+* silence slither on native address setting ([1b6a24f](https://github.com/propeller-heads/tycho-execution/commit/1b6a24fd75b91de7570f110e87d81ed081639bb7))
+* use encodePacked to encode if approval needed ([9e2f228](https://github.com/propeller-heads/tycho-execution/commit/9e2f228a470d163b71cac22a0f95116716490772))
+
+## [0.106.0](https://github.com/propeller-heads/tycho-execution/compare/0.105.0...0.106.0) (2025-07-09)
+
+
+### Features
+
+* UniswapXFiller callback - naive implementation ([a114dfc](https://github.com/propeller-heads/tycho-execution/commit/a114dfc9da52a6393c55b00ea5b57143c8106429))
+
+
+### Bug Fixes
+
+* disable slither warnings ([a2d123a](https://github.com/propeller-heads/tycho-execution/commit/a2d123a26328f71afa6e8c163096d29bfef6957b))
+
+## [0.105.0](https://github.com/propeller-heads/tycho-execution/compare/0.104.0...0.105.0) (2025-07-09)
+
+
+### Features
+
+* Upgrade scripts to submit to Safe wallet ([2733bb0](https://github.com/propeller-heads/tycho-execution/commit/2733bb00724fb2df8d6f8151df02826807289c9a))
+
+
+### Bug Fixes
+
+* Simplify nonceOffset logic ([ba60e4b](https://github.com/propeller-heads/tycho-execution/commit/ba60e4bb73741c17c44e1cfcdea3fd599ae027eb))
+
+## [0.104.0](https://github.com/propeller-heads/tycho-execution/compare/0.103.0...0.104.0) (2025-07-08)
+
+
+### Features
+
+* Take reactor address as input to UniswapXFiller ([00f22d6](https://github.com/propeller-heads/tycho-execution/commit/00f22d62c1f978f27eb5a922bc7b36af2a0b806b))
+* UniswapXFiller skeleton ([ce1fe1d](https://github.com/propeller-heads/tycho-execution/commit/ce1fe1dd94a4cc68e4695902c80ee30d30d7fd5e))
+
+
+### Bug Fixes
+
+* Make slither happy ([d61469e](https://github.com/propeller-heads/tycho-execution/commit/d61469ea67f2c8d0f28e5185da4099260c2b69ea))
+
+## [0.103.0](https://github.com/propeller-heads/tycho-execution/compare/0.102.0...0.103.0) (2025-07-07)
+
+
+### Features
+
+* Deploy Balancer V3 executor ([266e30d](https://github.com/propeller-heads/tycho-execution/commit/266e30d1aa49f3ad04dddeb6a3bb047ed4db90e9))
+
+## [0.102.0](https://github.com/propeller-heads/tycho-execution/compare/0.101.5...0.102.0) (2025-07-01)
+
+
+### Features
+
+* Deploy EkuboExecutor with MEV-resist ([3fe9906](https://github.com/propeller-heads/tycho-execution/commit/3fe9906e5babb4a31af45c1d48fda3a096802fe8))
+
+## [0.101.5](https://github.com/propeller-heads/tycho-execution/compare/0.101.4...0.101.5) (2025-06-27)
+
+
+### Bug Fixes
+
+* Use native token curve address and not regular zero address ([0f679d6](https://github.com/propeller-heads/tycho-execution/commit/0f679d6e0663aba881babb09319815723cdf68e5))
+
+## [0.101.4](https://github.com/propeller-heads/tycho-execution/compare/0.101.3...0.101.4) (2025-06-27)
+
+
+### Bug Fixes
+
+* Fix wrong log in CurveEncoder ([312269d](https://github.com/propeller-heads/tycho-execution/commit/312269dabba5b0d8f303f9aba47d9456e5cd5db7))
+
 ## [0.101.3](https://github.com/propeller-heads/tycho-execution/compare/0.101.2...0.101.3) (2025-06-23)
 
 
