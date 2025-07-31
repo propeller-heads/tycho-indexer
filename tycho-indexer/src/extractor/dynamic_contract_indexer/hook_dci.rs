@@ -1465,6 +1465,7 @@ mod tests {
             metadata_orchestrator::BlockMetadataOrchestrator,
             rpc_metadata_provider::RPCMetadataProvider,
         };
+        use crate::extractor::dynamic_contract_indexer::euler::metadata_generator::{EulerMetadataGenerator, EulerMetadataResponseParser};
 
         // Test fixture data based on provided protocol component
         fn create_test_protocol_component() -> ProtocolComponent {
@@ -1603,9 +1604,19 @@ mod tests {
         // Setup metadata registries for the test
         fn setup_test_metadata_registries(
         ) -> (MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry) {
-            let generator_registry = MetadataGeneratorRegistry::new();
-            let parser_registry = MetadataResponseParserRegistry::new();
+            let mut generator_registry = MetadataGeneratorRegistry::new();
+            let mut parser_registry = MetadataResponseParserRegistry::new();
             let mut provider_registry = ProviderRegistry::new();
+
+            let hook_address = Address::from("0x55dcf9455eee8fd3f5eed17606291272cde428a8");
+            let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
+
+            generator_registry.register_hook_generator(
+                hook_address,
+                Box::new(EulerMetadataGenerator::new(rpc_url)),
+            );
+
+            parser_registry.register_parser("euler".to_string(), Box::new(EulerMetadataResponseParser));
 
             provider_registry.register_provider(
                 "rpc_default".to_string(),
@@ -1658,6 +1669,7 @@ mod tests {
             // Setup metadata registries and orchestrators
             let (generator_registry, parser_registry, provider_registry) =
                 setup_test_metadata_registries();
+
             let metadata_orchestrator = BlockMetadataOrchestrator::new(
                 generator_registry,
                 parser_registry,
