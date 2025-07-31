@@ -7,12 +7,12 @@ use tycho_common::Bytes;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HashflowPriceLevelsResponse {
     pub status: String, // "success" or "fail"
-    pub levels: Option<HashMap<String, Vec<HashflowMarketMakerLevel>>>,
+    pub levels: Option<HashMap<String, Vec<HashflowMarketMakerLevels>>>,
     pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HashflowMarketMakerLevel {
+pub struct HashflowMarketMakerLevels {
     pub pair: HashflowPair,
     pub levels: Vec<HashflowPriceLevel>,
 }
@@ -55,7 +55,7 @@ where
         .map_err(serde::de::Error::custom)
 }
 
-impl HashflowMarketMakerLevel {
+impl HashflowMarketMakerLevels {
     /// Calculate Total Value Locked (TVL) for this market maker level
     pub fn calculate_tvl(&self) -> f64 {
         self.levels
@@ -130,8 +130,8 @@ pub struct HashflowMarketMakersResponse {
 mod tests {
     use super::*;
 
-    fn hashflow_level() -> HashflowMarketMakerLevel {
-        HashflowMarketMakerLevel {
+    fn hashflow_level() -> HashflowMarketMakerLevels {
+        HashflowMarketMakerLevels {
             pair: HashflowPair {
                 base_token: Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
                 quote_token: Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
@@ -167,7 +167,7 @@ mod tests {
         assert_eq!(multi_level_price, Some(2999.5));
 
         // Test empty levels
-        let empty_mm_level = HashflowMarketMakerLevel {
+        let empty_mm_level = HashflowMarketMakerLevels {
             pair: HashflowPair {
                 base_token: Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
                 quote_token: Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),

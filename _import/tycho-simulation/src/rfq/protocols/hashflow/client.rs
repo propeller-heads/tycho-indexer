@@ -22,7 +22,7 @@ use crate::{
         errors::RFQError,
         models::TimestampHeader,
         protocols::hashflow::models::{
-            HashflowMarketMakerLevel, HashflowMarketMakersResponse, HashflowPriceLevelsResponse,
+            HashflowMarketMakerLevels, HashflowMarketMakersResponse, HashflowPriceLevelsResponse,
         },
     },
     tycho_client::feed::synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
@@ -32,7 +32,6 @@ use crate::{
 #[derive(Clone)]
 pub struct HashflowClient {
     chain: Chain,
-    chain_id: u32,
     price_levels_endpoint: String,
     market_makers_endpoint: String,
     quote_endpoint: String,
@@ -46,6 +45,7 @@ pub struct HashflowClient {
     // Quote tokens to normalize to for TVL purposes. Should have the same prices.
     quote_tokens: HashSet<Bytes>,
     market_makers: Vec<String>,
+    poll_time: u64,
 }
 
 impl HashflowClient {
@@ -54,13 +54,12 @@ impl HashflowClient {
         tokens: HashSet<Bytes>,
         tvl: f64,
         quote_tokens: HashSet<Bytes>,
+        auth_user: String,
         auth_key: String,
+        poll_time: u64,
     ) -> Result<Self, RFQError> {
-        let chain_id = chain.id() as u32;
-
         Ok(Self {
             chain,
-            chain_id,
             price_levels_endpoint: "https://api.hashflow.com/taker/v3/price-levels".to_string(),
             market_makers_endpoint: "https://api.hashflow.com/taker/v3/market-makers".to_string(),
             quote_endpoint: "https://api.hashflow.com/taker/v3/rfq".to_string(),
@@ -68,9 +67,10 @@ impl HashflowClient {
             tvl,
             http_client: Client::new(),
             auth_key,
-            source: "propellerheads".to_string(),
+            source: auth_user,
             quote_tokens,
             market_makers: Vec::new(), // Will be populated during first fetch
+            poll_time,
         })
     }
 
@@ -80,7 +80,7 @@ impl HashflowClient {
         &self,
         raw_tvl: f64,
         quote_token: Bytes,
-        levels_by_mm: &HashMap<String, Vec<HashflowMarketMakerLevel>>,
+        levels_by_mm: &HashMap<String, Vec<HashflowMarketMakerLevels>>,
     ) -> Result<f64, RFQError> {
         // If the quote token is already in our approved quote token set, no conversion needed
         if self.quote_tokens.contains(&quote_token) {
@@ -113,7 +113,7 @@ impl HashflowClient {
         component_id: String,
         tokens: Vec<Bytes>,
         mm_name: &str,
-        mm_level: &HashflowMarketMakerLevel,
+        mm_level: &HashflowMarketMakerLevels,
         tvl: f64,
     ) -> ComponentWithState {
         let protocol_component = ProtocolComponent {
@@ -123,10 +123,7 @@ impl HashflowClient {
             chain: self.chain.into(),
             tokens,
             contract_ids: vec![], // empty for RFQ
-            static_attributes: Default::default(),
-            change: Default::default(),
-            creation_tx: Default::default(),
-            created_at: Default::default(),
+            ..Default::default()
         };
 
         let mut attributes = HashMap::new();
@@ -154,7 +151,7 @@ impl HashflowClient {
         let query_params = vec![
             ("source", self.source.clone()),
             ("baseChainType", "evm".to_string()),
-            ("baseChainId", self.chain_id.to_string()),
+            ("baseChainId", self.chain.id().to_string()),
         ];
 
         let request = self
@@ -192,11 +189,11 @@ impl HashflowClient {
 
     async fn fetch_price_levels(
         &self,
-    ) -> Result<HashMap<String, Vec<HashflowMarketMakerLevel>>, RFQError> {
+    ) -> Result<HashMap<String, Vec<HashflowMarketMakerLevels>>, RFQError> {
         let mut query_params = vec![
             ("source", self.source.clone()),
             ("baseChainType", "evm".to_string()),
-            ("baseChainId", self.chain_id.to_string()),
+            ("baseChainId", self.chain.id().to_string()),
         ];
 
         // Add market makers as array parameters
@@ -253,7 +250,7 @@ impl RFQClient for HashflowClient {
 
         Box::pin(async_stream::stream! {
             let mut current_components: HashMap<String, ComponentWithState> = HashMap::new();
-            let mut ticker = interval(Duration::from_secs(10));
+            let mut ticker = interval(Duration::from_secs(client.poll_time));
             let mut market_makers_fetched = false;
 
             info!("Starting Hashflow price levels polling every 10 seconds");
@@ -399,7 +396,7 @@ mod tests {
         let usdc = Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
         // Create mock levels for ETH/USDC pair for normalization
-        let eth_usdc_level = HashflowMarketMakerLevel {
+        let eth_usdc_level = HashflowMarketMakerLevels {
             pair: HashflowPair { base_token: weth.clone(), quote_token: usdc },
             levels: vec![
                 HashflowPriceLevel { quantity: 1.0, price: 3000.0 }, /* 1 ETH = 3000 USDC */
@@ -439,13 +436,15 @@ mod tests {
             HashSet::new(),
             1.0,
             quote_tokens,
+            "test_user".to_string(),
             "test_key".to_string(),
+            5,
         )
         .unwrap()
     }
 
     #[tokio::test]
-    #[ignore] // Requires network access and HASHFLOW_KEY environment variable
+    // #[ignore] // Requires network access and HASHFLOW_KEY environment variable
     async fn test_hashflow_api_polling() {
         use std::env;
         let hashflow_key = env::var("HASHFLOW_KEY").unwrap();
@@ -465,7 +464,9 @@ mod tests {
             tokens,
             1.0, // $1 minimum TVL - very low to capture most pairs
             quote_tokens,
+            "propellerheads".to_string(),
             hashflow_key,
+            5,
         )
         .unwrap();
 
