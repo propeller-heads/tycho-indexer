@@ -91,20 +91,7 @@ pub fn setup_hook_orchestrator_registry(
         );
         entrypoint_generator.set_config(config);
 
-        // Create orchestrator for this hook
-        let orchestrator_config = HookEntrypointConfig {
-            max_sample_size: Some(10),
-            min_samples: 1,
-            router_address: Some(router_address.clone()),
-            sender: Some(router_address.clone()),
-            router_code: None,
-            pool_manager: pool_manager.clone(),
-        };
-        let orchestrator = DefaultUniswapV4HookOrchestrator::new(
-            router_address.clone(),
-            orchestrator_config,
-            entrypoint_generator,
-        );
+        let orchestrator = DefaultUniswapV4HookOrchestrator::new(entrypoint_generator);
 
         hook_registry
             .hooks
