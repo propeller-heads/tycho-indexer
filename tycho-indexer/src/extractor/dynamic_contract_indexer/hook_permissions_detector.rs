@@ -1,5 +1,6 @@
 #![allow(dead_code)] // TODO: Remove this when the detector is used
 
+use tracing::{debug, instrument};
 use tycho_common::models::Address;
 
 /// Detector for Uniswap V4 hook permissions encoded in hook contract addresses.
@@ -42,16 +43,25 @@ impl HookPermissionsDetector {
     /// # Returns
     ///
     /// A u32 containing the last 4 bytes of the address
+    #[instrument(fields(address = %address))]
     fn get_address_flags(address: &Address) -> u32 {
         let bytes = address.as_ref();
         // Take the last 4 bytes (32 bits) of the address and convert to u32
         // Ethereum addresses are 20 bytes, so we take bytes 16-19 (0-indexed)
         let flag_bytes = &bytes[16..20];
-        u32::from_be_bytes(
+        let flags = u32::from_be_bytes(
             flag_bytes
                 .try_into()
                 .expect("slice with incorrect length"),
-        )
+        );
+
+        debug!(
+            flags = format!("{:#010x}", flags),
+            flags_binary = format!("{:032b}", flags),
+            "Extracted address flags"
+        );
+
+        flags
     }
 
     /// Checks if a specific hook permission flag is set in the address.
@@ -64,8 +74,18 @@ impl HookPermissionsDetector {
     /// # Returns
     ///
     /// `true` if the flag is set, `false` otherwise
+    #[instrument(fields(address = %address, flag = format!("{:#010x}", flag)))]
     fn has_permission(address: &Address, flag: u32) -> bool {
-        (Self::get_address_flags(address) & flag) != 0
+        let flags = Self::get_address_flags(address);
+        let has_flag = (flags & flag) != 0;
+
+        debug!(
+            has_permission = has_flag,
+            checked_flag = format!("{:#010x}", flag),
+            "Checked hook permission"
+        );
+
+        has_flag
     }
 
     /// Checks if the hook address has the `beforeSwap` hook permission enabled.
@@ -105,8 +125,20 @@ impl HookPermissionsDetector {
     /// # Returns
     ///
     /// `true` if either beforeSwap or afterSwap permission is set
+    #[instrument(fields(address = %address))]
     pub fn has_swap_hooks(address: &Address) -> bool {
-        Self::has_before_swap_hook(address) || Self::has_after_swap_hook(address)
+        let has_before_swap = Self::has_before_swap_hook(address);
+        let has_after_swap = Self::has_after_swap_hook(address);
+        let has_any_swap = has_before_swap || has_after_swap;
+
+        debug!(
+            has_before_swap,
+            has_after_swap,
+            has_any_swap_hooks = has_any_swap,
+            "Checked for any swap hook permissions"
+        );
+
+        has_any_swap
     }
 }
 
