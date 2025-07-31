@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use tonic::async_trait;
-use tracing::{debug, error};
+use tracing::{debug, error, info, instrument, span, warn, Level};
 use tycho_common::{
     models::{protocol::ProtocolComponent, Address, BlockHash, Chain, ComponentId, TxHash},
     storage::{EntryPointFilter, EntryPointGateway, ProtocolGateway},
@@ -97,7 +97,10 @@ where
         )
     }
 
+    #[instrument(skip(self), fields(chain = %self.chain))]
     pub async fn initialize(&mut self) -> Result<(), ExtractionError> {
+        info!("Initializing UniswapV4HookDCI");
+
         // Initialize the inner DCI
         self.inner_dci.initialize().await?;
 
@@ -117,18 +120,26 @@ where
                 ExtractionError::Unknown(format!("Failed to load protocol components: {e:?}"))
             })?;
 
-        debug!(
-            "Loaded {} UniswapV4 protocol components from storage",
-            protocol_components.entity.len()
+        info!(
+            component_count = protocol_components.entity.len(),
+            "Loaded UniswapV4 protocol components from storage"
         );
 
         // First pass: Filter components with swap hooks and collect their IDs
         let mut valid_components = Vec::new();
         let mut component_ids_for_batch = Vec::new();
+        let mut skipped_no_hook = 0;
+        let mut skipped_no_swap_perms = 0;
 
         for component in protocol_components.entity {
-            if let Some(hook_address) = component.static_attributes.get("hook") {
+            if let Some(hook_address) = component.static_attributes.get("hooks") {
                 if HookPermissionsDetector::has_swap_hooks(hook_address) {
+                    debug!(
+                        component_id = %component.id,
+                        hook_address = %hook_address,
+                        "Found component with swap hook permissions"
+                    );
+
                     // Add component to cache
                     self.cache
                         .protocol_components
@@ -138,18 +149,31 @@ where
                     component_ids_for_batch.push(component.id.clone());
                     valid_components.push(component);
                 } else {
+                    skipped_no_swap_perms += 1;
                     debug!(
-                        "Skipping UniswapV4 component {} - no swap hook permissions for hook {}",
-                        component.id, hook_address
+                        component_id = %component.id,
+                        hook_address = %hook_address,
+                        "Skipping UniswapV4 component - no swap hook permissions"
                     );
                 }
             } else {
-                debug!("Skipping UniswapV4 component {} - no hook attribute found", component.id);
+                skipped_no_hook += 1;
+                debug!(
+                    component_id = %component.id,
+                    "Skipping UniswapV4 component - no hook attribute found"
+                );
             }
         }
 
+        info!(
+            valid_components = valid_components.len(),
+            skipped_no_hook, skipped_no_swap_perms, "Completed component filtering"
+        );
+
         // Second pass: Batch request for all component entrypoints
         if !component_ids_for_batch.is_empty() {
+            info!(batch_size = component_ids_for_batch.len(), "Starting batch entrypoint loading");
+
             let filter = EntryPointFilter::new("uniswap_v4".to_string())
                 .with_component_ids(component_ids_for_batch.clone());
 
@@ -162,15 +186,22 @@ where
                     ExtractionError::Unknown(format!("Failed to load entrypoints: {e:?}"))
                 })?;
 
-            debug!("Loaded entrypoints for {} components in batch", all_entrypoints.entity.len());
+            info!(
+                entrypoint_count = all_entrypoints.entity.len(),
+                "Loaded entrypoints for components in batch"
+            );
 
             // Third pass: Process each component and determine its state
+            let mut traced_components = 0;
+            let mut unprocessed_components = 0;
+
             for component in valid_components {
                 let component_has_entrypoints = all_entrypoints
                     .entity
                     .contains_key(&component.id);
 
                 let component_state = if component_has_entrypoints {
+                    traced_components += 1;
                     // Has entrypoints = TracingComplete
                     ComponentProcessingState {
                         status: ProcessingStatus::TracingComplete,
@@ -178,6 +209,7 @@ where
                         last_error: None,
                     }
                 } else {
+                    unprocessed_components += 1;
                     // No entrypoints = Unprocessed
                     ComponentProcessingState {
                         status: ProcessingStatus::Unprocessed,
@@ -191,23 +223,37 @@ where
                     .insert_permanent(component.id.clone(), component_state.clone());
 
                 debug!(
-                    "Initialized component {} with state {:?}",
-                    component.id, component_state.status
+                    component_id = %component.id,
+                    status = ?component_state.status,
+                    has_entrypoints = component_has_entrypoints,
+                    "Initialized component state"
                 );
             }
+
+            info!(
+                traced_components,
+                unprocessed_components, "Completed component state initialization"
+            );
+        } else {
+            info!("No valid components found, skipping entrypoint loading");
         }
 
+        info!("UniswapV4HookDCI initialization completed successfully");
         Ok(())
     }
 
     /// Handles component failures by updating the state and logging errors
+    #[instrument(skip(self, block), fields(component_id = %component_id, block_number = block.number))]
     fn handle_component_failure(
         &mut self,
         component_id: ComponentId,
         error_msg: String,
         block: &tycho_common::models::blockchain::Block,
     ) -> Result<(), ExtractionError> {
-        error!("Component {} failed processing: {}", component_id, error_msg);
+        error!(
+            error_msg = %error_msg,
+            "Component failed processing"
+        );
 
         // Update component state
         let mut retry_count = 0;
@@ -217,30 +263,44 @@ where
             .get(&component_id)
         {
             retry_count = current_state.retry_count + 1;
+            debug!(
+                previous_retry_count = current_state.retry_count,
+                new_retry_count = retry_count,
+                "Incrementing retry count"
+            );
         }
 
         let new_state = ComponentProcessingState {
             status: ProcessingStatus::Failed,
             retry_count,
-            last_error: Some(ProcessingError::MetadataError(error_msg)),
+            last_error: Some(ProcessingError::MetadataError(error_msg.clone())),
         };
 
         self.cache
             .component_states
-            .insert_pending(block.clone(), component_id, new_state)
+            .insert_pending(block.clone(), component_id.clone(), new_state)
             .map_err(|e| {
+                error!("Failed to update component state: {e}");
                 ExtractionError::Unknown(format!("Failed to update component state: {e}"))
             })?;
 
+        debug!("Component state updated to Failed");
         Ok(())
     }
 
     /// Checks ComponentTracingMetadata for errors and updates component states accordingly
+    #[instrument(skip(self, component_metadata, block), fields(
+        component_count = component_metadata.len(),
+        block_number = block.number
+    ))]
     fn process_metadata_errors(
         &mut self,
         component_metadata: &[(ProtocolComponent, ComponentTracingMetadata)],
         block: &tycho_common::models::blockchain::Block,
     ) -> Result<(), ExtractionError> {
+        let mut failed_components = 0;
+        let mut total_errors = 0;
+
         for (component, metadata) in component_metadata {
             let mut errors = Vec::new();
 
@@ -261,19 +321,37 @@ where
 
             // If there are errors, mark component as failed
             if !errors.is_empty() {
+                failed_components += 1;
+                total_errors += errors.len();
                 let error_msg = errors.join("; ");
+
+                debug!(
+                    component_id = %component.id,
+                    error_count = errors.len(),
+                    "Component has metadata errors"
+                );
+
                 self.handle_component_failure(component.id.clone(), error_msg, block)?;
             }
+        }
+
+        if failed_components > 0 {
+            warn!(failed_components, total_errors, "Components failed with metadata errors");
+        } else {
+            debug!("No metadata errors found");
         }
 
         Ok(())
     }
 
+    #[instrument(skip(self, block), fields(component_id = %component, block_number = block.number))]
     fn handle_component_success(
         &mut self,
         component: ComponentId,
         block: &tycho_common::models::blockchain::Block,
     ) -> Result<(), ExtractionError> {
+        debug!("Handling component success");
+
         // Update the component state to indicate successful processing
         let new_state = ComponentProcessingState {
             status: ProcessingStatus::TracingComplete,
@@ -283,18 +361,26 @@ where
 
         self.cache
             .component_states
-            .insert_pending(block.clone(), component, new_state)
+            .insert_pending(block.clone(), component.clone(), new_state)
             .map_err(|e| {
+                error!("Failed to update component state: {e}");
                 ExtractionError::Unknown(format!("Failed to update component state: {e}"))
             })?;
 
+        debug!("Component state updated to TracingComplete");
         Ok(())
     }
 
+    #[instrument(skip(self, block_changes), fields(
+        block_number = block_changes.block.number,
+        tx_count = block_changes.txs_with_update.len()
+    ))]
     fn extract_components_with_swap_hooks(
         &mut self,
         block_changes: &mut BlockChanges,
     ) -> Result<HashMap<ComponentId, ComponentWithTxHash>, ExtractionError> {
+        debug!("Extracting components with swap hooks");
+
         let mut components_with_hooks = HashMap::new();
 
         // Create a map of component ID to latest transaction hash in the block
@@ -332,7 +418,7 @@ where
                 .protocol_components
                 .values()
             {
-                if let Some(hook_address) = component.static_attributes.get("hook") {
+                if let Some(hook_address) = component.static_attributes.get("hooks") {
                     if HookPermissionsDetector::has_swap_hooks(hook_address) {
                         let latest_tx_hash = component_to_latest_tx
                             .get(&component.id)
@@ -372,7 +458,7 @@ where
                 .protocol_components
                 .get(component_id)
             {
-                if let Some(hook_address) = component.static_attributes.get("hook") {
+                if let Some(hook_address) = component.static_attributes.get("hooks") {
                     if HookPermissionsDetector::has_swap_hooks(hook_address) {
                         let latest_tx_hash = component_to_latest_tx
                             .get(component_id)
@@ -386,19 +472,36 @@ where
             } else {
                 // Note: It's possible for components to be mutated that aren't in our cache
                 // (e.g., non-swap hook Uniswap V4 components). This is expected and we ignore them.
-                debug!("Skipping component with no swap hook permissions for {}", component_id);
+                // debug!(
+                //     component_id = %component_id,
+                //     "Skipping component - not found in cache or no swap hook permissions"
+                // );
             }
         }
+
+        info!(
+            components_with_hooks = components_with_hooks.len(),
+            total_affected_components = component_to_latest_tx.len(),
+            "Completed extraction of components with swap hooks"
+        );
 
         Ok(components_with_hooks)
     }
 
+    #[instrument(skip(self, components), fields(component_count = components.len()))]
     fn categorize_components(
         &self,
         components: &HashMap<ComponentId, ComponentWithTxHash>,
     ) -> Result<(Vec<ComponentWithTxHash>, Vec<ComponentWithTxHash>), ExtractionError> {
+        debug!("Categorizing components by processing state");
+
         let mut components_needing_full_processing = Vec::new();
         let mut components_needing_balance_only = Vec::new();
+        let mut unprocessed_count = 0;
+        let mut tracing_complete_count = 0;
+        let mut failed_retryable_count = 0;
+        let mut failed_paused_count = 0;
+        let mut not_in_cache_count = 0;
 
         for (component_id, (tx_hash, component)) in components {
             // Check the component's processing state from cache
@@ -410,11 +513,13 @@ where
                 Some(state) => {
                     match state.status {
                         ProcessingStatus::Unprocessed => {
+                            unprocessed_count += 1;
                             // Never processed, needs full processing
                             components_needing_full_processing
                                 .push((tx_hash.clone(), component.clone()));
                         }
                         ProcessingStatus::TracingComplete => {
+                            tracing_complete_count += 1;
                             // Already traced, only needs balance updates
                             components_needing_balance_only
                                 .push((tx_hash.clone(), component.clone()));
@@ -424,19 +529,41 @@ where
                             if state.retry_count < self.max_retries &&
                                 state.retry_count < self.pause_after_retries
                             {
+                                failed_retryable_count += 1;
                                 components_needing_full_processing
                                     .push((tx_hash.clone(), component.clone()));
+                            } else {
+                                failed_paused_count += 1;
+                                debug!(
+                                    component_id = %component_id,
+                                    retry_count = state.retry_count,
+                                    max_retries = self.max_retries,
+                                    pause_after_retries = self.pause_after_retries,
+                                    "Component processing paused due to too many failures"
+                                );
                             }
                             // else: pause processing for this component or max retries reached
                         }
                     }
                 }
                 None => {
+                    not_in_cache_count += 1;
                     // Not in cache, needs full processing
                     components_needing_full_processing.push((tx_hash.clone(), component.clone()));
                 }
             }
         }
+
+        info!(
+            full_processing = components_needing_full_processing.len(),
+            balance_only = components_needing_balance_only.len(),
+            unprocessed_count,
+            tracing_complete_count,
+            failed_retryable_count,
+            failed_paused_count,
+            not_in_cache_count,
+            "Completed component categorization"
+        );
 
         Ok((components_needing_full_processing, components_needing_balance_only))
     }
@@ -482,14 +609,22 @@ where
     T: EntryPointTracer + Send + Sync,
     G: EntryPointGateway + ProtocolGateway + Send + Sync,
 {
+    #[instrument(skip(self, block_changes), fields(
+        block_number = block_changes.block.number,
+        block_hash = %block_changes.block.hash,
+        tx_count = block_changes.txs_with_update.len()
+    ))]
     async fn process_block_update(
         &mut self,
         block_changes: &mut BlockChanges,
     ) -> Result<(), ExtractionError> {
+        info!("Processing block update for UniswapV4HookDCI");
+
         // Ensure the block layer exists in the cache
         self.cache
             .try_insert_block_layer(&block_changes.block)
             .map_err(|e| {
+                error!("Failed to ensure block layer: {e:?}");
                 ExtractionError::Unknown(format!("Failed to ensure block layer: {e:?}"))
             })?;
 
@@ -498,17 +633,32 @@ where
 
         // Early stop if no hook-components are affected
         if swap_hook_components.is_empty() {
+            debug!("No swap hook components found, delegating to inner DCI");
             return self
                 .inner_dci
                 .process_block_update(block_changes)
                 .await;
         }
 
+        info!(
+            swap_hook_components = swap_hook_components.len(),
+            "Found swap hook components to process"
+        );
+
         // 2. Categorize components based on processing state
         let (components_needing_full_processing, components_needing_balance_only) =
             self.categorize_components(&swap_hook_components)?;
 
+        info!(
+            full_processing = components_needing_full_processing.len(),
+            balance_only = components_needing_balance_only.len(),
+            "Categorized components by processing needs"
+        );
+
         // 3. Process the components - collect metadata
+        let metadata_span = span!(Level::INFO, "collect_metadata");
+        let _metadata_guard = metadata_span.enter();
+
         let component_metadata = self
             .metadata_orchestrator
             .collect_metadata_for_block(
@@ -525,6 +675,9 @@ where
                 ExtractionError::Unknown(format!("Failed to collect metadata: {e:?}"))
             })?;
 
+        info!(metadata_count = component_metadata.len(), "Collected component metadata");
+        drop(_metadata_guard);
+
         // 3a. Process metadata errors and update component states
         self.process_metadata_errors(&component_metadata, &block_changes.block)?;
 
@@ -535,7 +688,7 @@ where
         for (component, metadata) in component_metadata {
             metadata_by_component_id.insert(component.id.clone(), metadata);
 
-            if let Some(hook_address) = component.static_attributes.get("hook") {
+            if let Some(hook_address) = component.static_attributes.get("hooks") {
                 components_by_hook
                     .entry(hook_address.clone())
                     .or_default()
@@ -544,12 +697,24 @@ where
         }
 
         // 5. Call appropriate hook orchestrator for each group
+        info!(hook_groups = components_by_hook.len(), "Processing components by hook orchestrator");
+
         for (hook_address, components) in &components_by_hook {
+            let orchestrator_span = span!(
+                Level::INFO,
+                "hook_orchestrator",
+                hook_address = %hook_address,
+                component_count = components.len()
+            );
+            let _orchestrator_guard = orchestrator_span.enter();
+
             if let Some(orchestrator) = self
                 .hook_orchestrator_registry
                 .hooks
                 .get(hook_address)
             {
+                info!("Found hook orchestrator, processing components");
+
                 let component_metadata_map: HashMap<String, _> = components
                     .iter()
                     .filter_map(|comp| {
@@ -559,12 +724,22 @@ where
                     })
                     .collect();
 
+                debug!(
+                    metadata_entries = component_metadata_map.len(),
+                    "Prepared component metadata map"
+                );
+
                 match orchestrator.update_components(
                     block_changes,
                     components,
                     &component_metadata_map,
                 ) {
                     Ok(()) => {
+                        info!(
+                            processed_components = components.len(),
+                            "Hook orchestrator processed components successfully"
+                        );
+
                         // Update component states for successful processing
                         for component in components {
                             self.handle_component_success(
@@ -574,7 +749,11 @@ where
                         }
                     }
                     Err(e) => {
-                        error!("Hook orchestrator failed for hook {}: {e:?}", hook_address);
+                        error!(
+                            error = %e,
+                            failed_components = components.len(),
+                            "Hook orchestrator failed"
+                        );
 
                         // Mark all components in this group as failed
                         for component in components {
@@ -587,7 +766,11 @@ where
                     }
                 }
             } else {
-                debug!("No hook orchestrator found for hook address: {}", hook_address);
+                warn!(
+                    hook_address = %hook_address,
+                    missing_components = components.len(),
+                    "No hook orchestrator found for hook address"
+                );
 
                 // Mark components as failed since we can't process them
                 for component in components {
@@ -602,32 +785,49 @@ where
 
         // TODO: Is pruning implemented already?
         // 6. Delegate to standard DCI (handles tracing + pruning)
+        let dci_span = span!(Level::INFO, "inner_dci_processing");
+        let _dci_guard = dci_span.enter();
+
         self.inner_dci
             .process_block_update(block_changes)
             .await?;
+
+        drop(_dci_guard);
+        info!("Inner DCI processing completed");
 
         // 7. Handle finality for the cache
         self.cache
             .handle_finality(block_changes.finalized_block_height)
             .map_err(|e| {
+                error!("Failed to handle finality for cache: {e:?}");
                 ExtractionError::Unknown(format!("Failed to handle finality for cache: {e:?}"))
             })?;
 
+        info!("Block processing completed successfully");
         Ok(())
     }
 
     /// Handles revert by reverting the cache and calling the inner_dci's process_revert.
+    #[instrument(skip(self), fields(target_block = %target_block))]
     async fn process_revert(&mut self, target_block: &BlockHash) -> Result<(), ExtractionError> {
+        info!("Processing revert for UniswapV4HookDCI");
+
         // Revert the cache
         self.cache
             .revert_to(target_block)
-            .map_err(|e| ExtractionError::Unknown(format!("Failed to revert cache: {e:?}")))?;
+            .map_err(|e| {
+                error!("Failed to revert cache: {e:?}");
+                ExtractionError::Unknown(format!("Failed to revert cache: {e:?}"))
+            })?;
+
+        info!("Cache reverted successfully");
 
         // Delegate to inner DCI
         self.inner_dci
             .process_revert(target_block)
             .await?;
 
+        info!("Revert processing completed successfully");
         Ok(())
     }
 }
@@ -638,8 +838,11 @@ mod tests {
 
     use tycho_common::{
         models::{
-            blockchain::{Block, Transaction, TxWithChanges},
-            protocol::{ProtocolComponent, ProtocolComponentStateDelta},
+            blockchain::{
+                Block, EntryPoint, EntryPointWithTracingParams, RPCTracerParams, TracingParams,
+                Transaction, TxWithChanges,
+            },
+            protocol::{ProtocolComponent, ProtocolComponentState, ProtocolComponentStateDelta},
             Chain, ChangeType, TxHash,
         },
         storage::WithTotal,
@@ -674,7 +877,7 @@ mod tests {
 
     fn create_hook_component(id: &str, hook_address: Address) -> ProtocolComponent {
         let mut static_attributes = HashMap::new();
-        static_attributes.insert("hook".to_string(), hook_address.clone());
+        static_attributes.insert("hooks".to_string(), hook_address.clone());
         static_attributes.insert("key_lp_fee".to_string(), Bytes::from(vec![0, 0, 100])); // 100 basis points
         static_attributes.insert("tick_spacing".to_string(), Bytes::from(vec![0, 0, 0, 10])); // tick spacing 10
 
@@ -1241,5 +1444,466 @@ mod tests {
             .process_revert(&block_hash)
             .await
             .unwrap();
+    }
+
+    #[cfg(test)]
+    mod integration_tests {
+        use std::{collections::HashSet, str::FromStr, sync::Arc};
+
+        use super::*;
+        use crate::extractor::dynamic_contract_indexer::{
+            component_metadata::{
+                MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry,
+            },
+            entrypoint_generator::{
+                DefaultSwapAmountEstimator, HookEntrypointConfig, HookEntrypointGenerator,
+                UniswapV4DefaultHookEntrypointGenerator,
+            },
+            hook_orchestrator::{DefaultUniswapV4HookOrchestrator, HookOrchestratorRegistry},
+            metadata_orchestrator::BlockMetadataOrchestrator,
+            rpc_metadata_provider::RPCMetadataProvider,
+        };
+
+        // Test fixture data based on provided protocol component
+        fn create_test_protocol_component() -> ProtocolComponent {
+            let mut static_attributes = HashMap::new();
+            static_attributes.insert("tick_spacing".to_string(), Bytes::from_str("0x01").unwrap());
+            static_attributes.insert(
+                "pool_id".to_string(),
+                Bytes::from_str(
+                    "0x156c3163f4cabc00f83d2bfad9ee341aebc85a5bcb566c0ba8fc4358a1023166",
+                )
+                .unwrap(),
+            );
+            static_attributes.insert(
+                "hooks".to_string(),
+                Address::from("0x55dcf9455eee8fd3f5eed17606291272cde428a8"),
+            );
+            static_attributes.insert("key_lp_fee".to_string(), Bytes::from_str("0x64").unwrap());
+
+            ProtocolComponent {
+                id: "0x156c3163f4cabc00f83d2bfad9ee341aebc85a5bcb566c0ba8fc4358a1023166"
+                    .to_string(),
+                protocol_system: "uniswap_v4".to_string(),
+                protocol_type_name: "uniswap_v4_pool".to_string(),
+                chain: Chain::Ethereum,
+                tokens: vec![
+                    Address::from("0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"),
+                    Address::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
+                ],
+                contract_addresses: vec![],
+                static_attributes,
+                change: ChangeType::Creation,
+                creation_tx: TxHash::from(
+                    "0x17cc501a356d8e367f57c40419bd954790fe83f8d2dbfb06058bc7617f1c16f3",
+                ),
+                created_at: chrono::NaiveDateTime::parse_from_str(
+                    "2025-07-01 15:49:11",
+                    "%Y-%m-%d %H:%M:%S",
+                )
+                .unwrap(),
+            }
+        }
+
+        // Create initial component state based on provided data
+        fn create_test_component_state() -> ProtocolComponentState {
+            let mut attributes = HashMap::new();
+            attributes.insert(
+                "sqrt_price_x96".to_string(),
+                Bytes::from_str("0x01000000000000000000000000").unwrap(),
+            );
+            attributes
+                .insert("protocol_fees/zero2one".to_string(), Bytes::from_str("0x00").unwrap());
+            attributes.insert("tick".to_string(), Bytes::from_str("0x00").unwrap());
+            attributes.insert("liquidity".to_string(), Bytes::from_str("0x00").unwrap());
+            attributes.insert(
+                "balance_owner".to_string(),
+                Bytes::from_str("0x000000000004444c5dc75cb358380d2e3de08a90").unwrap(),
+            );
+            attributes
+                .insert("protocol_fees/one2zero".to_string(), Bytes::from_str("0x00").unwrap());
+
+            let mut balances = HashMap::new();
+            balances.insert(
+                Address::from("0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0"),
+                Bytes::from_str("0x00").unwrap(),
+            );
+            balances.insert(
+                Address::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
+                Bytes::from_str("0x00").unwrap(),
+            );
+
+            ProtocolComponentState {
+                component_id: "0x156c3163f4cabc00f83d2bfad9ee341aebc85a5bcb566c0ba8fc4358a1023166"
+                    .to_string(),
+                attributes,
+                balances,
+            }
+        }
+
+        fn create_test_block(block_number: u64) -> Block {
+            Block::new(
+                block_number,
+                Chain::Ethereum,
+                Bytes::from(block_number).lpad(32, 0),
+                Bytes::from(block_number - 1).lpad(32, 0),
+                chrono::NaiveDateTime::from_timestamp_opt(
+                    1719849000 + (block_number * 12) as i64,
+                    0,
+                )
+                .unwrap(),
+            )
+        }
+
+        fn create_test_transaction(nonce: u64) -> Transaction {
+            Transaction::new(
+                Bytes::from(nonce).lpad(32, 0),
+                Bytes::from(1u64).lpad(32, 0),
+                Address::from("0x1234567890123456789012345678901234567890"),
+                Some(Address::from("0x55dcf9455eee8fd3f5eed17606291272cde428a8")),
+                nonce,
+            )
+        }
+
+        // Setup hook orchestrator registry with the test hook address
+        fn setup_test_hook_orchestrator_registry(
+            router_address: Address,
+            pool_manager: Address,
+        ) -> HookOrchestratorRegistry {
+            let mut hook_registry = HookOrchestratorRegistry { hooks: HashMap::new() };
+
+            let hook_address = Address::from("0x55dcf9455eee8fd3f5eed17606291272cde428a8");
+
+            let config = HookEntrypointConfig {
+                max_sample_size: Some(4),
+                min_samples: 1,
+                router_address: Some(router_address.clone()),
+                sender: None,
+                router_code: None,
+                pool_manager: pool_manager.clone(),
+            };
+
+            let mut entrypoint_generator = UniswapV4DefaultHookEntrypointGenerator::new(
+                DefaultSwapAmountEstimator,
+                pool_manager.clone(),
+            );
+            entrypoint_generator.set_config(config);
+
+            let orchestrator = DefaultUniswapV4HookOrchestrator::new(entrypoint_generator);
+
+            hook_registry
+                .hooks
+                .insert(hook_address, Box::new(orchestrator));
+
+            hook_registry
+        }
+
+        // Setup metadata registries for the test
+        fn setup_test_metadata_registries(
+        ) -> (MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry) {
+            let generator_registry = MetadataGeneratorRegistry::new();
+            let parser_registry = MetadataResponseParserRegistry::new();
+            let mut provider_registry = ProviderRegistry::new();
+
+            provider_registry.register_provider(
+                "rpc_default".to_string(),
+                Arc::new(RPCMetadataProvider::new(50)),
+            );
+
+            (generator_registry, parser_registry, provider_registry)
+        }
+
+        // Note: This is an integration test that requires real DB and RPC connections
+        // It should be run manually with proper environment setup
+        #[tokio::test]
+        #[ignore] // This test requires real DB and RPC connections
+        async fn test_hook_dci_process_block_update_integration() {
+            // Test configuration
+            let chain = Chain::Ethereum;
+            let router_address = Address::from("0x1234567890123456789012345678901234567890");
+            let pool_manager = Address::from("0x5d8d4b3c8b1f2a3c4b8f6e9d7c5a3b1e2f4d6a8c");
+
+            // Create mock gateways
+            let mut db_gateway = MockGateway::new();
+            let account_extractor = MockAccountExtractor::new();
+            let entrypoint_tracer = MockEntryPointTracer::new();
+
+            // Setup initial expectations for initialization
+            db_gateway
+                .expect_get_entry_points_tracing_params()
+                .return_once(move |_, _| {
+                    Box::pin(async move { Ok(WithTotal { entity: HashMap::new(), total: None }) })
+                });
+
+            db_gateway
+                .expect_get_traced_entry_points()
+                .return_once(move |_| Box::pin(async move { Ok(HashMap::new()) }));
+
+
+            // Create inner DCI
+            let inner_dci = DynamicContractIndexer::new(
+                chain,
+                "test_extractor".to_string(),
+                db_gateway,
+                account_extractor,
+                entrypoint_tracer,
+            );
+
+            // Setup metadata registries and orchestrators
+            let (generator_registry, parser_registry, provider_registry) =
+                setup_test_metadata_registries();
+            let metadata_orchestrator = BlockMetadataOrchestrator::new(
+                generator_registry,
+                parser_registry,
+                provider_registry,
+            );
+            let hook_orchestrator_registry =
+                setup_test_hook_orchestrator_registry(router_address, pool_manager.clone());
+
+            // Create new mock gateway for Hook DCI (since we moved ownership of the first one)
+            let mut db_gateway2 = MockGateway::new();
+
+            // Set up expectations for process_block_update
+            // This would be called by inner_dci.process_block_update
+            db_gateway2
+                .expect_insert_entry_points()
+                .returning(|_| Box::pin(async move { Ok(()) }));
+
+            db_gateway2
+                .expect_insert_entry_point_tracing_params()
+                .returning(|_| Box::pin(async move { Ok(()) }));
+
+            // Set up expectation for getting protocol components during initialization
+            let test_component = create_test_protocol_component();
+            let component_clone = test_component.clone();
+            db_gateway2
+                .expect_get_protocol_components()
+                .withf(move |chain, system, ids, min_tvl, pagination| {
+                    chain == &Chain::Ethereum &&
+                        system.as_deref() == Some("uniswap_v4") &&
+                        ids.is_none() &&
+                        min_tvl.is_none() &&
+                        pagination.is_none()
+                })
+                .return_once(move |_, _, _, _, _| {
+                    Box::pin(async move {
+                        Ok(WithTotal { entity: vec![component_clone], total: Some(1) })
+                    })
+                });
+
+            // Set up expectation for getting entry points for the component
+            db_gateway2
+                .expect_get_entry_points_tracing_params()
+                .withf(move |filter: &EntryPointFilter, _| {
+                    filter.protocol_system == "uniswap_v4"
+                        && filter
+                        .component_ids
+                        .as_ref()
+                        .map(|ids| ids.contains(&"0x156c3163f4cabc00f83d2bfad9ee341aebc85a5bcb566c0ba8fc4358a1023166".to_string()))
+                        .unwrap_or(false)
+                })
+                .return_once(move |_, _| {
+                    Box::pin(async move {
+                        Ok(WithTotal {
+                            entity: HashMap::new(), // No entrypoints yet - component needs processing
+                            total: None,
+                        })
+                    })
+                });
+
+
+            // Create Hook DCI
+            let mut hook_dci = UniswapV4HookDCI::new(
+                inner_dci,
+                metadata_orchestrator,
+                hook_orchestrator_registry,
+                db_gateway2,
+                chain,
+                3, // max_retries
+                2, // pause_after_retries
+            );
+
+            // Initialize the Hook DCI
+            hook_dci.initialize().await.unwrap();
+
+            // Create test block changes with the new protocol component
+            let block = create_test_block(20547123);
+            let tx = create_test_transaction(1);
+
+            let mut protocol_components = HashMap::new();
+            protocol_components.insert(test_component.id.clone(), test_component.clone());
+
+            let tx_with_changes = TxWithChanges {
+                tx: tx.clone(),
+                protocol_components,
+                state_updates: HashMap::new(),
+                balance_changes: HashMap::new(),
+                ..Default::default()
+            };
+
+            let mut block_changes = BlockChanges::new(
+                "test_extractor".to_string(),
+                chain,
+                block,
+                20547120, // finalized_block_height
+                false,
+                vec![tx_with_changes],
+                vec![],
+            );
+
+            // Process the block update
+            let result = hook_dci
+                .process_block_update(&mut block_changes)
+                .await;
+
+            // Verify the result
+            assert!(result.is_ok(), "process_block_update should succeed");
+
+            // Verify that the component was processed
+            // In a real integration test, you would verify:
+            // 1. Entry points were generated and stored
+            // 2. Component state was updated in the cache
+            // 3. Balance updates were applied
+            // 4. The hook orchestrator was called appropriately
+
+            println!("Integration test completed successfully!");
+        }
+
+        // Additional test for handling state updates on existing components
+        #[tokio::test]
+        #[ignore] // This test requires real DB and RPC connections
+        async fn test_hook_dci_process_block_update_with_state_changes() {
+            let chain = Chain::Ethereum;
+            let router_address = Address::from("0x1234567890123456789012345678901234567890");
+            let pool_manager = Address::from("0x5d8d4b3c8b1f2a3c4b8f6e9d7c5a3b1e2f4d6a8c");
+
+            // Similar setup as above but with existing component and state updates
+            let mut db_gateway = MockGateway::new();
+            let account_extractor = MockAccountExtractor::new();
+            let entrypoint_tracer = MockEntryPointTracer::new();
+
+            // Setup expectations for initialization
+            db_gateway
+                .expect_get_entry_points_tracing_params()
+                .return_once(move |_, _| {
+                    Box::pin(async move { Ok(WithTotal { entity: HashMap::new(), total: None }) })
+                });
+
+            db_gateway
+                .expect_get_traced_entry_points()
+                .return_once(move |_| Box::pin(async move { Ok(HashMap::new()) }));
+
+            let test_component = create_test_protocol_component();
+            let component_id = test_component.id.clone();
+            let component_clone = test_component.clone();
+
+            db_gateway
+                .expect_get_protocol_components()
+                .return_once(move |_, _, _, _, _| {
+                    Box::pin(async move {
+                        Ok(WithTotal { entity: vec![component_clone], total: Some(1) })
+                    })
+                });
+
+            // This time, return some entrypoints to indicate the component has been traced before
+            db_gateway
+                .expect_get_entry_points_tracing_params()
+                .withf(move |filter: &EntryPointFilter, _| filter.protocol_system == "uniswap_v4")
+                .return_once(move |_, _| {
+                    let mut entrypoints = HashMap::new();
+                    let mut ep_set = HashSet::new();
+
+                    let entry_point = EntryPoint {
+                        external_id: "test_ep_1".to_string(),
+                        target: Address::from("0x55dcf9455eee8fd3f5eed17606291272cde428a8"),
+                        signature: "swap(uint256,uint256)".to_string(),
+                    };
+
+                    let params = TracingParams::RPCTracer(RPCTracerParams {
+                        caller: Some(Address::from("0x1234567890123456789012345678901234567890")),
+                        calldata: Bytes::from_str("0x").unwrap(),
+                        state_overrides: None,
+                        prune_addresses: None,
+                    });
+
+                    ep_set.insert(EntryPointWithTracingParams { entry_point, params });
+                    entrypoints.insert(component_id.clone(), ep_set);
+
+                    Box::pin(async move { Ok(WithTotal { entity: entrypoints, total: None }) })
+                });
+
+            let inner_dci = DynamicContractIndexer::new(
+                chain,
+                "test_extractor".to_string(),
+                db_gateway,
+                account_extractor,
+                entrypoint_tracer,
+            );
+
+            let (generator_registry, parser_registry, provider_registry) =
+                setup_test_metadata_registries();
+            let metadata_orchestrator = BlockMetadataOrchestrator::new(
+                generator_registry,
+                parser_registry,
+                provider_registry,
+            );
+            let hook_orchestrator_registry =
+                setup_test_hook_orchestrator_registry(router_address, pool_manager.clone());
+
+            let db_gateway2 = MockGateway::new();
+
+            let mut hook_dci = UniswapV4HookDCI::new(
+                inner_dci,
+                metadata_orchestrator,
+                hook_orchestrator_registry,
+                db_gateway2,
+                chain,
+                2,
+                3,
+            );
+
+            hook_dci.initialize().await.unwrap();
+
+            // Create block changes with state updates (no new components)
+            let block = create_test_block(20547124);
+            let tx = create_test_transaction(2);
+
+            let mut state_updates = HashMap::new();
+            let mut updated_attributes = HashMap::new();
+            updated_attributes.insert("liquidity".to_string(), Bytes::from_str("0x1000").unwrap());
+
+            let state_delta = ProtocolComponentStateDelta::new(
+                &test_component.id,
+                updated_attributes,
+                HashSet::new(),
+            );
+            state_updates.insert(test_component.id.clone(), state_delta);
+
+            let tx_with_changes = TxWithChanges {
+                tx: tx.clone(),
+                protocol_components: HashMap::new(), // No new components
+                state_updates,
+                balance_changes: HashMap::new(),
+                ..Default::default()
+            };
+
+            let mut block_changes = BlockChanges::new(
+                "test_extractor".to_string(),
+                chain,
+                block,
+                20547121,
+                false,
+                vec![tx_with_changes],
+                vec![],
+            );
+
+            // Process the block update
+            let result = hook_dci
+                .process_block_update(&mut block_changes)
+                .await;
+
+            assert!(result.is_ok(), "process_block_update with state changes should succeed");
+            println!("State update test completed successfully!");
+        }
     }
 }
