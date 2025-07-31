@@ -5,6 +5,7 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use revm::primitives::I128;
 use tracing::trace;
+use tycho_client::feed::BlockHeader;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -16,33 +17,28 @@ use tycho_common::{
 };
 
 use super::hooks::utils::{has_permission, HookOptions};
-use crate::{
-    evm::{
-        engine_db::simulation_db::BlockHeader,
-        protocol::{
-            safe_math::{safe_add_u256, safe_sub_u256},
-            u256_num::u256_to_biguint,
-            uniswap_v4::hooks::{
-                hook_handler::HookHandler,
-                models::{
-                    AfterSwapParameters, BalanceDelta, BeforeSwapDelta, BeforeSwapParameters,
-                    StateContext, SwapParams,
-                },
-            },
-            utils::uniswap::{
-                i24_be_bytes_to_i32, liquidity_math,
-                sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
-                swap_math,
-                tick_list::{TickInfo, TickList, TickListErrorKind},
-                tick_math::{
-                    get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
-                    MIN_SQRT_RATIO, MIN_TICK,
-                },
-                StepComputation, SwapResults, SwapState,
-            },
-            vm::constants::EXTERNAL_ACCOUNT,
+use crate::evm::protocol::{
+    safe_math::{safe_add_u256, safe_sub_u256},
+    u256_num::u256_to_biguint,
+    uniswap_v4::hooks::{
+        hook_handler::HookHandler,
+        models::{
+            AfterSwapParameters, BalanceDelta, BeforeSwapDelta, BeforeSwapParameters, StateContext,
+            SwapParams,
         },
     },
+    utils::uniswap::{
+        i24_be_bytes_to_i32, liquidity_math,
+        sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
+        swap_math,
+        tick_list::{TickInfo, TickList, TickListErrorKind},
+        tick_math::{
+            get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
+            MIN_SQRT_RATIO, MIN_TICK,
+        },
+        StepComputation, SwapResults, SwapState,
+    },
+    vm::constants::EXTERNAL_ACCOUNT,
 };
 
 #[derive(Clone, Debug)]
@@ -359,7 +355,7 @@ impl ProtocolSim for UniswapV4State {
                 };
 
                 let before_swap_result = hook
-                    .before_swap(before_swap_params, self.block, None, None)
+                    .before_swap(before_swap_params, self.block.clone(), None, None)
                     .map_err(|e| {
                         SimulationError::FatalError(format!(
                             "BeforeSwap hook simulation failed: {e:?}"
@@ -416,7 +412,7 @@ impl ProtocolSim for UniswapV4State {
                 };
 
                 let after_swap_result = hook
-                    .after_swap(after_swap_params, self.block, storage_overwrites, None)
+                    .after_swap(after_swap_params, self.block.clone(), storage_overwrites, None)
                     .map_err(|e| {
                         SimulationError::FatalError(format!(
                             "AfterSwap hook simulation failed: {e:?}"
@@ -672,11 +668,9 @@ impl ProtocolSim for UniswapV4State {
 mod tests {
     use std::{collections::HashSet, fs, path::Path, str::FromStr};
 
-    use alloy::primitives::B256;
-    use num_bigint::ToBigUint;
     use num_traits::FromPrimitive;
     use serde_json::Value;
-    use tycho_client::feed::{synchronizer::ComponentWithState, Header};
+    use tycho_client::feed::synchronizer::ComponentWithState;
     use tycho_common::models::Chain;
 
     use super::*;
@@ -694,7 +688,7 @@ mod tests {
 
     #[test]
     fn test_delta_transition() {
-        let block = Header {
+        let block = BlockHeader {
             number: 7239119,
             hash: Bytes::from_str(
                 "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
@@ -702,6 +696,7 @@ mod tests {
             .expect("Invalid block hash"),
             parent_hash: Bytes::from(vec![0; 32]),
             revert: false,
+            timestamp: 0,
         };
         let mut pool = UniswapV4State::new(
             1000,
@@ -710,7 +705,7 @@ mod tests {
             100,
             60,
             vec![TickInfo::new(120, 10000), TickInfo::new(180, -10000)],
-            block.into(),
+            block,
         );
 
         let attributes: HashMap<String, Bytes> = [
@@ -771,7 +766,7 @@ mod tests {
         let state: ComponentWithState = serde_json::from_value(data)
             .expect("Expected json to match ComponentWithState structure");
 
-        let block = Header {
+        let block = BlockHeader {
             number: 7239119,
             hash: Bytes::from_str(
                 "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
@@ -779,6 +774,7 @@ mod tests {
             .expect("Invalid block hash"),
             parent_hash: Bytes::from(vec![0; 32]),
             revert: false,
+            timestamp: 0,
         };
 
         let usv4_state = UniswapV4State::try_from_with_header(
@@ -842,7 +838,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_limits() {
-        let block = Header {
+        let block = BlockHeader {
             number: 22689129,
             hash: Bytes::from_str(
                 "0x7763ea30d11aef68da729b65250c09a88ad00458c041064aad8c9a9dbf17adde",
@@ -850,6 +846,7 @@ mod tests {
             .expect("Invalid block hash"),
             parent_hash: Bytes::from(vec![0; 32]),
             revert: false,
+            timestamp: 0,
         };
 
         let project_root = env!("CARGO_MANIFEST_DIR");
@@ -921,11 +918,13 @@ mod tests {
 
         let block = BlockHeader {
             number: 22689128,
-            hash: B256::from_str(
+            parent_hash: Default::default(),
+            hash: Bytes::from_str(
                 "0xfbfa716523d25d6d5248c18d001ca02b1caf10cabd1ab7321465e2262c41157b",
             )
             .expect("Invalid block hash"),
             timestamp: 1749739055,
+            revert: false,
         };
 
         // Pool ID: 0xdd8dd509e58ec98631b800dd6ba86ee569c517ffbd615853ed5ab815bbc48ccb
@@ -938,7 +937,7 @@ mod tests {
             1,
             // Except the ticks - not sure where to get these...
             vec![],
-            block,
+            block.clone(),
         );
 
         let hook_address: Address = Address::from_str("0x69058613588536167ba0aa94f0cc1fe420ef28a8")
@@ -959,16 +958,22 @@ mod tests {
         .unwrap();
 
         let t0 = Token::new(
-            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-            6,
+            &Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
             "USDC",
-            10_000.to_biguint().unwrap(), // gas
+            6,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
         let t1 = Token::new(
-            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-            18,
+            &Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
             "WETH",
-            10_000.to_biguint().unwrap(), // gas
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
 
         usv4_state.set_hook_handler(Box::new(hook_handler));

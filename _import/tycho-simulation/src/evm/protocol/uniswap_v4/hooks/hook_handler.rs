@@ -1,9 +1,6 @@
 use std::{collections::HashMap, fmt::Debug};
 
-use alloy::{
-    primitives::{aliases::U24, Address, I256, U256},
-    sol,
-};
+use alloy::primitives::{Address, U256};
 use tycho_client::feed::BlockHeader;
 use tycho_common::{
     dto::ProtocolStateDelta,
@@ -15,7 +12,13 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::evm::protocol::uniswap_v4::state::{UniswapV4Fees, UniswapV4State};
+use crate::evm::protocol::uniswap_v4::{
+    hooks::models::{
+        AfterSwapDelta, AfterSwapParameters, AmountRanges, BeforeSwapOutput, BeforeSwapParameters,
+        SwapParams, WithGasEstimate,
+    },
+    state::UniswapV4State,
+};
 
 /// Trait for simulating the swap-related behavior of Uniswap V4 hooks.
 /// https://github.com/Uniswap/v4-core/blob/main/src/interfaces/IHooks.sol

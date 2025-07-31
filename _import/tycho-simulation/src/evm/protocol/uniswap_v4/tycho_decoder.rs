@@ -130,7 +130,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
             tick,
             tick_spacing,
             ticks,
-            block.clone().into(),
+            block.clone(),
         );
 
         let hook_address = snapshot
@@ -140,7 +140,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
         if let Some(hook_address) = hook_address {
             let hook_address = Address::from_slice(&hook_address.0);
             let hook_params = HookCreationParams::new(
-                block.into(),
+                block,
                 account_balances,
                 all_tokens,
                 state.clone(),
@@ -238,7 +238,7 @@ mod tests {
         .await
         .unwrap();
 
-        let block = Header {
+        let block = BlockHeader {
             number: 22689129,
             hash: Bytes::from_str(
                 "0x7763ea30d11aef68da729b65250c09a88ad00458c041064aad8c9a9dbf17adde",
@@ -246,6 +246,7 @@ mod tests {
             .expect("Invalid block hash"),
             parent_hash: Bytes::from(vec![0; 32]),
             revert: false,
+            timestamp: 0,
         };
 
         let fees = UniswapV4Fees::new(0, 0, 500);
@@ -256,7 +257,7 @@ mod tests {
             300,
             60,
             vec![TickInfo::new(60, 400)],
-            block.into(),
+            block,
         );
         assert_eq!(result, expected);
     }

@@ -8,7 +8,7 @@ use tycho_common::{models::token::Token, simulation::errors::SimulationError, By
 
 use crate::{
     evm::{
-        engine_db::{create_engine, simulation_db::BlockHeader, SHARED_TYCHO_DB},
+        engine_db::{create_engine, SHARED_TYCHO_DB},
         protocol::uniswap_v4::{
             hooks::{generic_vm_hook_handler::GenericVMHookHandler, hook_handler::HookHandler},
             state::UniswapV4State,

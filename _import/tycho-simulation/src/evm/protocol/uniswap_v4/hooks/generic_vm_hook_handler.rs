@@ -25,7 +25,7 @@ use crate::evm::{
                 models::{
                     AfterSwapDelta, AfterSwapParameters, AfterSwapSolReturn, AmountRanges,
                     BeforeSwapOutput, BeforeSwapParameters, BeforeSwapSolOutput, SwapParams,
-                        WithGasEstimate,
+                    WithGasEstimate,
                 },
             },
             state::UniswapV4State,
