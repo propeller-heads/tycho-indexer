@@ -4,7 +4,7 @@ const {EthersAdapter} = require('@safe-global/protocol-kit');
 const {default: SafeApiKit} = require("@safe-global/api-kit");
 
 const txServiceUrls = {
-    mainnet: "https://safe-transaction-mainnet.safe.global",
+    ethereum: "https://safe-transaction-mainnet.safe.global",
     base: "https://safe-transaction-base.safe.global",
     unichain: "https://safe-transaction-unichain.safe.global",
 };
