@@ -14,28 +14,73 @@ services:
       - "5431:5432"
     volumes:
       - postgres_data:/bitnami/postgresql
+  
+  # Grafana LGTM stack for observability (Loki, Grafana, Tempo, Mimir)
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    restart: "always"
+    ports:
+      - "3000:3000"    # Grafana UI
+      - "4317:4317"    # OpenTelemetry gRPC
+      - "4318:4318"    # OpenTelemetry HTTP
+      - "3100:3100"    # Loki API
+    volumes:
+      - lgtm_data:/data
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+  
+  # Promtail for log collection
+  promtail:
+    image: grafana/promtail:2.9.0
+    restart: "always"
+    depends_on:
+      - lgtm
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./promtail-config.yml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+
   tycho-indexer:
     image: ${TYCHO_IMAGE}
     restart: "no"
     depends_on:
       - db
+      - lgtm
+      - promtail
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 10s
       timeout: 5s
       retries: 5
+    env_file:
+      - .env
     environment:
-      SUBSTREAMS_API_TOKEN: readme
-      RPC_URL: readme
-      DATABASE_URL: postgres://postgres:mypassword@db:5432/tycho_indexer_0
-      RUST_LOG: info
+      SUBSTREAMS_API_TOKEN: ${SUBSTREAMS_API_TOKEN:-readme}
+      RPC_URL: ${RPC_URL:-readme}
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:mypassword@db:5432/tycho_indexer_0}
+      RUST_LOG: ${RUST_LOG:-info}
+      # Configure OTLP endpoint for tracing
+      OTLP_EXPORTER_ENDPOINT: ${OTLP_EXPORTER_ENDPOINT:-http://lgtm:4317}
     ports:
       - "4242:4242"
     volumes:
       - ./wait-for-postgres.sh:/usr/wait-for-postgres.sh
       - ./extractors.yaml:/opt/tycho-indexer/extractors.yaml
       - ./substreams/:/opt/tycho-indexer/substreams/
+    # Configure logging driver for better log collection
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "service,version"
+    labels:
+      - "service=tycho-indexer"
+      - "version=0.76.0"
     entrypoint: [ "/usr/wait-for-postgres.sh", "db" ]
-    command: [ "/opt/tycho-indexer/tycho-indexer", "--endpoint", "https://mainnet.eth.streamingfast.io:443", "index" ]
+    command: [ "/opt/tycho-indexer/tycho-indexer", "--endpoint", "https://mainnet.eth.streamingfast.io:443", "index", "--retention-horizon", "2025-07-23T00:00:00"]
+
 volumes:
   postgres_data:
+  lgtm_data:
