@@ -338,7 +338,7 @@ contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
             RestrictTransferFrom.TransferType.TransferFrom,
             ALICE,
             address(0),
-            bytes(""),clip
+            bytes(""),
             pools
         );
 
