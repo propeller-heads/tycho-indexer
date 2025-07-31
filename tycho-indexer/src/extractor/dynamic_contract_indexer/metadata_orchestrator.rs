@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use tracing::{debug, error, info, instrument, warn};
 use tycho_common::models::{blockchain::Block, protocol::ProtocolComponent, TxHash};
 
 use crate::extractor::dynamic_contract_indexer::component_metadata::{
@@ -23,17 +24,26 @@ impl BlockMetadataOrchestrator {
         Self { generator_registry, response_parser_registry, provider_registry }
     }
 
+    #[instrument(skip(self, balance_only, full_processing, block), fields(
+        block_number = block.number,
+        balance_only_count = balance_only.len(),
+        full_processing_count = full_processing.len()
+    ))]
     pub async fn collect_metadata_for_block(
         &self,
         balance_only: &[(TxHash, ProtocolComponent)],
         full_processing: &[(TxHash, ProtocolComponent)],
         block: &Block,
     ) -> Result<Vec<(ProtocolComponent, ComponentTracingMetadata)>, MetadataError> {
+        info!("Starting metadata collection for block");
+
         let all_components: HashMap<_, _> = balance_only
             .iter()
             .chain(full_processing.iter())
             .map(|(tx_hash, comp)| (comp.id.clone(), (tx_hash.clone(), comp.clone())))
             .collect();
+
+        info!(total_components = all_components.len(), "Prepared component map");
 
         let full_components: Vec<_> = full_processing
             .iter()
@@ -52,68 +62,177 @@ impl BlockMetadataOrchestrator {
             RequestMode::BalanceOnly,
         )?);
 
+        info!(total_requests = all_requests.len(), "Generated metadata requests");
+
         let requests_by_provider = self.group_requests_by_routing_key(&all_requests);
+
+        info!(provider_count = requests_by_provider.len(), "Grouped requests by provider");
+
         let all_results = self
             .execute_provider_batches(&all_components, requests_by_provider)
             .await?;
 
-        self.assemble_component_metadata(&all_components, all_results)
+        info!(result_count = all_results.len(), "Executed provider batches");
+
+        let final_metadata = self.assemble_component_metadata(&all_components, all_results)?;
+
+        info!(metadata_count = final_metadata.len(), "Completed metadata collection");
+
+        Ok(final_metadata)
     }
 
+    #[instrument(skip(self, components, block), fields(
+        component_count = components.len(),
+        block_number = block.number,
+        mode = match mode {
+            RequestMode::Full => "full",
+            RequestMode::BalanceOnly => "balance_only"
+        }
+    ))]
     fn generate_requests(
         &self,
         components: &[&ProtocolComponent],
         block: &Block,
         mode: RequestMode,
     ) -> Result<Vec<MetadataRequest>, MetadataError> {
+        debug!("Generating metadata requests");
+
         let mut all_requests = Vec::new();
+        let mut components_with_generators = 0;
+        let mut components_without_generators = 0;
 
         for component in components {
-            if let Some(generator) = self
+            match self
                 .generator_registry
-                .get_generator_for_component(component)?
+                .get_generator_for_component(component)
             {
-                let mut requests = match mode {
-                    RequestMode::Full => generator.generate_requests(component, block)?,
-                    RequestMode::BalanceOnly => {
-                        generator.generate_balance_only_requests(component, block)?
-                    }
-                };
-                all_requests.append(&mut requests);
+                Ok(Some(generator)) => {
+                    components_with_generators += 1;
+
+                    let mut requests = match mode {
+                        RequestMode::Full => {
+                            debug!(
+                                component_id = %component.id,
+                                "Generating full metadata requests"
+                            );
+                            generator.generate_requests(component, block)
+                        }
+                        RequestMode::BalanceOnly => {
+                            debug!(
+                                component_id = %component.id,
+                                "Generating balance-only metadata requests"
+                            );
+                            generator.generate_balance_only_requests(component, block)
+                        }
+                    }?;
+
+                    debug!(
+                        component_id = %component.id,
+                        request_count = requests.len(),
+                        "Generated requests for component"
+                    );
+
+                    all_requests.append(&mut requests);
+                }
+                Ok(None) => {
+                    components_without_generators += 1;
+                    debug!(
+                        component_id = %component.id,
+                        "No generator found for component"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        component_id = %component.id,
+                        error = %e,
+                        "Error getting generator for component"
+                    );
+                    return Err(e);
+                }
             }
         }
+
+        info!(
+            total_requests = all_requests.len(),
+            components_with_generators,
+            components_without_generators,
+            "Completed request generation"
+        );
 
         Ok(all_requests)
     }
 
+    #[instrument(skip(self, requests), fields(
+        request_count = requests.len()
+    ))]
     fn group_requests_by_routing_key(
         &self,
         requests: &[MetadataRequest],
     ) -> HashMap<String, Vec<MetadataRequest>> {
+        debug!("Grouping requests by routing key");
+
         let mut grouped: HashMap<String, Vec<MetadataRequest>> = HashMap::new();
+        let mut routing_key_counts: HashMap<String, usize> = HashMap::new();
 
         for req in requests {
+            let routing_key = req.transport.routing_key();
+            *routing_key_counts
+                .entry(routing_key.clone())
+                .or_insert(0) += 1;
+
             grouped
-                .entry(req.transport.routing_key())
+                .entry(routing_key)
                 .or_default()
                 .push(req.clone());
         }
 
+        // Log distribution of requests across routing keys
+        for (routing_key, count) in &routing_key_counts {
+            debug!(
+                routing_key = %routing_key,
+                request_count = count,
+                "Requests grouped for routing key"
+            );
+        }
+
+        info!(unique_routing_keys = grouped.len(), "Completed request grouping");
+
         grouped
     }
 
+    #[instrument(skip(self, all_components, requests_by_provider), fields(
+        component_count = all_components.len(),
+        provider_count = requests_by_provider.len()
+    ))]
     async fn execute_provider_batches(
         &self,
         all_components: &HashMap<String, (TxHash, ProtocolComponent)>,
         requests_by_provider: HashMap<String, Vec<MetadataRequest>>,
     ) -> Result<Vec<MetadataResult>, MetadataError> {
+        info!("Starting provider batch execution");
+
         let mut all_results = Vec::new();
+        let mut total_requests_processed = 0;
+        let mut successful_batches = 0;
+        let mut failed_batches = 0;
 
         for (routing_key, requests) in requests_by_provider {
+            total_requests_processed += requests.len();
+
+            debug!(
+                routing_key = %routing_key,
+                request_count = requests.len(),
+                "Processing batch for provider"
+            );
             let Some(provider) = self
                 .provider_registry
                 .get_provider_by_routing_key(&routing_key)
             else {
+                warn!(
+                    routing_key = %routing_key,
+                    "No provider found for routing key, skipping batch"
+                );
+                failed_batches += 1;
                 continue;
             };
 
@@ -140,6 +259,14 @@ impl BlockMetadataOrchestrator {
             let results = provider
                 .execute_batch(&transports)
                 .await;
+
+            debug!(
+                routing_key = %routing_key,
+                result_count = results.len(),
+                "Received results from provider"
+            );
+
+            successful_batches += 1;
 
             for (dedup_id, result) in results {
                 let request = ids_to_requests
@@ -168,8 +295,23 @@ impl BlockMetadataOrchestrator {
                         .expect("All components should contain every relevant component");
 
                     let metadata_value = match &result {
-                        Ok(success) => parser.parse_response(&component.1, request, success),
-                        Err(e) => Err(e.clone()),
+                        Ok(success) => {
+                            debug!(
+                                component_id = %comp_id,
+                                request_type = ?request.request_type,
+                                "Parsing successful response"
+                            );
+                            parser.parse_response(&component.1, request, success)
+                        }
+                        Err(e) => {
+                            error!(
+                                component_id = %comp_id,
+                                request_type = ?request.request_type,
+                                error = %e,
+                                "Provider returned error for request"
+                            );
+                            Err(e.clone())
+                        }
                     };
 
                     all_results.push(MetadataResult {
@@ -182,22 +324,57 @@ impl BlockMetadataOrchestrator {
             }
         }
 
+        info!(
+            total_results = all_results.len(),
+            total_requests_processed,
+            successful_batches,
+            failed_batches,
+            "Completed provider batch execution"
+        );
+
         Ok(all_results)
     }
 
+    #[instrument(skip(self, all_components, results), fields(
+        component_count = all_components.len(),
+        result_count = results.len()
+    ))]
     fn assemble_component_metadata(
         &self,
         all_components: &HashMap<String, (TxHash, ProtocolComponent)>,
         results: Vec<MetadataResult>,
     ) -> Result<Vec<(ProtocolComponent, ComponentTracingMetadata)>, MetadataError> {
+        debug!("Assembling component metadata from results");
+
         let tx_hash_by_component: HashMap<_, _> = all_components
             .iter()
             .map(|(_, (tx_hash, comp))| (comp.id.clone(), tx_hash.clone()))
             .collect();
 
         let mut metadata_map: HashMap<String, ComponentTracingMetadata> = HashMap::new();
+        let mut successful_results = 0;
+        let mut failed_results = 0;
 
         for result in results {
+            match &result.result {
+                Ok(_) => {
+                    successful_results += 1;
+                    debug!(
+                        component_id = %result.component_id,
+                        request_type = ?result.request_type,
+                        "Processing successful result"
+                    );
+                }
+                Err(e) => {
+                    failed_results += 1;
+                    debug!(
+                        component_id = %result.component_id,
+                        request_type = ?result.request_type,
+                        error = %e,
+                        "Processing failed result"
+                    );
+                }
+            }
             let tx_hash = tx_hash_by_component
                 .get(&result.component_id)
                 .expect("Tx hash must exist");
@@ -208,7 +385,7 @@ impl BlockMetadataOrchestrator {
                 .add_result(result);
         }
 
-        Ok(metadata_map
+        let final_metadata: Vec<_> = metadata_map
             .into_iter()
             .map(|(comp_id, metadata)| {
                 let component = &all_components
@@ -217,7 +394,14 @@ impl BlockMetadataOrchestrator {
                     .1;
                 (component.clone(), metadata)
             })
-            .collect())
+            .collect();
+
+        info!(
+            final_component_count = final_metadata.len(),
+            successful_results, failed_results, "Completed metadata assembly"
+        );
+
+        Ok(final_metadata)
     }
 }
 
@@ -258,7 +442,7 @@ mod tests {
 
     fn create_test_component(id: &str) -> ProtocolComponent {
         let mut static_attributes = HashMap::new();
-        static_attributes.insert("hook".to_string(), Address::from([1u8; 20]));
+        static_attributes.insert("hooks".to_string(), Address::from([1u8; 20]));
         ProtocolComponent {
             id: id.to_string(),
             protocol_system: "test_protocol".to_string(),
