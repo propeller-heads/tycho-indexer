@@ -1,3 +1,10 @@
+## [0.112.1](https://github.com/propeller-heads/tycho-execution/compare/0.112.0...0.112.1) (2025-07-31)
+
+
+### Bug Fixes
+
+* Rename mainnet to ethereum in txServiceUrls for Safe ([51d9484](https://github.com/propeller-heads/tycho-execution/commit/51d9484de0b4c75b78dc8ca839f4ec7df40f972e))
+
 ## [0.112.0](https://github.com/propeller-heads/tycho-execution/compare/0.111.0...0.112.0) (2025-07-22)
 
 
