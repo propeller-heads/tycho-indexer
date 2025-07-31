@@ -111,8 +111,8 @@ where
         };
 
         let block_env = BlockEnv {
-            number: params.block_number,
-            timestamp: params.timestamp,
+            number: U256::from(params.block_number),
+            timestamp: U256::from(params.timestamp),
             ..Default::default()
         };
 
@@ -145,7 +145,7 @@ where
                     "Starting simulation with tx parameters: {:#?} {:#?}",
                     vm.ctx.tx, vm.ctx.block
                 );
-                vm.inspect_replay()
+                vm.inspect_tx(tx_env.clone())
             };
 
             Self::print_traces(tracer, res.as_ref().ok());
@@ -385,15 +385,13 @@ mod tests {
             Account, AccountInfo, AccountStatus, Bytecode, EvmState as rState, EvmStorageSlot,
         },
     };
+    use tycho_common::simulation::errors::SimulationError;
 
     use super::*;
-    use crate::{
-        evm::engine_db::{
-            engine_db_interface::EngineDatabaseInterface,
-            simulation_db::{EVMProvider, SimulationDB},
-            utils::{get_client, get_runtime},
-        },
-        protocol::errors::SimulationError,
+    use crate::evm::engine_db::{
+        engine_db_interface::EngineDatabaseInterface,
+        simulation_db::{EVMProvider, SimulationDB},
+        utils::{get_client, get_runtime},
     };
 
     #[test]
@@ -416,6 +414,7 @@ mod tests {
                         code_hash: B256::ZERO,
                         code: None,
                     },
+                    transaction_id: 0,
                     storage: [
                         // this slot has changed
                         (
@@ -423,6 +422,7 @@ mod tests {
                             EvmStorageSlot {
                                 original_value: U256::from_limbs([4, 0, 0, 0]),
                                 present_value: U256::from_limbs([5, 0, 0, 0]),
+                                transaction_id: 0,
                                 is_cold: true,
                             },
                         ),
@@ -432,6 +432,7 @@ mod tests {
                             EvmStorageSlot {
                                 original_value: U256::from_limbs([4, 0, 0, 0]),
                                 present_value: U256::from_limbs([4, 0, 0, 0]),
+                                transaction_id: 0,
                                 is_cold: true,
                             },
                         ),

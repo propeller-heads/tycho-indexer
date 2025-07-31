@@ -9,17 +9,15 @@ use revm::{
     state::{AccountInfo, Bytecode},
     DatabaseRef,
 };
+use tycho_common::simulation::errors::SimulationError;
 
 use super::{
     constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
     utils::coerce_error,
 };
-use crate::{
-    evm::{
-        engine_db::engine_db_interface::EngineDatabaseInterface,
-        simulation::{SimulationEngine, SimulationParameters, SimulationResult},
-    },
-    protocol::errors::SimulationError,
+use crate::evm::{
+    engine_db::engine_db_interface::EngineDatabaseInterface,
+    simulation::{SimulationEngine, SimulationParameters, SimulationResult},
 };
 
 #[derive(Debug, Clone)]
@@ -311,7 +309,7 @@ mod tests {
             .call(
                 selector,
                 args,
-                22578103, // blockHeader
+                22578103, // blockBlockHeader
                 None,
                 None,
                 None,

@@ -5,7 +5,7 @@ use std::{
 };
 
 use alloy::{
-    primitives::{Address, Bytes, StorageValue, B256, U256},
+    primitives::{Address, Bytes as AlloyBytes, StorageValue, B256, U256},
     providers::{
         fillers::{BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller},
         Provider, RootProvider,
@@ -19,6 +19,7 @@ use revm::{
 };
 use thiserror::Error;
 use tracing::{debug, info};
+use tycho_client::feed::BlockHeader;
 
 use super::{
     super::account_storage::{AccountStorage, StateUpdate},
@@ -82,13 +83,6 @@ impl<DB: DatabaseRef> DatabaseRef for OverriddenSimulationDB<'_, DB> {
     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
         self.inner_db.block_hash_ref(number)
     }
-}
-
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Default)]
-pub struct BlockHeader {
-    pub number: u64,
-    pub hash: B256,
-    pub timestamp: u64,
 }
 
 /// A wrapper over an Alloy Provider with local storage cache and overrides.
@@ -221,7 +215,7 @@ impl<P: Provider + Debug + 'static> SimulationDB<P> {
 
             tokio::join!(balance_request, nonce_request, code_request,)
         });
-        let code = Bytecode::new_raw(Bytes::copy_from_slice(&code?));
+        let code = Bytecode::new_raw(AlloyBytes::copy_from_slice(&code?));
 
         Ok(AccountInfo::new(balance?, nonce?, code.hash_slow(), code))
     }
@@ -468,7 +462,7 @@ where
     /// instead of querying a node.
     fn block_hash_ref(&self, _number: u64) -> Result<B256, Self::Error> {
         match &self.block {
-            Some(header) => Ok(header.hash),
+            Some(header) => Ok(B256::from_slice(&header.hash)),
             None => Ok(B256::ZERO),
         }
     }
@@ -479,6 +473,7 @@ mod tests {
     use std::{error::Error, str::FromStr};
 
     use rstest::rstest;
+    use tycho_common::Bytes;
 
     use super::*;
     use crate::evm::engine_db::utils::{get_client, get_runtime};
@@ -504,11 +499,12 @@ mod tests {
         let mut db = SimulationDB::new(get_client(None), get_runtime(), None);
         let block = BlockHeader {
             number: 20308186,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0x61c51e3640b02ae58a03201be0271e84e02dac8a4826501995cbe4da24174b52",
             )
             .unwrap(),
             timestamp: 234,
+            ..Default::default()
         };
         db.set_block(Some(block));
         let address = Address::from_str("0x168b93113fe5902c87afaecE348581A1481d0f93").unwrap();
@@ -570,7 +566,7 @@ mod tests {
         let update = StateUpdate { storage: Some(new_storage), balance: Some(new_balance) };
         let mut updates = HashMap::default();
         updates.insert(address, update);
-        let new_block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
+        let new_block = BlockHeader { number: 1, timestamp: 234, ..Default::default() };
 
         let reverse_update = db.update_state(&updates, new_block);
 

@@ -1,11 +1,9 @@
 use std::ops::BitOr;
 
 use alloy::primitives::{Sign, I256, U256};
+use tycho_common::simulation::errors::SimulationError;
 
-use crate::{
-    evm::protocol::safe_math::{div_mod_u256, safe_div_u256, safe_mul_u256},
-    protocol::errors::SimulationError,
-};
+use crate::evm::protocol::safe_math::{div_mod_u256, safe_div_u256, safe_mul_u256};
 
 pub(crate) const MIN_TICK: i32 = -887272;
 pub(crate) const MAX_TICK: i32 = 887272;

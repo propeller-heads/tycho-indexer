@@ -1,4 +1,5 @@
 extern crate tycho_simulation;
+
 mod ui;
 pub mod utils;
 
@@ -24,10 +25,9 @@ use tycho_simulation::{
         },
         stream::ProtocolStreamBuilder,
     },
-    protocol::models::BlockUpdate,
-    utils::load_all_tokens,
+    protocol::models::Update,
+    utils::{get_default_url, load_all_tokens},
 };
-use utils::get_default_url;
 
 #[derive(Parser)]
 struct Cli {
@@ -98,6 +98,7 @@ async fn main() {
     utils::setup_tracing();
     // Parse command-line arguments into a Cli struct
     let cli = Cli::parse();
+
     let chain =
         Chain::from_str(&cli.chain).unwrap_or_else(|_| panic!("Unknown chain {}", cli.chain));
 
@@ -114,7 +115,7 @@ async fn main() {
     env::var("RPC_URL").expect("RPC_URL env variable should be set");
 
     // Create communication channels for inter-thread communication
-    let (tick_tx, tick_rx) = mpsc::channel::<BlockUpdate>(12);
+    let (tick_tx, tick_rx) = mpsc::channel::<Update>(12);
 
     let tycho_message_processor: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
         let all_tokens = load_all_tokens(

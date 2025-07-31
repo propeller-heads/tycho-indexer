@@ -11,7 +11,10 @@ use evm_ekubo_sdk::{
     },
 };
 use num_traits::Zero;
-use tycho_common::Bytes;
+use tycho_common::{
+    simulation::errors::{SimulationError, TransitionError},
+    Bytes,
+};
 
 use super::{EkuboPool, EkuboPoolQuote};
 use crate::{
@@ -19,7 +22,7 @@ use crate::{
         attributes::ticks_from_attributes,
         pool::base::{self, BasePool},
     },
-    protocol::errors::{InvalidSnapshotError, SimulationError, TransitionError},
+    protocol::errors::InvalidSnapshotError,
 };
 
 #[derive(Debug, Eq, Clone)]
@@ -201,8 +204,18 @@ impl EkuboPool for MevResistPool {
         if let Some(new_active_tick) = active_tick_update {
             self.last_tick = new_active_tick;
             self.active_tick = Some(new_active_tick);
-            self.base_pool_state.active_tick_index =
-                find_nearest_initialized_tick_index(&self.ticks, new_active_tick);
+        }
+
+        if active_tick_update.is_some() || new_initialized_ticks {
+            self.base_pool_state.active_tick_index = find_nearest_initialized_tick_index(
+                &self.ticks,
+                self.active_tick.ok_or_else(|| {
+                    TransitionError::MissingAttribute(
+                        "base state should always have an active tick during transitions"
+                            .to_string(),
+                    )
+                })?,
+            );
         }
 
         if new_initialized_ticks {

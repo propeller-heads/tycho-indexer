@@ -27,14 +27,13 @@
 use std::{collections::HashMap, default::Default, future::Future};
 
 use chrono::NaiveDateTime;
-use num_bigint::BigUint;
 use serde::Serialize;
-use tycho_client::feed::Header;
-use tycho_common::{models::Chain, Bytes};
-
-use super::state::ProtocolSim;
-use crate::models::Token;
-
+use tycho_client::feed::HeaderLike;
+use tycho_common::{
+    models::{token::Token, Chain},
+    simulation::protocol_sim::ProtocolSim,
+    Bytes,
+};
 /// ProtocolComponent struct represents the properties of a trading pair
 ///
 /// # Fields
@@ -125,12 +124,15 @@ impl From<ProtocolComponent> for tycho_common::models::protocol::ProtocolCompone
     }
 }
 
-pub trait TryFromWithBlock<T> {
+pub trait TryFromWithBlock<T, H>
+where
+    H: HeaderLike,
+{
     type Error;
 
-    fn try_from_with_block(
+    fn try_from_with_header(
         value: T,
-        block: Header,
+        block: H,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send + Sync
@@ -138,37 +140,9 @@ pub trait TryFromWithBlock<T> {
         Self: Sized;
 }
 
-/// GetAmountOutResult struct represents the result of getting the amount out of a trading pair
-///
-/// # Fields
-///
-/// * `amount`: BigUint, the amount of the trading pair
-/// * `gas`: BigUint, the gas of the trading pair
-#[derive(Debug)]
-pub struct GetAmountOutResult {
-    pub amount: BigUint,
-    pub gas: BigUint,
-    pub new_state: Box<dyn ProtocolSim>,
-}
-
-impl GetAmountOutResult {
-    /// Constructs a new GetAmountOutResult struct with the given amount and gas
-    pub fn new(amount: BigUint, gas: BigUint, new_state: Box<dyn ProtocolSim>) -> Self {
-        GetAmountOutResult { amount, gas, new_state }
-    }
-
-    /// Aggregates the given GetAmountOutResult struct to the current one.
-    /// It updates the amount with the other's amount and adds the other's gas to the current one's
-    /// gas.
-    pub fn aggregate(&mut self, other: &Self) {
-        self.amount = other.amount.clone();
-        self.gas += &other.gas;
-    }
-}
-
 #[derive(Debug, Clone)]
-pub struct BlockUpdate {
-    pub block_number: u64,
+pub struct Update {
+    pub block_number_or_timestamp: u64,
     /// The new and updated states of this block
     pub states: HashMap<String, Box<dyn ProtocolSim>>,
     /// The new pairs that were added in this block
@@ -177,17 +151,30 @@ pub struct BlockUpdate {
     pub removed_pairs: HashMap<String, ProtocolComponent>,
 }
 
-impl BlockUpdate {
+impl Update {
     pub fn new(
         block_number: u64,
         states: HashMap<String, Box<dyn ProtocolSim>>,
         new_pairs: HashMap<String, ProtocolComponent>,
     ) -> Self {
-        BlockUpdate { block_number, states, new_pairs, removed_pairs: HashMap::new() }
+        Update {
+            block_number_or_timestamp: block_number,
+            states,
+            new_pairs,
+            removed_pairs: HashMap::new(),
+        }
     }
 
     pub fn set_removed_pairs(mut self, pairs: HashMap<String, ProtocolComponent>) -> Self {
         self.removed_pairs = pairs;
+        self
+    }
+
+    pub fn merge(mut self, other: Update) -> Self {
+        self.states.extend(other.states);
+        self.new_pairs.extend(other.new_pairs);
+        self.removed_pairs
+            .extend(other.removed_pairs);
         self
     }
 }

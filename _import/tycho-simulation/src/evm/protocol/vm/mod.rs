@@ -1,6 +1,6 @@
 mod adapter_contract;
 pub mod constants;
-mod erc20_token;
+pub mod erc20_token;
 mod models;
 pub mod state;
 pub mod state_builder;

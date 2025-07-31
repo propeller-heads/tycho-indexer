@@ -15,26 +15,20 @@ use revm::{
     DatabaseRef,
 };
 use tracing::warn;
-use tycho_common::Bytes as TychoBytes;
+use tycho_client::feed::BlockHeader;
+use tycho_common::{simulation::errors::SimulationError, Bytes as TychoBytes};
 
 use super::{
     constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
-    erc20_token::{brute_force_slots, ERC20Slots},
     models::Capability,
     state::EVMPoolState,
     tycho_simulation_contract::TychoSimulationContract,
     utils::get_code_for_contract,
 };
-use crate::{
-    evm::{
-        engine_db::{
-            create_engine, engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
-        },
-        protocol::{utils::bytes_to_address, vm::constants::ERC20_BYTECODE},
-        simulation::{SimulationEngine, SimulationParameters},
-        ContractCompiler,
-    },
-    protocol::errors::SimulationError,
+use crate::evm::{
+    engine_db::{create_engine, engine_db_interface::EngineDatabaseInterface},
+    protocol::utils::bytes_to_address,
+    simulation::{SimulationEngine, SimulationParameters},
 };
 
 #[derive(Debug)]
@@ -50,15 +44,15 @@ use crate::{
 /// use alloy::primitives::Address;
 /// use std::path::PathBuf;
 /// use tycho_common::Bytes;
-/// use tycho_simulation::evm::engine_db::simulation_db::BlockHeader;
 /// use tycho_simulation::evm::engine_db::SHARED_TYCHO_DB;
-/// use tycho_simulation::protocol::errors::SimulationError;
 /// use tycho_simulation::evm::protocol::vm::state_builder::EVMPoolStateBuilder;
 /// use tycho_simulation::evm::protocol::vm::constants::BALANCER_V2;
+/// use tycho_client::feed::BlockHeader;
+/// use tycho_common::simulation::errors::SimulationError;
+/// use revm::state::Bytecode;
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), SimulationError> {
-///     use revm::state::Bytecode;
 /// let pool_id: String = "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
 ///
 ///     let tokens = vec![
@@ -69,6 +63,7 @@ use crate::{
 ///         number: 1,
 ///         hash: Default::default(),
 ///         timestamp: 1632456789,
+///         ..Default::default()
 ///     };
 ///
 ///     // Build the EVMPoolState
@@ -94,7 +89,6 @@ where
     involved_contracts: Option<HashSet<Address>>,
     contract_balances: HashMap<Address, HashMap<Address, U256>>,
     stateless_contracts: Option<HashMap<String, Option<Vec<u8>>>>,
-    token_storage_slots: Option<HashMap<Address, (ERC20Slots, ContractCompiler)>>,
     manual_updates: Option<bool>,
     trace: Option<bool>,
     engine: Option<SimulationEngine<D>>,
@@ -125,7 +119,6 @@ where
             involved_contracts: None,
             contract_balances: HashMap::new(),
             stateless_contracts: None,
-            token_storage_slots: None,
             manual_updates: None,
             trace: None,
             engine: None,
@@ -173,15 +166,6 @@ where
         self.stateless_contracts = Some(stateless_contracts);
         self
     }
-
-    pub fn token_storage_slots(
-        mut self,
-        token_storage_slots: HashMap<Address, (ERC20Slots, ContractCompiler)>,
-    ) -> Self {
-        self.token_storage_slots = Some(token_storage_slots);
-        self
-    }
-
     pub fn manual_updates(mut self, manual_updates: bool) -> Self {
         self.manual_updates = Some(manual_updates);
         self
@@ -228,7 +212,6 @@ where
             )?)
         };
 
-        self.init_token_storage_slots()?;
         let capabilities = if let Some(capabilities) = &self.capabilities {
             capabilities.clone()
         } else {
@@ -253,8 +236,6 @@ where
             HashMap::new(),
             self.involved_contracts
                 .unwrap_or_default(),
-            self.token_storage_slots
-                .unwrap_or_default(),
             self.manual_updates.unwrap_or(false),
             adapter_contract,
         ))
@@ -262,17 +243,6 @@ where
 
     async fn get_default_engine(&self, db: D) -> Result<SimulationEngine<D>, SimulationError> {
         let engine = create_engine(db, self.trace.unwrap_or(false))?;
-        for token_address in &self.tokens {
-            let info = AccountInfo {
-                balance: Default::default(),
-                nonce: 0,
-                code_hash: KECCAK_EMPTY,
-                code: Some(Bytecode::new_raw(ERC20_BYTECODE.into())),
-            };
-            engine
-                .state
-                .init_account(bytes_to_address(token_address)?, info, None, false);
-        }
 
         engine.state.init_account(
             *EXTERNAL_ACCOUNT,
@@ -315,35 +285,6 @@ where
             }
         }
         Ok(engine)
-    }
-
-    fn init_token_storage_slots(&mut self) -> Result<(), SimulationError> {
-        for t in self.tokens.iter() {
-            let t_erc20_address = bytes_to_address(t)?;
-            if self
-                .involved_contracts
-                .as_ref()
-                .is_some_and(|contracts| contracts.contains(&t_erc20_address)) &&
-                !self
-                    .token_storage_slots
-                    .as_ref()
-                    .is_some_and(|token_storage| token_storage.contains_key(&t_erc20_address))
-            {
-                self.token_storage_slots
-                    .get_or_insert(HashMap::new())
-                    .insert(
-                        t_erc20_address,
-                        brute_force_slots(
-                            &t_erc20_address,
-                            &self.block,
-                            self.engine
-                                .as_ref()
-                                .expect("engine should be set"),
-                        )?,
-                    );
-            }
-        }
-        Ok(())
     }
 
     fn get_default_capabilities(&mut self) -> Result<HashSet<Capability>, SimulationError> {
@@ -468,7 +409,7 @@ where
 mod tests {
     use std::str::FromStr;
 
-    use alloy::primitives::B256;
+    use tycho_client::feed::BlockHeader;
 
     use super::*;
     use crate::evm::engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB};
@@ -479,7 +420,7 @@ mod tests {
         let tokens =
             vec![TychoBytes::from_str("0000000000000000000000000000000000000000").unwrap()];
         let balances = HashMap::new();
-        let block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
+        let block = BlockHeader { number: 1, timestamp: 234, ..Default::default() };
         let adapter_address =
             Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270").unwrap();
         let result = tokio_test::block_on(
@@ -503,23 +444,20 @@ mod tests {
         let token2 = TychoBytes::from_str("0000000000000000000000000000000000000002").unwrap();
         let token3 = TychoBytes::from_str("0000000000000000000000000000000000000003").unwrap();
         let tokens = vec![token2.clone(), token3.clone()];
-        let block = BlockHeader { number: 1, hash: B256::default(), timestamp: 234 };
+        let block = BlockHeader { number: 1, timestamp: 234, ..Default::default() };
         let balances = HashMap::new();
         let adapter_address =
             Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270").unwrap();
         let builder = EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, block, adapter_address)
             .balances(balances);
 
-        let engine =
-            tokio_test::block_on(builder.get_default_engine(SHARED_TYCHO_DB.clone())).unwrap();
+        let engine = tokio_test::block_on(builder.get_default_engine(SHARED_TYCHO_DB.clone()));
 
+        assert!(engine.is_ok());
+        let engine = engine.unwrap();
         assert!(engine
             .state
             .get_account_storage()
-            .account_present(&bytes_to_address(&token2).unwrap()));
-        assert!(engine
-            .state
-            .get_account_storage()
-            .account_present(&bytes_to_address(&token3).unwrap()));
+            .account_present(&EXTERNAL_ACCOUNT));
     }
 }

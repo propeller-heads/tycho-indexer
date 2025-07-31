@@ -1,21 +1,48 @@
+use std::collections::HashMap;
+
+use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
+use tycho_common::{models::token::Token, Bytes};
+
+use crate::{
+    evm::protocol::{cpmm::protocol::cpmm_try_from_with_header, uniswap_v2::state::UniswapV2State},
+    protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
+};
+
+impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV2State {
+    type Error = InvalidSnapshotError;
+
+    /// Decodes a `ComponentWithState` into a `UniswapV2State`. Errors with a `InvalidSnapshotError`
+    /// if either reserve0 or reserve1 attributes are missing.
+    async fn try_from_with_header(
+        snapshot: ComponentWithState,
+        _block: BlockHeader,
+        _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
+        _all_tokens: &HashMap<Bytes, Token>,
+    ) -> Result<Self, Self::Error> {
+        let (reserve0, reserve1) = cpmm_try_from_with_header(snapshot)?;
+        Ok(Self::new(reserve0, reserve1))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
     use alloy::primitives::U256;
     use rstest::rstest;
-    use tycho_client::feed::{synchronizer::ComponentWithState, Header};
+    use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
     use tycho_common::{dto::ResponseProtocolState, Bytes};
 
     use super::super::state::UniswapV2State;
     use crate::protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock};
 
-    fn header() -> Header {
-        Header {
+    fn header() -> BlockHeader {
+        BlockHeader {
             number: 1,
             hash: Bytes::from(vec![0; 32]),
             parent_hash: Bytes::from(vec![0; 32]),
             revert: false,
+            timestamp: 1,
         }
     }
 
@@ -32,9 +59,10 @@ mod tests {
             },
             component: Default::default(),
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
 
-        let result = UniswapV2State::try_from_with_block(
+        let result = UniswapV2State::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),
@@ -65,9 +93,10 @@ mod tests {
             },
             component: Default::default(),
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
 
-        let result = UniswapV2State::try_from_with_block(
+        let result = UniswapV2State::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),

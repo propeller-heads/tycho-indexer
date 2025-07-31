@@ -1,61 +1,38 @@
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
-use alloy::primitives::{Address, B256, U256};
+use alloy::primitives::{Address, U256};
 use revm::state::Bytecode;
-use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_common::Bytes;
+use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
+use tycho_common::{models::token::Token, Bytes};
 
 use super::{state::EVMPoolState, state_builder::EVMPoolStateBuilder};
 use crate::{
     evm::{
-        engine_db::{simulation_db::BlockHeader, tycho_db::PreCachedDB, SHARED_TYCHO_DB},
+        engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB},
         protocol::vm::constants::get_adapter_file,
     },
-    models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 
-impl From<Header> for BlockHeader {
-    fn from(header: Header) -> Self {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs();
-        BlockHeader {
-            number: header.number,
-            hash: B256::new(
-                header
-                    .hash
-                    .as_ref()
-                    .try_into()
-                    .expect("Hash must be 32 bytes"),
-            ),
-            timestamp: now,
-        }
-    }
-}
-
-impl TryFromWithBlock<ComponentWithState> for EVMPoolState<PreCachedDB> {
+impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCachedDB> {
     type Error = InvalidSnapshotError;
 
-    /// Decodes a `ComponentWithState`, block `Header` and HashMap of all available tokens into an
-    /// `EVMPoolState`.
+    /// Decodes a `ComponentWithState`, block `BlockHeader` and HashMap of all available tokens into
+    /// an `EVMPoolState`.
     ///
     /// Errors with a `InvalidSnapshotError`.
     #[allow(deprecated)]
-    async fn try_from_with_block(
+    async fn try_from_with_header(
         snapshot: ComponentWithState,
-        block: Header,
+        block: BlockHeader,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
         let id = snapshot.component.id.clone();
         let tokens = snapshot.component.tokens.clone();
-        let block = BlockHeader::from(block);
 
         // Decode involved contracts
         let mut stateless_contracts = HashMap::new();
@@ -182,7 +159,6 @@ mod tests {
     use std::{collections::HashSet, fs, path::Path};
 
     use chrono::DateTime;
-    use num_bigint::ToBigUint;
     use revm::{primitives::KECCAK_EMPTY, state::AccountInfo};
     use serde_json::Value;
     use tycho_common::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
@@ -228,12 +204,13 @@ mod tests {
         }
     }
 
-    fn header() -> Header {
-        Header {
+    fn header() -> BlockHeader {
+        BlockHeader {
             number: 1,
             hash: Bytes::from(vec![0; 32]),
             parent_hash: Bytes::from(vec![0; 32]),
             revert: false,
+            timestamp: 1,
         }
     }
 
@@ -251,7 +228,7 @@ mod tests {
 
     #[allow(deprecated)]
     #[tokio::test]
-    async fn test_try_from_with_block() {
+    async fn test_try_from_with_header() {
         let attributes: HashMap<String, Bytes> = vec![
             (
                 "balance_owner".to_string(),
@@ -263,16 +240,22 @@ mod tests {
         .collect();
         let tokens = [
             Token::new(
-                "0x6b175474e89094c44da98b954eedeac495271d0f",
-                18,
+                &Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
                 "DAI",
-                10_000.to_biguint().unwrap(),
+                18,
+                0,
+                &[Some(10_000)],
+                tycho_common::models::Chain::Ethereum,
+                100,
             ),
             Token::new(
-                "0xba100000625a3754423978a60c9317c58a424e3d",
-                18,
+                &Bytes::from_str("0xba100000625a3754423978a60c9317c58a424e3d").unwrap(),
                 "BAL",
-                10_000.to_biguint().unwrap(),
+                18,
+                0,
+                &[Some(10_000)],
+                tycho_common::models::Chain::Ethereum,
+                100,
             ),
         ]
         .into_iter()
@@ -287,6 +270,7 @@ mod tests {
             },
             component: vm_component(),
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
         // Initialize engine with balancer storage
         let block = header();
@@ -309,7 +293,7 @@ mod tests {
                 false,
             );
         }
-        db.update(accounts, Some(block.into()));
+        db.update(accounts, Some(block));
         let account_balances = HashMap::from([(
             Bytes::from("0xBA12222222228d8Ba445958a75a0704d566BF2C8"),
             HashMap::from([
@@ -324,9 +308,10 @@ mod tests {
             ]),
         )]);
 
-        let res = EVMPoolState::try_from_with_block(snapshot, header(), &account_balances, &tokens)
-            .await
-            .unwrap();
+        let res =
+            EVMPoolState::try_from_with_header(snapshot, header(), &account_balances, &tokens)
+                .await
+                .unwrap();
 
         let res_pool = res;
 

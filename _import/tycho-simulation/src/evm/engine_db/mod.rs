@@ -3,17 +3,13 @@ use std::{collections::HashMap, fmt::Debug};
 use alloy::primitives::Address;
 use lazy_static::lazy_static;
 use revm::{primitives::KECCAK_EMPTY, state::AccountInfo, DatabaseRef};
+use tycho_client::feed::BlockHeader;
+use tycho_common::simulation::errors::SimulationError;
 
-use crate::{
-    evm::{
-        engine_db::{
-            engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
-            tycho_db::PreCachedDB,
-        },
-        simulation::SimulationEngine,
-        tycho_models::{AccountUpdate, ChangeType, ResponseAccount},
-    },
-    protocol::errors::SimulationError,
+use crate::evm::{
+    engine_db::{engine_db_interface::EngineDatabaseInterface, tycho_db::PreCachedDB},
+    simulation::SimulationEngine,
+    tycho_models::{AccountUpdate, ChangeType, ResponseAccount},
 };
 
 pub mod engine_db_interface;
@@ -71,33 +67,37 @@ where
 
 pub async fn update_engine(
     db: PreCachedDB,
-    block: BlockHeader,
+    block: Option<BlockHeader>,
     vm_storage: Option<HashMap<Address, ResponseAccount>>,
     account_updates: HashMap<Address, AccountUpdate>,
 ) -> Vec<AccountUpdate> {
-    let mut vm_updates: Vec<AccountUpdate> = Vec::new();
+    if let Some(block) = block {
+        let mut vm_updates: Vec<AccountUpdate> = Vec::new();
 
-    for (_address, account_update) in account_updates.iter() {
-        vm_updates.push(account_update.clone());
-    }
-
-    if let Some(vm_storage_values) = vm_storage {
-        for (_address, vm_storage_values) in vm_storage_values.iter() {
-            // ResponseAccount objects to AccountUpdate objects as required by the update method
-            vm_updates.push(AccountUpdate {
-                address: vm_storage_values.address,
-                chain: vm_storage_values.chain,
-                slots: vm_storage_values.slots.clone(),
-                balance: Some(vm_storage_values.native_balance),
-                code: Some(vm_storage_values.code.clone()),
-                change: ChangeType::Creation,
-            });
+        for (_address, account_update) in account_updates.iter() {
+            vm_updates.push(account_update.clone());
         }
-    }
 
-    if !vm_updates.is_empty() {
-        db.update(vm_updates.clone(), Some(block));
-    }
+        if let Some(vm_storage_values) = vm_storage {
+            for (_address, vm_storage_values) in vm_storage_values.iter() {
+                // ResponseAccount objects to AccountUpdate objects as required by the update method
+                vm_updates.push(AccountUpdate {
+                    address: vm_storage_values.address,
+                    chain: vm_storage_values.chain,
+                    slots: vm_storage_values.slots.clone(),
+                    balance: Some(vm_storage_values.native_balance),
+                    code: Some(vm_storage_values.code.clone()),
+                    change: ChangeType::Creation,
+                });
+            }
+        }
 
-    vm_updates
+        if !vm_updates.is_empty() {
+            db.update(vm_updates.clone(), Some(block));
+        }
+
+        vm_updates
+    } else {
+        vec![]
+    }
 }

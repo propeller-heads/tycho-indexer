@@ -3,13 +3,16 @@ use std::{collections::HashMap, str::FromStr};
 use num_bigint::BigUint;
 use pyo3::{prelude::*, types::PyType};
 use revm::primitives::{Address, U256 as rU256};
-use tycho_simulation::evm::{
-    account_storage,
-    engine_db::{
-        engine_db_interface::EngineDatabaseInterface, simulation_db, simulation_db::EVMProvider,
-        tycho_db,
+use tycho_simulation::{
+    evm::{
+        account_storage,
+        engine_db::{
+            engine_db_interface::EngineDatabaseInterface, simulation_db,
+            simulation_db::EVMProvider, tycho_db,
+        },
+        simulation,
     },
-    simulation,
+    tycho_client::feed::BlockHeader as TychoHeader,
 };
 
 use crate::structs_py::{
@@ -66,7 +69,7 @@ impl SimulationEngineInner {
     fn update_state(
         &mut self,
         updates: &HashMap<Address, account_storage::StateUpdate>,
-        block: simulation_db::BlockHeader,
+        block: TychoHeader,
     ) -> HashMap<Address, account_storage::StateUpdate> {
         match self {
             SimulationEngineInner::SimulationDB(engine) => engine
@@ -207,7 +210,7 @@ impl SimulationEngine {
         updates: HashMap<String, StateUpdate>,
         block: BlockHeader,
     ) -> PyResult<HashMap<String, StateUpdate>> {
-        let block = tycho_simulation::evm::engine_db::simulation_db::BlockHeader::from(block);
+        let block = TychoHeader::from(block);
         let mut rust_updates: HashMap<Address, account_storage::StateUpdate> = HashMap::new();
         for (key, value) in updates {
             rust_updates.insert(

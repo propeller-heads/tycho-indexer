@@ -5,29 +5,34 @@ use alloy::{
     sol_types::SolType,
 };
 use revm::DatabaseRef;
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
-
-use crate::{
-    evm::{
-        engine_db::{engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader},
-        protocol::{
-            uniswap_v4::{
-                hooks::{
-                    hook_handler::HookHandler,
-                    models::{
-                        AfterSwapDelta, AfterSwapParameters, AfterSwapSolReturn, AmountRanges,
-                        BeforeSwapOutput, BeforeSwapParameters, BeforeSwapSolOutput, SwapParams,
-                        WithGasEstimate,
-                    },
-                },
-                state::UniswapV4State,
-            },
-            vm::tycho_simulation_contract::TychoSimulationContract,
-        },
-        simulation::SimulationEngine,
+use tycho_client::feed::BlockHeader;
+use tycho_common::{
+    dto::ProtocolStateDelta,
+    models::token::Token,
+    simulation::{
+        errors::{SimulationError, TransitionError},
+        protocol_sim::Balances,
     },
-    models::{Balances, Token},
-    protocol::errors::{SimulationError, TransitionError},
+    Bytes,
+};
+
+use crate::evm::{
+    engine_db::engine_db_interface::EngineDatabaseInterface,
+    protocol::{
+        uniswap_v4::{
+            hooks::{
+                hook_handler::HookHandler,
+                models::{
+                    AfterSwapDelta, AfterSwapParameters, AfterSwapSolReturn, AmountRanges,
+                    BeforeSwapOutput, BeforeSwapParameters, BeforeSwapSolOutput, SwapParams,
+                        WithGasEstimate,
+                },
+            },
+            state::UniswapV4State,
+        },
+        vm::tycho_simulation_contract::TychoSimulationContract,
+    },
+    simulation::SimulationEngine,
 };
 
 #[derive(Debug, Clone)]
@@ -252,16 +257,17 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{default::Default, str::FromStr};
 
     use alloy::primitives::{aliases::U24, B256, I256, U256};
     use revm::state::{AccountInfo, Bytecode};
+    use tycho_client::feed::BlockHeader;
 
     use super::*;
     use crate::evm::{
         engine_db::{
             create_engine,
-            simulation_db::{BlockHeader, SimulationDB},
+            simulation_db::SimulationDB,
             utils::{get_client, get_runtime},
         },
         protocol::{
@@ -280,13 +286,14 @@ mod tests {
     fn test_before_swap() {
         let block = BlockHeader {
             number: 22578103,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0x035c0e674c3bf3384a74b766908ab41c1968e989360aa26bea1dd64b1626f5f0",
             )
             .unwrap(),
             timestamp: 1748397011,
+            ..Default::default()
         };
-        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block));
+        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
 
         let hook_address = Address::from_str("0x0010d0d5db05933fa0d9f7038d365e1541a41888")
@@ -366,13 +373,14 @@ mod tests {
     fn test_after_swap() {
         let block = BlockHeader {
             number: 15797251,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0x7032b93c5b0d419f2001f7c77c19ade6da92d2df147712eac1a27c7ffedfe410",
             )
             .unwrap(),
             timestamp: 1748397011,
+            ..Default::default()
         };
-        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block));
+        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
 
         // pool manager on ethereum
@@ -461,16 +469,17 @@ mod tests {
     fn test_before_and_after_swap() {
         let block = BlockHeader {
             number: 15797251,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0x7032b93c5b0d419f2001f7c77c19ade6da92d2df147712eac1a27c7ffedfe410",
             )
             .unwrap(),
             timestamp: 1746562410,
+            ..Default::default()
         };
         let db = SimulationDB::new(
             get_client(Some("https://unichain.drpc.org".into())),
             get_runtime(),
-            Some(block),
+            Some(block.clone()),
         );
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
 
@@ -520,7 +529,7 @@ mod tests {
         )]);
 
         let result = hook_handler
-            .before_swap(params, block, None, Some(transient_storage.clone()))
+            .before_swap(params, block.clone(), None, Some(transient_storage.clone()))
             .unwrap();
 
         assert_eq!(result.result.amount_delta, BeforeSwapDelta(I256::from_dec_str("0").unwrap()));

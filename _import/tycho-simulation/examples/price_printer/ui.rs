@@ -17,11 +17,8 @@ use ratatui::{
 };
 use tokio::{select, sync::mpsc::Receiver};
 use tracing::warn;
-use tycho_common::Bytes;
-use tycho_simulation::protocol::{
-    models::{BlockUpdate, ProtocolComponent},
-    state::ProtocolSim,
-};
+use tycho_common::{simulation::protocol_sim::ProtocolSim, Bytes};
+use tycho_simulation::protocol::models::{ProtocolComponent, Update};
 
 const INFO_TEXT: [&str; 2] = [
     "(Esc) quit | (↑) move up | (↓) move down | (↵) Toggle Quote | (+) Increase Quote Amount",
@@ -80,7 +77,7 @@ pub struct App {
     quote_amount: BigUint,
     zero2one: bool,
     items: Vec<Data>,
-    rx: Receiver<BlockUpdate>,
+    rx: Receiver<Update>,
     scroll_state: ScrollbarState,
     colors: TableColors,
     input_mode: bool,
@@ -88,7 +85,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(rx: Receiver<BlockUpdate>) -> Self {
+    pub fn new(rx: Receiver<Update>) -> Self {
         let data_vec = Vec::new();
         Self {
             state: TableState::default().with_selected(0),
@@ -135,17 +132,17 @@ impl App {
             let comp = &self.items[new_index].component;
             let decimals = comp.tokens[if self.zero2one { 0 } else { 1 }].decimals;
             if decimals >= prev_decimals {
-                self.quote_amount *= BigUint::from(10u64).pow((decimals - prev_decimals) as u32);
+                self.quote_amount *= BigUint::from(10u64).pow(decimals - prev_decimals);
             } else {
-                let new_amount = self.quote_amount.clone() /
-                    BigUint::from(10u64).pow((prev_decimals - decimals) as u32);
+                let new_amount =
+                    self.quote_amount.clone() / BigUint::from(10u64).pow(prev_decimals - decimals);
                 self.quote_amount =
                     if new_amount > BigUint::ZERO { new_amount } else { BigUint::one() };
             }
         }
     }
 
-    pub fn update_data(&mut self, update: BlockUpdate) {
+    pub fn update_data(&mut self, update: Update) {
         for (id, comp) in update.new_pairs.iter() {
             let name = format!("{comp_id:#042x}", comp_id = comp.id);
             let tokens = comp
@@ -286,11 +283,11 @@ impl App {
             let decimals =
                 if self.zero2one { comp.tokens[0].decimals } else { comp.tokens[1].decimals };
             if increase {
-                self.quote_amount += BigUint::from(10u64).pow(decimals as u32);
+                self.quote_amount += BigUint::from(10u64).pow(decimals);
             } else {
                 self.quote_amount = self
                     .quote_amount
-                    .checked_sub(&BigUint::from(10u64).pow(decimals as u32))
+                    .checked_sub(&BigUint::from(10u64).pow(decimals))
                     .unwrap_or(BigUint::one());
             }
         }

@@ -10,31 +10,28 @@ use alloy::primitives::{Address, U256};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use revm::DatabaseRef;
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
+use tycho_client::feed::BlockHeader;
+use tycho_common::{
+    dto::ProtocolStateDelta,
+    models::token::Token,
+    simulation::{
+        errors::{SimulationError, TransitionError},
+        protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
+    },
+    Bytes,
+};
 
 use super::{
     constants::{EXTERNAL_ACCOUNT, MAX_BALANCE},
-    erc20_token::{ERC20OverwriteFactory, ERC20Slots, Overwrites},
+    erc20_token::{Overwrites, TokenProxyOverwriteFactory},
     models::Capability,
     tycho_simulation_contract::TychoSimulationContract,
 };
-use crate::{
-    evm::{
-        engine_db::{
-            engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader,
-            tycho_db::PreCachedDB,
-        },
-        protocol::{
-            u256_num::{u256_to_biguint, u256_to_f64},
-            utils::bytes_to_address,
-        },
-        ContractCompiler, SlotId,
-    },
-    models::{Balances, Token},
+use crate::evm::{
+    engine_db::{engine_db_interface::EngineDatabaseInterface, tycho_db::PreCachedDB},
     protocol::{
-        errors::{SimulationError, TransitionError},
-        models::GetAmountOutResult,
-        state::ProtocolSim,
+        u256_num::{u256_to_biguint, u256_to_f64},
+        utils::bytes_to_address,
     },
 };
 
@@ -68,12 +65,6 @@ where
     involved_contracts: HashSet<Address>,
     /// A map of contracts to their token balances.
     contract_balances: HashMap<Address, HashMap<Address, U256>>,
-    /// Allows the specification of custom storage slots for token allowances and
-    /// balances. This is particularly useful for token contracts involved in protocol
-    /// logic that extends beyond simple transfer functionality.
-    /// Each entry also specify the compiler with which the target contract was compiled. This is
-    /// later used to compute storage slot for maps.
-    token_storage_slots: HashMap<Address, (ERC20Slots, ContractCompiler)>,
     /// Indicates if the protocol uses custom update rules and requires update
     /// triggers to recalculate spot prices ect. Default is to update on all changes on
     /// the pool.
@@ -104,7 +95,6 @@ where
         capabilities: HashSet<Capability>,
         block_lasting_overwrites: HashMap<Address, Overwrites>,
         involved_contracts: HashSet<Address>,
-        token_storage_slots: HashMap<Address, (ERC20Slots, ContractCompiler)>,
         manual_updates: bool,
         adapter_contract: TychoSimulationContract<D>,
     ) -> Self {
@@ -119,7 +109,6 @@ where
             block_lasting_overwrites,
             involved_contracts,
             contract_balances,
-            token_storage_slots,
             manual_updates,
             adapter_contract,
         }
@@ -193,10 +182,12 @@ where
                 {
                     let sell_token_address = bytes_to_address(sell_token_address)?;
                     let buy_token_address = bytes_to_address(buy_token_address)?;
+
                     let overwrites = Some(self.get_overwrites(
                         vec![sell_token_address, buy_token_address],
                         *MAX_BALANCE / U256::from(100),
                     )?);
+
                     let (sell_amount_limit, _) = self.get_amount_limits(
                         vec![sell_token_address, buy_token_address],
                         overwrites.clone(),
@@ -289,6 +280,7 @@ where
             }
             Err(e) => return Err(e),
         }
+
         Ok(())
     }
 
@@ -299,7 +291,7 @@ where
     ) -> Result<usize, SimulationError> {
         tokens
             .get(&Bytes::from(sell_token_address.as_slice()))
-            .map(|t| t.decimals)
+            .map(|t| t.decimals as usize)
             .ok_or_else(|| {
                 SimulationError::FatalError(format!(
                     "Failed to scale spot prices! Pool: {} Token 0x{:x} is not available!",
@@ -368,6 +360,8 @@ where
                 .component_balances
                 .get(&self.id)
             {
+                // Merge delta balances with existing balances instead of replacing them
+                // Prevents errors when delta balance changes do not affect all the pool tokens.
                 for (token, bal) in bals {
                     let addr = bytes_to_address(token).map_err(|_| {
                         SimulationError::FatalError(format!(
@@ -434,16 +428,7 @@ where
             res.push(self.get_balance_overwrites()?);
         }
 
-        let (slots, compiler) = self
-            .token_storage_slots
-            .get(sell_token)
-            .cloned()
-            .unwrap_or((
-                ERC20Slots::new(SlotId::from(0), SlotId::from(1)),
-                ContractCompiler::Solidity,
-            ));
-
-        let mut overwrites = ERC20OverwriteFactory::new(*sell_token, slots.clone(), compiler);
+        let mut overwrites = TokenProxyOverwriteFactory::new(*sell_token, None);
 
         overwrites.set_balance(max_amount, Address::from_slice(&*EXTERNAL_ACCOUNT.0));
 
@@ -481,23 +466,12 @@ where
                 )
             })?),
         };
-        if let Some(address) = address {
-            for (token, bal) in &self.balances {
-                let (slots, compiler) = if self.involved_contracts.contains(token) {
-                    self.token_storage_slots
-                        .get(token)
-                        .cloned()
-                        .ok_or_else(|| {
-                            SimulationError::FatalError(
-                                "Failed to get balance overwrites: Token storage slots not found"
-                                    .into(),
-                            )
-                        })?
-                } else {
-                    (ERC20Slots::new(SlotId::from(0), SlotId::from(1)), ContractCompiler::Solidity)
-                };
 
-                let mut overwrites = ERC20OverwriteFactory::new(*token, slots, compiler);
+        if let Some(address) = address {
+            // Only override balances that are explicitly provided in self.balances
+            // This preserves existing balances for tokens not updated in delta transitions
+            for (token, bal) in &self.balances {
+                let mut overwrites = TokenProxyOverwriteFactory::new(*token, None);
                 overwrites.set_balance(*bal, address);
                 balance_overwrites.extend(overwrites.get_overwrites());
             }
@@ -507,16 +481,7 @@ where
         // for a contract we explicitly track balances for)
         for (contract, balances) in &self.contract_balances {
             for (token, balance) in balances {
-                let (slots, compiler) = self
-                    .token_storage_slots
-                    .get(token)
-                    .cloned()
-                    .unwrap_or((
-                        ERC20Slots::new(SlotId::from(0), SlotId::from(1)),
-                        ContractCompiler::Solidity,
-                    ));
-
-                let mut overwrites = ERC20OverwriteFactory::new(*token, slots, compiler);
+                let mut overwrites = TokenProxyOverwriteFactory::new(*token, None);
                 overwrites.set_balance(*balance, *contract);
                 balance_overwrites.extend(overwrites.get_overwrites());
             }
@@ -735,38 +700,49 @@ where
 
 #[cfg(test)]
 mod tests {
-    use alloy::primitives::B256;
-    use num_bigint::ToBigUint;
+    use std::default::Default;
+
     use num_traits::One;
     use revm::{
         primitives::KECCAK_EMPTY,
         state::{AccountInfo, Bytecode},
     };
     use serde_json::Value;
+    use tycho_client::feed::BlockHeader;
+    use tycho_common::models::Chain;
 
     use super::*;
     use crate::evm::{
         engine_db::{create_engine, SHARED_TYCHO_DB},
-        protocol::vm::{constants::BALANCER_V2, state_builder::EVMPoolStateBuilder},
+        protocol::vm::{
+            constants::{BALANCER_V2, ERC20_PROXY_BYTECODE},
+            state_builder::EVMPoolStateBuilder,
+        },
         simulation::SimulationEngine,
         tycho_models::AccountUpdate,
     };
 
     fn dai() -> Token {
         Token::new(
-            "0x6b175474e89094c44da98b954eedeac495271d0f",
-            18,
+            &Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
             "DAI",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         )
     }
 
     fn bal() -> Token {
         Token::new(
-            "0xba100000625a3754423978a60c9317c58a424e3d",
-            18,
+            &Bytes::from_str("0xba100000625a3754423978a60c9317c58a424e3d").unwrap(),
             "BAL",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         )
     }
 
@@ -790,11 +766,12 @@ mod tests {
 
         let block = BlockHeader {
             number: 20463609,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0x4315fd1afc25cc2ebc72029c543293f9fd833eeb305e2e30159459c827733b1b",
             )
             .unwrap(),
             timestamp: 1722875891,
+            ..Default::default()
         };
 
         for account in accounts.clone() {
@@ -816,13 +793,28 @@ mod tests {
         db.update(accounts, Some(block));
 
         let tokens = vec![dai().address, bal().address];
+        for token in &tokens {
+            engine.state.init_account(
+                bytes_to_address(token).unwrap(),
+                AccountInfo {
+                    balance: U256::from(0),
+                    nonce: 0,
+                    code_hash: KECCAK_EMPTY,
+                    code: Some(Bytecode::new_raw(ERC20_PROXY_BYTECODE.into())),
+                },
+                None,
+                true,
+            );
+        }
+
         let block = BlockHeader {
             number: 18485417,
-            hash: B256::from_str(
+            hash: Bytes::from_str(
                 "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
             )
             .expect("Invalid block hash"),
             timestamp: 0,
+            ..Default::default()
         };
 
         let pool_id: String =
@@ -930,7 +922,6 @@ mod tests {
             .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
         assert_eq!(result.amount, BigUint::from_str("137780051463393923").unwrap());
-        assert_eq!(result.gas, BigUint::from_str("102770").unwrap());
         assert_ne!(new_state.spot_prices, pool_state.spot_prices);
         assert!(pool_state
             .block_lasting_overwrites
@@ -951,7 +942,6 @@ mod tests {
             .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
         assert_eq!(result.amount, BigUint::from_str("137780051463393923").unwrap());
-        assert_eq!(result.gas, BigUint::from_str("102770").unwrap());
         assert_ne!(new_state.spot_prices, pool_state.spot_prices);
 
         let new_result = new_state
@@ -964,7 +954,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(new_result.amount, BigUint::from_str("136964651490065626").unwrap());
-        assert_eq!(new_result.gas, BigUint::from_str("70048").unwrap());
         assert_ne!(new_state_second_swap.spot_prices, new_state.spot_prices);
     }
 
@@ -982,7 +971,6 @@ mod tests {
             .downcast_ref::<EVMPoolState<PreCachedDB>>()
             .unwrap();
         assert_eq!(result.amount, BigUint::ZERO);
-        assert_eq!(result.gas, 68656.to_biguint().unwrap());
         assert_eq!(new_state.spot_prices, pool_state.spot_prices)
     }
 
@@ -1147,5 +1135,98 @@ mod tests {
 
         assert!(overwrites.contains_key(&dai_address));
         assert!(overwrites.contains_key(&bal_address));
+    }
+
+    #[tokio::test]
+    async fn test_balance_merging_during_delta_transition() {
+        use std::str::FromStr;
+
+        let mut pool_state = setup_pool_state().await;
+        let pool_id = pool_state.id.clone();
+
+        // Test the balance merging logic more directly
+        // Setup initial balances including DAI and BAL (which the pool already knows about)
+        let dai_addr = dai_addr();
+        let bal_addr = bal_addr();
+        let new_token = Address::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(); // WETH
+
+        // Clear and setup clean initial state
+        pool_state.balances.clear();
+        pool_state
+            .balances
+            .insert(dai_addr, U256::from(1000000000u64));
+        pool_state
+            .balances
+            .insert(bal_addr, U256::from(2000000000u64));
+        pool_state
+            .balances
+            .insert(new_token, U256::from(3000000000u64));
+
+        // Create tokens mapping including the existing DAI and BAL
+        let mut tokens = HashMap::new();
+        tokens.insert(dai().address.clone(), dai());
+        tokens.insert(bal().address.clone(), bal());
+
+        // Simulate a delta transition with only DAI balance update (missing BAL and new_token)
+        let mut component_balances = HashMap::new();
+        let mut delta_balances = HashMap::new();
+        // Only update DAI balance, leave others unchanged in delta
+        delta_balances.insert(dai().address.clone(), Bytes::from(vec![0x77, 0x35, 0x94, 0x00])); // 2000000000 (updated value)
+        component_balances.insert(pool_id.clone(), delta_balances);
+
+        let balances = Balances { component_balances, account_balances: HashMap::new() };
+
+        // Record initial balance count
+        let initial_balance_count = pool_state.balances.len();
+        assert_eq!(initial_balance_count, 3);
+
+        // Apply delta transition
+        pool_state
+            .update_pool_state(&tokens, &balances)
+            .unwrap();
+
+        // Verify that all 3 balances are preserved (BAL and new_token should still be there)
+        assert_eq!(
+            pool_state.balances.len(),
+            3,
+            "All balances should be preserved after delta transition"
+        );
+        assert!(
+            pool_state
+                .balances
+                .contains_key(&dai_addr),
+            "DAI balance should be present"
+        );
+        assert!(
+            pool_state
+                .balances
+                .contains_key(&bal_addr),
+            "BAL balance should be present"
+        );
+        assert!(
+            pool_state
+                .balances
+                .contains_key(&new_token),
+            "New token balance should be preserved from before delta"
+        );
+
+        // Verify that updated token (DAI) has new value
+        assert_eq!(
+            pool_state.balances[&dai_addr],
+            U256::from(2000000000u64),
+            "DAI balance should be updated"
+        );
+
+        // Verify that non-updated tokens retain their original values
+        assert_eq!(
+            pool_state.balances[&bal_addr],
+            U256::from(2000000000u64),
+            "BAL balance should be unchanged"
+        );
+        assert_eq!(
+            pool_state.balances[&new_token],
+            U256::from(3000000000u64),
+            "New token balance should be unchanged"
+        );
     }
 }

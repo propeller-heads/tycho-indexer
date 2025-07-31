@@ -9,20 +9,20 @@ use evm_ekubo_sdk::{
     quoting::types::{NodeKey, TokenAmount},
 };
 use num_bigint::BigUint;
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{
+    dto::ProtocolStateDelta,
+    models::token::Token,
+    simulation::{
+        errors::{SimulationError, TransitionError},
+        protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
+    },
+    Bytes,
+};
 
 use super::pool::{
     base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool, EkuboPool,
 };
-use crate::{
-    evm::protocol::{ekubo::pool::mev_resist::MevResistPool, u256_num::u256_to_f64},
-    models::{Balances, Token},
-    protocol::{
-        errors::{SimulationError, TransitionError},
-        models::GetAmountOutResult,
-        state::ProtocolSim,
-    },
-};
+use crate::evm::protocol::{ekubo::pool::mev_resist::MevResistPool, u256_num::u256_to_f64};
 
 #[enum_delegate::implement(EkuboPool)]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,7 +48,7 @@ impl ProtocolSim for EkuboState {
 
     fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
         let sqrt_ratio = self.sqrt_ratio();
-        let (base_decimals, quote_decimals) = (base.decimals, quote.decimals);
+        let (base_decimals, quote_decimals) = (base.decimals as usize, quote.decimals as usize);
 
         Ok(if base < quote {
             sqrt_price_q128_to_f64(sqrt_ratio, (base_decimals, quote_decimals))
@@ -171,7 +171,7 @@ mod tests {
             )
             .expect("executing transition");
 
-        assert_eq!(state, case.state);
+        assert_eq!(state, case.state_after_transition);
     }
 
     #[apply(all_cases)]
@@ -180,7 +180,7 @@ mod tests {
         let (amount_in, expected_out) = case.swap_token0;
 
         let res = case
-            .state
+            .state_after_transition
             .get_amount_out(amount_in, &token0, &token1)
             .expect("computing quote");
 
@@ -192,7 +192,7 @@ mod tests {
         use std::ops::Deref;
 
         let (token0, token1) = (case.token0(), case.token1());
-        let state = case.state;
+        let state = case.state_after_transition;
 
         let max_amount_in = state
             .get_limits(token0.address.deref().into(), token1.address.deref().into())

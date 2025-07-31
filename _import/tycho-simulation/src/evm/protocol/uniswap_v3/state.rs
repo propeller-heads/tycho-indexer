@@ -4,30 +4,30 @@ use alloy::primitives::{Sign, I256, U256};
 use num_bigint::BigUint;
 use num_traits::Zero;
 use tracing::trace;
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{
+    dto::ProtocolStateDelta,
+    models::token::Token,
+    simulation::{
+        errors::{SimulationError, TransitionError},
+        protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
+    },
+    Bytes,
+};
 
 use super::enums::FeeAmount;
-use crate::{
-    evm::protocol::{
-        safe_math::{safe_add_u256, safe_sub_u256},
-        u256_num::u256_to_biguint,
-        utils::uniswap::{
-            i24_be_bytes_to_i32, liquidity_math,
-            sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
-            swap_math,
-            tick_list::{TickInfo, TickList, TickListErrorKind},
-            tick_math::{
-                get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
-                MIN_SQRT_RATIO, MIN_TICK,
-            },
-            StepComputation, SwapResults, SwapState,
+use crate::evm::protocol::{
+    safe_math::{safe_add_u256, safe_sub_u256},
+    u256_num::u256_to_biguint,
+    utils::uniswap::{
+        i24_be_bytes_to_i32, liquidity_math,
+        sqrt_price_math::{get_amount0_delta, get_amount1_delta, sqrt_price_q96_to_f64},
+        swap_math,
+        tick_list::{TickInfo, TickList, TickListErrorKind},
+        tick_math::{
+            get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MAX_TICK,
+            MIN_SQRT_RATIO, MIN_TICK,
         },
-    },
-    models::{Balances, Token},
-    protocol::{
-        errors::{SimulationError, TransitionError},
-        models::GetAmountOutResult,
-        state::ProtocolSim,
+        StepComputation, SwapResults, SwapState,
     },
 };
 
@@ -225,10 +225,9 @@ impl ProtocolSim for UniswapV3State {
 
     fn spot_price(&self, a: &Token, b: &Token) -> Result<f64, SimulationError> {
         if a < b {
-            Ok(sqrt_price_q96_to_f64(self.sqrt_price, a.decimals as u32, b.decimals as u32))
+            Ok(sqrt_price_q96_to_f64(self.sqrt_price, a.decimals, b.decimals))
         } else {
-            Ok(1.0f64 /
-                sqrt_price_q96_to_f64(self.sqrt_price, b.decimals as u32, a.decimals as u32))
+            Ok(1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, b.decimals, a.decimals))
         }
     }
 
@@ -479,7 +478,7 @@ mod tests {
     use num_traits::FromPrimitive;
     use serde_json::Value;
     use tycho_client::feed::synchronizer::ComponentWithState;
-    use tycho_common::hex_bytes::Bytes;
+    use tycho_common::{hex_bytes::Bytes, models::Chain};
 
     use super::*;
     use crate::protocol::models::TryFromWithBlock;
@@ -487,16 +486,22 @@ mod tests {
     #[test]
     fn test_get_amount_out_full_range_liquidity() {
         let token_x = Token::new(
-            "0x6b175474e89094c44da98b954eedeac495271d0f",
-            18,
+            &Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
             "X",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
         let token_y = Token::new(
-            "0xf1ca9cb74685755965c7458528a36934df52a3ef",
-            18,
+            &Bytes::from_str("0xf1ca9cb74685755965c7458528a36934df52a3ef").unwrap(),
             "Y",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
 
         let pool = UniswapV3State::new(
@@ -525,16 +530,22 @@ mod tests {
     #[test]
     fn test_get_amount_out() {
         let wbtc = Token::new(
-            "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
-            8,
+            &Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap(),
             "WBTC",
-            10_000.to_biguint().unwrap(),
+            8,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
         let weth = Token::new(
-            "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-            18,
+            &Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
             "WETH",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
         let pool = UniswapV3State::new(
             377952820878029838,
@@ -622,16 +633,22 @@ mod tests {
     #[test]
     fn test_err_with_partial_trade() {
         let dai = Token::new(
-            "0x6b175474e89094c44da98b954eedeac495271d0f",
-            18,
+            &Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
             "DAI",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
         let usdc = Token::new(
-            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-            6,
+            &Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
             "USDC",
-            10_000.to_biguint().unwrap(),
+            6,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
         let pool = UniswapV3State::new(
             73015811375239994,
@@ -750,7 +767,7 @@ mod tests {
         let state: ComponentWithState = serde_json::from_value(data)
             .expect("Expected json to match ComponentWithState structure");
 
-        let usv3_state = UniswapV3State::try_from_with_block(
+        let usv3_state = UniswapV3State::try_from_with_header(
             state,
             Default::default(),
             &Default::default(),
@@ -760,16 +777,22 @@ mod tests {
         .unwrap();
 
         let t0 = Token::new(
-            "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-            8,
+            &Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap(),
             "WBTC",
-            10_000.to_biguint().unwrap(),
+            8,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
         let t1 = Token::new(
-            "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
-            8,
+            &Bytes::from_str("0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf").unwrap(),
             "cbBTC",
-            10_000.to_biguint().unwrap(),
+            8,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
 
         let res = usv3_state
@@ -790,9 +813,9 @@ mod tests {
 mod tests_forks {
     use std::{fs, path::Path, str::FromStr};
 
-    use num_bigint::ToBigUint;
     use serde_json::Value;
     use tycho_client::feed::synchronizer::ComponentWithState;
+    use tycho_common::models::Chain;
 
     use super::*;
     use crate::protocol::models::TryFromWithBlock;
@@ -808,7 +831,7 @@ mod tests_forks {
         let state: ComponentWithState = serde_json::from_value(data)
             .expect("Expected json to match ComponentWithState structure");
 
-        let pool_state = UniswapV3State::try_from_with_block(
+        let pool_state = UniswapV3State::try_from_with_header(
             state,
             Default::default(),
             &Default::default(),
@@ -818,16 +841,22 @@ mod tests_forks {
         .unwrap();
 
         let usdc = Token::new(
-            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            &Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+            "USDC",
             6,
-            "UDC",
-            10_000.to_biguint().unwrap(),
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
         let usdt = Token::new(
-            "0xdac17f958d2ee523a2206206994597c13d831ec7",
-            6,
+            &Bytes::from_str("0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap(),
             "USDT",
-            10_000.to_biguint().unwrap(),
+            6,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
 
         // Swap from https://etherscan.io/tx/0x641b1e98990ae49fd00157a29e1530ff6403706b2864aa52b1c30849ce020b2c#eventlog

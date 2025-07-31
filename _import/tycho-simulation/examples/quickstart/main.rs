@@ -27,8 +27,7 @@ use futures::StreamExt;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use tracing_subscriber::EnvFilter;
-use tycho_common::Bytes;
-pub mod utils;
+use tycho_common::{models::token::Token, Bytes};
 use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder},
@@ -52,13 +51,11 @@ use tycho_simulation::{
         },
         stream::ProtocolStreamBuilder,
     },
-    models::Token,
-    protocol::models::{BlockUpdate, ProtocolComponent},
+    protocol::models::{ProtocolComponent, Update},
     tycho_client::feed::component_tracker::ComponentFilter,
     tycho_common::models::Chain,
-    utils::load_all_tokens,
+    utils::{get_default_url, load_all_tokens},
 };
-use utils::get_default_url;
 
 const FAKE_PK: &str = "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234";
 
@@ -526,7 +523,7 @@ async fn main() {
 }
 
 fn get_best_swap(
-    message: BlockUpdate,
+    message: Update,
     pairs: &mut HashMap<String, ProtocolComponent>,
     amount_in: BigUint,
     sell_token: Token,
@@ -535,7 +532,7 @@ fn get_best_swap(
 ) -> Option<(String, BigUint)> {
     println!(
         "\n==================== Received block {block:?} ====================",
-        block = message.block_number
+        block = message.block_number_or_timestamp
     );
     for (id, comp) in message.new_pairs.iter() {
         pairs
@@ -609,7 +606,7 @@ fn create_solution(
     sell_amount: BigUint,
     user_address: Bytes,
     expected_amount: BigUint,
-) -> Solution {
+) -> Solution<'static> {
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = Swap::new(
         component,
@@ -618,6 +615,8 @@ fn create_solution(
         // Split defines the fraction of the amount to be swapped. A value of 0 indicates 100% of
         // the amount or the total remaining balance.
         0f64,
+        None,
+        None,
     );
 
     // Compute a minimum amount out

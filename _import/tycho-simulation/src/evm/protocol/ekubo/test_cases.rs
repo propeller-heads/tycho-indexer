@@ -4,10 +4,7 @@ use std::{
 };
 
 use evm_ekubo_sdk::{
-    math::{
-        tick::{MIN_SQRT_RATIO, MIN_TICK},
-        uint::U256,
-    },
+    math::{tick::MIN_SQRT_RATIO, uint::U256},
     quoting::{
         full_range_pool::FullRangePoolState,
         oracle_pool::OraclePoolState,
@@ -18,24 +15,25 @@ use evm_ekubo_sdk::{
 use num_bigint::BigUint;
 use rstest::*;
 use rstest_reuse::template;
-use tycho_common::{dto::ProtocolComponent, Bytes};
+use tycho_common::{
+    dto::ProtocolComponent,
+    models::{token::Token, Chain},
+    Bytes,
+};
 
 use super::{
     pool::{base::BasePool, EkuboPool},
     state::EkuboState,
 };
-use crate::{
-    evm::protocol::ekubo::pool::{
-        full_range::FullRangePool, mev_resist::MevResistPool, oracle::OraclePool, twamm::TwammPool,
-    },
-    models::Token,
+use crate::evm::protocol::ekubo::pool::{
+    full_range::FullRangePool, mev_resist::MevResistPool, oracle::OraclePool, twamm::TwammPool,
 };
 
 pub struct TestCase {
     pub component: ProtocolComponent,
 
     pub state_before_transition: EkuboState,
-    pub state: EkuboState,
+    pub state_after_transition: EkuboState,
 
     pub required_attributes: HashSet<String>,
     pub transition_attributes: HashMap<String, Bytes>,
@@ -49,28 +47,34 @@ impl TestCase {
     pub fn token0(&self) -> Token {
         Token {
             address: self
-                .state
+                .state_after_transition
                 .key()
                 .token0
                 .to_big_endian()
                 .into(),
             decimals: 18,
             symbol: "TOKEN0".to_string(),
-            gas: 0_u8.into(),
+            gas: vec![Some(0)],
+            chain: Chain::Ethereum,
+            tax: 0,
+            quality: 100,
         }
     }
 
     pub fn token1(&self) -> Token {
         Token {
             address: self
-                .state
+                .state_after_transition
                 .key()
                 .token1
                 .to_big_endian()
                 .into(),
             decimals: 18,
             symbol: "TOKEN1".to_string(),
-            gas: 0_u8.into(),
+            gas: vec![Some(0)],
+            chain: Chain::Ethereum,
+            tax: 0,
+            quality: 100,
         }
     }
 }
@@ -91,31 +95,6 @@ pub fn base() -> TestCase {
     const SQRT_RATIO_BETWEEN: U256 = U256([0, 0, 1, 0]);
     const LIQUIDITY_BETWEEN: u128 = LOWER_TICK.liquidity_delta as u128;
 
-    let transition_attributes = HashMap::from([
-        ("liquidity".to_string(), LIQUIDITY_BETWEEN.to_be_bytes().into()),
-        (
-            "sqrt_ratio".to_string(),
-            SQRT_RATIO_BETWEEN
-                .to_big_endian()
-                .into(),
-        ),
-        ("tick".to_string(), TICK_INDEX_BETWEEN.to_be_bytes().into()),
-        (
-            format!("ticks/{}", LOWER_TICK.index),
-            LOWER_TICK
-                .liquidity_delta
-                .to_be_bytes()
-                .into(),
-        ),
-        (
-            format!("ticks/{}", UPPER_TICK.index),
-            UPPER_TICK
-                .liquidity_delta
-                .to_be_bytes()
-                .into(),
-        ),
-    ]);
-
     TestCase {
         component: component([
             ("extension_id".to_string(), 1_i32.to_be_bytes().into()), // Base pool
@@ -133,9 +112,9 @@ pub fn base() -> TestCase {
             ),
         ]),
         state_before_transition: EkuboState::Base(
-            BasePool::new(POOL_KEY, vec![], MIN_SQRT_RATIO, 0, MIN_TICK).unwrap(),
+            BasePool::new(POOL_KEY, vec![], SQRT_RATIO_BETWEEN, 0, TICK_INDEX_BETWEEN).unwrap(),
         ),
-        state: EkuboState::Base(
+        state_after_transition: EkuboState::Base(
             BasePool::new(
                 POOL_KEY,
                 vec![LOWER_TICK, UPPER_TICK],
@@ -155,12 +134,37 @@ pub fn base() -> TestCase {
             "liquidity".to_string(),
             "sqrt_ratio".to_string(),
             "tick".to_string(),
-            format!("ticks/{}", LOWER_TICK.index),
-            format!("ticks/{}", UPPER_TICK.index),
         ]
         .into(),
-        transition_attributes: transition_attributes.clone(),
-        state_attributes: transition_attributes,
+        transition_attributes: [
+            ("liquidity".to_string(), LIQUIDITY_BETWEEN.to_be_bytes().into()),
+            (
+                format!("ticks/{}", LOWER_TICK.index),
+                LOWER_TICK
+                    .liquidity_delta
+                    .to_be_bytes()
+                    .into(),
+            ),
+            (
+                format!("ticks/{}", UPPER_TICK.index),
+                UPPER_TICK
+                    .liquidity_delta
+                    .to_be_bytes()
+                    .into(),
+            ),
+        ]
+        .into(),
+        state_attributes: [
+            ("liquidity".to_string(), 0_u128.to_be_bytes().into()),
+            (
+                "sqrt_ratio".to_string(),
+                SQRT_RATIO_BETWEEN
+                    .to_big_endian()
+                    .into(),
+            ),
+            ("tick".to_string(), TICK_INDEX_BETWEEN.to_be_bytes().into()),
+        ]
+        .into(),
         swap_token0: (100_u8.into(), 99_u8.into()),
         expected_limit_token0: 497_u16.into(),
     }
@@ -176,8 +180,6 @@ pub fn full_range() -> TestCase {
 
     const SQRT_RATIO: U256 = U256([0, 0, 1, 0]);
     const LIQUIDITY: u128 = 100_000_000;
-
-    let transition_attributes = [("sqrt_ratio".to_string(), SQRT_RATIO.to_big_endian().into())];
 
     TestCase {
         component: component([
@@ -202,7 +204,7 @@ pub fn full_range() -> TestCase {
             )
             .unwrap(),
         ),
-        state: EkuboState::FullRange(
+        state_after_transition: EkuboState::FullRange(
             FullRangePool::new(
                 POOL_KEY,
                 FullRangePoolState { sqrt_ratio: SQRT_RATIO, liquidity: LIQUIDITY },
@@ -220,11 +222,13 @@ pub fn full_range() -> TestCase {
             "sqrt_ratio".to_string(),
         ]
         .into(),
-        transition_attributes: transition_attributes.clone().into(),
-        state_attributes: transition_attributes
-            .into_iter()
-            .chain([("liquidity".to_string(), LIQUIDITY.to_be_bytes().into())])
-            .collect(),
+        transition_attributes: [("sqrt_ratio".to_string(), SQRT_RATIO.to_big_endian().into())]
+            .into(),
+        state_attributes: [
+            ("sqrt_ratio".to_string(), MIN_SQRT_RATIO.to_big_endian().into()),
+            ("liquidity".to_string(), LIQUIDITY.to_be_bytes().into()),
+        ]
+        .into(),
         swap_token0: (100_u8.into(), 99_u8.into()),
         expected_limit_token0: 1844629699405272373941016055_u128.into(),
     }
@@ -239,11 +243,6 @@ pub fn oracle() -> TestCase {
 
     const SQRT_RATIO: U256 = U256([0, 0, 1, 0]);
     const LIQUIDITY: u128 = 100_000_000;
-
-    let transition_attributes = HashMap::from([
-        ("sqrt_ratio".to_string(), SQRT_RATIO.to_big_endian().into()),
-        ("liquidity".to_string(), LIQUIDITY.to_be_bytes().into()),
-    ]);
 
     TestCase {
         component: component([
@@ -274,7 +273,7 @@ pub fn oracle() -> TestCase {
             )
             .unwrap(),
         ),
-        state: EkuboState::Oracle(
+        state_after_transition: EkuboState::Oracle(
             OraclePool::new(
                 &POOL_KEY,
                 OraclePoolState {
@@ -298,8 +297,16 @@ pub fn oracle() -> TestCase {
             "sqrt_ratio".to_string(),
         ]
         .into(),
-        transition_attributes: transition_attributes.clone(),
-        state_attributes: transition_attributes,
+        transition_attributes: [
+            ("sqrt_ratio".to_string(), SQRT_RATIO.to_big_endian().into()),
+            ("liquidity".to_string(), LIQUIDITY.to_be_bytes().into()),
+        ]
+        .into(),
+        state_attributes: [
+            ("sqrt_ratio".to_string(), MIN_SQRT_RATIO.to_big_endian().into()),
+            ("liquidity".to_string(), 0_u128.to_be_bytes().into()),
+        ]
+        .into(),
         swap_token0: (100_u8.into(), 99_u8.into()),
         expected_limit_token0: 1844629699405272373941016055_u128.into(),
     }
@@ -320,28 +327,6 @@ pub fn twamm() -> TestCase {
     const TOKEN0_SALE_RATE: u128 = 10 << 32;
     const TOKEN1_SALE_RATE: u128 = TOKEN0_SALE_RATE / 2;
     const ORDER_END_TIME: u64 = TEST_TIMESTAMP;
-
-    let transition_attributes = HashMap::from([
-        ("sqrt_ratio".to_string(), SQRT_RATIO.to_big_endian().into()),
-        ("liquidity".to_string(), LIQUIDITY.to_be_bytes().into()),
-        ("token0_sale_rate".to_string(), TOKEN0_SALE_RATE.to_be_bytes().into()),
-        ("token1_sale_rate".to_string(), TOKEN1_SALE_RATE.to_be_bytes().into()),
-        ("last_execution_time".to_string(), LAST_EXECUTION_TIME.to_be_bytes().into()),
-        (
-            format!("orders/token0/{ORDER_END_TIME}"),
-            (TOKEN0_SALE_RATE as i128)
-                .neg()
-                .to_be_bytes()
-                .into(),
-        ),
-        (
-            format!("orders/token1/{ORDER_END_TIME}"),
-            (TOKEN1_SALE_RATE as i128)
-                .neg()
-                .to_be_bytes()
-                .into(),
-        ),
-    ]);
 
     TestCase {
         component: component([
@@ -375,7 +360,7 @@ pub fn twamm() -> TestCase {
             )
             .unwrap(),
         ),
-        state: EkuboState::Twamm(
+        state_after_transition: EkuboState::Twamm(
             TwammPool::new(
                 &POOL_KEY,
                 TwammPoolState {
@@ -407,12 +392,38 @@ pub fn twamm() -> TestCase {
             "last_execution_time".to_string(),
             "token0_sale_rate".to_string(),
             "token1_sale_rate".to_string(),
-            format!("orders/token0/{ORDER_END_TIME}"),
-            format!("orders/token1/{ORDER_END_TIME}"),
         ]
         .into(),
-        transition_attributes: transition_attributes.clone(),
-        state_attributes: transition_attributes,
+        transition_attributes: [
+            ("sqrt_ratio".to_string(), SQRT_RATIO.to_big_endian().into()),
+            ("liquidity".to_string(), LIQUIDITY.to_be_bytes().into()),
+            ("token0_sale_rate".to_string(), TOKEN0_SALE_RATE.to_be_bytes().into()),
+            ("token1_sale_rate".to_string(), TOKEN1_SALE_RATE.to_be_bytes().into()),
+            ("last_execution_time".to_string(), LAST_EXECUTION_TIME.to_be_bytes().into()),
+            (
+                format!("orders/token0/{ORDER_END_TIME}"),
+                (TOKEN0_SALE_RATE as i128)
+                    .neg()
+                    .to_be_bytes()
+                    .into(),
+            ),
+            (
+                format!("orders/token1/{ORDER_END_TIME}"),
+                (TOKEN1_SALE_RATE as i128)
+                    .neg()
+                    .to_be_bytes()
+                    .into(),
+            ),
+        ]
+        .into(),
+        state_attributes: [
+            ("sqrt_ratio".to_string(), MIN_SQRT_RATIO.to_big_endian().into()),
+            ("liquidity".to_string(), 0_u128.to_be_bytes().into()),
+            ("token0_sale_rate".to_string(), 0_u128.to_be_bytes().into()),
+            ("token1_sale_rate".to_string(), 0_u128.to_be_bytes().into()),
+            ("last_execution_time".to_string(), 0_u64.to_be_bytes().into()),
+        ]
+        .into(),
         swap_token0: (100_000_000u64.into(), 49996287_u64.into()),
         expected_limit_token0: 1844629699405272373941011106_u128.into(),
     }
@@ -434,31 +445,6 @@ pub fn mev_resist() -> TestCase {
     const SQRT_RATIO_BETWEEN: U256 = U256([0, 0, 1, 0]);
     const LIQUIDITY_BETWEEN: u128 = LOWER_TICK.liquidity_delta as u128;
 
-    let transition_attributes = HashMap::from([
-        ("liquidity".to_string(), LIQUIDITY_BETWEEN.to_be_bytes().into()),
-        (
-            "sqrt_ratio".to_string(),
-            SQRT_RATIO_BETWEEN
-                .to_big_endian()
-                .into(),
-        ),
-        ("tick".to_string(), TICK_INDEX_BETWEEN.to_be_bytes().into()),
-        (
-            format!("ticks/{}", LOWER_TICK.index),
-            LOWER_TICK
-                .liquidity_delta
-                .to_be_bytes()
-                .into(),
-        ),
-        (
-            format!("ticks/{}", UPPER_TICK.index),
-            UPPER_TICK
-                .liquidity_delta
-                .to_be_bytes()
-                .into(),
-        ),
-    ]);
-
     TestCase {
         component: component([
             ("extension_id".to_string(), 4_i32.to_be_bytes().into()), // MEV-resist pool
@@ -476,9 +462,10 @@ pub fn mev_resist() -> TestCase {
             ),
         ]),
         state_before_transition: EkuboState::MevResist(
-            MevResistPool::new(POOL_KEY, vec![], MIN_SQRT_RATIO, 0, MIN_TICK).unwrap(),
+            MevResistPool::new(POOL_KEY, vec![], SQRT_RATIO_BETWEEN, 0, TICK_INDEX_BETWEEN)
+                .unwrap(),
         ),
-        state: EkuboState::MevResist(
+        state_after_transition: EkuboState::MevResist(
             MevResistPool::new(
                 POOL_KEY,
                 vec![LOWER_TICK, UPPER_TICK],
@@ -498,12 +485,37 @@ pub fn mev_resist() -> TestCase {
             "liquidity".to_string(),
             "sqrt_ratio".to_string(),
             "tick".to_string(),
-            format!("ticks/{}", LOWER_TICK.index),
-            format!("ticks/{}", UPPER_TICK.index),
         ]
         .into(),
-        transition_attributes: transition_attributes.clone(),
-        state_attributes: transition_attributes,
+        transition_attributes: [
+            ("liquidity".to_string(), LIQUIDITY_BETWEEN.to_be_bytes().into()),
+            (
+                format!("ticks/{}", LOWER_TICK.index),
+                LOWER_TICK
+                    .liquidity_delta
+                    .to_be_bytes()
+                    .into(),
+            ),
+            (
+                format!("ticks/{}", UPPER_TICK.index),
+                UPPER_TICK
+                    .liquidity_delta
+                    .to_be_bytes()
+                    .into(),
+            ),
+        ]
+        .into(),
+        state_attributes: [
+            ("liquidity".to_string(), 0_u128.to_be_bytes().into()),
+            (
+                "sqrt_ratio".to_string(),
+                SQRT_RATIO_BETWEEN
+                    .to_big_endian()
+                    .into(),
+            ),
+            ("tick".to_string(), TICK_INDEX_BETWEEN.to_be_bytes().into()),
+        ]
+        .into(),
         swap_token0: (100_u8.into(), 87_u8.into()),
         expected_limit_token0: 553_u16.into(),
     }

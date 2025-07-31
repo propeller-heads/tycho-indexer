@@ -5,7 +5,15 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use revm::primitives::I128;
 use tracing::trace;
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
+use tycho_common::{
+    dto::ProtocolStateDelta,
+    models::token::Token,
+    simulation::{
+        errors::{SimulationError, TransitionError},
+        protocol_sim::{Balances, GetAmountOutResult, ProtocolSim},
+    },
+    Bytes,
+};
 
 use super::hooks::utils::{has_permission, HookOptions};
 use crate::{
@@ -34,12 +42,6 @@ use crate::{
             },
             vm::constants::EXTERNAL_ACCOUNT,
         },
-    },
-    models::{Balances, Token},
-    protocol::{
-        errors::{SimulationError, TransitionError},
-        models::GetAmountOutResult,
-        state::ProtocolSim,
     },
 };
 
@@ -302,14 +304,9 @@ impl ProtocolSim for UniswapV4State {
         }
 
         if base < quote {
-            Ok(sqrt_price_q96_to_f64(self.sqrt_price, base.decimals as u32, quote.decimals as u32))
+            Ok(sqrt_price_q96_to_f64(self.sqrt_price, base.decimals, quote.decimals))
         } else {
-            Ok(1.0f64 /
-                sqrt_price_q96_to_f64(
-                    self.sqrt_price,
-                    quote.decimals as u32,
-                    base.decimals as u32,
-                ))
+            Ok(1.0f64 / sqrt_price_q96_to_f64(self.sqrt_price, quote.decimals, base.decimals))
         }
     }
 
@@ -680,6 +677,7 @@ mod tests {
     use num_traits::FromPrimitive;
     use serde_json::Value;
     use tycho_client::feed::{synchronizer::ComponentWithState, Header};
+    use tycho_common::models::Chain;
 
     use super::*;
     use crate::{
@@ -783,7 +781,7 @@ mod tests {
             revert: false,
         };
 
-        let usv4_state = UniswapV4State::try_from_with_block(
+        let usv4_state = UniswapV4State::try_from_with_header(
             state,
             block,
             &Default::default(),
@@ -793,16 +791,22 @@ mod tests {
         .unwrap();
 
         let t0 = Token::new(
-            "0x647e32181a64f4ffd4f0b0b4b052ec05b277729c",
-            18,
+            &Bytes::from_str("0x647e32181a64f4ffd4f0b0b4b052ec05b277729c").unwrap(),
             "T0",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
         let t1 = Token::new(
-            "0xe390a1c311b26f14ed0d55d3b0261c2320d15ca5",
-            18,
+            &Bytes::from_str("0xe390a1c311b26f14ed0d55d3b0261c2320d15ca5").unwrap(),
             "T0",
-            10_000.to_biguint().unwrap(),
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
 
         let res = usv4_state
@@ -857,7 +861,7 @@ mod tests {
         let state: ComponentWithState = serde_json::from_value(data)
             .expect("Expected json to match ComponentWithState structure");
 
-        let usv4_state = UniswapV4State::try_from_with_block(
+        let usv4_state = UniswapV4State::try_from_with_header(
             state,
             block,
             &Default::default(),
@@ -867,16 +871,22 @@ mod tests {
         .unwrap();
 
         let t0 = Token::new(
-            "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-            8,
+            &Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap(),
             "WBTC",
-            10_000.to_biguint().unwrap(),
+            8,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
         let t1 = Token::new(
-            "0xdac17f958d2ee523a2206206994597c13d831ec7",
-            6,
+            &Bytes::from_str("0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap(),
             "USDT",
-            10_000.to_biguint().unwrap(),
+            6,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
         );
 
         let res = usv4_state

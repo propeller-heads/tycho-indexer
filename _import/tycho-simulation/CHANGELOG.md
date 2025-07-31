@@ -1,3 +1,291 @@
+## [0.140.0](https://github.com/propeller-heads/tycho-simulation/compare/0.139.0...0.140.0) (2025-07-29)
+
+
+### Features
+
+* **Bebop:** Quickstart example ([a6952d5](https://github.com/propeller-heads/tycho-simulation/commit/a6952d579d68d2b5bcb44f21bbf1848d271d6390))
+* Builder pattern for BebopClient ([5ab147d](https://github.com/propeller-heads/tycho-simulation/commit/5ab147dd73efca936bef75459a5f941019199ea7))
+* Take Bytes as init to BebopClient ([1316cd4](https://github.com/propeller-heads/tycho-simulation/commit/1316cd47916ece596282fbab6f7697ee658ee5f9))
+* Take tokens in BebopClient instead of pairs ([96cc894](https://github.com/propeller-heads/tycho-simulation/commit/96cc894a01745255e0848272ef6077c659fb280d))
+
+
+### Bug Fixes
+
+* Fix BebopClientBuilder example ([ad75f99](https://github.com/propeller-heads/tycho-simulation/commit/ad75f994493a545e4f22974796c18ee92fd6df72))
+* Take models::Chain in BebopClient ([924d9ed](https://github.com/propeller-heads/tycho-simulation/commit/924d9edba67262a56848482ff8d2f766b6eb4946))
+
+## [0.139.0](https://github.com/propeller-heads/tycho-simulation/compare/0.138.0...0.139.0) (2025-07-29)
+
+
+### Features
+
+* Change return of as_indicatively_priced to Result ([6512830](https://github.com/propeller-heads/tycho-simulation/commit/651283086e010dfe0ad12e4cb08e8bf679280852))
+
+## [0.138.0](https://github.com/propeller-heads/tycho-simulation/compare/0.137.0...0.138.0) (2025-07-29)
+
+
+### Features
+
+* Implement as_indicatively_priced for BebopState ([10f8008](https://github.com/propeller-heads/tycho-simulation/commit/10f8008ddabf3b5159114ef24443dd20310b7f28))
+* Implement IndicativelyPriced for BebopState ([b182376](https://github.com/propeller-heads/tycho-simulation/commit/b1823769bcc8c35c71611861731e4312c1f2775b))
+* Update tycho-common: IndicativelyPriced is ProtocolSim super trait ([dd9fac4](https://github.com/propeller-heads/tycho-simulation/commit/dd9fac4561d7e7a7cdbf8835871c8178a5a9c0ff))
+* Upgrade tycho-common and tycho-execution ([86a5536](https://github.com/propeller-heads/tycho-simulation/commit/86a55360a05b7a3dde1cf42d4c4ae0511b1da1f1))
+
+## [0.137.0](https://github.com/propeller-heads/tycho-simulation/compare/0.136.0...0.137.0) (2025-07-28)
+
+
+### Features
+
+* **Bebop:** Use protobuf for ws connection ([5e049cd](https://github.com/propeller-heads/tycho-simulation/commit/5e049cd6cf0683f8792e187bc7d697b297e66143))
+
+## [0.136.0](https://github.com/propeller-heads/tycho-simulation/compare/0.135.0...0.136.0) (2025-07-25)
+
+
+### Features
+
+* Update foundry ([0f0013b](https://github.com/propeller-heads/tycho-simulation/commit/0f0013bff8400d021ae60a0a3c9c2f9bbc91613f))
+* Update revm to 27.0.3 ([090406b](https://github.com/propeller-heads/tycho-simulation/commit/090406b8c4898b7a1396fa7e1171c7df1c5bb063))
+* Update revm to 27.0.3 in tycho_simulation_py ([626f118](https://github.com/propeller-heads/tycho-simulation/commit/626f118ef2b1d034f97ad0014aad8da58aee41b0))
+* Update tycho common and client ([f9db0dc](https://github.com/propeller-heads/tycho-simulation/commit/f9db0dcec408a9a6b1b86a0cf207c8f99cb55718))
+* Update tycho common and client ([e80551d](https://github.com/propeller-heads/tycho-simulation/commit/e80551d1fdf4e0ad3d286d8f013aa877ada2e6b0))
+* Update tycho common and client ([7768648](https://github.com/propeller-heads/tycho-simulation/commit/77686487a3bad77c99c2c5413712f7e9b6359a73))
+
+## [0.135.0](https://github.com/propeller-heads/tycho-simulation/compare/0.134.0...0.135.0) (2025-07-24)
+
+
+### Features
+
+* **Bebop:** Implement request_binding_quote (WIP) ([902cdbd](https://github.com/propeller-heads/tycho-simulation/commit/902cdbdb2c6cc88799b870607061a01ddb2a3df9))
+* Create/assert SignedQuote from raw quote obj ([705232b](https://github.com/propeller-heads/tycho-simulation/commit/705232b47c525fdf3b0c90f5a40e308d47762707))
+
+
+### Bug Fixes
+
+* Add partial_fill_offset to quote attributes ([326133e](https://github.com/propeller-heads/tycho-simulation/commit/326133e4a3a36684bb9e6674edbd82f8ea3d2e85))
+* After rebase fixes ([174dcbf](https://github.com/propeller-heads/tycho-simulation/commit/174dcbf946b3167bcf6ae2d23e054ac3311a5008))
+* Define Bebop urls at new() ([5c81364](https://github.com/propeller-heads/tycho-simulation/commit/5c813648ec58687169ee6e332b87bfd7b90a6ef6))
+
+## [0.134.0](https://github.com/propeller-heads/tycho-simulation/compare/0.133.1...0.134.0) (2025-07-22)
+
+
+### Features
+
+* Bebop Decoder ([13506c0](https://github.com/propeller-heads/tycho-simulation/commit/13506c01dcaa770b6bd89498e8489c61961a08b7))
+* Rename try_from_with_block -> try_from_with_header ([01d3241](https://github.com/propeller-heads/tycho-simulation/commit/01d32411a4250d3061dc8b3e96958babf98b8b8f))
+
+
+### Bug Fixes
+
+* Don't error if bids/asks not found ([43b782c](https://github.com/propeller-heads/tycho-simulation/commit/43b782ce22c8c40728af878d98a1fb80d5dfb3f1))
+
+## [0.133.1](https://github.com/propeller-heads/tycho-simulation/compare/0.133.0...0.133.1) (2025-07-22)
+
+
+### Bug Fixes
+
+* correctly insert balances updates ([4c3ce82](https://github.com/propeller-heads/tycho-simulation/commit/4c3ce8203922efd7c7dd7d72a67a0d8b76a6240c))
+
+## [0.133.0](https://github.com/propeller-heads/tycho-simulation/compare/0.132.0...0.133.0) (2025-07-22)
+
+
+### Features
+
+* **Bebop:** Implement get_amount_out ([660fbe4](https://github.com/propeller-heads/tycho-simulation/commit/660fbe4521be933b8d68df211b72d2b09a259588))
+* **Bebop:** Return errors nicely in get_amount_out ([a28bc58](https://github.com/propeller-heads/tycho-simulation/commit/a28bc586a157c3906724223d157ac7c4431307bd))
+* **Bebop:** Roughly estimate gas for a Bebop swap ([a0a9354](https://github.com/propeller-heads/tycho-simulation/commit/a0a93542a8925208eb129e6ae396b17f9bb9f649))
+
+## [0.132.0](https://github.com/propeller-heads/tycho-simulation/compare/0.131.0...0.132.0) (2025-07-22)
+
+
+### Features
+
+* (WIP) ProtocolSim.get_limits implementation ([d72b482](https://github.com/propeller-heads/tycho-simulation/commit/d72b482fa35ac37e436079ed412b6ebc50623df3))
+* ProtocolSim.spot_price implementation ([dac3349](https://github.com/propeller-heads/tycho-simulation/commit/dac3349409eb7c57ff0f41fc84fd3e5e747c247f))
+* Use BebopPriceData in BebopState ([fe6ed10](https://github.com/propeller-heads/tycho-simulation/commit/fe6ed109a546f707eda4ae257b8d72394ee32675))
+
+
+### Bug Fixes
+
+* Bebop limit calculation ([b698338](https://github.com/propeller-heads/tycho-simulation/commit/b698338c83eae8a81308068385292b808e5d7b4c))
+* Make last_update_ts public ([85d8130](https://github.com/propeller-heads/tycho-simulation/commit/85d8130bf5fef418a5dcae69eb73daf3e2e5cc5c))
+
+## [0.131.0](https://github.com/propeller-heads/tycho-simulation/compare/0.130.0...0.131.0) (2025-07-19)
+
+
+### Features
+
+* empty commit to upgrade version ([d7bdaff](https://github.com/propeller-heads/tycho-simulation/commit/d7bdaff460c1e9fc13444092289520affad36e4c))
+
+## [0.130.0](https://github.com/propeller-heads/tycho-simulation/compare/0.129.0...0.130.0) (2025-07-18)
+
+
+### Features
+
+* Add BebopState skeleton ([a87cbcb](https://github.com/propeller-heads/tycho-simulation/commit/a87cbcb18483d9b7d663732e2b9b6a7bd4a9a27e))
+
+
+### Bug Fixes
+
+* After rebase with main fixes ([5c8324f](https://github.com/propeller-heads/tycho-simulation/commit/5c8324fddb7f1742078c724f61b8ce961b81e413))
+
+## [0.129.0](https://github.com/propeller-heads/tycho-simulation/compare/0.128.2...0.129.0) (2025-07-18)
+
+
+### Features
+
+* (WIP) BebopClient stream method ([9bf905f](https://github.com/propeller-heads/tycho-simulation/commit/9bf905f2526b77054b7e09f8adb37d278e58bb41))
+* Error handling + retry if connection closed ([52f4162](https://github.com/propeller-heads/tycho-simulation/commit/52f41627dbd614b4e2e3390dda62b5c1e8fbe771))
+* Generalize BebopClient to all chains ([f1f55f2](https://github.com/propeller-heads/tycho-simulation/commit/f1f55f23f78fad4456a8b90125af98434e3d100b))
+* pass ws user and key to BebopClient init ([9fa26fb](https://github.com/propeller-heads/tycho-simulation/commit/9fa26fba6c9b83b97c7ed23aedeefca95e802462))
+* Prepare methods for getting mid price in usdc ([9866c45](https://github.com/propeller-heads/tycho-simulation/commit/9866c4510a27e49e2ae93927d8fadd6fda8b4eac))
+
+
+### Bug Fixes
+
+* Checksum token addresses ([afd8fdb](https://github.com/propeller-heads/tycho-simulation/commit/afd8fdb7833cf629594ca13929047fda11a2a5b9))
+* Don't return none for price if insufficient liquidity ([3b9bea8](https://github.com/propeller-heads/tycho-simulation/commit/3b9bea833d57eae76b84910e8a5410e2d03467c5))
+* Emit one message per bebop message, not per component ([7293c6a](https://github.com/propeller-heads/tycho-simulation/commit/7293c6a705a983088b51de7ee8f281c9b7e2e755))
+* Normalize TVL calculation ([33746fc](https://github.com/propeller-heads/tycho-simulation/commit/33746fc3156461b4c57b826a114508a625597331))
+* Return FatalError if connection fails ([03ad05b](https://github.com/propeller-heads/tycho-simulation/commit/03ad05b883ce7fb768d2157c4caaa70be238e793))
+* Use base token for size in mid price calc ([e9a5cec](https://github.com/propeller-heads/tycho-simulation/commit/e9a5cece4c34461d825d7957a3764515d734aea8))
+* various minor fixes... ([7b42160](https://github.com/propeller-heads/tycho-simulation/commit/7b4216097e749e39ef3a6adf108f9242a9781ba4))
+* various small issues... ([6da4e14](https://github.com/propeller-heads/tycho-simulation/commit/6da4e145d70fdfa4f3602751cd4ec84079d4207e))
+
+## [0.128.2](https://github.com/propeller-heads/tycho-simulation/compare/0.128.1...0.128.2) (2025-07-18)
+
+
+### Bug Fixes
+
+* Handle delta state update errors on decoder ([6ac34da](https://github.com/propeller-heads/tycho-simulation/commit/6ac34da5b539133e8763b227813e5438a84ba407))
+
+## [0.128.1](https://github.com/propeller-heads/tycho-simulation/compare/0.128.0...0.128.1) (2025-07-17)
+
+
+### Bug Fixes
+
+* Add a merge method to Update ([500e757](https://github.com/propeller-heads/tycho-simulation/commit/500e757cf6726f015e28646039f3774677b5104d))
+
+## [0.128.0](https://github.com/propeller-heads/tycho-simulation/compare/0.127.1...0.128.0) (2025-07-17)
+
+
+### Features
+
+* Generalise TychoStreamDecoder to take a HeaderLike trait impl ([2a3125a](https://github.com/propeller-heads/tycho-simulation/commit/2a3125aac56dd5cd8b09b6f3a299b033f88a2504))
+* Implement error handling in RFQStreamBuilder anc change RFQClient ([9cc115c](https://github.com/propeller-heads/tycho-simulation/commit/9cc115cfaffad1f881743324c2c4e30d069e1d1d))
+* Implement RFQStreamBuilder with a mocked test ([05f31d9](https://github.com/propeller-heads/tycho-simulation/commit/05f31d9decc1d4b2f3e229c47ce4086ea2432c93))
+* Upgrade tycho-common ([647954d](https://github.com/propeller-heads/tycho-simulation/commit/647954d8bc9ef8d1f2704b56d541e5d9df43b8af))
+
+## [0.127.1](https://github.com/propeller-heads/tycho-simulation/compare/0.127.0...0.127.1) (2025-07-16)
+
+
+### Bug Fixes
+
+* update alloy version to `1.0.22` ([0850d74](https://github.com/propeller-heads/tycho-simulation/commit/0850d743409867e858f6f8d90ce29c9596cacdd2))
+
+## [0.127.0](https://github.com/propeller-heads/tycho-simulation/compare/0.126.0...0.127.0) (2025-07-14)
+
+
+### Features
+
+* Add tycho-rfq crate ([9af9800](https://github.com/propeller-heads/tycho-simulation/commit/9af9800639747cd99067d61b9376e8eb2eafa17d))
+* Create a feature gate rfq ([3fdec2e](https://github.com/propeller-heads/tycho-simulation/commit/3fdec2eeb8261c70519efd28ace7ae86711d12e3))
+
+
+### Bug Fixes
+
+* Convert main.rs into a lib.rs ([4350197](https://github.com/propeller-heads/tycho-simulation/commit/4350197be015aaa3e9e20d9f566116aa5e0de589))
+
+## [0.126.0](https://github.com/propeller-heads/tycho-simulation/compare/0.125.0...0.126.0) (2025-07-14)
+
+
+### Features
+
+* Rename BlockUpdate to Update and block_number to marker ([09df270](https://github.com/propeller-heads/tycho-simulation/commit/09df270f669ae96a1f25343523fa0cd9957cf6e7))
+
+## [0.125.0](https://github.com/propeller-heads/tycho-simulation/compare/0.124.0...0.125.0) (2025-07-14)
+
+
+### Features
+
+* Refactor CPMMProtocol trait into util functions ([3d290d4](https://github.com/propeller-heads/tycho-simulation/commit/3d290d4f835a36fcfc114bd115e0c2c2b98bedb4))
+* Rename Header to BlockHeader from tycho-common ([88ae9fe](https://github.com/propeller-heads/tycho-simulation/commit/88ae9fe4965f706902f9eb4e359baac8180056df))
+* upgrade tycho-common and tycho-client ([33376d7](https://github.com/propeller-heads/tycho-simulation/commit/33376d7df690a942a79e74df3cfc63fb5e691b89))
+* Use ProtocolSim from tycho-common ([a1b5242](https://github.com/propeller-heads/tycho-simulation/commit/a1b52427e00d7dbc623afc69bbcdcc7aecc5bce6))
+
+## [0.124.0](https://github.com/propeller-heads/tycho-simulation/compare/0.123.0...0.124.0) (2025-07-11)
+
+
+### Features
+
+* Update tycho-common and tycho-execution ([3c8f649](https://github.com/propeller-heads/tycho-simulation/commit/3c8f649bdfebea6fbaa8a2d99298bcc712dd51eb))
+* Use Block from tycho common instead of redefining it ([d2e27d9](https://github.com/propeller-heads/tycho-simulation/commit/d2e27d9205bcb4a185b76c4ed676d667a57a9e53))
+* Use ContractId from tycho-common instead of redefining ([3edac06](https://github.com/propeller-heads/tycho-simulation/commit/3edac06939e30c12a2ccfba74f767a9c24236d3f))
+* Use ExtractorIdentity from tycho common instead of redefining it ([6f70b01](https://github.com/propeller-heads/tycho-simulation/commit/6f70b019121698f17ab765a1ceacb8697224ebb8))
+* Use Header from tycho-client instead of redefining a BlockHeader ([ce7d353](https://github.com/propeller-heads/tycho-simulation/commit/ce7d353a0f0307e8a5c26322d0483ca1eaccdb50))
+* Use Token from tycho-common ([1e89048](https://github.com/propeller-heads/tycho-simulation/commit/1e890481be05340c2dc1b6aad9fc724edfe0d1a7))
+
+
+### Bug Fixes
+
+* After merge with main fixes ([f28f22a](https://github.com/propeller-heads/tycho-simulation/commit/f28f22a057864b3776280472b7f8c22683fc6c77))
+
+## [0.123.0](https://github.com/propeller-heads/tycho-simulation/compare/0.122.0...0.123.0) (2025-07-10)
+
+
+### Features
+
+* create default BalancerV2 filter ([0c448cc](https://github.com/propeller-heads/tycho-simulation/commit/0c448cc9726529c6a2f46728da2f6f627e8dd66a))
+
+## [0.122.0](https://github.com/propeller-heads/tycho-simulation/compare/0.121.0...0.122.0) (2025-07-10)
+
+
+### Features
+
+* Add TokenProxyOverwriteFactory ([d95cf81](https://github.com/propeller-heads/tycho-simulation/commit/d95cf81224200572a801ea2832936686fd5987bc))
+* move token contract initialization to decoder ([27c00ea](https://github.com/propeller-heads/tycho-simulation/commit/27c00ea59d8dde096afd5d28ec527a9d03acd608))
+* remove deprecated ERC20OverwriteFactory ([b91f377](https://github.com/propeller-heads/tycho-simulation/commit/b91f377cb8522d45256bab38601b51aac8044682))
+
+
+### Bug Fixes
+
+* add original token slots to proxy token account ([fee1aaa](https://github.com/propeller-heads/tycho-simulation/commit/fee1aaad1d71db545705c8c1c9453df01894da37))
+* allow accounts to be loaded on the engine without native balances ([76cb251](https://github.com/propeller-heads/tycho-simulation/commit/76cb251e651224eadd308eaf77c11610bd7391b0))
+* fix state guard write lock scopes ([74eb6cd](https://github.com/propeller-heads/tycho-simulation/commit/74eb6cd5c270d33001036d8788b5f18ed3e2d6db))
+* Fix token AccountUpdate creation when processing deltas ([52eb686](https://github.com/propeller-heads/tycho-simulation/commit/52eb686e2801a7b0b450c067dfe5d04afcc67485))
+* initialize token accounts when creating a new pool state ([7c2dcea](https://github.com/propeller-heads/tycho-simulation/commit/7c2dcea7fb1bd3a6a51fa1a5521a9355ef01bfcf))
+* rollback CurveSwapAdapter ([a65dad4](https://github.com/propeller-heads/tycho-simulation/commit/a65dad440a9236b11e458ec161666ba02b942020))
+
+## [0.121.0](https://github.com/propeller-heads/tycho-simulation/compare/0.120.0...0.121.0) (2025-07-09)
+
+
+### Features
+
+* add new balancer v2 filter ([42aaee5](https://github.com/propeller-heads/tycho-simulation/commit/42aaee5bd1f8ec8041eba8524a97722e039be919))
+
+
+### Bug Fixes
+
+* Update comments and debug message ([839852f](https://github.com/propeller-heads/tycho-simulation/commit/839852f14c50a0422142ede19960cac8b1ad7ac9))
+
+## [0.120.0](https://github.com/propeller-heads/tycho-simulation/compare/0.119.0...0.120.0) (2025-07-09)
+
+
+### Features
+
+* update tycho dependencies for DCI supported protocols ([accfa55](https://github.com/propeller-heads/tycho-simulation/commit/accfa55ed8721b80429f299354753899d94056b0))
+
+
+### Bug Fixes
+
+* upgrade execution and allow deprecated creation_tx ([671b974](https://github.com/propeller-heads/tycho-simulation/commit/671b974988edd4bbdf9442ea7400c1e31ff6c6cb))
+
+## [0.119.0](https://github.com/propeller-heads/tycho-simulation/compare/0.118.1...0.119.0) (2025-07-01)
+
+
+### Features
+
+* Upgrade tycho-execution to 0.102.0 ([9c12382](https://github.com/propeller-heads/tycho-simulation/commit/9c12382013f959a5391bce24e7d8711472ad5874))
+
 ## [0.118.1](https://github.com/propeller-heads/tycho-simulation/compare/0.118.0...0.118.1) (2025-06-27)
 
 ## [0.118.0](https://github.com/propeller-heads/tycho-simulation/compare/0.117.0...0.118.0) (2025-06-24)

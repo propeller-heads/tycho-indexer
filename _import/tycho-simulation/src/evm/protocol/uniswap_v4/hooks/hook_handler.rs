@@ -1,22 +1,21 @@
 use std::{collections::HashMap, fmt::Debug};
 
-use alloy::primitives::{Address, U256};
-use tycho_common::{dto::ProtocolStateDelta, Bytes};
-
-use crate::{
-    evm::{
-        engine_db::simulation_db::BlockHeader,
-        protocol::uniswap_v4::{
-            hooks::models::{
-                AfterSwapDelta, AfterSwapParameters, AmountRanges, BeforeSwapOutput,
-                BeforeSwapParameters, SwapParams, WithGasEstimate,
-            },
-            state::UniswapV4State,
-        },
-    },
-    models::{Balances, Token},
-    protocol::errors::{SimulationError, TransitionError},
+use alloy::{
+    primitives::{aliases::U24, Address, I256, U256},
+    sol,
 };
+use tycho_client::feed::BlockHeader;
+use tycho_common::{
+    dto::ProtocolStateDelta,
+    models::token::Token,
+    simulation::{
+        errors::{SimulationError, TransitionError},
+        protocol_sim::Balances,
+    },
+    Bytes,
+};
+
+use crate::evm::protocol::uniswap_v4::state::{UniswapV4Fees, UniswapV4State};
 
 /// Trait for simulating the swap-related behavior of Uniswap V4 hooks.
 /// https://github.com/Uniswap/v4-core/blob/main/src/interfaces/IHooks.sol

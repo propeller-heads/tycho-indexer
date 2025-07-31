@@ -10,11 +10,12 @@ use evm_ekubo_sdk::{
     math::uint::U256,
     quoting::types::{NodeKey, TokenAmount},
 };
-use tycho_common::Bytes;
+use tycho_common::{
+    simulation::errors::{SimulationError, TransitionError},
+    Bytes,
+};
 
 use super::state::EkuboState;
-use crate::protocol::errors::{SimulationError, TransitionError};
-
 pub struct EkuboPoolQuote {
     pub consumed_amount: i128,
     pub calculated_amount: u128,

@@ -11,8 +11,8 @@ use evm_ekubo_sdk::{
 };
 use itertools::Itertools;
 use num_traits::Zero;
-use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_common::Bytes;
+use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
+use tycho_common::{models::token::Token, Bytes};
 
 use super::{
     attributes::{sale_rate_deltas_from_attributes, ticks_from_attributes},
@@ -21,7 +21,6 @@ use super::{
 };
 use crate::{
     evm::protocol::ekubo::pool::mev_resist::MevResistPool,
-    models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 
@@ -38,24 +37,24 @@ impl TryFrom<Bytes> for EkuboExtension {
     fn try_from(value: Bytes) -> Result<Self, Self::Error> {
         // See extension ID encoding in tycho-protocol-sdk
         match i32::from(value) {
-            0 => Err(InvalidSnapshotError::ValueError("unknown extension".to_string())),
+            0 => Err(InvalidSnapshotError::ValueError("Unknown Ekubo extension".to_string())),
             1 => Ok(Self::Base),
             2 => Ok(Self::Oracle),
             3 => Ok(Self::Twamm),
             4 => Ok(Self::MevResist),
             discriminant => Err(InvalidSnapshotError::ValueError(format!(
-                "unknown discriminant {discriminant}"
+                "Unknown Ekubo extension discriminant {discriminant}"
             ))),
         }
     }
 }
 
-impl TryFromWithBlock<ComponentWithState> for EkuboState {
+impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboState {
     type Error = InvalidSnapshotError;
 
-    async fn try_from_with_block(
+    async fn try_from_with_header(
         snapshot: ComponentWithState,
-        _block: Header,
+        _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
@@ -198,7 +197,7 @@ mod tests {
 
     #[apply(all_cases)]
     #[tokio::test]
-    async fn test_try_from_with_block(case: TestCase) {
+    async fn test_try_from_with_header(case: TestCase) {
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
                 attributes: case.state_attributes,
@@ -206,18 +205,19 @@ mod tests {
             },
             component: case.component,
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
 
-        let result = EkuboState::try_from_with_block(
+        let result = EkuboState::try_from_with_header(
             snapshot,
-            Header::default(),
+            BlockHeader::default(),
             &HashMap::new(),
             &HashMap::new(),
         )
         .await
         .expect("reconstructing state");
 
-        assert_eq!(result, case.state);
+        assert_eq!(result, case.state_before_transition);
     }
 
     #[apply(all_cases)]
@@ -240,11 +240,12 @@ mod tests {
                 },
                 component,
                 component_tvl: None,
+                entrypoints: Vec::new(),
             };
 
-            let result = EkuboState::try_from_with_block(
+            let result = EkuboState::try_from_with_header(
                 snapshot,
-                Header::default(),
+                BlockHeader::default(),
                 &HashMap::default(),
                 &HashMap::default(),
             )

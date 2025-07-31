@@ -3,18 +3,19 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use alloy::primitives::{Address, Bytes, B256, U256};
+use alloy::primitives::{Address, Bytes as AlloyBytes, B256, U256};
 use revm::{
     context::DBErrorMarker,
     state::{AccountInfo, Bytecode},
     DatabaseRef,
 };
 use thiserror::Error;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, instrument, warn};
+use tycho_client::feed::BlockHeader;
 
 use crate::evm::{
     account_storage::{AccountStorage, StateUpdate},
-    engine_db::{engine_db_interface::EngineDatabaseInterface, simulation_db::BlockHeader},
+    engine_db::engine_db_interface::EngineDatabaseInterface,
     tycho_models::{AccountUpdate, ChangeType},
 };
 
@@ -82,7 +83,7 @@ impl PreCachedDB {
         for update in account_updates {
             match update.change {
                 ChangeType::Update => {
-                    info!(%update.address, "Updating account");
+                    debug!(%update.address, "Updating account");
 
                     // If the account is not present, the internal storage will handle throwing
                     // an exception.
@@ -95,21 +96,22 @@ impl PreCachedDB {
                     );
                 }
                 ChangeType::Deletion => {
-                    info!(%update.address, "Deleting account");
+                    debug!(%update.address, "Deleting account");
 
                     warn!(%update.address, "Deletion not implemented");
                 }
                 ChangeType::Creation => {
-                    info!(%update.address, "Creating account");
+                    debug!(%update.address, "Creating account");
 
-                    // We expect the code and balance to be present.
-                    let code = Bytecode::new_raw(Bytes::from(
+                    // We expect the code to be present.
+                    let code = Bytecode::new_raw(AlloyBytes::from(
                         update
                             .code
                             .clone()
                             .expect("account code"),
                     ));
-                    let balance = update.balance.expect("account balance");
+                    // If the balance is not present, we set it to zero.
+                    let balance = update.balance.unwrap_or(U256::ZERO);
 
                     // Initialize the account.
                     write_guard.accounts.init_account(
@@ -329,10 +331,10 @@ impl DatabaseRef for PreCachedDB {
         }
     }
 
-    /// If block header is set, returns the hash. Otherwise returns a zero hash.
+    /// If block header is set, returns the hash. Otherwise, returns a zero hash.
     fn block_hash_ref(&self, _number: u64) -> Result<B256, Self::Error> {
-        match self.inner.read().unwrap().block {
-            Some(header) => Ok(header.hash),
+        match self.inner.read().unwrap().block.clone() {
+            Some(header) => Ok(B256::from_slice(&header.hash)),
             None => Ok(B256::default()),
         }
     }
@@ -342,12 +344,12 @@ impl DatabaseRef for PreCachedDB {
 mod tests {
     use std::{error::Error, str::FromStr};
 
-    use chrono::DateTime;
     use revm::primitives::U256;
     use rstest::{fixture, rstest};
+    use tycho_common::Bytes;
 
     use super::*;
-    use crate::evm::tycho_models::{AccountUpdate, Block, Chain, ChangeType};
+    use crate::evm::tycho_models::{AccountUpdate, Chain, ChangeType};
 
     #[fixture]
     pub fn mock_db() -> PreCachedDB {
@@ -443,19 +445,19 @@ mod tests {
         new_storage.insert(new_storage_value_index, new_storage_value_index);
         let new_balance = U256::from_limbs_slice(&[500]);
         let update = StateUpdate { storage: Some(new_storage), balance: Some(new_balance) };
-        let new_block = Block {
+        let new_block = BlockHeader {
             number: 1,
-            hash: B256::default(),
-            parent_hash: B256::default(),
-            chain: Chain::Ethereum,
-            ts: DateTime::from_timestamp_millis(123)
-                .unwrap()
-                .naive_utc(),
+            hash: Bytes::from_str(
+                "0xc6b994ec855fb2b31013c7ae65074406fac46679b5b963469104e0bfeddd66d9",
+            )
+            .unwrap(),
+            timestamp: 123,
+            ..Default::default()
         };
         let mut updates = HashMap::default();
         updates.insert(address, update);
 
-        mock_db.update_state(&updates, new_block.into());
+        mock_db.update_state(&updates, new_block);
 
         assert_eq!(
             mock_db
@@ -473,6 +475,7 @@ mod tests {
             .read()
             .unwrap()
             .block
+            .clone()
             .expect("block is Some");
         assert_eq!(block.number, 1);
 
@@ -485,18 +488,18 @@ mod tests {
         let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc")?;
         mock_db.init_account(address, AccountInfo::default(), None, false);
 
-        let new_block = Block {
+        let new_block = BlockHeader {
             number: 1,
-            hash: B256::default(),
-            parent_hash: B256::default(),
-            chain: Chain::Ethereum,
-            ts: DateTime::from_timestamp_millis(123)
-                .unwrap()
-                .naive_utc(),
+            hash: Bytes::from_str(
+                "0xc6b994ec855fb2b31013c7ae65074406fac46679b5b963469104e0bfeddd66d9",
+            )
+            .unwrap(),
+            timestamp: 123,
+            ..Default::default()
         };
         let updates = HashMap::default();
 
-        mock_db.update_state(&updates, new_block.into());
+        mock_db.update_state(&updates, new_block);
 
         let block_number = mock_db.block_number();
         assert_eq!(block_number.unwrap(), 1);
@@ -523,17 +526,17 @@ mod tests {
             ChangeType::Creation,
         );
 
-        let new_block = Block {
+        let new_block = BlockHeader {
             number: 1,
-            hash: B256::default(),
-            parent_hash: B256::default(),
-            chain: Chain::Ethereum,
-            ts: DateTime::from_timestamp_millis(123)
-                .unwrap()
-                .naive_utc(),
+            hash: Bytes::from_str(
+                "0xc6b994ec855fb2b31013c7ae65074406fac46679b5b963469104e0bfeddd66d9",
+            )
+            .unwrap(),
+            timestamp: 123,
+            ..Default::default()
         };
 
-        mock_db.update(vec![account_update], Some(new_block.into()));
+        mock_db.update(vec![account_update], Some(new_block));
 
         let account_info = mock_db
             .basic_ref(Address::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap())
@@ -559,6 +562,7 @@ mod tests {
                 .read()
                 .unwrap()
                 .block
+                .clone()
                 .expect("block is Some")
                 .number,
             1
@@ -590,11 +594,7 @@ mod tests {
         let ambient_contract =
             Address::from_str("0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688").unwrap();
 
-        let tycho_http_url = "http://127.0.0.1:4242";
-        info!(tycho_http_url, "Creating PreCachedDB");
         let db = PreCachedDB::new().expect("db should initialize");
-
-        info!("Fetching account info");
 
         let acc_info = db
             .basic_ref(ambient_contract)

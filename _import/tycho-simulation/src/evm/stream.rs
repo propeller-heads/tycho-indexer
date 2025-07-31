@@ -4,18 +4,20 @@ use futures::{Stream, StreamExt};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::warn;
 use tycho_client::{
-    feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState},
+    feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState, BlockHeader},
     stream::{StreamError, TychoStreamBuilder},
 };
-use tycho_common::{models::Chain, Bytes};
+use tycho_common::{
+    models::{token::Token, Chain},
+    simulation::protocol_sim::ProtocolSim,
+    Bytes,
+};
 
 use crate::{
     evm::decoder::{StreamDecodeError, TychoStreamDecoder},
-    models::Token,
     protocol::{
         errors::InvalidSnapshotError,
-        models::{BlockUpdate, TryFromWithBlock},
-        state::ProtocolSim,
+        models::{TryFromWithBlock, Update},
     },
 };
 
@@ -49,7 +51,7 @@ use crate::{
 /// # Errors
 /// Returns a `StreamError` if the underlying stream builder fails to initialize.
 pub struct ProtocolStreamBuilder {
-    decoder: TychoStreamDecoder,
+    decoder: TychoStreamDecoder<BlockHeader>,
     stream_builder: TychoStreamBuilder,
 }
 
@@ -72,7 +74,7 @@ impl ProtocolStreamBuilder {
     ) -> Self
     where
         T: ProtocolSim
-            + TryFromWithBlock<ComponentWithState, Error = InvalidSnapshotError>
+            + TryFromWithBlock<ComponentWithState, BlockHeader, Error = InvalidSnapshotError>
             + Send
             + 'static,
     {
@@ -143,7 +145,7 @@ impl ProtocolStreamBuilder {
 
     pub async fn build(
         self,
-    ) -> Result<impl Stream<Item = Result<BlockUpdate, StreamDecodeError>>, StreamError> {
+    ) -> Result<impl Stream<Item = Result<Update, StreamDecodeError>>, StreamError> {
         let (_, rx) = self.stream_builder.build().await?;
         let decoder = Arc::new(self.decoder);
 

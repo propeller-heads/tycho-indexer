@@ -5,7 +5,8 @@
         "hash": "0x985c985381d51f7768902baa56da51819c843d300d128a505705833ea68dc210",
         "number": 21823189,
         "parent_hash": "0x298b11c34ed6d8d13f5cdb9b86528a4dd2e12aedd5121ce6dc698761e1b27f6e",
-        "revert": false
+        "revert": false,
+        "timestamp": 1739275775
       },
       "snapshots": {
         "states": {},
@@ -61,6 +62,11 @@
         "account_balances": {},
         "component_tvl": {
           "0x93d199263632a4ef4bb438f1feb99e57b4b5f0bd0000000000000000000005c2": 12902.997863620163
+        },
+        "dci_update": {
+          "new_entrypoints": {},
+          "new_entrypoint_params": {},
+          "trace_results": {}
         }
       },
       "removed_components": {}
@@ -72,7 +78,8 @@
       "hash": "0x985c985381d51f7768902baa56da51819c843d300d128a505705833ea68dc210",
       "number": 21823189,
       "parent_hash": "0x298b11c34ed6d8d13f5cdb9b86528a4dd2e12aedd5121ce6dc698761e1b27f6e",
-      "revert": false
+      "revert": false,
+      "timestamp": 1739275775
     }
   }
 }

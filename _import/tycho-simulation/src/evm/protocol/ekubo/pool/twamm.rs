@@ -13,12 +13,15 @@ use evm_ekubo_sdk::{
 };
 use itertools::Itertools;
 use num_traits::Zero;
-use tycho_common::Bytes;
+use tycho_common::{
+    simulation::errors::{SimulationError, TransitionError},
+    Bytes,
+};
 
 use super::{full_range::FullRangePool, EkuboPool, EkuboPoolQuote};
 use crate::{
     evm::protocol::ekubo::attributes::sale_rate_deltas_from_attributes,
-    protocol::errors::{InvalidSnapshotError, SimulationError, TransitionError},
+    protocol::errors::InvalidSnapshotError,
 };
 
 #[derive(Debug, Eq, Clone)]

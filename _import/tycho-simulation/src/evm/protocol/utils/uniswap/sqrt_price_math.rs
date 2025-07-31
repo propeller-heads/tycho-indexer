@@ -1,12 +1,10 @@
 use alloy::primitives::U256;
+use tycho_common::simulation::errors::SimulationError;
 
 use super::solidity_math::{mul_div, mul_div_rounding_up};
-use crate::{
-    evm::protocol::{
-        safe_math::{div_mod_u256, safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
-        u256_num::u256_to_f64,
-    },
-    protocol::errors::SimulationError,
+use crate::evm::protocol::{
+    safe_math::{div_mod_u256, safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
+    u256_num::u256_to_f64,
 };
 
 const Q96: U256 = U256::from_limbs([0, 4294967296, 0, 0]);

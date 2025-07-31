@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use alloy::primitives::{Address, U256};
-use tycho_client::feed::{synchronizer::ComponentWithState, Header};
-use tycho_common::Bytes;
+use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
+use tycho_common::{models::token::Token, Bytes};
 
 use super::state::UniswapV4State;
 use crate::{
@@ -13,18 +13,17 @@ use crate::{
         },
         utils::uniswap::{i24_be_bytes_to_i32, tick_list::TickInfo},
     },
-    models::Token,
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
 };
 
-impl TryFromWithBlock<ComponentWithState> for UniswapV4State {
+impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
     type Error = InvalidSnapshotError;
 
     /// Decodes a `ComponentWithState` into a `UniswapV4State`. Errors with a `InvalidSnapshotError`
     /// if the snapshot is missing any required attributes.
-    async fn try_from_with_block(
+    async fn try_from_with_header(
         snapshot: ComponentWithState,
-        block: Header,
+        block: BlockHeader,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
@@ -207,12 +206,13 @@ mod tests {
             ("ticks/60/net_liquidity".to_string(), Bytes::from(400_i128.to_be_bytes().to_vec())),
         ])
     }
-    fn header() -> Header {
-        Header {
+    fn header() -> BlockHeader {
+        BlockHeader {
             number: 1,
             hash: Bytes::from(vec![0; 32]),
             parent_hash: Bytes::from(vec![0; 32]),
             revert: false,
+            timestamp: 1,
         }
     }
 
@@ -226,9 +226,10 @@ mod tests {
             },
             component: usv4_component(),
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
 
-        let result = UniswapV4State::try_from_with_block(
+        let result = UniswapV4State::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),
@@ -297,9 +298,10 @@ mod tests {
             },
             component,
             component_tvl: None,
+            entrypoints: Vec::new(),
         };
 
-        let result = UniswapV4State::try_from_with_block(
+        let result = UniswapV4State::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),
