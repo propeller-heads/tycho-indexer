@@ -50,6 +50,8 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
         let token_1 = component.tokens[1]
             .to_string()
             .split_off(2);
+        // Metadata is extracted by calling the hooks contract
+        let target = component.static_attributes.get("hooks").expect("Hooks attribute not found");
 
         let limits_transport_0to1 = RpcTransport::new(
             self.rpc_url.clone(),
@@ -57,7 +59,7 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
             vec![
                 json!({
                     "data": format!("0xaaed87a3000000000000000000000000{}000000000000000000000000{}", token_0, token_1),
-                    "to": component.id
+                    "to": target
                 }),
                 json!(format!("0x{:x}", block.number)),
             ],
@@ -66,7 +68,7 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
             "euler".to_string(),
             format!(
                 "euler_limits_{}_{}_to_{}",
-                component.id, component.tokens[0], component.tokens[1]
+                target, component.tokens[0], component.tokens[1]
             ),
             component.id.clone(),
             // Euler swap only has pools with 2 tokens
@@ -82,7 +84,7 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
             vec![
                 json!({
                   "data": format!("0xaaed87a3000000000000000000000000{}000000000000000000000000{}", token_1, token_0),
-                  "to": component.id
+                  "to": target
                 }),
                 json!(format!("0x{:x}", block.number)),
             ],
@@ -91,7 +93,7 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
             "euler".to_string(),
             format!(
                 "euler_limits_{}_{}_to_{}",
-                component.id, component.tokens[1], component.tokens[0]
+                target, component.tokens[1], component.tokens[0]
             ),
             component.id.clone(),
             // Euler swap only has pools with 2 tokens
@@ -110,6 +112,8 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
         block: &Block,
     ) -> Result<Vec<MetadataRequest>, MetadataError> {
         let mut requests = vec![];
+        // Balance is extracted by calling the hooks contract
+        let target = component.static_attributes.get("hooks").expect("Hooks attribute not found");
 
         let balance_transport = RpcTransport::new(
             self.rpc_url.clone(),
@@ -117,14 +121,14 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
             vec![
                 json!({
                     "data": "0x0902f1ac", // getReserves()
-                    "to": component.id
+                    "to": target
                 }),
                 json!(format!("0x{:x}", block.number)),
             ],
         );
         requests.push(MetadataRequest::new(
             "euler".to_string(),
-            format!("euler_balance_{}", component.id),
+            format!("euler_balance_{target}"),
             component.id.clone(),
             MetadataRequestType::ComponentBalance { token_addresses: component.tokens.clone() },
             Box::new(balance_transport),
@@ -172,6 +176,14 @@ impl MetadataResponseParser for EulerMetadataResponseParser {
                 let res_str = res_string
                     .strip_prefix("0x")
                     .unwrap_or(&res_string);
+
+                // Check if response has enough data
+                if res_str.len() < 128 {
+                    return Err(MetadataError::GenerationFailed(format!(
+                        "Balance response too short: expected at least 128 characters, got {}",
+                        res_str.len()
+                    )));
+                }
 
                 let balance_0 = Bytes::from(&res_str[0..64]);
                 let balance_1 = Bytes::from(&res_str[64..128]);
@@ -227,6 +239,14 @@ impl MetadataResponseParser for EulerMetadataResponseParser {
                     e
                 })
                 .ok();
+
+                // Check if response has enough data
+                if res_str.len() < 128 {
+                    return Err(MetadataError::GenerationFailed(format!(
+                        "Limits response too short: expected at least 128 characters, got {}",
+                        res_str.len()
+                    )));
+                }
 
                 let limit_0 = Bytes::from(&res_str[0..64]);
                 let limit_1 = Bytes::from(&res_str[64..128]);
