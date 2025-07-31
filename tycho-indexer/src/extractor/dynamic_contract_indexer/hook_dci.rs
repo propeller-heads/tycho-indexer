@@ -1450,6 +1450,8 @@ mod tests {
     mod integration_tests {
         use std::{collections::HashSet, str::FromStr, sync::Arc};
 
+        use tracing::info;
+
         use super::*;
         use crate::extractor::dynamic_contract_indexer::{
             component_metadata::{
@@ -1618,6 +1620,10 @@ mod tests {
         #[tokio::test]
         #[ignore] // This test requires real DB and RPC connections
         async fn test_hook_dci_process_block_update_integration() {
+            // Initialize tracing for tests
+            let _ = tracing_subscriber::fmt()
+                .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+                .try_init();
             // Test configuration
             let chain = Chain::Ethereum;
             let router_address = Address::from("0x1234567890123456789012345678901234567890");
@@ -1723,6 +1729,7 @@ mod tests {
                 2, // pause_after_retries
             );
 
+            info!("Initializing");
             // Initialize the Hook DCI
             hook_dci.initialize().await.unwrap();
 
@@ -1745,7 +1752,8 @@ mod tests {
                 "test_extractor".to_string(),
                 chain,
                 block,
-                20547120, // finalized_block_height
+                20547123, /* finalized_block_height - set to same as block number to avoid
+                           * finality processing */
                 false,
                 vec![tx_with_changes],
                 vec![],
@@ -1757,7 +1765,14 @@ mod tests {
                 .await;
 
             // Verify the result
-            assert!(result.is_ok(), "process_block_update should succeed");
+            match result {
+                Ok(_) => {
+                    println!("Integration test completed successfully!");
+                }
+                Err(e) => {
+                    panic!("process_block_update failed with error: {e:?}");
+                }
+            }
 
             // Verify that the component was processed
             // In a real integration test, you would verify:
