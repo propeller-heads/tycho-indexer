@@ -156,21 +156,15 @@ impl MetadataResponseParser for EulerMetadataResponseParser {
     ) -> Result<MetadataValue, MetadataError> {
         match &request.request_type {
             MetadataRequestType::ComponentBalance { .. } => {
-                let token_0 = component
-                    .static_attributes
-                    .get("token_0")
-                    .ok_or(MetadataError::MissingData(
-                        "token_0 static attribute".to_string(),
+                if component.tokens.len() < 2 {
+                    return Err(MetadataError::MissingData(
+                        "component must have at least 2 tokens".to_string(),
                         component.id.clone(),
-                    ))?;
+                    ));
+                }
 
-                let token_1 = component
-                    .static_attributes
-                    .get("token_1")
-                    .ok_or(MetadataError::MissingData(
-                        "token_1 static attribute".to_string(),
-                        component.id.clone(),
-                    ))?;
+                let token_0 = &component.tokens[0];
+                let token_1 = &component.tokens[1];
 
                 let res_string = serde_json::from_value::<String>(response.clone()).unwrap();
                 let res_str = res_string
