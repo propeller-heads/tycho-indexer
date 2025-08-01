@@ -1603,13 +1603,13 @@ mod tests {
 
         // Setup metadata registries for the test
         fn setup_test_metadata_registries(
+            rpc_url: String,
         ) -> (MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry) {
             let mut generator_registry = MetadataGeneratorRegistry::new();
             let mut parser_registry = MetadataResponseParserRegistry::new();
             let mut provider_registry = ProviderRegistry::new();
 
             let hook_address = Address::from("0x55dcf9455eee8fd3f5eed17606291272cde428a8");
-            let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
 
             generator_registry.register_hook_generator(
                 hook_address,
@@ -1642,8 +1642,12 @@ mod tests {
 
             // Create mock gateways
             let mut db_gateway = MockGateway::new();
-            let account_extractor = MockAccountExtractor::new();
-            let entrypoint_tracer = MockEntryPointTracer::new();
+            let mut account_extractor = MockAccountExtractor::new();
+            
+            // Use real RPC-based tracer instead of mock
+            let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
+            let entrypoint_tracer = tycho_ethereum::entrypoint_tracer::tracer::EVMEntrypointService::try_from_url(&rpc_url)
+                .expect("Failed to create RPC entrypoint tracer");
 
             // Setup initial expectations for initialization
             db_gateway
@@ -1656,6 +1660,10 @@ mod tests {
                 .expect_get_traced_entry_points()
                 .return_once(move |_| Box::pin(async move { Ok(HashMap::new()) }));
 
+            // Setup expectation for the account extractor
+            account_extractor
+                .expect_get_accounts_at_block()
+                .returning(|_, _| Ok(HashMap::new()));
 
             // Create inner DCI
             let inner_dci = DynamicContractIndexer::new(
@@ -1668,7 +1676,7 @@ mod tests {
 
             // Setup metadata registries and orchestrators
             let (generator_registry, parser_registry, provider_registry) =
-                setup_test_metadata_registries();
+                setup_test_metadata_registries(rpc_url.clone());
 
             let metadata_orchestrator = BlockMetadataOrchestrator::new(
                 generator_registry,
@@ -1746,7 +1754,14 @@ mod tests {
             hook_dci.initialize().await.unwrap();
 
             // Create test block changes with the new protocol component
-            let block = create_test_block(20547123);
+            // Using a real mainnet block for RPC compatibility
+            let block = Block::new(
+                23003136, // Real mainnet block number
+                Chain::Ethereum,
+                Bytes::from_str("0xfdd7626c879f499cc6ad2011ed783da534d5a8b817ddd40e14b87e3bdd84aecc").unwrap(), // Real block hash
+                Bytes::from_str("0x97e6d877bd7e6587c29711ee80b873d4eac8c49fc616145e6326e07a5e41bf1810").unwrap(), // Real parent hash
+                chrono::NaiveDateTime::from_timestamp_opt(1724251307, 0).unwrap(), // Real timestamp
+            );
             let tx = create_test_transaction(1);
 
             let mut protocol_components = HashMap::new();
@@ -1763,9 +1778,8 @@ mod tests {
             let mut block_changes = BlockChanges::new(
                 "test_extractor".to_string(),
                 chain,
-                block,
-                20547123, /* finalized_block_height - set to same as block number to avoid
-                           * finality processing */
+                block.clone(),
+                block.number, // finalized_block_height - same as current block for testing
                 false,
                 vec![tx_with_changes],
                 vec![],
@@ -1867,8 +1881,9 @@ mod tests {
                 entrypoint_tracer,
             );
 
+            let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
             let (generator_registry, parser_registry, provider_registry) =
-                setup_test_metadata_registries();
+                setup_test_metadata_registries(rpc_url);
             let metadata_orchestrator = BlockMetadataOrchestrator::new(
                 generator_registry,
                 parser_registry,
