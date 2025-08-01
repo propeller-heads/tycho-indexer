@@ -1,3 +1,17 @@
+## [0.141.0](https://github.com/propeller-heads/tycho-simulation/compare/0.140.0...0.141.0) (2025-08-01)
+
+
+### Features
+
+* Don't store market makers in HashflowClient ([2d0982f](https://github.com/propeller-heads/tycho-simulation/commit/2d0982f7ef15ed9bfcb1c2066d0b0879ff400d94))
+* **Hashflow:** Hashflow price levels API client ([444bc01](https://github.com/propeller-heads/tycho-simulation/commit/444bc01e472efe114e5108a5e1e05e57b3f38283))
+* misc improvements ([b3e5ace](https://github.com/propeller-heads/tycho-simulation/commit/b3e5ace851f690c71c5a9853ae98f0ece8fb290d))
+
+
+### Bug Fixes
+
+* Fetch mms every time we poll for levels ([50b921a](https://github.com/propeller-heads/tycho-simulation/commit/50b921acc5d4497b226cde21f659b05dfa07f5be))
+
 ## [0.140.0](https://github.com/propeller-heads/tycho-simulation/compare/0.139.0...0.140.0) (2025-07-29)
 
 
