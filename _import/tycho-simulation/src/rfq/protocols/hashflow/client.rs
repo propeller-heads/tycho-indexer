@@ -44,7 +44,6 @@ pub struct HashflowClient {
     source: String,
     // Quote tokens to normalize to for TVL purposes. Should have the same prices.
     quote_tokens: HashSet<Bytes>,
-    market_makers: Vec<String>,
     poll_time: u64,
 }
 
@@ -69,7 +68,6 @@ impl HashflowClient {
             auth_key,
             source: auth_user,
             quote_tokens,
-            market_makers: Vec::new(), // Will be populated during first fetch
             poll_time,
         })
     }
@@ -147,7 +145,7 @@ impl HashflowClient {
         }
     }
 
-    async fn fetch_market_makers(&mut self) -> Result<(), RFQError> {
+    async fn fetch_market_makers(&mut self) -> Result<Vec<String>, RFQError> {
         let query_params = vec![
             ("source", self.source.clone()),
             ("baseChainType", "evm".to_string()),
@@ -180,15 +178,18 @@ impl HashflowClient {
             RFQError::ParsingError(format!("Failed to parse market makers response: {e}"))
         })?;
 
-        self.market_makers = mm_response.market_makers;
+        info!(
+            "Fetched {} market makers: {:?}",
+            mm_response.market_makers.len(),
+            mm_response.market_makers
+        );
 
-        info!("Fetched {} market makers: {:?}", self.market_makers.len(), self.market_makers);
-
-        Ok(())
+        Ok(mm_response.market_makers)
     }
 
     async fn fetch_price_levels(
         &self,
+        market_makers: &Vec<String>,
     ) -> Result<HashMap<String, Vec<HashflowMarketMakerLevels>>, RFQError> {
         let mut query_params = vec![
             ("source", self.source.clone()),
@@ -197,7 +198,7 @@ impl HashflowClient {
         ];
 
         // Add market makers as array parameters
-        for mm in &self.market_makers {
+        for mm in market_makers {
             query_params.push(("marketMakers[]", mm.clone()));
         }
 
@@ -257,8 +258,11 @@ impl RFQClient for HashflowClient {
 
             loop {
                 ticker.tick().await;
+
+                let market_makers;
                 match client.fetch_market_makers().await {
-                    Ok(()) => {
+                    Ok(mms) => {
+                        market_makers = mms;
                         info!("Successfully fetched market makers");
                     }
                     Err(e) => {
@@ -267,7 +271,7 @@ impl RFQClient for HashflowClient {
                     }
                 }
 
-                match client.fetch_price_levels().await {
+                match client.fetch_price_levels(&market_makers).await {
                     Ok(levels_by_mm) => {
                         let mut new_components = HashMap::new();
 
