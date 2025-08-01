@@ -139,12 +139,20 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
             .get("hook");
         if let Some(hook_address) = hook_address {
             let hook_address = Address::from_slice(&hook_address.0);
+
+            // Merge state attributes into static_attributes for hook creation
+            let mut merged_attributes = snapshot
+                .component
+                .static_attributes
+                .clone();
+            merged_attributes.extend(snapshot.state.attributes.clone());
+
             let hook_params = HookCreationParams::new(
                 block,
                 account_balances,
                 all_tokens,
                 state.clone(),
-                &snapshot.component.static_attributes,
+                &merged_attributes,
                 &snapshot.state.balances,
             );
 

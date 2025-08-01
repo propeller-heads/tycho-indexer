@@ -954,6 +954,7 @@ mod tests {
             pool_manager,
             HashMap::new(),
             HashMap::new(),
+            None,
         )
         .unwrap();
 
