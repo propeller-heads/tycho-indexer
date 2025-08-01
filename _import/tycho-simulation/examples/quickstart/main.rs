@@ -61,18 +61,18 @@ const FAKE_PK: &str = "0x123456789abcdef123456789abcdef123456789abcdef123456789a
 
 #[derive(Parser)]
 struct Cli {
-    #[arg(short, long)]
+    #[arg(long)]
     sell_token: Option<String>,
-    #[arg(short, long)]
+    #[arg(long)]
     buy_token: Option<String>,
-    #[arg(short, long, default_value_t = 10.0)]
+    #[arg(long, default_value_t = 10.0)]
     sell_amount: f64,
     /// The tvl threshold to filter the graph by
-    #[arg(short, long, default_value_t = 100.0)]
+    #[arg(long, default_value_t = 100.0)]
     tvl_threshold: f64,
-    #[arg(short, long, default_value = FAKE_PK)]
+    #[arg(long, default_value = FAKE_PK)]
     swapper_pk: String,
-    #[arg(short, long, default_value = "ethereum")]
+    #[arg(long, default_value = "ethereum")]
     chain: String,
 }
 
