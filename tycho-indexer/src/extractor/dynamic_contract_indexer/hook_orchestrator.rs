@@ -6,9 +6,9 @@ use thiserror::Error;
 use tracing::{debug, error, info, instrument, warn};
 use tycho_common::{
     models::{
-        blockchain::{Block, TracingParams},
+        blockchain::{Block, EntryPointWithTracingParams},
         protocol::{ComponentBalance, ProtocolComponent, ProtocolComponentStateDelta},
-        Address, EntryPointId, TxHash,
+        Address, ComponentId, TxHash,
     },
     Bytes,
 };
@@ -69,16 +69,16 @@ impl DefaultUniswapV4HookOrchestrator {
         Self { entrypoint_generator }
     }
 
-    #[instrument(skip(self, block_changes, metadata, entrypoint_params), fields(
+    #[instrument(skip(self, block_changes, metadata, component_entrypoints), fields(
         component_count = metadata.len(),
-        entrypoint_count = entrypoint_params.len(),
+        entrypoint_count = component_entrypoints.len(),
         tx_count = block_changes.txs_with_update.len()
     ))]
     fn prepare_components(
         &self,
         block_changes: &mut BlockChanges,
         metadata: &HashMap<String, ComponentTracingMetadata>,
-        entrypoint_params: HashMap<EntryPointId, Vec<(TxHash, TracingParams)>>,
+        component_entrypoints: HashMap<ComponentId, Vec<(TxHash, EntryPointWithTracingParams)>>,
     ) -> Result<(), HookOrchestratorError> {
         debug!("Preparing components with metadata and entrypoint params");
 
@@ -209,25 +209,31 @@ impl DefaultUniswapV4HookOrchestrator {
         }
 
         let mut total_entrypoint_params = 0;
-        for (entrypoint_id, entrypoint_params) in entrypoint_params {
-            total_entrypoint_params += entrypoint_params.len();
-
-            debug!(
-                entrypoint_id = %entrypoint_id,
-                param_count = entrypoint_params.len(),
-                "Processing entrypoint parameters"
-            );
-
-            for (tx_hash, entrypoint_params) in entrypoint_params {
+        
+        // Process each component's entrypoints
+        for (component_id, entrypoints_with_tx) in component_entrypoints {
+            for (tx_hash, entrypoint_with_params) in entrypoints_with_tx {
+                total_entrypoint_params += 1;
+                
                 let tx_idx = tx_vec_idx_by_hash
                     .get(&tx_hash)
                     .expect("Tx hash should be present in the block changes");
-
+                
                 let tx_delta = &mut block_changes.txs_with_update[*tx_idx];
-
+                
+                // Add the EntryPoint to the transaction's entrypoints
+                tx_delta
+                    .entrypoints
+                    .entry(component_id.clone())
+                    .or_default()
+                    .insert(entrypoint_with_params.entry_point.clone());
+                
+                // Add the tracing params to the transaction's entrypoint_params
                 tx_delta
                     .entrypoint_params
-                    .insert(entrypoint_id.clone(), HashSet::from([(entrypoint_params, None)]));
+                    .entry(entrypoint_with_params.entry_point.external_id.clone())
+                    .or_default()
+                    .insert((entrypoint_with_params.params, Some(component_id.clone())));
             }
         }
 
@@ -252,7 +258,7 @@ impl DefaultUniswapV4HookOrchestrator {
         block: &Block,
         components: &[ProtocolComponent],
         metadata: &HashMap<String, ComponentTracingMetadata>,
-    ) -> Result<HashMap<EntryPointId, Vec<(TxHash, TracingParams)>>, HookOrchestratorError> {
+    ) -> Result<HashMap<ComponentId, Vec<(TxHash, EntryPointWithTracingParams)>>, HookOrchestratorError> {
         debug!("Generating entrypoint parameters");
 
         let mut result = HashMap::new();
@@ -305,12 +311,12 @@ impl DefaultUniswapV4HookOrchestrator {
 
                 total_entrypoints_generated += eps.len();
 
-                for ep in eps {
-                    result
-                        .entry(ep.entry_point.external_id.clone())
-                        .or_insert_with(Vec::new)
-                        .push((metadata.tx_hash.clone(), ep.params));
-                }
+                let component_entrypoints = eps
+                    .into_iter()
+                    .map(|ep| (metadata.tx_hash.clone(), ep))
+                    .collect::<Vec<_>>();
+                
+                result.insert(component.id.clone(), component_entrypoints);
             } else {
                 warn!(
                     component_id = %component.id,
@@ -344,9 +350,9 @@ impl HookOrchestrator for DefaultUniswapV4HookOrchestrator {
     ) -> Result<(), HookOrchestratorError> {
         info!("Starting component update process");
 
-        let entrypoint_params =
+        let component_entrypoints =
             self.generate_entrypoint_params(&block_changes.block, components, metadata)?;
-        self.prepare_components(block_changes, metadata, entrypoint_params)?;
+        self.prepare_components(block_changes, metadata, component_entrypoints)?;
 
         info!("Component update process completed successfully");
         Ok(())
