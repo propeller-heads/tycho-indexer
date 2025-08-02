@@ -1562,7 +1562,7 @@ mod tests {
             Transaction::new(
                 Bytes::from(nonce).lpad(32, 0),
                 Bytes::from(1u64).lpad(32, 0),
-                Address::from("0x1234567890123456789012345678901234567890"),
+                Address::from("0x2626664c2603336E57B271c5C0b26F421741e481"), // Use real router address as sender
                 Some(Address::from("0x55dcf9455eee8fd3f5eed17606291272cde428a8")),
                 nonce,
             )
@@ -1635,10 +1635,10 @@ mod tests {
             let _ = tracing_subscriber::fmt()
                 .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
                 .try_init();
-            // Test configuration
+            // Test configuration - using realistic mainnet addresses
             let chain = Chain::Ethereum;
             let router_address = Address::from("0x1234567890123456789012345678901234567890");
-            let pool_manager = Address::from("0x5d8d4b3c8b1f2a3c4b8f6e9d7c5a3b1e2f4d6a8c");
+            let pool_manager = Address::from("0x000000000004444c5dc75cB358380D2e3dE08A90"); // Real Uniswap V4 pool manager
 
             // Create mock gateways
             let mut db_gateway = MockGateway::new();

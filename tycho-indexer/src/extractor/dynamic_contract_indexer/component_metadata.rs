@@ -53,8 +53,17 @@ impl ComponentTracingMetadata {
             Ok(MetadataValue::Balances(balances)) => {
                 self.balances = Some(Ok(balances));
             }
-            Ok(MetadataValue::Limits(limits)) => {
-                self.limits = Some(Ok(limits));
+            Ok(MetadataValue::Limits(new_limits)) => {
+                match &mut self.limits {
+                    Some(Ok(existing_limits)) => {
+                        // Merge new limits with existing limits
+                        existing_limits.extend(new_limits);
+                    }
+                    _ => {
+                        // No existing limits or existing was an error, set new limits
+                        self.limits = Some(Ok(new_limits));
+                    }
+                }
             }
             Ok(MetadataValue::Tvl(tvl)) => {
                 self.tvl = Some(Ok(tvl));
