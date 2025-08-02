@@ -4,7 +4,6 @@ use std::{
 };
 
 use async_trait::async_trait;
-use ethcontract::{H160, H256};
 use ethers::{
     prelude::{spoof, Middleware},
     providers::{Http, Provider},
@@ -12,7 +11,7 @@ use ethers::{
         Address as EthersAddress, BlockId, Bytes as EthersBytes, CallFrame,
         GethDebugBuiltInTracerType, GethDebugTracerType, GethDebugTracingCallOptions,
         GethDebugTracingOptions, GethTrace, GethTraceFrame, NameOrAddress, PreStateFrame,
-        PreStateMode, TransactionRequest, U256,
+        PreStateMode, TransactionRequest, U256, H160, H256,
     },
 };
 use tracing::warn;
@@ -66,6 +65,7 @@ impl EVMEntrypointService {
                 GethDebugTracingCallOptions {
                     tracing_options: GethDebugTracingOptions {
                         tracer: Some(GethDebugTracerType::BuiltInTracer(tracer_type)),
+                        enable_return_data: Some(true),
                         ..Default::default()
                     },
                     state_overrides: params
@@ -214,7 +214,25 @@ impl EntryPointTracer for EVMEntrypointService {
 
 fn flatten_calls(call: &CallFrame) -> Vec<EthersAddress> {
     if let Some(err) = &call.error {
-        warn!("Error in call frame: {:?}", err);
+        warn!(
+            "Error in call frame: {:?}, input:{:?}, target:{:?}, output:{:?}, gas_used:{:?}, gas:{:?}, value:{:?}, call_type:{:?}",
+            err, call.input, call.to, call.output, call.gas_used, call.gas, call.value, call.typ
+        );
+        
+        // Try to decode revert reason if output is available
+        if let Some(output) = &call.output {
+            if output.len() >= 4 {
+                // Check if it's a standard revert with reason (Error(string) selector: 0x08c379a0)
+                if output.starts_with(&[0x08, 0x37, 0x9a, 0x00]) {
+                    match decode_revert_reason(&output[4..]) {
+                        Ok(reason) => warn!("Revert reason: {}", reason),
+                        Err(e) => warn!("Failed to decode revert reason: {}", e),
+                    }
+                } else {
+                    warn!("Non-standard revert data: {:?}", output);
+                }
+            }
+        }
     }
     let to = if let Some(NameOrAddress::Address(a)) = &call.to { *a } else { return vec![] };
     let mut flat_calls = vec![to];
@@ -224,6 +242,25 @@ fn flatten_calls(call: &CallFrame) -> Vec<EthersAddress> {
         }
     }
     flat_calls
+}
+
+fn decode_revert_reason(data: &[u8]) -> Result<String, String> {
+    // Simple ABI decode for string - this is a basic implementation
+    // For a full implementation, you'd want to use proper ABI decoding
+    if data.len() < 64 {
+        return Err("Data too short for string decode".to_string());
+    }
+    
+    // Skip the offset (first 32 bytes) and get the length
+    let length = u32::from_be_bytes([data[28], data[29], data[30], data[31]]) as usize;
+    
+    if data.len() < 64 + length {
+        return Err("Data shorter than expected string length".to_string());
+    }
+    
+    // Extract the string data
+    let string_data = &data[64..64 + length];
+    String::from_utf8(string_data.to_vec()).map_err(|e| format!("UTF-8 decode error: {}", e))
 }
 
 #[cfg(test)]
