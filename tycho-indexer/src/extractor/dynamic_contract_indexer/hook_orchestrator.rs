@@ -17,9 +17,8 @@ use crate::extractor::{
     dynamic_contract_indexer::{
         component_metadata::ComponentTracingMetadata,
         entrypoint_generator::{
-            DefaultSwapAmountEstimator, EntrypointGenerationError,
-            HookEntrypointData, HookEntrypointGenerator, HookTracerContext,
-            UniswapV4DefaultHookEntrypointGenerator,
+            DefaultSwapAmountEstimator, EntrypointGenerationError, HookEntrypointData,
+            HookEntrypointGenerator, HookTracerContext, UniswapV4DefaultHookEntrypointGenerator,
         },
     },
     models::BlockChanges,
@@ -102,56 +101,54 @@ impl DefaultUniswapV4HookOrchestrator {
 
             if let Some(Ok(limit)) = &metadata.limits {
                 components_with_limits += 1;
-                if let Some(limit_entrypoint) = limit
-                    .first()
-                    .expect("Limit should be present")
-                    .1
-                     .2
-                    .as_ref()
-                {
-                    debug!(
-                        component_id = %component_id,
-                        entrypoint_target = %limit_entrypoint.entry_point.target,
-                        entrypoint_signature = %limit_entrypoint.entry_point.signature,
-                        "Processing component limits"
-                    );
+                debug!(
+                    component_id = %component_id,
+                    "Processing component limits"
+                );
+                for (idx, lim) in limit.iter().enumerate() {
+                    if let Some(limit_entrypoint) = lim.1 .2.as_ref() {
+                        // Since limits should share the same entrypoint but different parameters
+                        // (for 0->1 and 1->0 we only insert one Entrypoint.
+                        if idx == 0 {
+                            let mut updated_attributes = HashMap::new();
+                            updated_attributes.insert(
+                                "limits_entrypoint".to_string(),
+                                Bytes::from(
+                                    format!(
+                                        "{}:{}",
+                                        limit_entrypoint.entry_point.target,
+                                        limit_entrypoint.entry_point.signature
+                                    )
+                                    .as_bytes()
+                                    .to_vec(),
+                                ),
+                            );
+                            let pc_delta = ProtocolComponentStateDelta::new(
+                                component_id,
+                                updated_attributes,
+                                HashSet::new(),
+                            );
+                            tx_delta
+                                .state_updates
+                                .insert(component_id.clone(), pc_delta);
 
-                    let mut updated_attributes = HashMap::new();
-                    updated_attributes.insert(
-                        "limits_entrypoint".to_string(),
-                        Bytes::from(
-                            format!(
-                                "{}:{}",
-                                limit_entrypoint.entry_point.target,
-                                limit_entrypoint.entry_point.signature
+                            tx_delta.entrypoints.insert(
+                                component_id.clone(),
+                                HashSet::from([limit_entrypoint.entry_point.clone()]),
+                            );
+                        }
+
+                        tx_delta
+                            .entrypoint_params
+                            .entry(
+                                limit_entrypoint
+                                    .entry_point
+                                    .external_id
+                                    .clone(),
                             )
-                            .as_bytes()
-                            .to_vec(),
-                        ),
-                    );
-                    let pc_delta = ProtocolComponentStateDelta::new(
-                        component_id,
-                        updated_attributes,
-                        HashSet::new(),
-                    );
-                    tx_delta
-                        .state_updates
-                        .insert(component_id.clone(), pc_delta);
-
-                    tx_delta.entrypoints.insert(
-                        component_id.clone(),
-                        HashSet::from([limit_entrypoint.entry_point.clone()]),
-                    );
-                    tx_delta.entrypoint_params.insert(
-                        limit_entrypoint
-                            .entry_point
-                            .external_id
-                            .clone(),
-                        HashSet::from([(
-                            limit_entrypoint.params.clone(),
-                            Some(component_id.clone()),
-                        )]),
-                    );
+                            .or_default()
+                            .insert((limit_entrypoint.params.clone(), Some(component_id.clone())));
+                    }
                 }
             }
 
@@ -209,29 +206,38 @@ impl DefaultUniswapV4HookOrchestrator {
         }
 
         let mut total_entrypoint_params = 0;
-        
+
         // Process each component's entrypoints
         for (component_id, entrypoints_with_tx) in component_entrypoints {
             for (tx_hash, entrypoint_with_params) in entrypoints_with_tx {
                 total_entrypoint_params += 1;
-                
+
                 let tx_idx = tx_vec_idx_by_hash
                     .get(&tx_hash)
                     .expect("Tx hash should be present in the block changes");
-                
+
                 let tx_delta = &mut block_changes.txs_with_update[*tx_idx];
-                
+
                 // Add the EntryPoint to the transaction's entrypoints
                 tx_delta
                     .entrypoints
                     .entry(component_id.clone())
                     .or_default()
-                    .insert(entrypoint_with_params.entry_point.clone());
-                
+                    .insert(
+                        entrypoint_with_params
+                            .entry_point
+                            .clone(),
+                    );
+
                 // Add the tracing params to the transaction's entrypoint_params
                 tx_delta
                     .entrypoint_params
-                    .entry(entrypoint_with_params.entry_point.external_id.clone())
+                    .entry(
+                        entrypoint_with_params
+                            .entry_point
+                            .external_id
+                            .clone(),
+                    )
                     .or_default()
                     .insert((entrypoint_with_params.params, Some(component_id.clone())));
             }
@@ -258,7 +264,10 @@ impl DefaultUniswapV4HookOrchestrator {
         block: &Block,
         components: &[ProtocolComponent],
         metadata: &HashMap<String, ComponentTracingMetadata>,
-    ) -> Result<HashMap<ComponentId, Vec<(TxHash, EntryPointWithTracingParams)>>, HookOrchestratorError> {
+    ) -> Result<
+        HashMap<ComponentId, Vec<(TxHash, EntryPointWithTracingParams)>>,
+        HookOrchestratorError,
+    > {
         debug!("Generating entrypoint parameters");
 
         let mut result = HashMap::new();
@@ -315,7 +324,7 @@ impl DefaultUniswapV4HookOrchestrator {
                     .into_iter()
                     .map(|ep| (metadata.tx_hash.clone(), ep))
                     .collect::<Vec<_>>();
-                
+
                 result.insert(component.id.clone(), component_entrypoints);
             } else {
                 warn!(
