@@ -479,6 +479,14 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
         info!("Starting entrypoint generation");
 
         let tokens = data.component.tokens.clone();
+        let token0 = tokens[0].clone();
+        let token1 = tokens[1].clone();
+
+        if token1 < token0 {
+            return Err(EntrypointGenerationError::EntrypointGenerationFailed(
+                "Component has out-of-order tokens".to_string(),
+            ));
+        }
 
         // Defaults to random predefined address.
         let router_address = self
@@ -513,15 +521,19 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
 
         info!(swap_pair_count = swap_amounts.len(), "Estimated swap amounts for token pairs");
 
-        for ((token0, token1), amounts) in swap_amounts.iter() {
+        for ((token_in, token_out), amounts) in swap_amounts.iter() {
             debug!(
-                token0 = %token0,
-                token1 = %token1,
+                token_in = %token_in,
+                token_out = %token_out,
                 amount_count = amounts.len(),
                 "Processing token pair"
             );
-            let currency0 = SolAddress::from_slice(token0.as_ref());
-            let currency1 = SolAddress::from_slice(token1.as_ref());
+            let sell_token = SolAddress::from_slice(token_in.as_ref());
+            let buy_token = SolAddress::from_slice(token_out.as_ref());
+
+            let token_0 = SolAddress::from_slice(token0.as_ref());
+            let token_1 = SolAddress::from_slice(token1.as_ref());
+
             let hooks = SolAddress::from_slice(data.hook_address.as_ref());
 
             let fee = u32::from(
@@ -559,20 +571,20 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
             debug!(fee, tick_spacing, "Extracted pool parameters from component");
 
             let pool_key = PoolKey {
-                currency0,
-                currency1,
+                currency0: token_0,
+                currency1: token_1,
                 fee: U24::try_from(fee).expect("Fee value too large for U24"),
                 tickSpacing: I24::try_from(tick_spacing)
                     .expect("tick_spacing value out of range for I24"),
                 hooks,
             };
 
-            let is_zero_for_one = token0 < token1;
+            let is_zero_for_one = token_in < token_out;
 
             let amounts_to_use = if amounts.len() >= max_sample_size {
                 debug!(
-                    token0 = %token0,
-                    token1 = %token1,
+                    token_in = %token_in,
+                    token_out = %token_out,
                     "Using max sample size, taking {} out of {} amounts",
                     max_sample_size,
                     amounts.len()
@@ -583,16 +595,16 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                     .collect::<Vec<_>>()
             } else if amounts.len() >= min_samples {
                 debug!(
-                    token0 = %token0,
-                    token1 = %token1,
+                    token_in = %token_in,
+                    token_out = %token_out,
                     "Using all {} available amounts",
                     amounts.len()
                 );
                 amounts.iter().collect::<Vec<_>>()
             } else {
                 error!(
-                    token0 = %token0,
-                    token1 = %token1,
+                    token_in = %token_in,
+                    token_out = %token_out,
                     available_amounts = amounts.len(),
                     min_samples,
                     "Insufficient swap amounts for token pair"
@@ -600,7 +612,7 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                 return Err(EntrypointGenerationError::AmountsEstimationFailed(
                     format!(
                         "Insufficient swap amounts for token pair {:?} -> {:?}: got {}, need at least {}",
-                        token0, token1, amounts.len(), min_samples
+                        token_in, token_out, amounts.len(), min_samples
                     ),
                 ));
             };
@@ -609,8 +621,8 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                 let amount_u256 = U256::from_be_slice(amount_bytes.as_ref());
                 let amount_in = u128::try_from(amount_u256).map_err(|_| {
                     error!(
-                        token0 = %token0,
-                        token1 = %token1,
+                        token0 = %token_in,
+                        token1 = %token_out,
                         amount_hex = %format!("{:#x}", amount_u256),
                         "Amount too large for u128"
                     );
@@ -620,8 +632,8 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                 })?;
 
                 debug!(
-                    token0 = %token0,
-                    token1 = %token1,
+                    token_in = %token_in,
+                    token_out = %token_out,
                     amount_idx,
                     amount_in,
                     "Processing swap amount"
@@ -636,24 +648,25 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                     hookData: Default::default(),
                 };
 
-                let plan = Plan {
-                    actions: SolBytes::from(vec![
-                        ACTION_SWAP_EXACT_IN_SINGLE,
-                        ACTION_SETTLE_ALL,
-                        ACTION_TAKE_ALL,
-                    ]),
-                    params: vec![
-                        SolBytes::from(swap_params.abi_encode()),
-                        // Token In // amount in
-                        SolBytes::from((currency0, amount_in).abi_encode()),
-                        // Token Out // amount out
-                        SolBytes::from((currency1, 0u128).abi_encode()),
-                    ],
-                };
+                let actions = SolBytes::from(vec![
+                    ACTION_SWAP_EXACT_IN_SINGLE,
+                    ACTION_SETTLE_ALL,
+                    ACTION_TAKE_ALL,
+                ]);
+                let params = vec![
+                    SolBytes::from(swap_params.abi_encode()),
+                    SolBytes::from((sell_token, amount_in).abi_encode()),
+                    SolBytes::from((buy_token, 0u128).abi_encode()),
+                ];
+                
 
-                // Build calldata for execute(bytes) function call
-                let mut calldata = EXECUTE_FUNCTION_SELECTOR.to_vec();
-                calldata.extend(plan.abi_encode());
+                let mut calldata = hex::decode("09c5eabe").unwrap();
+                let mut tmp = (actions, params).abi_encode();
+                
+                // Remove first 32 bytes like the reference implementation
+                tmp.drain(0..32);
+                
+                calldata.extend(tmp.abi_encode());
 
                 let overwrites = ERC6909Overwrites::default();
                 let balance_slot = overwrites.balance_slot(router_address.clone(), token0.clone());
@@ -670,7 +683,7 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
 
                 state_overrides.insert(
                     router_address.clone(),
-                    AccountOverrides { slots: None, native_balance: None, code: Some(router_code) },
+                    AccountOverrides { slots: None, native_balance: None, code: Some(router_code.clone()) },
                 );
 
                 let mut storage_diff = BTreeMap::new();
@@ -688,7 +701,7 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                 );
 
                 state_overrides.insert(
-                    pool_manager,
+                    pool_manager.clone(),
                     AccountOverrides {
                         slots: Some(StorageOverride::Diff(storage_diff)),
                         native_balance: None,
@@ -709,8 +722,8 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                 );
 
                 debug!(
-                    token0 = %token0,
-                    token1 = %token1,
+                    token_in = %token_in,
+                    token_out = %token_out,
                     amount_idx,
                     "Generated entrypoint for swap"
                 );
