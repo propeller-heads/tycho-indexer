@@ -82,7 +82,7 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         );
     }
 
-    // Override to prank the taker address before calling the real settlement
+    // Override swap to handle test setup
     function swap(uint256 givenAmount, bytes calldata data)
         external
         payable
@@ -98,19 +98,17 @@ contract BebopExecutorHarness is BebopExecutor, Test {
             uint256 originalFilledTakerAmount,
         ) = _decodeData(data);
 
-        uint256 actualFilledTakerAmount =
-            _getActualFilledTakerAmount(givenAmount, originalFilledTakerAmount);
-
-        // Extract taker address and expiry from bebop calldata
+        // Extract taker address, receiver, and expiry from bebop calldata
         bytes4 sel = _getSelector(bebopCalldata);
         address takerAddress;
+        address receiverAddress;
         uint256 expiry;
 
-        bytes memory bebopCalldataWithoutSelector;
+        bytes memory bebopCalldataWithoutSelector =
+            _stripSelector(bebopCalldata);
 
         if (sel == SWAP_SINGLE_SELECTOR) {
-            bebopCalldataWithoutSelector = _stripSelector(bebopCalldata);
-            (IBebopSettlement.Single memory ord,,) = abi.decode(
+            (IBebopSettlement.Single memory order,,) = abi.decode(
                 bebopCalldataWithoutSelector,
                 (
                     IBebopSettlement.Single,
@@ -118,11 +116,11 @@ contract BebopExecutorHarness is BebopExecutor, Test {
                     uint256
                 )
             );
-            takerAddress = ord.taker_address;
-            expiry = ord.expiry;
+            takerAddress = order.taker_address;
+            receiverAddress = order.receiver;
+            expiry = order.expiry;
         } else {
-            bebopCalldataWithoutSelector = _stripSelector(bebopCalldata);
-            (IBebopSettlement.Aggregate memory ord,,) = abi.decode(
+            (IBebopSettlement.Aggregate memory order,,) = abi.decode(
                 bebopCalldataWithoutSelector,
                 (
                     IBebopSettlement.Aggregate,
@@ -130,9 +128,13 @@ contract BebopExecutorHarness is BebopExecutor, Test {
                     uint256
                 )
             );
-            takerAddress = ord.taker_address;
-            expiry = ord.expiry;
+            takerAddress = order.taker_address;
+            receiverAddress = order.receiver;
+            expiry = order.expiry;
         }
+
+        uint256 actualFilledTakerAmount =
+            _getActualFilledTakerAmount(givenAmount, originalFilledTakerAmount);
 
         // For testing: transfer tokens from executor to taker address
         // This simulates the taker having the tokens with approval
@@ -150,7 +152,7 @@ contract BebopExecutorHarness is BebopExecutor, Test {
             vm.stopPrank();
         } else {
             vm.stopPrank();
-            // For native ETH, send it to the taker address
+            // For native ETH, deal it to the taker address
             payable(takerAddress).transfer(actualFilledTakerAmount);
         }
 
@@ -162,8 +164,6 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         uint256 currentTimestamp = block.timestamp;
         vm.warp(expiry - 1); // Set timestamp to just before expiry
 
-        // Execute the single swap with the original data
-        // The parent's _swap will handle the modification of filledTakerAmount
         calculatedAmount = _swap(givenAmount, data);
 
         // Restore original timestamp

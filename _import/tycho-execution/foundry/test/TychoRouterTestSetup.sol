@@ -195,22 +195,17 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         address tokenIn,
         address tokenOut,
         RestrictTransferFrom.TransferType transferType,
-        BebopExecutorHarness.OrderType orderType,
-        bytes memory quoteData,
-        uint8 signatureType,
-        bytes memory signature,
+        bytes memory bebopCalldata,
+        uint256 originalAmountIn,
         bool approvalNeeded
     ) internal pure returns (bytes memory) {
         return abi.encodePacked(
             tokenIn,
             tokenOut,
-            transferType,
-            orderType,
-            uint32(quoteData.length),
-            quoteData,
-            signatureType,
-            uint32(signature.length),
-            signature,
+            uint8(transferType),
+            uint32(bebopCalldata.length),
+            bebopCalldata,
+            originalAmountIn,
             approvalNeeded ? uint8(1) : uint8(0)
         );
     }
