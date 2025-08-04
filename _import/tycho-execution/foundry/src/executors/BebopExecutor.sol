@@ -65,10 +65,11 @@ interface IBebopSettlement {
 contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
     using Math for uint256;
     using SafeERC20 for IERC20;
+    using Address for address;
 
     /// @notice Function selectors for Bebop settlement methods
-    bytes4 constant SWAP_SINGLE_SELECTOR = 0x47fb5891;
-    bytes4 constant SWAP_AGGREGATE_SELECTOR = 0x80d2cf33;
+    bytes4 public constant SWAP_SINGLE_SELECTOR = 0x4dcebcba;
+    bytes4 public constant SWAP_AGGREGATE_SELECTOR = 0xa2f74893;
 
     /// @notice Bebop-specific errors
     error BebopExecutor__InvalidDataLength();
@@ -115,14 +116,11 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             bool approvalNeeded
         ) = _decodeData(data);
 
-        // Determine if we need to modify filledTakerAmount based on slippage
-        bytes memory finalCalldata = bebopCalldata;
-        if (givenAmount != originalFilledTakerAmount) {
-            // Need to modify the filledTakerAmount in the calldata
-            finalCalldata = _modifyFilledTakerAmount(
-                bebopCalldata, givenAmount, originalFilledTakerAmount
-            );
-        }
+        // Modify the filledTakerAmount in the calldata
+        // If the filledTakerAmount is the same as the original, the original calldata is returned
+        bytes memory finalCalldata = _modifyFilledTakerAmount(
+            bebopCalldata, givenAmount, originalFilledTakerAmount
+        );
 
         // Transfer tokens if needed
         if (tokenIn != address(0)) {
@@ -142,15 +140,8 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         // Execute the swap with the forwarded calldata
         uint256 ethValue = tokenIn == address(0) ? givenAmount : 0;
 
-        // slither-disable-next-line arbitrary-send-eth
-        (bool success, bytes memory result) =
-            bebopSettlement.call{value: ethValue}(finalCalldata);
-        if (!success) {
-            // If the call failed, bubble up the revert reason
-            assembly {
-                revert(add(result, 0x20), mload(result))
-            }
-        }
+        // Use OpenZeppelin's Address library for safe call with value
+        bebopSettlement.functionCallWithValue(finalCalldata, ethValue);
 
         // Calculate actual amount received by the executor
         uint256 balanceAfter = _balanceOf(tokenOut, address(this));
@@ -159,7 +150,7 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
 
     /// @dev Decodes the packed calldata
     function _decodeData(bytes calldata data)
-        internal
+        public
         pure
         returns (
             address tokenIn,
@@ -215,62 +206,49 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
     /// @param bebopCalldata The original calldata for the bebop settlement
     /// @param givenAmount The actual amount available from the router
     /// @param originalFilledTakerAmount The original amount expected when the quote was generated
-    /// @return modifiedCalldata The modified calldata with updated filledTakerAmount
+    /// @return The modified calldata with updated filledTakerAmount
     function _modifyFilledTakerAmount(
         bytes memory bebopCalldata,
         uint256 givenAmount,
         uint256 originalFilledTakerAmount
-    ) internal pure returns (bytes memory) {
-        // Check the function selector to determine order type
-        bytes4 selector;
+    ) public pure returns (bytes memory) {
+        bytes4 selector = _getSelector(bebopCalldata);
+
+        // The position of filledTakerAmount differs between swapSingle and swapAggregate
+        // due to how Solidity encodes structs:
+        // - swapSingle: Single struct is encoded inline (no offset), so filledTakerAmount is at position 388
+        // - swapAggregate: Aggregate struct uses offset (has arrays), so filledTakerAmount is at position 68
+        uint256 filledTakerAmountPos =
+            selector == SWAP_SINGLE_SELECTOR ? 388 : 68;
+
+        // Calculate new filledTakerAmount using _getActualFilledTakerAmount
+        uint256 newFilledTakerAmount =
+            _getActualFilledTakerAmount(givenAmount, originalFilledTakerAmount);
+
+        // If the new filledTakerAmount is the same as the original, return the original calldata
+        if (newFilledTakerAmount == originalFilledTakerAmount) {
+            return bebopCalldata;
+        }
+
+        // Use assembly to modify the filledTakerAmount at the correct position
         assembly {
-            selector := mload(add(bebopCalldata, 32))
+            // Get pointer to the data portion of the bytes array
+            let dataPtr := add(bebopCalldata, 0x20)
+
+            // Calculate the actual position and store the new value
+            let actualPos := add(dataPtr, filledTakerAmountPos)
+            mstore(actualPos, newFilledTakerAmount)
         }
 
-        if (
-            selector == SWAP_SINGLE_SELECTOR
-                || selector == SWAP_AGGREGATE_SELECTOR
-        ) {
-            // Both swapSingle and swapAggregate have filledTakerAmount as the last parameter
-            // For swapSingle: (Single calldata order, MakerSignature calldata makerSignature, uint256 filledTakerAmount)
-            // For swapAggregate: (Aggregate calldata order, MakerSignature[] calldata makerSignatures, uint256 filledTakerAmount)
-            // The filledTakerAmount is always the last 32 bytes of the calldata
+        return bebopCalldata;
+    }
 
-            // Calculate the new filledTakerAmount based on available amount
-            // The encoder guarantees originalFilledTakerAmount is never 0
-
-            uint256 calldataLength = bebopCalldata.length;
-            if (calldataLength < 36) revert BebopExecutor__InvalidInput(); // 4 bytes selector + at least 32 bytes
-
-            // Calculate new filledTakerAmount using _getActualFilledTakerAmount
-            uint256 newFilledTakerAmount = _getActualFilledTakerAmount(
-                givenAmount, originalFilledTakerAmount
-            );
-
-            // If the new filledTakerAmount is the same as the original, return the original calldata
-            if (newFilledTakerAmount == originalFilledTakerAmount) {
-                return bebopCalldata;
-            }
-
-            // Create modified calldata
-            bytes memory modifiedCalldata = new bytes(calldataLength);
-
-            // Copy all data except the last 32 bytes
-            for (uint256 i = 0; i < calldataLength - 32; i++) {
-                modifiedCalldata[i] = bebopCalldata[i];
-            }
-
-            // Write the new filledTakerAmount in the last 32 bytes
-            assembly {
-                mstore(
-                    add(modifiedCalldata, calldataLength), newFilledTakerAmount
-                )
-            }
-
-            return modifiedCalldata;
-        } else {
-            revert BebopExecutor__InvalidInput();
-        }
+    /// @dev Helper function to extract selector from bytes
+    function _getSelector(bytes memory data) internal pure returns (bytes4) {
+        return bytes4(
+            uint32(uint8(data[0])) << 24 | uint32(uint8(data[1])) << 16
+                | uint32(uint8(data[2])) << 8 | uint32(uint8(data[3]))
+        );
     }
 
     /// @dev Returns the balance of a token or ETH for an account
