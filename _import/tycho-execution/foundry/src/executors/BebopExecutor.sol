@@ -66,12 +66,9 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
     using Math for uint256;
     using SafeERC20 for IERC20;
 
-    /// @notice Bebop order types
-    enum OrderType {
-        Single, // 0: Single token pair trade
-        Aggregate // 1: Multi-maker trade with single token in/out
-
-    }
+    /// @notice Function selectors for Bebop settlement methods
+    bytes4 constant SWAP_SINGLE_SELECTOR = 0x47fb5891;
+    bytes4 constant SWAP_AGGREGATE_SELECTOR = 0x80d2cf33;
 
     /// @notice Bebop-specific errors
     error BebopExecutor__InvalidDataLength();
@@ -92,11 +89,12 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
 
     /// @notice Executes a swap through Bebop's PMM RFQ system
     /// @param givenAmount The amount of input token to swap
-    /// @param data Encoded swap data containing tokens and quote information
+    /// @param data Encoded swap data containing tokens and bebop calldata
     /// @return calculatedAmount The amount of output token received
     function swap(uint256 givenAmount, bytes calldata data)
         external
         payable
+        virtual
         override
         returns (uint256 calculatedAmount)
     {
@@ -105,39 +103,51 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             address tokenIn,
             address tokenOut,
             TransferType transferType,
-            OrderType orderType,
-            uint256 filledTakerAmount,
-            bytes memory quoteData,
-            bytes memory makerSignaturesData,
+            bytes memory bebopCalldata,
+            uint256 originalAmountIn,
             bool approvalNeeded
         ) = _decodeData(data);
 
-        // Execute RFQ swap based on order type
-        if (orderType == OrderType.Single) {
-            calculatedAmount = _executeSingleRFQ(
-                tokenIn,
-                tokenOut,
-                transferType,
-                givenAmount,
-                filledTakerAmount,
-                quoteData,
-                makerSignaturesData,
-                approvalNeeded
+        // Determine if we need to modify filledTakerAmount based on slippage
+        bytes memory finalCalldata = bebopCalldata;
+        if (givenAmount != originalAmountIn) {
+            // Need to modify the filledTakerAmount in the calldata
+            finalCalldata = _modifyFilledTakerAmount(
+                bebopCalldata, givenAmount, originalAmountIn
             );
-        } else if (orderType == OrderType.Aggregate) {
-            calculatedAmount = _executeAggregateRFQ(
-                tokenIn,
-                tokenOut,
-                transferType,
-                givenAmount,
-                filledTakerAmount,
-                quoteData,
-                makerSignaturesData,
-                approvalNeeded
-            );
-        } else {
-            revert BebopExecutor__InvalidInput();
         }
+
+        // Transfer tokens if needed
+        if (tokenIn != address(0)) {
+            _transfer(address(this), transferType, tokenIn, givenAmount);
+        }
+
+        // Approve Bebop settlement to spend tokens if needed
+        if (approvalNeeded && tokenIn != address(0)) {
+            // slither-disable-next-line unused-return
+            IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
+        }
+
+        // Bebop orders specify the receiver, so we need to check the receiver's balance
+        // We'll use the executor's balance since Bebop should send tokens here for the router to collect
+        uint256 balanceBefore = _balanceOf(tokenOut, address(this));
+
+        // Execute the swap with the forwarded calldata
+        uint256 ethValue = tokenIn == address(0) ? givenAmount : 0;
+
+        // slither-disable-next-line arbitrary-send-eth
+        (bool success, bytes memory result) =
+            bebopSettlement.call{value: ethValue}(finalCalldata);
+        if (!success) {
+            // If the call failed, bubble up the revert reason
+            assembly {
+                revert(add(result, 0x20), mload(result))
+            }
+        }
+
+        // Calculate actual amount received by the executor
+        uint256 balanceAfter = _balanceOf(tokenOut, address(this));
+        calculatedAmount = balanceAfter - balanceBefore;
     }
 
     /// @dev Decodes the packed calldata
@@ -148,190 +158,48 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             address tokenIn,
             address tokenOut,
             TransferType transferType,
-            OrderType orderType,
-            uint256 filledTakerAmount,
-            bytes memory quoteData,
-            bytes memory makerSignaturesData,
+            bytes memory bebopCalldata,
+            uint256 originalAmountIn,
             bool approvalNeeded
         )
     {
-        // Need at least 83 bytes for the minimum fixed fields
-        // 20 + 20 + 1 + 1 + 32 (filledTakerAmount) + 4 (quote length) + 4 (maker sigs length) + 1 (approval) = 83
-        if (data.length < 83) revert BebopExecutor__InvalidDataLength();
+        // Need at least 78 bytes for the minimum fixed fields
+        // 20 + 20 + 1 + 4 (calldata length) + 32 (original amount) + 1 (approval) = 78
+        if (data.length < 78) revert BebopExecutor__InvalidDataLength();
 
         // Decode fixed fields
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         transferType = TransferType(uint8(data[40]));
-        orderType = OrderType(uint8(data[41]));
-        filledTakerAmount = uint256(bytes32(data[42:74]));
 
-        // Get quote data length and validate
-        uint32 quoteDataLength = uint32(bytes4(data[74:78]));
-        if (data.length < 78 + quoteDataLength + 4) {
+        // Get bebop calldata length and validate
+        uint32 bebopCalldataLength = uint32(bytes4(data[41:45]));
+        if (data.length != 78 + bebopCalldataLength) {
             revert BebopExecutor__InvalidDataLength();
         }
 
-        // Extract quote data
-        quoteData = data[78:78 + quoteDataLength];
+        // Extract bebop calldata
+        bebopCalldata = data[45:45 + bebopCalldataLength];
 
-        // Get maker signatures data length
-        uint32 makerSignaturesLength =
-            uint32(bytes4(data[78 + quoteDataLength:82 + quoteDataLength]));
-
-        // Validate total length
-        // 78 + quoteDataLength + 4 + makerSignaturesLength + 1 (approval)
-        uint256 expectedLength = 83 + quoteDataLength + makerSignaturesLength;
-        if (data.length != expectedLength) {
-            revert BebopExecutor__InvalidDataLength();
-        }
-
-        // Extract maker signatures data (ABI encoded MakerSignature array)
-        makerSignaturesData = data[
-            82 + quoteDataLength:82 + quoteDataLength + makerSignaturesLength
-        ];
+        // Extract original amount in
+        originalAmountIn = uint256(
+            bytes32(data[45 + bebopCalldataLength:77 + bebopCalldataLength])
+        );
 
         // Extract approval flag
-        approvalNeeded = data[82 + quoteDataLength + makerSignaturesLength] != 0;
+        approvalNeeded = data[77 + bebopCalldataLength] != 0;
     }
 
-    /// @dev Executes a Single RFQ swap through Bebop settlement
-    function _executeSingleRFQ(
-        address tokenIn,
-        address tokenOut,
-        TransferType transferType,
-        uint256 givenAmount,
-        uint256 filledTakerAmount,
-        bytes memory quoteData,
-        bytes memory makerSignaturesData,
-        bool approvalNeeded
-    ) internal virtual returns (uint256 amountOut) {
-        // Decode the order from quoteData
-        IBebopSettlement.Single memory order =
-            abi.decode(quoteData, (IBebopSettlement.Single));
-
-        // Decode the MakerSignature array (should contain exactly 1 signature for Single orders)
-        IBebopSettlement.MakerSignature[] memory signatures =
-            abi.decode(makerSignaturesData, (IBebopSettlement.MakerSignature[]));
-
-        // Validate that there is exactly one maker signature
-        if (signatures.length != 1) {
-            revert BebopExecutor__InvalidInput();
-        }
-
-        // Get the maker signature from the first and only element of the array
-        IBebopSettlement.MakerSignature memory sig = signatures[0];
-
-        uint256 actualFilledTakerAmount = _getActualFilledTakerAmount(
-            givenAmount, order.taker_amount, filledTakerAmount
-        );
-
-        if (tokenIn != address(0)) {
-            // Transfer tokens to executor
-            _transfer(address(this), transferType, tokenIn, givenAmount);
-        }
-
-        // Approve Bebop settlement to spend tokens if needed
-        if (approvalNeeded) {
-            // slither-disable-next-line unused-return
-            IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
-        }
-
-        // Record balances before swap to calculate amountOut
-        uint256 balanceBefore = _balanceOf(tokenOut, order.receiver);
-
-        // Execute the swap with ETH value if needed
-        uint256 ethValue = tokenIn == address(0) ? actualFilledTakerAmount : 0;
-
-        // Use swapSingle since tokens are in the executor with approval
-        // slither-disable-next-line arbitrary-send-eth
-        IBebopSettlement(bebopSettlement).swapSingle{value: ethValue}(
-            order, sig, actualFilledTakerAmount
-        );
-
-        // Calculate actual amount received
-        uint256 balanceAfter = _balanceOf(tokenOut, order.receiver);
-
-        amountOut = balanceAfter - balanceBefore;
-    }
-
-    /// @dev Executes an Aggregate RFQ swap through Bebop settlement
-    function _executeAggregateRFQ(
-        address tokenIn,
-        address tokenOut,
-        TransferType transferType,
-        uint256 givenAmount,
-        uint256 filledTakerAmount,
-        bytes memory quoteData,
-        bytes memory makerSignaturesData,
-        bool approvalNeeded
-    ) internal virtual returns (uint256 amountOut) {
-        // Decode the Aggregate order
-        IBebopSettlement.Aggregate memory order =
-            abi.decode(quoteData, (IBebopSettlement.Aggregate));
-
-        // Decode the MakerSignature array (can contain multiple signatures for Aggregate orders)
-        IBebopSettlement.MakerSignature[] memory signatures =
-            abi.decode(makerSignaturesData, (IBebopSettlement.MakerSignature[]));
-
-        // Aggregate orders should have at least one signature
-        if (signatures.length == 0) {
-            revert BebopExecutor__InvalidInput();
-        }
-
-        // For aggregate orders, calculate total taker amount across all amounts of the 2D array
-        uint256 totalTakerAmount = 0;
-        for (uint256 i = 0; i < order.taker_amounts.length; i++) {
-            for (uint256 j = 0; j < order.taker_amounts[i].length; j++) {
-                totalTakerAmount += order.taker_amounts[i][j];
-            }
-        }
-
-        uint256 actualFilledTakerAmount = _getActualFilledTakerAmount(
-            givenAmount, totalTakerAmount, filledTakerAmount
-        );
-
-        if (tokenIn != address(0)) {
-            // Transfer tokens to executor
-            _transfer(address(this), transferType, tokenIn, givenAmount);
-        }
-
-        // Approve Bebop settlement to spend tokens if needed
-        if (approvalNeeded) {
-            // slither-disable-next-line unused-return
-            IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
-        }
-
-        // Record balance before swap
-        uint256 balanceBefore = _balanceOf(tokenOut, order.receiver);
-
-        // Execute the swap
-        uint256 ethValue = tokenIn == address(0) ? actualFilledTakerAmount : 0;
-
-        // Execute the swap (tokens are in executor, approved to settlement)
-        // slither-disable-next-line arbitrary-send-eth
-        IBebopSettlement(bebopSettlement).swapAggregate{value: ethValue}(
-            order, signatures, actualFilledTakerAmount
-        );
-
-        // Calculate actual amount received
-        uint256 balanceAfter = _balanceOf(tokenOut, order.receiver);
-
-        amountOut = balanceAfter - balanceBefore;
-    }
-
-    /**
-     * @dev Determines the actual taker amount to be filled for a Bebop order
-     * @notice This function handles two scenarios:
-     *         1. When filledTakerAmount is 0: Uses the full order amount if givenAmount is sufficient,
-     *            otherwise returns givenAmount to partially fill the order
-     *         2. When filledTakerAmount > 0: Caps the fill at the minimum of filledTakerAmount and givenAmount
-     *            to ensure we don't attempt to fill more than available
-     * @param givenAmount The amount of tokens available from the router for this swap
-     * @param orderTakerAmount The full taker amount specified in the Bebop order
-     * @param filledTakerAmount The requested fill amount (0 means fill entire order)
-     * @return actualFilledTakerAmount The amount that will actually be filled
-     */
+    /// @dev Determines the actual taker amount to be filled for a Bebop order
+    /// @notice This function handles two scenarios:
+    ///         1. When filledTakerAmount is 0: Uses the full order amount if given amount is sufficient,
+    ///            otherwise returns givenAmount to partially fill the order
+    ///         2. When filledTakerAmount > 0: Caps the fill at the minimum of filledTakerAmount
+    ///            to ensure we don't attempt to fill more than available
+    /// @param givenAmount The amount of tokens available from the router for this swap
+    /// @param orderTakerAmount The full taker amount specified in the Bebop order
+    /// @param filledTakerAmount The requested fill amount (0 means fill entire order)
+    /// @return actualFilledTakerAmount The amount that will actually be filled
     function _getActualFilledTakerAmount(
         uint256 givenAmount,
         uint256 orderTakerAmount,
@@ -340,6 +208,76 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         actualFilledTakerAmount = filledTakerAmount == 0
             ? (givenAmount >= orderTakerAmount ? orderTakerAmount : givenAmount)
             : (filledTakerAmount > givenAmount ? givenAmount : filledTakerAmount);
+    }
+
+    /// @dev Modifies the filledTakerAmount in the bebop calldata to handle slippage
+    /// @param bebopCalldata The original calldata for the bebop settlement
+    /// @param givenAmount The actual amount available from the router
+    /// @param originalAmountIn The original amount expected when the quote was generated
+    /// @return modifiedCalldata The modified calldata with updated filledTakerAmount
+    function _modifyFilledTakerAmount(
+        bytes memory bebopCalldata,
+        uint256 givenAmount,
+        uint256 originalAmountIn
+    ) internal pure returns (bytes memory) {
+        // Check the function selector to determine order type
+        bytes4 selector;
+        assembly {
+            selector := mload(add(bebopCalldata, 32))
+        }
+
+        if (
+            selector == SWAP_SINGLE_SELECTOR
+                || selector == SWAP_AGGREGATE_SELECTOR
+        ) {
+            // Both swapSingle and swapAggregate have filledTakerAmount as the last parameter
+            // For swapSingle: (Single calldata order, MakerSignature calldata makerSignature, uint256 filledTakerAmount)
+            // For swapAggregate: (Aggregate calldata order, MakerSignature[] calldata makerSignatures, uint256 filledTakerAmount)
+            // The filledTakerAmount is always the last 32 bytes of the calldata
+
+            // Calculate the new filledTakerAmount proportionally
+            // If originalAmountIn was X and filledTakerAmount was Y,
+            // then new filledTakerAmount = (Y * givenAmount) / X
+
+            uint256 calldataLength = bebopCalldata.length;
+            if (calldataLength < 36) revert BebopExecutor__InvalidInput(); // 4 bytes selector + at least 32 bytes
+
+            // Extract original filledTakerAmount (last 32 bytes)
+            uint256 originalFilledTakerAmount;
+            assembly {
+                originalFilledTakerAmount :=
+                    mload(add(bebopCalldata, calldataLength))
+            }
+
+            // Calculate new filledTakerAmount using _getActualFilledTakerAmount
+            uint256 newFilledTakerAmount = _getActualFilledTakerAmount(
+                givenAmount, originalAmountIn, originalFilledTakerAmount
+            );
+
+            // If the new filledTakerAmount is the same as the original, return the original calldata
+            if (newFilledTakerAmount == originalFilledTakerAmount) {
+                return bebopCalldata;
+            }
+
+            // Create modified calldata
+            bytes memory modifiedCalldata = new bytes(calldataLength);
+
+            // Copy all data except the last 32 bytes
+            for (uint256 i = 0; i < calldataLength - 32; i++) {
+                modifiedCalldata[i] = bebopCalldata[i];
+            }
+
+            // Write the new filledTakerAmount in the last 32 bytes
+            assembly {
+                mstore(
+                    add(modifiedCalldata, calldataLength), newFilledTakerAmount
+                )
+            }
+
+            return modifiedCalldata;
+        } else {
+            revert BebopExecutor__InvalidInput();
+        }
     }
 
     /// @dev Returns the balance of a token or ETH for an account
