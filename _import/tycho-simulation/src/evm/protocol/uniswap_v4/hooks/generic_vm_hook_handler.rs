@@ -267,7 +267,8 @@ where
 
             let decoded = GetLimitsSolReturn::abi_decode(&res.return_value).map_err(|e| {
                 SimulationError::FatalError(format!(
-                    "Failed to decode getLimits return value: {e:?}"
+                    "Failed to decode getLimits return value: {:?} with error {e:?}",
+                    res.return_value
                 ))
             })?;
 
@@ -324,7 +325,7 @@ where
 mod tests {
     use std::{default::Default, str::FromStr};
 
-    use alloy::primitives::{aliases::U24, Bytes as AlloyBytes, B256, I256, U256};
+    use alloy::primitives::{aliases::U24, B256, I256, U256};
     use revm::state::{AccountInfo, Bytecode};
     use tycho_client::feed::BlockHeader;
 
@@ -629,9 +630,9 @@ mod tests {
     #[test]
     fn test_get_amount_ranges() {
         let block = BlockHeader {
-            number: 15797251,
+            number: 23072527,
             hash: Bytes::from_str(
-                "0x7032b93c5b0d419f2001f7c77c19ade6da92d2df147712eac1a27c7ffedfe410",
+                "0x639d7e454339ba43da3b2288b45078405330afcc3cd7f10e6e852be9c70ac164",
             )
             .unwrap(),
             timestamp: 1748397011,
@@ -640,53 +641,15 @@ mod tests {
         let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
 
-        let hook_address = Address::from_str("0x0010d0d5db05933fa0d9f7038d365e1541a41888")
+        let hook_address = Address::from_str("0xC88b618C2c670c2e2a42e06B466B6F0e82A6E8A8")
             .expect("Invalid hook address");
 
         let pool_manager = Address::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90")
             .expect("Invalid pool manager address");
 
-        // The limits contract address from the provided entrypoint
-        let limits_contract_address =
-            Address::from_str("0x69058613588536167ba0aa94f0cc1fe420ef28a8")
-                .expect("Invalid limits contract address");
-
-        // Deploy mock getLimits contract to avoid intricacies of existing contracts
-        //
-        // Bytecode retrieved by running `forge inspect Limits deployedBytecode` on the following
-        // contract (must be converted to a Solidity file):
-        //
-        // // SPDX-License-Identifier: UNLICENSED
-        // pragma solidity ^0.8.26;
-        //
-        // contract Limits {
-        //     function getLimits(address a, address b) external pure returns (uint256, uint256) {
-        //         require(a != address(0) && b != address(0));
-        //         return (1000, 2000);
-        //     }
-        // }
-        let limits_bytecode = {
-            Bytecode::new_raw(
-                AlloyBytes::from_str("0x60808060405260043610156011575f80fd5b5f3560e01c63aaed87a3146023575f80fd5b34607a576040366003190112607a576004356001600160a01b03811690819003607a576024356001600160a01b0381169190829003607a5715159081607e575b5015607a57806103e8604092526107d06020820152f35b5f80fd5b905015155f606356fea2646970667358221220dba2ce58a718a2bf997701d130cb01ae2e5da7c456269ba47dd0c405b90862f064736f6c634300081c0033").unwrap()
-            )
-        };
-
-        // Initialize the limits contract with the mock bytecode
-        engine.state.init_account(
-            limits_contract_address,
-            AccountInfo {
-                balance: *MAX_BALANCE,
-                nonce: 0,
-                code_hash: B256::from(keccak256(limits_bytecode.clone().bytes())),
-                code: Some(limits_bytecode),
-            },
-            None,
-            true,
-        );
-
         // Encode function signature as expected in TychoSimulationContract.encode_input
         let limits_entrypoint =
-            "0x69058613588536167ba0aa94f0cc1fe420ef28a8:getLimits(address,address)";
+            "0xC88b618C2c670c2e2a42e06B466B6F0e82A6E8A8:getLimits(address,address)";
         let hook_handler = GenericVMHookHandler::new(
             hook_address,
             engine,
@@ -707,11 +670,12 @@ mod tests {
                 assert_eq!(ranges.amount_in_range.0, U256::ZERO);
                 assert_eq!(ranges.amount_out_range.0, U256::ZERO);
 
-                let expected_limit_1 = U256::from_str("1000").unwrap();
-                let expected_limit_2 = U256::from_str("2000").unwrap();
+                // This varies depending on block, so we just use a safe min amount
+                let min_expected_limit_1 = U256::from_str("10000000000000").unwrap();
+                let min_expected_limit_2 = U256::from_str("1000").unwrap();
 
-                assert_eq!(ranges.amount_in_range.1, expected_limit_1);
-                assert_eq!(ranges.amount_out_range.1, expected_limit_2);
+                assert!(ranges.amount_in_range.1 >= min_expected_limit_1);
+                assert!(ranges.amount_out_range.1 >= min_expected_limit_2);
             }
             Err(e) => {
                 panic!("get_amount_out ranges failed {e}");
