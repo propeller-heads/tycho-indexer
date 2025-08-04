@@ -668,6 +668,84 @@ impl BebopSwapEncoder {
     }
 }
 
+/// Extract the total taker amount from a Bebop aggregate order calldata
+fn extract_aggregate_taker_amount(bebop_calldata: &[u8]) -> Option<U256> {
+    // Minimum size check: 4 (selector) + 32 (order offset) + 32 (signatures offset) + 32 (filledTakerAmount) = 100 bytes
+    // This ensures we can safely read the offset to the order parameter
+    if bebop_calldata.len() < 100 {
+        return None;
+    }
+
+    // Read the offset to the order struct (first parameter)
+    let order_offset = U256::from_be_slice(&bebop_calldata[4..36]).to::<usize>() + 4;
+
+    // The Aggregate struct fields (all offsets are relative to the start of the struct):
+    // 0: expiry (32 bytes)
+    // 1: taker_address (32 bytes)
+    // 2: offset to maker_addresses array (32 bytes)
+    // 3: offset to maker_nonces array (32 bytes)
+    // 4: offset to taker_tokens array (32 bytes)
+    // 5: offset to maker_tokens array (32 bytes)
+    // 6: offset to taker_amounts array (32 bytes) <- we need this
+
+    if bebop_calldata.len() <= order_offset + 224 {
+        return None;
+    }
+
+    let taker_amounts_offset =
+        U256::from_be_slice(&bebop_calldata[order_offset + 192..order_offset + 224]).to::<usize>();
+    let taker_amounts_data_offset = order_offset + taker_amounts_offset;
+
+    // Read the taker_amounts 2D array
+    if bebop_calldata.len() <= taker_amounts_data_offset + 32 {
+        return None;
+    }
+
+    // First 32 bytes is the array length (number of makers)
+    let num_makers = U256::from_be_slice(
+        &bebop_calldata[taker_amounts_data_offset..taker_amounts_data_offset + 32],
+    )
+    .to::<usize>();
+
+    let total_taker_amount = (0..num_makers)
+        // turn each maker-offset word into an absolute data offset
+        .filter_map(|idx| {
+            let word_start = taker_amounts_data_offset + 32 + idx * 32;
+            if bebop_calldata.len() <= word_start + 32 {
+                return None;
+            }
+            let rel =
+                U256::from_be_slice(&bebop_calldata[word_start..word_start + 32]).to::<usize>();
+            Some(taker_amounts_data_offset + rel)
+        })
+        // for every maker, accumulate its taker_amounts array
+        .map(|maker_data_off| {
+            if bebop_calldata.len() <= maker_data_off + 32 {
+                return U256::ZERO;
+            }
+            let num_amounts =
+                U256::from_be_slice(&bebop_calldata[maker_data_off..maker_data_off + 32])
+                    .to::<usize>();
+
+            (0..num_amounts)
+                .filter_map(|j| {
+                    let amount_off = maker_data_off + 32 + j * 32;
+                    if bebop_calldata.len() < amount_off + 32 {
+                        return None;
+                    }
+                    Some(U256::from_be_slice(&bebop_calldata[amount_off..amount_off + 32]))
+                })
+                .fold(U256::ZERO, |acc, amt| acc.saturating_add(amt))
+        })
+        .fold(U256::ZERO, |acc, maker_sum| acc.saturating_add(maker_sum));
+
+    if total_taker_amount > U256::ZERO {
+        Some(total_taker_amount)
+    } else {
+        None
+    }
+}
+
 impl SwapEncoder for BebopSwapEncoder {
     fn new(
         executor_address: String,
@@ -744,9 +822,43 @@ impl SwapEncoder for BebopSwapEncoder {
             ));
         }
 
-        // Extract the last 32 bytes as the original filledTakerAmount
-        let original_filled_taker_amount =
-            U256::from_be_slice(&bebop_calldata[bebop_calldata.len() - 32..]);
+        // Extract the original filledTakerAmount, using the order's taker_amount if it's zero
+        let original_filled_taker_amount = {
+            let filled_amount = U256::from_be_slice(&bebop_calldata[bebop_calldata.len() - 32..]);
+
+            if filled_amount != U256::ZERO {
+                filled_amount
+            } else {
+                // Extract taker_amount from the order based on the function selector
+                let selector = &bebop_calldata[0..4];
+
+                // swapSingle selector: 0x47fb5891
+                // swapAggregate selector: 0x80d2cf33
+                const SWAP_SINGLE_SELECTOR: [u8; 4] = [0x47, 0xfb, 0x58, 0x91];
+                const SWAP_AGGREGATE_SELECTOR: [u8; 4] = [0x80, 0xd2, 0xcf, 0x33];
+
+                if selector == SWAP_SINGLE_SELECTOR {
+                    // For swapSingle, decode the Single struct to get taker_amount
+                    // The Single struct is the first parameter after the selector
+                    // Single struct has fields in order: expiry, taker_address, maker_address,
+                    // maker_nonce, taker_token, maker_token, taker_amount, maker_amount, etc.
+                    // taker_amount is at position 6 (0-indexed), so offset is 4 + 32*6 = 196
+                    if bebop_calldata.len() >= 228 {
+                        U256::from_be_slice(&bebop_calldata[196..228])
+                    } else {
+                        U256::ZERO
+                    }
+                } else if selector == SWAP_AGGREGATE_SELECTOR {
+                    // For swapAggregate, we need to sum all taker_amounts
+                    // The calldata structure is: selector(4) + offset_to_order(32) +
+                    // offset_to_signatures(32) + filledTakerAmount(32) + order_data +
+                    // signatures_data
+                    extract_aggregate_taker_amount(&bebop_calldata).unwrap_or(U256::ZERO)
+                } else {
+                    U256::ZERO
+                }
+            }
+        };
 
         // Encode packed data for the executor
         // Format: token_in | token_out | transfer_type | bebop_calldata_length |
