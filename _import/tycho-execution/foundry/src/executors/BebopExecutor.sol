@@ -98,6 +98,13 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         override
         returns (uint256 calculatedAmount)
     {
+        calculatedAmount = _swap(givenAmount, data);
+    }
+
+    function _swap(uint256 givenAmount, bytes calldata data)
+        internal
+        returns (uint256 calculatedAmount)
+    {
         // Decode the packed data
         (
             address tokenIn,

@@ -18,12 +18,10 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         returns (
             address tokenIn,
             address tokenOut,
-            RestrictTransferFrom.TransferType transferType,
-            BebopExecutor.OrderType orderType,
-            uint256 filledTakerAmount,
-            bytes memory quoteData,
-            bytes memory makerSignaturesData,
-            bool // approvalNeeded - unused in test harness
+            TransferType transferType,
+            bytes memory bebopCalldata,
+            uint256 originalFilledTakerAmount,
+            bool approvalNeeded
         )
     {
         return _decodeData(data);
@@ -32,32 +30,65 @@ contract BebopExecutorHarness is BebopExecutor, Test {
     // Expose the internal getActualFilledTakerAmount function for testing
     function exposed_getActualFilledTakerAmount(
         uint256 givenAmount,
-        uint256 orderTakerAmount,
         uint256 filledTakerAmount
     ) external pure returns (uint256 actualFilledTakerAmount) {
-        return _getActualFilledTakerAmount(
-            givenAmount, orderTakerAmount, filledTakerAmount
+        return _getActualFilledTakerAmount(givenAmount, filledTakerAmount);
+    }
+
+    // Expose the internal modifyFilledTakerAmount function for testing
+    function exposed_modifyFilledTakerAmount(
+        bytes memory bebopCalldata,
+        uint256 givenAmount,
+        uint256 originalFilledTakerAmount
+    ) external pure returns (bytes memory) {
+        return _modifyFilledTakerAmount(
+            bebopCalldata, givenAmount, originalFilledTakerAmount
         );
     }
 
     // Override to prank the taker address before calling the real settlement
-    function _executeSingleRFQ(
-        address tokenIn,
-        address tokenOut,
-        TransferType transferType,
-        uint256 givenAmount,
-        uint256 filledTakerAmount,
-        bytes memory quoteData,
-        bytes memory makerSignaturesData,
-        bool approvalNeeded
-    ) internal virtual override returns (uint256 amountOut) {
-        // Decode the order from quoteData
-        IBebopSettlement.Single memory order =
-            abi.decode(quoteData, (IBebopSettlement.Single));
+    function swap(uint256 givenAmount, bytes calldata data)
+        external
+        payable
+        override
+        returns (uint256 calculatedAmount)
+    {
+        // Decode the packed data
+        (
+            address tokenIn,
+            ,
+            TransferType transferType,
+            bytes memory bebopCalldata,
+            uint256 originalFilledTakerAmount,
+        ) = _decodeData(data);
 
-        uint256 actualFilledTakerAmount = _getActualFilledTakerAmount(
-            givenAmount, order.taker_amount, filledTakerAmount
-        );
+        uint256 actualFilledTakerAmount =
+            _getActualFilledTakerAmount(givenAmount, originalFilledTakerAmount);
+
+        // Extract taker address and expiry from bebop calldata
+        address takerAddress;
+        uint256 expiry;
+
+        // Both swapSingle and swapAggregate have the same order structure position
+        // Read the offset to the order struct (first parameter after selector)
+        uint256 orderOffset;
+        assembly {
+            orderOffset := mload(add(bebopCalldata, 36)) // 4 (selector) + 32 (offset)
+        }
+
+        // Navigate to the order struct data
+        // Order struct starts at: 4 (selector) + orderOffset
+        uint256 orderDataStart = 4 + orderOffset;
+
+        // Extract expiry (first field of the order struct)
+        assembly {
+            expiry := mload(add(bebopCalldata, add(orderDataStart, 32)))
+        }
+
+        // Extract taker_address (second field of the order struct)
+        assembly {
+            takerAddress := mload(add(bebopCalldata, add(orderDataStart, 64)))
+        }
 
         // For testing: transfer tokens from executor to taker address
         // This simulates the taker having the tokens with approval
@@ -65,115 +96,30 @@ contract BebopExecutorHarness is BebopExecutor, Test {
             _transfer(
                 address(this), transferType, tokenIn, actualFilledTakerAmount
             );
-            IERC20(tokenIn).safeTransfer(
-                order.taker_address, actualFilledTakerAmount
-            );
+            IERC20(tokenIn).safeTransfer(takerAddress, actualFilledTakerAmount);
 
             // Approve settlement from taker's perspective
             // Stop any existing prank first
             vm.stopPrank();
-            vm.startPrank(order.taker_address);
+            vm.startPrank(takerAddress);
             IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
             vm.stopPrank();
         } else {
             vm.stopPrank();
             // For native ETH, send it to the taker address
-            payable(order.taker_address).transfer(actualFilledTakerAmount);
+            payable(takerAddress).transfer(actualFilledTakerAmount);
         }
 
         // IMPORTANT: Prank as the taker address to pass the settlement validation
         vm.stopPrank();
-        vm.startPrank(order.taker_address);
+        vm.startPrank(takerAddress);
 
         // Set block timestamp to ensure order is valid regardless of fork block
         uint256 currentTimestamp = block.timestamp;
-        vm.warp(order.expiry - 1); // Set timestamp to just before expiry
+        vm.warp(expiry - 1); // Set timestamp to just before expiry
 
         // Execute the single swap, let's test the actual settlement logic
-        amountOut = super._executeSingleRFQ(
-            tokenIn,
-            tokenOut,
-            TransferType.None, // We set transfer type to none for testing in order to keep the taker's balance unchanged as it will execute the swap
-            givenAmount,
-            filledTakerAmount,
-            quoteData,
-            makerSignaturesData,
-            approvalNeeded
-        );
-
-        // Restore original timestamp
-        vm.warp(currentTimestamp);
-        vm.stopPrank();
-    }
-
-    // Override to execute aggregate orders through the real settlement
-    function _executeAggregateRFQ(
-        address tokenIn,
-        address tokenOut,
-        TransferType transferType,
-        uint256 givenAmount,
-        uint256 filledTakerAmount,
-        bytes memory quoteData,
-        bytes memory makerSignaturesData,
-        bool approvalNeeded
-    ) internal virtual override returns (uint256 amountOut) {
-        // Decode the Aggregate order
-        IBebopSettlement.Aggregate memory order =
-            abi.decode(quoteData, (IBebopSettlement.Aggregate));
-
-        // For aggregate orders, calculate total taker amount across all amounts of the 2D array
-        uint256 totalTakerAmount = 0;
-        for (uint256 i = 0; i < order.taker_amounts.length; i++) {
-            for (uint256 j = 0; j < order.taker_amounts[i].length; j++) {
-                totalTakerAmount += order.taker_amounts[i][j];
-            }
-        }
-
-        uint256 actualFilledTakerAmount = _getActualFilledTakerAmount(
-            givenAmount, totalTakerAmount, filledTakerAmount
-        );
-
-        // For testing: transfer tokens from executor to taker address
-        // This simulates the taker having the tokens with approval
-        if (tokenIn != address(0)) {
-            _transfer(
-                address(this), transferType, tokenIn, actualFilledTakerAmount
-            );
-            IERC20(tokenIn).safeTransfer(
-                order.taker_address, actualFilledTakerAmount
-            );
-
-            // Approve settlement from taker's perspective
-            // Stop any existing prank first
-            vm.stopPrank();
-            vm.startPrank(order.taker_address);
-            IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
-            vm.stopPrank();
-        } else {
-            vm.stopPrank();
-            // For native ETH, send it to the taker address
-            payable(order.taker_address).transfer(actualFilledTakerAmount);
-        }
-
-        // IMPORTANT: Prank as the taker address to pass the settlement validation
-        vm.stopPrank();
-        vm.startPrank(order.taker_address);
-
-        // Set block timestamp to ensure order is valid regardless of fork block
-        uint256 currentTimestamp = block.timestamp;
-        vm.warp(order.expiry - 1); // Set timestamp to just before expiry
-
-        // Execute the aggregate swap, let's test the actual settlement logic
-        amountOut = super._executeAggregateRFQ(
-            tokenIn,
-            tokenOut,
-            TransferType.None, // We set transfer type to none for testing in order to keep the taker's balance unchanged as it will execute the swap
-            givenAmount,
-            filledTakerAmount,
-            quoteData,
-            makerSignaturesData,
-            approvalNeeded
-        );
+        calculatedAmount = _swap(givenAmount, data);
 
         // Restore original timestamp
         vm.warp(currentTimestamp);
