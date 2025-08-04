@@ -104,16 +104,16 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             address tokenOut,
             TransferType transferType,
             bytes memory bebopCalldata,
-            uint256 originalAmountIn,
+            uint256 originalFilledTakerAmount,
             bool approvalNeeded
         ) = _decodeData(data);
 
         // Determine if we need to modify filledTakerAmount based on slippage
         bytes memory finalCalldata = bebopCalldata;
-        if (givenAmount != originalAmountIn) {
+        if (givenAmount != originalFilledTakerAmount) {
             // Need to modify the filledTakerAmount in the calldata
             finalCalldata = _modifyFilledTakerAmount(
-                bebopCalldata, givenAmount, originalAmountIn
+                bebopCalldata, givenAmount, originalFilledTakerAmount
             );
         }
 
@@ -159,7 +159,7 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             address tokenOut,
             TransferType transferType,
             bytes memory bebopCalldata,
-            uint256 originalAmountIn,
+            uint256 originalFilledTakerAmount,
             bool approvalNeeded
         )
     {
@@ -182,7 +182,7 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         bebopCalldata = data[45:45 + bebopCalldataLength];
 
         // Extract original amount in
-        originalAmountIn = uint256(
+        originalFilledTakerAmount = uint256(
             bytes32(data[45 + bebopCalldataLength:77 + bebopCalldataLength])
         );
 
@@ -191,34 +191,28 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
     }
 
     /// @dev Determines the actual taker amount to be filled for a Bebop order
-    /// @notice This function handles two scenarios:
-    ///         1. When filledTakerAmount is 0: Uses the full order amount if given amount is sufficient,
-    ///            otherwise returns givenAmount to partially fill the order
-    ///         2. When filledTakerAmount > 0: Caps the fill at the minimum of filledTakerAmount
-    ///            to ensure we don't attempt to fill more than available
+    /// @notice The encoder ensures filledTakerAmount is never 0 by extracting from order data when needed.
+    ///         This function simply caps the fill amount at the available tokens from the router.
     /// @param givenAmount The amount of tokens available from the router for this swap
-    /// @param orderTakerAmount The full taker amount specified in the Bebop order
-    /// @param filledTakerAmount The requested fill amount (0 means fill entire order)
+    /// @param filledTakerAmount The requested fill amount (guaranteed to be non-zero by encoder)
     /// @return actualFilledTakerAmount The amount that will actually be filled
     function _getActualFilledTakerAmount(
         uint256 givenAmount,
-        uint256 orderTakerAmount,
         uint256 filledTakerAmount
     ) internal pure returns (uint256 actualFilledTakerAmount) {
-        actualFilledTakerAmount = filledTakerAmount == 0
-            ? (givenAmount >= orderTakerAmount ? orderTakerAmount : givenAmount)
-            : (filledTakerAmount > givenAmount ? givenAmount : filledTakerAmount);
+        actualFilledTakerAmount =
+            filledTakerAmount > givenAmount ? givenAmount : filledTakerAmount;
     }
 
     /// @dev Modifies the filledTakerAmount in the bebop calldata to handle slippage
     /// @param bebopCalldata The original calldata for the bebop settlement
     /// @param givenAmount The actual amount available from the router
-    /// @param originalAmountIn The original amount expected when the quote was generated
+    /// @param originalFilledTakerAmount The original amount expected when the quote was generated
     /// @return modifiedCalldata The modified calldata with updated filledTakerAmount
     function _modifyFilledTakerAmount(
         bytes memory bebopCalldata,
         uint256 givenAmount,
-        uint256 originalAmountIn
+        uint256 originalFilledTakerAmount
     ) internal pure returns (bytes memory) {
         // Check the function selector to determine order type
         bytes4 selector;
@@ -235,23 +229,15 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             // For swapAggregate: (Aggregate calldata order, MakerSignature[] calldata makerSignatures, uint256 filledTakerAmount)
             // The filledTakerAmount is always the last 32 bytes of the calldata
 
-            // Calculate the new filledTakerAmount proportionally
-            // If originalAmountIn was X and filledTakerAmount was Y,
-            // then new filledTakerAmount = (Y * givenAmount) / X
+            // Calculate the new filledTakerAmount based on available amount
+            // The encoder guarantees originalFilledTakerAmount is never 0
 
             uint256 calldataLength = bebopCalldata.length;
             if (calldataLength < 36) revert BebopExecutor__InvalidInput(); // 4 bytes selector + at least 32 bytes
 
-            // Extract original filledTakerAmount (last 32 bytes)
-            uint256 originalFilledTakerAmount;
-            assembly {
-                originalFilledTakerAmount :=
-                    mload(add(bebopCalldata, calldataLength))
-            }
-
             // Calculate new filledTakerAmount using _getActualFilledTakerAmount
             uint256 newFilledTakerAmount = _getActualFilledTakerAmount(
-                givenAmount, originalAmountIn, originalFilledTakerAmount
+                givenAmount, originalFilledTakerAmount
             );
 
             // If the new filledTakerAmount is the same as the original, return the original calldata
