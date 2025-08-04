@@ -24,8 +24,8 @@ use crate::evm::{
                 hook_handler::HookHandler,
                 models::{
                     AfterSwapDelta, AfterSwapParameters, AfterSwapSolReturn, AmountRanges,
-                    BeforeSwapOutput, BeforeSwapParameters, BeforeSwapSolOutput, SwapParams,
-                    WithGasEstimate,
+                    BeforeSwapOutput, BeforeSwapParameters, BeforeSwapSolOutput,
+                    GetLimitsSolReturn, SwapParams, WithGasEstimate,
                 },
             },
             state::UniswapV4State,
@@ -206,6 +206,7 @@ where
         let decoded = AfterSwapSolReturn::abi_decode(&res.return_value).map_err(|e| {
             SimulationError::FatalError(format!("Failed to decode before swap return value: {e:?}"))
         })?;
+
         Ok(WithGasEstimate {
             gas_estimate: res.simulation_result.gas_used,
             result: I128::try_from(decoded.delta).map_err(|e| {
@@ -231,57 +232,54 @@ where
         token_in: Bytes,
         token_out: Bytes,
     ) -> Result<AmountRanges, SimulationError> {
-        match &self.limits_entrypoint {
-            Some(entrypoint) => {
-                let parts: Vec<&str> = entrypoint.split(':').collect();
-                if parts.len() != 2 {
-                    return Err(SimulationError::FatalError(
-                        "Invalid limits_entrypoint format. Expected 'address:signature'"
-                            .to_string(),
-                    ));
-                }
-
-                let contract_address = Address::from_str(parts[0]).map_err(|e| {
-                    SimulationError::FatalError(format!("Failed to parse contract address: {e:?}"))
-                })?;
-
-                let function_signature = parts[1];
-
-                let token_in_addr = Address::from_slice(&token_in.0);
-                let token_out_addr = Address::from_slice(&token_out.0);
-
-                let limits_contract =
-                    TychoSimulationContract::new(contract_address, self.contract.engine.clone())?;
-
-                let args = (token_in_addr, token_out_addr);
-
-                let res = limits_contract.call(
-                    function_signature,
-                    args,
-                    0,                // block number (not used to get limits)
-                    None,             // timestamp
-                    None,             // overwrites
-                    None,             // caller
-                    U256::from(0u64), // value
-                    None,             // transient_storage
-                )?;
-
-                println!("Return value {:?}", res.clone());
-
-                let decoded: (U256, U256) = (
-                    U256::from_be_slice(&res.return_value[..32]),
-                    U256::from_be_slice(&res.return_value[32..64]),
-                );
-
-                // For now, we only care about upper limits
-                Ok(AmountRanges {
-                    amount_in_range: (U256::ZERO, decoded.0),
-                    amount_out_range: (U256::ZERO, decoded.1),
-                })
+        if let Some(entrypoint) = &self.limits_entrypoint {
+            let parts: Vec<&str> = entrypoint.split(':').collect();
+            if parts.len() != 2 {
+                return Err(SimulationError::FatalError(
+                    "Invalid limits_entrypoint format. Expected 'address:signature'".to_string(),
+                ));
             }
-            None => Err(SimulationError::RecoverableError(
+
+            let contract_address = Address::from_str(parts[0]).map_err(|e| {
+                SimulationError::FatalError(format!("Failed to parse contract address: {e:?}"))
+            })?;
+
+            let function_signature = parts[1];
+
+            let token_in_addr = Address::from_slice(&token_in.0);
+            let token_out_addr = Address::from_slice(&token_out.0);
+
+            let limits_contract =
+                TychoSimulationContract::new(contract_address, self.contract.engine.clone())?;
+
+            let args = (token_in_addr, token_out_addr);
+
+            let res = limits_contract.call(
+                function_signature,
+                args,
+                0,                // block number (not used to get limits)
+                None,             // timestamp
+                None,             // overwrites
+                None,             // caller
+                U256::from(0u64), // value
+                None,             // transient_storage
+            )?;
+
+            let decoded = GetLimitsSolReturn::abi_decode(&res.return_value).map_err(|e| {
+                SimulationError::FatalError(format!(
+                    "Failed to decode getLimits return value: {e:?}"
+                ))
+            })?;
+
+            // For now, we only care about upper limits
+            Ok(AmountRanges {
+                amount_in_range: (U256::ZERO, decoded.amount_in_upper_limit),
+                amount_out_range: (U256::ZERO, decoded.amount_out_upper_limit),
+            })
+        } else {
+            Err(SimulationError::RecoverableError(
                 "limits_entrypoint is not set for this GenericVMHookHandler".to_string(),
-            )),
+            ))
         }
     }
 
