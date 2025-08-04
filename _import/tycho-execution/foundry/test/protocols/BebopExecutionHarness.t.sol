@@ -11,6 +11,42 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         BebopExecutor(_bebopSettlement, _permit2)
     {}
 
+    /// @dev Helper function to strip selector from bytes using assembly
+    function _stripSelector(bytes memory data)
+        internal
+        pure
+        returns (bytes memory bebopCalldataWithoutSelector)
+    {
+        require(data.length >= 4, "BE: data too short for selector");
+
+        // Create new array with length - 4
+        bebopCalldataWithoutSelector = new bytes(data.length - 4);
+
+        assembly {
+            // Get pointers to the data
+            let srcPtr := add(data, 0x24) // Skip length (0x20) and selector (0x04)
+            let destPtr := add(bebopCalldataWithoutSelector, 0x20) // Skip length
+
+            // Copy all bytes after the selector
+            let length := sub(mload(data), 4)
+
+            // Copy word by word for efficiency
+            let words := div(length, 32)
+            let remainder := mod(length, 32)
+
+            // Copy full words
+            for { let i := 0 } lt(i, words) { i := add(i, 1) } {
+                mstore(add(destPtr, mul(i, 32)), mload(add(srcPtr, mul(i, 32))))
+            }
+
+            // Copy remaining bytes if any
+            if remainder {
+                let lastWord := mload(add(srcPtr, mul(words, 32)))
+                mstore(add(destPtr, mul(words, 32)), lastWord)
+            }
+        }
+    }
+
     // Expose the internal decodeData function for testing
     function decodeParams(bytes calldata data)
         external
@@ -66,28 +102,36 @@ contract BebopExecutorHarness is BebopExecutor, Test {
             _getActualFilledTakerAmount(givenAmount, originalFilledTakerAmount);
 
         // Extract taker address and expiry from bebop calldata
+        bytes4 sel = _getSelector(bebopCalldata);
         address takerAddress;
         uint256 expiry;
 
-        // Both swapSingle and swapAggregate have the same order structure position
-        // Read the offset to the order struct (first parameter after selector)
-        uint256 orderOffset;
-        assembly {
-            orderOffset := mload(add(bebopCalldata, 36)) // 4 (selector) + 32 (offset)
-        }
+        bytes memory bebopCalldataWithoutSelector;
 
-        // Navigate to the order struct data
-        // Order struct starts at: 4 (selector) + orderOffset
-        uint256 orderDataStart = 4 + orderOffset;
-
-        // Extract expiry (first field of the order struct)
-        assembly {
-            expiry := mload(add(bebopCalldata, add(orderDataStart, 32)))
-        }
-
-        // Extract taker_address (second field of the order struct)
-        assembly {
-            takerAddress := mload(add(bebopCalldata, add(orderDataStart, 64)))
+        if (sel == SWAP_SINGLE_SELECTOR) {
+            bebopCalldataWithoutSelector = _stripSelector(bebopCalldata);
+            (IBebopSettlement.Single memory ord,,) = abi.decode(
+                bebopCalldataWithoutSelector,
+                (
+                    IBebopSettlement.Single,
+                    IBebopSettlement.MakerSignature,
+                    uint256
+                )
+            );
+            takerAddress = ord.taker_address;
+            expiry = ord.expiry;
+        } else {
+            bebopCalldataWithoutSelector = _stripSelector(bebopCalldata);
+            (IBebopSettlement.Aggregate memory ord,,) = abi.decode(
+                bebopCalldataWithoutSelector,
+                (
+                    IBebopSettlement.Aggregate,
+                    IBebopSettlement.MakerSignature[],
+                    uint256
+                )
+            );
+            takerAddress = ord.taker_address;
+            expiry = ord.expiry;
         }
 
         // For testing: transfer tokens from executor to taker address
@@ -118,7 +162,8 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         uint256 currentTimestamp = block.timestamp;
         vm.warp(expiry - 1); // Set timestamp to just before expiry
 
-        // Execute the single swap, let's test the actual settlement logic
+        // Execute the single swap with the original data
+        // The parent's _swap will handle the modification of filledTakerAmount
         calculatedAmount = _swap(givenAmount, data);
 
         // Restore original timestamp
