@@ -832,10 +832,10 @@ impl SwapEncoder for BebopSwapEncoder {
                 // Extract taker_amount from the order based on the function selector
                 let selector = &bebop_calldata[0..4];
 
-                // swapSingle selector: 0x47fb5891
-                // swapAggregate selector: 0x80d2cf33
-                const SWAP_SINGLE_SELECTOR: [u8; 4] = [0x47, 0xfb, 0x58, 0x91];
-                const SWAP_AGGREGATE_SELECTOR: [u8; 4] = [0x80, 0xd2, 0xcf, 0x33];
+                // swapSingle selector: 0x4dcebcba
+                // swapAggregate selector: 0xa2f74893
+                const SWAP_SINGLE_SELECTOR: [u8; 4] = [0x4d, 0xce, 0xbc, 0xba];
+                const SWAP_AGGREGATE_SELECTOR: [u8; 4] = [0xa2, 0xf7, 0x48, 0x93];
 
                 if selector == SWAP_SINGLE_SELECTOR {
                     // For swapSingle, decode the Single struct to get taker_amount
