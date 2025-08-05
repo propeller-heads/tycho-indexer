@@ -670,8 +670,9 @@ impl BebopSwapEncoder {
 
 /// Extract the total taker amount from a Bebop aggregate order calldata
 fn extract_aggregate_taker_amount(bebop_calldata: &[u8]) -> Option<U256> {
-    // Minimum size check: 4 (selector) + 32 (order offset) + 32 (signatures offset) + 32 (filledTakerAmount) = 100 bytes
-    // This ensures we can safely read the offset to the order parameter
+    // Minimum size check: 4 (selector) + 32 (order offset) + 32 (signatures offset) + 32
+    // (filledTakerAmount) = 100 bytes This ensures we can safely read the offset to the order
+    // parameter
     if bebop_calldata.len() < 100 {
         return None;
     }
@@ -803,15 +804,18 @@ impl SwapEncoder for BebopSwapEncoder {
             EncodingError::InvalidInput("Bebop swaps require user_data with calldata".to_string())
         })?;
 
-        // User data should contain the complete Bebop calldata
-        if user_data.len() < 4 {
+        // User data format: partialFillOffset (1 byte) + bebop_calldata
+        if user_data.len() < 5 {
             return Err(EncodingError::InvalidInput(
-                "User data too short to contain Bebop calldata".to_string(),
+                "User data too short to contain offset and Bebop calldata".to_string(),
             ));
         }
 
+        // Extract the partialFillOffset from the first byte
+        let partial_fill_offset = user_data[0];
+
         // The calldata should be for either swapSingle or swapAggregate
-        let bebop_calldata = user_data.to_vec();
+        let bebop_calldata = user_data[1..].to_vec();
 
         // Extract the original filledTakerAmount from the calldata
         // Both swapSingle and swapAggregate have filledTakerAmount as the last parameter
@@ -862,13 +866,15 @@ impl SwapEncoder for BebopSwapEncoder {
 
         // Encode packed data for the executor
         // Format: token_in | token_out | transfer_type | bebop_calldata_length |
-        //         bebop_calldata | original_filled_taker_amount | approval_needed
+        //         bebop_calldata | partial_fill_offset | original_filled_taker_amount |
+        // approval_needed
         let args = (
             token_in,
             token_out,
             (encoding_context.transfer_type as u8).to_be_bytes(),
             (bebop_calldata.len() as u32).to_be_bytes(),
             &bebop_calldata[..],
+            partial_fill_offset.to_be_bytes(),
             original_filled_taker_amount.to_be_bytes::<32>(),
             (approval_needed as u8).to_be_bytes(),
         );
@@ -1953,6 +1959,10 @@ mod tests {
                 + "0000000000000000000000000000000000000000000000000000000bebc200" // filledTakerAmount = 200000000
             ).unwrap();
 
+            // Prepend the partialFillOffset (12 for swapSingle)
+            let mut user_data = vec![12u8]; // partialFillOffset = 12
+            user_data.extend_from_slice(&bebop_calldata);
+
             let bebop_component = ProtocolComponent {
                 id: String::from("bebop-rfq"),
                 protocol_system: String::from("rfq:bebop"),
@@ -1968,7 +1978,7 @@ mod tests {
                 token_in: token_in.clone(),
                 token_out: token_out.clone(),
                 split: 0f64,
-                user_data: Some(Bytes::from(bebop_calldata.clone())),
+                user_data: Some(Bytes::from(user_data)),
             };
 
             let encoding_context = EncodingContext {
@@ -2008,7 +2018,75 @@ mod tests {
                 hex_swap.contains("0000000000000000000000000000000000000000000000000000000bebc200")
             ); // 200000000 in hex
 
+            // Verify the partialFillOffset byte appears after the bebop calldata
+            // Look for the pattern: end of bebop calldata (bebc200) followed by offset (0c)
+            assert!(hex_swap.contains("bebc2000c")); // filledTakerAmount followed by offset byte
+
             write_calldata_to_file("test_encode_bebop_calldata_forwarding", hex_swap.as_str());
+        }
+
+        #[test]
+        fn test_encode_bebop_with_aggregate_offset() {
+            use alloy::hex;
+
+            // Create mock Bebop calldata for swapAggregate
+            let bebop_calldata = hex::decode(
+                "a2f74893".to_owned() // swapAggregate selector
+                + "0000000000000000000000000000000000000000000000000000000000000001" // mock order data
+                + "0000000000000000000000000000000000000000000000000000000000000002" // mock signature data  
+                + "00000000000000000000000000000000000000000000000000000000003d0900" // filledTakerAmount
+            ).unwrap();
+
+            // Prepend the partialFillOffset (2 for swapAggregate)
+            let mut user_data = vec![2u8]; // partialFillOffset = 2 for aggregate
+            user_data.extend_from_slice(&bebop_calldata);
+
+            let bebop_component = ProtocolComponent {
+                id: String::from("bebop-rfq"),
+                protocol_system: String::from("rfq:bebop"),
+                static_attributes: HashMap::new(),
+                ..Default::default()
+            };
+
+            let token_in = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"); // WETH
+            let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+
+            let swap = Swap {
+                component: bebop_component,
+                token_in: token_in.clone(),
+                token_out: token_out.clone(),
+                split: 0f64,
+                user_data: Some(Bytes::from(user_data)),
+            };
+
+            let encoding_context = EncodingContext {
+                receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"),
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::Transfer,
+            };
+
+            let encoder = BebopSwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                TychoCoreChain::Ethereum.into(),
+                Some(HashMap::from([(
+                    "bebop_settlement_address".to_string(),
+                    "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F".to_string(),
+                )])),
+            )
+            .unwrap();
+
+            let encoded_swap = encoder
+                .encode_swap(&swap, &encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
+
+            // Verify the partialFillOffset byte (02 = 2 in hex) appears after the bebop calldata
+            assert!(hex_swap.contains("3d090002")); // filledTakerAmount followed by offset byte
+
+            write_calldata_to_file("test_encode_bebop_aggregate_offset", hex_swap.as_str());
         }
     }
 }

@@ -112,6 +112,7 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             address tokenOut,
             TransferType transferType,
             bytes memory bebopCalldata,
+            uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
             bool approvalNeeded
         ) = _decodeData(data);
@@ -119,7 +120,7 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         // Modify the filledTakerAmount in the calldata
         // If the filledTakerAmount is the same as the original, the original calldata is returned
         bytes memory finalCalldata = _modifyFilledTakerAmount(
-            bebopCalldata, givenAmount, originalFilledTakerAmount
+            bebopCalldata, givenAmount, originalFilledTakerAmount, partialFillOffset
         );
 
         // Transfer tokens if needed
@@ -157,13 +158,14 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             address tokenOut,
             TransferType transferType,
             bytes memory bebopCalldata,
+            uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
             bool approvalNeeded
         )
     {
-        // Need at least 78 bytes for the minimum fixed fields
-        // 20 + 20 + 1 + 4 (calldata length) + 32 (original amount) + 1 (approval) = 78
-        if (data.length < 78) revert BebopExecutor__InvalidDataLength();
+        // Need at least 79 bytes for the minimum fixed fields
+        // 20 + 20 + 1 + 4 (calldata length) + 1 (offset) + 32 (original amount) + 1 (approval) = 79
+        if (data.length < 79) revert BebopExecutor__InvalidDataLength();
 
         // Decode fixed fields
         tokenIn = address(bytes20(data[0:20]));
@@ -172,58 +174,44 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
 
         // Get bebop calldata length and validate
         uint32 bebopCalldataLength = uint32(bytes4(data[41:45]));
-        if (data.length != 78 + bebopCalldataLength) {
+        if (data.length != 79 + bebopCalldataLength) {
             revert BebopExecutor__InvalidDataLength();
         }
 
         // Extract bebop calldata
         bebopCalldata = data[45:45 + bebopCalldataLength];
 
+        // Extract partial fill offset
+        partialFillOffset = uint8(data[45 + bebopCalldataLength]);
+
         // Extract original amount in
         originalFilledTakerAmount = uint256(
-            bytes32(data[45 + bebopCalldataLength:77 + bebopCalldataLength])
+            bytes32(data[46 + bebopCalldataLength:78 + bebopCalldataLength])
         );
 
         // Extract approval flag
-        approvalNeeded = data[77 + bebopCalldataLength] != 0;
-    }
-
-    /// @dev Determines the actual taker amount to be filled for a Bebop order
-    /// @notice The encoder ensures filledTakerAmount is never 0 by extracting from order data when needed.
-    ///         This function simply caps the fill amount at the available tokens from the router.
-    /// @param givenAmount The amount of tokens available from the router for this swap
-    /// @param filledTakerAmount The requested fill amount (guaranteed to be non-zero by encoder)
-    /// @return actualFilledTakerAmount The amount that will actually be filled
-    function _getActualFilledTakerAmount(
-        uint256 givenAmount,
-        uint256 filledTakerAmount
-    ) internal pure returns (uint256 actualFilledTakerAmount) {
-        actualFilledTakerAmount =
-            filledTakerAmount > givenAmount ? givenAmount : filledTakerAmount;
+        approvalNeeded = data[78 + bebopCalldataLength] != 0;
     }
 
     /// @dev Modifies the filledTakerAmount in the bebop calldata to handle slippage
     /// @param bebopCalldata The original calldata for the bebop settlement
     /// @param givenAmount The actual amount available from the router
     /// @param originalFilledTakerAmount The original amount expected when the quote was generated
+    /// @param partialFillOffset The offset from Bebop API indicating where filledTakerAmount is located
     /// @return The modified calldata with updated filledTakerAmount
     function _modifyFilledTakerAmount(
         bytes memory bebopCalldata,
         uint256 givenAmount,
-        uint256 originalFilledTakerAmount
+        uint256 originalFilledTakerAmount,
+        uint8 partialFillOffset
     ) public pure returns (bytes memory) {
-        bytes4 selector = _getSelector(bebopCalldata);
+        // Use the offset from Bebop API to locate filledTakerAmount
+        // Position = 4 bytes (selector) + offset * 32 bytes
+        uint256 filledTakerAmountPos = 4 + uint256(partialFillOffset) * 32;
 
-        // The position of filledTakerAmount differs between swapSingle and swapAggregate
-        // due to how Solidity encodes structs:
-        // - swapSingle: Single struct is encoded inline (no offset), so filledTakerAmount is at position 388
-        // - swapAggregate: Aggregate struct uses offset (has arrays), so filledTakerAmount is at position 68
-        uint256 filledTakerAmountPos =
-            selector == SWAP_SINGLE_SELECTOR ? 388 : 68;
-
-        // Calculate new filledTakerAmount using _getActualFilledTakerAmount
+        // Cap the fill amount at what we actually have available
         uint256 newFilledTakerAmount =
-            _getActualFilledTakerAmount(givenAmount, originalFilledTakerAmount);
+            originalFilledTakerAmount > givenAmount ? givenAmount : originalFilledTakerAmount;
 
         // If the new filledTakerAmount is the same as the original, return the original calldata
         if (newFilledTakerAmount == originalFilledTakerAmount) {

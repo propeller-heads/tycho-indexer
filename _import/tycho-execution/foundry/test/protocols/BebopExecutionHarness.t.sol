@@ -3,9 +3,11 @@ pragma solidity ^0.8.10;
 
 import "../../src/executors/BebopExecutor.sol";
 import {Test, console} from "forge-std/Test.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
 contract BebopExecutorHarness is BebopExecutor, Test {
     using SafeERC20 for IERC20;
+    using Address for address;
 
     constructor(address _bebopSettlement, address _permit2)
         BebopExecutor(_bebopSettlement, _permit2)
@@ -56,6 +58,7 @@ contract BebopExecutorHarness is BebopExecutor, Test {
             address tokenOut,
             TransferType transferType,
             bytes memory bebopCalldata,
+            uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
             bool approvalNeeded
         )
@@ -63,22 +66,24 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         return _decodeData(data);
     }
 
-    // Expose the internal getActualFilledTakerAmount function for testing
+    // No longer needed since we inlined the logic
     function exposed_getActualFilledTakerAmount(
         uint256 givenAmount,
         uint256 filledTakerAmount
     ) external pure returns (uint256 actualFilledTakerAmount) {
-        return _getActualFilledTakerAmount(givenAmount, filledTakerAmount);
+        // Inline the simple logic here for backward compatibility
+        actualFilledTakerAmount = filledTakerAmount > givenAmount ? givenAmount : filledTakerAmount;
     }
 
     // Expose the internal modifyFilledTakerAmount function for testing
     function exposed_modifyFilledTakerAmount(
         bytes memory bebopCalldata,
         uint256 givenAmount,
-        uint256 originalFilledTakerAmount
+        uint256 originalFilledTakerAmount,
+        uint8 partialFillOffset
     ) external pure returns (bytes memory) {
         return _modifyFilledTakerAmount(
-            bebopCalldata, givenAmount, originalFilledTakerAmount
+            bebopCalldata, givenAmount, originalFilledTakerAmount, partialFillOffset
         );
     }
 
@@ -95,6 +100,7 @@ contract BebopExecutorHarness is BebopExecutor, Test {
             ,
             TransferType transferType,
             bytes memory bebopCalldata,
+            , // partialFillOffset not needed in test harness
             uint256 originalFilledTakerAmount,
         ) = _decodeData(data);
 
@@ -133,8 +139,9 @@ contract BebopExecutorHarness is BebopExecutor, Test {
             expiry = order.expiry;
         }
 
+        // Inline the simple logic since _getActualFilledTakerAmount was removed
         uint256 actualFilledTakerAmount =
-            _getActualFilledTakerAmount(givenAmount, originalFilledTakerAmount);
+            originalFilledTakerAmount > givenAmount ? givenAmount : originalFilledTakerAmount;
 
         // For testing: transfer tokens from executor to taker address
         // This simulates the taker having the tokens with approval
@@ -164,6 +171,7 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         uint256 currentTimestamp = block.timestamp;
         vm.warp(expiry - 1); // Set timestamp to just before expiry
 
+        // Call the parent's internal _swap function
         calculatedAmount = _swap(givenAmount, data);
 
         // Restore original timestamp

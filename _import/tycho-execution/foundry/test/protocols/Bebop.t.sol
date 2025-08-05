@@ -100,6 +100,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(RestrictTransferFrom.TransferType.Transfer),
             uint32(bebopCalldata.length),
             bebopCalldata,
+            uint8(12), // partialFillOffset for swapSingle (388 = 4 + 12*32)
             originalAmountIn,
             uint8(1) // approvalNeeded: true
         );
@@ -110,6 +111,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             address tokenOut,
             RestrictTransferFrom.TransferType transferType,
             bytes memory decodedBebopCalldata,
+            uint8 decodedPartialFillOffset,
             uint256 decodedOriginalAmountIn,
             bool decodedApprovalNeeded
         ) = bebopExecutor.decodeParams(params);
@@ -126,6 +128,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             keccak256(bebopCalldata),
             "bebopCalldata mismatch"
         );
+        assertEq(decodedPartialFillOffset, 12, "partialFillOffset mismatch");
         assertEq(
             decodedOriginalAmountIn,
             originalAmountIn,
@@ -212,6 +215,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(RestrictTransferFrom.TransferType.Transfer),
             uint32(bebopCalldata.length),
             bebopCalldata,
+            uint8(12), // partialFillOffset for swapSingle (388 = 4 + 12*32)
             testData.order.taker_amount, // originalAmountIn (matches what encoder would produce)
             uint8(1) // approvalNeeded: true
         );
@@ -307,6 +311,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(RestrictTransferFrom.TransferType.Transfer),
             uint32(bebopCalldata.length),
             bebopCalldata,
+            uint8(12), // partialFillOffset for swapSingle (388 = 4 + 12*32)
             testData.order.taker_amount, // originalAmountIn (full order amount)
             uint8(1) // approvalNeeded: true
         );
@@ -441,6 +446,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(RestrictTransferFrom.TransferType.Transfer),
             uint32(bebopCalldata.length),
             bebopCalldata,
+            uint8(2), // partialFillOffset for swapAggregate (68 = 4 + 2*32)
             totalTakerAmount, // originalAmountIn
             uint8(0) // approvalNeeded: false for native ETH
         );
@@ -580,6 +586,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(RestrictTransferFrom.TransferType.Transfer),
             uint32(bebopCalldata.length),
             bebopCalldata,
+            uint8(2), // partialFillOffset for swapAggregate (68 = 4 + 2*32)
             totalTakerAmount, // originalAmountIn (full order amount)
             uint8(0) // approvalNeeded: false for native ETH
         );
@@ -628,6 +635,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(RestrictTransferFrom.TransferType.Transfer),
             uint32(bebopCalldata.length),
             bebopCalldata,
+            uint8(12), // partialFillOffset for swapSingle (388 = 4 + 12*32)
             originalAmountIn,
             uint8(1) // approvalNeeded: true
         );
@@ -703,6 +711,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(RestrictTransferFrom.TransferType.Transfer),
             uint32(bebopCalldata.length),
             bebopCalldata,
+            uint8(12), // partialFillOffset for swapSingle (388 = 4 + 12*32)
             uint256(200000000), // originalAmountIn
             uint8(1) // approvalNeeded: true
         );
@@ -823,6 +832,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint8(RestrictTransferFrom.TransferType.Transfer),
             uint32(bebopCalldata.length),
             bebopCalldata,
+            uint8(2), // partialFillOffset for swapAggregate (68 = 4 + 2*32)
             ethAmount, // originalAmountIn
             uint8(0) // approvalNeeded: false for native ETH
         );
@@ -1098,7 +1108,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         bytes memory modifiedCalldata = bebopExecutor
             .exposed_modifyFilledTakerAmount(
-            originalCalldata, givenAmount, originalAmountIn
+            originalCalldata, givenAmount, originalAmountIn, 12 // partialFillOffset for swapSingle
         );
 
         // Decode the modified calldata to verify the filledTakerAmount was updated
@@ -1174,7 +1184,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         bytes memory modifiedCalldata = bebopExecutor
             .exposed_modifyFilledTakerAmount(
-            originalCalldata, givenAmount, originalAmountIn
+            originalCalldata, givenAmount, originalAmountIn, 2 // partialFillOffset for swapAggregate
         );
 
         // Decode the modified calldata to verify the filledTakerAmount was updated
@@ -1233,7 +1243,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             // So we'll test that it properly sets the value we want
             bytes memory modifiedCalldata = bebopExecutor
                 .exposed_modifyFilledTakerAmount(
-                originalCalldata, givenAmount, originalAmountIn
+                originalCalldata, givenAmount, originalAmountIn, 12 // partialFillOffset for swapSingle
             );
 
             // Extract the new filledTakerAmount
@@ -1249,7 +1259,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             // Normal test - amounts match so calldata should be unchanged
             bytes memory modifiedCalldata = bebopExecutor
                 .exposed_modifyFilledTakerAmount(
-                originalCalldata, givenAmount, originalAmountIn
+                originalCalldata, givenAmount, originalAmountIn, 12 // partialFillOffset for swapSingle
             );
 
             assertEq(
