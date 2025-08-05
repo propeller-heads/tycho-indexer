@@ -29,7 +29,7 @@ use crate::{
     tycho_common::dto::{ProtocolComponent, ResponseProtocolState},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct HashflowClient {
     chain: Chain,
     price_levels_endpoint: String,
