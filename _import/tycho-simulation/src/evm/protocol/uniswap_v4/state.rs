@@ -279,6 +279,79 @@ impl UniswapV4State {
             sqrt_price_next
         }
     }
+
+    fn find_limits_experimentally(
+        &self,
+        token_in: Bytes,
+        token_out: Bytes,
+    ) -> Result<(BigUint, BigUint), SimulationError> {
+        // Create dummy token objects with proper addresses. This is fine since `get_amount_out`
+        // only uses the token addresses.
+        let token_in_obj =
+            Token::new(&token_in, "TOKEN_IN", 18, 0, &[Some(10_000)], Default::default(), 100);
+        let token_out_obj =
+            Token::new(&token_out, "TOKEN_OUT", 18, 0, &[Some(10_000)], Default::default(), 100);
+
+        // Find limit for token_in -> token_out
+        let max_amount_in = self.find_max_amount(&token_in_obj, &token_out_obj)?;
+        // Find limit for token_out -> token_in
+        let max_amount_out = self.find_max_amount(&token_out_obj, &token_in_obj)?;
+
+        Ok((max_amount_in, max_amount_out))
+    }
+
+    /// Finds max amount by performing exponential search.
+    fn find_max_amount(
+        &self,
+        token_in: &Token,
+        token_out: &Token,
+    ) -> Result<BigUint, SimulationError> {
+        let mut low = BigUint::from(1u64);
+
+        // The max you can swap on a USV4 is I256::MAX is 5.7e76, since input amount is I256.
+        // So start with something much smaller to search for a reasonable upper bound.
+        let mut high = BigUint::from(10u64).pow(18); // 1 ether in wei
+        let mut last_successful = BigUint::from(1u64);
+
+        // First, find an upper bound where the swap fails using exponential search.
+        while self
+            .get_amount_out(high.clone(), token_in, token_out)
+            .is_ok()
+        {
+            // We haven't found the upper bound yet, increase the attempted upper bound
+            // by order of magnitude and store the last success as the lower bound.
+            low = last_successful;
+            last_successful = high.clone();
+            high *= BigUint::from(10u64);
+
+            // Stop if we're getting too large for I256 (about 10^75)
+            if high > BigUint::from(10u64).pow(75) {
+                return Ok(last_successful);
+            }
+        }
+
+        // Use binary search to narrow down value between low and high
+        while &high - &low > BigUint::from(1u64) {
+            let mid = (&low + &high) / BigUint::from(2u64);
+
+            match self.get_amount_out(mid.clone(), token_in, token_out) {
+                Ok(_) => {
+                    last_successful = mid.clone();
+                    low = mid;
+                }
+                Err(_) => {
+                    high = mid;
+                }
+            }
+        }
+
+        Ok(last_successful)
+    }
+
+    /// Helper method to check if there are no initialized ticks in either direction
+    fn has_no_initialized_ticks(&self) -> bool {
+        !self.ticks.has_initialized_ticks()
+    }
 }
 
 impl ProtocolSim for UniswapV4State {
@@ -459,17 +532,28 @@ impl ProtocolSim for UniswapV4State {
         token_out: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
         if let Some(hook) = &self.hook {
-            match hook.get_amount_ranges(token_in.clone(), token_out.clone()) {
-                Ok(amount_ranges) => {
-                    return Ok((
-                        u256_to_biguint(amount_ranges.amount_in_range.1),
-                        u256_to_biguint(amount_ranges.amount_out_range.1),
-                    ))
+            // Check if pool has no liquidity & ticks -> hook manages liquidity
+            if self.liquidity == 0 && self.has_no_initialized_ticks() {
+                // If the hook has a get_amount_ranges entrypoint, call it and return (0, limits[1])
+                match hook.get_amount_ranges(token_in.clone(), token_out.clone()) {
+                    Ok(amount_ranges) => {
+                        return Ok((
+                            BigUint::from(0u8),
+                            u256_to_biguint(amount_ranges.amount_out_range.1),
+                        ))
+                    }
+                    // Check if hook get_amount_ranges is not implemented or the limits entrypoint
+                    // is not set for this hook
+                    Err(SimulationError::RecoverableError(msg))
+                        if msg.contains("not implemented") || msg.contains("not set") =>
+                    {
+                        // Hook manages liquidity but doesn't have get_amount_ranges
+                        // Use binary search to find limits by calling swap with increasing amounts
+                        return self.find_limits_experimentally(token_in, token_out);
+                        // Otherwise fall back to default implementation
+                    }
+                    Err(e) => return Err(e),
                 }
-                Err(SimulationError::RecoverableError(msg)) if msg.contains("not implemented") => {
-                    // Fall back to default implementation
-                }
-                Err(e) => return Err(e),
             }
         }
 
@@ -551,6 +635,11 @@ impl ProtocolSim for UniswapV4State {
             // Move to the next tick position
             current_tick = if zero_for_one { next_tick - 1 } else { next_tick };
             current_sqrt_price = sqrt_price_next;
+
+            // If we've consumed all liquidity, no point continuing the loop
+            if current_liquidity == 0 {
+                break;
+            }
         }
 
         Ok((u256_to_biguint(total_amount_in), u256_to_biguint(total_amount_out)))
@@ -685,6 +774,31 @@ mod tests {
         },
         protocol::models::TryFromWithBlock,
     };
+
+    // Helper methods to create commonly used tokens
+    fn usdc() -> Token {
+        Token::new(
+            &Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+            "USDC",
+            6,
+            0,
+            &[Some(10_000)],
+            Default::default(),
+            100,
+        )
+    }
+
+    fn weth() -> Token {
+        Token::new(
+            &Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
+            "WETH",
+            18,
+            0,
+            &[Some(10_000)],
+            Default::default(),
+            100,
+        )
+    }
 
     #[test]
     fn test_delta_transition() {
@@ -958,24 +1072,8 @@ mod tests {
         )
         .unwrap();
 
-        let t0 = Token::new(
-            &Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
-            "USDC",
-            6,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        );
-        let t1 = Token::new(
-            &Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
-            "WETH",
-            18,
-            0,
-            &[Some(10_000)],
-            Chain::Ethereum,
-            100,
-        );
+        let t0 = usdc();
+        let t1 = weth();
 
         usv4_state.set_hook_handler(Box::new(hook_handler));
         let out = usv4_state
@@ -983,5 +1081,206 @@ mod tests {
             .unwrap();
 
         assert_eq!(out.amount, BigUint::from_str("2681115183499232721").unwrap())
+    }
+
+    #[test]
+    fn test_get_limits_with_hook_managed_liquidity_no_ranges_entrypoint() {
+        // This test demonstrates the experimental limit finding logic for hooks that:
+        // 1. Manage liquidity (pool has no liquidity & no ticks)
+        // 2. Don't have get_amount_ranges entrypoint
+
+        let block = BlockHeader {
+            number: 22689128,
+            parent_hash: Default::default(),
+            hash: Bytes::from_str(
+                "0xfbfa716523d25d6d5248c18d001ca02b1caf10cabd1ab7321465e2262c41157b",
+            )
+            .expect("Invalid block hash"),
+            timestamp: 1749739055,
+            revert: false,
+        };
+
+        let hook_address: Address = Address::from_str("0x69058613588536167ba0aa94f0cc1fe420ef28a8")
+            .expect("Invalid hook address");
+
+        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
+        let engine = create_engine(db, true).expect("Failed to create simulation engine");
+        let pool_manager = Address::from_str("0x000000000004444c5dc75cb358380d2e3de08a90")
+            .expect("Invalid pool manager address");
+
+        // Create a GenericVMHookHandler without limits_entrypoint
+        // This will trigger the "not set" error path and use experimental limit finding
+        let hook_handler = GenericVMHookHandler::new(
+            hook_address,
+            engine,
+            pool_manager,
+            HashMap::new(),
+            HashMap::new(),
+            None,
+        )
+        .unwrap();
+
+        // Create a UniswapV4State with NO liquidity and NO ticks (hook manages all liquidity)
+        let mut usv4_state = UniswapV4State::new(
+            0, // no liquidity - hook provides it
+            U256::from_str("4295128740").unwrap(),
+            UniswapV4Fees { zero_for_one: 100, one_for_zero: 90, lp_fee: 500 },
+            0,      // current tick
+            1,      // tick spacing
+            vec![], // no ticks - hook manages liquidity
+            block.clone(),
+        );
+
+        usv4_state.set_hook_handler(Box::new(hook_handler));
+
+        let token_in = usdc().address;
+        let token_out = weth().address;
+
+        let (amount_in_limit, amount_out_limit) = usv4_state
+            .get_limits(token_in, token_out)
+            .expect("Should find limits through experimental swapping");
+
+        println!("Found limits through experimental swapping: amount_in={amount_in_limit}, amount_out={amount_out_limit}");
+
+        // At least 10 million USDC, not more than 100 million USDC
+        assert!(amount_in_limit > BigUint::from(10u64).pow(13));
+        assert!(amount_in_limit < BigUint::from(10u64).pow(14));
+
+        // At least 1000 ETH, not more than 10 000 ETH
+        assert!(amount_out_limit > BigUint::from(10u64).pow(21));
+        assert!(amount_out_limit < BigUint::from(10u64).pow(22));
+    }
+
+    #[test]
+    fn test_find_max_amount_greater_than_starting_point() {
+        // We start our search at 1e18, so test that we can properly find a max amount greater than
+        // that
+
+        let block = BlockHeader {
+            number: 22578103,
+            hash: Bytes::from_str(
+                "0x035c0e674c3bf3384a74b766908ab41c1968e989360aa26bea1dd64b1626f5f0",
+            )
+            .unwrap(),
+            timestamp: 1748397011,
+            ..Default::default()
+        };
+
+        let usv4_state = UniswapV4State::new(
+            u128::MAX / 2,
+            U256::from_str("79228162514264337593543950336").unwrap(),
+            UniswapV4Fees { zero_for_one: 100, one_for_zero: 100, lp_fee: 100 }, // Low fees
+            0,
+            60,
+            vec![
+                TickInfo::new(-600, (u128::MAX / 4) as i128),
+                TickInfo::new(600, -((u128::MAX / 4) as i128)),
+            ],
+            block,
+        );
+
+        let token_in = usdc();
+        let token_out = weth();
+
+        let max_amount = usv4_state
+            .find_max_amount(&token_in, &token_out)
+            .unwrap();
+        assert!(max_amount > BigUint::from(1u64));
+        assert!(usv4_state
+            .get_amount_out(max_amount.clone(), &token_in, &token_out)
+            .is_ok());
+        assert!(usv4_state
+            .get_amount_out(max_amount.clone() + BigUint::from(1u64), &token_in, &token_out)
+            .is_err());
+    }
+
+    #[test]
+    fn test_find_max_amount_less_than_starting_point() {
+        // We start our search at 1e18, so test that we can properly find a max amount less than
+        // that
+
+        let block = BlockHeader {
+            number: 22578103,
+            hash: Bytes::from_str(
+                "0x035c0e674c3bf3384a74b766908ab41c1968e989360aa26bea1dd64b1626f5f0",
+            )
+            .unwrap(),
+            timestamp: 1748397011,
+            ..Default::default()
+        };
+
+        let usv4_state = UniswapV4State::new(
+            1000000000000000000u128, // 10e17
+            U256::from_str("79228162514264337593543950336").unwrap(),
+            UniswapV4Fees { zero_for_one: 100, one_for_zero: 100, lp_fee: 3000 },
+            0,
+            60,
+            vec![
+                TickInfo::new(-180, 5000000000000000000i128),
+                TickInfo::new(180, -5000000000000000000i128),
+            ],
+            block,
+        );
+
+        let token_in = usdc();
+        let token_out = weth();
+
+        let max_amount = usv4_state
+            .find_max_amount(&token_in, &token_out)
+            .unwrap();
+
+        let success = usv4_state
+            .get_amount_out(max_amount.clone(), &token_in, &token_out)
+            .is_ok();
+        assert!(success, "Should be able to swap the exact max amount");
+
+        let one_more = &max_amount + BigUint::from(1u64);
+        let should_fail = usv4_state
+            .get_amount_out(one_more, &token_in, &token_out)
+            .is_err();
+        assert!(should_fail, "Swapping max_amount + 1 should fail");
+    }
+
+    #[test]
+    fn test_find_max_amount_boundary_conditions() {
+        // Test edge cases and boundary conditions
+        let block = BlockHeader {
+            number: 22578103,
+            hash: Bytes::from_str(
+                "0x035c0e674c3bf3384a74b766908ab41c1968e989360aa26bea1dd64b1626f5f0",
+            )
+            .unwrap(),
+            timestamp: 1748397011,
+            ..Default::default()
+        };
+
+        // Minimal liquidity state
+        let usv4_state = UniswapV4State::new(
+            1000u128, // Very small liquidity
+            U256::from_str("79228162514264337593543950336").unwrap(),
+            UniswapV4Fees { zero_for_one: 0, one_for_zero: 0, lp_fee: 0 }, // No fees
+            0,
+            1,
+            vec![TickInfo::new(-1, 500i128), TickInfo::new(1, -500i128)],
+            block,
+        );
+
+        let token_in = usdc();
+        let token_out = weth();
+
+        let max_amount = usv4_state
+            .find_max_amount(&token_in, &token_out)
+            .unwrap();
+
+        let success = usv4_state
+            .get_amount_out(max_amount.clone(), &token_in, &token_out)
+            .is_ok();
+        assert!(success, "Should be able to swap the exact max amount");
+
+        let one_more = &max_amount + BigUint::from(1u64);
+        let should_fail = usv4_state
+            .get_amount_out(one_more, &token_in, &token_out)
+            .is_err();
+        assert!(should_fail, "Swapping max_amount + 1 should fail");
     }
 }
