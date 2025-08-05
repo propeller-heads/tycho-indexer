@@ -13,7 +13,7 @@ use tycho_execution::encoding::{
 };
 
 use crate::common::{
-    build_bebop_user_data, encoding::encode_tycho_router_call, eth, eth_chain, get_signer,
+    build_bebop_calldata, encoding::encode_tycho_router_call, eth, eth_chain, get_signer,
     get_tycho_router_encoder, ondo, usdc, weth,
 };
 
@@ -656,7 +656,7 @@ fn test_uniswap_v3_bebop() {
     let signature = hex::decode("eb5419631614978da217532a40f02a8f2ece37d8cfb94aaa602baabbdefb56b474f4c2048a0f56502caff4ea7411d99eed6027cd67dc1088aaf4181dcb0df7051c").unwrap();
 
     // Build user_data with the quote and signature
-    let user_data = build_bebop_user_data(
+    let user_data = build_bebop_calldata(
         BebopOrderType::Single,
         U256::from(0), // 0 means fill entire order
         &quote_data,

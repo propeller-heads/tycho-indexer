@@ -69,90 +69,191 @@ pub fn get_tycho_router_encoder(user_transfer_type: UserTransferType) -> Box<dyn
         .expect("Failed to build encoder")
 }
 
-/// Builds Bebop user_data with support for single or multiple signatures
+/// Builds the complete Bebop calldata in the format expected by the encoder
+/// Returns: partialFillOffset (1 byte) | bebop_calldata (selector + ABI encoded params)
 ///
 /// # Arguments
 /// * `order_type` - The type of Bebop order (Single or Aggregate)
 /// * `filled_taker_amount` - Amount to fill (0 means fill entire order)
-/// * `quote_data` - The ABI-encoded order data
+/// * `quote_data` - The ABI-encoded order data (just the struct, not full calldata)
 /// * `signatures` - Vector of (signature_bytes, signature_type) tuples
-///   - For Single orders: expects exactly 1 signature
-///   - For Aggregate orders: expects 1 or more signatures (one per maker)
-pub fn build_bebop_user_data(
+pub fn build_bebop_calldata(
     order_type: BebopOrderType,
     filled_taker_amount: U256,
     quote_data: &[u8],
-    signatures: Vec<(Vec<u8>, u8)>, // (signature, signature_type)
+    signatures: Vec<(Vec<u8>, u8)>,
 ) -> Bytes {
-    // ABI encode MakerSignature[] array
-    // Format: offset_to_array | array_length | [offset_to_struct_i]... | [struct_i_data]...
-    let mut encoded_maker_sigs = Vec::new();
+    // Step 1: Determine selector and partialFillOffset based on order type
+    let (selector, partial_fill_offset) = match order_type {
+        BebopOrderType::Single => (
+            [0x4d, 0xce, 0xbc, 0xba], // swapSingle selector
+            12u8,                     // partialFillOffset (388 = 4 + 12*32)
+        ),
+        BebopOrderType::Aggregate => (
+            [0xa2, 0xf7, 0x48, 0x93], // swapAggregate selector
+            2u8,                      // partialFillOffset (68 = 4 + 2*32)
+        ),
+    };
 
-    // Calculate total size needed
-    let array_offset = 32; // offset to array start
-    let array_length_size = 32;
-    let struct_offsets_size = 32 * signatures.len();
-    let _header_size = array_length_size + struct_offsets_size;
+    // Step 2: Build the ABI-encoded parameters based on order type
+    let encoded_params = match order_type {
+        BebopOrderType::Single => {
+            // swapSingle(Single order, MakerSignature signature, uint256 filledTakerAmount)
+            encode_single_params(quote_data, &signatures[0], filled_taker_amount)
+        }
+        BebopOrderType::Aggregate => {
+            // swapAggregate(Aggregate order, MakerSignature[] signatures, uint256
+            // filledTakerAmount)
+            encode_aggregate_params(quote_data, &signatures, filled_taker_amount)
+        }
+    };
 
-    // Build each struct's data and calculate offsets
+    // Step 3: Combine selector and encoded parameters into complete calldata
+    let mut bebop_calldata = Vec::new();
+    bebop_calldata.extend_from_slice(&selector);
+    bebop_calldata.extend_from_slice(&encoded_params);
+
+    // Step 4: Prepend partialFillOffset to create final user_data
+    let mut user_data = vec![partial_fill_offset];
+    user_data.extend_from_slice(&bebop_calldata);
+
+    Bytes::from(user_data)
+}
+
+fn encode_single_params(
+    order_data: &[u8], // Already ABI-encoded Single struct
+    signature: &(Vec<u8>, u8),
+    filled_taker_amount: U256,
+) -> Vec<u8> {
+    // For swapSingle, we need to encode three parameters:
+    // 1. Single struct (dynamic) - offset at position 0
+    // 2. MakerSignature struct (dynamic) - offset at position 32
+    // 3. uint256 filledTakerAmount (static) - at position 64
+
+    let mut encoded = Vec::new();
+
+    // The order struct is already ABI encoded, we just need to wrap it properly
+    // Calculate offsets (relative to start of params, not selector)
+    let order_offset = 96; // After 3 words (2 offsets + filledTakerAmount)
+    let signature_offset = order_offset + order_data.len();
+
+    // Write the three parameter slots
+    encoded.extend_from_slice(&U256::from(order_offset).to_be_bytes::<32>());
+    encoded.extend_from_slice(&U256::from(signature_offset).to_be_bytes::<32>());
+    encoded.extend_from_slice(&filled_taker_amount.to_be_bytes::<32>());
+
+    // Append order data (already encoded)
+    encoded.extend_from_slice(order_data);
+
+    // Encode MakerSignature struct
+    let signature_struct = encode_maker_signature(signature);
+    encoded.extend_from_slice(&signature_struct);
+
+    encoded
+}
+
+fn encode_aggregate_params(
+    order_data: &[u8], // Already ABI-encoded Aggregate struct
+    signatures: &[(Vec<u8>, u8)],
+    filled_taker_amount: U256,
+) -> Vec<u8> {
+    // For swapAggregate, we need to encode three parameters:
+    // 1. Aggregate struct (dynamic) - offset at position 0
+    // 2. MakerSignature[] array (dynamic) - offset at position 32
+    // 3. uint256 filledTakerAmount (static) - at position 64
+
+    let mut encoded = Vec::new();
+
+    // Encode signatures array
+    let signatures_array = encode_maker_signatures_array(signatures);
+
+    // Calculate offsets
+    let order_offset = 96; // After 3 words
+    let signatures_offset = order_offset + order_data.len();
+
+    // Write the three parameter slots
+    encoded.extend_from_slice(&U256::from(order_offset).to_be_bytes::<32>());
+    encoded.extend_from_slice(&U256::from(signatures_offset).to_be_bytes::<32>());
+    encoded.extend_from_slice(&filled_taker_amount.to_be_bytes::<32>());
+
+    // Append order data
+    encoded.extend_from_slice(order_data);
+
+    // Append signatures array
+    encoded.extend_from_slice(&signatures_array);
+
+    encoded
+}
+
+fn encode_maker_signature(signature: &(Vec<u8>, u8)) -> Vec<u8> {
+    let mut encoded = Vec::new();
+
+    // MakerSignature struct has two fields:
+    // - bytes signatureBytes (dynamic) - offset at position 0
+    // - uint256 flags - at position 32
+
+    // Offset to signatureBytes (always 64 for this struct layout)
+    encoded.extend_from_slice(&U256::from(64).to_be_bytes::<32>());
+
+    // Flags (signature type)
+    encoded.extend_from_slice(&U256::from(signature.1).to_be_bytes::<32>());
+
+    // SignatureBytes (length + data)
+    encoded.extend_from_slice(&U256::from(signature.0.len()).to_be_bytes::<32>());
+    encoded.extend_from_slice(&signature.0);
+
+    // Pad to 32-byte boundary
+    let padding = (32 - (signature.0.len() % 32)) % 32;
+    encoded.extend(vec![0u8; padding]);
+
+    encoded
+}
+
+fn encode_maker_signatures_array(signatures: &[(Vec<u8>, u8)]) -> Vec<u8> {
+    let mut encoded = Vec::new();
+
+    // Array length
+    encoded.extend_from_slice(&U256::from(signatures.len()).to_be_bytes::<32>());
+
+    // Calculate offsets for each struct (relative to start of array data)
     let mut struct_data = Vec::new();
     let mut struct_offsets = Vec::new();
-    // Offsets are relative to the start of array data, not the absolute position
-    // Array data starts after array length, so first offset is after all offset values
-    let mut current_offset = struct_offsets_size; // Just the space for offsets, not including array length
+    let struct_offsets_size = 32 * signatures.len();
+    let mut current_offset = struct_offsets_size;
 
-    for (signature, signature_type) in &signatures {
+    for signature in signatures {
         struct_offsets.push(current_offset);
 
-        // Each struct contains:
-        // - offset to signatureBytes (32 bytes) - always 0x40 (64)
-        // - flags (32 bytes)
-        // - signatureBytes length (32 bytes)
-        // - signatureBytes data (padded to 32 bytes)
+        // Build struct data
         let mut struct_bytes = Vec::new();
 
         // Offset to signatureBytes within this struct
         struct_bytes.extend_from_slice(&U256::from(64).to_be_bytes::<32>());
 
-        // Flags (contains signature type) - AFTER the offset, not before!
-        let flags = U256::from(*signature_type);
-        struct_bytes.extend_from_slice(&flags.to_be_bytes::<32>());
+        // Flags (signature type)
+        struct_bytes.extend_from_slice(&U256::from(signature.1).to_be_bytes::<32>());
 
         // SignatureBytes length
-        struct_bytes.extend_from_slice(&U256::from(signature.len()).to_be_bytes::<32>());
+        struct_bytes.extend_from_slice(&U256::from(signature.0.len()).to_be_bytes::<32>());
 
         // SignatureBytes data (padded to 32 byte boundary)
-        struct_bytes.extend_from_slice(signature);
-        let padding = (32 - (signature.len() % 32)) % 32;
-        struct_bytes.extend_from_slice(&vec![0u8; padding]);
+        struct_bytes.extend_from_slice(&signature.0);
+        let padding = (32 - (signature.0.len() % 32)) % 32;
+        struct_bytes.extend(vec![0u8; padding]);
 
         current_offset += struct_bytes.len();
         struct_data.push(struct_bytes);
     }
 
-    // Build the complete ABI encoded array
-    // Offset to array (always 0x20 for a single parameter)
-    encoded_maker_sigs.extend_from_slice(&U256::from(array_offset).to_be_bytes::<32>());
-
-    // Array length
-    encoded_maker_sigs.extend_from_slice(&U256::from(signatures.len()).to_be_bytes::<32>());
-
-    // Struct offsets (relative to start of array data)
+    // Write struct offsets
     for offset in struct_offsets {
-        encoded_maker_sigs.extend_from_slice(&U256::from(offset).to_be_bytes::<32>());
+        encoded.extend_from_slice(&U256::from(offset).to_be_bytes::<32>());
     }
 
-    // Struct data
+    // Write struct data
     for data in struct_data {
-        encoded_maker_sigs.extend_from_slice(&data);
+        encoded.extend_from_slice(&data);
     }
 
-    // Build complete user_data
-    let mut user_data = Vec::new();
-    user_data.push(order_type as u8);
-    user_data.extend_from_slice(&filled_taker_amount.to_be_bytes::<32>());
-    user_data.extend_from_slice(&(quote_data.len() as u32).to_be_bytes());
-    user_data.extend_from_slice(quote_data);
-    user_data.extend_from_slice(&encoded_maker_sigs);
-    Bytes::from(user_data)
+    encoded
 }
