@@ -1,3 +1,10 @@
+## [0.142.0](https://github.com/propeller-heads/tycho-simulation/compare/0.141.0...0.142.0) (2025-08-05)
+
+
+### Features
+
+* Exposes state synchronization info on Update struct. ([fb332a9](https://github.com/propeller-heads/tycho-simulation/commit/fb332a91379848b0c2c5bc056e01daa9ac88479f))
+
 ## [0.141.0](https://github.com/propeller-heads/tycho-simulation/compare/0.140.0...0.141.0) (2025-08-01)
 
 
