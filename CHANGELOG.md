@@ -1,3 +1,14 @@
+## [0.81.1](https://github.com/propeller-heads/tycho-indexer/compare/0.81.0...0.81.1) (2025-08-06)
+
+
+### Bug Fixes
+
+* add proper deltas subscription cleanup and fix tests ([14a682f](https://github.com/propeller-heads/tycho-indexer/commit/14a682f013dba94236e2637209439d700f224cd1))
+* ensure state_sync cleanup runs on all exit paths ([c482b23](https://github.com/propeller-heads/tycho-indexer/commit/c482b236ae30022744e5c852d0d7e8a9e2d6b33e))
+* prevent unnecessary warnings in deltas client unsubscribe ([0fa5c1b](https://github.com/propeller-heads/tycho-indexer/commit/0fa5c1bdd671f26b555700b1a9e17dcd11fff297))
+* properly close WebSocket client and log close errors ([db0d27e](https://github.com/propeller-heads/tycho-indexer/commit/db0d27e26641e02c6e641697c70449945f15d214))
+* tycho-client shutdown cleanup and improve error handling ([#637](https://github.com/propeller-heads/tycho-indexer/issues/637)) ([2043997](https://github.com/propeller-heads/tycho-indexer/commit/2043997db77bdb68177a2a8507d1cfa80f4f912b))
+
 ## [0.81.0](https://github.com/propeller-heads/tycho-indexer/compare/0.80.0...0.81.0) (2025-07-29)
 
 
