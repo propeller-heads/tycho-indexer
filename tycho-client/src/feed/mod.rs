@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use chrono::{Duration as ChronoDuration, Local, NaiveDateTime};
 use futures03::{
@@ -10,7 +13,10 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::{
     select,
-    sync::mpsc::{self, Receiver},
+    sync::{
+        mpsc::{self, Receiver},
+        oneshot,
+    },
     task::JoinHandle,
     time::timeout,
 };
@@ -22,7 +28,7 @@ use tycho_common::{
 
 use crate::feed::{
     block_history::{BlockHistory, BlockHistoryError, BlockPosition},
-    synchronizer::{StateSyncMessage, StateSynchronizer, SynchronizerError},
+    synchronizer::{StateSyncMessage, StateSynchronizer, SyncResult, SynchronizerError},
 };
 
 mod block_history;
@@ -417,6 +423,40 @@ where
         self.synchronizers = Some(registered);
         self
     }
+
+    #[cfg(test)]
+    pub fn with_short_timeouts() -> Self {
+        Self::new(Duration::from_millis(10), Duration::from_millis(10), 3)
+    }
+
+    /// Cleanup function for shutting down remaining synchronizers when the nanny detects an error.
+    /// Sends close signals to all remaining synchronizers and waits for them to complete.
+    async fn cleanup_synchronizers(
+        mut state_sync_tasks: FuturesUnordered<JoinHandle<SyncResult<()>>>,
+        sync_close_senders: Vec<oneshot::Sender<()>>,
+    ) {
+        // Send close signals to all remaining synchronizers
+        for close_sender in sync_close_senders {
+            let _ = close_sender.send(());
+        }
+
+        // Await remaining tasks with timeout
+        let mut completed_tasks = 0;
+        while let Ok(Some(_)) = timeout(Duration::from_secs(5), state_sync_tasks.next()).await {
+            completed_tasks += 1;
+        }
+
+        // Warn if any synchronizers timed out during cleanup
+        let remaining_tasks = state_sync_tasks.len();
+        if remaining_tasks > 0 {
+            warn!(
+                completed = completed_tasks,
+                timed_out = remaining_tasks,
+                "Some synchronizers timed out during cleanup and may not have shut down cleanly"
+            );
+        }
+    }
+
     pub async fn run(
         mut self,
     ) -> BlockSyncResult<(JoinHandle<()>, Receiver<FeedMessage<BlockHeader>>)> {
@@ -428,17 +468,18 @@ where
             .ok_or(BlockSynchronizerError::NoSynchronizers)?;
         // init synchronizers
         let init_tasks = synchronizers
-            .values()
+            .values_mut()
             .map(|s| s.initialize())
             .collect::<Vec<_>>();
         try_join_all(init_tasks).await?;
 
         let mut sync_streams = HashMap::with_capacity(synchronizers.len());
-        let mut sync_handles = Vec::new();
+        let mut sync_close_senders = Vec::new();
         for (extractor_id, synchronizer) in synchronizers.drain() {
-            let (jh, rx) = synchronizer.start().await?;
-            state_sync_tasks.push(jh);
-            sync_handles.push(synchronizer);
+            let (handle, rx) = synchronizer.start().await?;
+            let (join_handle, close_sender) = handle.split();
+            state_sync_tasks.push(join_handle);
+            sync_close_senders.push(close_sender);
 
             sync_streams.insert(
                 extractor_id.clone(),
@@ -617,14 +658,11 @@ where
         let nanny_jh = tokio::spawn(async move {
             select! {
                 error = state_sync_tasks.select_next_some() => {
-                    for s in sync_handles.iter_mut() {
-                        if let Err(e) = s.close().await {
-                            error!(error=?e, "Failed to close synchronizer: was not started!");
-                        }
-                    }
+                    Self::cleanup_synchronizers(state_sync_tasks, sync_close_senders).await;
                     error!(?error, "State synchronizer exited");
                 },
                 error = main_loop_jh => {
+                    Self::cleanup_synchronizers(state_sync_tasks, sync_close_senders).await;
                     error!(?error, "Feed main loop exited");
                 }
             }
@@ -642,43 +680,71 @@ mod tests {
     use tokio::sync::{oneshot, Mutex};
     use tycho_common::dto::Chain;
 
-    use super::{synchronizer::SynchronizerError, *};
-    use crate::feed::synchronizer::SyncResult;
+    use super::*;
+    use crate::feed::synchronizer::{SyncResult, SynchronizerTaskHandle};
+
+    #[derive(Clone, Debug)]
+    enum MockBehavior {
+        Normal,          // Exit successfully when receiving close signal
+        FailOnExit,      // Exit with error when receiving close signal
+        IgnoreClose,     // Ignore close signals and hang (for timeout testing)
+        ExitImmediately, // Exit immediately after first message (for quick failure testing)
+    }
 
     #[derive(Clone)]
     struct MockStateSync {
         header_tx: mpsc::Sender<StateSyncMessage<BlockHeader>>,
         header_rx: Arc<Mutex<Option<Receiver<StateSyncMessage<BlockHeader>>>>>,
-        end_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+        close_received: Arc<Mutex<bool>>,
+        behavior: MockBehavior,
+        // For testing: store the close sender so tests can trigger close signals
+        close_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     }
 
     impl MockStateSync {
         fn new() -> Self {
+            Self::with_behavior(MockBehavior::Normal)
+        }
+
+        fn with_behavior(behavior: MockBehavior) -> Self {
             let (tx, rx) = mpsc::channel(1);
             Self {
                 header_tx: tx,
                 header_rx: Arc::new(Mutex::new(Some(rx))),
-                end_tx: Arc::new(Mutex::new(None)),
+                close_received: Arc::new(Mutex::new(false)),
+                behavior,
+                close_tx: Arc::new(Mutex::new(None)),
             }
         }
+
+        async fn was_close_received(&self) -> bool {
+            *self.close_received.lock().await
+        }
+
         async fn send_header(&self, header: StateSyncMessage<BlockHeader>) {
             self.header_tx
                 .send(header)
                 .await
                 .expect("sending header failed");
         }
+
+        // For testing: trigger a close signal to make the synchronizer exit
+        async fn trigger_close(&self) {
+            if let Some(close_tx) = self.close_tx.lock().await.take() {
+                let _ = close_tx.send(());
+            }
+        }
     }
 
     #[async_trait]
     impl StateSynchronizer for MockStateSync {
-        async fn initialize(&self) -> SyncResult<()> {
+        async fn initialize(&mut self) -> SyncResult<()> {
             Ok(())
         }
 
         async fn start(
-            &self,
-        ) -> SyncResult<(JoinHandle<SyncResult<()>>, Receiver<StateSyncMessage<BlockHeader>>)>
-        {
+            mut self,
+        ) -> SyncResult<(SynchronizerTaskHandle, Receiver<StateSyncMessage<BlockHeader>>)> {
             let block_rx = {
                 let mut guard = self.header_rx.lock().await;
                 guard
@@ -686,30 +752,79 @@ mod tests {
                     .expect("Block receiver was not set!")
             };
 
-            let end_rx = {
-                let (end_tx, end_rx) = oneshot::channel();
-                let mut guard = self.end_tx.lock().await;
-                *guard = Some(end_tx);
-                end_rx
-            };
+            // Create close channel - we need to store one sender for testing and give one to the
+            // handle
+            let (close_tx_for_handle, close_rx) = oneshot::channel();
+            let (close_tx_for_test, close_rx_for_test) = oneshot::channel();
+
+            // Store the test close sender
+            {
+                let mut guard = self.close_tx.lock().await;
+                *guard = Some(close_tx_for_test);
+            }
+
+            let close_received_clone = self.close_received.clone();
+            let behavior = self.behavior.clone();
 
             let jh = tokio::spawn(async move {
-                let _ = end_rx.await;
-                SyncResult::Ok(())
+                match behavior {
+                    MockBehavior::IgnoreClose => {
+                        // Infinite loop to simulate a hung synchronizer that doesn't respond to
+                        // close signals
+                        loop {
+                            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        }
+                    }
+                    MockBehavior::ExitImmediately => {
+                        // Exit immediately with error to simulate immediate task failure
+                        SyncResult::Err(SynchronizerError::ConnectionError(
+                            "Simulated immediate task failure".to_string(),
+                        ))
+                    }
+                    MockBehavior::Normal | MockBehavior::FailOnExit => {
+                        // Wait for close signal from either handle or test, then respond based on
+                        // behavior
+                        let result = tokio::select! {
+                            result = close_rx => result,
+                            result = close_rx_for_test => result,
+                        };
+
+                        match result {
+                            Ok(()) => {
+                                // Mark that close signal was received
+                                let mut guard = close_received_clone.lock().await;
+                                *guard = true;
+
+                                match behavior {
+                                    MockBehavior::Normal => SyncResult::Ok(()),
+                                    MockBehavior::FailOnExit => {
+                                        SyncResult::Err(SynchronizerError::ConnectionError(
+                                            "Simulated task failure on close".to_string(),
+                                        ))
+                                    }
+                                    _ => unreachable!(),
+                                }
+                            }
+                            Err(_) => {
+                                // Close signal sender was dropped
+                                match behavior {
+                                    MockBehavior::Normal => SyncResult::Ok(()),
+                                    MockBehavior::FailOnExit => {
+                                        SyncResult::Err(SynchronizerError::ConnectionError(
+                                            "Simulated task failure on close sender drop"
+                                                .to_string(),
+                                        ))
+                                    }
+                                    _ => unreachable!(),
+                                }
+                            }
+                        }
+                    }
+                }
             });
 
-            Ok((jh, block_rx))
-        }
-
-        async fn close(&mut self) -> SyncResult<()> {
-            let mut guard = self.end_tx.lock().await;
-            if let Some(tx) = guard.take() {
-                tx.send(())
-                    .expect("end channel closed!");
-                Ok(())
-            } else {
-                Err(SynchronizerError::CloseError("Not Started".to_string()))
-            }
+            let handle = SynchronizerTaskHandle::new(jh, close_tx_for_handle);
+            Ok((handle, block_rx))
         }
     }
 
@@ -717,19 +832,15 @@ mod tests {
     async fn test_two_ready_synchronizers() {
         let v2_sync = MockStateSync::new();
         let v3_sync = MockStateSync::new();
-        let block_sync = BlockSynchronizer::new(
-            std::time::Duration::from_millis(500),
-            std::time::Duration::from_millis(50),
-            10,
-        )
-        .register_synchronizer(
-            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-            v2_sync.clone(),
-        )
-        .register_synchronizer(
-            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-            v3_sync.clone(),
-        );
+        let block_sync = BlockSynchronizer::with_short_timeouts()
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+                v2_sync.clone(),
+            )
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+                v3_sync.clone(),
+            );
         let start_msg = StateSyncMessage {
             header: BlockHeader { number: 1, ..Default::default() },
             ..Default::default()
@@ -800,19 +911,15 @@ mod tests {
     async fn test_delayed_synchronizer_catches_up() {
         let v2_sync = MockStateSync::new();
         let v3_sync = MockStateSync::new();
-        let block_sync = BlockSynchronizer::new(
-            std::time::Duration::from_millis(500),
-            std::time::Duration::from_millis(50),
-            10,
-        )
-        .register_synchronizer(
-            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-            v2_sync.clone(),
-        )
-        .register_synchronizer(
-            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-            v3_sync.clone(),
-        );
+        let block_sync = BlockSynchronizer::with_short_timeouts()
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+                v2_sync.clone(),
+            )
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+                v3_sync.clone(),
+            );
 
         // Initial messages - both synchronizers are at block 1
         let block1_msg = StateSyncMessage {
@@ -940,19 +1047,15 @@ mod tests {
     async fn test_different_start_blocks() {
         let v2_sync = MockStateSync::new();
         let v3_sync = MockStateSync::new();
-        let block_sync = BlockSynchronizer::new(
-            std::time::Duration::from_millis(500),
-            std::time::Duration::from_millis(50),
-            10,
-        )
-        .register_synchronizer(
-            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-            v2_sync.clone(),
-        )
-        .register_synchronizer(
-            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-            v3_sync.clone(),
-        );
+        let block_sync = BlockSynchronizer::with_short_timeouts()
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+                v2_sync.clone(),
+            )
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+                v3_sync.clone(),
+            );
 
         // Initial messages - synchronizers at different blocks
         let block1_msg = StateSyncMessage {
@@ -1040,5 +1143,243 @@ mod tests {
             second_feed_msg.sync_states.get("uniswap-v3").unwrap(),
             SynchronizerState::Ready(header) if header.number == 3
         ));
+    }
+
+    #[test(tokio::test)]
+    async fn test_synchronizer_task_failure_triggers_cleanup() {
+        // Test Case 1: Verify that when a synchronizer task fails,
+        // the nanny properly cleans up all other synchronizers
+
+        let v2_sync = MockStateSync::with_behavior(MockBehavior::ExitImmediately);
+        let v3_sync = MockStateSync::new(); // Normal behavior
+
+        let block_sync = BlockSynchronizer::with_short_timeouts()
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+                v2_sync.clone(),
+            )
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+                v3_sync.clone(),
+            );
+
+        // Send initial messages
+        let start_msg = StateSyncMessage {
+            header: BlockHeader { number: 1, ..Default::default() },
+            ..Default::default()
+        };
+        v2_sync
+            .send_header(start_msg.clone())
+            .await;
+        v3_sync
+            .send_header(start_msg.clone())
+            .await;
+
+        // Start BlockSynchronizer - v2_sync will exit immediately with error
+        let (nanny_handle, mut sync_rx) = block_sync
+            .run()
+            .await
+            .expect("BlockSynchronizer failed to start");
+
+        // Consume first message to ensure at least one synchronizer is running
+        let first_msg = sync_rx
+            .recv()
+            .await
+            .expect("Should receive first message");
+        // v2_sync might have already failed, so we might only get v3_sync message
+        assert!(!first_msg.state_msgs.is_empty());
+
+        // Wait for nanny to detect task failure and execute cleanup
+        let result = timeout(Duration::from_secs(2), nanny_handle).await;
+        assert!(result.is_ok(), "Nanny should complete when synchronizer task exits");
+
+        // Give cleanup time to execute
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Verify that the remaining synchronizer received close signal during cleanup
+        assert!(
+            v3_sync.was_close_received().await,
+            "v3_sync should have received close signal during cleanup"
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_synchronizer_task_exit_triggers_cleanup() {
+        // Test Case 2: StateSynchronizer task exits with error on close, triggering nanny cleanup
+        // This tests the first branch of the nanny's select statement
+
+        let v2_sync = MockStateSync::with_behavior(MockBehavior::FailOnExit);
+        let v3_sync = MockStateSync::new();
+
+        let block_sync = BlockSynchronizer::with_short_timeouts()
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+                v2_sync.clone(),
+            )
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+                v3_sync.clone(),
+            );
+
+        // Send initial messages
+        let start_msg = StateSyncMessage {
+            header: BlockHeader { number: 1, ..Default::default() },
+            ..Default::default()
+        };
+        v2_sync
+            .send_header(start_msg.clone())
+            .await;
+        v3_sync
+            .send_header(start_msg.clone())
+            .await;
+
+        // Start BlockSynchronizer
+        let (nanny_handle, mut sync_rx) = block_sync
+            .run()
+            .await
+            .expect("BlockSynchronizer failed to start");
+
+        // Consume first message
+        let first_msg = sync_rx
+            .recv()
+            .await
+            .expect("Should receive first message");
+        assert_eq!(first_msg.state_msgs.len(), 2);
+
+        // Send a close signal to v2_sync to make it exit with error (due to FailOnExit behavior)
+        // This should trigger the first branch of the nanny's select statement
+        v2_sync.trigger_close().await;
+
+        // Wait for nanny to detect synchronizer task exit and complete cleanup
+        let result = timeout(Duration::from_secs(2), nanny_handle).await;
+        assert!(result.is_ok(), "Nanny should complete when synchronizer task exits");
+
+        // Give cleanup time to execute
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Verify cleanup was triggered - v3_sync should have received close signal
+        assert!(
+            v3_sync.was_close_received().await,
+            "v3_sync should have received close signal during cleanup"
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_main_loop_timeout_triggers_cleanup() {
+        // Test Case 3: Main loop times out waiting for synchronizers
+        // This simulates synchronizers becoming unresponsive
+
+        let v2_sync = MockStateSync::new();
+        let v3_sync = MockStateSync::new();
+
+        let block_sync = BlockSynchronizer::with_short_timeouts()
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+                v2_sync.clone(),
+            )
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+                v3_sync.clone(),
+            );
+
+        // Send initial messages
+        let start_msg = StateSyncMessage {
+            header: BlockHeader { number: 1, ..Default::default() },
+            ..Default::default()
+        };
+        v2_sync
+            .send_header(start_msg.clone())
+            .await;
+        v3_sync
+            .send_header(start_msg.clone())
+            .await;
+
+        // Start BlockSynchronizer
+        let (nanny_handle, mut sync_rx) = block_sync
+            .run()
+            .await
+            .expect("BlockSynchronizer failed to start");
+
+        // Consume first message
+        let first_msg = sync_rx
+            .recv()
+            .await
+            .expect("Should receive first message");
+        assert_eq!(first_msg.state_msgs.len(), 2);
+
+        // Don't send any more messages - synchronizers will become stale and eventually cause
+        // main loop to error when no ready synchronizers remain
+
+        // Wait for main loop to error due to no ready synchronizers
+        let result = timeout(Duration::from_secs(3), nanny_handle).await;
+        assert!(
+            result.is_ok(),
+            "Nanny should complete when main loop errors due to no ready synchronizers"
+        );
+
+        // Give cleanup time to execute
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Verify cleanup was triggered
+        assert!(
+            v2_sync.was_close_received().await,
+            "v2_sync should have received close signal during cleanup"
+        );
+        assert!(
+            v3_sync.was_close_received().await,
+            "v3_sync should have received close signal during cleanup"
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_cleanup_timeout_warning() {
+        // Verify that cleanup_synchronizers emits a warning when synchronizers timeout during
+        // cleanup
+
+        let v2_sync = MockStateSync::with_behavior(MockBehavior::ExitImmediately);
+        let v3_sync = MockStateSync::with_behavior(MockBehavior::IgnoreClose);
+
+        let block_sync = BlockSynchronizer::with_short_timeouts()
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+                v2_sync.clone(),
+            )
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+                v3_sync.clone(),
+            );
+
+        // Send initial messages
+        let start_msg = StateSyncMessage {
+            header: BlockHeader { number: 1, ..Default::default() },
+            ..Default::default()
+        };
+        v2_sync
+            .send_header(start_msg.clone())
+            .await;
+        v3_sync
+            .send_header(start_msg.clone())
+            .await;
+
+        // Start BlockSynchronizer - v2_sync will exit immediately, triggering cleanup
+        // v3_sync will ignore close signals and timeout during cleanup
+        let (nanny_handle, mut sync_rx) = block_sync
+            .run()
+            .await
+            .expect("BlockSynchronizer failed to start");
+
+        // Might not get any messages if v2_sync fails before producing output
+        let _ = sync_rx.recv().await;
+
+        // Wait for nanny to complete - cleanup should timeout on v3_sync but still complete
+        let result = timeout(Duration::from_secs(10), nanny_handle).await;
+        assert!(
+            result.is_ok(),
+            "Nanny should complete even when some synchronizers timeout during cleanup"
+        );
+
+        // Note: In a real test environment, we would capture log output to verify the warning was
+        // emitted. Since this is a unit test without log capture setup, we just verify that
+        // cleanup completes even when some synchronizers timeout.
     }
 }
