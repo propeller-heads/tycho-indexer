@@ -2,7 +2,7 @@ use std::{collections::HashMap, str::FromStr};
 
 use alloy::primitives::Address;
 use serde::{Deserialize, Serialize};
-use tycho_common::Bytes;
+use tycho_common::{models::Chain, Bytes};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HashflowPriceLevelsResponse {
@@ -123,6 +123,97 @@ impl HashflowMarketMakerLevels {
 pub struct HashflowMarketMakersResponse {
     #[serde(rename = "marketMakers")]
     pub market_makers: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HashflowQuoteRequest {
+    pub source: String,
+    #[serde(rename = "baseChain")]
+    pub base_chain: HashflowChain,
+    #[serde(rename = "quoteChain")]
+    pub quote_chain: HashflowChain,
+    pub rfqs: Vec<HashflowRFQ>,
+    pub calldata: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HashflowChain {
+    #[serde(rename = "chainType")]
+    chain_type: String,
+    #[serde(rename = "chainId")]
+    chain_id: u64,
+}
+
+impl From<Chain> for HashflowChain {
+    fn from(value: Chain) -> Self {
+        HashflowChain { chain_type: "evm".to_string(), chain_id: value.id() }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HashflowRFQ {
+    #[serde(rename = "baseToken")]
+    pub base_token: String,
+    #[serde(rename = "quoteToken")]
+    pub quote_token: String,
+    // Decimal amount (e.g. "1000000" for 1 USDT)
+    #[serde(rename = "baseTokenAmount")]
+    pub base_token_amount: Option<String>,
+    // Decimal amount (e.g. "1000000" for 1 USDT)
+    #[serde(rename = "quoteTokenAmount", skip_serializing_if = "Option::is_none")]
+    pub quote_token_amount: Option<String>,
+    pub trader: String,
+    #[serde(rename = "effectiveTrader")]
+    pub effective_trader: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HashflowQuoteResponse {
+    pub status: String,
+    pub error: Option<String>,
+    #[serde(rename = "rfqId")]
+    rfq_id: String,
+    #[serde(rename = "internalRfqIds")]
+    internal_rfq_ids: Option<Vec<String>>,
+    pub quotes: Option<Vec<HashflowQuote>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HashflowQuote {
+    #[serde(rename = "quoteData")]
+    pub quote_data: HashflowQuoteData,
+    pub signature: Bytes,
+    #[serde(rename = "targetContract")]
+    target_contract: Option<Bytes>,
+    value: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HashflowQuoteData {
+    #[serde(rename = "baseChain")]
+    base_chain: HashflowChain,
+    #[serde(rename = "quoteChain")]
+    quote_chain: HashflowChain,
+    #[serde(rename = "baseToken")]
+    pub base_token: Bytes,
+    #[serde(rename = "quoteToken")]
+    pub quote_token: Bytes,
+    // Decimal amount (e.g. "1000000" for 1 USDT)
+    #[serde(rename = "baseTokenAmount")]
+    pub base_token_amount: String,
+    // Decimal amount (e.g. "1000000" for 1 USDT)
+    #[serde(rename = "quoteTokenAmount")]
+    pub quote_token_amount: String,
+    pub trader: Bytes,
+    #[serde(rename = "effectiveTrader")]
+    pub effective_trader: Option<Bytes>,
+    #[serde(rename = "txid")]
+    pub tx_id: Bytes,
+    pub pool: Bytes,
+    #[serde(rename = "quoteExpiry")]
+    pub quote_expiry: u64,
+    pub nonce: u64,
+    #[serde(rename = "externalAccount")]
+    pub external_account: Option<Bytes>,
 }
 
 #[cfg(test)]

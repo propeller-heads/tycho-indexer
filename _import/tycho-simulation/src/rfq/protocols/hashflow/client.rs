@@ -1,12 +1,14 @@
 #![allow(dead_code)] // TODO remove this
 use std::{
     collections::{HashMap, HashSet},
+    str::FromStr,
     time::SystemTime,
 };
 
 use alloy::primitives::utils::keccak256;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
+use num_bigint::BigUint;
 use reqwest::Client;
 use tokio::time::{interval, Duration};
 use tracing::{error, info};
@@ -22,7 +24,8 @@ use crate::{
         errors::RFQError,
         models::TimestampHeader,
         protocols::hashflow::models::{
-            HashflowMarketMakerLevels, HashflowMarketMakersResponse, HashflowPriceLevelsResponse,
+            HashflowChain, HashflowMarketMakerLevels, HashflowMarketMakersResponse,
+            HashflowPriceLevelsResponse, HashflowQuoteRequest, HashflowQuoteResponse, HashflowRFQ,
         },
     },
     tycho_client::feed::synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
@@ -41,7 +44,7 @@ pub struct HashflowClient {
     tvl: f64,
     http_client: Client,
     auth_key: String,
-    source: String,
+    auth_user: String,
     // Quote tokens to normalize to for TVL purposes. Should have the same prices.
     quote_tokens: HashSet<Bytes>,
     poll_time: u64,
@@ -66,7 +69,7 @@ impl HashflowClient {
             tvl,
             http_client: Client::new(),
             auth_key,
-            source: auth_user,
+            auth_user,
             quote_tokens,
             poll_time,
         })
@@ -147,7 +150,7 @@ impl HashflowClient {
 
     async fn fetch_market_makers(&mut self) -> Result<Vec<String>, RFQError> {
         let query_params = vec![
-            ("source", self.source.clone()),
+            ("source", self.auth_user.clone()),
             ("baseChainType", "evm".to_string()),
             ("baseChainId", self.chain.id().to_string()),
         ];
@@ -192,7 +195,7 @@ impl HashflowClient {
         market_makers: &Vec<String>,
     ) -> Result<HashMap<String, Vec<HashflowMarketMakerLevels>>, RFQError> {
         let mut query_params = vec![
-            ("source", self.source.clone()),
+            ("source", self.auth_user.clone()),
             ("baseChainType", "evm".to_string()),
             ("baseChainId", self.chain.id().to_string()),
         ];
@@ -356,18 +359,139 @@ impl RFQClient for HashflowClient {
 
     async fn request_binding_quote(
         &self,
-        _params: &GetAmountOutParams,
+        params: &GetAmountOutParams,
     ) -> Result<SignedQuote, RFQError> {
-        todo!()
+        let hashflow_chain = HashflowChain::from(self.chain);
+        let quote_request = HashflowQuoteRequest {
+            source: self.auth_user.clone(),
+            base_chain: hashflow_chain.clone(),
+            quote_chain: hashflow_chain,
+            rfqs: vec![HashflowRFQ {
+                base_token: params.token_in.address.to_string(),
+                quote_token: params.token_out.address.to_string(),
+                base_token_amount: Some(params.amount_in.to_string()),
+                quote_token_amount: None,
+                trader: params.receiver.to_string(),
+                effective_trader: None,
+            }],
+            calldata: false,
+        };
+
+        let url = self.quote_endpoint.clone();
+
+        let request = self
+            .http_client
+            .post(&url)
+            .json(&quote_request)
+            .header("accept", "application/json")
+            .header("Authorization", &self.auth_key);
+
+        let response = request.send().await.map_err(|e| {
+            RFQError::ConnectionError(format!("Failed to send Hashflow quote request: {e}"))
+        })?;
+
+        if response.status() != 200 {
+            let err_msg = response.text().await.map_err(|e| {
+                RFQError::ParsingError(format!(
+                    "Failed to read response text from Hashflow failed request: {e}"
+                ))
+            })?;
+            return Err(RFQError::FatalError(format!(
+                "Failed to send Hashflow quote request: {err_msg}",
+            )));
+        }
+
+        let quote_response = response
+            .json::<HashflowQuoteResponse>()
+            .await
+            .map_err(|e| {
+                RFQError::ParsingError(format!(
+                    "Failed to parse Hashflow quote response:
+        {e}"
+                ))
+            })?;
+
+        match quote_response.status.as_str() {
+            "success" => {
+                if let Some(quotes) = quote_response.quotes {
+                    // We assume there will be only one quote request at a time
+                    let quote = quotes[0].clone();
+
+                    if (quote.quote_data.base_token != params.token_in.address) ||
+                        (quote.quote_data.quote_token != params.token_out.address)
+                    {
+                        return Err(RFQError::FatalError(
+                            "Quote tokens don't match request tokens".to_string(),
+                        ))
+                    }
+
+                    let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
+                    quote_attributes.insert("pool".to_string(), quote.quote_data.pool);
+                    quote_attributes.insert("trader".to_string(), quote.quote_data.trader);
+                    quote_attributes
+                        .insert("nonce".to_string(), Bytes::from(quote.quote_data.nonce));
+                    quote_attributes.insert("tx_id".to_string(), quote.quote_data.tx_id);
+                    quote_attributes.insert("signature".to_string(), quote.signature);
+                    quote_attributes.insert(
+                        "quote_expiry".to_string(),
+                        Bytes::from(quote.quote_data.quote_expiry),
+                    );
+                    if let Some(external_account) = quote.quote_data.external_account {
+                        quote_attributes.insert("external_account".to_string(), external_account);
+                    }
+                    if let Some(effective_trader) = quote.quote_data.effective_trader {
+                        quote_attributes.insert("effective_trader".to_string(), effective_trader);
+                    }
+
+                    let signed_quote = SignedQuote {
+                        base_token: params.token_in.address.clone(),
+                        quote_token: params.token_out.address.clone(),
+                        amount_in: BigUint::from_str(&quote.quote_data.base_token_amount).map_err(
+                            |_| {
+                                RFQError::ParsingError(format!(
+                                    "Failed to parse amount in string: {}",
+                                    quote.quote_data.base_token_amount
+                                ))
+                            },
+                        )?,
+                        amount_out: BigUint::from_str(&quote.quote_data.quote_token_amount)
+                            .map_err(|_| {
+                                RFQError::ParsingError(format!(
+                                    "Failed to parse amount out string: {}",
+                                    quote.quote_data.quote_token_amount
+                                ))
+                            })?,
+                        quote_attributes,
+                    };
+                    Ok(signed_quote)
+                } else {
+                    return Err(RFQError::QuoteNotFound(format!(
+                        "Hashflow quote not found for {} {} ->{}",
+                        params.amount_in, params.token_in.address, params.token_out.address,
+                    )))
+                }
+            }
+            "fail" => {
+                return Err(RFQError::FatalError(format!(
+                    "Hashflow API error: {:?}",
+                    quote_response.error
+                )));
+            }
+            _ => {
+                return Err(RFQError::FatalError("Hashflow API error: Unknown status".to_string()));
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{str::FromStr, time::Duration};
+    use std::{env, str::FromStr, time::Duration};
 
+    use dotenv::dotenv;
     use futures::StreamExt;
     use tokio::time::timeout;
+    use tycho_common::models::token::Token;
 
     use super::*;
     use crate::rfq::protocols::hashflow::models::{HashflowPair, HashflowPriceLevel};
@@ -445,7 +569,7 @@ mod tests {
     #[tokio::test]
     #[ignore] // Requires network access and HASHFLOW_KEY environment variable
     async fn test_hashflow_api_polling() {
-        use std::env;
+        dotenv().expect("Missing .env file");
         let hashflow_key = env::var("HASHFLOW_KEY").unwrap();
 
         let lpt = Bytes::from_str("0x58b6a8a3302369daec383334672404ee733ab239").unwrap();
@@ -530,5 +654,90 @@ mod tests {
             Ok(_) => println!("Test completed successfully"),
             Err(_) => panic!("Test timed out - no messages received within 5 seconds"),
         }
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires network access and setting proper env vars
+    async fn test_request_binding_quote() {
+        let wbtc = Token {
+            address: Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap(),
+            symbol: "WBTC".to_string(),
+            decimals: 8,
+            tax: 0,
+            gas: vec![],
+            chain: Default::default(),
+            quality: 100,
+        };
+        let weth = Token {
+            address: Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
+            symbol: "WETH".to_string(),
+            decimals: 18,
+            tax: 0,
+            gas: vec![],
+            chain: Default::default(),
+            quality: 100,
+        };
+        let auth_user = String::from("propellerheads");
+        dotenv().expect("Missing .env file");
+        let auth_key = env::var("HASHFLOW_KEY").unwrap();
+
+        let client = HashflowClient::new(
+            Chain::Ethereum,
+            HashSet::from_iter(vec![weth.address.clone(), wbtc.address.clone()]),
+            10.0,
+            HashSet::new(),
+            auth_user,
+            auth_key,
+            0,
+        )
+        .unwrap();
+
+        let router = Bytes::from_str("0xfD0b31d2E955fA55e3fa641Fe90e08b677188d35").unwrap();
+
+        let params = GetAmountOutParams {
+            amount_in: BigUint::from(1_000000000000000000u64),
+            token_in: weth.clone(),
+            token_out: wbtc.clone(),
+            sender: router.clone(),
+            receiver: router.clone(),
+        };
+        let quote = client
+            .request_binding_quote(&params)
+            .await
+            .unwrap();
+
+        assert_eq!(quote.base_token, weth.address);
+        assert_eq!(quote.quote_token, wbtc.address);
+        assert_eq!(quote.amount_in, BigUint::from(1_000000000000000000u64));
+
+        // // Assuming the BTC - WETH price doesn't change too much at the time of running this
+        assert!(quote.amount_out > BigUint::from(3000000u64));
+
+        assert_eq!(
+            quote
+                .quote_attributes
+                .get("trader")
+                .unwrap(),
+            &router
+        );
+        assert!(
+            quote
+                .quote_attributes
+                .get("nonce")
+                .unwrap() >
+                &Bytes::from(1u64)
+        );
+        assert!(quote
+            .quote_attributes
+            .contains_key("pool"));
+        assert!(quote
+            .quote_attributes
+            .contains_key("tx_id"));
+        assert!(quote
+            .quote_attributes
+            .contains_key("signature"));
+        assert!(quote
+            .quote_attributes
+            .contains_key("quote_expiry"));
     }
 }

@@ -359,15 +359,16 @@ impl RFQClient for BebopClient {
             .header("name", &self.ws_user)
             .header("Authorization", &self.ws_key);
 
-        let response = request
-            .send()
-            .await
-            .map_err(|e| RFQError::ConnectionError(format!("Failed to send quote request: {e}")))?;
+        let response = request.send().await.map_err(|e| {
+            RFQError::ConnectionError(format!("Failed to send Bebop quote request: {e}"))
+        })?;
 
         let quote_response = response
             .json::<BebopQuoteResponse>()
             .await
-            .map_err(|e| RFQError::ParsingError(format!("Failed to parse quote response: {e}")))?;
+            .map_err(|e| {
+                RFQError::ParsingError(format!("Failed to parse Bebop quote response: {e}"))
+            })?;
 
         match quote_response {
             BebopQuoteResponse::Success(quote) => {
@@ -375,7 +376,9 @@ impl RFQClient for BebopClient {
                 quote_attributes.insert(
                     "calldata".into(),
                     Bytes::from_str(&quote.tx.data).map_err(|_| {
-                        RFQError::ParsingError("Failed to parse quote result's calldata".into())
+                        RFQError::ParsingError(
+                            "Failed to parse Bebop quote result's calldata".into(),
+                        )
                     })?,
                 );
                 quote_attributes.insert(
