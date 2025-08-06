@@ -6,7 +6,7 @@ use num_bigint::{BigInt, BigUint};
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 use tycho_execution::encoding::{
     evm::utils::write_calldata_to_file,
-    models::{Solution, Swap, UserTransferType},
+    models::{NativeAction, Solution, Swap, UserTransferType},
 };
 
 use crate::common::{
@@ -19,7 +19,7 @@ fn test_sequential_swap_strategy_encoder() {
     // Note: This test does not assert anything. It is only used to obtain integration
     // test data for our router solidity test.
     //
-    // Performs a sequential swap from WETH to USDC though WBTC using USV2 pools
+    // Performs a sequential swap from WETH to USDC through WBTC using USV2 pools
     //
     //   WETH ───(USV2)──> WBTC ───(USV2)──> USDC
 
@@ -315,4 +315,76 @@ fn test_sequential_strategy_cyclic_swap() {
     assert_eq!(hex_calldata[..456], expected_input);
     assert_eq!(hex_calldata[1224..], expected_swaps);
     write_calldata_to_file("test_sequential_strategy_cyclic_swap", hex_calldata.as_str());
+}
+
+#[test]
+fn test_sequential_swap_strategy_encoder_unwrap() {
+    // Note: This test does not assert anything. It is only used to obtain integration
+    // test data for our router solidity test.
+    //
+    // Performs a sequential swap from USDC to ETH through WBTC using USV2 pools and unwrapping in
+    // the end
+    //
+    //   USDC ───(USV2)──> WBTC ───(USV2)──> WETH -> ETH
+
+    let weth = weth();
+    let wbtc = wbtc();
+    let usdc = usdc();
+
+    let swap_usdc_wbtc = Swap {
+        component: ProtocolComponent {
+            id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
+            protocol_system: "uniswap_v2".to_string(),
+            ..Default::default()
+        },
+        token_in: usdc.clone(),
+        token_out: wbtc.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+    };
+    let swap_wbtc_weth = Swap {
+        component: ProtocolComponent {
+            id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
+            protocol_system: "uniswap_v2".to_string(),
+            ..Default::default()
+        },
+        token_in: wbtc.clone(),
+        token_out: weth.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+    };
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: usdc,
+        given_amount: BigUint::from_str("3_000_000_000").unwrap(),
+        checked_token: eth(),
+        checked_amount: BigUint::from_str("26173932").unwrap(),
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap_usdc_wbtc, swap_wbtc_weth],
+        native_action: Some(NativeAction::Unwrap),
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFromPermit2,
+        &eth(),
+        Some(get_signer()),
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_sequential_swap_strategy_encoder_unwrap", hex_calldata.as_str());
 }

@@ -228,10 +228,11 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 
         let grouped_swaps = group_swaps(&solution.swaps);
 
-        let mut wrap = false;
+        let (mut wrap, mut unwrap) = (false, false);
         if let Some(action) = &solution.native_action {
-            if action == &NativeAction::Wrap {
-                wrap = true
+            match *action {
+                NativeAction::Wrap => wrap = true,
+                NativeAction::Unwrap => unwrap = true,
             }
         }
 
@@ -251,7 +252,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
             let next_swap = grouped_swaps.get(i + 1);
             let (swap_receiver, next_swap_optimization) = self
                 .transfer_optimization
-                .get_receiver(&solution.receiver, next_swap)?;
+                .get_receiver(&solution.receiver, next_swap, unwrap)?;
             next_in_between_swap_optimization_allowed = next_swap_optimization;
 
             let transfer = self
