@@ -1587,7 +1587,7 @@ mod tests {
             };
 
             let mut entrypoint_generator = UniswapV4DefaultHookEntrypointGenerator::new(
-                DefaultSwapAmountEstimator,
+                DefaultSwapAmountEstimator::with_balances(),
                 pool_manager.clone(),
             );
             entrypoint_generator.set_config(config);
