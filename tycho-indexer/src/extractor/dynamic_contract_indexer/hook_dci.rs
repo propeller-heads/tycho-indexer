@@ -681,28 +681,48 @@ where
         // 3a. Process metadata errors and update component states
         self.process_metadata_errors(&component_metadata, &block_changes.block)?;
 
-        // 4. Group components by hook address for orchestrator processing
-        let mut components_by_hook: HashMap<Address, Vec<ProtocolComponent>> = HashMap::new();
+        // 4. Group components by hook address and separate by processing needs
+        let mut components_by_hook_full_processing: HashMap<Address, Vec<ProtocolComponent>> = HashMap::new();
+        let mut components_by_hook_balance_only: HashMap<Address, Vec<ProtocolComponent>> = HashMap::new();
         let mut metadata_by_component_id: HashMap<ComponentId, _> = HashMap::new();
+
+        // Create lookup sets for quick component categorization
+        let full_processing_ids: std::collections::HashSet<ComponentId> = components_needing_full_processing
+            .iter()
+            .map(|(_, comp)| comp.id.clone())
+            .collect();
 
         for (component, metadata) in component_metadata {
             metadata_by_component_id.insert(component.id.clone(), metadata);
 
             if let Some(hook_address) = component.static_attributes.get("hooks") {
-                components_by_hook
-                    .entry(hook_address.clone())
-                    .or_default()
-                    .push(component);
+                if full_processing_ids.contains(&component.id) {
+                    // Component needs full processing (entrypoint generation)
+                    components_by_hook_full_processing
+                        .entry(hook_address.clone())
+                        .or_default()
+                        .push(component);
+                } else {
+                    // Component only needs balance updates
+                    components_by_hook_balance_only
+                        .entry(hook_address.clone())
+                        .or_default()
+                        .push(component);
+                }
             }
         }
 
-        // 5. Call appropriate hook orchestrator for each group
-        info!(hook_groups = components_by_hook.len(), "Processing components by hook orchestrator");
+        // 5a. Call appropriate hook orchestrator for components needing full processing (entrypoint generation)
+        info!(
+            full_processing_hook_groups = components_by_hook_full_processing.len(),
+            balance_only_hook_groups = components_by_hook_balance_only.len(),
+            "Processing components by hook orchestrator"
+        );
 
-        for (hook_address, components) in &components_by_hook {
+        for (hook_address, components) in &components_by_hook_full_processing {
             let orchestrator_span = span!(
                 Level::INFO,
-                "hook_orchestrator",
+                "hook_orchestrator_full_processing",
                 hook_address = %hook_address,
                 component_count = components.len()
             );
@@ -713,7 +733,7 @@ where
                 .hooks
                 .get(hook_address)
             {
-                info!("Found hook orchestrator, processing components");
+                info!("Found hook orchestrator, processing components needing full processing");
 
                 let component_metadata_map: HashMap<String, _> = components
                     .iter()
@@ -726,18 +746,19 @@ where
 
                 debug!(
                     metadata_entries = component_metadata_map.len(),
-                    "Prepared component metadata map"
+                    "Prepared component metadata map for full processing"
                 );
 
                 match orchestrator.update_components(
                     block_changes,
                     components,
                     &component_metadata_map,
+                    true
                 ) {
                     Ok(()) => {
                         info!(
                             processed_components = components.len(),
-                            "Hook orchestrator processed components successfully"
+                            "Hook orchestrator processed components successfully (full processing)"
                         );
 
                         // Update component states for successful processing
@@ -752,7 +773,7 @@ where
                         error!(
                             error = %e,
                             failed_components = components.len(),
-                            "Hook orchestrator failed"
+                            "Hook orchestrator failed (full processing)"
                         );
 
                         // Mark all components in this group as failed
@@ -781,6 +802,101 @@ where
                     )?;
                 }
             }
+        }
+
+        // 5b. Handle components that only need balance updates (no entrypoint generation)
+        for (hook_address, components) in &components_by_hook_balance_only {
+            let balance_span = span!(
+                Level::INFO,
+                "hook_balance_only_processing",
+                hook_address = %hook_address,
+                component_count = components.len()
+            );
+            let _balance_guard = balance_span.enter();
+
+            if let Some(orchestrator) = self
+                .hook_orchestrator_registry
+                .hooks
+                .get(hook_address)
+            {
+                info!("Found hook orchestrator, processing components needing balance-only updates");
+
+                let component_metadata_map: HashMap<String, _> = components
+                    .iter()
+                    .filter_map(|comp| {
+                        metadata_by_component_id
+                            .get(&comp.id)
+                            .map(|meta| (comp.id.clone(), meta.clone()))
+                    })
+                    .collect();
+
+                debug!(
+                    metadata_entries = component_metadata_map.len(),
+                    "Prepared component metadata map for balance-only processing"
+                );
+
+                // For balance-only components, we just update their balances without generating new entrypoints
+                // The balance updates are already injected into block_changes by the metadata orchestrator
+                match orchestrator.update_components(
+                    block_changes,
+                    components,
+                    &component_metadata_map,
+                    false, // Skip entrypoint generation
+                ) {
+                    Ok(()) => {
+                        info!(
+                            processed_components = components.len(),
+                            "Hook orchestrator processed components successfully (balance-only)"
+                        );
+
+                        // Update component states for successful processing - they remain TracingComplete
+                        for component in components {
+                            // Note: We don't call handle_component_success here because these components
+                            // are already TracingComplete and should remain so
+                            debug!(
+                                component_id = %component.id,
+                                "Completed balance-only update for component"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        error!(
+                            error = %e,
+                            failed_components = components.len(),
+                            "Hook orchestrator failed (balance-only)"
+                        );
+
+                        // Mark all components in this group as failed
+                        for component in components {
+                            self.handle_component_failure(
+                                component.id.clone(),
+                                format!("Hook orchestrator balance update error: {e:?}"),
+                                &block_changes.block,
+                            )?;
+                        }
+                    }
+                }
+            } else {
+                warn!(
+                    hook_address = %hook_address,
+                    missing_components = components.len(),
+                    "No hook orchestrator found for hook address (balance-only processing)"
+                );
+
+                // Mark components as failed since we can't process them
+                for component in components {
+                    self.handle_component_failure(
+                        component.id.clone(),
+                        format!("No hook orchestrator available for hook {hook_address} (balance-only)"),
+                        &block_changes.block,
+                    )?;
+                }
+            }
+
+            info!(
+                processed_components = components.len(),
+                "Completed balance-only processing for hook"
+            );
         }
 
         // TODO: Is pruning implemented already?
