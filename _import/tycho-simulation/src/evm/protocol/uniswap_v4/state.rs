@@ -301,6 +301,13 @@ impl UniswapV4State {
     }
 
     /// Finds max amount by performing exponential search.
+    ///
+    /// Reasoning:
+    /// - get_amount_out(I256::MAX) will almost always fail, so this will waste time checking values
+    ///   unrealistically high.
+    /// - If you were to start binary search from 1 to 10^76, you'd need hundreds of iterations.
+    ///
+    /// More about exponential search: https://en.wikipedia.org/wiki/Exponential_search
     fn find_max_amount(
         &self,
         token_in: &Token,
@@ -758,6 +765,7 @@ mod tests {
     use std::{collections::HashSet, fs, path::Path, str::FromStr};
 
     use num_traits::FromPrimitive;
+    use rstest::rstest;
     use serde_json::Value;
     use tycho_client::feed::synchronizer::ComponentWithState;
     use tycho_common::models::Chain;
@@ -1140,8 +1148,6 @@ mod tests {
             .get_limits(token_in, token_out)
             .expect("Should find limits through experimental swapping");
 
-        println!("Found limits through experimental swapping: amount_in={amount_in_limit}, amount_out={amount_out_limit}");
-
         // At least 10 million USDC, not more than 100 million USDC
         assert!(amount_in_limit > BigUint::from(10u64).pow(13));
         assert!(amount_in_limit < BigUint::from(10u64).pow(14));
@@ -1151,11 +1157,11 @@ mod tests {
         assert!(amount_out_limit < BigUint::from(10u64).pow(22));
     }
 
-    #[test]
-    fn test_find_max_amount_greater_than_starting_point() {
-        // We start our search at 1e18, so test that we can properly find a max amount greater than
-        // that
-
+    #[rstest]
+    #[case::high_liquidity(u128::MAX / 2)] // Very large liquidity
+    #[case::medium_liquidity(10000000000000000000u128)] // Moderate liquidity: 10e18
+    #[case::minimal_liquidity(1000u128)] // Very small liquidity
+    fn test_find_max_amount(#[case] liquidity: u128) {
         let block = BlockHeader {
             number: 22578103,
             hash: Bytes::from_str(
@@ -1166,59 +1172,21 @@ mod tests {
             ..Default::default()
         };
 
-        let usv4_state = UniswapV4State::new(
-            u128::MAX / 2,
-            U256::from_str("79228162514264337593543950336").unwrap(),
-            UniswapV4Fees { zero_for_one: 100, one_for_zero: 100, lp_fee: 100 }, // Low fees
-            0,
-            60,
-            vec![
-                TickInfo::new(-600, (u128::MAX / 4) as i128),
-                TickInfo::new(600, -((u128::MAX / 4) as i128)),
-            ],
-            block,
-        );
-
-        let token_in = usdc();
-        let token_out = weth();
-
-        let max_amount = usv4_state
-            .find_max_amount(&token_in, &token_out)
-            .unwrap();
-        assert!(max_amount > BigUint::from(1u64));
-        assert!(usv4_state
-            .get_amount_out(max_amount.clone(), &token_in, &token_out)
-            .is_ok());
-        assert!(usv4_state
-            .get_amount_out(max_amount.clone() + BigUint::from(1u64), &token_in, &token_out)
-            .is_err());
-    }
-
-    #[test]
-    fn test_find_max_amount_less_than_starting_point() {
-        // We start our search at 1e18, so test that we can properly find a max amount less than
-        // that
-
-        let block = BlockHeader {
-            number: 22578103,
-            hash: Bytes::from_str(
-                "0x035c0e674c3bf3384a74b766908ab41c1968e989360aa26bea1dd64b1626f5f0",
-            )
-            .unwrap(),
-            timestamp: 1748397011,
-            ..Default::default()
-        };
+        // Use fixed configuration for all test cases
+        let fees = UniswapV4Fees { zero_for_one: 100, one_for_zero: 100, lp_fee: 100 };
+        let tick_spacing = 60;
+        let ticks = vec![
+            TickInfo::new(-600, (liquidity / 4) as i128),
+            TickInfo::new(600, -((liquidity / 4) as i128)),
+        ];
 
         let usv4_state = UniswapV4State::new(
-            1000000000000000000u128, // 10e17
+            liquidity,
             U256::from_str("79228162514264337593543950336").unwrap(),
-            UniswapV4Fees { zero_for_one: 100, one_for_zero: 100, lp_fee: 3000 },
+            fees,
             0,
-            60,
-            vec![
-                TickInfo::new(-180, 5000000000000000000i128),
-                TickInfo::new(180, -5000000000000000000i128),
-            ],
+            tick_spacing,
+            ticks,
             block,
         );
 
@@ -1232,55 +1200,12 @@ mod tests {
         let success = usv4_state
             .get_amount_out(max_amount.clone(), &token_in, &token_out)
             .is_ok();
-        assert!(success, "Should be able to swap the exact max amount");
+        assert!(success, "Should be able to swap the exact max amount.");
 
         let one_more = &max_amount + BigUint::from(1u64);
         let should_fail = usv4_state
             .get_amount_out(one_more, &token_in, &token_out)
             .is_err();
-        assert!(should_fail, "Swapping max_amount + 1 should fail");
-    }
-
-    #[test]
-    fn test_find_max_amount_boundary_conditions() {
-        // Test edge cases and boundary conditions
-        let block = BlockHeader {
-            number: 22578103,
-            hash: Bytes::from_str(
-                "0x035c0e674c3bf3384a74b766908ab41c1968e989360aa26bea1dd64b1626f5f0",
-            )
-            .unwrap(),
-            timestamp: 1748397011,
-            ..Default::default()
-        };
-
-        // Minimal liquidity state
-        let usv4_state = UniswapV4State::new(
-            1000u128, // Very small liquidity
-            U256::from_str("79228162514264337593543950336").unwrap(),
-            UniswapV4Fees { zero_for_one: 0, one_for_zero: 0, lp_fee: 0 }, // No fees
-            0,
-            1,
-            vec![TickInfo::new(-1, 500i128), TickInfo::new(1, -500i128)],
-            block,
-        );
-
-        let token_in = usdc();
-        let token_out = weth();
-
-        let max_amount = usv4_state
-            .find_max_amount(&token_in, &token_out)
-            .unwrap();
-
-        let success = usv4_state
-            .get_amount_out(max_amount.clone(), &token_in, &token_out)
-            .is_ok();
-        assert!(success, "Should be able to swap the exact max amount");
-
-        let one_more = &max_amount + BigUint::from(1u64);
-        let should_fail = usv4_state
-            .get_amount_out(one_more, &token_in, &token_out)
-            .is_err();
-        assert!(should_fail, "Swapping max_amount + 1 should fail");
+        assert!(should_fail, "Swapping max_amount + 1 should fail.");
     }
 }
