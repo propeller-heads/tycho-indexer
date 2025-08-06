@@ -2181,7 +2181,7 @@ mod test {
                 .states
                 .is_empty() ||
                 first_snapshot.deltas.is_some()
-);
+        );
         // Now send close signal - this should be handled in the main processing loop
         let _ = end_tx.send(());
 
@@ -2193,7 +2193,7 @@ mod test {
             result.is_ok(),
             "state_sync should exit cleanly when closed after first message: {:?}",
             result
-);
+        );
         println!("SUCCESS: Close signal handled correctly during main processing loop");
     }
 }

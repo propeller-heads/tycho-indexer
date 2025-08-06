@@ -458,15 +458,26 @@ impl WsDeltasClient {
                                     )
                                     .await
                                     {
-                                        warn!(?e, ?subscription_id, "Failed to send unsubscribe command");
+                                        warn!(
+                                            ?e,
+                                            ?subscription_id,
+                                            "Failed to send unsubscribe command"
+                                        );
                                     } else {
                                         // Wait for unsubscribe completion with timeout
-                                        match tokio::time::timeout(Duration::from_secs(5), rx).await {
+                                        match tokio::time::timeout(Duration::from_secs(5), rx).await
+                                        {
                                             Ok(_) => {
-                                                debug!(?subscription_id, "Unsubscribe completed successfully");
+                                                debug!(
+                                                    ?subscription_id,
+                                                    "Unsubscribe completed successfully"
+                                                );
                                             }
                                             Err(_) => {
-                                                warn!(?subscription_id, "Unsubscribe completion timed out");
+                                                warn!(
+                                                    ?subscription_id,
+                                                    "Unsubscribe completion timed out"
+                                                );
                                             }
                                         }
                                     }

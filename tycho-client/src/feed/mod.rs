@@ -1187,7 +1187,7 @@ mod tests {
             .await
             .expect("Should receive first message");
         // v2_sync might have already failed, so we might only get v3_sync message
-        assert!(first_msg.state_msgs.len() >= 1);
+        assert!(!first_msg.state_msgs.is_empty());
 
         // Wait for nanny to detect task failure and execute cleanup
         let result = timeout(Duration::from_secs(2), nanny_handle).await;
