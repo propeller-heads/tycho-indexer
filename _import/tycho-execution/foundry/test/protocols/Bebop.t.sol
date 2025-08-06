@@ -102,7 +102,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             bebopCalldata,
             uint8(12), // partialFillOffset for swapSingle (388 = 4 + 12*32)
             originalAmountIn,
-            uint8(1) // approvalNeeded: true
+            uint8(1), // approvalNeeded: true
+            address(123)
         );
 
         // Test decoding
@@ -113,7 +114,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             bytes memory decodedBebopCalldata,
             uint8 decodedPartialFillOffset,
             uint256 decodedOriginalAmountIn,
-            bool decodedApprovalNeeded
+            bool decodedApprovalNeeded,
+            address decodedReceiver
         ) = bebopExecutor.decodeParams(params);
 
         assertEq(tokenIn, USDC_ADDR, "tokenIn mismatch");
@@ -135,6 +137,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             "originalAmountIn mismatch"
         );
         assertTrue(decodedApprovalNeeded, "approvalNeeded should be true");
+        assertEq(decodedReceiver, address(123), "receiver mismatch");
     }
 
     // Single Order Tests
@@ -217,18 +220,22 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             bebopCalldata,
             uint8(12), // partialFillOffset for swapSingle (388 = 4 + 12*32)
             testData.order.taker_amount, // originalAmountIn (matches what encoder would produce)
-            uint8(1) // approvalNeeded: true
+            uint8(1), // approvalNeeded: true
+            originalTakerAddress // receiver from order
         );
+
+        // Check initial ONDO balance of receiver
+        uint256 initialOndoBalance = ONDO.balanceOf(originalTakerAddress);
 
         uint256 amountOut = bebopExecutor.swap(testData.amountIn, params);
 
         // Verify results
         assertEq(amountOut, testData.expectedAmountOut, "Incorrect amount out");
-        // The harness transfers tokens to the executor to simulate proper flow
+        // Since we're using real order data, tokens go to the original receiver
         assertEq(
-            ONDO.balanceOf(address(bebopExecutor)),
+            ONDO.balanceOf(originalTakerAddress) - initialOndoBalance,
             testData.expectedAmountOut,
-            "ONDO should be in executor"
+            "ONDO should be at receiver"
         );
         assertEq(
             USDC.balanceOf(address(bebopExecutor)), 0, "USDC left in executor"
@@ -313,8 +320,12 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             bebopCalldata,
             uint8(12), // partialFillOffset for swapSingle (388 = 4 + 12*32)
             testData.order.taker_amount, // originalAmountIn (full order amount)
-            uint8(1) // approvalNeeded: true
+            uint8(1), // approvalNeeded: true
+            originalTakerAddress // receiver from order
         );
+
+        // Check initial ONDO balance of receiver
+        uint256 initialOndoBalance = ONDO.balanceOf(originalTakerAddress);
 
         uint256 amountOut = bebopExecutor.swap(testData.amountIn, params);
 
@@ -324,11 +335,11 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             testData.expectedAmountOut,
             "Incorrect partial amount out"
         );
-        // The harness transfers tokens to the executor to simulate proper flow
+        // Since we're using real order data, tokens go to the original receiver
         assertEq(
-            ONDO.balanceOf(address(bebopExecutor)),
+            ONDO.balanceOf(originalTakerAddress) - initialOndoBalance,
             testData.expectedAmountOut,
-            "ONDO should be in executor"
+            "ONDO should be at receiver"
         );
         assertEq(
             USDC.balanceOf(address(bebopExecutor)), 0, "USDC left in executor"
@@ -448,8 +459,12 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             bebopCalldata,
             uint8(2), // partialFillOffset for swapAggregate (68 = 4 + 2*32)
             totalTakerAmount, // originalAmountIn
-            uint8(0) // approvalNeeded: false for native ETH
+            uint8(0), // approvalNeeded: false for native ETH
+            originalTakerAddress // receiver from order
         );
+
+        // Check initial USDC balance of receiver
+        uint256 initialUsdcBalance = USDC.balanceOf(originalTakerAddress);
 
         // Execute the aggregate swap with ETH value
         uint256 amountOut = bebopExecutor.swap{value: totalTakerAmount}(
@@ -458,11 +473,11 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         // Verify results
         assertEq(amountOut, totalMakerAmount, "Incorrect amount out");
-        // The harness transfers tokens to the executor to simulate proper flow
+        // Since we're using real order data, tokens go to the original receiver
         assertEq(
-            USDC.balanceOf(address(bebopExecutor)),
+            USDC.balanceOf(originalTakerAddress) - initialUsdcBalance,
             totalMakerAmount,
-            "USDC should be in executor"
+            "USDC should be at receiver"
         );
         // ETH balance check - the harness may have different balance due to test setup
         // Just ensure no excessive ETH is stuck
@@ -588,8 +603,12 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             bebopCalldata,
             uint8(2), // partialFillOffset for swapAggregate (68 = 4 + 2*32)
             totalTakerAmount, // originalAmountIn (full order amount)
-            uint8(0) // approvalNeeded: false for native ETH
+            uint8(0), // approvalNeeded: false for native ETH
+            originalTakerAddress // receiver from order
         );
+
+        // Check initial USDC balance of receiver
+        uint256 initialUsdcBalance = USDC.balanceOf(originalTakerAddress);
 
         // Execute the partial aggregate swap with ETH value
         uint256 amountOut = bebopExecutor.swap{value: partialFillAmount}(
@@ -600,11 +619,11 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         assertEq(
             amountOut, expectedPartialOutput, "Incorrect partial amount out"
         );
-        // The harness transfers tokens to the executor to simulate proper flow
+        // Since we're using real order data, tokens go to the original receiver
         assertEq(
-            USDC.balanceOf(address(bebopExecutor)),
+            USDC.balanceOf(originalTakerAddress) - initialUsdcBalance,
             expectedPartialOutput,
-            "USDC should be in executor"
+            "USDC should be at receiver"
         );
         // ETH balance check - the harness may have different balance due to test setup
         // Just ensure no excessive ETH is stuck
@@ -637,7 +656,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             bebopCalldata,
             uint8(12), // partialFillOffset for swapSingle (388 = 4 + 12*32)
             originalAmountIn,
-            uint8(1) // approvalNeeded: true
+            uint8(1), // approvalNeeded: true
+            address(bebopExecutor)
         );
 
         // Verify valid params work
@@ -713,7 +733,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             bebopCalldata,
             uint8(12), // partialFillOffset for swapSingle (388 = 4 + 12*32)
             uint256(200000000), // originalAmountIn
-            uint8(1) // approvalNeeded: true
+            uint8(1), // approvalNeeded: true
+            originalTakerAddress // receiver from order
         );
 
         // Deal 200 USDC to the executor
@@ -727,16 +748,19 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         vm.prank(maker);
         ONDO.approve(BEBOP_SETTLEMENT, expectedAmountOut);
 
+        // Check initial ONDO balance of receiver
+        uint256 initialOndoBalance = ONDO.balanceOf(originalTakerAddress);
+
         // Execute the swap
         uint256 amountOut = bebopExecutor.swap(amountIn, protocolData);
 
         // Verify results
         assertEq(amountOut, expectedAmountOut, "Incorrect amount out");
-        // The harness transfers tokens to the executor to simulate proper flow
+        // Since we're using historical data, tokens go to the original receiver
         assertEq(
-            ONDO.balanceOf(address(bebopExecutor)),
+            ONDO.balanceOf(originalTakerAddress) - initialOndoBalance,
             expectedAmountOut,
-            "ONDO should be in executor"
+            "ONDO should be at receiver"
         );
         assertEq(
             USDC.balanceOf(address(bebopExecutor)), 0, "USDC left in executor"
@@ -834,7 +858,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             bebopCalldata,
             uint8(2), // partialFillOffset for swapAggregate (68 = 4 + 2*32)
             ethAmount, // originalAmountIn
-            uint8(0) // approvalNeeded: false for native ETH
+            uint8(0), // approvalNeeded: false for native ETH
+            orderTaker // receiver from order
         );
 
         // Fund the two makers from the real transaction with USDC
@@ -854,17 +879,20 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         vm.deal(ALICE, ethAmount);
         vm.startPrank(ALICE);
 
+        // Check initial USDC balance of receiver
+        uint256 initialUsdcBalance = IERC20(USDC_ADDR).balanceOf(orderTaker);
+
         // Execute the swap with native ETH
         uint256 amountOut =
             bebopExecutor.swap{value: ethAmount}(ethAmount, protocolData);
 
         // Verify results
         assertEq(amountOut, expAmountOut, "Incorrect amount out");
-        // The harness transfers tokens to the executor to simulate proper flow
+        // Since we're using historical data, tokens go to the original receiver
         assertEq(
-            IERC20(USDC_ADDR).balanceOf(address(bebopExecutor)),
+            IERC20(USDC_ADDR).balanceOf(orderTaker) - initialUsdcBalance,
             expAmountOut,
-            "USDC should be in executor"
+            "USDC should be at receiver"
         );
         // ETH balance check - the harness may have different balance due to test setup
         // Just ensure no excessive ETH is stuck
@@ -874,202 +902,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             "Too much ETH left in executor"
         );
         vm.stopPrank();
-    }
-
-    // Test exposed_getActualFilledTakerAmount function
-    function testGetActualFilledTakerAmount_FilledLessThanGiven() public {
-        // Deploy Bebop executor harness
-        bebopExecutor =
-            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
-
-        // When filledTakerAmount < givenAmount
-        // Should return filledTakerAmount
-        uint256 givenAmount = 1000e18;
-        uint256 filledTakerAmount = 700e18;
-
-        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
-            givenAmount, filledTakerAmount
-        );
-
-        assertEq(
-            result,
-            filledTakerAmount,
-            "Should return filledTakerAmount when less than givenAmount"
-        );
-    }
-
-    function testGetActualFilledTakerAmount_FilledGreaterThanGiven() public {
-        // Deploy Bebop executor harness
-        bebopExecutor =
-            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
-
-        // When filledTakerAmount > givenAmount
-        // Should return givenAmount (capped)
-        uint256 givenAmount = 500e18;
-        uint256 filledTakerAmount = 700e18;
-
-        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
-            givenAmount, filledTakerAmount
-        );
-
-        assertEq(
-            result,
-            givenAmount,
-            "Should return givenAmount when filledTakerAmount exceeds it"
-        );
-    }
-
-    function testGetActualFilledTakerAmount_FilledEqualsGiven() public {
-        // Deploy Bebop executor harness
-        bebopExecutor =
-            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
-
-        // When filledTakerAmount == givenAmount
-        // Should return filledTakerAmount
-        uint256 givenAmount = 700e18;
-        uint256 filledTakerAmount = 700e18;
-
-        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
-            givenAmount, filledTakerAmount
-        );
-
-        assertEq(
-            result,
-            filledTakerAmount,
-            "Should return filledTakerAmount when equal to givenAmount"
-        );
-    }
-
-    function testGetActualFilledTakerAmount_ZeroGivenAmount() public {
-        // Deploy Bebop executor harness
-        bebopExecutor =
-            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
-
-        // When givenAmount is 0
-        // Should always return 0 regardless of filledTakerAmount
-        uint256 givenAmount = 0;
-        uint256 filledTakerAmount = 100e18;
-
-        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
-            givenAmount, filledTakerAmount
-        );
-
-        assertEq(result, 0, "Should return 0 when givenAmount is 0");
-    }
-
-    function testGetActualFilledTakerAmount_ZeroFilledTakerAmount() public {
-        // Deploy Bebop executor harness
-        bebopExecutor =
-            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
-
-        // When filledTakerAmount is 0 (encoder should prevent this, but test edge case)
-        // Should return 0
-        uint256 givenAmount = 1000e18;
-        uint256 filledTakerAmount = 0;
-
-        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
-            givenAmount, filledTakerAmount
-        );
-
-        assertEq(result, 0, "Should return 0 when filledTakerAmount is 0");
-    }
-
-    function testGetActualFilledTakerAmount_SmallAmounts() public {
-        // Deploy Bebop executor harness
-        bebopExecutor =
-            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
-
-        // Test with small amounts (e.g., for tokens with low decimals)
-        uint256 givenAmount = 100; // 100 units
-        uint256 filledTakerAmount = 50; // 50 units
-
-        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
-            givenAmount, filledTakerAmount
-        );
-
-        assertEq(
-            result, filledTakerAmount, "Should handle small amounts correctly"
-        );
-
-        // Test when filledTakerAmount exceeds givenAmount
-        filledTakerAmount = 150;
-        result = bebopExecutor.exposed_getActualFilledTakerAmount(
-            givenAmount, filledTakerAmount
-        );
-
-        assertEq(
-            result, givenAmount, "Should cap at givenAmount for small amounts"
-        );
-    }
-
-    function testGetActualFilledTakerAmount_MaxUint256Values() public {
-        // Deploy Bebop executor harness
-        bebopExecutor =
-            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
-
-        // Test with max uint256 values (edge case)
-        uint256 givenAmount = type(uint256).max;
-        uint256 filledTakerAmount = type(uint256).max - 1;
-
-        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
-            givenAmount, filledTakerAmount
-        );
-
-        assertEq(
-            result, filledTakerAmount, "Should handle max values correctly"
-        );
-
-        // Test with filledTakerAmount exceeding givenAmount
-        givenAmount = type(uint256).max - 100;
-        filledTakerAmount = type(uint256).max;
-        result = bebopExecutor.exposed_getActualFilledTakerAmount(
-            givenAmount, filledTakerAmount
-        );
-
-        assertEq(
-            result,
-            givenAmount,
-            "Should cap at givenAmount even with max filledTakerAmount"
-        );
-    }
-
-    function testFuzzGetActualFilledTakerAmount(
-        uint256 givenAmount,
-        uint256 filledTakerAmount
-    ) public {
-        // Deploy Bebop executor harness
-        bebopExecutor =
-            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
-
-        uint256 result = bebopExecutor.exposed_getActualFilledTakerAmount(
-            givenAmount, filledTakerAmount
-        );
-
-        // Verify the invariants
-        // Result should be min(givenAmount, filledTakerAmount)
-        if (filledTakerAmount > givenAmount) {
-            assertEq(
-                result,
-                givenAmount,
-                "Should return givenAmount when filledTakerAmount > givenAmount"
-            );
-        } else {
-            assertEq(
-                result,
-                filledTakerAmount,
-                "Should return filledTakerAmount when filledTakerAmount <= givenAmount"
-            );
-        }
-
-        // Result should never exceed givenAmount
-        assertLe(result, givenAmount, "Result should never exceed givenAmount");
-
-        // Result should never exceed filledTakerAmount
-        assertLe(
-            result,
-            filledTakerAmount,
-            "Result should never exceed filledTakerAmount"
-        );
     }
 
     // Test exposed_modifyFilledTakerAmount function
@@ -1108,7 +940,10 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         bytes memory modifiedCalldata = bebopExecutor
             .exposed_modifyFilledTakerAmount(
-            originalCalldata, givenAmount, originalAmountIn, 12 // partialFillOffset for swapSingle
+            originalCalldata,
+            givenAmount,
+            originalAmountIn,
+            12 // partialFillOffset for swapSingle
         );
 
         // Decode the modified calldata to verify the filledTakerAmount was updated
@@ -1184,7 +1019,10 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         bytes memory modifiedCalldata = bebopExecutor
             .exposed_modifyFilledTakerAmount(
-            originalCalldata, givenAmount, originalAmountIn, 2 // partialFillOffset for swapAggregate
+            originalCalldata,
+            givenAmount,
+            originalAmountIn,
+            2 // partialFillOffset for swapAggregate
         );
 
         // Decode the modified calldata to verify the filledTakerAmount was updated
@@ -1243,7 +1081,10 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             // So we'll test that it properly sets the value we want
             bytes memory modifiedCalldata = bebopExecutor
                 .exposed_modifyFilledTakerAmount(
-                originalCalldata, givenAmount, originalAmountIn, 12 // partialFillOffset for swapSingle
+                originalCalldata,
+                givenAmount,
+                originalAmountIn,
+                12 // partialFillOffset for swapSingle
             );
 
             // Extract the new filledTakerAmount
@@ -1259,7 +1100,10 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             // Normal test - amounts match so calldata should be unchanged
             bytes memory modifiedCalldata = bebopExecutor
                 .exposed_modifyFilledTakerAmount(
-                originalCalldata, givenAmount, originalAmountIn, 12 // partialFillOffset for swapSingle
+                originalCalldata,
+                givenAmount,
+                originalAmountIn,
+                12 // partialFillOffset for swapSingle
             );
 
             assertEq(

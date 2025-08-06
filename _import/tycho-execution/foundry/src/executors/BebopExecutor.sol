@@ -114,13 +114,17 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             bytes memory bebopCalldata,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
-            bool approvalNeeded
+            bool approvalNeeded,
+            address receiver
         ) = _decodeData(data);
 
         // Modify the filledTakerAmount in the calldata
         // If the filledTakerAmount is the same as the original, the original calldata is returned
         bytes memory finalCalldata = _modifyFilledTakerAmount(
-            bebopCalldata, givenAmount, originalFilledTakerAmount, partialFillOffset
+            bebopCalldata,
+            givenAmount,
+            originalFilledTakerAmount,
+            partialFillOffset
         );
 
         // Transfer tokens if needed
@@ -134,9 +138,8 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
         }
 
-        // Bebop orders specify the receiver, so we need to check the receiver's balance
-        // We'll use the executor's balance since Bebop should send tokens here for the router to collect
-        uint256 balanceBefore = _balanceOf(tokenOut, address(this));
+        // Check the receiver's balance before the swap
+        uint256 balanceBefore = _balanceOf(tokenOut, receiver);
 
         // Execute the swap with the forwarded calldata
         uint256 ethValue = tokenIn == address(0) ? givenAmount : 0;
@@ -144,8 +147,8 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         // Use OpenZeppelin's Address library for safe call with value
         bebopSettlement.functionCallWithValue(finalCalldata, ethValue);
 
-        // Calculate actual amount received by the executor
-        uint256 balanceAfter = _balanceOf(tokenOut, address(this));
+        // Calculate actual amount received by the receiver
+        uint256 balanceAfter = _balanceOf(tokenOut, receiver);
         calculatedAmount = balanceAfter - balanceBefore;
     }
 
@@ -160,12 +163,13 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             bytes memory bebopCalldata,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
-            bool approvalNeeded
+            bool approvalNeeded,
+            address receiver
         )
     {
-        // Need at least 79 bytes for the minimum fixed fields
-        // 20 + 20 + 1 + 4 (calldata length) + 1 (offset) + 32 (original amount) + 1 (approval) = 79
-        if (data.length < 79) revert BebopExecutor__InvalidDataLength();
+        // Need at least 99 bytes for the minimum fixed fields
+        // 20 + 20 + 1 + 4 (calldata length) + 1 (offset) + 32 (original amount) + 1 (approval) + 20 (receiver) = 99
+        if (data.length < 99) revert BebopExecutor__InvalidDataLength();
 
         // Decode fixed fields
         tokenIn = address(bytes20(data[0:20]));
@@ -174,7 +178,7 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
 
         // Get bebop calldata length and validate
         uint32 bebopCalldataLength = uint32(bytes4(data[41:45]));
-        if (data.length != 79 + bebopCalldataLength) {
+        if (data.length != 99 + bebopCalldataLength) {
             revert BebopExecutor__InvalidDataLength();
         }
 
@@ -191,6 +195,11 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
 
         // Extract approval flag
         approvalNeeded = data[78 + bebopCalldataLength] != 0;
+
+        // Extract receiver address
+        receiver = address(
+            bytes20(data[79 + bebopCalldataLength:99 + bebopCalldataLength])
+        );
     }
 
     /// @dev Modifies the filledTakerAmount in the bebop calldata to handle slippage
@@ -210,8 +219,9 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         uint256 filledTakerAmountPos = 4 + uint256(partialFillOffset) * 32;
 
         // Cap the fill amount at what we actually have available
-        uint256 newFilledTakerAmount =
-            originalFilledTakerAmount > givenAmount ? givenAmount : originalFilledTakerAmount;
+        uint256 newFilledTakerAmount = originalFilledTakerAmount > givenAmount
+            ? givenAmount
+            : originalFilledTakerAmount;
 
         // If the new filledTakerAmount is the same as the original, return the original calldata
         if (newFilledTakerAmount == originalFilledTakerAmount) {

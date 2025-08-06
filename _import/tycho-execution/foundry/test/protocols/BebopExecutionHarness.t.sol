@@ -60,19 +60,11 @@ contract BebopExecutorHarness is BebopExecutor, Test {
             bytes memory bebopCalldata,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
-            bool approvalNeeded
+            bool approvalNeeded,
+            address receiver
         )
     {
         return _decodeData(data);
-    }
-
-    // No longer needed since we inlined the logic
-    function exposed_getActualFilledTakerAmount(
-        uint256 givenAmount,
-        uint256 filledTakerAmount
-    ) external pure returns (uint256 actualFilledTakerAmount) {
-        // Inline the simple logic here for backward compatibility
-        actualFilledTakerAmount = filledTakerAmount > givenAmount ? givenAmount : filledTakerAmount;
     }
 
     // Expose the internal modifyFilledTakerAmount function for testing
@@ -83,7 +75,10 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         uint8 partialFillOffset
     ) external pure returns (bytes memory) {
         return _modifyFilledTakerAmount(
-            bebopCalldata, givenAmount, originalFilledTakerAmount, partialFillOffset
+            bebopCalldata,
+            givenAmount,
+            originalFilledTakerAmount,
+            partialFillOffset
         );
     }
 
@@ -102,6 +97,8 @@ contract BebopExecutorHarness is BebopExecutor, Test {
             bytes memory bebopCalldata,
             , // partialFillOffset not needed in test harness
             uint256 originalFilledTakerAmount,
+            , // approvalNeeded not needed in test harness
+                // receiver not needed since we extract it from bebop calldata
         ) = _decodeData(data);
 
         // Extract taker address, receiver, and expiry from bebop calldata
@@ -139,16 +136,13 @@ contract BebopExecutorHarness is BebopExecutor, Test {
             expiry = order.expiry;
         }
 
-        // Inline the simple logic since _getActualFilledTakerAmount was removed
-        uint256 actualFilledTakerAmount =
-            originalFilledTakerAmount > givenAmount ? givenAmount : originalFilledTakerAmount;
+        uint256 actualFilledTakerAmount = originalFilledTakerAmount
+            > givenAmount ? givenAmount : originalFilledTakerAmount;
 
         // For testing: transfer tokens from executor to taker address
         // This simulates the taker having the tokens with approval
         if (tokenIn != address(0)) {
-            _transfer(
-                address(this), transferType, tokenIn, actualFilledTakerAmount
-            );
+            // The executor already has the tokens from the test, just transfer to taker
             IERC20(tokenIn).safeTransfer(takerAddress, actualFilledTakerAmount);
 
             // Approve settlement from taker's perspective
