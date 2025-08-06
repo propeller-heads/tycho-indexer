@@ -51,7 +51,10 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
             .to_string()
             .split_off(2);
         // Metadata is extracted by calling the hooks contract
-        let target = component.static_attributes.get("hooks").expect("Hooks attribute not found");
+        let target = component
+            .static_attributes
+            .get("hooks")
+            .expect("Hooks attribute not found");
 
         let limits_transport_0to1 = RpcTransport::new(
             self.rpc_url.clone(),
@@ -66,10 +69,7 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
         );
         requests.push(MetadataRequest::new(
             "euler".to_string(),
-            format!(
-                "euler_limits_{}_{}_to_{}",
-                target, component.tokens[0], component.tokens[1]
-            ),
+            format!("euler_limits_{}_{}_to_{}", target, component.tokens[0], component.tokens[1]),
             component.id.clone(),
             // Euler swap only has pools with 2 tokens
             MetadataRequestType::Limits {
@@ -91,10 +91,7 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
         );
         requests.push(MetadataRequest::new(
             "euler".to_string(),
-            format!(
-                "euler_limits_{}_{}_to_{}",
-                target, component.tokens[1], component.tokens[0]
-            ),
+            format!("euler_limits_{}_{}_to_{}", target, component.tokens[1], component.tokens[0]),
             component.id.clone(),
             // Euler swap only has pools with 2 tokens
             MetadataRequestType::Limits {
@@ -113,7 +110,10 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
     ) -> Result<Vec<MetadataRequest>, MetadataError> {
         let mut requests = vec![];
         // Balance is extracted by calling the hooks contract
-        let target = component.static_attributes.get("hooks").expect("Hooks attribute not found");
+        let target = component
+            .static_attributes
+            .get("hooks")
+            .expect("Hooks attribute not found");
 
         let balance_transport = RpcTransport::new(
             self.rpc_url.clone(),
