@@ -42,7 +42,12 @@ where
     T: EntryPointTracer + Send + Sync,
     G: EntryPointGateway + Send + Sync,
 {
-    #[instrument(skip_all, fields(chain = % self.chain, protocol = % self.protocol, block_number = % block_changes.block.number))]
+    #[instrument(skip(self, block_changes), fields(
+        chain = % self.chain, 
+        protocol = % self.protocol, 
+        block_number = % block_changes.block.number,
+        tx_count = block_changes.txs_with_update.len()
+    ))]
     async fn process_block_update(
         &mut self,
         block_changes: &mut BlockChanges,
@@ -471,6 +476,10 @@ where
     /// # Returns
     /// A map of entrypoints that need to be re-traced and the transaction that first detected the
     /// retriggered entrypoint.
+    #[instrument(skip(self, tx_with_changes), fields(
+        protocol = % self.protocol,
+        storage_changes_count = tx_with_changes.len()
+    ))]
     fn detect_retriggers<'a>(
         &self,
         tx_with_changes: &'a [TxWithStorageChanges],
@@ -508,7 +517,11 @@ where
         }
 
         if !retriggered_entrypoints.is_empty() {
-            tracing::info!("DCI: Retriggered entrypoints: {:?}", retriggered_entrypoints);
+            let retrigger_log: Vec<String> = retriggered_entrypoints
+                .keys()
+                .map(|e| e.entry_point.external_id.clone())
+                .collect();
+            tracing::info!("DCI: Retriggered entrypoints: {:?}", retrigger_log);
         }
 
         retriggered_entrypoints
