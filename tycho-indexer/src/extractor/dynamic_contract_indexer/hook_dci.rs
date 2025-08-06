@@ -1461,11 +1461,11 @@ mod tests {
                 DefaultSwapAmountEstimator, HookEntrypointConfig, HookEntrypointGenerator,
                 UniswapV4DefaultHookEntrypointGenerator,
             },
+            euler::metadata_generator::{EulerMetadataGenerator, EulerMetadataResponseParser},
             hook_orchestrator::{DefaultUniswapV4HookOrchestrator, HookOrchestratorRegistry},
             metadata_orchestrator::BlockMetadataOrchestrator,
             rpc_metadata_provider::RPCMetadataProvider,
         };
-        use crate::extractor::dynamic_contract_indexer::euler::metadata_generator::{EulerMetadataGenerator, EulerMetadataResponseParser};
 
         // Test fixture data based on provided protocol component
         fn create_test_protocol_component() -> ProtocolComponent {
@@ -1562,7 +1562,9 @@ mod tests {
             Transaction::new(
                 Bytes::from(nonce).lpad(32, 0),
                 Bytes::from(1u64).lpad(32, 0),
-                Address::from("0x2626664c2603336E57B271c5C0b26F421741e481"), // Use real router address as sender
+                Address::from("0x2626664c2603336E57B271c5C0b26F421741e481"), /* Use real router
+                                                                              * address as
+                                                                              * sender */
                 Some(Address::from("0x55dcf9455eee8fd3f5eed17606291272cde428a8")),
                 nonce,
             )
@@ -1616,7 +1618,8 @@ mod tests {
                 Box::new(EulerMetadataGenerator::new(rpc_url)),
             );
 
-            parser_registry.register_parser("euler".to_string(), Box::new(EulerMetadataResponseParser));
+            parser_registry
+                .register_parser("euler".to_string(), Box::new(EulerMetadataResponseParser));
 
             provider_registry.register_provider(
                 "rpc_default".to_string(),
@@ -1643,10 +1646,13 @@ mod tests {
             // Create mock gateways
             let mut db_gateway = MockGateway::new();
             let mut account_extractor = MockAccountExtractor::new();
-            
+
             // Use real RPC-based tracer instead of mock
             let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
-            let entrypoint_tracer = tycho_ethereum::entrypoint_tracer::tracer::EVMEntrypointService::try_from_url(&rpc_url)
+            let entrypoint_tracer =
+                tycho_ethereum::entrypoint_tracer::tracer::EVMEntrypointService::try_from_url(
+                    &rpc_url,
+                )
                 .expect("Failed to create RPC entrypoint tracer");
 
             // Setup initial expectations for initialization
@@ -1737,7 +1743,6 @@ mod tests {
                     })
                 });
 
-
             // Create Hook DCI
             let mut hook_dci = UniswapV4HookDCI::new(
                 inner_dci,
@@ -1758,9 +1763,15 @@ mod tests {
             let block = Block::new(
                 23003136, // Real mainnet block number
                 Chain::Ethereum,
-                Bytes::from_str("0xfdd7626c879f499cc6ad2011ed783da534d5a8b817ddd40e14b87e3bdd84aecc").unwrap(), // Real block hash
-                Bytes::from_str("0x97e6d877bd7e6587c29711ee80b873d4eac8c49fc616145e6326e07a5e41bf1810").unwrap(), // Real parent hash
-                chrono::NaiveDateTime::from_timestamp_opt(1724251307, 0).unwrap(), // Real timestamp
+                Bytes::from_str(
+                    "0xfdd7626c879f499cc6ad2011ed783da534d5a8b817ddd40e14b87e3bdd84aecc",
+                )
+                .unwrap(), // Real block hash
+                Bytes::from_str(
+                    "0x97e6d877bd7e6587c29711ee80b873d4eac8c49fc616145e6326e07a5e41bf1810",
+                )
+                .unwrap(), // Real parent hash
+                chrono::NaiveDateTime::from_timestamp_opt(1724251307, 0).unwrap(), /* Real timestamp */
             );
             let tx = create_test_transaction(1);
 

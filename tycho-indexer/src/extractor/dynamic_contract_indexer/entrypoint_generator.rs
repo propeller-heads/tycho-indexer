@@ -286,29 +286,32 @@ impl SwapAmountEstimator for DefaultSwapAmountEstimator {
         metadata: &ComponentTracingMetadata,
         tokens: &[Address],
     ) -> Result<HashMap<(Address, Address), Vec<Bytes>>, EntrypointGenerationError> {
-        debug!("Starting swap amount estimation with preferred method: {:?}", self.preferred_method);
-
-        let mut result = HashMap::new();
+        debug!(
+            "Starting swap amount estimation with preferred method: {:?}",
+            self.preferred_method
+        );
 
         // Check based on preferred method
-        match self.preferred_method {
+        let result = match self.preferred_method {
             EstimationMethod::Balances => {
                 // Try balances first
-                result = self.try_estimate_from_balances(metadata, tokens);
+                let mut result = self.try_estimate_from_balances(metadata, tokens);
                 if result.is_empty() {
                     // Fallback to limits
                     result = self.try_estimate_from_limits(metadata);
                 }
+                result
             }
             EstimationMethod::Limits => {
                 // Try limits first
-                result = self.try_estimate_from_limits(metadata);
+                let mut result = self.try_estimate_from_limits(metadata);
                 if result.is_empty() {
                     // Fallback to balances
                     result = self.try_estimate_from_balances(metadata, tokens);
                 }
+                result
             }
-        }
+        };
 
         if !result.is_empty() {
             return Ok(result);
@@ -328,7 +331,7 @@ impl DefaultSwapAmountEstimator {
         metadata: &ComponentTracingMetadata,
     ) -> HashMap<(Address, Address), Vec<Bytes>> {
         let mut result = HashMap::new();
-        
+
         if let Some(Ok(limits)) = &metadata.limits {
             debug!(limit_count = limits.len(), "Found limits data, trying estimation");
             if !limits.is_empty() {
@@ -398,17 +401,17 @@ impl DefaultSwapAmountEstimator {
                 );
             }
         }
-        
+
         result
     }
-    
+
     fn try_estimate_from_balances(
         &self,
         metadata: &ComponentTracingMetadata,
         tokens: &[Address],
     ) -> HashMap<(Address, Address), Vec<Bytes>> {
         let mut result = HashMap::new();
-        
+
         if let Some(Ok(balances)) = &metadata.balances {
             debug!(balance_count = balances.len(), "Found balance data, using for estimation");
 
@@ -489,7 +492,7 @@ impl DefaultSwapAmountEstimator {
                 "Processed all token balances"
             );
         }
-        
+
         result
     }
 }
@@ -718,18 +721,18 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                     SolBytes::from((sell_token, amount_in).abi_encode()),
                     SolBytes::from((buy_token, 0u128).abi_encode()),
                 ];
-                
 
                 let mut calldata = hex::decode("09c5eabe").unwrap();
                 let mut tmp = (actions, params).abi_encode();
-                
+
                 // Remove first 32 bytes like the reference implementation
                 tmp.drain(0..32);
-                
+
                 calldata.extend(tmp.abi_encode());
 
                 let overwrites = ERC6909Overwrites::default();
-                let balance_slot = overwrites.balance_slot(router_address.clone(), token_in.clone());
+                let balance_slot =
+                    overwrites.balance_slot(router_address.clone(), token_in.clone());
 
                 let pool_manager = self.config.pool_manager.clone();
 
@@ -743,7 +746,11 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
 
                 state_overrides.insert(
                     router_address.clone(),
-                    AccountOverrides { slots: None, native_balance: None, code: Some(router_code.clone()) },
+                    AccountOverrides {
+                        slots: None,
+                        native_balance: None,
+                        code: Some(router_code.clone()),
+                    },
                 );
 
                 let mut storage_diff = BTreeMap::new();
