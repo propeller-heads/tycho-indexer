@@ -1,3 +1,16 @@
+## [0.81.2](https://github.com/propeller-heads/tycho-indexer/compare/0.81.1...0.81.2) (2025-08-06)
+
+
+### Bug Fixes
+
+* Resolve WebSocket deadlock with async subscription handling ([ba5715f](https://github.com/propeller-heads/tycho-indexer/commit/ba5715f92a81a3242696419fda15c7263e62a3f1))
+* Websocket deadlocks ([#642](https://github.com/propeller-heads/tycho-indexer/issues/642)) ([cfde3ba](https://github.com/propeller-heads/tycho-indexer/commit/cfde3ba0cad753a1e05f98aab605f2358e9e80a4))
+
+
+### Performance Improvements
+
+* Eliminate mutex from WebSocket subscribers for lock-free access ([2a11192](https://github.com/propeller-heads/tycho-indexer/commit/2a11192f1a5dce89f3f2b40d3f158bbb2cd0a494))
+
 ## [0.81.1](https://github.com/propeller-heads/tycho-indexer/compare/0.81.0...0.81.1) (2025-08-06)
 
 
