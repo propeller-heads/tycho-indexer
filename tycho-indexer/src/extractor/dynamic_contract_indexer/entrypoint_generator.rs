@@ -242,28 +242,95 @@ impl ERC6909Overwrites {
     }
 }
 
+/// Preferred method for estimating swap amounts
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EstimationMethod {
+    /// Prefer limits for estimation (if available)
+    Limits,
+    /// Prefer balances for estimation (if available)
+    Balances,
+}
+
 /// Default implementation of SwapAmountEstimator
-/// Uses limits when available, falls back to balances
-pub struct DefaultSwapAmountEstimator;
+/// Can be configured to prefer either limits or balances
+pub struct DefaultSwapAmountEstimator {
+    pub preferred_method: EstimationMethod,
+}
+
+impl DefaultSwapAmountEstimator {
+    /// Create a new estimator with the specified preferred method
+    pub fn new(preferred_method: EstimationMethod) -> Self {
+        Self { preferred_method }
+    }
+
+    /// Create an estimator that prefers limits
+    pub fn with_limits() -> Self {
+        Self::new(EstimationMethod::Limits)
+    }
+
+    /// Create an estimator that prefers balances
+    pub fn with_balances() -> Self {
+        Self::new(EstimationMethod::Balances)
+    }
+}
 
 impl SwapAmountEstimator for DefaultSwapAmountEstimator {
     #[instrument(skip(self, metadata), fields(
         token_count = tokens.len(),
         has_limits = metadata.limits.is_some(),
-        has_balances = metadata.balances.is_some()
+        has_balances = metadata.balances.is_some(),
+        preferred_method = ?self.preferred_method
     ))]
     fn estimate_swap_amounts(
         &self,
         metadata: &ComponentTracingMetadata,
         tokens: &[Address],
     ) -> Result<HashMap<(Address, Address), Vec<Bytes>>, EntrypointGenerationError> {
-        debug!("Starting swap amount estimation");
+        debug!("Starting swap amount estimation with preferred method: {:?}", self.preferred_method);
 
         let mut result = HashMap::new();
 
-        // Try to use limits first (preferred)
+        // Check based on preferred method
+        match self.preferred_method {
+            EstimationMethod::Balances => {
+                // Try balances first
+                result = self.try_estimate_from_balances(metadata, tokens);
+                if result.is_empty() {
+                    // Fallback to limits
+                    result = self.try_estimate_from_limits(metadata);
+                }
+            }
+            EstimationMethod::Limits => {
+                // Try limits first
+                result = self.try_estimate_from_limits(metadata);
+                if result.is_empty() {
+                    // Fallback to balances
+                    result = self.try_estimate_from_balances(metadata, tokens);
+                }
+            }
+        }
+
+        if !result.is_empty() {
+            return Ok(result);
+        }
+
+        // If neither limits nor balances are available, return error
+        warn!("No usable limits or balances found for swap amount estimation");
+        Err(EntrypointGenerationError::NoDataAvailable(
+            "No limits or balances available for swap amount estimation".to_string(),
+        ))
+    }
+}
+
+impl DefaultSwapAmountEstimator {
+    fn try_estimate_from_limits(
+        &self,
+        metadata: &ComponentTracingMetadata,
+    ) -> HashMap<(Address, Address), Vec<Bytes>> {
+        let mut result = HashMap::new();
+        
         if let Some(Ok(limits)) = &metadata.limits {
-            debug!(limit_count = limits.len(), "Found limits data, using for estimation");
+            debug!(limit_count = limits.len(), "Found limits data, trying estimation");
             if !limits.is_empty() {
                 let mut valid_limits = 0;
                 let mut zero_limits = 0;
@@ -281,28 +348,28 @@ impl SwapAmountEstimator for DefaultSwapAmountEstimator {
                             limit_amount_hex = %format!("{:#x}", &limit_amount),
                             "Processing limit for token pair"
                         );
-                        let one_hundred = BigInt::from(100);
+                        let ten_thousand = BigInt::from(10000);
                         let amounts = vec![
                             Bytes::from(
-                                (&limit_amount / &one_hundred)
+                                ((&limit_amount * BigInt::from(5)) / &ten_thousand)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 0.05%
+                            Bytes::from(
+                                ((&limit_amount * BigInt::from(10)) / &ten_thousand)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 0.1%
+                            Bytes::from(
+                                ((&limit_amount * BigInt::from(50)) / &ten_thousand)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 0.5%
+                            Bytes::from(
+                                (&limit_amount / BigInt::from(100))
                                     .to_bytes_be()
                                     .1,
                             ), // 1%
-                            Bytes::from(
-                                (&limit_amount / BigInt::from(10))
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 10%
-                            Bytes::from(
-                                (&limit_amount / BigInt::from(2))
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 50%
-                            Bytes::from(
-                                ((&limit_amount * BigInt::from(95)) / &one_hundred)
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 95%
                         ];
 
                         debug!(
@@ -329,18 +396,19 @@ impl SwapAmountEstimator for DefaultSwapAmountEstimator {
                     total_pairs_generated = result.len(),
                     "Processed all limits"
                 );
-
-                if !result.is_empty() {
-                    info!("Using limits-based estimation");
-                    return Ok(result);
-                }
             }
         }
-
-        // Fallback to using balances if no limits available
-        // For each token that has a balance, create amounts for all possible sell->buy pairs
-        debug!("No usable limits found, falling back to balances");
-
+        
+        result
+    }
+    
+    fn try_estimate_from_balances(
+        &self,
+        metadata: &ComponentTracingMetadata,
+        tokens: &[Address],
+    ) -> HashMap<(Address, Address), Vec<Bytes>> {
+        let mut result = HashMap::new();
+        
         if let Some(Ok(balances)) = &metadata.balances {
             debug!(balance_count = balances.len(), "Found balance data, using for estimation");
 
@@ -358,28 +426,28 @@ impl SwapAmountEstimator for DefaultSwapAmountEstimator {
                             balance_hex = %format!("{:#x}", &balance),
                             "Processing balance for token"
                         );
-                        let one_hundred = BigInt::from(100);
+                        let ten_thousand = BigInt::from(10000);
                         let amounts = vec![
                             Bytes::from(
-                                (&balance / &one_hundred)
+                                ((&balance * BigInt::from(5)) / &ten_thousand)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 0.05%
+                            Bytes::from(
+                                ((&balance * BigInt::from(10)) / &ten_thousand)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 0.1%
+                            Bytes::from(
+                                ((&balance * BigInt::from(50)) / &ten_thousand)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 0.5%
+                            Bytes::from(
+                                (&balance / BigInt::from(100))
                                     .to_bytes_be()
                                     .1,
                             ), // 1%
-                            Bytes::from(
-                                (&balance / BigInt::from(10))
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 10%
-                            Bytes::from(
-                                (&balance / BigInt::from(2))
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 50%
-                            Bytes::from(
-                                ((&balance * BigInt::from(95)) / &one_hundred)
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 95%
                         ];
                         // Create entries for each possible buy token
                         let mut pairs_created = 0;
@@ -420,18 +488,9 @@ impl SwapAmountEstimator for DefaultSwapAmountEstimator {
                 total_pairs_generated = result.len(),
                 "Processed all token balances"
             );
-
-            if !result.is_empty() {
-                info!("Using balance-based estimation");
-                return Ok(result);
-            }
         }
-
-        // If neither limits nor balances are available, return error
-        warn!("No usable limits or balances found for swap amount estimation");
-        Err(EntrypointGenerationError::NoDataAvailable(
-            "No limits or balances available for swap amount estimation".to_string(),
-        ))
+        
+        result
     }
 }
 
@@ -636,6 +695,7 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                     token_out = %token_out,
                     amount_idx,
                     amount_in,
+                    amount_hex = %format!("{:#x}", amount_in),
                     "Processing swap amount"
                 );
 
@@ -669,7 +729,7 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                 calldata.extend(tmp.abi_encode());
 
                 let overwrites = ERC6909Overwrites::default();
-                let balance_slot = overwrites.balance_slot(router_address.clone(), token0.clone());
+                let balance_slot = overwrites.balance_slot(router_address.clone(), token_in.clone());
 
                 let pool_manager = self.config.pool_manager.clone();
 
@@ -794,10 +854,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_estimate_with_limits() {
-        let estimator = DefaultSwapAmountEstimator;
+        let estimator = DefaultSwapAmountEstimator::with_limits();
         let tokens = create_test_tokens();
 
-        let limit_value = BigInt::from(1000u64);
+        let limit_value = BigInt::from(10000u64);
         let limits = vec![(
             (tokens[0].clone(), tokens[1].clone()),
             (Bytes::from(limit_value.to_bytes_be().1), Bytes::from(limit_value.to_bytes_be().1)),
@@ -814,18 +874,18 @@ mod tests {
             .get(&(tokens[0].clone(), tokens[1].clone()))
             .unwrap();
         assert_eq!(amounts.len(), 4);
-        assert_eq!(amounts[0], Bytes::from(BigInt::from(10u64).to_bytes_be().1)); // 1%
-        assert_eq!(amounts[1], Bytes::from(BigInt::from(100u64).to_bytes_be().1)); // 10%
-        assert_eq!(amounts[2], Bytes::from(BigInt::from(500u64).to_bytes_be().1)); // 50%
-        assert_eq!(amounts[3], Bytes::from(BigInt::from(950u64).to_bytes_be().1)); // 95%
+        assert_eq!(amounts[0], Bytes::from(BigInt::from(5u64).to_bytes_be().1)); // 0.05%
+        assert_eq!(amounts[1], Bytes::from(BigInt::from(10u64).to_bytes_be().1)); // 0.1%
+        assert_eq!(amounts[2], Bytes::from(BigInt::from(50u64).to_bytes_be().1)); // 0.5%
+        assert_eq!(amounts[3], Bytes::from(BigInt::from(100u64).to_bytes_be().1)); // 1%
     }
 
     #[tokio::test]
     async fn test_estimate_with_balances_fallback() {
-        let estimator = DefaultSwapAmountEstimator;
+        let estimator = DefaultSwapAmountEstimator::with_balances();
         let tokens = create_test_tokens();
 
-        let balance_value = BigInt::from(2000u64);
+        let balance_value = BigInt::from(20000u64);
         let mut balances = HashMap::new();
         balances.insert(tokens[0].clone(), Bytes::from(balance_value.to_bytes_be().1));
         balances.insert(tokens[1].clone(), Bytes::from(balance_value.to_bytes_be().1));
@@ -842,24 +902,24 @@ mod tests {
             .get(&(tokens[0].clone(), tokens[1].clone()))
             .unwrap();
         assert_eq!(amounts01.len(), 4);
-        assert_eq!(amounts01[0], Bytes::from(BigInt::from(20u64).to_bytes_be().1)); // 1%
-        assert_eq!(amounts01[1], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 10%
-        assert_eq!(amounts01[2], Bytes::from(BigInt::from(1000u64).to_bytes_be().1)); // 50%
-        assert_eq!(amounts01[3], Bytes::from(BigInt::from(1900u64).to_bytes_be().1)); // 95%
+        assert_eq!(amounts01[0], Bytes::from(BigInt::from(10u64).to_bytes_be().1)); // 0.05%
+        assert_eq!(amounts01[1], Bytes::from(BigInt::from(20u64).to_bytes_be().1)); // 0.1%
+        assert_eq!(amounts01[2], Bytes::from(BigInt::from(100u64).to_bytes_be().1)); // 0.5%
+        assert_eq!(amounts01[3], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 1%
 
         let amounts10 = result
             .get(&(tokens[1].clone(), tokens[0].clone()))
             .unwrap();
         assert_eq!(amounts10.len(), 4);
-        assert_eq!(amounts10[0], Bytes::from(BigInt::from(20u64).to_bytes_be().1)); // 1%
-        assert_eq!(amounts10[1], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 10%
-        assert_eq!(amounts10[2], Bytes::from(BigInt::from(1000u64).to_bytes_be().1)); // 50%
-        assert_eq!(amounts10[3], Bytes::from(BigInt::from(1900u64).to_bytes_be().1)); // 95%
+        assert_eq!(amounts10[0], Bytes::from(BigInt::from(10u64).to_bytes_be().1)); // 0.05%
+        assert_eq!(amounts10[1], Bytes::from(BigInt::from(20u64).to_bytes_be().1)); // 0.1%
+        assert_eq!(amounts10[2], Bytes::from(BigInt::from(100u64).to_bytes_be().1)); // 0.5%
+        assert_eq!(amounts10[3], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 1%
     }
 
     #[tokio::test]
     async fn test_estimate_with_no_data() {
-        let estimator = DefaultSwapAmountEstimator;
+        let estimator = DefaultSwapAmountEstimator::with_balances();
         let tokens = create_test_tokens();
 
         let metadata = ComponentTracingMetadata {
