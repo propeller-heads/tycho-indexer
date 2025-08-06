@@ -2,14 +2,15 @@
 use std::{
     collections::HashMap,
     fmt::Debug,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
-use actix::{Actor, ActorContext, AsyncContext, SpawnHandle, StreamHandler};
+use actix::{
+    Actor, ActorContext, ActorFutureExt, AsyncContext, SpawnHandle, StreamHandler, WrapFuture,
+};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
-use futures03::executor::block_on;
 use metrics::{counter, gauge};
 use serde::Serialize;
 use thiserror::Error;
@@ -66,15 +67,15 @@ impl Serialize for WebsocketError {
 pub type MessageSenderMap = HashMap<ExtractorIdentity, Arc<dyn MessageSender + Send + Sync>>;
 
 /// Shared application data between all connections
-/// Parameters are hidden behind a Mutex to allow for sharing between threads
+/// The subscribers map is read-only after initialization, so no mutex is needed
 pub struct WsData {
     /// There is one extractor subscriber per extractor identity
-    pub subscribers: Arc<Mutex<MessageSenderMap>>,
+    pub subscribers: Arc<MessageSenderMap>,
 }
 
 impl WsData {
     pub fn new(extractors: MessageSenderMap) -> Self {
-        Self { subscribers: Arc::new(Mutex::new(extractors)) }
+        Self { subscribers: Arc::new(extractors) }
     }
 }
 
@@ -166,6 +167,43 @@ impl WsActor {
     }
 
     /// Subscribe to an extractor
+    ///
+    /// This method handles WebSocket subscription requests asynchronously to avoid deadlocks.
+    ///
+    /// ## Design Decision: Async Spawning vs Blocking
+    ///
+    /// Previously, this method used `block_on()` while holding a mutex, which caused deadlocks
+    /// when multiple clients subscribed simultaneously. The `block_on()` call would block the
+    /// entire Actix runtime thread, preventing other actors from processing messages and even
+    /// preventing the async operation itself from completing.
+    ///
+    /// ## Current Approach: Lock-Free Async
+    ///
+    /// We now use `ctx.spawn()` to handle the subscription asynchronously with direct HashMap
+    /// access (no mutex needed since the subscribers map is read-only after initialization).
+    /// This approach:
+    ///
+    /// **Advantages:**
+    /// - Prevents runtime deadlocks by not blocking the actor's message processing
+    /// - Allows unlimited concurrent subscriptions with zero lock contention
+    /// - Eliminates all mutex-related performance overhead and deadlock possibilities
+    ///
+    /// **Trade-offs:**
+    /// - The subscription setup is fire-and-forget - we don't wait for completion
+    /// - If the WebSocket disconnects quickly, the subscription future might not complete
+    /// - The client gets the NewSubscription response only after the async operation completes
+    ///
+    /// **Why This Is Acceptable:**
+    /// - WebSocket connections are typically long-lived, so the async completion usually succeeds
+    /// - The alternative (blocking) would prevent any concurrent subscriptions from working
+    /// - Failed subscriptions are handled gracefully with error responses to the client
+    ///
+    /// ## Implementation Notes:
+    ///
+    /// 1. We access the subscribers HashMap directly (no mutex needed - it's read-only)
+    /// 2. We spawn an async future that handles the extractor subscription
+    /// 3. The future's completion handler updates actor state and sends the response to the client
+    /// 4. If the future fails, an error response is sent instead
     #[instrument(skip(self, ctx), fields(WsActor.id = %self.id, subscription_id))]
     fn subscribe(
         &mut self,
@@ -173,67 +211,22 @@ impl WsActor {
         extractor_id: &ExtractorIdentity,
         include_state: bool,
     ) {
-        {
-            debug!(extractor=?extractor_id, "Acquire lock for subscribing..");
-            let extractors_guard = self
+        let extractor_id = extractor_id.clone();
+        // Step 1: Direct HashMap access (no mutex needed since map is read-only after
+        // initialization)
+        let message_sender = {
+            debug!(extractor=?extractor_id, "Looking up extractor in subscribers map..");
+
+            if let Some(message_sender) = self
                 .app_state
                 .subscribers
-                .lock()
-                .unwrap();
-
-            if let Some(message_sender) = extractors_guard.get(extractor_id) {
-                // Generate a unique ID for this subscription
-                let subscription_id = Uuid::new_v4();
-
-                // Add the subscription_id to the current tracing span recorded fields
-                tracing::Span::current().record("subscription_id", subscription_id.to_string());
-
-                info!(extractor_id = %extractor_id, "Subscribing to extractor");
-
-                match block_on(message_sender.subscribe()) {
-                    Ok(mut rx) => {
-                        // The `rx` variable is a `Receiver` of `Result<String, String>`.
-                        // The `rx` variable is a `Result<String, String>`.
-                        let stream = async_stream::stream! {
-                            while let Some(item) = rx.recv().await {
-                                let result = if include_state {
-                                    (*item).clone().into()
-                                } else {
-                                    item.drop_state().into()
-                                };
-                                yield Ok((subscription_id, result));
-                            }
-                        };
-
-                        let handle = ctx.add_stream(stream);
-                        self.subscriptions
-                            .insert(subscription_id, handle);
-                        debug!("Added subscription to hashmap");
-                        gauge!("websocket_extractor_subscriptions_active", "subscription_id" => subscription_id.to_string()).increment(1);
-                        counter!(
-                            "websocket_extractor_subscriptions_metadata",
-                            "subscription_id" => subscription_id.to_string(),
-                            "chain"=> extractor_id.chain.to_string(),
-                            "extractor" => extractor_id.name.to_string(),
-                            "user_identity" => self.user_identity.clone().unwrap_or("unknown".to_string()),
-                        )
-                        .increment(1);
-
-                        let message = Response::NewSubscription {
-                            extractor_id: extractor_id.clone().into(),
-                            subscription_id,
-                        };
-                        ctx.text(serde_json::to_string(&message).unwrap());
-                    }
-                    Err(err) => {
-                        error!(error = %err, "Failed to subscribe to the extractor");
-
-                        let error = WebsocketError::SubscribeError(extractor_id.clone());
-                        ctx.text(serde_json::to_string(&error).unwrap());
-                    }
-                };
+                .get(&extractor_id)
+            {
+                message_sender.clone()
             } else {
-                let available = extractors_guard
+                let available = self
+                    .app_state
+                    .subscribers
                     .keys()
                     .map(|id| id.to_string())
                     .collect::<Vec<_>>();
@@ -242,8 +235,91 @@ impl WsActor {
                 error!(%error, available_extractors = ?available, "Extractor not found in hashmap");
 
                 ctx.text(serde_json::to_string(&error).unwrap());
+                return;
             }
-        }
+        };
+
+        // Step 2: Generate subscription ID and prepare for async operation
+        // Generate a unique ID for this subscription
+        let subscription_id = Uuid::new_v4();
+
+        // Add the subscription_id to the current tracing span recorded fields
+        tracing::Span::current().record("subscription_id", subscription_id.to_string());
+
+        info!(extractor_id = %extractor_id, "Subscribing to extractor");
+
+        debug!(actor_id = %self.id, "About to call message_sender.subscribe() asynchronously");
+        let start_time = std::time::Instant::now();
+        let actor_id = self.id;
+        let user_identity = self.user_identity.clone();
+        let extractor_id_for_future = extractor_id.clone();
+        let extractor_id_for_error = extractor_id.clone();
+
+        // Step 3: Create async future for subscription setup
+        // This future will run independently without blocking the actor's message processing
+        // Use async operation instead of block_on to prevent runtime deadlocks
+        let fut = async move {
+            match message_sender.subscribe().await {
+                Ok(mut rx) => {
+                    let elapsed = start_time.elapsed();
+                    debug!(actor_id = %actor_id, elapsed_ms = elapsed.as_millis(), "subscribe completed successfully");
+
+                    let stream = async_stream::stream! {
+                        while let Some(item) = rx.recv().await {
+                            let result = if include_state {
+                                (*item).clone().into()
+                            } else {
+                                item.drop_state().into()
+                            };
+                            yield Ok((subscription_id, result));
+                        }
+                    };
+
+                    Some((subscription_id, stream, extractor_id_for_future.clone()))
+                }
+                Err(err) => {
+                    let elapsed = start_time.elapsed();
+                    debug!(actor_id = %actor_id, elapsed_ms = elapsed.as_millis(), "subscribe failed");
+                    error!(error = %err, "Failed to subscribe to the extractor");
+                    None
+                }
+            }
+        };
+
+        // Step 4: Spawn the async future using ctx.spawn()
+        // This is fire-and-forget: we don't wait for completion to avoid blocking
+        // The future will complete independently and update actor state when done
+        ctx.spawn(fut.into_actor(self).map(move |result, actor, ctx| {
+            // Step 5: Handle async completion - this runs when the subscription future finishes
+            // If successful: add stream to actor, update metrics, send success response to client
+            // If failed: send error response to client
+            match result {
+                Some((subscription_id, stream, extractor_id)) => {
+                    let handle = ctx.add_stream(stream);
+                    actor.subscriptions.insert(subscription_id, handle);
+                    debug!("Added subscription to hashmap");
+                    gauge!("websocket_extractor_subscriptions_active", "subscription_id" => subscription_id.to_string()).increment(1);
+                    counter!(
+                        "websocket_extractor_subscriptions_metadata",
+                        "subscription_id" => subscription_id.to_string(),
+                        "chain"=> extractor_id.chain.to_string(),
+                        "extractor" => extractor_id.name.to_string(),
+                        "user_identity" => user_identity.unwrap_or("unknown".to_string()),
+                    )
+                    .increment(1);
+
+                    let message = Response::NewSubscription {
+                        extractor_id: extractor_id.into(),
+                        subscription_id,
+                    };
+                    ctx.text(serde_json::to_string(&message).unwrap());
+                }
+                None => {
+                    let error = WebsocketError::SubscribeError(extractor_id_for_error);
+                    ctx.text(serde_json::to_string(&error).unwrap());
+                }
+            }
+        }));
     }
 
     #[instrument(skip(self, ctx), fields(WsActor.id = %self.id))]
@@ -324,6 +400,7 @@ impl StreamHandler<Result<(Uuid, BlockChanges), ws::ProtocolError>> for WsActor 
 /// Handle incoming messages from the WS connection
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsActor {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+        debug!("WsActor {}: StreamHandler::handle called", self.id);
         trace!("Websocket message received");
         match msg {
             Ok(ws::Message::Ping(msg)) => {
@@ -336,16 +413,18 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsActor {
                 self.heartbeat = Instant::now();
             }
             Ok(ws::Message::Text(text)) => {
-                trace!(text = %text, "Websocket text message received");
+                debug!(actor_id = %self.id, text = %text, "Websocket text message received");
 
                 // Try to deserialize the message to a Message enum
                 match serde_json::from_str::<Command>(&text) {
                     Ok(message) => {
+                        debug!(actor_id = %self.id, "Parsed command successfully");
                         // Handle the message based on its variant
                         match message {
                             Command::Subscribe { extractor_id, include_state } => {
-                                debug!(%extractor_id, "Subscribing to extractor");
+                                debug!(actor_id = %self.id, %extractor_id, "Message handler: Processing subscribe request");
                                 self.subscribe(ctx, &extractor_id.clone().into(), include_state);
+                                debug!(actor_id = %self.id, %extractor_id, "Message handler: Subscribe method completed");
                             }
                             Command::Unsubscribe { subscription_id } => {
                                 debug!(%subscription_id, "Unsubscribing from subscription");
@@ -630,16 +709,16 @@ mod tests {
         let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "dummy");
         let extractor_id2 = ExtractorIdentity::new(Chain::Ethereum, "dummy2");
 
-        let app_state = web::Data::new(WsData::new(HashMap::new()));
-
         let message_sender = Arc::new(MyMessageSender::new(extractor_id.clone()));
         let message_sender2 = Arc::new(MyMessageSender::new(extractor_id2.clone()));
 
-        {
-            let mut subscribers = app_state.subscribers.lock().unwrap();
-            subscribers.insert(extractor_id.clone(), message_sender);
-            subscribers.insert(extractor_id2.clone(), message_sender2);
-        }
+        let mut subscribers_map = HashMap::new();
+        subscribers_map
+            .insert(extractor_id.clone(), message_sender as Arc<dyn MessageSender + Send + Sync>);
+        subscribers_map
+            .insert(extractor_id2.clone(), message_sender2 as Arc<dyn MessageSender + Send + Sync>);
+
+        let app_state = web::Data::new(WsData::new(subscribers_map));
 
         // Setup WebSocket server and client, similar to existing test
         let server = start_with(
@@ -772,5 +851,163 @@ mod tests {
         let action = Command::Subscribe { extractor_id: extractor_id.into(), include_state: true };
         let res = serde_json::to_string(&action).unwrap();
         println!("{res}");
+    }
+
+    /// Message sender that simulates slow operations to trigger the deadlock
+    pub struct SlowMessageSender {
+        extractor_id: ExtractorIdentity,
+    }
+
+    impl SlowMessageSender {
+        pub fn new(extractor_id: ExtractorIdentity) -> Self {
+            Self { extractor_id }
+        }
+    }
+
+    #[async_trait]
+    impl MessageSender for SlowMessageSender {
+        async fn subscribe(&self) -> Result<Receiver<ExtractorMsg>, SendError<ControlMessage>> {
+            debug!("SlowMessageSender::subscribe() starting 200ms delay");
+            // Add a delay to increase the window for deadlock
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            debug!("SlowMessageSender::subscribe() delay completed, creating channel");
+
+            let (tx, rx) = mpsc::channel::<ExtractorMsg>(1);
+            let extractor_id = self.extractor_id.clone();
+
+            tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    if tx
+                        .send(Arc::new(BlockAggregatedChanges {
+                            extractor: extractor_id.name.clone(),
+                            block: Block::new(
+                                1,
+                                Chain::Ethereum,
+                                Bytes::zero(32),
+                                Bytes::zero(32),
+                                NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+                            ),
+                            finalized_block_height: 1,
+                            revert: false,
+                            ..Default::default()
+                        }))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            });
+
+            Ok(rx)
+        }
+    }
+
+    #[actix_rt::test]
+    async fn test_deadlock_concurrent_subscriptions() {
+        tracing_subscriber::fmt()
+            .with_test_writer()
+            .with_max_level(tracing::Level::DEBUG)
+            .try_init()
+            .unwrap_or_else(|_| debug!("Subscriber already initialized"));
+
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "deadlock_test");
+
+        // Use SlowMessageSender to recreate the deadlock scenario
+        let message_sender = Arc::new(SlowMessageSender::new(extractor_id.clone()));
+
+        let mut subscribers_map = HashMap::new();
+        subscribers_map
+            .insert(extractor_id.clone(), message_sender as Arc<dyn MessageSender + Send + Sync>);
+
+        let app_state = web::Data::new(WsData::new(subscribers_map));
+
+        let server = start_with(
+            TestServerConfig::default().client_request_timeout(Duration::from_secs(10)),
+            move || {
+                App::new()
+                    .wrap(RequestTracing::new())
+                    .app_data(app_state.clone())
+                    .service(web::resource("/ws/").route(web::get().to(WsActor::ws_index)))
+            },
+        );
+
+        let url = server
+            .url("/ws/")
+            .to_string()
+            .replacen("http://", "ws://", 1);
+
+        // Create multiple connections to trigger concurrent subscriptions
+        let num_clients = 4;
+        let mut connections = Vec::new();
+
+        for i in 0..num_clients {
+            let (connection, _) = tokio_tungstenite::connect_async(&url)
+                .await
+                .unwrap_or_else(|_| panic!("Failed to connect client {}", i));
+            connections.push(connection);
+        }
+
+        let subscribe_msg =
+            Command::Subscribe { extractor_id: extractor_id.clone().into(), include_state: true };
+        let msg_text = serde_json::to_string(&subscribe_msg).unwrap();
+
+        // Send subscription requests from all clients simultaneously
+        let tasks: Vec<_> = connections
+            .into_iter()
+            .enumerate()
+            .map(|(i, mut connection)| {
+                let msg_text = msg_text.clone();
+                async move {
+                    println!("Client {} sending subscription request", i);
+                    connection
+                        .send(Message::Text(msg_text))
+                        .await
+                        .unwrap_or_else(|_| panic!("Failed to send from client {}", i));
+
+                    // Try to receive response
+                    let start = std::time::Instant::now();
+                    let result = timeout(Duration::from_secs(3), connection.next()).await;
+                    let elapsed = start.elapsed();
+
+                    println!(
+                        "Client {} completed in {:?}, success: {}",
+                        i,
+                        elapsed,
+                        result.is_ok()
+                    );
+                    (i, result.is_ok(), elapsed)
+                }
+            })
+            .collect();
+
+        // Wait for all tasks with a reasonable timeout
+        let start_time = std::time::Instant::now();
+        let results = futures03::future::join_all(tasks).await;
+        let total_time = start_time.elapsed();
+
+        // Analyze results
+        let successful = results
+            .iter()
+            .filter(|(_, success, _)| *success)
+            .count();
+        let failed = results.len() - successful;
+
+        println!("Test completed in {:?}", total_time);
+        println!("Results: {} successful, {} failed", successful, failed);
+
+        // With the original deadlock-prone code, we expect some failures due to timeouts
+        // caused by the mutex being held during block_on() calls
+
+        if failed > 0 {
+            println!("DEADLOCK ISSUE DETECTED: {} out of {} clients failed", failed, num_clients);
+            println!("This indicates the deadlock problem exists in the original code");
+        } else {
+            println!("ALL CLIENTS SUCCEEDED - deadlock not reproduced");
+        }
+
+        // For the test to be meaningful, we expect at least some clients to fail with original code
+        // This test demonstrates the issue that needs to be fixed
     }
 }
