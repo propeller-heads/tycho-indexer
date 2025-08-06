@@ -6,7 +6,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use actix::{Actor, ActorContext, ActorFutureExt, AsyncContext, SpawnHandle, StreamHandler, WrapFuture};
+use actix::{
+    Actor, ActorContext, ActorFutureExt, AsyncContext, SpawnHandle, StreamHandler, WrapFuture,
+};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use metrics::{counter, gauge};
@@ -165,41 +167,41 @@ impl WsActor {
     }
 
     /// Subscribe to an extractor
-    /// 
+    ///
     /// This method handles WebSocket subscription requests asynchronously to avoid deadlocks.
-    /// 
+    ///
     /// ## Design Decision: Async Spawning vs Blocking
-    /// 
+    ///
     /// Previously, this method used `block_on()` while holding a mutex, which caused deadlocks
-    /// when multiple clients subscribed simultaneously. The `block_on()` call would block the 
+    /// when multiple clients subscribed simultaneously. The `block_on()` call would block the
     /// entire Actix runtime thread, preventing other actors from processing messages and even
     /// preventing the async operation itself from completing.
-    /// 
+    ///
     /// ## Current Approach: Lock-Free Async
-    /// 
+    ///
     /// We now use `ctx.spawn()` to handle the subscription asynchronously with direct HashMap
     /// access (no mutex needed since the subscribers map is read-only after initialization).
     /// This approach:
-    /// 
+    ///
     /// **Advantages:**
     /// - Prevents runtime deadlocks by not blocking the actor's message processing
     /// - Allows unlimited concurrent subscriptions with zero lock contention
     /// - Eliminates all mutex-related performance overhead and deadlock possibilities
-    /// 
+    ///
     /// **Trade-offs:**
     /// - The subscription setup is fire-and-forget - we don't wait for completion
     /// - If the WebSocket disconnects quickly, the subscription future might not complete
     /// - The client gets the NewSubscription response only after the async operation completes
-    /// 
+    ///
     /// **Why This Is Acceptable:**
     /// - WebSocket connections are typically long-lived, so the async completion usually succeeds
     /// - The alternative (blocking) would prevent any concurrent subscriptions from working
     /// - Failed subscriptions are handled gracefully with error responses to the client
-    /// 
+    ///
     /// ## Implementation Notes:
-    /// 
+    ///
     /// 1. We access the subscribers HashMap directly (no mutex needed - it's read-only)
-    /// 2. We spawn an async future that handles the extractor subscription 
+    /// 2. We spawn an async future that handles the extractor subscription
     /// 3. The future's completion handler updates actor state and sends the response to the client
     /// 4. If the future fails, an error response is sent instead
     #[instrument(skip(self, ctx), fields(WsActor.id = %self.id, subscription_id))]
@@ -210,14 +212,21 @@ impl WsActor {
         include_state: bool,
     ) {
         let extractor_id = extractor_id.clone();
-        // Step 1: Direct HashMap access (no mutex needed since map is read-only after initialization)
+        // Step 1: Direct HashMap access (no mutex needed since map is read-only after
+        // initialization)
         let message_sender = {
             debug!(extractor=?extractor_id, "Looking up extractor in subscribers map..");
-            
-            if let Some(message_sender) = self.app_state.subscribers.get(&extractor_id) {
+
+            if let Some(message_sender) = self
+                .app_state
+                .subscribers
+                .get(&extractor_id)
+            {
                 message_sender.clone()
             } else {
-                let available = self.app_state.subscribers
+                let available = self
+                    .app_state
+                    .subscribers
                     .keys()
                     .map(|id| id.to_string())
                     .collect::<Vec<_>>();
@@ -245,7 +254,7 @@ impl WsActor {
         let user_identity = self.user_identity.clone();
         let extractor_id_for_future = extractor_id.clone();
         let extractor_id_for_error = extractor_id.clone();
-        
+
         // Step 3: Create async future for subscription setup
         // This future will run independently without blocking the actor's message processing
         // Use async operation instead of block_on to prevent runtime deadlocks
@@ -254,7 +263,7 @@ impl WsActor {
                 Ok(mut rx) => {
                     let elapsed = start_time.elapsed();
                     debug!(actor_id = %actor_id, elapsed_ms = elapsed.as_millis(), "subscribe completed successfully");
-                    
+
                     let stream = async_stream::stream! {
                         while let Some(item) = rx.recv().await {
                             let result = if include_state {
@@ -704,9 +713,11 @@ mod tests {
         let message_sender2 = Arc::new(MyMessageSender::new(extractor_id2.clone()));
 
         let mut subscribers_map = HashMap::new();
-        subscribers_map.insert(extractor_id.clone(), message_sender as Arc<dyn MessageSender + Send + Sync>);
-        subscribers_map.insert(extractor_id2.clone(), message_sender2 as Arc<dyn MessageSender + Send + Sync>);
-        
+        subscribers_map
+            .insert(extractor_id.clone(), message_sender as Arc<dyn MessageSender + Send + Sync>);
+        subscribers_map
+            .insert(extractor_id2.clone(), message_sender2 as Arc<dyn MessageSender + Send + Sync>);
+
         let app_state = web::Data::new(WsData::new(subscribers_map));
 
         // Setup WebSocket server and client, similar to existing test
@@ -860,7 +871,7 @@ mod tests {
             // Add a delay to increase the window for deadlock
             tokio::time::sleep(Duration::from_millis(200)).await;
             debug!("SlowMessageSender::subscribe() delay completed, creating channel");
-            
+
             let (tx, rx) = mpsc::channel::<ExtractorMsg>(1);
             let extractor_id = self.extractor_id.clone();
 
@@ -902,13 +913,14 @@ mod tests {
             .unwrap_or_else(|_| debug!("Subscriber already initialized"));
 
         let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "deadlock_test");
-        
+
         // Use SlowMessageSender to recreate the deadlock scenario
         let message_sender = Arc::new(SlowMessageSender::new(extractor_id.clone()));
 
         let mut subscribers_map = HashMap::new();
-        subscribers_map.insert(extractor_id.clone(), message_sender as Arc<dyn MessageSender + Send + Sync>);
-        
+        subscribers_map
+            .insert(extractor_id.clone(), message_sender as Arc<dyn MessageSender + Send + Sync>);
+
         let app_state = web::Data::new(WsData::new(subscribers_map));
 
         let server = start_with(
@@ -929,7 +941,7 @@ mod tests {
         // Create multiple connections to trigger concurrent subscriptions
         let num_clients = 4;
         let mut connections = Vec::new();
-        
+
         for i in 0..num_clients {
             let (connection, _) = tokio_tungstenite::connect_async(&url)
                 .await
@@ -937,54 +949,64 @@ mod tests {
             connections.push(connection);
         }
 
-        let subscribe_msg = Command::Subscribe {
-            extractor_id: extractor_id.clone().into(),
-            include_state: true,
-        };
+        let subscribe_msg =
+            Command::Subscribe { extractor_id: extractor_id.clone().into(), include_state: true };
         let msg_text = serde_json::to_string(&subscribe_msg).unwrap();
 
         // Send subscription requests from all clients simultaneously
-        let tasks: Vec<_> = connections.into_iter().enumerate().map(|(i, mut connection)| {
-            let msg_text = msg_text.clone();
-            async move {
-                println!("Client {} sending subscription request", i);
-                connection
-                    .send(Message::Text(msg_text))
-                    .await
-                    .unwrap_or_else(|_| panic!("Failed to send from client {}", i));
-                
-                // Try to receive response
-                let start = std::time::Instant::now();
-                let result = timeout(Duration::from_secs(3), connection.next()).await;
-                let elapsed = start.elapsed();
-                
-                println!("Client {} completed in {:?}, success: {}", i, elapsed, result.is_ok());
-                (i, result.is_ok(), elapsed)
-            }
-        }).collect();
+        let tasks: Vec<_> = connections
+            .into_iter()
+            .enumerate()
+            .map(|(i, mut connection)| {
+                let msg_text = msg_text.clone();
+                async move {
+                    println!("Client {} sending subscription request", i);
+                    connection
+                        .send(Message::Text(msg_text))
+                        .await
+                        .unwrap_or_else(|_| panic!("Failed to send from client {}", i));
+
+                    // Try to receive response
+                    let start = std::time::Instant::now();
+                    let result = timeout(Duration::from_secs(3), connection.next()).await;
+                    let elapsed = start.elapsed();
+
+                    println!(
+                        "Client {} completed in {:?}, success: {}",
+                        i,
+                        elapsed,
+                        result.is_ok()
+                    );
+                    (i, result.is_ok(), elapsed)
+                }
+            })
+            .collect();
 
         // Wait for all tasks with a reasonable timeout
         let start_time = std::time::Instant::now();
         let results = futures03::future::join_all(tasks).await;
         let total_time = start_time.elapsed();
-        
+
         // Analyze results
-        let successful = results.iter().filter(|(_, success, _)| *success).count();
+        let successful = results
+            .iter()
+            .filter(|(_, success, _)| *success)
+            .count();
         let failed = results.len() - successful;
-        
+
         println!("Test completed in {:?}", total_time);
         println!("Results: {} successful, {} failed", successful, failed);
-        
+
         // With the original deadlock-prone code, we expect some failures due to timeouts
         // caused by the mutex being held during block_on() calls
-        
+
         if failed > 0 {
             println!("DEADLOCK ISSUE DETECTED: {} out of {} clients failed", failed, num_clients);
             println!("This indicates the deadlock problem exists in the original code");
         } else {
             println!("ALL CLIENTS SUCCEEDED - deadlock not reproduced");
         }
-        
+
         // For the test to be meaningful, we expect at least some clients to fail with original code
         // This test demonstrates the issue that needs to be fixed
     }
