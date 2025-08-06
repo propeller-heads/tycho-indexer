@@ -11,7 +11,7 @@ use ethers::{
         Address as EthersAddress, BlockId, Bytes as EthersBytes, CallFrame,
         GethDebugBuiltInTracerType, GethDebugTracerType, GethDebugTracingCallOptions,
         GethDebugTracingOptions, GethTrace, GethTraceFrame, NameOrAddress, PreStateFrame,
-        PreStateMode, TransactionRequest, U256, H160, H256,
+        PreStateMode, TransactionRequest, H160, H256, U256,
     },
 };
 use tracing::warn;
@@ -218,7 +218,7 @@ fn flatten_calls(call: &CallFrame) -> Vec<EthersAddress> {
             "Error in call frame: {:?}, input:{:?}, target:{:?}, output:{:?}, gas_used:{:?}, gas:{:?}, value:{:?}, call_type:{:?}",
             err, call.input, call.to, call.output, call.gas_used, call.gas, call.value, call.typ
         );
-        
+
         // Try to decode revert reason if output is available
         if let Some(output) = &call.output {
             if output.len() >= 4 {
@@ -250,17 +250,17 @@ fn decode_revert_reason(data: &[u8]) -> Result<String, String> {
     if data.len() < 64 {
         return Err("Data too short for string decode".to_string());
     }
-    
+
     // Skip the offset (first 32 bytes) and get the length
     let length = u32::from_be_bytes([data[28], data[29], data[30], data[31]]) as usize;
-    
+
     if data.len() < 64 + length {
         return Err("Data shorter than expected string length".to_string());
     }
-    
+
     // Extract the string data
     let string_data = &data[64..64 + length];
-    String::from_utf8(string_data.to_vec()).map_err(|e| format!("UTF-8 decode error: {}", e))
+    String::from_utf8(string_data.to_vec()).map_err(|e| format!("UTF-8 decode error: {e}"))
 }
 
 #[cfg(test)]
