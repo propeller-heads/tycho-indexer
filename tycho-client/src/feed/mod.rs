@@ -1074,6 +1074,11 @@ mod tests {
             .await
             .expect("send_header failed");
 
+        // Give the synchronizer time to process v3's catch-up
+        // The BlockSynchronizer uses 10ms timeouts in tests, so we wait slightly longer
+        // to ensure the catch-up is processed and the block history is updated
+        tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
+
         // Both advance to block 3
         let block3_msg = StateSyncMessage {
             header: BlockHeader {
@@ -1094,11 +1099,23 @@ mod tests {
             .await
             .expect("send_header failed");
 
-        // Consume third message - both should be on block 3
-        let third_feed_msg = rx
+        // Consume messages until we get both synchronizers on block 3
+        // We may get an intermediate message for v3's catch-up or a combined message
+        let mut third_feed_msg = rx
             .recv()
             .await
             .expect("header channel was closed");
+
+        // If this message doesn't have both univ2, it's an intermediate message, so we get the next one
+        if !third_feed_msg
+            .state_msgs
+            .contains_key("uniswap-v2")
+        {
+            third_feed_msg = rx
+                .recv()
+                .await
+                .expect("header channel was closed");
+        }
         assert!(third_feed_msg
             .state_msgs
             .contains_key("uniswap-v2"));
