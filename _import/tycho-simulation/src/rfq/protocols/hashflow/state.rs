@@ -2,7 +2,7 @@ use std::{any::Any, collections::HashMap};
 
 use async_trait::async_trait;
 use num_bigint::BigUint;
-use num_traits::{FromPrimitive, ToPrimitive};
+use num_traits::{FromPrimitive, Pow, ToPrimitive};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::{protocol::GetAmountOutParams, token::Token},
@@ -37,6 +37,31 @@ impl HashflowState {
     ) -> Self {
         Self { base_token, quote_token, levels, client }
     }
+
+    fn valid_direction_guard(
+        &self,
+        token_address_in: &Bytes,
+        token_address_out: &Bytes,
+    ) -> Result<(), SimulationError> {
+        // The current levels are only valid for the base/quote pair.
+        if !(token_address_in == &self.base_token.address &&
+            token_address_out == &self.quote_token.address)
+        {
+            Err(SimulationError::InvalidInput(
+                format!("Invalid token addresses: {token_address_in}, {token_address_out}"),
+                None,
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn valid_levels_guard(&self) -> Result<(), SimulationError> {
+        if self.levels.levels.is_empty() {
+            return Err(SimulationError::RecoverableError("No liquidity".into()));
+        }
+        Ok(())
+    }
 }
 
 impl ProtocolSim for HashflowState {
@@ -44,8 +69,15 @@ impl ProtocolSim for HashflowState {
         todo!()
     }
 
-    fn spot_price(&self, _base: &Token, _quote: &Token) -> Result<f64, SimulationError> {
-        todo!()
+    fn spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
+        self.valid_direction_guard(&base.address, &quote.address)?;
+
+        // Hashflow's levels are sorted by price, so the first level represents the best price.
+        self.levels
+            .levels
+            .first()
+            .ok_or(SimulationError::RecoverableError("No liquidity".into()))
+            .map(|level| level.price)
     }
 
     fn get_amount_out(
@@ -54,16 +86,8 @@ impl ProtocolSim for HashflowState {
         token_in: &Token,
         token_out: &Token,
     ) -> Result<GetAmountOutResult, SimulationError> {
-        // The current levels are only valid for the base/quote pair.
-        if !(token_in == &self.base_token && token_out == &self.quote_token) {
-            return Err(SimulationError::InvalidInput(
-                format!("Invalid token addresses: {}, {}", token_in.address, token_out.address),
-                None,
-            ));
-        }
-        if self.levels.levels.is_empty() {
-            return Err(SimulationError::RecoverableError("No liquidity".into()));
-        }
+        self.valid_direction_guard(&token_in.address, &token_out.address)?;
+        self.valid_levels_guard()?;
 
         let amount_in = amount_in.to_f64().ok_or_else(|| {
             SimulationError::RecoverableError("Can't convert amount in to f64".into())
@@ -77,7 +101,7 @@ impl ProtocolSim for HashflowState {
             )));
         }
 
-        // Calculate amount out using the existing price level logic
+        // Calculate amount out
         let (amount_out, remaining_amount_in) = self
             .levels
             .get_amount_out_from_levels(amount_in);
@@ -102,10 +126,27 @@ impl ProtocolSim for HashflowState {
 
     fn get_limits(
         &self,
-        _sell_token: Bytes,
-        _buy_token: Bytes,
+        sell_token: Bytes,
+        buy_token: Bytes,
     ) -> Result<(BigUint, BigUint), SimulationError> {
-        todo!()
+        self.valid_direction_guard(&sell_token, &buy_token)?;
+        self.valid_levels_guard()?;
+
+        let sell_decimals = self.base_token.decimals;
+        let buy_decimals = self.quote_token.decimals;
+        let (total_sell_amount, total_buy_amount) =
+            self.levels
+                .levels
+                .iter()
+                .fold((0.0, 0.0), |(sell_sum, buy_sum), level| {
+                    (sell_sum + level.quantity, buy_sum + level.quantity * level.price)
+                });
+
+        let sell_limit =
+            BigUint::from((total_sell_amount * 10_f64.pow(sell_decimals as f64)) as u128);
+        let buy_limit = BigUint::from((total_buy_amount * 10_f64.pow(buy_decimals as f64)) as u128);
+
+        Ok((sell_limit, buy_limit))
     }
 
     fn delta_transition(
@@ -239,6 +280,45 @@ mod tests {
         }
     }
 
+    mod spot_price {
+        use super::*;
+
+        #[test]
+        fn returns_best_price() {
+            let state = create_test_hashflow_state();
+            let price = state
+                .spot_price(&state.base_token, &state.quote_token)
+                .unwrap();
+            // The best price is the first level's price (3000.0)
+            assert_eq!(price, 3000.0);
+        }
+
+        #[test]
+        fn returns_invalid_input_error() {
+            let state = create_test_hashflow_state();
+            let result = state.spot_price(&wbtc(), &usdc());
+            assert!(result.is_err());
+            if let Err(SimulationError::InvalidInput(msg, _)) = result {
+                assert!(msg.contains("Invalid token addresses"));
+            } else {
+                panic!("Expected InvalidInput");
+            }
+        }
+
+        #[test]
+        fn returns_no_liquidity_error() {
+            let mut state = create_test_hashflow_state();
+            state.levels.levels.clear();
+            let result = state.spot_price(&state.base_token, &state.quote_token);
+            assert!(result.is_err());
+            if let Err(SimulationError::RecoverableError(msg)) = result {
+                assert_eq!(msg, "No liquidity");
+            } else {
+                panic!("Expected RecoverableError");
+            }
+        }
+    }
+
     mod get_amount_out {
         use super::*;
 
@@ -352,6 +432,50 @@ mod tests {
                 &usdc(),
             );
 
+            assert!(result.is_err());
+            if let Err(SimulationError::RecoverableError(msg)) = result {
+                assert_eq!(msg, "No liquidity");
+            } else {
+                panic!("Expected RecoverableError");
+            }
+        }
+    }
+
+    mod get_limits {
+        use super::*;
+
+        #[test]
+        fn valid_limits() {
+            let state = create_test_hashflow_state();
+            let (sell_limit, buy_limit) = state
+                .get_limits(state.base_token.address.clone(), state.quote_token.address.clone())
+                .unwrap();
+
+            // Total sell: 0.5 + 1.5 + 5.0 = 7.0 WETH (18 decimals)
+            // Total buy: (0.5+1.5)*3000 + 5.0*2999 = 20995 USDC (6 decimals)
+            assert_eq!(sell_limit, BigUint::from((7.0 * 10f64.powi(18)) as u128));
+            assert_eq!(buy_limit, BigUint::from((20995.0 * 10f64.powi(6)) as u128));
+        }
+
+        #[test]
+        fn invalid_token_pair() {
+            let state = create_test_hashflow_state();
+            let result =
+                state.get_limits(wbtc().address.clone(), state.quote_token.address.clone());
+            assert!(result.is_err());
+            if let Err(SimulationError::InvalidInput(msg, _)) = result {
+                assert!(msg.contains("Invalid token addresses"));
+            } else {
+                panic!("Expected InvalidInput");
+            }
+        }
+
+        #[test]
+        fn no_liquidity() {
+            let mut state = create_test_hashflow_state();
+            state.levels.levels = vec![];
+            let result = state
+                .get_limits(state.base_token.address.clone(), state.quote_token.address.clone());
             assert!(result.is_err());
             if let Err(SimulationError::RecoverableError(msg)) = result {
                 assert_eq!(msg, "No liquidity");
