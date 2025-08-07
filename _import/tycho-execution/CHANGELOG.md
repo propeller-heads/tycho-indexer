@@ -1,3 +1,10 @@
+## [0.112.2](https://github.com/propeller-heads/tycho-execution/compare/0.112.1...0.112.2) (2025-08-07)
+
+
+### Bug Fixes
+
+* Encode sequential swaps with unwrapping WETH correctly ([c42a5da](https://github.com/propeller-heads/tycho-execution/commit/c42a5dae6a55d315360eaaa510d9dcaf7ef8e4c0))
+
 ## [0.112.1](https://github.com/propeller-heads/tycho-execution/compare/0.112.0...0.112.1) (2025-07-31)
 
 

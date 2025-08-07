@@ -1,6 +1,6 @@
 [package]
 name = "tycho-execution"
-version = "0.112.1"
+version = "0.112.2"
 edition = "2021"
 description = "Provides tools for encoding and executing swaps against Tycho router and protocol executors."
 repository = "https://github.com/propeller-heads/tycho-execution"
