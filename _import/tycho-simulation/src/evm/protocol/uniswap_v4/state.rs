@@ -545,7 +545,7 @@ impl ProtocolSim for UniswapV4State {
                 match hook.get_amount_ranges(token_in.clone(), token_out.clone()) {
                     Ok(amount_ranges) => {
                         return Ok((
-                            BigUint::from(0u8),
+                            u256_to_biguint(amount_ranges.amount_in_range.1),
                             u256_to_biguint(amount_ranges.amount_out_range.1),
                         ))
                     }
