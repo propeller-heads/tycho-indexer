@@ -165,4 +165,10 @@ sol! {
         bytes4 selector;
         int128 delta;
    }
+
+    #[derive(Debug)]
+    struct GetLimitsSolReturn {
+        uint256 amount_in_upper_limit;
+        uint256 amount_out_upper_limit;
+    }
 }

@@ -73,6 +73,11 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
         let hook_address = Address::from_slice(&hook_address_bytes.0);
         let pool_manager_address = Address::from_slice(&pool_manager_address_bytes.0);
 
+        let limits_entrypoint = params
+            .attributes
+            .get("limits_entrypoint")
+            .and_then(|bytes| String::from_utf8(bytes.0.to_vec()).ok());
+
         let engine = create_engine(SHARED_TYCHO_DB.clone(), true).map_err(|e| {
             InvalidSnapshotError::VMError(SimulationError::FatalError(format!(
                 "Failed to create engine: {e:?}"
@@ -85,6 +90,7 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
             pool_manager_address,
             params.all_tokens.clone(),
             params.account_balances.clone(),
+            limits_entrypoint,
         )
         .map_err(InvalidSnapshotError::VMError)?;
 

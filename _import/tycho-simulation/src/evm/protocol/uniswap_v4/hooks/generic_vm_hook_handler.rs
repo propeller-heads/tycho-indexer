@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap, fmt::Debug};
+use std::{any::Any, collections::HashMap, fmt::Debug, str::FromStr};
 
 use alloy::{
     primitives::{keccak256, Address, Signed, Uint, I128, U256},
@@ -24,8 +24,8 @@ use crate::evm::{
                 hook_handler::HookHandler,
                 models::{
                     AfterSwapDelta, AfterSwapParameters, AfterSwapSolReturn, AmountRanges,
-                    BeforeSwapOutput, BeforeSwapParameters, BeforeSwapSolOutput, SwapParams,
-                    WithGasEstimate,
+                    BeforeSwapOutput, BeforeSwapParameters, BeforeSwapSolOutput,
+                    GetLimitsSolReturn, SwapParams, WithGasEstimate,
                 },
             },
             state::UniswapV4State,
@@ -44,6 +44,7 @@ where
     contract: TychoSimulationContract<D>,
     address: Address,
     pool_manager: Address,
+    limits_entrypoint: Option<String>,
 }
 
 impl<D: EngineDatabaseInterface + Clone + Debug> PartialEq for GenericVMHookHandler<D>
@@ -52,7 +53,9 @@ where
     <D as EngineDatabaseInterface>::Error: Debug,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.address == other.address && self.pool_manager == other.pool_manager
+        self.address == other.address &&
+            self.pool_manager == other.pool_manager &&
+            self.limits_entrypoint == other.limits_entrypoint
     }
 }
 
@@ -67,11 +70,13 @@ where
         pool_manager: Address,
         _all_tokens: HashMap<Bytes, Token>,
         _account_balances: HashMap<Bytes, HashMap<Bytes, Bytes>>,
+        limits_entrypoint: Option<String>,
     ) -> Result<Self, SimulationError> {
         Ok(GenericVMHookHandler {
             contract: TychoSimulationContract::new(address, engine)?,
             address,
             pool_manager,
+            limits_entrypoint,
         })
     }
 
@@ -201,6 +206,7 @@ where
         let decoded = AfterSwapSolReturn::abi_decode(&res.return_value).map_err(|e| {
             SimulationError::FatalError(format!("Failed to decode before swap return value: {e:?}"))
         })?;
+
         Ok(WithGasEstimate {
             gas_estimate: res.simulation_result.gas_used,
             result: I128::try_from(decoded.delta).map_err(|e| {
@@ -223,23 +229,82 @@ where
 
     fn get_amount_ranges(
         &self,
-        _token_in: Bytes,
-        _token_out: Bytes,
+        token_in: Bytes,
+        token_out: Bytes,
     ) -> Result<AmountRanges, SimulationError> {
-        Err(SimulationError::RecoverableError(
-            "get_amount_ranges is not implemented for GenericVMHookHandler".to_string(),
-        ))
+        if let Some(entrypoint) = &self.limits_entrypoint {
+            let parts: Vec<&str> = entrypoint.split(':').collect();
+            if parts.len() != 2 {
+                return Err(SimulationError::FatalError(
+                    "Invalid limits_entrypoint format. Expected 'address:signature'".to_string(),
+                ));
+            }
+
+            let contract_address = Address::from_str(parts[0]).map_err(|e| {
+                SimulationError::FatalError(format!("Failed to parse contract address: {e:?}"))
+            })?;
+
+            let function_signature = parts[1];
+
+            let token_in_addr = Address::from_slice(&token_in.0);
+            let token_out_addr = Address::from_slice(&token_out.0);
+
+            let limits_contract =
+                TychoSimulationContract::new(contract_address, self.contract.engine.clone())?;
+
+            let args = (token_in_addr, token_out_addr);
+
+            let res = limits_contract.call(
+                function_signature,
+                args,
+                0,                // block number (not used to get limits)
+                None,             // timestamp
+                None,             // overwrites
+                None,             // caller
+                U256::from(0u64), // value
+                None,             // transient_storage
+            )?;
+
+            let decoded = GetLimitsSolReturn::abi_decode(&res.return_value).map_err(|e| {
+                SimulationError::FatalError(format!(
+                    "Failed to decode getLimits return value: {:?} with error {e:?}",
+                    res.return_value
+                ))
+            })?;
+
+            // For now, we only care about upper limits
+            Ok(AmountRanges {
+                amount_in_range: (U256::ZERO, decoded.amount_in_upper_limit),
+                amount_out_range: (U256::ZERO, decoded.amount_out_upper_limit),
+            })
+        } else {
+            Err(SimulationError::RecoverableError(
+                "limits_entrypoint is not set for this GenericVMHookHandler".to_string(),
+            ))
+        }
     }
 
     fn delta_transition(
         &mut self,
-        _delta: ProtocolStateDelta,
+        delta: ProtocolStateDelta,
         _tokens: &HashMap<Bytes, Token>,
         _balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
-        Err(TransitionError::SimulationError(SimulationError::RecoverableError(
-            "delta_transition is not implemented for GenericVMHookHandler".to_string(),
-        )))
+        if let Some(limits_entrypoint_bytes) = delta
+            .updated_attributes
+            .get("limits_entrypoint")
+        {
+            let limits_entrypoint =
+                String::from_utf8(limits_entrypoint_bytes.0.to_vec()).map_err(|e| {
+                    TransitionError::SimulationError(SimulationError::FatalError(format!(
+                        "Failed to parse limits_entrypoint from delta: {e:?}"
+                    )))
+                })?;
+
+            self.limits_entrypoint = Some(limits_entrypoint);
+        }
+
+        Ok(())
     }
 
     fn clone_box(&self) -> Box<dyn HookHandler> {
@@ -257,7 +322,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{default::Default, str::FromStr};
+    use std::{
+        collections::{HashMap, HashSet},
+        default::Default,
+        str::FromStr,
+    };
 
     use alloy::primitives::{aliases::U24, B256, I256, U256};
     use revm::state::{AccountInfo, Bytecode};
@@ -299,7 +368,7 @@ mod tests {
         let hook_address = Address::from_str("0x0010d0d5db05933fa0d9f7038d365e1541a41888")
             .expect("Invalid hook address");
 
-        let pool_manager = Address::from_str("0x000000000004444c5dc75cb358380d2e3de08a90")
+        let pool_manager = Address::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90")
             .expect("Invalid pool manager address");
 
         let hook_handler = GenericVMHookHandler::new(
@@ -308,6 +377,7 @@ mod tests {
             pool_manager,
             HashMap::new(),
             HashMap::new(),
+            None,
         )
         .expect("Failed to create GenericVMHookHandler");
 
@@ -432,6 +502,7 @@ mod tests {
             pool_manager,
             HashMap::new(),
             HashMap::new(),
+            None,
         )
         .expect("Failed to create GenericVMHookHandler");
 
@@ -495,6 +566,7 @@ mod tests {
             pool_manager,
             HashMap::new(),
             HashMap::new(),
+            None,
         )
         .expect("Failed to create GenericVMHookHandler");
 
@@ -556,5 +628,110 @@ mod tests {
         let res = result.unwrap().result;
         // This hook does not return any delta, so we expect it to be zero.
         assert_eq!(res, I128::ZERO);
+    }
+
+    #[test]
+    fn test_get_amount_ranges() {
+        let block = BlockHeader {
+            number: 23072527,
+            hash: Bytes::from_str(
+                "0x639d7e454339ba43da3b2288b45078405330afcc3cd7f10e6e852be9c70ac164",
+            )
+            .unwrap(),
+            timestamp: 1748397011,
+            ..Default::default()
+        };
+        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
+        let engine = create_engine(db, true).expect("Failed to create simulation engine");
+
+        let hook_address = Address::from_str("0xC88b618C2c670c2e2a42e06B466B6F0e82A6E8A8")
+            .expect("Invalid hook address");
+
+        let pool_manager = Address::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90")
+            .expect("Invalid pool manager address");
+
+        // Encode function signature as expected in TychoSimulationContract.encode_input
+        let limits_entrypoint =
+            "0xC88b618C2c670c2e2a42e06B466B6F0e82A6E8A8:getLimits(address,address)";
+        let hook_handler = GenericVMHookHandler::new(
+            hook_address,
+            engine,
+            pool_manager,
+            HashMap::new(),
+            HashMap::new(),
+            Some(limits_entrypoint.to_string()),
+        )
+        .expect("Failed to create GenericVMHookHandler");
+
+        let token_in = Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(); // USDC
+        let token_out = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(); // WETH
+
+        let result = hook_handler.get_amount_ranges(token_in, token_out);
+
+        match result {
+            Ok(ranges) => {
+                assert_eq!(ranges.amount_in_range.0, U256::ZERO);
+                assert_eq!(ranges.amount_out_range.0, U256::ZERO);
+
+                // This varies depending on block, so we just use a safe min amount
+                let min_expected_limit_1 = U256::from_str("10000000000000").unwrap();
+                let min_expected_limit_2 = U256::from_str("1000").unwrap();
+
+                assert!(ranges.amount_in_range.1 >= min_expected_limit_1);
+                assert!(ranges.amount_out_range.1 >= min_expected_limit_2);
+            }
+            Err(e) => {
+                panic!("get_amount_out ranges failed {e}");
+            }
+        }
+    }
+
+    #[test]
+    fn test_delta_transition_limits_entrypoint_decoding() {
+        let block = BlockHeader {
+            number: 1,
+            hash: Bytes::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+            timestamp: 1748397011,
+            ..Default::default()
+        };
+        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
+        let engine = create_engine(db, true).expect("Failed to create simulation engine");
+
+        let mut hook_handler = GenericVMHookHandler {
+            contract: TychoSimulationContract::new(Address::ZERO, engine).unwrap(),
+            address: Address::ZERO,
+            pool_manager: Address::ZERO,
+            limits_entrypoint: None,
+        };
+
+        assert!(hook_handler.limits_entrypoint.is_none());
+        let limits_entrypoint_value =
+            "0xC88b618C2c670c2e2a42e06B466B6F0e82A6E8A8:getLimits(address,address)";
+        let mut updated_attributes = HashMap::new();
+
+        // Imitate the way that the limits_entrypoint is inserted in the indexer
+        updated_attributes.insert(
+            "limits_entrypoint".to_string(),
+            Bytes::from(
+                limits_entrypoint_value
+                    .as_bytes()
+                    .to_vec(),
+            ),
+        );
+
+        let delta = ProtocolStateDelta {
+            component_id: "hook_component".to_string(),
+            updated_attributes,
+            deleted_attributes: HashSet::new(),
+        };
+
+        let result = hook_handler.delta_transition(delta, &HashMap::new(), &Default::default());
+        assert!(result.is_ok());
+
+        // Verify the limits_entrypoint was updated correctly
+        assert_eq!(hook_handler.limits_entrypoint.unwrap(), limits_entrypoint_value);
     }
 }
