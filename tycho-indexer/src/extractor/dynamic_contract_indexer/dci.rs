@@ -1,7 +1,7 @@
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use async_trait::async_trait;
-use tracing::{debug, instrument, trace};
+use tracing::{debug, instrument, span, trace, Instrument, Level};
 use tycho_common::{
     models::{
         blockchain::{
@@ -159,6 +159,12 @@ where
                         .cloned()
                         .collect(),
                 )
+                .instrument(span!(
+                    Level::INFO, 
+                    "dci_rpc_tracing", 
+                    entrypoint_count = entrypoints_to_analyze.len(),
+                    block_hash = %block_changes.block.hash
+                ))
                 .await
                 .map_err(|e| ExtractionError::TracingError(format!("{e:?}")))?;
 
@@ -250,7 +256,13 @@ where
                 match self
                     .storage_source
                     .get_accounts_at_block(&block_changes.block, &storage_request)
-                    .await
+                    .instrument(span!(
+                    Level::INFO,
+                    "dci_account_extraction",
+                    account_count = storage_request.len(),
+                    block_number = block_changes.block.number
+                ))
+                .await
                 {
                     Ok(accounts) => break accounts,
                     Err(e) => {
@@ -307,7 +319,14 @@ where
             }
 
             // Update the cache with new traced entrypoints
+            let _span = span!(
+                Level::INFO,
+                "dci_cache_update",
+                traced_entrypoints = traced_entry_points.len(),
+                block_number = block_changes.block.number
+            ).entered();
             self.update_cache(&block_changes.block, &traced_entry_points)?;
+            drop(_span);
 
             // Update the block changes with the traced entrypoints
             block_changes.trace_results = traced_entry_points;
@@ -325,7 +344,13 @@ where
                     .map(|ep| (ep.external_id.clone(), ep)),
             )?;
 
+        let _span = span!(
+            Level::INFO,
+            "dci_extract_tracked_updates",
+            block_storage_changes = block_changes.block_storage_changes.len()
+        ).entered();
         let tracked_updates = self.extract_tracked_updates(block_changes)?;
+        drop(_span);
 
         let mut tx_with_changes = block_changes
             .txs_with_update
@@ -484,6 +509,12 @@ where
         &self,
         tx_with_changes: &'a [TxWithStorageChanges],
     ) -> HashMap<EntryPointWithTracingParams, &'a Transaction> {
+        let _span = span!(
+            Level::INFO,
+            "dci_retrigger_detection",
+            tx_count = tx_with_changes.len()
+        ).entered();
+
         // Create a map of storage locations that have been updated in the block and the transaction
         // that last detected the update.
         // Note: tracing results are block scoped, this means if the same storage location is
@@ -493,9 +524,12 @@ where
 
         let mut retriggered_entrypoints: HashMap<EntryPointWithTracingParams, &Transaction> =
             HashMap::new();
+        let mut storage_locations_scanned = 0u64;
+        
         for tx_with_changes in tx_with_changes.iter() {
             for (account, contract_store) in tx_with_changes.storage_changes.iter() {
                 for key in contract_store.keys() {
+                    storage_locations_scanned += 1;
                     let location = (account.clone(), key.clone());
                     // Check if this storage location triggers any entrypoints
                     if let Some(entrypoints) = self.cache.retriggers.get_all(location) {
@@ -515,6 +549,15 @@ where
                 }
             }
         }
+
+        span!(Level::INFO, "retrigger_scan_complete")
+            .in_scope(|| {
+                tracing::info!(
+                    retriggered_count = retriggered_entrypoints.len(),
+                    storage_locations_scanned = storage_locations_scanned,
+                    "DCI: Retrigger detection completed"
+                );
+            });
 
         if !retriggered_entrypoints.is_empty() {
             let retrigger_log: Vec<String> = retriggered_entrypoints
