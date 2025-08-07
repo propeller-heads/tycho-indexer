@@ -189,10 +189,6 @@ pub struct HashflowQuote {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HashflowQuoteData {
-    #[serde(rename = "baseChain")]
-    base_chain: HashflowChain,
-    #[serde(rename = "quoteChain")]
-    quote_chain: HashflowChain,
     #[serde(rename = "baseToken")]
     pub base_token: Bytes,
     #[serde(rename = "quoteToken")]

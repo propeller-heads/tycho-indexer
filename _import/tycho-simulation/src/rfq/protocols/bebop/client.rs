@@ -373,14 +373,7 @@ impl RFQClient for BebopClient {
         match quote_response {
             BebopQuoteResponse::Success(quote) => {
                 let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
-                quote_attributes.insert(
-                    "calldata".into(),
-                    Bytes::from_str(&quote.tx.data).map_err(|_| {
-                        RFQError::ParsingError(
-                            "Failed to parse Bebop quote result's calldata".into(),
-                        )
-                    })?,
-                );
+                quote_attributes.insert("calldata".into(), quote.tx.data);
                 quote_attributes.insert(
                     "partial_fill_offset".into(),
                     Bytes::from(
@@ -706,7 +699,8 @@ mod tests {
         };
         let ws_user = String::from("tycho");
         dotenv().expect("Missing .env file");
-        let ws_key = env::var("BEBOP_KEY").expect("BEBOP_KEY environment variable is required");
+        let ws_key =
+            env::var("BEBOP_WS_KEY").expect("BEBOP_WS_KEY environment variable is required");
 
         let client = BebopClient::new(
             Chain::Ethereum,

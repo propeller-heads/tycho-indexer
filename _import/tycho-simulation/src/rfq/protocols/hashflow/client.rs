@@ -414,6 +414,12 @@ impl RFQClient for HashflowClient {
         match quote_response.status.as_str() {
             "success" => {
                 if let Some(quotes) = quote_response.quotes {
+                    if quotes.is_empty() {
+                        return Err(RFQError::QuoteNotFound(format!(
+                            "Hashflow quote not found for {} {} ->{}",
+                            params.amount_in, params.token_in.address, params.token_out.address,
+                        )))
+                    }
                     // We assume there will be only one quote request at a time
                     let quote = quotes[0].clone();
 
@@ -428,13 +434,27 @@ impl RFQClient for HashflowClient {
                     let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
                     quote_attributes.insert("pool".to_string(), quote.quote_data.pool);
                     quote_attributes.insert("trader".to_string(), quote.quote_data.trader);
-                    quote_attributes
-                        .insert("nonce".to_string(), Bytes::from(quote.quote_data.nonce));
+                    quote_attributes.insert(
+                        "nonce".to_string(),
+                        Bytes::from(
+                            quote
+                                .quote_data
+                                .nonce
+                                .to_be_bytes()
+                                .to_vec(),
+                        ),
+                    );
                     quote_attributes.insert("tx_id".to_string(), quote.quote_data.tx_id);
                     quote_attributes.insert("signature".to_string(), quote.signature);
                     quote_attributes.insert(
                         "quote_expiry".to_string(),
-                        Bytes::from(quote.quote_data.quote_expiry),
+                        Bytes::from(
+                            quote
+                                .quote_data
+                                .quote_expiry
+                                .to_be_bytes()
+                                .to_vec(),
+                        ),
                     );
                     if let Some(external_account) = quote.quote_data.external_account {
                         quote_attributes.insert("external_account".to_string(), external_account);
