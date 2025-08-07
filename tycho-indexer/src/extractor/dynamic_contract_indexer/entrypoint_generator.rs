@@ -784,7 +784,8 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                     ),
                     TracingParams::RPCTracer(
                         RPCTracerParams::new(None, Bytes::from(calldata))
-                            .with_state_overrides(state_overrides),
+                            .with_state_overrides(state_overrides)
+                            .with_prune_addresses(vec![router_address.clone()]),
                     ),
                 );
 
