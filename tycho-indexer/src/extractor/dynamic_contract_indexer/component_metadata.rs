@@ -31,8 +31,7 @@ pub(crate) type DeduplicationId = String;
 
 type RoutingKey = String;
 
-#[cfg_attr(test, derive(Debug))]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ComponentTracingMetadata {
     // Here we need to link the each metadata field with the transaction hash that triggered the
     // fetching so we can modify the Block data with the new balances - and link the generated

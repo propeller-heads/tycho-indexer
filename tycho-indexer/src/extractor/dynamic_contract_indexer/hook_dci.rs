@@ -578,6 +578,120 @@ where
         // The balances are injected into block_changes.txs_with_update by the orchestrator.
         Ok(())
     }
+
+    /// Enriches component metadata with balance updates from block_changes for components
+    /// that need full processing but don't have external metadata sources.
+    #[instrument(skip(self, components_needing_full_processing, block_changes), fields(
+        block_number = block_changes.block.number,
+        full_processing_count = components_needing_full_processing.len()
+    ))]
+    fn enrich_metadata_with_balance_updates(
+        &self,
+        components_needing_full_processing: &[(TxHash, ProtocolComponent)],
+        existing_metadata: &[(ProtocolComponent, ComponentTracingMetadata)],
+        block_changes: &BlockChanges,
+    ) -> Result<Vec<(ProtocolComponent, ComponentTracingMetadata)>, ExtractionError> {
+        debug!("Starting balance-based metadata enrichment");
+
+        // Create a set of component IDs that already have metadata from external sources
+        let existing_metadata_components: std::collections::HashSet<ComponentId> = existing_metadata
+            .iter()
+            .map(|(comp, _)| comp.id.clone())
+            .collect();
+
+        let mut enriched_metadata = Vec::new();
+        let mut components_enriched = 0;
+        let mut components_skipped_no_balances = 0;
+        let mut components_skipped_has_metadata = 0;
+        let mut total_balance_entries = 0;
+
+        // Extract balance updates from block_changes for components needing full processing
+        for (tx_hash, component) in components_needing_full_processing {
+            // Skip if component already has metadata from external sources
+            if existing_metadata_components.contains(&component.id) {
+                components_skipped_has_metadata += 1;
+                debug!(
+                    component_id = %component.id,
+                    "Skipping component - already has external metadata"
+                );
+                continue;
+            }
+
+            // Look for balance updates for this component in the block changes
+            let mut component_balances = std::collections::HashMap::new();
+            let mut found_balance_update = false;
+
+            // Search through all transactions for balance updates for this component
+            for tx_with_changes in &block_changes.txs_with_update {
+                if let Some(balance_changes) = tx_with_changes.balance_changes.get(&component.id) {
+                    found_balance_update = true;
+                    
+                    debug!(
+                        component_id = %component.id,
+                        tx_hash = %tx_with_changes.tx.hash,
+                        balance_count = balance_changes.len(),
+                        "Found balance updates for component"
+                    );
+
+                    // Convert ComponentBalance to the expected format for ComponentTracingMetadata
+                    for (token_address, component_balance) in balance_changes {
+                        // Only include non-zero balances
+                        if !component_balance.balance.is_zero() {
+                            component_balances.insert(token_address.clone(), component_balance.balance.clone());
+                            total_balance_entries += 1;
+                            
+                            debug!(
+                                component_id = %component.id,
+                                token = %token_address,
+                                balance = %component_balance.balance,
+                                balance_float = component_balance.balance_float,
+                                "Added non-zero balance from block update"
+                            );
+                        } else {
+                            debug!(
+                                component_id = %component.id,
+                                token = %token_address,
+                                "Skipping zero balance"
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Create metadata if we found non-zero balance updates
+            if found_balance_update && !component_balances.is_empty() {
+                components_enriched += 1;
+                let mut metadata = ComponentTracingMetadata::new(tx_hash.clone());
+                metadata.balances = Some(Ok(component_balances));
+                
+                debug!(
+                    component_id = %component.id,
+                    balance_count = metadata.balances.as_ref().unwrap().as_ref().unwrap().len(),
+                    "Created metadata from balance updates"
+                );
+                
+                enriched_metadata.push((component.clone(), metadata));
+            } else {
+                components_skipped_no_balances += 1;
+                debug!(
+                    component_id = %component.id,
+                    found_balance_update = found_balance_update,
+                    balance_count = component_balances.len(),
+                    "Skipping component - no non-zero balance updates found"
+                );
+            }
+        }
+
+        info!(
+            components_enriched,
+            components_skipped_has_metadata,
+            components_skipped_no_balances,
+            total_balance_entries,
+            "Completed balance-based metadata enrichment"
+        );
+
+        Ok(enriched_metadata)
+    }
 }
 
 // Component state tracking
@@ -697,15 +811,48 @@ where
         info!(metadata_count = component_metadata.len(), "Collected component metadata");
         drop(_metadata_guard);
 
+        // 3b. Enrich metadata with balance updates for components that need full processing
+        // but don't have external metadata sources
+        let enrichment_span = span!(
+            Level::INFO,
+            "enrich_metadata_with_balances",
+            existing_metadata_count = component_metadata.len()
+        );
+        let _enrichment_guard = enrichment_span.enter();
+
+        let balance_enriched_metadata = self
+            .enrich_metadata_with_balance_updates(
+                &components_needing_full_processing,
+                &component_metadata,
+                block_changes,
+            )?;
+
+        // Track which components were enriched with balance updates
+        let balance_enriched_component_ids: std::collections::HashSet<ComponentId> = balance_enriched_metadata
+            .iter()
+            .map(|(comp, _)| comp.id.clone())
+            .collect();
+
+        // Combine existing metadata with balance-enriched metadata
+        let mut combined_metadata = component_metadata;
+        combined_metadata.extend(balance_enriched_metadata);
+
+        info!(
+            total_metadata_count = combined_metadata.len(),
+            balance_enriched_count = balance_enriched_component_ids.len(),
+            "Combined external metadata with balance-enriched metadata"
+        );
+        drop(_enrichment_guard);
+
         // 3a. Process metadata errors and update component states
-        self.process_metadata_errors(&component_metadata, &block_changes.block)?;
+        self.process_metadata_errors(&combined_metadata, &block_changes.block)?;
 
         // 4. Group components by hook address and separate by processing needs
         let (components_by_hook_full_processing, components_by_hook_balance_only, metadata_by_component_id) = {
             let _span = span!(
                 Level::INFO,
                 "group_components_by_hook",
-                total_metadata = component_metadata.len()
+                total_metadata = combined_metadata.len()
             ).entered();
             
             let mut components_by_hook_full_processing: HashMap<Address, Vec<ProtocolComponent>> = HashMap::new();
@@ -718,7 +865,7 @@ where
                 .map(|(_, comp)| comp.id.clone())
                 .collect();
 
-            for (component, metadata) in component_metadata {
+            for (component, metadata) in combined_metadata {
                 metadata_by_component_id.insert(component.id.clone(), metadata);
 
                 if let Some(hook_address) = component.static_attributes.get("hooks") {
@@ -778,11 +925,24 @@ where
                     "Prepared component metadata map for full processing"
                 );
 
+                // For full processing components, skip balance injection if they were enriched from balance updates
+                // since the balances are already present in the block
+                let has_balance_enriched_components = components
+                    .iter()
+                    .any(|comp| balance_enriched_component_ids.contains(&comp.id));
+
+                debug!(
+                    hook_address = %hook_address,
+                    has_balance_enriched_components = has_balance_enriched_components,
+                    "Determining balance injection strategy for full processing components"
+                );
+
                 match orchestrator.update_components(
                     block_changes,
                     components,
                     &component_metadata_map,
-                    true
+                    true, // generate_entrypoints
+                    has_balance_enriched_components, // skip_balance_injection
                 ) {
                     Ok(()) => {
                         info!(
@@ -865,12 +1025,18 @@ where
                 );
 
                 // For balance-only components, we just update their balances without generating new entrypoints
-                // The balance updates are already injected into block_changes by the metadata orchestrator
+                // These components always have external metadata, so we never skip balance injection
+                debug!(
+                    hook_address = %hook_address,
+                    "Processing balance-only components - allowing balance injection from external metadata"
+                );
+
                 match orchestrator.update_components(
                     block_changes,
                     components,
                     &component_metadata_map,
-                    false, // Skip entrypoint generation
+                    false, // generate_entrypoints - Skip entrypoint generation
+                    false, // skip_balance_injection - Allow balance injection from external metadata
                 ) {
                     Ok(()) => {
                         info!(

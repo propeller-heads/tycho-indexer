@@ -51,6 +51,7 @@ pub trait HookOrchestrator: Send + Sync {
         components: &[ProtocolComponent],
         metadata: &HashMap<String, ComponentTracingMetadata>,
         generate_entrypoints: bool,
+        skip_balance_injection: bool,
     ) -> Result<(), HookOrchestratorError>;
 }
 
@@ -72,13 +73,15 @@ impl DefaultUniswapV4HookOrchestrator {
     #[instrument(skip(self, block_changes, metadata, component_entrypoints), fields(
         component_count = metadata.len(),
         entrypoint_count = component_entrypoints.len(),
-        tx_count = block_changes.txs_with_update.len()
+        tx_count = block_changes.txs_with_update.len(),
+        skip_balance_injection = skip_balance_injection
     ))]
     fn prepare_components(
         &self,
         block_changes: &mut BlockChanges,
         metadata: &HashMap<String, ComponentTracingMetadata>,
         component_entrypoints: HashMap<ComponentId, Vec<(TxHash, EntryPointWithTracingParams)>>,
+        skip_balance_injection: bool,
     ) -> Result<(), HookOrchestratorError> {
         debug!("Preparing components with metadata and entrypoint params");
 
@@ -153,55 +156,62 @@ impl DefaultUniswapV4HookOrchestrator {
                 }
             }
 
-            if let Some(Ok(balances)) = metadata.balances.clone() {
-                components_with_balances += 1;
-                total_balance_updates += balances.len();
+            if !skip_balance_injection {
+                if let Some(Ok(balances)) = metadata.balances.clone() {
+                    components_with_balances += 1;
+                    total_balance_updates += balances.len();
 
-                debug!(
-                    component_id = %component_id,
-                    balance_count = balances.len(),
-                    "Processing component balances"
-                );
+                    debug!(
+                        component_id = %component_id,
+                        balance_count = balances.len(),
+                        "Processing component balances"
+                    );
 
-                let component_balance = balances
-                    .into_iter()
-                    .map(|(token, balance)| {
-                        let balance_float = bytes_to_f64(balance.as_ref()).ok_or_else(|| {
-                            error!(
+                    let component_balance = balances
+                        .into_iter()
+                        .map(|(token, balance)| {
+                            let balance_float = bytes_to_f64(balance.as_ref()).ok_or_else(|| {
+                                error!(
+                                    component_id = %component_id,
+                                    token = %token,
+                                    balance = %balance,
+                                    "Failed to convert balance to float"
+                                );
+                                HookOrchestratorError::PrepareComponentsFailed(format!(
+                                    "Failed to convert balance to float: {balance}"
+                                ))
+                            })?;
+
+                            debug!(
                                 component_id = %component_id,
                                 token = %token,
-                                balance = %balance,
-                                "Failed to convert balance to float"
+                                balance_raw = %balance,
+                                balance_float = balance_float,
+                                "Converted balance"
                             );
-                            HookOrchestratorError::PrepareComponentsFailed(format!(
-                                "Failed to convert balance to float: {balance}"
+
+                            Ok((
+                                token.clone(),
+                                ComponentBalance::new(
+                                    token,
+                                    balance,
+                                    balance_float,
+                                    tx_delta.tx.hash.clone(),
+                                    component_id,
+                                ),
                             ))
-                        })?;
+                        })
+                        .collect::<Result<HashMap<Address, ComponentBalance>, HookOrchestratorError>>()?;
 
-                        debug!(
-                            component_id = %component_id,
-                            token = %token,
-                            balance_raw = %balance,
-                            balance_float = balance_float,
-                            "Converted balance"
-                        );
-
-                        Ok((
-                            token.clone(),
-                            ComponentBalance::new(
-                                token,
-                                balance,
-                                balance_float,
-                                tx_delta.tx.hash.clone(),
-                                component_id,
-                            ),
-                        ))
-                    })
-                    .collect::<Result<HashMap<Address, ComponentBalance>, HookOrchestratorError>>()?;
-
-                tx_delta
-                    .balance_changes
-                    .insert(component_id.clone(), component_balance);
+                    tx_delta
+                        .balance_changes
+                        .insert(component_id.clone(), component_balance);
+                }
+            } else {
+                debug!(
+                    component_id = %component_id,
+                    "Skipping balance injection - balances already present in block update"
+                );
             }
         }
 
@@ -350,6 +360,8 @@ impl HookOrchestrator for DefaultUniswapV4HookOrchestrator {
         block_number = block_changes.block.number,
         component_count = components.len(),
         metadata_count = metadata.len(),
+        generate_entrypoints = generate_entrypoints,
+        skip_balance_injection = skip_balance_injection
     ))]
     fn update_components(
         &self,
@@ -357,6 +369,7 @@ impl HookOrchestrator for DefaultUniswapV4HookOrchestrator {
         components: &[ProtocolComponent],
         metadata: &HashMap<String, ComponentTracingMetadata>,
         generate_entrypoints: bool,
+        skip_balance_injection: bool,
     ) -> Result<(), HookOrchestratorError> {
         info!("Starting component update process");
 
@@ -370,7 +383,7 @@ impl HookOrchestrator for DefaultUniswapV4HookOrchestrator {
                 }
             };
 
-        self.prepare_components(block_changes, metadata, component_entrypoints)?;
+        self.prepare_components(block_changes, metadata, component_entrypoints, skip_balance_injection)?;
 
         info!("Component update process completed successfully");
         Ok(())
