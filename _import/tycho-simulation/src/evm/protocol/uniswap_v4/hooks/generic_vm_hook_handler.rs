@@ -294,7 +294,6 @@ where
             .updated_attributes
             .get("limits_entrypoint")
         {
-            // TODO double check how exactly this is encoded
             let limits_entrypoint =
                 String::from_utf8(limits_entrypoint_bytes.0.to_vec()).map_err(|e| {
                     TransitionError::SimulationError(SimulationError::FatalError(format!(
@@ -323,7 +322,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{default::Default, str::FromStr};
+    use std::{
+        collections::{HashMap, HashSet},
+        default::Default,
+        str::FromStr,
+    };
 
     use alloy::primitives::{aliases::U24, B256, I256, U256};
     use revm::state::{AccountInfo, Bytecode};
@@ -681,5 +684,54 @@ mod tests {
                 panic!("get_amount_out ranges failed {e}");
             }
         }
+    }
+
+    #[test]
+    fn test_delta_transition_limits_entrypoint_decoding() {
+        let block = BlockHeader {
+            number: 1,
+            hash: Bytes::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+            timestamp: 1748397011,
+            ..Default::default()
+        };
+        let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
+        let engine = create_engine(db, true).expect("Failed to create simulation engine");
+
+        let mut hook_handler = GenericVMHookHandler {
+            contract: TychoSimulationContract::new(Address::ZERO, engine).unwrap(),
+            address: Address::ZERO,
+            pool_manager: Address::ZERO,
+            limits_entrypoint: None,
+        };
+
+        assert!(hook_handler.limits_entrypoint.is_none());
+        let limits_entrypoint_value =
+            "0xC88b618C2c670c2e2a42e06B466B6F0e82A6E8A8:getLimits(address,address)";
+        let mut updated_attributes = HashMap::new();
+
+        // Imitate the way that the limits_entrypoint is inserted in the indexer
+        updated_attributes.insert(
+            "limits_entrypoint".to_string(),
+            Bytes::from(
+                limits_entrypoint_value
+                    .as_bytes()
+                    .to_vec(),
+            ),
+        );
+
+        let delta = ProtocolStateDelta {
+            component_id: "hook_component".to_string(),
+            updated_attributes,
+            deleted_attributes: HashSet::new(),
+        };
+
+        let result = hook_handler.delta_transition(delta, &HashMap::new(), &Default::default());
+        assert!(result.is_ok());
+
+        // Verify the limits_entrypoint was updated correctly
+        assert_eq!(hook_handler.limits_entrypoint.unwrap(), limits_entrypoint_value);
     }
 }
