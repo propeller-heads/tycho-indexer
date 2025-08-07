@@ -203,18 +203,8 @@ impl SynchronizerStream {
                 .await
                 // TODO: if we entered advanced state we need to buffer the message for a while.
             }
-            SynchronizerState::Delayed(old_block) => {
+            SynchronizerState::Delayed(old_block) | SynchronizerState::Stale(old_block) => {
                 // try to catch up all currently queued blocks until the expected block
-                debug!(
-                    ?old_block,
-                    ?latest_block,
-                    %extractor_id,
-                    "Trying to catch up to latest block"
-                );
-                self.try_catch_up(block_history, max_wait, stale_threshold)
-                    .await
-            }
-            SynchronizerState::Stale(old_block) => {
                 debug!(
                     ?old_block,
                     ?latest_block,
@@ -248,7 +238,7 @@ impl SynchronizerStream {
                 error!(
                     %extractor_id,
                     ?previous_block,
-                    "Extractor terminated: channel closed!"
+                    "SynchronizerStream terminated: channel closed!"
                 );
                 self.state = SynchronizerState::Ended;
                 self.modify_ts = Local::now().naive_utc();
@@ -256,7 +246,7 @@ impl SynchronizerStream {
             }
             Err(_) => {
                 // trying to advance a block timed out
-                debug!(%extractor_id, ?previous_block, "Extractor did not check in within time.");
+                debug!(%extractor_id, ?previous_block, "No block received within time limit.");
 
                 match &self.state {
                     SynchronizerState::Ready(_) => {
@@ -371,7 +361,7 @@ impl SynchronizerStream {
             warn!(
                 extractor_id=%self.extractor_id,
                 last_message_at=?self.modify_ts,
-                "Extractor transition to stale due to timeout."
+                "SynchronizerStream transition to stale due to timeout."
             );
             self.state = SynchronizerState::Stale(header_to_use);
             self.modify_ts = now;
@@ -400,6 +390,11 @@ impl SynchronizerStream {
         match block_history.determine_block_position(&latest_retrieved)? {
             BlockPosition::NextExpected => {
                 self.state = SynchronizerState::Ready(latest_retrieved.clone());
+                trace!(
+                    next = ?latest_retrieved,
+                    extractor = ?extractor_id,
+                    "SynchronizerStream transition to next expected"
+                )
             }
             BlockPosition::Latest | BlockPosition::Delayed => {
                 if !self.check_and_transition_to_stale_if_needed(
@@ -410,7 +405,7 @@ impl SynchronizerStream {
                         ?extractor_id,
                         ?last_message_at,
                         ?block,
-                        "Extractor transition to delayed."
+                        "SynchronizerStream transition transition to delayed."
                     );
                     self.state = SynchronizerState::Delayed(latest_retrieved.clone());
                 }
@@ -419,8 +414,9 @@ impl SynchronizerStream {
                 error!(
                     ?extractor_id,
                     ?last_message_at,
+                    latest = ?block_history.latest(),
                     ?block,
-                    "Extractor transition to advanced."
+                    "SynchronizerStream transition to advanced."
                 );
                 self.state = SynchronizerState::Advanced(latest_retrieved.clone());
             }
@@ -693,17 +689,18 @@ where
                 // Check if we have any active synchronizers (Ready, Delayed, or Advanced)
                 // If all synchronizers have been purged (Stale/Ended), exit the main loop
                 if sync_streams.is_empty() {
+                    error!("No healthy SynchronizerStream remain");
                     return Err(BlockSynchronizerError::NoReadySynchronizers.into());
                 }
 
-                // Find a block header from Ready or Delayed synchronizers to advance block history
+                // Find the latest connected block header to advance history
                 if let Some(header) = sync_streams
                     .values()
                     .filter_map(|v| match &v.state {
                         SynchronizerState::Ready(b) | SynchronizerState::Delayed(b) => Some(b),
                         _ => None,
                     })
-                    .next()
+                    .max_by_key(|b| b.number)
                 {
                     block_history.push(header.clone())?;
                 } else {
@@ -711,6 +708,8 @@ where
                     // (they must be Advanced). Continue the loop to let them transition properly.
                     // This handles the case where all synchronizers are temporarily Advanced
                     // and need time to transition back to Ready/Delayed or go Stale.
+                    // TODO: this case is not properly handled yet
+                    warn!("No progress on block history");
                 }
             }
         });
@@ -1053,6 +1052,8 @@ mod tests {
             .recv()
             .await
             .expect("header channel was closed");
+        debug!("Consumed second message for v2");
+
         assert!(second_feed_msg
             .state_msgs
             .contains_key("uniswap-v2"));
@@ -1073,11 +1074,6 @@ mod tests {
             .send_header(block2_msg.clone())
             .await
             .expect("send_header failed");
-
-        // Give the synchronizer time to process v3's catch-up
-        // The BlockSynchronizer uses 10ms timeouts in tests, so we wait slightly longer
-        // to ensure the catch-up is processed and the block history is updated
-        tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
 
         // Both advance to block 3
         let block3_msg = StateSyncMessage {
@@ -1106,7 +1102,8 @@ mod tests {
             .await
             .expect("header channel was closed");
 
-        // If this message doesn't have both univ2, it's an intermediate message, so we get the next one
+        // If this message doesn't have both univ2, it's an intermediate message, so we get the next
+        // one
         if !third_feed_msg
             .state_msgs
             .contains_key("uniswap-v2")
