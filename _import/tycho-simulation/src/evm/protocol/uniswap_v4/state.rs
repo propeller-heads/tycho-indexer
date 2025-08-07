@@ -292,12 +292,7 @@ impl UniswapV4State {
         let token_out_obj =
             Token::new(&token_out, "TOKEN_OUT", 18, 0, &[Some(10_000)], Default::default(), 100);
 
-        // Find limit for token_in -> token_out
-        let max_amount_in = self.find_max_amount(&token_in_obj, &token_out_obj)?;
-        // Find limit for token_out -> token_in
-        let max_amount_out = self.find_max_amount(&token_out_obj, &token_in_obj)?;
-
-        Ok((max_amount_in, max_amount_out))
+        self.find_max_amount(&token_in_obj, &token_out_obj)
     }
 
     /// Finds max amount by performing exponential search.
@@ -308,32 +303,36 @@ impl UniswapV4State {
     /// - If you were to start binary search from 1 to 10^76, you'd need hundreds of iterations.
     ///
     /// More about exponential search: https://en.wikipedia.org/wiki/Exponential_search
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple containing the max amount in and max amount out respectively.
     fn find_max_amount(
         &self,
         token_in: &Token,
         token_out: &Token,
-    ) -> Result<BigUint, SimulationError> {
+    ) -> Result<(BigUint, BigUint), SimulationError> {
         let mut low = BigUint::from(1u64);
 
         // The max you can swap on a USV4 is I256::MAX is 5.7e76, since input amount is I256.
         // So start with something much smaller to search for a reasonable upper bound.
         let mut high = BigUint::from(10u64).pow(18); // 1 ether in wei
-        let mut last_successful = BigUint::from(1u64);
+        let mut last_successful_amount_in = BigUint::from(1u64);
+        let mut last_successful_amount_out = BigUint::from(0u64);
 
         // First, find an upper bound where the swap fails using exponential search.
-        while self
-            .get_amount_out(high.clone(), token_in, token_out)
-            .is_ok()
-        {
+        // Save and return both the amount in and amount out.
+        while let Ok(result) = self.get_amount_out(high.clone(), token_in, token_out) {
             // We haven't found the upper bound yet, increase the attempted upper bound
             // by order of magnitude and store the last success as the lower bound.
-            low = last_successful;
-            last_successful = high.clone();
+            low = last_successful_amount_in.clone();
+            last_successful_amount_in = high.clone();
+            last_successful_amount_out = result.amount;
             high *= BigUint::from(10u64);
 
             // Stop if we're getting too large for I256 (about 10^75)
             if high > BigUint::from(10u64).pow(75) {
-                return Ok(last_successful);
+                return Ok((last_successful_amount_in, last_successful_amount_out));
             }
         }
 
@@ -342,8 +341,9 @@ impl UniswapV4State {
             let mid = (&low + &high) / BigUint::from(2u64);
 
             match self.get_amount_out(mid.clone(), token_in, token_out) {
-                Ok(_) => {
-                    last_successful = mid.clone();
+                Ok(result) => {
+                    last_successful_amount_in = mid.clone();
+                    last_successful_amount_out = result.amount;
                     low = mid;
                 }
                 Err(_) => {
@@ -352,7 +352,7 @@ impl UniswapV4State {
             }
         }
 
-        Ok(last_successful)
+        Ok((last_successful_amount_in, last_successful_amount_out))
     }
 
     /// Helper method to check if there are no initialized ticks in either direction
@@ -1148,12 +1148,13 @@ mod tests {
             .get_limits(token_in, token_out)
             .expect("Should find limits through experimental swapping");
 
-        // At least 10 million USDC, not more than 100 million USDC
-        assert!(amount_in_limit > BigUint::from(10u64).pow(13));
+        // Assuming pool supply doesn't change drastically at time of this test
+        // At least 1 million USDC, not more than 100 million USDC
+        assert!(amount_in_limit > BigUint::from(10u64).pow(12));
         assert!(amount_in_limit < BigUint::from(10u64).pow(14));
 
-        // At least 1000 ETH, not more than 10 000 ETH
-        assert!(amount_out_limit > BigUint::from(10u64).pow(21));
+        // At least 100 ETH, not more than 10 000 ETH
+        assert!(amount_out_limit > BigUint::from(10u64).pow(20));
         assert!(amount_out_limit < BigUint::from(10u64).pow(22));
     }
 
@@ -1193,16 +1194,16 @@ mod tests {
         let token_in = usdc();
         let token_out = weth();
 
-        let max_amount = usv4_state
+        let (max_amount_in, _max_amount_out) = usv4_state
             .find_max_amount(&token_in, &token_out)
             .unwrap();
 
         let success = usv4_state
-            .get_amount_out(max_amount.clone(), &token_in, &token_out)
+            .get_amount_out(max_amount_in.clone(), &token_in, &token_out)
             .is_ok();
         assert!(success, "Should be able to swap the exact max amount.");
 
-        let one_more = &max_amount + BigUint::from(1u64);
+        let one_more = &max_amount_in + BigUint::from(1u64);
         let should_fail = usv4_state
             .get_amount_out(one_more, &token_in, &token_out)
             .is_err();
