@@ -705,11 +705,9 @@ where
                     block_history.push(header.clone())?;
                 } else {
                     // No Ready or Delayed synchronizers, but we still have some synchronizers
-                    // (they must be Advanced). Continue the loop to let them transition properly.
-                    // This handles the case where all synchronizers are temporarily Advanced
-                    // and need time to transition back to Ready/Delayed or go Stale.
-                    // TODO: this case is not properly handled yet
-                    warn!("No progress on block history");
+                    // we can probably recover here but since this is unlikely we error for now
+                    error!("Only advanced SynchronizerStreams remain");
+                    return Err(BlockSynchronizerError::NoReadySynchronizers.into());
                 }
             }
         });
