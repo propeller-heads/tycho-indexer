@@ -629,7 +629,14 @@ where
             })?;
 
         // 1. Filter components with swap hooks (beforeSwap/afterSwap only)
-        let swap_hook_components = self.extract_components_with_swap_hooks(block_changes)?;
+        let swap_hook_components = {
+            let _span = span!(
+                Level::INFO,
+                "extract_swap_hook_components"
+            ).entered();
+            
+            self.extract_components_with_swap_hooks(block_changes)?
+        };
 
         // Early stop if no hook-components are affected
         if swap_hook_components.is_empty() {
@@ -646,8 +653,15 @@ where
         );
 
         // 2. Categorize components based on processing state
-        let (components_needing_full_processing, components_needing_balance_only) =
-            self.categorize_components(&swap_hook_components)?;
+        let (components_needing_full_processing, components_needing_balance_only) = {
+            let _span = span!(
+                Level::INFO,
+                "categorize_components",
+                total_components = swap_hook_components.len()
+            ).entered();
+            
+            self.categorize_components(&swap_hook_components)?
+        };
 
         info!(
             full_processing = components_needing_full_processing.len(),
@@ -656,7 +670,12 @@ where
         );
 
         // 3. Process the components - collect metadata
-        let metadata_span = span!(Level::INFO, "collect_metadata");
+        let metadata_span = span!(
+            Level::INFO, 
+            "collect_metadata",
+            balance_only_count = components_needing_balance_only.len(),
+            full_processing_count = components_needing_full_processing.len()
+        );
         let _metadata_guard = metadata_span.enter();
 
         let component_metadata = self
@@ -682,35 +701,45 @@ where
         self.process_metadata_errors(&component_metadata, &block_changes.block)?;
 
         // 4. Group components by hook address and separate by processing needs
-        let mut components_by_hook_full_processing: HashMap<Address, Vec<ProtocolComponent>> = HashMap::new();
-        let mut components_by_hook_balance_only: HashMap<Address, Vec<ProtocolComponent>> = HashMap::new();
-        let mut metadata_by_component_id: HashMap<ComponentId, _> = HashMap::new();
+        let (components_by_hook_full_processing, components_by_hook_balance_only, metadata_by_component_id) = {
+            let _span = span!(
+                Level::INFO,
+                "group_components_by_hook",
+                total_metadata = component_metadata.len()
+            ).entered();
+            
+            let mut components_by_hook_full_processing: HashMap<Address, Vec<ProtocolComponent>> = HashMap::new();
+            let mut components_by_hook_balance_only: HashMap<Address, Vec<ProtocolComponent>> = HashMap::new();
+            let mut metadata_by_component_id: HashMap<ComponentId, _> = HashMap::new();
 
-        // Create lookup sets for quick component categorization
-        let full_processing_ids: std::collections::HashSet<ComponentId> = components_needing_full_processing
-            .iter()
-            .map(|(_, comp)| comp.id.clone())
-            .collect();
+            // Create lookup sets for quick component categorization
+            let full_processing_ids: std::collections::HashSet<ComponentId> = components_needing_full_processing
+                .iter()
+                .map(|(_, comp)| comp.id.clone())
+                .collect();
 
-        for (component, metadata) in component_metadata {
-            metadata_by_component_id.insert(component.id.clone(), metadata);
+            for (component, metadata) in component_metadata {
+                metadata_by_component_id.insert(component.id.clone(), metadata);
 
-            if let Some(hook_address) = component.static_attributes.get("hooks") {
-                if full_processing_ids.contains(&component.id) {
-                    // Component needs full processing (entrypoint generation)
-                    components_by_hook_full_processing
-                        .entry(hook_address.clone())
-                        .or_default()
-                        .push(component);
-                } else {
-                    // Component only needs balance updates
-                    components_by_hook_balance_only
-                        .entry(hook_address.clone())
-                        .or_default()
-                        .push(component);
+                if let Some(hook_address) = component.static_attributes.get("hooks") {
+                    if full_processing_ids.contains(&component.id) {
+                        // Component needs full processing (entrypoint generation)
+                        components_by_hook_full_processing
+                            .entry(hook_address.clone())
+                            .or_default()
+                            .push(component);
+                    } else {
+                        // Component only needs balance updates
+                        components_by_hook_balance_only
+                            .entry(hook_address.clone())
+                            .or_default()
+                            .push(component);
+                    }
                 }
             }
-        }
+            
+            (components_by_hook_full_processing, components_by_hook_balance_only, metadata_by_component_id)
+        };
 
         // 5a. Call appropriate hook orchestrator for components needing full processing (entrypoint generation)
         info!(
