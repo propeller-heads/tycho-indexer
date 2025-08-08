@@ -479,12 +479,11 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             totalMakerAmount,
             "USDC should be at receiver"
         );
-        // ETH balance check - the harness may have different balance due to test setup
-        // Just ensure no excessive ETH is stuck
-        assertLe(
+        // With pranking, settlement pulls ETH from taker; executor keeps msg.value
+        assertEq(
             address(bebopExecutor).balance,
-            initialExecutorBalance + 1 ether,
-            "Too much ETH left in executor"
+            totalTakerAmount,
+            "Executor ETH balance should equal msg.value for aggregate ETH flow"
         );
     }
 
@@ -625,12 +624,11 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             expectedPartialOutput,
             "USDC should be at receiver"
         );
-        // ETH balance check - the harness may have different balance due to test setup
-        // Just ensure no excessive ETH is stuck
-        assertLe(
+        // With pranking, settlement pulls ETH from taker; executor keeps msg.value
+        assertEq(
             address(bebopExecutor).balance,
-            initialExecutorBalance + 1 ether,
-            "Too much ETH left in executor"
+            partialFillAmount,
+            "Executor ETH balance should equal msg.value for aggregate ETH flow"
         );
     }
 
