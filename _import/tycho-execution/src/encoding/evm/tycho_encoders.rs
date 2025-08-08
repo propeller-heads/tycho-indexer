@@ -1,7 +1,7 @@
 use std::{collections::HashSet, str::FromStr};
 
 use alloy::signers::local::PrivateKeySigner;
-use tycho_common::Bytes;
+use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -16,7 +16,7 @@ use crate::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
     },
     models::{
-        Chain, EncodedSolution, EncodingContext, NativeAction, Solution, Transaction, TransferType,
+        EncodedSolution, EncodingContext, NativeAction, Solution, Transaction, TransferType,
         UserTransferType,
     },
     strategy_encoder::StrategyEncoder,
@@ -61,19 +61,19 @@ impl TychoRouterEncoder {
         };
         Ok(TychoRouterEncoder {
             single_swap_strategy: SingleSwapStrategyEncoder::new(
-                chain.clone(),
+                chain,
                 swap_encoder_registry.clone(),
                 user_transfer_type.clone(),
                 router_address.clone(),
             )?,
             sequential_swap_strategy: SequentialSwapStrategyEncoder::new(
-                chain.clone(),
+                chain,
                 swap_encoder_registry.clone(),
                 user_transfer_type.clone(),
                 router_address.clone(),
             )?,
             split_swap_strategy: SplitSwapStrategyEncoder::new(
-                chain.clone(),
+                chain,
                 swap_encoder_registry,
                 user_transfer_type.clone(),
                 router_address.clone(),
@@ -153,11 +153,11 @@ impl TychoEncoder for TychoRouterEncoder {
             let encoded_solution = self.encode_solution(solution)?;
 
             let transaction = encode_tycho_router_call(
-                self.chain.id,
+                self.chain.id(),
                 encoded_solution,
                 solution,
                 &self.user_transfer_type,
-                &self.chain.native_token()?,
+                &self.chain.native_token().address,
                 self.signer.clone(),
             )?;
 
@@ -186,8 +186,11 @@ impl TychoEncoder for TychoRouterEncoder {
         if solution.swaps.is_empty() {
             return Err(EncodingError::FatalError("No swaps found in solution".to_string()));
         }
-        let native_address = self.chain.native_token()?;
-        let wrapped_address = self.chain.wrapped_token()?;
+        let native_address = self.chain.native_token().address;
+        let wrapped_address = self
+            .chain
+            .wrapped_native_token()
+            .address;
         if let Some(native_action) = &solution.native_action {
             if native_action == &NativeAction::Wrap {
                 if solution.given_token != native_address {
@@ -387,7 +390,7 @@ mod tests {
     use std::{collections::HashMap, str::FromStr};
 
     use num_bigint::{BigInt, BigUint};
-    use tycho_common::models::{protocol::ProtocolComponent, Chain as TychoCommonChain};
+    use tycho_common::models::{protocol::ProtocolComponent, Chain};
 
     use super::*;
     use crate::encoding::models::Swap;
@@ -419,7 +422,7 @@ mod tests {
     // Fee and tick spacing information for this test is obtained by querying the
     // USV4 Position Manager contract: 0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e
     // Using the poolKeys function with the first 25 bytes of the pool id
-    fn swap_usdc_eth_univ4() -> Swap {
+    fn swap_usdc_eth_univ4() -> Swap<'static> {
         let pool_fee_usdc_eth = Bytes::from(BigInt::from(3000).to_signed_bytes_be());
         let tick_spacing_usdc_eth = Bytes::from(BigInt::from(60).to_signed_bytes_be());
         let mut static_attributes_usdc_eth: HashMap<String, Bytes> = HashMap::new();
@@ -437,10 +440,11 @@ mod tests {
             token_out: eth().clone(),
             split: 0f64,
             user_data: None,
+            protocol_state: None,
         }
     }
 
-    fn swap_eth_pepe_univ4() -> Swap {
+    fn swap_eth_pepe_univ4() -> Swap<'static> {
         let pool_fee_eth_pepe = Bytes::from(BigInt::from(25000).to_signed_bytes_be());
         let tick_spacing_eth_pepe = Bytes::from(BigInt::from(500).to_signed_bytes_be());
         let mut static_attributes_eth_pepe: HashMap<String, Bytes> = HashMap::new();
@@ -458,6 +462,7 @@ mod tests {
             token_out: pepe().clone(),
             split: 0f64,
             user_data: None,
+            protocol_state: None,
         }
     }
 
@@ -466,7 +471,7 @@ mod tests {
     }
 
     fn eth_chain() -> Chain {
-        TychoCommonChain::Ethereum.into()
+        Chain::Ethereum
     }
 
     fn get_swap_encoder_registry() -> SwapEncoderRegistry {
@@ -506,6 +511,7 @@ mod tests {
                 token_out: dai(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -571,6 +577,7 @@ mod tests {
                 token_out: dai(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let swap_dai_usdc = Swap {
@@ -583,6 +590,7 @@ mod tests {
                 token_out: usdc(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -663,6 +671,7 @@ mod tests {
                 token_out: dai(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -692,6 +701,7 @@ mod tests {
                 token_out: dai(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -726,6 +736,7 @@ mod tests {
                 token_out: dai(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -780,6 +791,7 @@ mod tests {
                 token_out: weth(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -808,6 +820,7 @@ mod tests {
                 token_out: weth(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -843,6 +856,7 @@ mod tests {
                 token_out: eth(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -883,6 +897,7 @@ mod tests {
                     token_out: weth(),
                     split: 0.5f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -894,6 +909,7 @@ mod tests {
                     token_out: weth(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -905,6 +921,7 @@ mod tests {
                     token_out: dai(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
             ];
 
@@ -938,6 +955,7 @@ mod tests {
                     token_out: weth(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -949,6 +967,7 @@ mod tests {
                     token_out: usdc(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -960,6 +979,7 @@ mod tests {
                     token_out: dai(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -971,6 +991,7 @@ mod tests {
                     token_out: wbtc(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
             ];
 
@@ -1011,6 +1032,7 @@ mod tests {
                     token_out: dai(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -1022,6 +1044,7 @@ mod tests {
                     token_out: weth(),
                     split: 0.5f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -1033,6 +1056,7 @@ mod tests {
                     token_out: weth(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
             ];
 
@@ -1066,6 +1090,7 @@ mod tests {
                     token_out: dai(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
                 Swap {
                     component: ProtocolComponent {
@@ -1077,6 +1102,7 @@ mod tests {
                     token_out: weth(),
                     split: 0f64,
                     user_data: None,
+                    protocol_state: None,
                 },
             ];
 
@@ -1131,6 +1157,7 @@ mod tests {
                 token_out: token_out.clone(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {
@@ -1191,6 +1218,7 @@ mod tests {
                 token_out: token_out.clone(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let solution = Solution {

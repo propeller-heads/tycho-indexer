@@ -1,7 +1,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use alloy::{primitives::B256, signers::local::PrivateKeySigner};
-use tycho_common::{models::Chain as TychoCommonChain, Bytes};
+use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -10,7 +10,7 @@ use crate::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         tycho_encoders::{TychoExecutorEncoder, TychoRouterEncoder},
     },
-    models::{Chain, UserTransferType},
+    models::UserTransferType,
     tycho_encoder::TychoEncoder,
 };
 
@@ -41,8 +41,8 @@ impl TychoRouterEncoderBuilder {
             user_transfer_type: None,
         }
     }
-    pub fn chain(mut self, chain: TychoCommonChain) -> Self {
-        self.chain = Some(chain.into());
+    pub fn chain(mut self, chain: Chain) -> Self {
+        self.chain = Some(chain);
         self
     }
 
@@ -85,10 +85,10 @@ impl TychoRouterEncoderBuilder {
             if let Some(address) = self.router_address {
                 tycho_router_address = address;
             } else {
-                let default_routers: HashMap<String, Bytes> =
+                let default_routers: HashMap<Chain, Bytes> =
                     serde_json::from_str(DEFAULT_ROUTERS_JSON)?;
                 tycho_router_address = default_routers
-                    .get(&chain.name)
+                    .get(&chain)
                     .ok_or(EncodingError::FatalError(
                         "No default router address found for chain".to_string(),
                     ))?
@@ -96,7 +96,7 @@ impl TychoRouterEncoderBuilder {
             }
 
             let swap_encoder_registry =
-                SwapEncoderRegistry::new(self.executors_file_path.clone(), chain.clone())?;
+                SwapEncoderRegistry::new(self.executors_file_path.clone(), chain)?;
 
             let signer = if let Some(pk) = self.swapper_pk {
                 let pk = B256::from_str(&pk).map_err(|_| {
@@ -141,8 +141,8 @@ impl TychoExecutorEncoderBuilder {
     pub fn new() -> Self {
         TychoExecutorEncoderBuilder { chain: None, executors_file_path: None }
     }
-    pub fn chain(mut self, chain: TychoCommonChain) -> Self {
-        self.chain = Some(chain.into());
+    pub fn chain(mut self, chain: Chain) -> Self {
+        self.chain = Some(chain);
         self
     }
 
@@ -158,7 +158,7 @@ impl TychoExecutorEncoderBuilder {
     pub fn build(self) -> Result<Box<dyn TychoEncoder>, EncodingError> {
         if let Some(chain) = self.chain {
             let swap_encoder_registry =
-                SwapEncoderRegistry::new(self.executors_file_path.clone(), chain.clone())?;
+                SwapEncoderRegistry::new(self.executors_file_path.clone(), chain)?;
             Ok(Box::new(TychoExecutorEncoder::new(swap_encoder_registry)?))
         } else {
             Err(EncodingError::FatalError(

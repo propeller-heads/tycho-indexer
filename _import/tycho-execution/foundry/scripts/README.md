@@ -54,3 +54,35 @@ For each of the following, you must select one of `tenderly_ethereum`, `tenderly
 1. If you set a new executor for the same protocol, you need to remove the old one.
 2. Run: `npx hardhat run scripts/remove-executor.js --network NETWORK`
 3. There will be a prompt for you to insert the executor address you want to remove.
+
+### Revoke roles
+
+1. If you wish to revoke a role for a certain address, run: `npx hardhat run scripts/revoke-role.js --network NETWORK`
+2. There will be a prompt for you to insert the role hash and the address you want to revoke it for.
+
+### Safe wallet
+
+1. If the wallet that has the role, is a Gnosis Safe, you need to set the `SAFE_ADDRESS` env var.
+2. The scripts deploy-executors, remove-executor, set-roles and revoke-role all support this.
+    1. If `SAFE_ADDRESS` is set, then it will propose a transaction to the safe wallet and later on it needs to be
+       approved in their UI to execute on chain.
+    2. If it's not set, it will submit the transaction directly to the chain.
+
+## Deploy Uniswap X filler
+
+The current script deploys an Uniswap X filler and verifies it in the corresponding blockchain explorer.
+
+Make sure to run `unset HISTFILE` in your terminal before setting the private key. This will prevent the private key
+from being stored in the shell history.
+
+1. Set the following environment variables:
+
+```
+export RPC_URL=<chain-rpc-url>
+export PRIVATE_KEY=<deploy-wallet-private-key>
+export BLOCKCHAIN_EXPLORER_API_KEY=<blockchain-explorer-api-key>
+```
+
+2. Confirm that the variables `tychoRouter`, `uniswapXReactor` and `nativeToken` are correctly set in the script. Make
+   sure that the Uniswap X Reactor address matches the reactor you are targeting.
+3. Run `npx hardhat run scripts/deploy-uniswap-x-filler.js --network NETWORK`.

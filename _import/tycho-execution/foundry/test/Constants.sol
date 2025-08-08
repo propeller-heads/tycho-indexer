@@ -78,6 +78,7 @@ contract Constants is Test, BaseConstants {
 
     // Uniswap v3
     address DAI_WETH_USV3 = 0xC2e9F25Be6257c210d7Adf0D4Cd6E3E881ba25f8;
+    address DAI_USDT_USV3 = 0x48DA0965ab2d2cbf1C17C09cFB5Cbe67Ad5B1406;
     address USDC_WETH_USV3 = 0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640; // 0.05% fee
     address USDC_WETH_USV3_2 = 0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8; // 0.3% fee
 

@@ -7,10 +7,9 @@ use alloy::{
     primitives::{B256, U256},
     signers::local::PrivateKeySigner,
 };
-use tycho_common::{models::Chain as TychoCommonChain, Bytes};
+use tycho_common::{models::Chain, Bytes};
 use tycho_execution::encoding::{
-    evm::encoder_builders::TychoRouterEncoderBuilder,
-    models::{BebopOrderType, Chain, UserTransferType},
+    evm::encoder_builders::TychoRouterEncoderBuilder, models::UserTransferType,
     tycho_encoder::TychoEncoder,
 };
 
@@ -19,7 +18,7 @@ pub fn router_address() -> Bytes {
 }
 
 pub fn eth_chain() -> Chain {
-    TychoCommonChain::Ethereum.into()
+    Chain::Ethereum
 }
 
 pub fn eth() -> Bytes {
@@ -44,6 +43,10 @@ pub fn wbtc() -> Bytes {
 
 pub fn pepe() -> Bytes {
     Bytes::from_str("0x6982508145454Ce325dDbE47a25d4ec3d2311933").unwrap()
+}
+
+pub fn usdt() -> Bytes {
+    Bytes::from_str("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap()
 }
 
 pub fn ondo() -> Bytes {

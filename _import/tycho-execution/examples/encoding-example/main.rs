@@ -43,6 +43,7 @@ fn main() {
         // the amount or the total remaining balance.
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     // Then we create a solution object with the previous swap
@@ -96,6 +97,7 @@ fn main() {
         token_out: dai.clone(),
         split: 0.5f64,
         user_data: None,
+        protocol_state: None,
     };
     let swap_weth_wbtc = Swap {
         component: ProtocolComponent {
@@ -109,6 +111,7 @@ fn main() {
         // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let swap_dai_usdc = Swap {
         component: ProtocolComponent {
@@ -120,6 +123,7 @@ fn main() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let swap_wbtc_usdc = Swap {
         component: ProtocolComponent {
@@ -131,6 +135,7 @@ fn main() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let mut complex_solution = solution.clone();
     complex_solution.swaps = vec![swap_weth_dai, swap_weth_wbtc, swap_dai_usdc, swap_wbtc_usdc];

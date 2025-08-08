@@ -57,10 +57,11 @@ const executors_to_deploy = {
         },
         // Args: Permit2
         {exchange: "BalancerV2Executor", args: ["0x000000000022D473030F116dDEE9F6B43aC78BA3"]},
-        // Args: Ekubo core contract, Permit2
+        // Args: Ekubo core contract, mev resist, Permit2
         {
             exchange: "EkuboExecutor", args: [
                 "0xe0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444",
+                "0x553a2EFc570c9e104942cEC6aC1c18118e54C091",
                 "0x000000000022D473030F116dDEE9F6B43aC78BA3"
             ]
         },
@@ -78,6 +79,8 @@ const executors_to_deploy = {
                 "0x000000000022D473030F116dDEE9F6B43aC78BA3"
             ]
         },
+        // Args: Permit2
+        {exchange: "BalancerV3Executor", args: ["0x000000000022D473030F116dDEE9F6B43aC78BA3"]},
         // Args: Bebop Settlement contract, Permit2
         {
             exchange: "BebopExecutor",

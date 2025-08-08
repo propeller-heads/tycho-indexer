@@ -493,6 +493,27 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
+    function testSequentialSwapWithUnwrapIntegration() public {
+        // Performs a sequential swap from USDC to ETH through WBTC using USV2 pools and unwrapping in
+        // the end
+        deal(USDC_ADDR, ALICE, 3_000_000_000);
+        uint256 balanceBefore = ALICE.balance;
+
+        // Approve permit2
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
+        bytes memory callData =
+            loadCallDataFromFile("test_sequential_swap_strategy_encoder_unwrap");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = ALICE.balance;
+
+        assertTrue(success, "Call Failed");
+        assertEq(balanceAfter - balanceBefore, 1404194006633772805);
+    }
+
     function testUSV3BebopIntegration() public {
         // Performs a sequential swap from WETH to ONDO through USDC using USV3 and Bebop RFQ
         //
