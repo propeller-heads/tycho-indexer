@@ -2,7 +2,7 @@ use std::{collections::VecDeque, num::NonZeroUsize};
 
 use lru::LruCache;
 use thiserror::Error;
-use tracing::error;
+use tracing::{debug, error};
 use tycho_common::Bytes;
 
 use crate::feed::BlockHeader;
@@ -79,7 +79,7 @@ impl BlockHistory {
         connected_chain.reverse();
 
         let cache_size = NonZeroUsize::new(size * 10).ok_or(BlockHistoryError::InvalidCacheSize)?;
-
+        debug!(tip = ?connected_chain.last(), "InitBlockHistory");
         Ok(Self {
             history: VecDeque::from(connected_chain),
             size,
@@ -127,6 +127,10 @@ impl BlockHistory {
                     return Err(BlockHistoryError::DetachedBlock);
                 }
                 // Push new block to history, marking it as latest.
+                debug!(
+                    tip = ?block.parent_hash,
+                    "BlockHistoryUpdate"
+                );
                 self.history.push_back(block);
                 if self.history.len() > self.size {
                     self.history.pop_front();

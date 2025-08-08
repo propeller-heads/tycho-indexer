@@ -1869,7 +1869,7 @@ mod test {
             .expect("Should be able to send close signal");
         // Task should stop cleanly
         let task_result = jh.await.expect("Task should not panic");
-        assert!(task_result.is_ok(), "Task should exit cleanly after close: {:?}", task_result);
+        assert!(task_result.is_ok(), "Task should exit cleanly after close: {task_result:?}");
     }
 
     #[test(tokio::test)]
@@ -2056,7 +2056,7 @@ mod test {
         let result = state_sync_handle
             .await
             .expect("Task should not panic");
-        assert!(result.is_ok(), "state_sync should exit cleanly when closed: {:?}", result);
+        assert!(result.is_ok(), "state_sync should exit cleanly when closed: {result:?}");
 
         println!("SUCCESS: Close signal handled correctly while waiting for first deltas");
     }
@@ -2191,8 +2191,7 @@ mod test {
             .expect("Task should not panic");
         assert!(
             result.is_ok(),
-            "state_sync should exit cleanly when closed after first message: {:?}",
-            result
+            "state_sync should exit cleanly when closed after first message: {result:?}"
         );
         println!("SUCCESS: Close signal handled correctly during main processing loop");
     }
