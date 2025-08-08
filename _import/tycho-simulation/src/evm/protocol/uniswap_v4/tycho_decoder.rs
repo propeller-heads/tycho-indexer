@@ -113,12 +113,26 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
             })
             .collect();
 
+        let hook_address = snapshot
+            .component
+            .static_attributes
+            .get("hooks");
+
         let mut ticks = match ticks {
             Ok(ticks) if !ticks.is_empty() => ticks
                 .into_iter()
                 .filter(|t| t.net_liquidity != 0)
                 .collect::<Vec<_>>(),
-            _ => return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string())),
+            _ => {
+                // there might be pools where the liquidity is managed by the hook
+                if hook_address.is_some() {
+                    Vec::new()
+                } else {
+                    return Err(InvalidSnapshotError::MissingAttribute(
+                        "tick_liquidities".to_string(),
+                    ))
+                }
+            }
         };
 
         ticks.sort_by_key(|tick| tick.index);
@@ -133,10 +147,6 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
             block.clone(),
         );
 
-        let hook_address = snapshot
-            .component
-            .static_attributes
-            .get("hook");
         if let Some(hook_address) = hook_address {
             let hook_address = Address::from_slice(&hook_address.0);
 
@@ -149,6 +159,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
 
             let hook_params = HookCreationParams::new(
                 block,
+                hook_address,
                 account_balances,
                 all_tokens,
                 state.clone(),

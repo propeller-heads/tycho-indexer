@@ -26,6 +26,7 @@ pub struct SwapParams {
     pub sqrt_price_limit: U256,
 }
 
+#[derive(Debug)]
 pub struct BeforeSwapParameters {
     pub context: StateContext,
     pub sender: Address,

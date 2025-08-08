@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use std::{collections::HashMap, sync::RwLock};
+use std::{collections::HashMap, str::FromStr, sync::RwLock};
 
 use alloy::primitives::Address;
 use lazy_static::lazy_static;
@@ -20,6 +20,7 @@ use crate::{
 /// Parameters for creating a HookHandler.
 pub struct HookCreationParams<'a> {
     block: BlockHeader,
+    hook_address: Address,
     account_balances: &'a HashMap<Bytes, HashMap<Bytes, Bytes>>,
     all_tokens: &'a HashMap<Bytes, Token>,
     state: UniswapV4State,
@@ -34,13 +35,14 @@ pub struct HookCreationParams<'a> {
 impl<'a> HookCreationParams<'a> {
     pub fn new(
         block: BlockHeader,
+        hook_address: Address,
         account_balances: &'a HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &'a HashMap<Bytes, Token>,
         state: UniswapV4State,
         attributes: &'a HashMap<String, Bytes>,
         balances: &'a HashMap<Bytes, Bytes>,
     ) -> Self {
-        Self { block, account_balances, all_tokens, state, attributes, balances }
+        Self { block, hook_address, account_balances, all_tokens, state, attributes, balances }
     }
 }
 
@@ -58,26 +60,24 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
         &self,
         params: HookCreationParams<'_>,
     ) -> Result<Box<dyn HookHandler>, InvalidSnapshotError> {
-        let hook_address_bytes = params
-            .attributes
-            .get("hook_address")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("hook_address".to_string()))?;
+        // let pool_manager_address_bytes = params
+        //     .attributes
+        //     .get("pool_manager_address")
+        //     .ok_or_else(|| {
+        //         InvalidSnapshotError::MissingAttribute("pool_manager_address".to_string())
+        //     })?;
 
-        let pool_manager_address_bytes = params
-            .attributes
-            .get("pool_manager_address")
-            .ok_or_else(|| {
-                InvalidSnapshotError::MissingAttribute("pool_manager_address".to_string())
+        let pool_manager_address = Address::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90")
+            .map_err(|_| {
+                InvalidSnapshotError::ValueError("Couldn't parse pool manager address".to_string())
             })?;
 
-        let hook_address = Address::from_slice(&hook_address_bytes.0);
-        let pool_manager_address = Address::from_slice(&pool_manager_address_bytes.0);
+        // let limits_entrypoint = params
+        //     .attributes
+        //     .get("limits_entrypoint")
+        //     .and_then(|bytes| String::from_utf8(bytes.0.to_vec()).ok());
 
-        let limits_entrypoint = params
-            .attributes
-            .get("limits_entrypoint")
-            .and_then(|bytes| String::from_utf8(bytes.0.to_vec()).ok());
-
+        // TODO: trace should be false by default
         let engine = create_engine(SHARED_TYCHO_DB.clone(), true).map_err(|e| {
             InvalidSnapshotError::VMError(SimulationError::FatalError(format!(
                 "Failed to create engine: {e:?}"
@@ -85,12 +85,12 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
         })?;
 
         let hook_handler = GenericVMHookHandler::new(
-            hook_address,
+            params.hook_address,
             engine,
             pool_manager_address,
             params.all_tokens.clone(),
             params.account_balances.clone(),
-            limits_entrypoint,
+            None,
         )
         .map_err(InvalidSnapshotError::VMError)?;
 
