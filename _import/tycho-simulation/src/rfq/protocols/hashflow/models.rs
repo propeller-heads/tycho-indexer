@@ -11,13 +11,13 @@ pub struct HashflowPriceLevelsResponse {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HashflowMarketMakerLevels {
     pub pair: HashflowPair,
     pub levels: Vec<HashflowPriceLevel>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HashflowPair {
     #[serde(rename = "baseToken", deserialize_with = "deserialize_string_to_checksummed_bytes")]
     pub base_token: Bytes,
@@ -36,7 +36,7 @@ where
     Ok(checksum_bytes)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HashflowPriceLevel {
     #[serde(rename = "q", deserialize_with = "deserialize_string_to_f64")]
     /// Quantity of tokens that can be traded at this level
@@ -101,7 +101,7 @@ impl HashflowMarketMakerLevels {
     /// A tuple of (amount_out, remaining_amount_in) where:
     /// - `amount_out`: The total quote tokens that can be obtained
     /// - `remaining_amount_in`: Any remaining base tokens that couldn't be filled
-    fn get_amount_out_from_levels(&self, amount_in: f64) -> (f64, f64) {
+    pub fn get_amount_out_from_levels(&self, amount_in: f64) -> (f64, f64) {
         let mut remaining_amount_in = amount_in;
         let mut total_amount_out = 0.0;
 

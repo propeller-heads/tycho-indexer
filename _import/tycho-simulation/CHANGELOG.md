@@ -1,3 +1,17 @@
+## [0.144.0](https://github.com/propeller-heads/tycho-simulation/compare/0.143.0...0.144.0) (2025-08-07)
+
+
+### Features
+
+* implement spot_price and get_limits for hashflow client ([254fc6a](https://github.com/propeller-heads/tycho-simulation/commit/254fc6ae35da5bf6ef2dad58945d34bb9a41d62b))
+
+## [0.143.0](https://github.com/propeller-heads/tycho-simulation/compare/0.142.0...0.143.0) (2025-08-07)
+
+
+### Features
+
+* implement ProtocolSim trait for HashflowState ([0f47276](https://github.com/propeller-heads/tycho-simulation/commit/0f47276959c610eb5e8f5c9aa6273527341b582e))
+
 ## [0.142.0](https://github.com/propeller-heads/tycho-simulation/compare/0.141.0...0.142.0) (2025-08-05)
 
 
