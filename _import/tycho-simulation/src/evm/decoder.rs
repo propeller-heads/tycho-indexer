@@ -210,8 +210,8 @@ where
                     .new_tokens
                     .iter()
                     .filter(|(addr, t)| {
-                        t.quality >= self.min_token_quality &&
-                            !state_guard.tokens.contains_key(*addr)
+                        t.quality >= self.min_token_quality
+                            && !state_guard.tokens.contains_key(*addr)
                     })
                     .filter_map(|(addr, t)| {
                         t.clone()
@@ -295,7 +295,7 @@ where
                     .map(|(key, value)| {
                         let mut account: ResponseAccount = value.clone().into();
 
-                        if state_guard.tokens.contains_key(key) && key != weth && key != steth {
+                        if state_guard.tokens.contains_key(key) {
                             // To work with Tycho's token overwrites system, if we get account
                             // snapshots for a token we must handle them
                             // with a proxy/wrapper contract.
@@ -533,7 +533,7 @@ where
                     .map(|(key, value)| {
                         let mut update: AccountUpdate = value.clone().into();
 
-                        if state_guard.tokens.contains_key(key) && key != weth && key != steth {
+                        if state_guard.tokens.contains_key(key) {
                             // If the account is a token, we need to handle it with a proxy contract
 
                             // Get or create a new token address

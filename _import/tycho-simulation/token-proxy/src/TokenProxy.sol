@@ -293,7 +293,7 @@ contract TokenProxy {
         }
         
         // If sender doesn't have custom balance, delegate to implementation
-        (bool success,) = _implementation().call(
+        (bool success,) = _implementation().delegatecall(
             abi.encodeWithSignature("transfer(address,uint256)", to, amount)
         );
         
@@ -381,7 +381,7 @@ contract TokenProxy {
         }
         
         // If we don't have custom balances/approvals, delegate to implementation
-        (bool success,) = _implementation().call(
+        (bool success,) = _implementation().delegatecall(
             abi.encodeWithSignature("transferFrom(address,address,uint256)", from, to, amount)
         );
         
