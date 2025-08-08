@@ -866,7 +866,7 @@ impl SwapEncoder for BebopSwapEncoder {
             )));
         }
 
-        // Extract the original filledTakerAmount and receiver from the order
+        // Extract the original filledTakerAmount from the order and use the context receiver
         let (original_filled_taker_amount, receiver) = {
             let filled_taker_amount = U256::from_be_slice(
                 &bebop_calldata[filled_taker_amount_pos..filled_taker_amount_pos + 32],
@@ -881,62 +881,27 @@ impl SwapEncoder for BebopSwapEncoder {
             const SWAP_AGGREGATE_SELECTOR: [u8; 4] = [0xa2, 0xf7, 0x48, 0x93];
 
             if selector == SWAP_SINGLE_SELECTOR {
-                // For swapSingle, decode the Single struct
-                // Single struct layout (after selector at offset 4):
-                // 0: offset to order (32 bytes) -> points to 96 (0x60)
-                // 32: offset to signature (32 bytes)
-                // 64: filledTakerAmount (32 bytes)
-                // 96: order struct starts here:
-                //   - expiry (32)
-                //   - taker_address (32)
-                //   - maker_address (32)
-                //   - maker_nonce (32)
-                //   - taker_token (32)
-                //   - maker_token (32)
-                //   - taker_amount (32)
-                //   - maker_amount (32)
-                //   - receiver (32)
-                // So receiver is at: 4 + 96 + 256 = 356
-                if bebop_calldata.len() >= 388 {
-                    let taker_amount = if filled_taker_amount != U256::ZERO {
-                        filled_taker_amount
-                    } else {
-                        // taker_amount is at: 4 + 96 + 192 = 292
-                        U256::from_be_slice(&bebop_calldata[292..324])
-                    };
-                    // receiver is at: 4 + 96 + 256 = 356 (take 20 bytes, skip 12 padding)
-                    let receiver_bytes = &bebop_calldata[368..388];
-                    let receiver = Address::from_slice(receiver_bytes);
-                    (taker_amount, receiver)
+                // For swapSingle, only care about taker_amount; receiver comes from context
+                // Single struct layout indicates taker_amount at bytes 292..324
+                let taker_amount = if filled_taker_amount != U256::ZERO {
+                    filled_taker_amount
+                } else if bebop_calldata.len() >= 324 {
+                    U256::from_be_slice(&bebop_calldata[292..324])
                 } else {
-                    (U256::ZERO, Address::ZERO)
-                }
+                    U256::ZERO
+                };
+                (taker_amount, bytes_to_address(&encoding_context.receiver)?)
             } else if selector == SWAP_AGGREGATE_SELECTOR {
-                // For swapAggregate, extract receiver from the aggregate order
-                // The order starts after: selector(4) + offset_to_order(32) +
-                // offset_to_signatures(32) + filledTakerAmount(32) = 100
-                // Then we have the order struct with dynamic arrays
-                // We need to carefully parse to find the receiver field
-                // Since receiver comes after all the dynamic arrays, it's complex to calculate its
-                // exact position For now, we'll use a simplified approach since the
-                // exact receiver extraction for aggregates requires full ABI decoding
-
-                // For aggregate orders, if filled_taker_amount is 0, we need to calculate the total
-                // from the order data because BebopExecutor requires a non-zero value
+                // For swapAggregate, compute taker_amount from calldata if needed; receiver from
+                // context
                 let taker_amount = if filled_taker_amount != U256::ZERO {
                     filled_taker_amount
                 } else {
-                    // Extract and sum all taker amounts from the aggregate order
                     extract_aggregate_taker_amount(&bebop_calldata).unwrap_or(U256::ZERO)
                 };
-
-                // For aggregate orders, extract receiver (this is a simplified extraction)
-                // In real implementation, we'd need proper ABI decoding for the complex nested
-                // structure For now, use zero address as fallback - this will be
-                // handled properly in production
-                (taker_amount, Address::ZERO)
+                (taker_amount, bytes_to_address(&encoding_context.receiver)?)
             } else {
-                (U256::ZERO, Address::ZERO)
+                (U256::ZERO, bytes_to_address(&encoding_context.receiver)?)
             }
         };
 
