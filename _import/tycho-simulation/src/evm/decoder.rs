@@ -190,6 +190,8 @@ where
         let mut new_pairs = HashMap::new();
         let mut removed_pairs = HashMap::new();
         let mut contracts_map = HashMap::new();
+        let weth = &Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
+        let steth = &Bytes::from_str("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0").unwrap();
 
         let header = msg
             .state_msgs
@@ -286,7 +288,6 @@ where
                         .get_vm_storage()
                         .len()
                 );
-
                 let storage_by_address: HashMap<Address, ResponseAccount> = protocol_msg
                     .snapshots
                     .get_vm_storage()
@@ -294,7 +295,7 @@ where
                     .map(|(key, value)| {
                         let mut account: ResponseAccount = value.clone().into();
 
-                        if state_guard.tokens.contains_key(key) {
+                        if state_guard.tokens.contains_key(key) && key != weth && key != steth {
                             // To work with Tycho's token overwrites system, if we get account
                             // snapshots for a token we must handle them
                             // with a proxy/wrapper contract.
@@ -532,7 +533,7 @@ where
                     .map(|(key, value)| {
                         let mut update: AccountUpdate = value.clone().into();
 
-                        if state_guard.tokens.contains_key(key) {
+                        if state_guard.tokens.contains_key(key) && key != weth && key != steth {
                             // If the account is a token, we need to handle it with a proxy contract
 
                             // Get or create a new token address
