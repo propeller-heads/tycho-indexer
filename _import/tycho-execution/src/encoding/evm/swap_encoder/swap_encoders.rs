@@ -875,7 +875,7 @@ impl SwapEncoder for BebopSwapEncoder {
                 &bebop_calldata[filled_taker_amount_pos..filled_taker_amount_pos + 32],
             );
 
-            // Extract receiver and taker_amount from the order based on the function selector
+            // Extract taker_amount from the order based on the function selector
             let selector = &bebop_calldata[0..4];
 
             // swapSingle selector: 0x4dcebcba

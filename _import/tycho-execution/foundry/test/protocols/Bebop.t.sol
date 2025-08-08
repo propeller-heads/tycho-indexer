@@ -227,7 +227,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         // Check initial ONDO balance of receiver
         uint256 initialOndoBalance = ONDO.balanceOf(originalTakerAddress);
 
-        uint256 amountOut = bebopExecutor.swapForTest(testData.amountIn, params);
+        uint256 amountOut = bebopExecutor.swap(testData.amountIn, params);
 
         // Verify results
         assertEq(amountOut, testData.expectedAmountOut, "Incorrect amount out");
@@ -327,7 +327,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         // Check initial ONDO balance of receiver
         uint256 initialOndoBalance = ONDO.balanceOf(originalTakerAddress);
 
-        uint256 amountOut = bebopExecutor.swapForTest(testData.amountIn, params);
+        uint256 amountOut = bebopExecutor.swap(testData.amountIn, params);
 
         // Verify partial fill results
         assertEq(
@@ -427,9 +427,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         vm.prank(makerAddresses[1]);
         USDC.approve(BEBOP_SETTLEMENT, makerAmounts[1][0]);
 
-        // ETH will be handled by the executor harness
-        // Fund the executor with ETH (like we do with ERC20 tokens in single tests)
-        vm.deal(address(bebopExecutor), totalTakerAmount);
+        // For native ETH, settlement pulls from taker; fund taker with ETH
+        vm.deal(originalTakerAddress, totalTakerAmount + 1 ether);
 
         // Create maker signatures
         IBebopSettlement.MakerSignature[] memory signatures =
@@ -467,7 +466,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 initialUsdcBalance = USDC.balanceOf(originalTakerAddress);
 
         // Execute the aggregate swap with ETH value
-        uint256 amountOut = bebopExecutor.swapForTest{value: totalTakerAmount}(
+        uint256 amountOut = bebopExecutor.swap{value: totalTakerAmount}(
             totalTakerAmount, params
         );
 
@@ -479,11 +478,11 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             totalMakerAmount,
             "USDC should be at receiver"
         );
-        // With pranking, settlement pulls ETH from taker; executor keeps msg.value
+        // With pranking, settlement pulls ETH from taker; executor keeps msg.value on top of initial dust
         assertEq(
             address(bebopExecutor).balance,
-            totalTakerAmount,
-            "Executor ETH balance should equal msg.value for aggregate ETH flow"
+            initialExecutorBalance + totalTakerAmount,
+            "Executor ETH balance should be initial + msg.value for aggregate ETH flow"
         );
     }
 
@@ -570,9 +569,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         vm.prank(makerAddresses[1]);
         USDC.approve(BEBOP_SETTLEMENT, makerAmounts[1][0]);
 
-        // ETH will be handled by the executor harness
-        // Fund the executor with ETH (like we do with ERC20 tokens in single tests)
-        vm.deal(address(bebopExecutor), partialFillAmount);
+        // For native ETH, settlement pulls from taker; fund taker with ETH
+        vm.deal(originalTakerAddress, partialFillAmount + 1 ether);
 
         // Create maker signatures
         IBebopSettlement.MakerSignature[] memory signatures =
@@ -610,7 +608,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 initialUsdcBalance = USDC.balanceOf(originalTakerAddress);
 
         // Execute the partial aggregate swap with ETH value
-        uint256 amountOut = bebopExecutor.swapForTest{value: partialFillAmount}(
+        uint256 amountOut = bebopExecutor.swap{value: partialFillAmount}(
             partialFillAmount, params
         );
 
@@ -624,11 +622,11 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             expectedPartialOutput,
             "USDC should be at receiver"
         );
-        // With pranking, settlement pulls ETH from taker; executor keeps msg.value
+        // With pranking, settlement pulls ETH from taker; executor keeps msg.value on top of initial dust
         assertEq(
             address(bebopExecutor).balance,
-            partialFillAmount,
-            "Executor ETH balance should equal msg.value for aggregate ETH flow"
+            initialExecutorBalance + partialFillAmount,
+            "Executor ETH balance should be initial + msg.value for aggregate ETH flow"
         );
     }
 
@@ -750,7 +748,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 initialOndoBalance = ONDO.balanceOf(originalTakerAddress);
 
         // Execute the swap
-        uint256 amountOut = bebopExecutor.swapForTest(amountIn, protocolData);
+        uint256 amountOut = bebopExecutor.swap(amountIn, protocolData);
 
         // Verify results
         assertEq(amountOut, expectedAmountOut, "Incorrect amount out");
@@ -884,7 +882,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         // Execute the swap with native ETH
         uint256 amountOut =
-            bebopExecutor.swapForTest{value: ethAmount}(ethAmount, protocolData);
+            bebopExecutor.swap{value: ethAmount}(ethAmount, protocolData);
 
         // Verify results
         assertEq(amountOut, expAmountOut, "Incorrect amount out");
