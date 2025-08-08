@@ -1,3 +1,14 @@
+## [0.81.3](https://github.com/propeller-heads/tycho-indexer/compare/0.81.2...0.81.3) (2025-08-08)
+
+
+### Bug Fixes
+
+* buggy transitions to advanced ([904314e](https://github.com/propeller-heads/tycho-indexer/commit/904314e5d20485d768e0abb0be3080d30220c430))
+* For now error if we are left with only advanced streams. ([40d3670](https://github.com/propeller-heads/tycho-indexer/commit/40d367092a125ba8a50838b3dc814b527e69fe57))
+* improve stale synchronizer detection in BlockSynchronizer ([0991d3f](https://github.com/propeller-heads/tycho-indexer/commit/0991d3f84989a211c55bd092c8509f530cd0efb3))
+* prevent premature main loop exit when all synchronizers are delayed ([d04ad69](https://github.com/propeller-heads/tycho-indexer/commit/d04ad6909f198536e3d99956d9de39063b785f57))
+* stale synchronizer detection ([#647](https://github.com/propeller-heads/tycho-indexer/issues/647)) ([77f45d4](https://github.com/propeller-heads/tycho-indexer/commit/77f45d437d5df1e73d463403301671276df6e4f1))
+
 ## [0.81.2](https://github.com/propeller-heads/tycho-indexer/compare/0.81.1...0.81.2) (2025-08-06)
 
 
