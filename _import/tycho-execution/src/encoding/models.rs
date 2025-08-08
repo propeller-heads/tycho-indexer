@@ -5,7 +5,7 @@ use tycho_common::{
     models::protocol::ProtocolComponent, simulation::protocol_sim::ProtocolSim, Bytes,
 };
 
-use crate::encoding::serde_primitives::biguint_string;
+use crate::encoding::{errors::EncodingError, serde_primitives::biguint_string};
 
 /// Specifies the method for transferring user funds into Tycho execution.
 ///

@@ -9,7 +9,8 @@ use alloy::{
 };
 use tycho_common::{models::Chain, Bytes};
 use tycho_execution::encoding::{
-    evm::encoder_builders::TychoRouterEncoderBuilder, models::UserTransferType,
+    evm::encoder_builders::TychoRouterEncoderBuilder,
+    models::{BebopOrderType, UserTransferType},
     tycho_encoder::TychoEncoder,
 };
 

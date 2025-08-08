@@ -631,6 +631,7 @@ fn test_uniswap_v3_bebop() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     // Second swap: USDC -> ONDO via Bebop RFQ using real order data
@@ -691,6 +692,7 @@ fn test_uniswap_v3_bebop() {
         token_out: ondo.clone(),
         split: 0f64,
         user_data: Some(user_data),
+        protocol_state: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
@@ -716,7 +718,7 @@ fn test_uniswap_v3_bebop() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,

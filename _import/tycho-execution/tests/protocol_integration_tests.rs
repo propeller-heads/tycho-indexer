@@ -653,6 +653,7 @@ fn test_single_encoding_strategy_bebop() {
         token_out: token_out.clone(),
         split: 0f64,
         user_data: Some(user_data),
+        protocol_state: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
@@ -678,7 +679,7 @@ fn test_single_encoding_strategy_bebop() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -780,6 +781,7 @@ fn test_single_encoding_strategy_bebop_aggregate() {
         token_out: token_out.clone(),
         split: 0f64,
         user_data: Some(user_data),
+        protocol_state: None,
     };
 
     // Use TransferFrom for WETH token transfer
@@ -804,7 +806,7 @@ fn test_single_encoding_strategy_bebop_aggregate() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::None,

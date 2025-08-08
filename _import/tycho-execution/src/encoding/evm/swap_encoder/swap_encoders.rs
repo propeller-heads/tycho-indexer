@@ -2134,6 +2134,7 @@ mod tests {
                 token_out: token_out.clone(),
                 split: 0f64,
                 user_data: Some(Bytes::from(user_data)),
+                protocol_state: None,
             };
 
             let encoding_context = EncodingContext {
@@ -2147,7 +2148,7 @@ mod tests {
 
             let encoder = BebopSwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
-                TychoCoreChain::Ethereum.into(),
+                Chain::Ethereum,
                 Some(HashMap::from([(
                     "bebop_settlement_address".to_string(),
                     "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F".to_string(),
@@ -2328,6 +2329,7 @@ mod tests {
                 token_out: token_out.clone(),
                 split: 0f64,
                 user_data: Some(Bytes::from(user_data)),
+                protocol_state: None,
             };
 
             let encoding_context = EncodingContext {
@@ -2341,7 +2343,7 @@ mod tests {
 
             let encoder = BebopSwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
-                TychoCoreChain::Ethereum.into(),
+                Chain::Ethereum,
                 Some(HashMap::from([(
                     "bebop_settlement_address".to_string(),
                     "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F".to_string(),
