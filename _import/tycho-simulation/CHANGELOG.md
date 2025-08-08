@@ -1,3 +1,10 @@
+## [0.145.0](https://github.com/propeller-heads/tycho-simulation/compare/0.144.0...0.145.0) (2025-08-08)
+
+
+### Features
+
+* **hashflow:** Implement request_binding_quote ([49728dd](https://github.com/propeller-heads/tycho-simulation/commit/49728dd044596e7149b1e70ae8e4c4af68cd0c8e))
+
 ## [0.144.0](https://github.com/propeller-heads/tycho-simulation/compare/0.143.0...0.144.0) (2025-08-07)
 
 
