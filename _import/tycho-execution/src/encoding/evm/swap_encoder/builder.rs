@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use tycho_common::models::Chain;
+
 use crate::encoding::{
     errors::EncodingError,
     evm::swap_encoder::swap_encoders::{
@@ -7,7 +9,6 @@ use crate::encoding::{
         EkuboSwapEncoder, MaverickV2SwapEncoder, UniswapV2SwapEncoder, UniswapV3SwapEncoder,
         UniswapV4SwapEncoder,
     },
-    models::Chain,
     swap_encoder::SwapEncoder,
 };
 

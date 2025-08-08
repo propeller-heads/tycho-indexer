@@ -53,6 +53,7 @@ fn test_uniswap_v3_uniswap_v2() {
         token_out: wbtc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let swap_wbtc_usdc = Swap {
         component: ProtocolComponent {
@@ -64,6 +65,7 @@ fn test_uniswap_v3_uniswap_v2() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -85,7 +87,7 @@ fn test_uniswap_v3_uniswap_v2() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -132,6 +134,7 @@ fn test_uniswap_v3_uniswap_v3() {
         token_out: wbtc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let swap_wbtc_usdc = Swap {
         component: ProtocolComponent {
@@ -151,6 +154,7 @@ fn test_uniswap_v3_uniswap_v3() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -172,7 +176,7 @@ fn test_uniswap_v3_uniswap_v3() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -218,6 +222,7 @@ fn test_uniswap_v3_curve() {
         token_out: wbtc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     let swap_wbtc_usdt = Swap {
@@ -247,6 +252,7 @@ fn test_uniswap_v3_curve() {
         token_out: usdt.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -268,7 +274,7 @@ fn test_uniswap_v3_curve() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -306,6 +312,7 @@ fn test_balancer_v2_uniswap_v2() {
         token_out: wbtc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     let swap_wbtc_usdc = Swap {
@@ -318,6 +325,7 @@ fn test_balancer_v2_uniswap_v2() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -339,7 +347,7 @@ fn test_balancer_v2_uniswap_v2() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -380,6 +388,7 @@ fn test_multi_protocol() {
         token_out: weth.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     let balancer_swap_weth_wbtc = Swap {
@@ -392,6 +401,7 @@ fn test_multi_protocol() {
         token_out: wbtc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     let curve_swap_wbtc_usdt = Swap {
@@ -421,6 +431,7 @@ fn test_multi_protocol() {
         token_out: usdt.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     // Ekubo
@@ -443,6 +454,7 @@ fn test_multi_protocol() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     // USV4
@@ -466,6 +478,7 @@ fn test_multi_protocol() {
         token_out: eth.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
@@ -495,7 +508,7 @@ fn test_multi_protocol() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFromPermit2,
@@ -538,6 +551,7 @@ fn test_uniswap_v3_balancer_v3() {
         token_out: wbtc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let swap_wbtc_qnt = Swap {
         component: ProtocolComponent {
@@ -549,6 +563,7 @@ fn test_uniswap_v3_balancer_v3() {
         token_out: qnt.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -570,7 +585,7 @@ fn test_uniswap_v3_balancer_v3() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -616,6 +631,7 @@ fn test_uniswap_v3_bebop() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     // Second swap: USDC -> ONDO via Bebop RFQ using real order data
@@ -676,6 +692,7 @@ fn test_uniswap_v3_bebop() {
         token_out: ondo.clone(),
         split: 0f64,
         user_data: Some(user_data),
+        protocol_state: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
@@ -701,7 +718,7 @@ fn test_uniswap_v3_bebop() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,

@@ -2,12 +2,12 @@
 pragma solidity ^0.8.26;
 
 import {IFlashAccountant} from "./IFlashAccountant.sol";
-import {EkuboPoolKey} from "../types/poolKey.sol";
+import {PoolKey} from "../types/poolKey.sol";
 import {SqrtRatio} from "../types/sqrtRatio.sol";
 
 interface ICore is IFlashAccountant {
     function swap_611415377(
-        EkuboPoolKey memory poolKey,
+        PoolKey memory poolKey,
         int128 amount,
         bool isToken1,
         SqrtRatio sqrtRatioLimit,

@@ -1,7 +1,7 @@
 use std::{collections::HashSet, str::FromStr};
 
 use alloy::primitives::{aliases::U24, U8};
-use tycho_common::Bytes;
+use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -14,7 +14,7 @@ use crate::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::{get_token_position, percentage_to_uint24, ple_encode},
     },
-    models::{Chain, EncodedSolution, EncodingContext, NativeAction, Solution, UserTransferType},
+    models::{EncodedSolution, EncodingContext, NativeAction, Solution, UserTransferType},
     strategy_encoder::StrategyEncoder,
     swap_encoder::SwapEncoder,
 };
@@ -52,8 +52,8 @@ impl SingleSwapStrategyEncoder {
             swap_encoder_registry,
             router_address: router_address.clone(),
             transfer_optimization: TransferOptimization::new(
-                chain.native_token()?,
-                chain.wrapped_token()?,
+                chain.native_token().address,
+                chain.wrapped_native_token().address,
                 user_transfer_type,
                 router_address,
             ),
@@ -186,16 +186,18 @@ impl SequentialSwapStrategyEncoder {
             "sequentialSwap(uint256,address,address,uint256,bool,bool,address,bool,bytes)"
 
         }.to_string();
+        let native_token_address = chain.native_token().address;
+        let wrapped_token_address = chain.wrapped_native_token().address;
         Ok(Self {
             function_signature,
             swap_encoder_registry,
             router_address: router_address.clone(),
-            native_address: chain.native_token()?,
-            wrapped_address: chain.wrapped_token()?,
+            native_address: native_token_address.clone(),
+            wrapped_address: wrapped_token_address.clone(),
             sequential_swap_validator: SequentialSwapValidator,
             transfer_optimization: TransferOptimization::new(
-                chain.native_token()?,
-                chain.wrapped_token()?,
+                native_token_address,
+                wrapped_token_address,
                 user_transfer_type,
                 router_address,
             ),
@@ -226,10 +228,11 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 
         let grouped_swaps = group_swaps(&solution.swaps);
 
-        let mut wrap = false;
+        let (mut wrap, mut unwrap) = (false, false);
         if let Some(action) = &solution.native_action {
-            if action == &NativeAction::Wrap {
-                wrap = true
+            match *action {
+                NativeAction::Wrap => wrap = true,
+                NativeAction::Unwrap => unwrap = true,
             }
         }
 
@@ -249,7 +252,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
             let next_swap = grouped_swaps.get(i + 1);
             let (swap_receiver, next_swap_optimization) = self
                 .transfer_optimization
-                .get_receiver(&solution.receiver, next_swap)?;
+                .get_receiver(&solution.receiver, next_swap, unwrap)?;
             next_in_between_swap_optimization_allowed = next_swap_optimization;
 
             let transfer = self
@@ -338,16 +341,18 @@ impl SplitSwapStrategyEncoder {
         } else {
                 "splitSwap(uint256,address,address,uint256,bool,bool,uint256,address,bool,bytes)"
         }.to_string();
+        let native_token_address = chain.native_token().address;
+        let wrapped_token_address = chain.wrapped_native_token().address;
         Ok(Self {
             function_signature,
             swap_encoder_registry,
-            native_address: chain.native_token()?,
-            wrapped_address: chain.wrapped_token()?,
+            native_address: native_token_address.clone(),
+            wrapped_address: wrapped_token_address.clone(),
             split_swap_validator: SplitSwapValidator,
             router_address: router_address.clone(),
             transfer_optimization: TransferOptimization::new(
-                chain.native_token()?,
-                chain.wrapped_token()?,
+                native_token_address,
+                wrapped_token_address,
                 user_transfer_type,
                 router_address,
             ),
@@ -508,7 +513,7 @@ mod tests {
     use alloy::{hex::encode, primitives::hex};
     use num_bigint::{BigInt, BigUint};
     use tycho_common::{
-        models::{protocol::ProtocolComponent, Chain as TychoCommonChain},
+        models::{protocol::ProtocolComponent, Chain},
         Bytes,
     };
 
@@ -516,7 +521,7 @@ mod tests {
     use crate::encoding::models::Swap;
 
     fn eth_chain() -> Chain {
-        TychoCommonChain::Ethereum.into()
+        Chain::Ethereum
     }
 
     fn weth() -> Bytes {
@@ -554,6 +559,7 @@ mod tests {
                 token_out: dai.clone(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SingleSwapStrategyEncoder::new(
@@ -615,6 +621,7 @@ mod tests {
                 token_out: dai.clone(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SingleSwapStrategyEncoder::new(
@@ -686,6 +693,7 @@ mod tests {
                 token_out: wbtc.clone(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
             let swap_wbtc_usdc = Swap {
                 component: ProtocolComponent {
@@ -697,6 +705,7 @@ mod tests {
                 token_out: usdc.clone(),
                 split: 0f64,
                 user_data: None,
+                protocol_state: None,
             };
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SequentialSwapStrategyEncoder::new(
@@ -789,6 +798,7 @@ mod tests {
                 token_out: weth.clone(),
                 split: 0.6f64, // 60% of input
                 user_data: None,
+                protocol_state: None,
             };
 
             // USDC -> WETH (Pool 2) - 40% of input (remaining)
@@ -811,6 +821,7 @@ mod tests {
                 token_out: weth.clone(),
                 split: 0f64,
                 user_data: None, // Remaining 40%
+                protocol_state: None,
             };
 
             // WETH -> USDC (Pool 2)
@@ -833,6 +844,7 @@ mod tests {
                 token_out: usdc.clone(),
                 split: 0.0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let swap_encoder_registry = get_swap_encoder_registry();
@@ -941,6 +953,7 @@ mod tests {
                 token_out: weth.clone(),
                 split: 0.0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let swap_weth_usdc_v3_pool1 = Swap {
@@ -962,6 +975,7 @@ mod tests {
                 token_out: usdc.clone(),
                 split: 0.6f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let swap_weth_usdc_v3_pool2 = Swap {
@@ -983,6 +997,7 @@ mod tests {
                 token_out: usdc.clone(),
                 split: 0.0f64,
                 user_data: None,
+                protocol_state: None,
             };
 
             let swap_encoder_registry = get_swap_encoder_registry();

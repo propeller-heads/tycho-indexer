@@ -46,6 +46,7 @@ fn test_single_encoding_strategy_ekubo() {
         token_out: token_out.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
@@ -69,7 +70,7 @@ fn test_single_encoding_strategy_ekubo() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -98,6 +99,7 @@ fn test_single_encoding_strategy_maverick() {
         token_out: token_out.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
@@ -121,7 +123,7 @@ fn test_single_encoding_strategy_maverick() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -162,6 +164,7 @@ fn test_single_encoding_strategy_usv4_eth_in() {
         token_out: pepe.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
@@ -183,7 +186,7 @@ fn test_single_encoding_strategy_usv4_eth_in() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFromPermit2,
@@ -228,6 +231,7 @@ fn test_single_encoding_strategy_usv4_eth_out() {
         token_out: eth.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
@@ -250,7 +254,7 @@ fn test_single_encoding_strategy_usv4_eth_out() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFromPermit2,
@@ -302,6 +306,7 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
         token_out: eth.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     let swap_eth_pepe = Swap {
@@ -315,6 +320,7 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
         token_out: pepe.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
@@ -336,7 +342,7 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFromPermit2,
@@ -423,6 +429,7 @@ fn test_single_encoding_strategy_curve() {
         token_out: token_out.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
@@ -446,7 +453,7 @@ fn test_single_encoding_strategy_curve() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -490,6 +497,7 @@ fn test_single_encoding_strategy_curve_st_eth() {
         token_out: token_out.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
@@ -513,7 +521,7 @@ fn test_single_encoding_strategy_curve_st_eth() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -543,6 +551,7 @@ fn test_single_encoding_strategy_balancer_v3() {
         token_out: token_out.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
@@ -566,7 +575,7 @@ fn test_single_encoding_strategy_balancer_v3() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -644,6 +653,7 @@ fn test_single_encoding_strategy_bebop() {
         token_out: token_out.clone(),
         split: 0f64,
         user_data: Some(user_data),
+        protocol_state: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
@@ -669,7 +679,7 @@ fn test_single_encoding_strategy_bebop() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::TransferFrom,
@@ -771,6 +781,7 @@ fn test_single_encoding_strategy_bebop_aggregate() {
         token_out: token_out.clone(),
         split: 0f64,
         user_data: Some(user_data),
+        protocol_state: None,
     };
 
     // Use TransferFrom for WETH token transfer
@@ -795,7 +806,7 @@ fn test_single_encoding_strategy_bebop_aggregate() {
         .clone();
 
     let calldata = encode_tycho_router_call(
-        eth_chain().id,
+        eth_chain().id(),
         encoded_solution,
         &solution,
         &UserTransferType::None,

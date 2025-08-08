@@ -1,10 +1,8 @@
 use clap::ValueEnum;
-use hex;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use tycho_common::{
-    models::{protocol::ProtocolComponent, Chain as TychoCommonChain},
-    Bytes,
+    models::protocol::ProtocolComponent, simulation::protocol_sim::ProtocolSim, Bytes,
 };
 
 use crate::encoding::{errors::EncodingError, serde_primitives::biguint_string};
@@ -37,7 +35,7 @@ pub enum UserTransferType {
 /// Represents a solution containing details describing an order, and  instructions for filling
 /// the order.
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
-pub struct Solution {
+pub struct Solution<'a> {
     /// Address of the sender.
     pub sender: Bytes,
     /// Address of the receiver.
@@ -57,7 +55,7 @@ pub struct Solution {
     #[serde(with = "biguint_string")]
     pub checked_amount: BigUint,
     /// List of swaps to fulfill the solution.
-    pub swaps: Vec<Swap>,
+    pub swaps: Vec<Swap<'a>>,
     /// If set, the corresponding native action will be executed.
     pub native_action: Option<NativeAction>,
 }
@@ -75,8 +73,8 @@ pub enum NativeAction {
 }
 
 /// Represents a swap operation to be performed on a pool.
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-pub struct Swap {
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Swap<'a> {
     /// Protocol component from tycho indexer
     pub component: ProtocolComponent,
     /// Token being input into the pool.
@@ -88,17 +86,32 @@ pub struct Swap {
     pub split: f64,
     /// Optional user data to be passed to encoding.
     pub user_data: Option<Bytes>,
+    /// Optional protocol state used to perform the swap.
+    #[serde(skip)]
+    pub protocol_state: Option<&'a dyn ProtocolSim>,
 }
 
-impl Swap {
+impl<'a> Swap<'a> {
     pub fn new<T: Into<ProtocolComponent>>(
         component: T,
         token_in: Bytes,
         token_out: Bytes,
         split: f64,
         user_data: Option<Bytes>,
+        protocol_state: Option<&'a dyn ProtocolSim>,
     ) -> Self {
-        Self { component: component.into(), token_in, token_out, split, user_data }
+        Self { component: component.into(), token_in, token_out, split, user_data, protocol_state }
+    }
+}
+
+impl<'a> PartialEq for Swap<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.component == other.component &&
+            self.token_in == other.token_in &&
+            self.token_out == other.token_out &&
+            self.split == other.split &&
+            self.user_data == other.user_data
+        // Skip protocol_state comparison since trait objects don't implement PartialEq
     }
 }
 
@@ -229,63 +242,6 @@ impl TryFrom<u8> for BebopOrderType {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct Chain {
-    pub id: u64,
-    pub name: String,
-}
-
-impl From<TychoCommonChain> for Chain {
-    fn from(chain: TychoCommonChain) -> Self {
-        match chain {
-            TychoCommonChain::Ethereum => Chain { id: 1, name: chain.to_string() },
-            TychoCommonChain::ZkSync => Chain { id: 324, name: chain.to_string() },
-            TychoCommonChain::Arbitrum => Chain { id: 42161, name: chain.to_string() },
-            TychoCommonChain::Starknet => Chain { id: 0, name: chain.to_string() },
-            TychoCommonChain::Base => Chain { id: 8453, name: chain.to_string() },
-            TychoCommonChain::Unichain => Chain { id: 130, name: chain.to_string() },
-        }
-    }
-}
-
-impl Chain {
-    fn decode_hex(&self, hex_str: &str, err_msg: &str) -> Result<Bytes, EncodingError> {
-        Ok(Bytes::from(
-            hex::decode(hex_str).map_err(|_| EncodingError::FatalError(err_msg.to_string()))?,
-        ))
-    }
-
-    pub fn native_token(&self) -> Result<Bytes, EncodingError> {
-        let decode_err_msg = "Failed to decode native token";
-        match self.id {
-            1 | 8453 | 42161 => {
-                self.decode_hex("0000000000000000000000000000000000000000", decode_err_msg)
-            }
-            324 => self.decode_hex("000000000000000000000000000000000000800A", decode_err_msg),
-            130 => self.decode_hex("0000000000000000000000000000000000000000", decode_err_msg),
-            _ => Err(EncodingError::InvalidInput(format!(
-                "Native token not set for chain {:?}. Double check the chain is supported.",
-                self.name
-            ))),
-        }
-    }
-
-    pub fn wrapped_token(&self) -> Result<Bytes, EncodingError> {
-        let decode_err_msg = "Failed to decode wrapped token";
-        match self.id {
-            1 => self.decode_hex("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", decode_err_msg),
-            8453 => self.decode_hex("4200000000000000000000000000000000000006", decode_err_msg),
-            324 => self.decode_hex("5AEa5775959fBC2557Cc8789bC1bf90A239D9a91", decode_err_msg),
-            42161 => self.decode_hex("82aF49447D8a07e3bd95BD0d56f35241523fBab1", decode_err_msg),
-            130 => self.decode_hex("4200000000000000000000000000000000000006", decode_err_msg),
-            _ => Err(EncodingError::InvalidInput(format!(
-                "Wrapped token not set for chain {:?}. Double check the chain is supported.",
-                self.name
-            ))),
-        }
-    }
-}
-
 mod tests {
     use super::*;
 
@@ -318,8 +274,14 @@ mod tests {
             protocol_system: "uniswap_v2".to_string(),
         };
         let user_data = Some(Bytes::from("0x1234"));
-        let swap =
-            Swap::new(component, Bytes::from("0x12"), Bytes::from("34"), 0.5, user_data.clone());
+        let swap = Swap::new(
+            component,
+            Bytes::from("0x12"),
+            Bytes::from("34"),
+            0.5,
+            user_data.clone(),
+            None,
+        );
         assert_eq!(swap.token_in, Bytes::from("0x12"));
         assert_eq!(swap.token_out, Bytes::from("0x34"));
         assert_eq!(swap.component.protocol_system, "uniswap_v2");
