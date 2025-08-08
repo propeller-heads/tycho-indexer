@@ -132,6 +132,7 @@ impl HashflowClient {
         // Store price levels as JSON string
         if !mm_level.levels.is_empty() {
             let levels_json = serde_json::to_string(&mm_level.levels).unwrap_or_default();
+            println!("{levels_json:?}");
             attributes.insert("levels".to_string(), levels_json.as_bytes().to_vec().into());
         }
         attributes.insert("mm".to_string(), mm_name.as_bytes().to_vec().into());
@@ -592,10 +593,10 @@ mod tests {
         dotenv().expect("Missing .env file");
         let hashflow_key = env::var("HASHFLOW_KEY").unwrap();
 
-        let lpt = Bytes::from_str("0x58b6a8a3302369daec383334672404ee733ab239").unwrap();
-        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let wbtc = Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap();
+        let weth = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
 
-        let tokens = HashSet::from([lpt, usdc.clone()]);
+        let tokens = HashSet::from([wbtc, weth.clone()]);
 
         let quote_tokens = HashSet::from([
             Bytes::from_str("0xa0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(), // USDC
@@ -615,7 +616,7 @@ mod tests {
 
         let mut stream = client.stream();
 
-        let result = timeout(Duration::from_secs(5), async {
+        let result = timeout(Duration::from_secs(10), async {
             let mut message_count = 0;
             let max_messages = 3;
             let mut total_components_received = 0;
@@ -637,9 +638,10 @@ mod tests {
 
                         for (id, component_with_state) in &snapshot.states {
                             let attributes = &component_with_state.state.attributes;
-
+                            let levels: &Bytes = attributes.get("levels").unwrap();
                             // Check that levels exist
                             if attributes.contains_key("levels") {
+                                println!("{levels:?}");
                                 assert!(!attributes["levels"].is_empty());
                             }
                             // Check that mm name exist

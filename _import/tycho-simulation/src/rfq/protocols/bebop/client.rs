@@ -699,8 +699,7 @@ mod tests {
         };
         let ws_user = String::from("tycho");
         dotenv().expect("Missing .env file");
-        let ws_key =
-            env::var("BEBOP_WS_KEY").expect("BEBOP_WS_KEY environment variable is required");
+        let ws_key = env::var("BEBOP_KEY").expect("BEBOP_KEY environment variable is required");
 
         let client = BebopClient::new(
             Chain::Ethereum,

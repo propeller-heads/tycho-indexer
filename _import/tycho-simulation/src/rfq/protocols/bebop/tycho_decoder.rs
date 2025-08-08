@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    env,
+};
 
 use tycho_client::feed::synchronizer::ComponentWithState;
 use tycho_common::{models::token::Token, Bytes};
@@ -75,8 +78,12 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
                 .collect(),
         };
 
-        let ws_user = "".to_string();
-        let ws_key = "".to_string();
+        let ws_user = env::var("BEBOP_USER").map_err(|_| {
+            InvalidSnapshotError::ValueError("BEBOP_USER environment variable is required".into())
+        })?;
+        let ws_key = env::var("BEBOP_KEY").map_err(|_| {
+            InvalidSnapshotError::ValueError("BEBOP_KEY environment variable is required".into())
+        })?;
 
         let client = BebopClient::new(
             snapshot.component.chain.into(),
@@ -84,6 +91,8 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
             0.0,
             ws_user,
             ws_key,
+            // Approved quote tokens can be empty, since no more normalization will be
+            // necessary inside the BebopState
             HashSet::new(),
         )
         .map_err(|e| {
@@ -182,6 +191,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_from_with_header() {
+        env::set_var("BEBOP_USER", "test_user");
+        env::set_var("BEBOP_KEY", "test_key");
+
         let (snapshot, tokens) = create_test_snapshot();
 
         let result = BebopState::try_from_with_header(
@@ -204,6 +216,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_from_missing_token() {
+        env::set_var("BEBOP_USER", "test_user");
+        env::set_var("BEBOP_KEY", "test_key");
+
         // Test missing second token (only one token in array)
         let (mut snapshot, tokens) = create_test_snapshot();
         snapshot.component.tokens.pop(); // Remove the second token
@@ -219,6 +234,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_from_missing_bids() {
+        env::set_var("BEBOP_USER", "test_user");
+        env::set_var("BEBOP_KEY", "test_key");
+
         // Should decode an empty array of bids
         let (mut snapshot, tokens) = create_test_snapshot();
         snapshot.state.attributes.remove("bids");
@@ -235,6 +253,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_try_from_invalid_json() {
+        env::set_var("BEBOP_USER", "test_user");
+        env::set_var("BEBOP_KEY", "test_key");
+
         let (mut snapshot, tokens) = create_test_snapshot();
 
         // Test invalid bids JSON
