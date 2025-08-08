@@ -80,7 +80,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         return 22082754;
     }
 
-    function setUp() public {
+    function setUp() public virtual {
         uint256 forkBlock = getForkBlock();
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
 

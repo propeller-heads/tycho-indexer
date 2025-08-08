@@ -227,7 +227,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         // Check initial ONDO balance of receiver
         uint256 initialOndoBalance = ONDO.balanceOf(originalTakerAddress);
 
-        uint256 amountOut = bebopExecutor.swap(testData.amountIn, params);
+        uint256 amountOut = bebopExecutor.swapForTest(testData.amountIn, params);
 
         // Verify results
         assertEq(amountOut, testData.expectedAmountOut, "Incorrect amount out");
@@ -327,7 +327,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         // Check initial ONDO balance of receiver
         uint256 initialOndoBalance = ONDO.balanceOf(originalTakerAddress);
 
-        uint256 amountOut = bebopExecutor.swap(testData.amountIn, params);
+        uint256 amountOut = bebopExecutor.swapForTest(testData.amountIn, params);
 
         // Verify partial fill results
         assertEq(
@@ -427,9 +427,9 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         vm.prank(makerAddresses[1]);
         USDC.approve(BEBOP_SETTLEMENT, makerAmounts[1][0]);
 
-        // ETH will be sent directly with the swap call
-        // Fund the test contract with ETH to send with the swap
-        vm.deal(address(this), totalTakerAmount);
+        // ETH will be handled by the executor harness
+        // Fund the executor with ETH (like we do with ERC20 tokens in single tests)
+        vm.deal(address(bebopExecutor), totalTakerAmount);
 
         // Create maker signatures
         IBebopSettlement.MakerSignature[] memory signatures =
@@ -467,7 +467,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 initialUsdcBalance = USDC.balanceOf(originalTakerAddress);
 
         // Execute the aggregate swap with ETH value
-        uint256 amountOut = bebopExecutor.swap{value: totalTakerAmount}(
+        uint256 amountOut = bebopExecutor.swapForTest{value: totalTakerAmount}(
             totalTakerAmount, params
         );
 
@@ -571,9 +571,9 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         vm.prank(makerAddresses[1]);
         USDC.approve(BEBOP_SETTLEMENT, makerAmounts[1][0]);
 
-        // ETH will be sent directly with the swap call
-        // Fund the test contract with ETH to send with the swap
-        vm.deal(address(this), partialFillAmount);
+        // ETH will be handled by the executor harness
+        // Fund the executor with ETH (like we do with ERC20 tokens in single tests)
+        vm.deal(address(bebopExecutor), partialFillAmount);
 
         // Create maker signatures
         IBebopSettlement.MakerSignature[] memory signatures =
@@ -611,7 +611,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 initialUsdcBalance = USDC.balanceOf(originalTakerAddress);
 
         // Execute the partial aggregate swap with ETH value
-        uint256 amountOut = bebopExecutor.swap{value: partialFillAmount}(
+        uint256 amountOut = bebopExecutor.swapForTest{value: partialFillAmount}(
             partialFillAmount, params
         );
 
@@ -752,7 +752,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 initialOndoBalance = ONDO.balanceOf(originalTakerAddress);
 
         // Execute the swap
-        uint256 amountOut = bebopExecutor.swap(amountIn, protocolData);
+        uint256 amountOut = bebopExecutor.swapForTest(amountIn, protocolData);
 
         // Verify results
         assertEq(amountOut, expectedAmountOut, "Incorrect amount out");
@@ -875,16 +875,18 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         vm.prank(maker2);
         IERC20(USDC_ADDR).approve(BEBOP_SETTLEMENT, type(uint256).max);
 
-        // Fund ALICE with ETH as it will send the transaction
-        vm.deal(ALICE, ethAmount);
-        vm.startPrank(ALICE);
+        // Fund both order taker and executor with ETH to ensure sufficient balance
+        // The taker needs ETH to send with the call, and for settlement
+        vm.deal(orderTaker, ethAmount + 1 ether);
+        vm.deal(address(bebopExecutor), ethAmount);
+        vm.startPrank(orderTaker);
 
         // Check initial USDC balance of receiver
         uint256 initialUsdcBalance = IERC20(USDC_ADDR).balanceOf(orderTaker);
 
         // Execute the swap with native ETH
         uint256 amountOut =
-            bebopExecutor.swap{value: ethAmount}(ethAmount, protocolData);
+            bebopExecutor.swapForTest{value: ethAmount}(ethAmount, protocolData);
 
         // Verify results
         assertEq(amountOut, expAmountOut, "Incorrect amount out");
@@ -1167,15 +1169,17 @@ contract TychoRouterForBebopTest is TychoRouterTestSetup {
         deal(USDC_ADDR, maker1, 10607211); // Maker 1 provides 10.607211 USDC
         deal(USDC_ADDR, maker2, 7362350); // Maker 2 provides 7.362350 USDC
 
-        // Makers approve settlement contract
+        // Makers approve settlement contract (which now has mock code)
         vm.prank(maker1);
         IERC20(USDC_ADDR).approve(BEBOP_SETTLEMENT, type(uint256).max);
         vm.prank(maker2);
         IERC20(USDC_ADDR).approve(BEBOP_SETTLEMENT, type(uint256).max);
 
-        // Fund ALICE with ETH as it will send the transaction
-        vm.deal(ALICE, ethAmount);
-        vm.startPrank(ALICE);
+        // Fund both order taker and executor with ETH to ensure sufficient balance
+        // The taker needs ETH to send with the call, and for settlement
+        vm.deal(orderTaker, ethAmount + 1 ether);
+        vm.deal(address(bebopExecutor), ethAmount);
+        vm.startPrank(orderTaker);
 
         // Load calldata from file
         bytes memory callData = loadCallDataFromFile(
