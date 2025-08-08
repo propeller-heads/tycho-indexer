@@ -359,25 +359,21 @@ impl RFQClient for BebopClient {
             .header("name", &self.ws_user)
             .header("Authorization", &self.ws_key);
 
-        let response = request
-            .send()
-            .await
-            .map_err(|e| RFQError::ConnectionError(format!("Failed to send quote request: {e}")))?;
+        let response = request.send().await.map_err(|e| {
+            RFQError::ConnectionError(format!("Failed to send Bebop quote request: {e}"))
+        })?;
 
         let quote_response = response
             .json::<BebopQuoteResponse>()
             .await
-            .map_err(|e| RFQError::ParsingError(format!("Failed to parse quote response: {e}")))?;
+            .map_err(|e| {
+                RFQError::ParsingError(format!("Failed to parse Bebop quote response: {e}"))
+            })?;
 
         match quote_response {
             BebopQuoteResponse::Success(quote) => {
                 let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
-                quote_attributes.insert(
-                    "calldata".into(),
-                    Bytes::from_str(&quote.tx.data).map_err(|_| {
-                        RFQError::ParsingError("Failed to parse quote result's calldata".into())
-                    })?,
-                );
+                quote_attributes.insert("calldata".into(), quote.tx.data);
                 quote_attributes.insert(
                     "partial_fill_offset".into(),
                     Bytes::from(
@@ -703,7 +699,8 @@ mod tests {
         };
         let ws_user = String::from("tycho");
         dotenv().expect("Missing .env file");
-        let ws_key = env::var("BEBOP_KEY").expect("BEBOP_KEY environment variable is required");
+        let ws_key =
+            env::var("BEBOP_WS_KEY").expect("BEBOP_WS_KEY environment variable is required");
 
         let client = BebopClient::new(
             Chain::Ethereum,

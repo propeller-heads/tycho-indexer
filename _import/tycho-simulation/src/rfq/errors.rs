@@ -11,6 +11,8 @@ pub enum RFQError {
     FatalError(String),
     #[error("RFQ invalid input error: {0}")]
     InvalidInput(String),
+    #[error("RFQ quote not found error: {0}")]
+    QuoteNotFound(String),
 }
 
 impl From<reqwest::Error> for RFQError {

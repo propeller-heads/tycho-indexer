@@ -215,7 +215,7 @@ pub struct BebopQuotePartial {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TxData {
     pub to: Bytes,
-    pub data: String,
+    pub data: Bytes,
     pub value: String,
     pub from: Bytes,
     pub gas: u64,
