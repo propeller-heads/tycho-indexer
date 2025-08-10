@@ -4,7 +4,7 @@ use std::{collections::HashMap, str::FromStr};
 use alloy::{
     hex,
     hex::encode,
-    primitives::{Address, U256},
+    primitives::{Address, Bytes as AlloyBytes, U256},
     sol_types::SolValue,
 };
 use num_bigint::{BigInt, BigUint};
@@ -696,8 +696,8 @@ fn test_single_encoding_strategy_bebop() {
 fn test_single_encoding_strategy_bebop_aggregate() {
     // Use real mainnet aggregate order data from CLAUDE.md
     // Transaction: https://etherscan.io/tx/0xec88410136c287280da87d0a37c1cb745f320406ca3ae55c678dec11996c1b1c
-    // For testing, use WETH directly to avoid delegatecall + native ETH complexities
-    let token_in = eth();
+    // Use WETH for token_in to match the actual order's taker_tokens
+    let token_in = weth();
     let token_out = usdc();
     let amount_in = BigUint::from_str("9850000000000000").unwrap(); // 0.00985 WETH
     let amount_out = BigUint::from_str("17969561").unwrap(); // 17.969561 USDC
@@ -729,7 +729,7 @@ fn test_single_encoding_strategy_bebop_aggregate() {
         vec![vec![U256::from_str("10607211").unwrap()], vec![U256::from_str("7362350").unwrap()]];
 
     // Commands and flags from the real transaction
-    let commands = hex!("00040004").to_vec();
+    let commands = AlloyBytes::from(hex!("00040004").to_vec());
     let flags = U256::from_str(
         "95769172144825922628485191511070792431742484643425438763224908097896054784000",
     )
@@ -763,7 +763,7 @@ fn test_single_encoding_strategy_bebop_aggregate() {
 
     let user_data = build_bebop_calldata(
         BebopOrderType::Aggregate,
-        U256::from(0), // 0 means fill entire aggregate order
+        U256::ZERO, // 0 means fill entire order
         &quote_data,
         signatures,
     );
@@ -793,8 +793,8 @@ fn test_single_encoding_strategy_bebop_aggregate() {
         given_amount: amount_in,
         checked_token: token_out,
         checked_amount: amount_out,
-        // Use ALICE as sender but order receiver as receiver
-        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(), /* ALICE */
+        // Use order taker as both sender and receiver to match the test setup
+        sender: Bytes::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap(), /* Order taker */
         receiver: Bytes::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap(), /* Order receiver */
         swaps: vec![swap],
         ..Default::default()
@@ -809,7 +809,7 @@ fn test_single_encoding_strategy_bebop_aggregate() {
         eth_chain().id(),
         encoded_solution,
         &solution,
-        &UserTransferType::None,
+        &UserTransferType::TransferFrom,
         &eth(),
         None,
     )

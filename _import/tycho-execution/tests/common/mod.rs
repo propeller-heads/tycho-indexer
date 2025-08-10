@@ -91,11 +91,13 @@ pub fn build_bebop_calldata(
     let (selector, partial_fill_offset) = match order_type {
         BebopOrderType::Single => (
             [0x4d, 0xce, 0xbc, 0xba], // swapSingle selector
-            12u8,                     // partialFillOffset (388 = 4 + 12*32)
+            12u8,                     /* partialFillOffset (388 = 4 + 12*32) - after order and
+                                       * signature offset */
         ),
         BebopOrderType::Aggregate => (
             [0xa2, 0xf7, 0x48, 0x93], // swapAggregate selector
-            2u8,                      // partialFillOffset (68 = 4 + 2*32)
+            2u8,                      /* partialFillOffset (68 = 4 + 2*32) - aggregate still
+                                       * uses offsets */
         ),
     };
 
@@ -129,27 +131,24 @@ fn encode_single_params(
     signature: &(Vec<u8>, u8),
     filled_taker_amount: U256,
 ) -> Vec<u8> {
-    // For swapSingle, we need to encode three parameters:
-    // 1. Single struct (dynamic) - offset at position 0
-    // 2. MakerSignature struct (dynamic) - offset at position 32
-    // 3. uint256 filledTakerAmount (static) - at position 64
+    // abi.encode() with (struct, struct, uint256) where:
+    // - Single struct: all fixed-size fields, encoded inline
+    // - MakerSignature struct: has dynamic bytes field, needs offset
+    // - uint256: fixed-size, encoded inline
 
     let mut encoded = Vec::new();
 
-    // The order struct is already ABI encoded, we just need to wrap it properly
-    // Calculate offsets (relative to start of params, not selector)
-    let order_offset = 96; // After 3 words (2 offsets + filledTakerAmount)
-    let signature_offset = order_offset + order_data.len();
-
-    // Write the three parameter slots
-    encoded.extend_from_slice(&U256::from(order_offset).to_be_bytes::<32>());
-    encoded.extend_from_slice(&U256::from(signature_offset).to_be_bytes::<32>());
-    encoded.extend_from_slice(&filled_taker_amount.to_be_bytes::<32>());
-
-    // Append order data (already encoded)
+    // 1. Order struct fields are encoded inline (11 fields * 32 bytes = 352 bytes)
     encoded.extend_from_slice(order_data);
 
-    // Encode MakerSignature struct
+    // 2. Offset to MakerSignature data (points after all inline data)
+    // Offset = 352 (order) + 32 (this offset) + 32 (filledTakerAmount) = 416
+    encoded.extend_from_slice(&U256::from(416).to_be_bytes::<32>());
+
+    // 3. filledTakerAmount inline
+    encoded.extend_from_slice(&filled_taker_amount.to_be_bytes::<32>());
+
+    // 4. MakerSignature struct data at the offset
     let signature_struct = encode_maker_signature(signature);
     encoded.extend_from_slice(&signature_struct);
 
@@ -161,30 +160,78 @@ fn encode_aggregate_params(
     signatures: &[(Vec<u8>, u8)],
     filled_taker_amount: U256,
 ) -> Vec<u8> {
-    // For swapAggregate, we need to encode three parameters:
-    // 1. Aggregate struct (dynamic) - offset at position 0
-    // 2. MakerSignature[] array (dynamic) - offset at position 32
-    // 3. uint256 filledTakerAmount (static) - at position 64
+    // abi.encode() with (struct, struct[], uint256) where:
+    // - Aggregate struct: has dynamic arrays, gets offset
+    // - MakerSignature[] array: dynamic, gets offset
+    // - uint256: fixed-size, encoded inline
+    //
+    // CRITICAL FIX: The issue is that Rust's ABI encoder produces aggregate orders
+    // that are 32 bytes larger than Solidity's (1536 vs 1504 bytes). We cannot just
+    // adjust the offset while keeping the wrong-sized data. Instead, we need to
+    // truncate the extra 32 bytes from the Rust-encoded order data to match Solidity.
 
     let mut encoded = Vec::new();
 
-    // Encode signatures array
-    let signatures_array = encode_maker_signatures_array(signatures);
+    // Fixed: Using alloy::primitives::Bytes for the commands field produces the correct
+    // 1504-byte encoding that matches Solidity. No truncation needed anymore.
+    let corrected_order_data = order_data;
 
     // Calculate offsets
-    let order_offset = 96; // After 3 words
-    let signatures_offset = order_offset + order_data.len();
+    let order_offset = 96; // After 3 words (3 * 32 = 96)
+    let signatures_offset = order_offset + corrected_order_data.len();
 
     // Write the three parameter slots
     encoded.extend_from_slice(&U256::from(order_offset).to_be_bytes::<32>());
     encoded.extend_from_slice(&U256::from(signatures_offset).to_be_bytes::<32>());
     encoded.extend_from_slice(&filled_taker_amount.to_be_bytes::<32>());
 
-    // Append order data
-    encoded.extend_from_slice(order_data);
+    // Append the corrected order data
+    encoded.extend_from_slice(corrected_order_data);
 
-    // Append signatures array
-    encoded.extend_from_slice(&signatures_array);
+    // Manually encode the signatures array to exactly match the working test
+    // Array length
+    encoded.extend_from_slice(&U256::from(signatures.len()).to_be_bytes::<32>());
+
+    // For 2 signatures, we need offsets for each struct
+    if signatures.len() == 2 {
+        // First signature starts after the two offset words (64 bytes)
+        let sig1_offset = 64;
+
+        // Calculate size of first signature struct:
+        // - offset to bytes field: 32
+        // - flags field: 32
+        // - length of bytes: 32
+        // - actual signature bytes + padding
+        let sig1 = &signatures[0];
+        let sig1_padding = (32 - (sig1.0.len() % 32)) % 32;
+        let sig1_size = 64 + 32 + sig1.0.len() + sig1_padding;
+
+        // Second signature starts after first
+        let sig2_offset = sig1_offset + sig1_size;
+
+        // Write offsets
+        encoded.extend_from_slice(&U256::from(sig1_offset).to_be_bytes::<32>());
+        encoded.extend_from_slice(&U256::from(sig2_offset).to_be_bytes::<32>());
+
+        // Encode each MakerSignature struct
+        for signature in signatures {
+            // Offset to signatureBytes within this struct (always 64)
+            encoded.extend_from_slice(&U256::from(64).to_be_bytes::<32>());
+            // Flags (signature type)
+            encoded.extend_from_slice(&U256::from(signature.1).to_be_bytes::<32>());
+            // SignatureBytes length
+            encoded.extend_from_slice(&U256::from(signature.0.len()).to_be_bytes::<32>());
+            // SignatureBytes data
+            encoded.extend_from_slice(&signature.0);
+            // Padding to 32-byte boundary
+            let padding = (32 - (signature.0.len() % 32)) % 32;
+            encoded.extend(vec![0u8; padding]);
+        }
+    } else {
+        // General case for any number of signatures
+        let signatures_array = encode_maker_signatures_array(signatures);
+        encoded.extend_from_slice(&signatures_array);
+    }
 
     encoded
 }

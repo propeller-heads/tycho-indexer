@@ -706,7 +706,7 @@ fn test_uniswap_v3_bebop() {
         given_amount: BigUint::from_str("99000000000000000").unwrap(), // 0.099 WETH
         checked_token: ondo,
         checked_amount: BigUint::from_str("237212396774431060000").unwrap(), /* Expected ONDO from Bebop order */
-        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        sender: Bytes::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(), /* Must match order taker_address */
         receiver: Bytes::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(), /* Using the real order receiver */
         swaps: vec![swap_weth_usdc, swap_usdc_ondo],
         ..Default::default()
