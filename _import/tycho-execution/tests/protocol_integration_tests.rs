@@ -696,8 +696,8 @@ fn test_single_encoding_strategy_bebop() {
 fn test_single_encoding_strategy_bebop_aggregate() {
     // Use real mainnet aggregate order data from CLAUDE.md
     // Transaction: https://etherscan.io/tx/0xec88410136c287280da87d0a37c1cb745f320406ca3ae55c678dec11996c1b1c
-    // Use WETH for token_in to match the actual order's taker_tokens
-    let token_in = weth();
+    // Use native ETH as tycho's token_in
+    let token_in = eth();
     let token_out = usdc();
     let amount_in = BigUint::from_str("9850000000000000").unwrap(); // 0.00985 WETH
     let amount_out = BigUint::from_str("17969561").unwrap(); // 17.969561 USDC

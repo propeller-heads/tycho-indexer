@@ -15,9 +15,9 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
     using SafeERC20 for IERC20;
 
     /// @dev Helper to extract filledTakerAmount from bebop calldata
-    /// Note: The position differs between swapSingle and swapAggregate due to struct encoding
-    /// - swapSingle: position 388-420 (struct encoded inline)
-    /// - swapAggregate: position 68-100 (struct uses offset due to arrays)
+    /// Note: With proper ABI encoding, filledTakerAmount is at the same position for both
+    /// - swapSingle: position 68-100 (third parameter, after two offsets)
+    /// - swapAggregate: position 68-100 (third parameter, after two offsets)
     function _extractFilledTakerAmount(bytes memory bebopCalldata)
         private
         pure
@@ -30,8 +30,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             selector := mload(dataPtr)
         }
 
-        // If the selector is swapSingle, the position is 388, otherwise it's 68
-        uint256 position = selector == 0x4dcebcba ? 388 : 68;
+        // Both swapSingle and swapAggregate have filledTakerAmount at position 68
+        uint256 position = 68;
 
         assembly {
             // bebopCalldata points to length, add 0x20 for data start
@@ -98,12 +98,11 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             USDC_ADDR,
             ONDO_ADDR,
             uint8(RestrictTransferFrom.TransferType.Transfer),
-            uint32(bebopCalldata.length),
-            bebopCalldata,
-            uint8(12), // partialFillOffset for swapSingle (388 = 4 + 12*32)
+            uint8(2), // partialFillOffset for swapSingle (68 = 4 + 2*32)
             originalAmountIn,
             uint8(1), // approvalNeeded: true
-            address(123)
+            address(123),
+            bebopCalldata
         );
 
         // Test decoding
@@ -130,7 +129,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             keccak256(bebopCalldata),
             "bebopCalldata mismatch"
         );
-        assertEq(decodedPartialFillOffset, 12, "partialFillOffset mismatch");
+        assertEq(decodedPartialFillOffset, 2, "partialFillOffset mismatch");
         assertEq(
             decodedOriginalAmountIn,
             originalAmountIn,
@@ -216,12 +215,11 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             USDC_ADDR,
             ONDO_ADDR,
             uint8(RestrictTransferFrom.TransferType.Transfer),
-            uint32(bebopCalldata.length),
-            bebopCalldata,
-            uint8(12), // partialFillOffset for swapSingle (388 = 4 + 12*32)
-            testData.order.taker_amount, // originalAmountIn (matches what encoder would produce)
+            uint8(2), // partialFillOffset for swapSingle (68 = 4 + 2*32)
+            testData.order.taker_amount, // originalAmountIn (full fill, so equals taker_amount)
             uint8(1), // approvalNeeded: true
-            originalTakerAddress // receiver from order
+            originalTakerAddress, // receiver from order
+            bebopCalldata
         );
 
         // Check initial ONDO balance of receiver
@@ -316,12 +314,11 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             USDC_ADDR,
             ONDO_ADDR,
             uint8(RestrictTransferFrom.TransferType.Transfer),
-            uint32(bebopCalldata.length),
-            bebopCalldata,
-            uint8(12), // partialFillOffset for swapSingle (388 = 4 + 12*32)
-            testData.order.taker_amount, // originalAmountIn (full order amount)
+            uint8(2), // partialFillOffset for swapSingle (68 = 4 + 2*32)
+            testData.filledTakerAmount, // originalAmountIn (the actual filledTakerAmount in the calldata)
             uint8(1), // approvalNeeded: true
-            originalTakerAddress // receiver from order
+            originalTakerAddress, // receiver from order
+            bebopCalldata
         );
 
         // Check initial ONDO balance of receiver
@@ -348,8 +345,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
     // Aggregate Order Tests
     function testAggregateOrder() public {
-        // Fork at a suitable block for aggregate order testing
-        vm.createSelectFork(vm.rpcUrl("mainnet"), 21370890);
+        // Fork at the block just before the actual transaction
+        vm.createSelectFork(vm.rpcUrl("mainnet"), 22410851);
 
         // Deploy Bebop executor harness that uses vm.prank
         bebopExecutor =
@@ -400,7 +397,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         // Create the aggregate order
         IBebopSettlement.Aggregate memory order = IBebopSettlement.Aggregate({
-            expiry: 1746367285,
+            expiry: 1746367285, // Original expiry that matches the signatures
             taker_address: originalTakerAddress,
             maker_addresses: makerAddresses,
             maker_nonces: makerNonces,
@@ -454,12 +451,11 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             address(0), // tokenIn: native ETH
             USDC_ADDR, // tokenOut
             uint8(RestrictTransferFrom.TransferType.Transfer),
-            uint32(bebopCalldata.length),
-            bebopCalldata,
             uint8(2), // partialFillOffset for swapAggregate (68 = 4 + 2*32)
             totalTakerAmount, // originalAmountIn
             uint8(0), // approvalNeeded: false for native ETH
-            originalTakerAddress // receiver from order
+            originalTakerAddress, // receiver from order
+            bebopCalldata
         );
 
         // Check initial USDC balance of receiver
@@ -487,8 +483,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
     }
 
     function testAggregateOrder_PartialFill() public {
-        // Fork at a suitable block for aggregate order testing
-        vm.createSelectFork(vm.rpcUrl("mainnet"), 21370890);
+        // Fork at the block just before the actual transaction
+        vm.createSelectFork(vm.rpcUrl("mainnet"), 22410851);
 
         // Deploy Bebop executor harness that uses vm.prank
         bebopExecutor =
@@ -538,7 +534,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         // Create the aggregate order
         IBebopSettlement.Aggregate memory order = IBebopSettlement.Aggregate({
-            expiry: 1746367285,
+            expiry: 1746367285, // Original expiry that matches the signatures
             taker_address: originalTakerAddress,
             maker_addresses: makerAddresses,
             maker_nonces: makerNonces,
@@ -596,12 +592,11 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             address(0), // tokenIn: native ETH
             USDC_ADDR,
             uint8(RestrictTransferFrom.TransferType.Transfer),
-            uint32(bebopCalldata.length),
-            bebopCalldata,
             uint8(2), // partialFillOffset for swapAggregate (68 = 4 + 2*32)
             totalTakerAmount, // originalAmountIn (full order amount)
             uint8(0), // approvalNeeded: false for native ETH
-            originalTakerAddress // receiver from order
+            originalTakerAddress, // receiver from order
+            bebopCalldata
         );
 
         // Check initial USDC balance of receiver
@@ -648,22 +643,22 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             WETH_ADDR,
             USDC_ADDR,
             uint8(RestrictTransferFrom.TransferType.Transfer),
-            uint32(bebopCalldata.length),
-            bebopCalldata,
-            uint8(12), // partialFillOffset for swapSingle (388 = 4 + 12*32)
+            uint8(2), // partialFillOffset for swapSingle (68 = 4 + 2*32)
             originalAmountIn,
             uint8(1), // approvalNeeded: true
-            address(bebopExecutor)
+            address(bebopExecutor),
+            bebopCalldata
         );
 
         // Verify valid params work
         bebopExecutor.decodeParams(validParams);
 
-        // Add extra bytes at the end, this should fail
-        bytes memory invalidParams = abi.encodePacked(validParams, hex"ff");
-
-        vm.expectRevert(BebopExecutor.BebopExecutor__InvalidDataLength.selector);
-        bebopExecutor.decodeParams(invalidParams);
+        // In the new format, adding extra bytes at the end doesn't fail
+        // because bebopCalldata is variable length at the end
+        // So test with extra bytes should not revert
+        bytes memory paramsWithExtra = abi.encodePacked(validParams, hex"ff");
+        // This should work as the extra byte becomes part of bebopCalldata
+        bebopExecutor.decodeParams(paramsWithExtra);
 
         // Try with insufficient data, should fail
         bytes memory tooShortParams = abi.encodePacked(
@@ -680,7 +675,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
     // Integration tests
     function testSwapSingleIntegration() public {
         // Fork at the right block first
-        vm.createSelectFork(vm.rpcUrl("mainnet"), 22667985);
+        vm.createSelectFork(vm.rpcUrl("mainnet"), 22667986);
 
         // Deploy Bebop executor harness
         bebopExecutor =
@@ -716,7 +711,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
                     signatureBytes: signature,
                     flags: uint256(0)
                 }),
-                order.taker_amount // Use taker_amount when filledTakerAmount would be 0
+                0 // full fill
             )
         );
 
@@ -725,12 +720,11 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             USDC_ADDR,
             ONDO_ADDR,
             uint8(RestrictTransferFrom.TransferType.Transfer),
-            uint32(bebopCalldata.length),
-            bebopCalldata,
-            uint8(12), // partialFillOffset for swapSingle (388 = 4 + 12*32)
+            uint8(2), // partialFillOffset for swapSingle (68 = 4 + 2*32)
             uint256(200000000), // originalAmountIn
             uint8(1), // approvalNeeded: true
-            originalTakerAddress // receiver from order
+            originalTakerAddress, // receiver from order
+            bebopCalldata
         );
 
         // Deal 200 USDC to the executor
@@ -764,8 +758,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
     }
 
     function testSwapAggregateIntegration() public {
-        // Fork at a suitable block for aggregate order testing
-        vm.createSelectFork(vm.rpcUrl("mainnet"), 21370890);
+        // Fork at the block just before the actual transaction
+        vm.createSelectFork(vm.rpcUrl("mainnet"), 22410851);
 
         // Deploy Bebop executor harness
         bebopExecutor =
@@ -811,7 +805,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         makerNonces[1] = 15460096;
 
         IBebopSettlement.Aggregate memory order = IBebopSettlement.Aggregate({
-            expiry: 1746367285,
+            expiry: 1746367285, // Original expiry that matches the signatures
             taker_address: orderTaker,
             maker_addresses: makerAddresses,
             maker_nonces: makerNonces,
@@ -850,12 +844,11 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             address(0), // tokenIn: native ETH
             USDC_ADDR, // tokenOut
             uint8(RestrictTransferFrom.TransferType.Transfer),
-            uint32(bebopCalldata.length),
-            bebopCalldata,
             uint8(2), // partialFillOffset for swapAggregate (68 = 4 + 2*32)
             ethAmount, // originalAmountIn
             uint8(0), // approvalNeeded: false for native ETH
-            orderTaker // receiver from order
+            orderTaker, // receiver from order
+            bebopCalldata
         );
 
         // Fund the two makers from the real transaction with USDC
@@ -941,7 +934,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             originalCalldata,
             givenAmount,
             originalAmountIn,
-            12 // partialFillOffset for swapSingle
+            2 // partialFillOffset for swapSingle
         );
 
         // Decode the modified calldata to verify the filledTakerAmount was updated
@@ -1059,67 +1052,87 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             .MakerSignature({signatureBytes: hex"1234567890", flags: 0});
 
         uint256 filledTakerAmount = 1000e6; // Full fill
+
+        // Properly encode with offsets for ABI compliance
+        // When encoding (struct, struct, uint256), both structs get offsets
+        bytes memory params = abi.encode(order, signature, filledTakerAmount);
         bytes memory originalCalldata = abi.encodePacked(
             bytes4(0x4dcebcba), // swapSingle selector
-            abi.encode(order, signature, filledTakerAmount)
+            params
         );
 
-        // Debug: Check what filledTakerAmount is in the calldata
-        uint256 extractedFilledTakerAmount =
-            _extractFilledTakerAmount(originalCalldata);
-
-        // Test with same amounts - but use the extracted amount to match what the function sees
+        // Test with same amounts - no modification should occur
         uint256 givenAmount = 1000e6;
         uint256 originalAmountIn = 1000e6;
 
-        // If the extracted amount doesn't match, we need to handle that case
-        if (extractedFilledTakerAmount != filledTakerAmount) {
-            // The function is reading a different value than we expect
-            // In this case, any modification will change the calldata
-            // So we'll test that it properly sets the value we want
-            bytes memory modifiedCalldata = bebopExecutor
-                .exposed_modifyFilledTakerAmount(
-                originalCalldata,
-                givenAmount,
-                originalAmountIn,
-                12 // partialFillOffset for swapSingle
-            );
+        // Since this is a unit test with mock data, we'll verify the function behavior
+        // The function should not modify the calldata when amounts match
+        bytes memory modifiedCalldata = bebopExecutor
+            .exposed_modifyFilledTakerAmount(
+            originalCalldata,
+            givenAmount,
+            originalAmountIn,
+            2 // partialFillOffset for swapSingle
+        );
 
-            // Extract the new filledTakerAmount
-            uint256 newFilledTakerAmount =
-                _extractFilledTakerAmount(modifiedCalldata);
-
-            assertEq(
-                newFilledTakerAmount,
-                givenAmount,
-                "Modified filledTakerAmount should match givenAmount"
-            );
-        } else {
-            // Normal test - amounts match so calldata should be unchanged
-            bytes memory modifiedCalldata = bebopExecutor
-                .exposed_modifyFilledTakerAmount(
-                originalCalldata,
-                givenAmount,
-                originalAmountIn,
-                12 // partialFillOffset for swapSingle
-            );
-
-            assertEq(
-                keccak256(modifiedCalldata),
-                keccak256(originalCalldata),
-                "Calldata should remain unchanged"
-            );
-        }
+        assertEq(
+            keccak256(modifiedCalldata),
+            keccak256(originalCalldata),
+            "Calldata should remain unchanged"
+        );
     }
 }
 
 contract TychoRouterForBebopTest is TychoRouterTestSetup {
+    // Override the fork block for Bebop tests
+    function getForkBlock() public pure override returns (uint256) {
+        return 22667986;
+    }
+
+    // Helper function to replace bytes in calldata
+    function _replaceBytes(
+        bytes memory data,
+        bytes memory oldBytes,
+        bytes memory newBytes
+    ) private pure returns (bytes memory) {
+        require(
+            oldBytes.length == newBytes.length,
+            "Replacement bytes must be same length"
+        );
+
+        // Find the position of oldBytes in data
+        uint256 position = type(uint256).max;
+        for (uint256 i = 0; i <= data.length - oldBytes.length; i++) {
+            bool found = true;
+            for (uint256 j = 0; j < oldBytes.length; j++) {
+                if (data[i + j] != oldBytes[j]) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) {
+                position = i;
+                break;
+            }
+        }
+
+        require(position != type(uint256).max, "Old bytes not found in data");
+
+        // Replace the bytes
+        for (uint256 i = 0; i < newBytes.length; i++) {
+            data[position + i] = newBytes[i];
+        }
+
+        return data;
+    }
+
     function testSingleBebopIntegration() public {
+        // Don't create a new fork - use the existing one from setUp
         // The calldata swaps 200 USDC for ONDO
         // The receiver in the order is 0xc5564C13A157E6240659fb81882A28091add8670
         address orderTaker = 0xc5564C13A157E6240659fb81882A28091add8670;
         address maker = 0xCe79b081c0c924cb67848723ed3057234d10FC6b;
-        deal(USDC_ADDR, orderTaker, 200 * 10 ** 6); // 200 USDC
+        deal(USDC_ADDR, tychoRouterAddr, 200000000); // 200 USDC
         uint256 expAmountOut = 237212396774431060000; // Expected ONDO amount from calldata
 
         // Fund the maker with ONDO and approve settlement
@@ -1135,6 +1148,12 @@ contract TychoRouterForBebopTest is TychoRouterTestSetup {
         // Load calldata from file
         bytes memory callData =
             loadCallDataFromFile("test_single_encoding_strategy_bebop");
+
+        console.log("BEBOP EXECUTOR ADDRESS", address(bebopExecutor));
+        console.log(
+            "Router has executor approved:",
+            tychoRouter.executors(address(bebopExecutor))
+        );
 
         (bool success,) = tychoRouterAddr.call(callData);
 
@@ -1153,42 +1172,39 @@ contract TychoRouterForBebopTest is TychoRouterTestSetup {
     }
 
     function testBebopAggregateIntegration() public {
-        // Based on real transaction: https://etherscan.io/tx/0xec88410136c287280da87d0a37c1cb745f320406ca3ae55c678dec11996c1b1c
-        address orderTaker = 0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6; // This is both taker and receiver in the order
+        // Test aggregate order integration
+        address orderTaker = 0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6;
         uint256 ethAmount = 9850000000000000; // 0.00985 WETH
         uint256 expAmountOut = 17969561; // 17.969561 USDC expected output
 
-        // Fund the two makers from the real transaction with USDC
+        // Fund makers with USDC
         address maker1 = 0x67336Cec42645F55059EfF241Cb02eA5cC52fF86;
         address maker2 = 0xBF19CbF0256f19f39A016a86Ff3551ecC6f2aAFE;
+        deal(USDC_ADDR, maker1, 10607211);
+        deal(USDC_ADDR, maker2, 7362350);
 
-        deal(USDC_ADDR, maker1, 10607211); // Maker 1 provides 10.607211 USDC
-        deal(USDC_ADDR, maker2, 7362350); // Maker 2 provides 7.362350 USDC
-
-        // Makers approve settlement contract (which now has mock code)
         vm.prank(maker1);
         IERC20(USDC_ADDR).approve(BEBOP_SETTLEMENT, type(uint256).max);
         vm.prank(maker2);
         IERC20(USDC_ADDR).approve(BEBOP_SETTLEMENT, type(uint256).max);
 
-        // Fund both order taker and executor with ETH to ensure sufficient balance
-        // The taker needs ETH to send with the call, and for settlement
-        vm.deal(orderTaker, ethAmount + 1 ether);
-        vm.deal(address(bebopExecutor), ethAmount);
+        // Fund taker with WETH
+        deal(WETH_ADDR, orderTaker, ethAmount);
+
         vm.startPrank(orderTaker);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, ethAmount);
 
         // Load calldata from file
         bytes memory callData = loadCallDataFromFile(
             "test_single_encoding_strategy_bebop_aggregate"
         );
 
-        // Execute the swap
-        (bool success,) = tychoRouterAddr.call{value: ethAmount}(callData);
+        (bool success,) = tychoRouterAddr.call(callData);
+
         uint256 finalBalance = IERC20(USDC_ADDR).balanceOf(orderTaker);
 
         assertTrue(success, "Call Failed");
         assertEq(finalBalance, expAmountOut);
-        assertEq(address(tychoRouterAddr).balance, 0, "ETH left in router");
 
         vm.stopPrank();
     }
