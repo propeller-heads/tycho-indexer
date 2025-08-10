@@ -89,31 +89,7 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         bytes4 selector = bytes4(bebopCalldata);
 
         // Extract taker address from the order - Bebop validates msg.sender == order.taker_address
-        address takerAddress;
-        if (selector == SWAP_SINGLE_SELECTOR) {
-            // For single orders with inline encoding, taker_address is at position 36
-            // Position: 4 (selector) + 352 (inline order) + 32 (signature offset) = 388
-            // But we need taker_address which is at: 4 (selector) + 32 (expiry) = 36
-            assembly {
-                let dataPtr := add(bebopCalldata, 0x20)
-                takerAddress := mload(add(dataPtr, 36))
-            }
-        } else if (selector == SWAP_AGGREGATE_SELECTOR) {
-            // For aggregate orders, extract taker_address from the calldata
-            // The aggregate order struct is passed as a calldata parameter
-            // We need to read the offset to the order struct, then extract taker_address
-            assembly {
-                let dataPtr := add(bebopCalldata, 0x20)
-                // Read the offset to the order struct (first parameter after selector)
-                let orderOffset := mload(add(dataPtr, 0x04))
-                // The taker_address is at orderOffset + 4 (selector) + 32 (after expiry)
-                takerAddress :=
-                    mload(add(dataPtr, add(0x04, add(orderOffset, 32))))
-            }
-            console.log(
-                "Extracted taker address from aggregate order:", takerAddress
-            );
-        }
+        address takerAddress = receiver;
 
         // For ERC20 tokens, we need to handle the flow differently
         // The taker needs to have the tokens and approve the settlement
