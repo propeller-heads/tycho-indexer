@@ -9,6 +9,7 @@ import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import {console} from "forge-std/Test.sol";
 
 /// @dev Bebop settlement interface for PMM RFQ swaps
 interface IBebopSettlement {
@@ -147,8 +148,40 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         // Execute the swap with the forwarded calldata
         uint256 ethValue = tokenIn == address(0) ? givenAmount : 0;
 
+        // Debug: Check msg.sender before settlement call
+        console.log(
+            "BebopExecutor: About to call settlement, msg.sender:", msg.sender
+        );
+
+        // Debug: Let's check what's in the calldata
+        bytes4 selector = _getSelector(finalCalldata);
+        if (selector == SWAP_AGGREGATE_SELECTOR) {
+            // Try to extract taker_address from the aggregate order
+            if (finalCalldata.length > 100) {
+                // Read the offset to the order struct
+                uint256 orderOffset;
+                assembly {
+                    orderOffset := mload(add(finalCalldata, 0x24))
+                }
+                // The taker_address is at orderOffset + 4 (selector) + 32 (after expiry)
+                address orderTaker;
+                assembly {
+                    orderTaker :=
+                        mload(add(finalCalldata, add(0x24, add(orderOffset, 32))))
+                }
+                console.log("Order taker_address in calldata:", orderTaker);
+            }
+        }
+
         // Use OpenZeppelin's Address library for safe call with value
-        bebopSettlement.functionCallWithValue(finalCalldata, ethValue);
+        // This will revert if the call fails
+        bytes memory returnData =
+            bebopSettlement.functionCallWithValue(finalCalldata, ethValue);
+
+        // Check if any tokens were actually transferred
+        if (returnData.length > 0) {
+            // Bebop might return some data, log it for debugging
+        }
 
         // Calculate actual amount received by the receiver
         uint256 balanceAfter = _balanceOf(tokenOut, receiver);
@@ -170,39 +203,29 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             address receiver
         )
     {
-        // Need at least 99 bytes for the minimum fixed fields
-        // 20 + 20 + 1 + 4 (calldata length) + 1 (offset) + 32 (original amount) + 1 (approval) + 20 (receiver) = 99
-        if (data.length < 99) revert BebopExecutor__InvalidDataLength();
+        // Need at least 95 bytes for the minimum fixed fields
+        // 20 + 20 + 1 + 1 (offset) + 32 (original amount) + 1 (approval) + 20 (receiver) = 95
+        if (data.length < 95) revert BebopExecutor__InvalidDataLength();
 
         // Decode fixed fields
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         transferType = TransferType(uint8(data[40]));
 
-        // Get bebop calldata length and validate
-        uint32 bebopCalldataLength = uint32(bytes4(data[41:45]));
-        if (data.length != 99 + bebopCalldataLength) {
-            revert BebopExecutor__InvalidDataLength();
-        }
-
-        // Extract bebop calldata
-        bebopCalldata = data[45:45 + bebopCalldataLength];
-
         // Extract partial fill offset
-        partialFillOffset = uint8(data[45 + bebopCalldataLength]);
+        partialFillOffset = uint8(data[41]);
 
         // Extract original amount in
-        originalFilledTakerAmount = uint256(
-            bytes32(data[46 + bebopCalldataLength:78 + bebopCalldataLength])
-        );
+        originalFilledTakerAmount = uint256(bytes32(data[42:74]));
 
         // Extract approval flag
-        approvalNeeded = data[78 + bebopCalldataLength] != 0;
+        approvalNeeded = data[74] != 0;
 
         // Extract receiver address
-        receiver = address(
-            bytes20(data[79 + bebopCalldataLength:99 + bebopCalldataLength])
-        );
+        receiver = address(bytes20(data[75:95]));
+
+        // Extract bebop calldata (all remaining bytes)
+        bebopCalldata = data[95:];
     }
 
     /// @dev Modifies the filledTakerAmount in the bebop calldata to handle slippage

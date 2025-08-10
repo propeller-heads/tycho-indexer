@@ -526,10 +526,9 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
 
         // Now using 0.099 WETH to get approximately 200 USDC from UniswapV3
         uint256 wethAmount = 99000000000000000; // 0.099 WETH
-        deal(WETH_ADDR, ALICE, wethAmount);
-        uint256 balanceBefore = IERC20(ONDO_ADDR).balanceOf(
-            0xc5564C13A157E6240659fb81882A28091add8670
-        );
+        address orderTaker = 0xc5564C13A157E6240659fb81882A28091add8670; // Must match Bebop order taker
+        deal(WETH_ADDR, orderTaker, wethAmount);
+        uint256 balanceBefore = IERC20(ONDO_ADDR).balanceOf(orderTaker);
 
         // Fund the Bebop maker with ONDO and approve settlement
         uint256 ondoAmount = 237212396774431060000; // From the real order
@@ -537,17 +536,15 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         vm.prank(0xCe79b081c0c924cb67848723ed3057234d10FC6b);
         IERC20(ONDO_ADDR).approve(BEBOP_SETTLEMENT, ondoAmount);
 
-        // Approve router
-        vm.startPrank(ALICE);
+        // Approve router from the order taker
+        vm.startPrank(orderTaker);
         IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
         bytes memory callData = loadCallDataFromFile("test_uniswap_v3_bebop");
         (bool success,) = tychoRouterAddr.call(callData);
 
         vm.stopPrank();
 
-        uint256 balanceAfter = IERC20(ONDO_ADDR).balanceOf(
-            0xc5564C13A157E6240659fb81882A28091add8670
-        );
+        uint256 balanceAfter = IERC20(ONDO_ADDR).balanceOf(orderTaker);
 
         assertTrue(success, "Call Failed");
         assertEq(balanceAfter - balanceBefore, ondoAmount);

@@ -69,12 +69,11 @@ contract BebopExecutorHarness is BebopExecutor, Test {
         override
         returns (uint256 calculatedAmount)
     {
-        console.log(
-            "[BebopHarness] swap entry, givenAmount=%s, value=%s",
-            givenAmount,
-            msg.value
-        );
-        // Decode packed params
+        console.log("BebopExecutorHarness::swap called");
+        console.log("  Given amount:", givenAmount);
+        console.log("  Data length:", data.length);
+        console.log("  Msg.sender:", msg.sender);
+        // Decode the data to get the bebop calldata
         (
             address tokenIn,
             address tokenOut,
@@ -85,168 +84,122 @@ contract BebopExecutorHarness is BebopExecutor, Test {
             bool approvalNeeded,
             address receiver
         ) = _decodeData(data);
-        console.log(
-            "[BebopHarness] decoded tokenIn=%s tokenOut=%s approvalNeeded=%s",
-            tokenIn,
-            tokenOut,
-            approvalNeeded
-        );
 
-        // Trust the encoder-provided receiver when present; if it's zero, fall back to
-        // decoding the taker from the Bebop order so we still impersonate correctly
-        bytes4 sel = _getSelector(bebopCalldata);
-        console.log("[BebopHarness] selector computed");
-        console.logBytes4(sel);
-        console.log("[BebopHarness] bebopCalldata len=%s", bebopCalldata.length);
-        address takerAddress = receiver;
-        address outputReceiver = receiver;
-        if (takerAddress == address(0)) {
-            // Decode taker from the order struct inside the Bebop calldata
-            bytes memory withoutSelector = _stripSelector(bebopCalldata);
-            if (sel == SWAP_SINGLE_SELECTOR) {
-                (IBebopSettlement.Single memory order,,) = abi.decode(
-                    withoutSelector,
-                    (
-                        IBebopSettlement.Single,
-                        IBebopSettlement.MakerSignature,
-                        uint256
-                    )
-                );
-                takerAddress = order.taker_address;
-                outputReceiver = order.receiver;
-            } else {
-                (IBebopSettlement.Aggregate memory order,,) = abi.decode(
-                    withoutSelector,
-                    (
-                        IBebopSettlement.Aggregate,
-                        IBebopSettlement.MakerSignature[],
-                        uint256
-                    )
-                );
-                takerAddress = order.taker_address;
-                outputReceiver = order.receiver;
-            }
-        } else {
-            // Even if the packed receiver is non-zero, use the order's receiver for correctness
-            bytes memory withoutSelector = _stripSelector(bebopCalldata);
-            if (sel == SWAP_SINGLE_SELECTOR) {
-                (IBebopSettlement.Single memory order,,) = abi.decode(
-                    withoutSelector,
-                    (
-                        IBebopSettlement.Single,
-                        IBebopSettlement.MakerSignature,
-                        uint256
-                    )
-                );
-                outputReceiver = order.receiver;
-            } else {
-                (IBebopSettlement.Aggregate memory order,,) = abi.decode(
-                    withoutSelector,
-                    (
-                        IBebopSettlement.Aggregate,
-                        IBebopSettlement.MakerSignature[],
-                        uint256
-                    )
-                );
-                outputReceiver = order.receiver;
-            }
-        }
-        console.log("[BebopHarness] taker=%s", takerAddress);
+        // Extract the selector to determine order type
+        bytes4 selector = bytes4(bebopCalldata);
 
-        // Make sure taker has the input assets and approvals when needed
-        // If the encoder gave us a zero original amount, pull it from the calldata so we can
-        // still set the correct fill
-        uint256 effectiveOriginal = originalFilledTakerAmount;
-        if (effectiveOriginal == 0) {
-            // Use the offset to read the filledTakerAmount from calldata; for aggregate, if it's
-            // also zero, sum the taker_amounts from the order
-            uint256 pos = 4 + uint256(partialFillOffset) * 32;
-            if (bebopCalldata.length >= pos + 32) {
-                assembly {
-                    effectiveOriginal :=
-                        mload(add(add(bebopCalldata, 0x20), pos))
-                }
+        // Extract taker address from the order - Bebop validates msg.sender == order.taker_address
+        address takerAddress;
+        if (selector == SWAP_SINGLE_SELECTOR) {
+            // For single orders with inline encoding, taker_address is at position 36
+            // Position: 4 (selector) + 352 (inline order) + 32 (signature offset) = 388
+            // But we need taker_address which is at: 4 (selector) + 32 (expiry) = 36
+            assembly {
+                let dataPtr := add(bebopCalldata, 0x20)
+                takerAddress := mload(add(dataPtr, 36))
             }
-            if (effectiveOriginal == 0 && sel == SWAP_AGGREGATE_SELECTOR) {
-                // Decode order and sum taker_amounts
-                bytes memory withoutSelector = _stripSelector(bebopCalldata);
-                (IBebopSettlement.Aggregate memory order,,) = abi.decode(
-                    withoutSelector,
-                    (
-                        IBebopSettlement.Aggregate,
-                        IBebopSettlement.MakerSignature[],
-                        uint256
-                    )
-                );
-                uint256 sum;
-                for (uint256 i = 0; i < order.taker_amounts.length; i++) {
-                    for (uint256 j = 0; j < order.taker_amounts[i].length; j++)
-                    {
-                        sum += order.taker_amounts[i][j];
-                    }
-                }
-                effectiveOriginal = sum;
+        } else if (selector == SWAP_AGGREGATE_SELECTOR) {
+            // For aggregate orders, extract taker_address from the calldata
+            // The aggregate order struct is passed as a calldata parameter
+            // We need to read the offset to the order struct, then extract taker_address
+            assembly {
+                let dataPtr := add(bebopCalldata, 0x20)
+                // Read the offset to the order struct (first parameter after selector)
+                let orderOffset := mload(add(dataPtr, 0x04))
+                // The taker_address is at orderOffset + 4 (selector) + 32 (after expiry)
+                takerAddress :=
+                    mload(add(dataPtr, add(0x04, add(orderOffset, 32))))
             }
-        }
-        uint256 actualFilled =
-            effectiveOriginal > givenAmount ? givenAmount : effectiveOriginal;
-        console.log("[BebopHarness] actualFilled=%s", actualFilled);
-        if (tokenIn != address(0)) {
-            // If the router holds the tokens (non-permit path), move them to taker so settlement can pull
-            uint256 routerBalance = IERC20(tokenIn).balanceOf(address(this));
             console.log(
-                "[BebopHarness] router tokenIn balance=%s", routerBalance
+                "Extracted taker address from aggregate order:", takerAddress
             );
-            if (routerBalance >= actualFilled) {
-                IERC20(tokenIn).safeTransfer(takerAddress, actualFilled);
-                console.log(
-                    "[BebopHarness] transferred %s tokenIn to taker",
-                    actualFilled
-                );
-            }
-
-            // Approve settlement from taker's perspective
-            vm.stopPrank();
-            vm.startPrank(takerAddress);
-            IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
-            vm.stopPrank();
-            console.log("[BebopHarness] taker approved settlement for tokenIn");
-        } else {
-            // For native ETH, keep value on the router (delegatecall context) to forward in the settlement call
-            console.log("[BebopHarness] native ETH flow");
         }
 
-        // Build final calldata with adjusted filledTakerAmount
-        bytes memory finalCalldata = _modifyFilledTakerAmount(
-            bebopCalldata, givenAmount, effectiveOriginal, partialFillOffset
-        );
-        console.log("[BebopHarness] finalCalldata len=%s", finalCalldata.length);
+        // For ERC20 tokens, we need to handle the flow differently
+        // The taker needs to have the tokens and approve the settlement
+        if (tokenIn != address(0)) {
+            // When called via delegatecall from the router, address(this) is the router
+            // So we check the balance of address(this) which will be the router
+            uint256 balance = IERC20(tokenIn).balanceOf(address(this));
+            console.log("Balance of tokenIn at address(this):", balance);
+            console.log("Address(this):", address(this));
 
-        // Do the settlement call while impersonating the taker
-        uint256 beforeBal = _balanceOf(tokenOut, outputReceiver);
-        uint256 ethValue = tokenIn == address(0) ? givenAmount : 0;
-        console.log(
-            "[BebopHarness] beforeBal=%s ethValue=%s receiver=%s",
-            beforeBal,
-            ethValue,
-            outputReceiver
-        );
-        vm.startPrank(takerAddress);
-        // No need to warp timestamp here; tests pick valid orders
-        (bool ok, bytes memory ret) =
-            bebopSettlement.call{value: ethValue}(finalCalldata);
-        console.log("[BebopHarness] settlement ok=%s retLen=%s", ok, ret.length);
+            // If we don't have tokens, the taker should have them
+            if (balance < givenAmount) {
+                // Try to transfer from the taker (who should have approved the router)
+                console.log("Transferring from taker to address(this)");
+                IERC20(tokenIn).transferFrom(
+                    takerAddress, address(this), givenAmount
+                );
+                balance = IERC20(tokenIn).balanceOf(address(this));
+                console.log("Balance after transfer:", balance);
+            }
+
+            // Calculate the modified filledTakerAmount (what will actually be used)
+            bytes memory modifiedCalldata = _modifyFilledTakerAmount(
+                bebopCalldata,
+                givenAmount,
+                originalFilledTakerAmount,
+                partialFillOffset
+            );
+
+            // Extract the actual filledTakerAmount that will be used
+            uint256 actualFilledAmount = originalFilledTakerAmount > givenAmount
+                ? givenAmount
+                : originalFilledTakerAmount;
+
+            console.log(
+                "Original filled taker amount:", originalFilledTakerAmount
+            );
+            console.log("Actual filled amount to use:", actualFilledAmount);
+
+            // Only transfer what's needed to the taker, keep the rest in router
+            IERC20(tokenIn).transfer(takerAddress, actualFilledAmount);
+            console.log("Transferred tokens to taker:", actualFilledAmount);
+
+            // Check balances after transfer
+            uint256 takerBalance = IERC20(tokenIn).balanceOf(takerAddress);
+            uint256 routerBalance = IERC20(tokenIn).balanceOf(address(this));
+            console.log("After transfer - Taker balance:", takerBalance);
+            console.log(
+                "After transfer - Router balance (dust):", routerBalance
+            );
+
+            // Impersonate the taker and approve settlement for what they have
+            vm.startPrank(takerAddress);
+            IERC20(tokenIn).approve(bebopSettlement, actualFilledAmount);
+            console.log("Taker approved settlement for:", actualFilledAmount);
+            vm.stopPrank();
+
+            // Check if taker still has the tokens
+            takerBalance = IERC20(tokenIn).balanceOf(takerAddress);
+            console.log("After approval - Taker balance:", takerBalance);
+
+            // Start pranking as taker for the actual swap
+            vm.startPrank(takerAddress);
+        } else {
+            // For ETH, start pranking as taker
+            vm.startPrank(takerAddress);
+        }
+
+        // Log the actual bebop call details
+        console.log("Calling Bebop settlement with:");
+        console.log("  Taker address:", takerAddress);
+        console.log("  Token in:", tokenIn);
+        console.log("  Token out:", tokenOut);
+        console.log("  Given amount:", givenAmount);
+        console.log("  Receiver:", receiver);
+        console.log("  Bebop calldata length:", bebopCalldata.length);
+        console.log("  Natural msg.sender (no prank):", msg.sender);
+
+        // Call the parent implementation which handles the actual swap
+        // The taker prank is already active from above
+        console.log("About to call _swap, msg.sender is:", msg.sender);
+        console.log("Pranked as taker:", takerAddress);
+        calculatedAmount = _swap(givenAmount, data);
+
         vm.stopPrank();
-        require(ok, "Bebop settlement call failed");
 
-        uint256 afterBal = _balanceOf(tokenOut, outputReceiver);
-        calculatedAmount = afterBal - beforeBal;
-        console.log(
-            "[BebopHarness] afterBal=%s calculatedAmount=%s",
-            afterBal,
-            calculatedAmount
-        );
-
-        // no-op; keep function end balanced
+        console.log("Calculated amount returned:", calculatedAmount);
     }
 }
