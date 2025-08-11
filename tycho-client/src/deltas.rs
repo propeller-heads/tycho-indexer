@@ -6,7 +6,7 @@
 //!
 //! ## Websocket Implementation
 //!
-//! The present WebSocket implementation is clonable, which enables it to be shared
+//! The present WebSocket implementation is cloneable, which enables it to be shared
 //! across multiple asynchronous tasks without creating separate instances for each task. This
 //! unique feature boosts efficiency as it:
 //!
@@ -21,7 +21,10 @@
 //! consumption, and enhances overall software scalability.
 use std::{
     collections::{hash_map::Entry, HashMap},
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -168,6 +171,8 @@ pub struct WsDeltasClient {
     conn_notify: Arc<Notify>,
     /// Shared client instance state.
     inner: Arc<Mutex<Option<Inner>>>,
+    /// If set the client has exhausted it's reconnection attemtpts
+    dead: Arc<AtomicBool>,
 }
 
 type WebSocketSink =
@@ -211,7 +216,7 @@ struct Inner {
     buffer_size: usize,
 }
 
-/// Shared state betweeen all client instances.
+/// Shared state between all client instances.
 ///
 /// This state is behind a mutex and requires synchronization to be read of modified.
 impl Inner {
@@ -371,6 +376,7 @@ impl WsDeltasClient {
             subscription_buffer_size: 128,
             conn_notify: Arc::new(Notify::new()),
             max_reconnects: 5,
+            dead: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -393,6 +399,7 @@ impl WsDeltasClient {
             subscription_buffer_size: 128,
             conn_notify: Arc::new(Notify::new()),
             max_reconnects,
+            dead: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -408,10 +415,14 @@ impl WsDeltasClient {
     ///
     /// This method acquires the lock for inner for a short period, then waits until the  
     /// connection is established if not already connected.
-    async fn ensure_connection(&self) {
+    async fn ensure_connection(&self) -> Result<(), DeltasError> {
+        if self.dead.load(Ordering::SeqCst) {
+            return Err(DeltasError::NotConnected)
+        };
         if !self.is_connected().await {
             self.conn_notify.notified().await;
-        }
+        };
+        Ok(())
     }
 
     /// Main message handling logic
@@ -558,7 +569,7 @@ impl WsDeltasClient {
         Ok(())
     }
 
-    /// Helper method to force request a unsubscribe of a subscription
+    /// Helper method to force an unsubscription
     ///
     /// This method expects to receive a mutable reference to `Inner` so it does not acquire a
     /// lock. Used for normal unsubscribes as well to remove any subscriptions with deallocated
@@ -592,7 +603,7 @@ impl DeltasClient for WsDeltasClient {
         options: SubscriptionOptions,
     ) -> Result<(Uuid, Receiver<BlockChanges>), DeltasError> {
         trace!("Starting subscribe");
-        self.ensure_connection().await;
+        self.ensure_connection().await?;
         let (ready_tx, ready_rx) = oneshot::channel();
         {
             let mut guard = self.inner.lock().await;
@@ -622,7 +633,7 @@ impl DeltasClient for WsDeltasClient {
 
     #[instrument(skip(self))]
     async fn unsubscribe(&self, subscription_id: Uuid) -> Result<(), DeltasError> {
-        self.ensure_connection().await;
+        self.ensure_connection().await?;
         let (ready_tx, ready_rx) = oneshot::channel();
         {
             let mut guard = self.inner.lock().await;
@@ -658,7 +669,7 @@ impl DeltasClient for WsDeltasClient {
             let mut result = Err(DeltasError::NotConnected);
 
             'retry: while retry_count < this.max_reconnects {
-                info!(?ws_uri, "Connecting to WebSocket server");
+                info!(?ws_uri, retry_count, "Connecting to WebSocket server");
 
                 // Create a WebSocket request
                 let mut request_builder = Request::builder()
@@ -728,6 +739,7 @@ impl DeltasClient for WsDeltasClient {
                         _ = cmd_rx.recv() => {break 'retry},
                     };
                     if let Err(error) = res {
+                        debug!(?error, "WsError");
                         if matches!(
                             error,
                             DeltasError::ConnectionClosed | DeltasError::ConnectionError { .. }
@@ -752,7 +764,11 @@ impl DeltasClient for WsDeltasClient {
                     }
                 }
             }
-
+            debug!(
+                retry_count,
+                max_reconnects=?this.max_reconnects,
+                "Reconnection loop ended"
+            );
             // Clean up before exiting
             let mut guard = this.inner.as_ref().lock().await;
             *guard = None;
@@ -760,6 +776,7 @@ impl DeltasClient for WsDeltasClient {
             // Check if max retries has been reached.
             if retry_count >= this.max_reconnects {
                 error!("Max reconnection attempts reached; Exiting");
+                this.dead.store(true, Ordering::SeqCst);
                 this.conn_notify.notify_waiters(); // Notify that the task is done
                 result = Err(DeltasError::ConnectionClosed);
             }
@@ -796,6 +813,7 @@ impl DeltasClient for WsDeltasClient {
 mod tests {
     use std::net::SocketAddr;
 
+    use test_log::test;
     use tokio::{net::TcpListener, time::timeout};
     use tycho_common::dto::Chain;
 
@@ -1311,28 +1329,48 @@ mod tests {
             .expect("ws server loop errored");
     }
 
-    async fn mock_bad_connection_tycho_ws() -> (SocketAddr, JoinHandle<()>) {
+    async fn mock_bad_connection_tycho_ws(accept_first: bool) -> (SocketAddr, JoinHandle<()>) {
         let server = TcpListener::bind("127.0.0.1:0")
             .await
             .expect("localhost bind failed");
         let addr = server.local_addr().unwrap();
         let jh = tokio::spawn(async move {
             while let Ok((stream, _)) = server.accept().await {
-                // Immediately close the connection to simulate a failure
-                drop(stream);
+                if accept_first {
+                    // Send connection handshake to accept the connection (fail later)
+                    let stream = tokio_tungstenite::accept_async(stream)
+                        .await
+                        .unwrap();
+                    sleep(Duration::from_millis(10)).await;
+                    drop(stream)
+                } else {
+                    // Close the connection to simulate a failure
+                    drop(stream);
+                }
             }
         });
         (addr, jh)
     }
 
-    #[tokio::test]
-    async fn test_connect_max_attempts() {
-        let (addr, _) = mock_bad_connection_tycho_ws().await;
+    #[test(tokio::test)]
+    async fn test_subscribe_dead_client_after_max_attempts() {
+        let (addr, _) = mock_bad_connection_tycho_ws(true).await;
         let client = WsDeltasClient::new_with_reconnects(&format!("ws://{addr}"), 3, None).unwrap();
 
-        let join_handle = client.connect().await;
+        let join_handle = client.connect().await.unwrap();
+        let handle_res = join_handle.await.unwrap();
+        assert!(handle_res.is_err());
+        assert!(!client.is_connected().await);
 
-        assert!(join_handle.is_err());
-        assert_eq!(join_handle.unwrap_err().to_string(), DeltasError::NotConnected.to_string());
+        let subscription_res = timeout(
+            Duration::from_millis(10),
+            client.subscribe(
+                ExtractorIdentity::new(Chain::Ethereum, "vm:ambient"),
+                SubscriptionOptions::new(),
+            ),
+        )
+        .await
+        .unwrap();
+        assert!(subscription_res.is_err());
     }
 }
