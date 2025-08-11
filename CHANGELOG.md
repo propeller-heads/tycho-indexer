@@ -1,3 +1,11 @@
+## [0.81.4](https://github.com/propeller-heads/tycho-indexer/compare/0.81.3...0.81.4) (2025-08-11)
+
+
+### Bug Fixes
+
+* WsDeltas client forever blocking subscribe. ([1b6ff33](https://github.com/propeller-heads/tycho-indexer/commit/1b6ff333150613031dc2ffc1b0c1b36170c2fdea))
+* WsDeltas client forever blocking subscribe. ([#648](https://github.com/propeller-heads/tycho-indexer/issues/648)) ([4c2e989](https://github.com/propeller-heads/tycho-indexer/commit/4c2e989e3f0997646fe82834d237cc1a0b6c9a67))
+
 ## [0.81.3](https://github.com/propeller-heads/tycho-indexer/compare/0.81.2...0.81.3) (2025-08-08)
 
 
