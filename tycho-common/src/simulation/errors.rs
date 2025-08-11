@@ -1,6 +1,8 @@
 use thiserror::Error;
 
-use crate::simulation::protocol_sim::GetAmountOutResult;
+use crate::{
+    simulation::protocol_sim::GetAmountOutResult, swap::approximation::ApproximationError,
+};
 
 /// Represents the outer-level, user-facing errors of the tycho-simulation package.
 ///
@@ -20,6 +22,8 @@ pub enum SimulationError {
     InvalidInput(String, Option<GetAmountOutResult>),
     #[error("Recoverable error: {0}")]
     RecoverableError(String),
+    #[error("Approximation failed")]
+    ApproximationError(#[from] ApproximationError),
 }
 
 #[derive(Debug)]
