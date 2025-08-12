@@ -24,6 +24,8 @@ pub struct AccessListResult {
     pub access_list: Vec<AccessListEntry>,
     #[serde(rename = "gasUsed")]
     pub gas_used: String,
+    #[serde(rename = "error")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -79,6 +81,10 @@ pub fn build_state_overrides(
 
 impl AccessListResult {
     pub fn try_get_accessed_slots(&self) -> Result<HashMap<Address, HashSet<Bytes>>, RPCError> {
+        if let Some(error) = &self.error {
+            return Err(RPCError::TracingFailure(error.to_string()));
+        }
+
         let mut out = HashMap::new();
 
         for entry in &self.access_list {
