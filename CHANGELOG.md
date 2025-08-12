@@ -1,3 +1,11 @@
+## [0.81.5](https://github.com/propeller-heads/tycho-indexer/compare/0.81.4...0.81.5) (2025-08-12)
+
+
+### Bug Fixes
+
+* Derive Debug in SignedQuote ([31fd3c7](https://github.com/propeller-heads/tycho-indexer/commit/31fd3c7e715d61e586568f1b818ec5df2946fe28))
+* Derive Debug in SignedQuote ([#650](https://github.com/propeller-heads/tycho-indexer/issues/650)) ([29fe8ad](https://github.com/propeller-heads/tycho-indexer/commit/29fe8ad75277e833bb80e0bbf8657ada5a2986a1))
+
 ## [0.81.4](https://github.com/propeller-heads/tycho-indexer/compare/0.81.3...0.81.4) (2025-08-11)
 
 
