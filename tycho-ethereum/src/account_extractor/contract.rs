@@ -10,7 +10,6 @@ use chrono::NaiveDateTime;
 use ethers::{
     middleware::Middleware,
     prelude::{BlockId, Http, Provider, H160, H256, U256},
-    providers::ProviderError,
 };
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
@@ -77,8 +76,10 @@ impl AccountExtractor for EVMAccountExtractor {
         let (result_balances, result_codes) =
             tokio::join!(try_join_all(balance_futures), try_join_all(code_futures));
 
-        let balances = result_balances?;
-        let codes = result_codes?;
+        let balances = result_balances
+            .map_err(|e| RPCError::RequestError(format!("Failed to get balance: {e}")))?;
+        let codes =
+            result_codes.map_err(|e| RPCError::RequestError(format!("Failed to get code: {e}")))?;
 
         // Process each address with its corresponding balance and code
         for (i, &address) in h160_addresses.iter().enumerate() {
@@ -149,7 +150,8 @@ impl EVMAccountExtractor {
             let result: StorageRange = self
                 .provider
                 .request("debug_storageRangeAt", params)
-                .await?;
+                .await
+                .map_err(|e| RPCError::RequestError(format!("Failed to get storage: {e}")))?;
 
             for (_, entry) in result.storage {
                 all_slots
@@ -170,7 +172,8 @@ impl EVMAccountExtractor {
         let block = self
             .provider
             .get_block(BlockId::from(u64::try_from(block_id).expect("Invalid block number")))
-            .await?
+            .await
+            .map_err(|e| RPCError::RequestError(format!("Failed to get block: {e}")))?
             .expect("Block not found");
 
         Ok(Block {
@@ -212,11 +215,7 @@ impl EVMBatchAccountExtractor {
                         "eth_getCode",
                         &(&request.address, BlockNumberOrTag::from(block.number)),
                     )
-                    .map_err(|e| {
-                        RPCError::RequestError(ProviderError::CustomError(format!(
-                            "Failed to get code: {e}",
-                        )))
-                    })?
+                    .map_err(|e| RPCError::RequestError(format!("Failed to get code: {e}")))?
                     .map_resp(|resp: Bytes| resp.to_vec()),
             ));
 
@@ -226,19 +225,14 @@ impl EVMBatchAccountExtractor {
                         "eth_getBalance",
                         &(&request.address, BlockNumberOrTag::from(block.number)),
                     )
-                    .map_err(|e| {
-                        RPCError::RequestError(ProviderError::CustomError(format!(
-                            "Failed to get balance: {e}",
-                        )))
-                    })?,
+                    .map_err(|e| RPCError::RequestError(format!("Failed to get balance: {e}")))?,
             ));
         }
 
-        batch.send().await.map_err(|e| {
-            RPCError::RequestError(ProviderError::CustomError(format!(
-                "Failed to send batch request: {e}",
-            )))
-        })?;
+        batch
+            .send()
+            .await
+            .map_err(|e| RPCError::RequestError(format!("Failed to send batch request: {e}")))?;
 
         let mut codes: HashMap<Bytes, Bytes> = HashMap::with_capacity(max_batch_size);
         let mut balances: HashMap<Bytes, Bytes> = HashMap::with_capacity(max_batch_size);
@@ -250,9 +244,7 @@ impl EVMBatchAccountExtractor {
                 .as_mut()
                 .await
                 .map_err(|e| {
-                    RPCError::RequestError(ProviderError::CustomError(format!(
-                        "Failed to collect code request data: {e}",
-                    )))
+                    RPCError::RequestError(format!("Failed to collect code request data: {e}"))
                 })?;
 
             codes.insert(address.clone(), code_result.into());
@@ -261,9 +253,7 @@ impl EVMBatchAccountExtractor {
                 .as_mut()
                 .await
                 .map_err(|e| {
-                    RPCError::RequestError(ProviderError::CustomError(format!(
-                        "Failed to collect balance request data: {e}",
-                    )))
+                    RPCError::RequestError(format!("Failed to collect balance request data: {e}"))
                 })?;
 
             balances.insert(address.clone(), Bytes::from(balance_result.to_be_bytes::<32>()));
@@ -294,10 +284,10 @@ impl EVMBatchAccountExtractor {
                                     &(&request.address, slot, BlockNumberOrTag::from(block.number)),
                                 )
                                 .map_err(|e| {
-                                    RPCError::RequestError(ProviderError::CustomError(format!(
+                                    RPCError::RequestError(format!(
                                         "Failed to get storage: {e}, address: {}, block: {}",
                                         request.address, block.number,
-                                    )))
+                                    ))
                                 })?
                                 .map_resp(|res: Bytes| res.to_vec()),
                         ));
@@ -307,9 +297,7 @@ impl EVMBatchAccountExtractor {
                         .send()
                         .await
                         .map_err(|e| {
-                            RPCError::RequestError(ProviderError::CustomError(format!(
-                                "Failed to send batch request: {e}",
-                            )))
+                            RPCError::RequestError(format!("Failed to send batch request: {e}"))
                         })?;
 
                     for (idx, slot) in slot_batch.iter().enumerate() {
@@ -317,9 +305,9 @@ impl EVMBatchAccountExtractor {
                             .as_mut()
                             .await
                             .map_err(|e| {
-                                RPCError::RequestError(ProviderError::CustomError(format!(
-                                    "Failed to collect storage request data: {e}",
-                                )))
+                                RPCError::RequestError(format!(
+                                    "Failed to collect storage request data: {e}"
+                                ))
                             })?;
 
                         let value = if storage_result == [0; 32] {
@@ -371,10 +359,10 @@ impl EVMBatchAccountExtractor {
                 )
                 .await
                 .map_err(|e| {
-                    RPCError::RequestError(ProviderError::CustomError(format!(
+                    RPCError::RequestError(format!(
                         "Failed to get storage: {e}, address: {address}, block: {}",
                         block.number,
-                    )))
+                    ))
                 })?;
 
             for (_, entry) in result.storage {

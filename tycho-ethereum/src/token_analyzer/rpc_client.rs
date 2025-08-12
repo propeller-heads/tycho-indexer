@@ -19,6 +19,6 @@ impl EthereumRpcClient {
             .get_block_number()
             .await
             .map(|number| number.as_u64())
-            .map_err(RPCError::RequestError)
+            .map_err(|e| RPCError::RequestError(e.to_string()))
     }
 }
