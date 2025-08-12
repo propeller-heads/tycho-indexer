@@ -13,7 +13,10 @@ use tycho_common::{
         simulate::{DefaultInputs, DefaultOutputs, SimulateForward},
     },
     asset::erc20::ERC20Asset,
-    models::token::Token,
+    liquidity_provision::action::{
+        AddLiquidityFullRange, AddLiquidityFullRangeParameters,
+    },
+    models::{token::Token, Chain},
     simulation::errors::SimulationError,
     swap::action::{Swap, SwapParameters},
 };
@@ -169,6 +172,63 @@ impl SimulateForward<Swap> for UniswapV2Pool {
             used_assets,
             produced_assets,
             BigUint::from(21000u32), // Typical swap gas cost
+        );
+
+        Ok((outputs, Box::new(new_pool)))
+    }
+}
+
+// =============================================================================
+// Liquidity Provision Action Implementation
+// =============================================================================
+
+impl SimulateForward<AddLiquidityFullRange> for UniswapV2Pool {
+    fn simulate_forward(
+        &self,
+        _context: &ActionContext,
+        _params: &AddLiquidityFullRangeParameters,
+        inputs: &DefaultInputs<ERC20Asset>,
+    ) -> Result<(DefaultOutputs<ERC20Asset>, Box<Self>), SimulationError> {
+        if inputs.0.len() != 2 {
+            return Err(SimulationError::InvalidInput("Add liquidity requires exactly two input tokens".into(), None));
+        }
+
+        // Sort inputs by token address to match pool order
+        let mut sorted_inputs = inputs.0.clone();
+        sorted_inputs.sort_by(|a, b| a.token().address.cmp(&b.token().address));
+
+        let (amount0, amount1) = (
+            sorted_inputs[0].amount().unwrap().clone(),
+            sorted_inputs[1].amount().unwrap().clone(),
+        );
+
+        let lp_tokens_minted = self.calculate_lp_tokens_to_mint(&amount0, &amount1)?;
+
+        // Create new pool state
+        let mut new_pool = self.clone();
+        new_pool.reserve0 += &amount0;
+        new_pool.reserve1 += &amount1;
+        new_pool.lp_total_supply += &lp_tokens_minted;
+
+        // Create LP token (using a simple hash-like address)
+        let lp_token = Token::new(
+            &"0x1111111111111111111111111111111111111111".into(),
+            &format!("{}/{}", self.token0.symbol, self.token1.symbol),
+            18,
+            0, // no tax
+            &[Some(50000u64)], // LP operations gas cost
+            Chain::Ethereum,
+            100, // good quality
+        );
+
+        // Create output assets
+        let used_assets = inputs.0.clone();
+        let produced_assets = vec![ERC20Asset::new(lp_token, lp_tokens_minted)];
+
+        let outputs = DefaultOutputs::new(
+            used_assets,
+            produced_assets,
+            BigUint::from(50000u32), // LP operation gas cost
         );
 
         Ok((outputs, Box::new(new_pool)))

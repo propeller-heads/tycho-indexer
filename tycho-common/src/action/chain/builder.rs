@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use crate::action::{
     chain::{
-        converters::TypeConverter,
+        converters::{TypeConverter, ErasedTypeConverter},
         executor::ActionChain,
         step::{ErasedStep, Step},
     },
@@ -27,7 +27,7 @@ pub struct ChainBuilder<InputType, CurrentType> {
     _current_marker: PhantomData<CurrentType>,
 }
 
-impl<I: 'static, C: 'static> ChainBuilder<I, C> {
+impl<I: 'static, C: Clone + 'static> ChainBuilder<I, C> {
     /// Add a new step to the chain with a custom converter.
     /// 
     /// The step can now handle type mismatches between the current chain output type C
@@ -36,7 +36,7 @@ impl<I: 'static, C: 'static> ChainBuilder<I, C> {
         mut self,
         state: S,
         parameters: A::Parameters,
-        converter: impl TypeConverter<A::Outputs, NewOutput> + Send + Sync + 'static,
+        converter: impl ErasedTypeConverter + 'static,
     ) -> ChainBuilder<I, NewOutput>
     where
         A: Action + 'static,
@@ -47,8 +47,7 @@ impl<I: 'static, C: 'static> ChainBuilder<I, C> {
         NewOutput: 'static,
         C: 'static,
     {
-        let boxed_converter: Box<dyn TypeConverter<A::Outputs, NewOutput> + Send + Sync> = 
-            Box::new(converter) as Box<dyn TypeConverter<A::Outputs, NewOutput> + Send + Sync>;
+        let boxed_converter: Box<dyn ErasedTypeConverter> = Box::new(converter);
             
         let step = Step::<A, S, C, NewOutput>::new(state, parameters, Some(boxed_converter));
         self.steps.push(Box::new(step));
@@ -90,7 +89,7 @@ impl<I: 'static> ChainBuilder<I, crate::action::simulate::DefaultOutputs<crate::
         let step = Step::<A, S, crate::action::simulate::DefaultOutputs<crate::asset::erc20::ERC20Asset>, crate::action::simulate::DefaultOutputs<crate::asset::erc20::ERC20Asset>>::new(
             state, 
             parameters, 
-            Some(Box::new(crate::action::chain::converters::PassThrough::new()))
+            Some(Box::new(crate::action::chain::converters::PassThrough::<crate::action::simulate::DefaultOutputs<crate::asset::erc20::ERC20Asset>>::new()))
         );
         
         ChainBuilder {

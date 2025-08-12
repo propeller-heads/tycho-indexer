@@ -74,6 +74,7 @@ pub struct DefaultInputs<A: Asset>(pub Vec<A>);
 ///
 /// Captures the complete result of an action execution including asset flows
 /// and gas consumption for comprehensive simulation tracking.
+#[derive(Clone)]
 pub struct DefaultOutputs<A: Asset> {
     /// Assets consumed during action execution.
     used: Vec<A>,

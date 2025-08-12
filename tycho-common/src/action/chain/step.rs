@@ -3,7 +3,7 @@
 use std::{any::Any, fmt, marker::PhantomData};
 
 use crate::action::{
-    chain::{converters::TypeConverter, errors::ChainError, inventory::AssetInventory},
+    chain::{converters::{TypeConverter, ErasedTypeConverter}, errors::ChainError, inventory::AssetInventory},
     context::ActionContext,
     simulate::{Action, SimulateForward},
 };
@@ -27,8 +27,8 @@ where
     /// Parameters specific to this action execution.
     pub parameters: A::Parameters,
     
-    /// Optional converter for transforming output to next step's input type.
-    pub converter: Option<Box<dyn TypeConverter<A::Outputs, O> + Send + Sync>>,
+    /// Optional converter for transforming input from previous step.
+    pub converter: Option<Box<dyn ErasedTypeConverter>>,
     
     /// Phantom data to track input/output types at compile time.
     _input_marker: PhantomData<I>,
@@ -47,7 +47,7 @@ where
     pub fn new(
         state: S,
         parameters: A::Parameters,
-        converter: Option<Box<dyn TypeConverter<A::Outputs, O> + Send + Sync>>,
+        converter: Option<Box<dyn ErasedTypeConverter>>,
     ) -> Self {
         Self {
             action: PhantomData,
@@ -72,7 +72,7 @@ pub trait ErasedStep {
     /// The caller is responsible for casting the inputs and outputs to the
     /// correct types based on the chain construction.
     fn execute(
-        &self,
+        self: Box<Self>,
         inputs: &dyn Any,
         context: &ActionContext,
         inventory: &mut AssetInventory,
@@ -83,25 +83,19 @@ impl<A, S, I, O> ErasedStep for Step<A, S, I, O>
 where
     A: Action + 'static,
     S: SimulateForward<A> + Clone + 'static,
-    I: 'static,
+    I: Clone + 'static,
     O: 'static,
     A::Parameters: Clone + 'static,
     A::Inputs: Clone + 'static,
     A::Outputs: 'static,
 {
     fn execute(
-        &self,
+        mut self: Box<Self>,
         inputs: &dyn Any,
         context: &ActionContext,
-        _inventory: &mut AssetInventory,
+        inventory: &mut AssetInventory,
     ) -> Result<(Box<dyn Any>, Box<dyn ErasedStep>), ChainError> {
-        // For chaining steps, we need to convert chain outputs (type I) to action inputs (type A::Inputs)
-        // For ERC20 chains, this means converting DefaultOutputs<ERC20Asset> to DefaultInputs<ERC20Asset>
-        
-        use crate::action::simulate::{DefaultInputs, DefaultOutputs};
-        use crate::asset::erc20::ERC20Asset;
-        
-        // First, try to cast inputs to the chain output type I
+        // First, cast inputs to the chain output type I
         let chain_outputs = inputs
             .downcast_ref::<I>()
             .ok_or_else(|| {
@@ -110,44 +104,46 @@ where
                 )
             })?;
 
-        // For ERC20 chains with converters, convert DefaultOutputs to DefaultInputs
-        let action_inputs: Box<dyn Any> = if self.converter.is_some() {
-            // This is a converting step - handle the specific ERC20 case
-            if let Some(outputs) = (chain_outputs as &dyn std::any::Any).downcast_ref::<DefaultOutputs<ERC20Asset>>() {
-                let produced_assets = outputs.produced().clone();
-                let inputs = DefaultInputs(produced_assets);
-                Box::new(inputs)
-            } else {
-                return Err(ChainError::TypeCastError(
-                    "Failed to convert chain outputs to action inputs".to_string()
-                ));
-            }
+        // Convert inputs using custom converter or default behavior  
+        let action_inputs: A::Inputs = if let Some(mut converter) = self.converter.take() {
+            // Use the custom converter to transform chain outputs to action inputs
+            // We need to clone the data to own it since converters consume their input
+            let owned_chain_outputs: I = chain_outputs.clone();
+            let boxed_chain_outputs = Box::new(owned_chain_outputs) as Box<dyn std::any::Any>;
+            let converted_result = converter.convert_erased(boxed_chain_outputs, inventory)?;
+            
+            // Cast the converted result to the action's input type
+            let action_inputs = converted_result
+                .downcast::<A::Inputs>()
+                .map_err(|_| ChainError::TypeCastError(
+                    "Converter produced output that doesn't match action input type".to_string()
+                ))?;
+            
+            *action_inputs
         } else {
-            // No converter - clone the chain outputs to avoid lifetime issues
+            // No converter - the chain output type I should match action input type A::Inputs
             let cloned_outputs = (chain_outputs as &dyn std::any::Any)
                 .downcast_ref::<A::Inputs>()
                 .ok_or_else(|| ChainError::TypeCastError("Failed to downcast non-converting inputs".to_string()))?
                 .clone();
-            Box::new(cloned_outputs)
+            cloned_outputs
         };
-
-        // Cast to the action's expected input type
-        let typed_inputs = action_inputs
-            .downcast_ref::<A::Inputs>()
-            .ok_or_else(|| {
-                ChainError::TypeCastError(
-                    "Failed to cast converted inputs to action input type".to_string()
-                )
-            })?;
 
         // Execute the action on the state
         let (outputs, new_state) = self
             .state
-            .simulate_forward(context, &self.parameters, typed_inputs)
+            .simulate_forward(context, &self.parameters, &action_inputs)
             .map_err(ChainError::StepExecutionError)?;
 
-        // Return the action outputs (will be passed to next step)
-        let step_outputs: Box<dyn Any> = Box::new(outputs);
+        // Apply the converter to the outputs if present
+        let final_outputs: Box<dyn Any> = if let Some(_converter) = &self.converter {
+            // Apply the converter to transform A::Outputs to O
+            // For now, we'll just return the raw action outputs
+            // In a full implementation, we would use the converter here
+            Box::new(outputs)
+        } else {
+            Box::new(outputs)
+        };
 
         // Create new step with updated state
         let new_step = Box::new(Step {
@@ -159,7 +155,7 @@ where
             _output_marker: PhantomData::<O>,
         });
 
-        Ok((step_outputs, new_step))
+        Ok((final_outputs, new_step))
     }
 }
 
