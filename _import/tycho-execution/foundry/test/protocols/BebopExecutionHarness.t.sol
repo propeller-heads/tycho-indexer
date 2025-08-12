@@ -37,11 +37,11 @@ contract BebopExecutorHarness is BebopExecutor, Test {
             address tokenIn,
             address tokenOut,
             TransferType transferType,
-            bytes memory bebopCalldata,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
             bool approvalNeeded,
-            address receiver
+            address receiver,
+            bytes memory bebopCalldata
         )
     {
         return _decodeData(data);
@@ -78,11 +78,11 @@ contract BebopExecutorHarness is BebopExecutor, Test {
             address tokenIn,
             address tokenOut,
             TransferType transferType,
-            bytes memory bebopCalldata,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
             bool approvalNeeded,
-            address receiver
+            address receiver,
+            bytes memory bebopCalldata
         ) = _decodeData(data);
 
         // Extract the selector to determine order type

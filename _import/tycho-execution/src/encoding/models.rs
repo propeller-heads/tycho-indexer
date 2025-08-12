@@ -237,7 +237,7 @@ impl TryFrom<u8> for BebopOrderType {
         match value {
             0 => Ok(BebopOrderType::Single),
             1 => Ok(BebopOrderType::Aggregate),
-            _ => Err(EncodingError::InvalidInput(format!("Invalid Bebop order type: {}", value))),
+            _ => Err(EncodingError::InvalidInput(format!("Invalid Bebop order type: {value}"))),
         }
     }
 }

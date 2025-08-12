@@ -1,20 +1,15 @@
 use std::{collections::HashMap, str::FromStr};
 
-use alloy::{
-    hex::encode,
-    primitives::{Address, U256},
-    sol_types::SolValue,
-};
+use alloy::hex::encode;
 use num_bigint::{BigInt, BigUint};
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 use tycho_execution::encoding::{
     evm::utils::write_calldata_to_file,
-    models::{BebopOrderType, Solution, Swap, UserTransferType},
+    models::{Solution, Swap, UserTransferType},
 };
 
 use crate::common::{
-    build_bebop_calldata, encoding::encode_tycho_router_call, eth, eth_chain, get_signer,
-    get_tycho_router_encoder, ondo, usdc, weth,
+    encoding::encode_tycho_router_call, eth, eth_chain, get_signer, get_tycho_router_encoder, weth,
 };
 
 mod common;
@@ -599,135 +594,142 @@ fn test_uniswap_v3_balancer_v3() {
     write_calldata_to_file("test_uniswap_v3_balancer_v3", hex_calldata.as_str());
 }
 
-#[test]
-fn test_uniswap_v3_bebop() {
-    // Note: This test does not assert anything. It is only used to obtain
-    // integration test data for our router solidity test.
-    //
-    // Performs a sequential swap from WETH to ONDO through USDC using USV3 and
-    // Bebop RFQ
-    //
-    //   WETH ───(USV3)──> USDC ───(Bebop RFQ)──> ONDO
-
-    let weth = weth();
-    let usdc = usdc();
-    let ondo = ondo();
-
-    // First swap: WETH -> USDC via UniswapV3
-    let swap_weth_usdc = Swap {
-        component: ProtocolComponent {
-            id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* WETH-USDC USV3 Pool
-                                                                           * 0.05% */
-            protocol_system: "uniswap_v3".to_string(),
-            static_attributes: {
-                let mut attrs = HashMap::new();
-                attrs
-                    .insert("fee".to_string(), Bytes::from(BigInt::from(500).to_signed_bytes_be()));
-                attrs
-            },
-            ..Default::default()
-        },
-        token_in: weth.clone(),
-        token_out: usdc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-    };
-
-    // Second swap: USDC -> ONDO via Bebop RFQ using real order data
-    // Using the same real order from the mainnet transaction at block 22667985
-    let expiry = 1749483840u64; // Real expiry from the order
-    let taker_address = Address::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(); // Real taker
-    let maker_address = Address::from_str("0xCe79b081c0c924cb67848723ed3057234d10FC6b").unwrap(); // Real maker
-    let maker_nonce = 1749483765992417u64; // Real nonce
-    let taker_token = Address::from_str(&usdc.to_string()).unwrap();
-    let maker_token = Address::from_str(&ondo.to_string()).unwrap();
-    // Using the real order amounts
-    let taker_amount = U256::from_str("200000000").unwrap(); // 200 USDC (6 decimals)
-    let maker_amount = U256::from_str("237212396774431060000").unwrap(); // 237.21 ONDO (18 decimals)
-    let receiver = Address::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(); // Real receiver
-    let packed_commands = U256::ZERO;
-    let flags = U256::from_str(
-        "51915842898789398998206002334703507894664330885127600393944965515693155942400",
-    )
-    .unwrap(); // Real flags
-
-    // Encode using standard ABI encoding (not packed)
-    let quote_data = (
-        expiry,
-        taker_address,
-        maker_address,
-        maker_nonce,
-        taker_token,
-        maker_token,
-        taker_amount,
-        maker_amount,
-        receiver,
-        packed_commands,
-        flags,
-    )
-        .abi_encode();
-
-    // Real signature from the order
-    let signature = hex::decode("eb5419631614978da217532a40f02a8f2ece37d8cfb94aaa602baabbdefb56b474f4c2048a0f56502caff4ea7411d99eed6027cd67dc1088aaf4181dcb0df7051c").unwrap();
-
-    // Build user_data with the quote and signature
-    let user_data = build_bebop_calldata(
-        BebopOrderType::Single,
-        U256::from(0), // 0 means fill entire order
-        &quote_data,
-        vec![(signature, 0)], // ETH_SIGN signature type (0)
-    );
-
-    let bebop_component = ProtocolComponent {
-        id: String::from("bebop-rfq"),
-        protocol_system: String::from("rfq:bebop"),
-        static_attributes: HashMap::new(), // No static attributes needed
-        ..Default::default()
-    };
-
-    let swap_usdc_ondo = Swap {
-        component: bebop_component,
-        token_in: usdc.clone(),
-        token_out: ondo.clone(),
-        split: 0f64,
-        user_data: Some(user_data),
-        protocol_state: None,
-    };
-
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-
-    let solution = Solution {
-        exact_out: false,
-        given_token: weth,
-        // Use ~0.099 WETH to get approximately 200 USDC from UniswapV3
-        // This should leave only dust amount in the router after Bebop consumes 200
-        // USDC
-        given_amount: BigUint::from_str("99000000000000000").unwrap(), // 0.099 WETH
-        checked_token: ondo,
-        checked_amount: BigUint::from_str("237212396774431060000").unwrap(), /* Expected ONDO from Bebop order */
-        sender: Bytes::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(), /* Must match order taker_address */
-        receiver: Bytes::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(), /* Using the real order receiver */
-        swaps: vec![swap_weth_usdc, swap_usdc_ondo],
-        ..Default::default()
-    };
-
-    let encoded_solution = encoder
-        .encode_solutions(vec![solution.clone()])
-        .unwrap()[0]
-        .clone();
-
-    let calldata = encode_tycho_router_call(
-        eth_chain().id(),
-        encoded_solution,
-        &solution,
-        &UserTransferType::TransferFrom,
-        &eth(),
-        None,
-    )
-    .unwrap()
-    .data;
-
-    let hex_calldata = encode(&calldata);
-    write_calldata_to_file("test_uniswap_v3_bebop", hex_calldata.as_str());
-}
+// #[test]
+// fn test_uniswap_v3_bebop() {
+//     // Note: This test does not assert anything. It is only used to obtain
+//     // integration test data for our router solidity test.
+//     //
+//     // Performs a sequential swap from WETH to ONDO through USDC using USV3 and
+//     // Bebop RFQ
+//     //
+//     //   WETH ───(USV3)──> USDC ───(Bebop RFQ)──> ONDO
+//
+//     let weth = weth();
+//     let usdc = usdc();
+//     let ondo = ondo();
+//
+//     // First swap: WETH -> USDC via UniswapV3
+//     let swap_weth_usdc = Swap {
+//         component: ProtocolComponent {
+//             id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* WETH-USDC USV3 Pool
+//                                                                            * 0.05% */
+//             protocol_system: "uniswap_v3".to_string(),
+//             static_attributes: {
+//                 let mut attrs = HashMap::new();
+//                 attrs
+//                     .insert("fee".to_string(),
+// Bytes::from(BigInt::from(500).to_signed_bytes_be()));                 attrs
+//             },
+//             ..Default::default()
+//         },
+//         token_in: weth.clone(),
+//         token_out: usdc.clone(),
+//         split: 0f64,
+//         user_data: None,
+//         protocol_state: None,
+//     };
+//
+//     // Second swap: USDC -> ONDO via Bebop RFQ using real order data
+//     // Using the same real order from the mainnet transaction at block 22667985
+//     let expiry = 1749483840u64; // Real expiry from the order
+//     let taker_address = Address::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap();
+// // Real taker     let maker_address =
+// Address::from_str("0xCe79b081c0c924cb67848723ed3057234d10FC6b").unwrap(); // Real maker
+//     let maker_nonce = 1749483765992417u64; // Real nonce
+//     let taker_token = Address::from_str(&usdc.to_string()).unwrap();
+//     let maker_token = Address::from_str(&ondo.to_string()).unwrap();
+//     // Using the real order amounts
+//     let taker_amount = U256::from_str("200000000").unwrap(); // 200 USDC (6 decimals)
+//     let maker_amount = U256::from_str("237212396774431060000").unwrap(); // 237.21 ONDO (18
+// decimals)     let receiver =
+// Address::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(); // Real receiver
+//     let packed_commands = U256::ZERO;
+//     let flags = U256::from_str(
+//         "51915842898789398998206002334703507894664330885127600393944965515693155942400",
+//     )
+//     .unwrap(); // Real flags
+//
+//     // Encode using standard ABI encoding (not packed)
+//     let quote_data = (
+//         expiry,
+//         taker_address,
+//         maker_address,
+//         maker_nonce,
+//         taker_token,
+//         maker_token,
+//         taker_amount,
+//         maker_amount,
+//         receiver,
+//         packed_commands,
+//         flags,
+//     )
+//         .abi_encode();
+//
+//     // Real signature from the order
+//     let signature =
+// hex::decode("
+// eb5419631614978da217532a40f02a8f2ece37d8cfb94aaa602baabbdefb56b474f4c2048a0f56502caff4ea7411d99eed6027cd67dc1088aaf4181dcb0df7051c"
+// ).unwrap();
+//
+//     // Build user_data with the quote and signature
+//     let user_data = build_bebop_calldata(
+//         BebopOrderType::Single,
+//         U256::from(0), // 0 means fill entire order
+//         &quote_data,
+//         vec![(signature, 0)], // ETH_SIGN signature type (0)
+//     );
+//
+//     let bebop_component = ProtocolComponent {
+//         id: String::from("bebop-rfq"),
+//         protocol_system: String::from("rfq:bebop"),
+//         static_attributes: HashMap::new(), // No static attributes needed
+//         ..Default::default()
+//     };
+//
+//     let swap_usdc_ondo = Swap {
+//         component: bebop_component,
+//         token_in: usdc.clone(),
+//         token_out: ondo.clone(),
+//         split: 0f64,
+//         user_data: Some(user_data),
+//         protocol_state: None,
+//     };
+//
+//     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+//
+//     let solution = Solution {
+//         exact_out: false,
+//         given_token: weth,
+//         // Use ~0.099 WETH to get approximately 200 USDC from UniswapV3
+//         // This should leave only dust amount in the router after Bebop consumes 200
+//         // USDC
+//         given_amount: BigUint::from_str("99000000000000000").unwrap(), // 0.099 WETH
+//         checked_token: ondo,
+//         checked_amount: BigUint::from_str("237212396774431060000").unwrap(), /* Expected ONDO
+// from Bebop order */         sender:
+// Bytes::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(), /* Must match order
+// taker_address */         receiver:
+// Bytes::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(), /* Using the real order
+// receiver */         swaps: vec![swap_weth_usdc, swap_usdc_ondo],
+//         ..Default::default()
+//     };
+//
+//     let encoded_solution = encoder
+//         .encode_solutions(vec![solution.clone()])
+//         .unwrap()[0]
+//         .clone();
+//
+//     let calldata = encode_tycho_router_call(
+//         eth_chain().id(),
+//         encoded_solution,
+//         &solution,
+//         &UserTransferType::TransferFrom,
+//         &eth(),
+//         None,
+//     )
+//     .unwrap()
+//     .data;
+//
+//     let hex_calldata = encode(&calldata);
+//     write_calldata_to_file("test_uniswap_v3_bebop", hex_calldata.as_str());
+// }

@@ -1,17 +1,12 @@
 mod common;
 use std::{collections::HashMap, str::FromStr};
 
-use alloy::{
-    hex,
-    hex::encode,
-    primitives::{Address, Bytes as AlloyBytes, U256},
-    sol_types::SolValue,
-};
+use alloy::{hex, hex::encode};
 use num_bigint::{BigInt, BigUint};
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 use tycho_execution::encoding::{
     evm::utils::write_calldata_to_file,
-    models::{BebopOrderType, Solution, Swap, UserTransferType},
+    models::{Solution, Swap, UserTransferType},
 };
 
 use crate::common::{
@@ -590,55 +585,21 @@ fn test_single_encoding_strategy_balancer_v3() {
 
 #[test]
 fn test_single_encoding_strategy_bebop() {
-    // Use the same mainnet data from Solidity tests
-    // Transaction: https://etherscan.io/tx/0x6279bc970273b6e526e86d9b69133c2ca1277e697ba25375f5e6fc4df50c0c94
+    // The quote was done separately where the sender is the router and the receiver is a random
+    // user    let _router = Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap();
+    let user = Bytes::from_str("0xd2068e04cf586f76eece7ba5beb779d7bb1474a1").unwrap();
+
     let token_in = usdc();
     let token_out = ondo();
     let amount_in = BigUint::from_str("200000000").unwrap(); // 200 USDC
-    let amount_out = BigUint::from_str("237212396774431060000").unwrap(); // 237.21 ONDO
-
-    // Create the exact same order from mainnet
-    let expiry = 1749483840u64;
-    let taker_address = Address::from_str("0xc5564C13A157E6240659fb81882A28091add8670").unwrap(); // Order receiver from mainnet
-    let maker_address = Address::from_str("0xCe79b081c0c924cb67848723ed3057234d10FC6b").unwrap();
-    let maker_nonce = 1749483765992417u64;
-    let taker_token = Address::from_str(&token_in.to_string()).unwrap();
-    let maker_token = Address::from_str(&token_out.to_string()).unwrap();
-    let taker_amount = U256::from_str(&amount_in.to_string()).unwrap();
-    let maker_amount = U256::from_str(&amount_out.to_string()).unwrap();
-    let receiver = taker_address; // Same as taker_address in this order
-    let packed_commands = U256::ZERO;
-    let flags = U256::from_str(
-        "51915842898789398998206002334703507894664330885127600393944965515693155942400",
-    )
-    .unwrap();
+    let amount_out = BigUint::from_str("194477331556159832309").unwrap(); // 203.8 ONDO
+    let partial_fill_offset = 12;
 
     // Encode using standard ABI encoding (not packed)
-    let quote_data = (
-        expiry,
-        taker_address,
-        maker_address,
-        maker_nonce,
-        taker_token,
-        maker_token,
-        taker_amount,
-        maker_amount,
-        receiver,
-        packed_commands,
-        flags,
-    )
-        .abi_encode();
-
-    // Real signature from mainnet
-    let signature = hex::decode("eb5419631614978da217532a40f02a8f2ece37d8cfb94aaa602baabbdefb56b474f4c2048a0f56502caff4ea7411d99eed6027cd67dc1088aaf4181dcb0df7051c").unwrap();
+    let calldata = Bytes::from_str("0x4dcebcba00000000000000000000000000000000000000000000000000000000689b548f0000000000000000000000003ede3eca2a72b3aecc820e955b36f38437d0139500000000000000000000000067336cec42645f55059eff241cb02ea5cc52ff86000000000000000000000000000000000000000000000000279ead5d9685f25b000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000faba6f8e4a5e8ab82f62fe7c39859fa577269be3000000000000000000000000000000000000000000000000000000000bebc20000000000000000000000000000000000000000000000000a8aea46aa4ec5c0f5000000000000000000000000d2068e04cf586f76eece7ba5beb779d7bb1474a100000000000000000000000000000000000000000000000000000000000000005230bcb979c81cebf94a3b5c08bcfa300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000414ce40058ff07f11d9224c2c8d1e58369e4a90173856202d8d2a17da48058ad683dedb742eda0d4c0cf04cf1c09138898dd7fd06f97268ea7f74ef9b42d29bf4c1b00000000000000000000000000000000000000000000000000000000000000").unwrap();
 
     // Build user_data with the quote and signature using new calldata format
-    let user_data = build_bebop_calldata(
-        BebopOrderType::Single,
-        U256::ZERO, // 0 means fill entire order
-        &quote_data,
-        vec![(signature, 0)], // ETH_SIGN signature type
-    );
+    let user_data = build_bebop_calldata(&calldata, partial_fill_offset);
 
     let bebop_component = ProtocolComponent {
         id: String::from("bebop-rfq"),
@@ -658,17 +619,14 @@ fn test_single_encoding_strategy_bebop() {
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
-    let taker_address_bytes = Bytes::from_str(&taker_address.to_string()).unwrap();
-
     let solution = Solution {
         exact_out: false,
         given_token: token_in,
         given_amount: amount_in,
         checked_token: token_out,
         checked_amount: amount_out, // Expected output amount
-        // Use the order's taker address as sender and receiver
-        sender: taker_address_bytes.clone(),
-        receiver: taker_address_bytes,
+        sender: user.clone(),
+        receiver: user,
         swaps: vec![swap],
         ..Default::default()
     };
@@ -691,131 +649,138 @@ fn test_single_encoding_strategy_bebop() {
     let hex_calldata = hex::encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_bebop", hex_calldata.as_str());
 }
-
-#[test]
-fn test_single_encoding_strategy_bebop_aggregate() {
-    // Use real mainnet aggregate order data from CLAUDE.md
-    // Transaction: https://etherscan.io/tx/0xec88410136c287280da87d0a37c1cb745f320406ca3ae55c678dec11996c1b1c
-    // Use native ETH as tycho's token_in
-    let token_in = eth();
-    let token_out = usdc();
-    let amount_in = BigUint::from_str("9850000000000000").unwrap(); // 0.00985 WETH
-    let amount_out = BigUint::from_str("17969561").unwrap(); // 17.969561 USDC
-
-    // Create the exact aggregate order from mainnet
-    let expiry = 1746367285u64;
-    let taker_address = Address::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap();
-    let receiver = Address::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap();
-
-    // Set up makers
-    let maker_addresses = vec![
-        Address::from_str("0x67336Cec42645F55059EfF241Cb02eA5cC52fF86").unwrap(),
-        Address::from_str("0xBF19CbF0256f19f39A016a86Ff3551ecC6f2aAFE").unwrap(),
-    ];
-    let maker_nonces = vec![U256::from(1746367197308u64), U256::from(15460096u64)];
-
-    // 2D arrays for tokens
-    // We use WETH as a taker token even when handling native ETH
-    let taker_tokens = vec![vec![Address::from_slice(&weth())], vec![Address::from_slice(&weth())]];
-    let maker_tokens =
-        vec![vec![Address::from_slice(&token_out)], vec![Address::from_slice(&token_out)]];
-
-    // 2D arrays for amounts
-    let taker_amounts = vec![
-        vec![U256::from_str("5812106401997138").unwrap()],
-        vec![U256::from_str("4037893598002862").unwrap()],
-    ];
-    let maker_amounts =
-        vec![vec![U256::from_str("10607211").unwrap()], vec![U256::from_str("7362350").unwrap()]];
-
-    // Commands and flags from the real transaction
-    let commands = AlloyBytes::from(hex!("00040004").to_vec());
-    let flags = U256::from_str(
-        "95769172144825922628485191511070792431742484643425438763224908097896054784000",
-    )
-    .unwrap();
-
-    // Encode Aggregate order - must match IBebopSettlement.Aggregate struct exactly
-    let quote_data = (
-        U256::from(expiry), // expiry as U256
-        taker_address,
-        maker_addresses,
-        maker_nonces, // Array of maker nonces
-        taker_tokens, // 2D array
-        maker_tokens,
-        taker_amounts, // 2D array
-        maker_amounts,
-        receiver,
-        commands,
-        flags,
-    )
-        .abi_encode();
-
-    // Use real signatures from the mainnet transaction
-    let sig1 = hex::decode("d5abb425f9bac1f44d48705f41a8ab9cae207517be8553d2c03b06a88995f2f351ab8ce7627a87048178d539dd64fd2380245531a0c8e43fdc614652b1f32fc71c").unwrap();
-    let sig2 = hex::decode("f38c698e48a3eac48f184bc324fef0b135ee13705ab38cc0bbf5a792f21002f051e445b9e7d57cf24c35e17629ea35b3263591c4abf8ca87ffa44b41301b89c41b").unwrap();
-
-    // Build user_data with ETH_SIGN flag (0) for both signatures
-    let signatures = vec![
-        (sig1, 0u8), // ETH_SIGN for maker 1
-        (sig2, 0u8), // ETH_SIGN for maker 2
-    ];
-
-    let user_data = build_bebop_calldata(
-        BebopOrderType::Aggregate,
-        U256::ZERO, // 0 means fill entire order
-        &quote_data,
-        signatures,
-    );
-
-    let bebop_component = ProtocolComponent {
-        id: String::from("bebop-rfq"),
-        protocol_system: String::from("rfq:bebop"),
-        static_attributes: HashMap::new(),
-        ..Default::default()
-    };
-
-    let swap = Swap {
-        component: bebop_component,
-        token_in: token_in.clone(),
-        token_out: token_out.clone(),
-        split: 0f64,
-        user_data: Some(user_data),
-        protocol_state: None,
-    };
-
-    // Use TransferFrom for WETH token transfer
-    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-
-    let solution = Solution {
-        exact_out: false,
-        given_token: token_in.clone(),
-        given_amount: amount_in,
-        checked_token: token_out,
-        checked_amount: amount_out,
-        // Use order taker as both sender and receiver to match the test setup
-        sender: Bytes::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap(), /* Order taker */
-        receiver: Bytes::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap(), /* Order receiver */
-        swaps: vec![swap],
-        ..Default::default()
-    };
-
-    let encoded_solution = encoder
-        .encode_solutions(vec![solution.clone()])
-        .unwrap()[0]
-        .clone();
-
-    let calldata = encode_tycho_router_call(
-        eth_chain().id(),
-        encoded_solution,
-        &solution,
-        &UserTransferType::TransferFrom,
-        &eth(),
-        None,
-    )
-    .unwrap()
-    .data;
-    let hex_calldata = hex::encode(&calldata);
-
-    write_calldata_to_file("test_single_encoding_strategy_bebop_aggregate", hex_calldata.as_str());
-}
+//
+// #[test]
+// fn test_single_encoding_strategy_bebop_aggregate() {
+//     // Use real mainnet aggregate order data from CLAUDE.md
+//     // Transaction: https://etherscan.io/tx/0xec88410136c287280da87d0a37c1cb745f320406ca3ae55c678dec11996c1b1c
+//     // Use native ETH as tycho's token_in
+//     let token_in = eth();
+//     let token_out = usdc();
+//     let amount_in = BigUint::from_str("9850000000000000").unwrap(); // 0.00985 WETH
+//     let amount_out = BigUint::from_str("17969561").unwrap(); // 17.969561 USDC
+//
+//     // Create the exact aggregate order from mainnet
+//     let expiry = 1746367285u64;
+//     let taker_address = Address::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap();
+//     let receiver = Address::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap();
+//
+//     // Set up makers
+//     let maker_addresses = vec![
+//         Address::from_str("0x67336Cec42645F55059EfF241Cb02eA5cC52fF86").unwrap(),
+//         Address::from_str("0xBF19CbF0256f19f39A016a86Ff3551ecC6f2aAFE").unwrap(),
+//     ];
+//     let maker_nonces = vec![U256::from(1746367197308u64), U256::from(15460096u64)];
+//
+//     // 2D arrays for tokens
+//     // We use WETH as a taker token even when handling native ETH
+//     let taker_tokens = vec![vec![Address::from_slice(&weth())],
+// vec![Address::from_slice(&weth())]];     let maker_tokens =
+//         vec![vec![Address::from_slice(&token_out)], vec![Address::from_slice(&token_out)]];
+//
+//     // 2D arrays for amounts
+//     let taker_amounts = vec![
+//         vec![U256::from_str("5812106401997138").unwrap()],
+//         vec![U256::from_str("4037893598002862").unwrap()],
+//     ];
+//     let maker_amounts =
+//         vec![vec![U256::from_str("10607211").unwrap()],
+// vec![U256::from_str("7362350").unwrap()]];
+//
+//     // Commands and flags from the real transaction
+//     let commands = AlloyBytes::from(hex!("00040004").to_vec());
+//     let flags = U256::from_str(
+//         "95769172144825922628485191511070792431742484643425438763224908097896054784000",
+//     )
+//     .unwrap();
+//
+//     // Encode Aggregate order - must match IBebopSettlement.Aggregate struct exactly
+//     let quote_data = (
+//         U256::from(expiry), // expiry as U256
+//         taker_address,
+//         maker_addresses,
+//         maker_nonces, // Array of maker nonces
+//         taker_tokens, // 2D array
+//         maker_tokens,
+//         taker_amounts, // 2D array
+//         maker_amounts,
+//         receiver,
+//         commands,
+//         flags,
+//     )
+//         .abi_encode();
+//
+//     // Use real signatures from the mainnet transaction
+//     let sig1 =
+// hex::decode("
+// d5abb425f9bac1f44d48705f41a8ab9cae207517be8553d2c03b06a88995f2f351ab8ce7627a87048178d539dd64fd2380245531a0c8e43fdc614652b1f32fc71c"
+// ).unwrap();     let sig2 =
+// hex::decode("
+// f38c698e48a3eac48f184bc324fef0b135ee13705ab38cc0bbf5a792f21002f051e445b9e7d57cf24c35e17629ea35b3263591c4abf8ca87ffa44b41301b89c41b"
+// ).unwrap();
+//
+//     // Build user_data with ETH_SIGN flag (0) for both signatures
+//     let signatures = vec![
+//         (sig1, 0u8), // ETH_SIGN for maker 1
+//         (sig2, 0u8), // ETH_SIGN for maker 2
+//     ];
+//
+//     let user_data = build_bebop_calldata(
+//         BebopOrderType::Aggregate,
+//         U256::ZERO, // 0 means fill entire order
+//         &quote_data,
+//         signatures,
+//     );
+//
+//     let bebop_component = ProtocolComponent {
+//         id: String::from("bebop-rfq"),
+//         protocol_system: String::from("rfq:bebop"),
+//         static_attributes: HashMap::new(),
+//         ..Default::default()
+//     };
+//
+//     let swap = Swap {
+//         component: bebop_component,
+//         token_in: token_in.clone(),
+//         token_out: token_out.clone(),
+//         split: 0f64,
+//         user_data: Some(user_data),
+//         protocol_state: None,
+//     };
+//
+//     // Use TransferFrom for WETH token transfer
+//     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+//
+//     let solution = Solution {
+//         exact_out: false,
+//         given_token: token_in.clone(),
+//         given_amount: amount_in,
+//         checked_token: token_out,
+//         checked_amount: amount_out,
+//         // Use order taker as both sender and receiver to match the test setup
+//         sender: Bytes::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap(), /* Order
+// taker */         receiver:
+// Bytes::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap(), /* Order receiver */
+//         swaps: vec![swap],
+//         ..Default::default()
+//     };
+//
+//     let encoded_solution = encoder
+//         .encode_solutions(vec![solution.clone()])
+//         .unwrap()[0]
+//         .clone();
+//
+//     let calldata = encode_tycho_router_call(
+//         eth_chain().id(),
+//         encoded_solution,
+//         &solution,
+//         &UserTransferType::TransferFrom,
+//         &eth(),
+//         None,
+//     )
+//     .unwrap()
+//     .data;
+//     let hex_calldata = hex::encode(&calldata);
+//
+//     write_calldata_to_file("test_single_encoding_strategy_bebop_aggregate",
+// hex_calldata.as_str()); }

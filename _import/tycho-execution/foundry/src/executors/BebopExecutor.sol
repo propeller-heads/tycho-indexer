@@ -112,12 +112,14 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             address tokenIn,
             address tokenOut,
             TransferType transferType,
-            bytes memory bebopCalldata,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
             bool approvalNeeded,
-            address receiver
+            address receiver,
+            bytes memory bebopCalldata
         ) = _decodeData(data);
+
+        _transfer(address(this), transferType, address(tokenIn), givenAmount);
 
         // Modify the filledTakerAmount in the calldata
         // If the filledTakerAmount is the same as the original, the original calldata is returned
@@ -128,16 +130,8 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             partialFillOffset
         );
 
-        // For ERC20 inputs, don't move tokens here. Bebop settlement pulls from the taker directly.
-        // The router/harness will ensure the taker has the funds and has granted allowance to settlement.
-        if (tokenIn != address(0)) {
-            // no-op
-        }
-        // For ETH (tokenIn == address(0)), don't transfer
-        // The harness gives ETH to the taker, and Bebop settlement expects it to stay there
-
         // Approve Bebop settlement to spend tokens if needed
-        if (approvalNeeded && tokenIn != address(0)) {
+        if (approvalNeeded) {
             // slither-disable-next-line unused-return
             IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
         }
@@ -196,11 +190,11 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             address tokenIn,
             address tokenOut,
             TransferType transferType,
-            bytes memory bebopCalldata,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
             bool approvalNeeded,
-            address receiver
+            address receiver,
+            bytes memory bebopCalldata
         )
     {
         // Need at least 95 bytes for the minimum fixed fields

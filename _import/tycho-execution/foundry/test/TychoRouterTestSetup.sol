@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 // Executors
 import {BalancerV2Executor} from "../src/executors/BalancerV2Executor.sol";
 import {BalancerV3Executor} from "../src/executors/BalancerV3Executor.sol";
+import {BebopExecutor} from "../src/executors/BebopExecutor.sol";
 import {CurveExecutor} from "../src/executors/CurveExecutor.sol";
 import {EkuboExecutor} from "../src/executors/EkuboExecutor.sol";
 import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
@@ -13,7 +14,6 @@ import {
     IUniswapV3Pool
 } from "../src/executors/UniswapV3Executor.sol";
 import {UniswapV4Executor} from "../src/executors/UniswapV4Executor.sol";
-import {BebopExecutorHarness} from "./protocols/BebopExecutionHarness.t.sol";
 
 // Test utilities and mocks
 import "./Constants.sol";
@@ -74,7 +74,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     CurveExecutor public curveExecutor;
     MaverickV2Executor public maverickv2Executor;
     BalancerV3Executor public balancerV3Executor;
-    BebopExecutorHarness public bebopExecutor;
+    BebopExecutor public bebopExecutor;
 
     function getForkBlock() public view virtual returns (uint256) {
         return 22082754;
@@ -134,8 +134,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         maverickv2Executor =
             new MaverickV2Executor(MAVERICK_V2_FACTORY, PERMIT2_ADDRESS);
         balancerV3Executor = new BalancerV3Executor(PERMIT2_ADDRESS);
-        bebopExecutor =
-            new BebopExecutorHarness(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+        bebopExecutor = new BebopExecutor(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
 
         address[] memory executors = new address[](10);
         executors[0] = address(usv2Executor);
