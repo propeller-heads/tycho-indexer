@@ -291,22 +291,28 @@ impl EntryPointTracer for EVMEntrypointService {
         &self,
         block_hash: BlockHash,
         entry_points: Vec<EntryPointWithTracingParams>,
-    ) -> Result<Vec<TracedEntryPoint>, Self::Error> {
+    ) -> Vec<Result<TracedEntryPoint, Self::Error>> {
         let mut results = Vec::new();
         for entry_point in &entry_points {
-            match &entry_point.params {
+            let result = match &entry_point.params {
                 TracingParams::RPCTracer(ref rpc_entry_point) => {
                     // Use batched RPC call for both access list and trace
-                    let (accessed_slots, pre_state_trace) = self
+                    let (accessed_slots, pre_state_trace) = match self
                         .batch_trace_and_access_list(
                             &entry_point.entry_point.target,
                             rpc_entry_point,
                             &block_hash,
                         )
-                        .await?;
+                        .await
+                    {
+                        Ok(trace) => trace,
+                        Err(e) => {
+                            results.push(Err(e));
+                            continue;
+                        }
+                    };
 
                     let called_addresses: Vec<Address> = accessed_slots.keys().cloned().collect();
-
                     // Provides a very simplistic way of finding retriggers. A better way would
                     // involve using the structure of callframes. So basically iterate the call
                     // tree in a parent child manner then search the
@@ -336,19 +342,22 @@ impl EntryPointTracer for EVMEntrypointService {
                         }
                         retriggers
                     } else {
-                        return Err(RPCError::UnknownError(
+                        results.push(Err(RPCError::UnknownError(
                             "invalid trace result for PreStateTracer".to_string(),
-                        ));
+                        )));
+                        continue;
                     };
-                    results.push(TracedEntryPoint::new(
+
+                    Ok(TracedEntryPoint::new(
                         entry_point.clone(),
                         block_hash.clone(),
                         TracingResult::new(retriggers, accessed_slots),
-                    ));
+                    ))
                 }
-            }
+            };
+            results.push(result);
         }
-        Ok(results)
+        results
     }
 }
 
@@ -402,6 +411,8 @@ mod tests {
                 entry_points.clone(),
             )
             .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
             .unwrap();
 
         assert_eq!(
@@ -555,6 +566,8 @@ mod tests {
                 entry_points.clone(),
             )
             .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
             .unwrap();
 
         assert_eq!(
@@ -638,6 +651,8 @@ mod tests {
                 entry_points.clone(),
             )
             .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
             .unwrap();
 
         assert_eq!(traced_entry_points, vec![]);
@@ -687,6 +702,8 @@ mod tests {
                 entry_points.clone(),
             )
             .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
             .unwrap();
 
         assert!(traced_entry_points[0]
