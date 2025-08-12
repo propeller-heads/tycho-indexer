@@ -9,6 +9,7 @@ use crate::{
     Bytes,
 };
 
+#[derive(Debug)]
 pub struct SignedQuote {
     pub base_token: Bytes,
     pub quote_token: Bytes,
