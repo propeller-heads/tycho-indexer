@@ -586,7 +586,8 @@ fn test_single_encoding_strategy_balancer_v3() {
 #[test]
 fn test_single_encoding_strategy_bebop() {
     // The quote was done separately where the sender is the router and the receiver is a random
-    // user    let _router = Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap();
+    // user
+    let _router = Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap();
     let user = Bytes::from_str("0xd2068e04cf586f76eece7ba5beb779d7bb1474a1").unwrap();
 
     let token_in = usdc();
@@ -595,10 +596,7 @@ fn test_single_encoding_strategy_bebop() {
     let amount_out = BigUint::from_str("194477331556159832309").unwrap(); // 203.8 ONDO
     let partial_fill_offset = 12;
 
-    // Encode using standard ABI encoding (not packed)
     let calldata = Bytes::from_str("0x4dcebcba00000000000000000000000000000000000000000000000000000000689b548f0000000000000000000000003ede3eca2a72b3aecc820e955b36f38437d0139500000000000000000000000067336cec42645f55059eff241cb02ea5cc52ff86000000000000000000000000000000000000000000000000279ead5d9685f25b000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000faba6f8e4a5e8ab82f62fe7c39859fa577269be3000000000000000000000000000000000000000000000000000000000bebc20000000000000000000000000000000000000000000000000a8aea46aa4ec5c0f5000000000000000000000000d2068e04cf586f76eece7ba5beb779d7bb1474a100000000000000000000000000000000000000000000000000000000000000005230bcb979c81cebf94a3b5c08bcfa300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000414ce40058ff07f11d9224c2c8d1e58369e4a90173856202d8d2a17da48058ad683dedb742eda0d4c0cf04cf1c09138898dd7fd06f97268ea7f74ef9b42d29bf4c1b00000000000000000000000000000000000000000000000000000000000000").unwrap();
-
-    // Build user_data with the quote and signature using new calldata format
     let user_data = build_bebop_calldata(&calldata, partial_fill_offset);
 
     let bebop_component = ProtocolComponent {
@@ -649,138 +647,69 @@ fn test_single_encoding_strategy_bebop() {
     let hex_calldata = hex::encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_bebop", hex_calldata.as_str());
 }
-//
-// #[test]
-// fn test_single_encoding_strategy_bebop_aggregate() {
-//     // Use real mainnet aggregate order data from CLAUDE.md
-//     // Transaction: https://etherscan.io/tx/0xec88410136c287280da87d0a37c1cb745f320406ca3ae55c678dec11996c1b1c
-//     // Use native ETH as tycho's token_in
-//     let token_in = eth();
-//     let token_out = usdc();
-//     let amount_in = BigUint::from_str("9850000000000000").unwrap(); // 0.00985 WETH
-//     let amount_out = BigUint::from_str("17969561").unwrap(); // 17.969561 USDC
-//
-//     // Create the exact aggregate order from mainnet
-//     let expiry = 1746367285u64;
-//     let taker_address = Address::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap();
-//     let receiver = Address::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap();
-//
-//     // Set up makers
-//     let maker_addresses = vec![
-//         Address::from_str("0x67336Cec42645F55059EfF241Cb02eA5cC52fF86").unwrap(),
-//         Address::from_str("0xBF19CbF0256f19f39A016a86Ff3551ecC6f2aAFE").unwrap(),
-//     ];
-//     let maker_nonces = vec![U256::from(1746367197308u64), U256::from(15460096u64)];
-//
-//     // 2D arrays for tokens
-//     // We use WETH as a taker token even when handling native ETH
-//     let taker_tokens = vec![vec![Address::from_slice(&weth())],
-// vec![Address::from_slice(&weth())]];     let maker_tokens =
-//         vec![vec![Address::from_slice(&token_out)], vec![Address::from_slice(&token_out)]];
-//
-//     // 2D arrays for amounts
-//     let taker_amounts = vec![
-//         vec![U256::from_str("5812106401997138").unwrap()],
-//         vec![U256::from_str("4037893598002862").unwrap()],
-//     ];
-//     let maker_amounts =
-//         vec![vec![U256::from_str("10607211").unwrap()],
-// vec![U256::from_str("7362350").unwrap()]];
-//
-//     // Commands and flags from the real transaction
-//     let commands = AlloyBytes::from(hex!("00040004").to_vec());
-//     let flags = U256::from_str(
-//         "95769172144825922628485191511070792431742484643425438763224908097896054784000",
-//     )
-//     .unwrap();
-//
-//     // Encode Aggregate order - must match IBebopSettlement.Aggregate struct exactly
-//     let quote_data = (
-//         U256::from(expiry), // expiry as U256
-//         taker_address,
-//         maker_addresses,
-//         maker_nonces, // Array of maker nonces
-//         taker_tokens, // 2D array
-//         maker_tokens,
-//         taker_amounts, // 2D array
-//         maker_amounts,
-//         receiver,
-//         commands,
-//         flags,
-//     )
-//         .abi_encode();
-//
-//     // Use real signatures from the mainnet transaction
-//     let sig1 =
-// hex::decode("
-// d5abb425f9bac1f44d48705f41a8ab9cae207517be8553d2c03b06a88995f2f351ab8ce7627a87048178d539dd64fd2380245531a0c8e43fdc614652b1f32fc71c"
-// ).unwrap();     let sig2 =
-// hex::decode("
-// f38c698e48a3eac48f184bc324fef0b135ee13705ab38cc0bbf5a792f21002f051e445b9e7d57cf24c35e17629ea35b3263591c4abf8ca87ffa44b41301b89c41b"
-// ).unwrap();
-//
-//     // Build user_data with ETH_SIGN flag (0) for both signatures
-//     let signatures = vec![
-//         (sig1, 0u8), // ETH_SIGN for maker 1
-//         (sig2, 0u8), // ETH_SIGN for maker 2
-//     ];
-//
-//     let user_data = build_bebop_calldata(
-//         BebopOrderType::Aggregate,
-//         U256::ZERO, // 0 means fill entire order
-//         &quote_data,
-//         signatures,
-//     );
-//
-//     let bebop_component = ProtocolComponent {
-//         id: String::from("bebop-rfq"),
-//         protocol_system: String::from("rfq:bebop"),
-//         static_attributes: HashMap::new(),
-//         ..Default::default()
-//     };
-//
-//     let swap = Swap {
-//         component: bebop_component,
-//         token_in: token_in.clone(),
-//         token_out: token_out.clone(),
-//         split: 0f64,
-//         user_data: Some(user_data),
-//         protocol_state: None,
-//     };
-//
-//     // Use TransferFrom for WETH token transfer
-//     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-//
-//     let solution = Solution {
-//         exact_out: false,
-//         given_token: token_in.clone(),
-//         given_amount: amount_in,
-//         checked_token: token_out,
-//         checked_amount: amount_out,
-//         // Use order taker as both sender and receiver to match the test setup
-//         sender: Bytes::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap(), /* Order
-// taker */         receiver:
-// Bytes::from_str("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap(), /* Order receiver */
-//         swaps: vec![swap],
-//         ..Default::default()
-//     };
-//
-//     let encoded_solution = encoder
-//         .encode_solutions(vec![solution.clone()])
-//         .unwrap()[0]
-//         .clone();
-//
-//     let calldata = encode_tycho_router_call(
-//         eth_chain().id(),
-//         encoded_solution,
-//         &solution,
-//         &UserTransferType::TransferFrom,
-//         &eth(),
-//         None,
-//     )
-//     .unwrap()
-//     .data;
-//     let hex_calldata = hex::encode(&calldata);
-//
-//     write_calldata_to_file("test_single_encoding_strategy_bebop_aggregate",
-// hex_calldata.as_str()); }
+
+#[test]
+fn test_single_encoding_strategy_bebop_aggregate() {
+    // The quote was done separately where the sender is the router and the receiver is a random
+    // user
+    let _router = Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap();
+    let user = Bytes::from_str("0xd2068e04cf586f76eece7ba5beb779d7bb1474a1").unwrap();
+
+    let token_in = usdc();
+    let token_out = ondo();
+    let amount_in = BigUint::from_str("20000000000").unwrap(); // 20k USDC
+    let amount_out = BigUint::from_str("18699321819466078474202").unwrap(); // 203.8 ONDO
+    let partial_fill_offset = 2;
+
+    let calldata = Bytes::from_str("0xa2f7489300000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000640000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000689b78880000000000000000000000003ede3eca2a72b3aecc820e955b36f38437d01395000000000000000000000000000000000000000000000000000000000000016000000000000000000000000000000000000000000000000000000000000001c00000000000000000000000000000000000000000000000000000000000000220000000000000000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000003e000000000000000000000000000000000000000000000000000000000000004c0000000000000000000000000d2068e04cf586f76eece7ba5beb779d7bb1474a100000000000000000000000000000000000000000000000000000000000005a060a5c2aaaaa2fe2cda34423cac76a84c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000051c72848c68a965f66fa7a88855f9f7784502a7f000000000000000000000000ce79b081c0c924cb67848723ed3057234d10fc6b00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000002901f2d62bb356ca0000000000000000000000000000000000000000000000002901f2d62bb356cb0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000001000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000000000001000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000001000000000000000000000000faba6f8e4a5e8ab82f62fe7c39859fa577269be30000000000000000000000000000000000000000000000000000000000000001000000000000000000000000faba6f8e4a5e8ab82f62fe7c39859fa577269be30000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000044f83c726000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000589400da00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000003aa5f96046644f6e37a000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000004b51a26526ddbeec60000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000417ab4332f2b091d87d56d04eee35dd49452782c782de71608c0425c5ae41f1d7e147173851c870d76720ce07d45cd8622352716b1c7965819ee2bf8c573c499ae1b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000410c8da2637aa929e11caff9afdfc4c489320c6dba77cc934d88ba8956e365fd1d48983087c6e474bbb828181cdfdd17317c4c9c3ee4bc98e3769d0c05cc7a285e1c00000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let user_data = build_bebop_calldata(&calldata, partial_fill_offset);
+
+    let bebop_component = ProtocolComponent {
+        id: String::from("bebop-rfq"),
+        protocol_system: String::from("rfq:bebop"),
+        static_attributes: HashMap::new(),
+        ..Default::default()
+    };
+
+    let swap = Swap {
+        component: bebop_component,
+        token_in: token_in.clone(),
+        token_out: token_out.clone(),
+        split: 0f64,
+        user_data: Some(user_data),
+        protocol_state: None,
+    };
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: token_in.clone(),
+        given_amount: amount_in,
+        checked_token: token_out,
+        checked_amount: amount_out,
+        sender: user.clone(),
+        receiver: user,
+        swaps: vec![swap],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+    let hex_calldata = hex::encode(&calldata);
+
+    write_calldata_to_file("test_single_encoding_strategy_bebop_aggregate", hex_calldata.as_str());
+}

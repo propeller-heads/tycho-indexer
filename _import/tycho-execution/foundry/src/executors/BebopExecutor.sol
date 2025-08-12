@@ -9,55 +9,6 @@ import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
-import {console} from "forge-std/Test.sol";
-
-/// @dev Bebop settlement interface for PMM RFQ swaps
-interface IBebopSettlement {
-    struct Single {
-        uint256 expiry;
-        address taker_address;
-        address maker_address;
-        uint256 maker_nonce;
-        address taker_token;
-        address maker_token;
-        uint256 taker_amount;
-        uint256 maker_amount;
-        address receiver;
-        uint256 packed_commands;
-        uint256 flags;
-    }
-
-    struct Aggregate {
-        uint256 expiry;
-        address taker_address;
-        address[] maker_addresses;
-        uint256[] maker_nonces;
-        address[][] taker_tokens;
-        address[][] maker_tokens;
-        uint256[][] taker_amounts;
-        uint256[][] maker_amounts;
-        address receiver;
-        bytes commands;
-        uint256 flags; // `hashAggregateOrder` doesn't use this field for AggregateOrder hash
-    }
-
-    struct MakerSignature {
-        bytes signatureBytes;
-        uint256 flags;
-    }
-
-    function swapSingle(
-        Single calldata order,
-        MakerSignature calldata makerSignature,
-        uint256 filledTakerAmount
-    ) external payable;
-
-    function swapAggregate(
-        Aggregate calldata order,
-        MakerSignature[] calldata makerSignatures,
-        uint256 filledTakerAmount
-    ) external payable;
-}
 
 /// @title BebopExecutor
 /// @notice Executor for Bebop PMM RFQ (Request for Quote) swaps
@@ -69,7 +20,6 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
     using Address for address;
 
     /// @notice Function selectors for Bebop settlement methods
-    bytes4 public constant SWAP_SINGLE_SELECTOR = 0x4dcebcba;
     bytes4 public constant SWAP_AGGREGATE_SELECTOR = 0xa2f74893;
 
     /// @notice Bebop-specific errors
@@ -100,14 +50,6 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         override
         returns (uint256 calculatedAmount)
     {
-        calculatedAmount = _swap(givenAmount, data);
-    }
-
-    function _swap(uint256 givenAmount, bytes calldata data)
-        internal
-        returns (uint256 calculatedAmount)
-    {
-        // Decode the packed data
         (
             address tokenIn,
             address tokenOut,
@@ -142,40 +84,9 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         // Execute the swap with the forwarded calldata
         uint256 ethValue = tokenIn == address(0) ? givenAmount : 0;
 
-        // Debug: Check msg.sender before settlement call
-        console.log(
-            "BebopExecutor: About to call settlement, msg.sender:", msg.sender
-        );
-
-        // Debug: Let's check what's in the calldata
-        bytes4 selector = _getSelector(finalCalldata);
-        if (selector == SWAP_AGGREGATE_SELECTOR) {
-            // Try to extract taker_address from the aggregate order
-            if (finalCalldata.length > 100) {
-                // Read the offset to the order struct
-                uint256 orderOffset;
-                assembly {
-                    orderOffset := mload(add(finalCalldata, 0x24))
-                }
-                // The taker_address is at orderOffset + 4 (selector) + 32 (after expiry)
-                address orderTaker;
-                assembly {
-                    orderTaker :=
-                        mload(add(finalCalldata, add(0x24, add(orderOffset, 32))))
-                }
-                console.log("Order taker_address in calldata:", orderTaker);
-            }
-        }
-
         // Use OpenZeppelin's Address library for safe call with value
         // This will revert if the call fails
-        bytes memory returnData =
-            bebopSettlement.functionCallWithValue(finalCalldata, ethValue);
-
-        // Check if any tokens were actually transferred
-        if (returnData.length > 0) {
-            // Bebop might return some data, log it for debugging
-        }
+        bebopSettlement.functionCallWithValue(finalCalldata, ethValue);
 
         // Calculate actual amount received by the receiver
         uint256 balanceAfter = _balanceOf(tokenOut, receiver);
@@ -184,7 +95,7 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
 
     /// @dev Decodes the packed calldata
     function _decodeData(bytes calldata data)
-        public
+        internal
         pure
         returns (
             address tokenIn,
@@ -201,24 +112,13 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         // 20 + 20 + 1 + 1 (offset) + 32 (original amount) + 1 (approval) + 20 (receiver) = 95
         if (data.length < 95) revert BebopExecutor__InvalidDataLength();
 
-        // Decode fixed fields
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         transferType = TransferType(uint8(data[40]));
-
-        // Extract partial fill offset
         partialFillOffset = uint8(data[41]);
-
-        // Extract original amount in
         originalFilledTakerAmount = uint256(bytes32(data[42:74]));
-
-        // Extract approval flag
         approvalNeeded = data[74] != 0;
-
-        // Extract receiver address
         receiver = address(bytes20(data[75:95]));
-
-        // Extract bebop calldata (all remaining bytes)
         bebopCalldata = data[95:];
     }
 
@@ -233,7 +133,7 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         uint256 givenAmount,
         uint256 originalFilledTakerAmount,
         uint8 partialFillOffset
-    ) public pure returns (bytes memory) {
+    ) internal pure returns (bytes memory) {
         // Use the offset from Bebop API to locate filledTakerAmount
         // Position = 4 bytes (selector) + offset * 32 bytes
         uint256 filledTakerAmountPos = 4 + uint256(partialFillOffset) * 32;
@@ -259,14 +159,6 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         }
 
         return bebopCalldata;
-    }
-
-    /// @dev Helper function to extract selector from bytes
-    function _getSelector(bytes memory data) internal pure returns (bytes4) {
-        return bytes4(
-            uint32(uint8(data[0])) << 24 | uint32(uint8(data[1])) << 16
-                | uint32(uint8(data[2])) << 8 | uint32(uint8(data[3]))
-        );
     }
 
     /// @dev Returns the balance of a token or ETH for an account
