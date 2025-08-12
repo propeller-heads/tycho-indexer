@@ -25,6 +25,11 @@ impl ERC20Asset {
     pub fn new(token: Token, amount: BigUint) -> Self {
         Self { token, amount }
     }
+
+    /// Get the token specification.
+    pub fn token(&self) -> &Token {
+        &self.token
+    }
 }
 
 impl Asset for ERC20Asset {

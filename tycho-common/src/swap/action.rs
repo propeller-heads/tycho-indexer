@@ -41,6 +41,11 @@ impl SwapParameters {
     pub fn new(output_token: Token) -> Self {
         Self { output_token }
     }
+
+    /// Get the output token.
+    pub fn output_token(&self) -> &Token {
+        &self.output_token
+    }
 }
 
 impl Action for Swap {

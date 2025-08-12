@@ -85,6 +85,11 @@ pub struct DefaultOutputs<A: Asset> {
 }
 
 impl<A: Asset> DefaultOutputs<A> {
+    /// Create new default outputs.
+    pub fn new(used: Vec<A>, produced: Vec<A>, gas_spent: BigUint) -> Self {
+        Self { used, produced, gas_spent }
+    }
+
     /// Get the assets that were consumed during execution.
     pub fn used(&self) -> &Vec<A> {
         &self.used
