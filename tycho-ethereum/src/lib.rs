@@ -12,10 +12,7 @@ pub mod token_pre_processor;
 #[macro_use]
 extern crate pretty_assertions;
 
-use ethers::{
-    providers::ProviderError,
-    types::{H160, H256, U256},
-};
+use ethers::types::{H160, H256, U256};
 use thiserror::Error;
 use tycho_common::{models::blockchain::BlockTag, Bytes};
 use web3::types::BlockNumber;
@@ -25,7 +22,9 @@ pub enum RPCError {
     #[error("RPC setup error: {0}")]
     SetupError(String),
     #[error("RPC error: {0}")]
-    RequestError(#[from] ProviderError),
+    RequestError(String),
+    #[error("Tracing failure: {0}")]
+    TracingFailure(String),
     #[error("Unknown error: {0}")]
     UnknownError(String),
 }
