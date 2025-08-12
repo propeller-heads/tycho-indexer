@@ -191,7 +191,8 @@ where
                     block_hash = %block_changes.block.hash
                 ))
                 .await
-                .into_iter()// TODO: properly handle errors, should either retry or pause the related components depending on the error
+                .into_iter() // TODO: properly handle errors, should either retry or pause the related components
+                // depending on the error
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| ExtractionError::TracingError(format!("{e:?}")))?;
 
