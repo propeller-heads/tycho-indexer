@@ -12,6 +12,7 @@ use crate::{
 ///
 /// This is a concrete implementation of the `Asset` trait for ERC20 tokens,
 /// enabling them to be used as inputs and outputs in action simulations.
+#[derive(Debug, Clone)]
 pub struct ERC20Asset {
     /// The token specification including address, decimals, and symbol.
     token: Token,
@@ -43,7 +44,7 @@ impl Asset for ERC20Asset {
         Some(&self.amount)
     }
 
-    fn predicate_descriptor(&self, owner: &Bytes) -> PredicateDescriptor {
+    fn predicate_descriptor(&self, _owner: &Bytes) -> PredicateDescriptor {
         todo!()
     }
 }

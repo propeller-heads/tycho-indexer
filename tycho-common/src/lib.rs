@@ -2,6 +2,7 @@ pub mod action;
 mod asset;
 pub mod dto;
 pub mod hex_bytes;
+pub mod liquidity_provision;
 pub mod models;
 pub mod serde_primitives;
 pub mod simulation;
