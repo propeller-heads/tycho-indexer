@@ -191,6 +191,8 @@ where
                     block_hash = %block_changes.block.hash
                 ))
                 .await
+                .into_iter()// TODO: properly handle errors, should either retry or pause the related components depending on the error
+                .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| ExtractionError::TracingError(format!("{e:?}")))?;
 
             tracing::debug!(traced_entry_points = ?traced_entry_points, "DCI: Traced entrypoints");
@@ -1234,11 +1236,11 @@ mod tests {
                 )]),
             )
             .return_once(move |_, _| {
-                Ok(vec![TracedEntryPoint::new(
+                vec![Ok(TracedEntryPoint::new(
                     EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
                     Bytes::zero(32),
                     get_tracing_result(9),
-                )])
+                ))]
             });
 
         account_extractor
@@ -1422,18 +1424,18 @@ mod tests {
                 }),
             )
             .return_once(move |_, _| {
-                Ok(vec![
-                    TracedEntryPoint::new(
+                vec![
+                    Ok(TracedEntryPoint::new(
                         EntryPointWithTracingParams::new(get_entrypoint(1), get_tracing_params(1)),
                         Bytes::zero(32),
                         get_tracing_result(1),
-                    ),
-                    TracedEntryPoint::new(
+                    )),
+                    Ok(TracedEntryPoint::new(
                         EntryPointWithTracingParams::new(get_entrypoint(4), get_tracing_params(1)),
                         Bytes::zero(32),
                         get_tracing_result(5),
-                    ),
-                ])
+                    )),
+                ]
             });
 
         // Should only be called for new accounts, so account 0x01 and 0x11 are ignored because
@@ -1573,11 +1575,11 @@ mod tests {
             .return_once({
                 let token_address = token_address.clone();
                 move |_, _| {
-                    Ok(vec![TracedEntryPoint::new(
+                    vec![Ok(TracedEntryPoint::new(
                         EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
                         Bytes::zero(32),
                         get_tracing_result_with_address(&token_address),
-                    )])
+                    ))]
                 }
             });
 
@@ -1674,11 +1676,11 @@ mod tests {
                 )]),
             )
             .return_once(move |_, _| {
-                Ok(vec![TracedEntryPoint::new(
+                vec![Ok(TracedEntryPoint::new(
                     EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
                     Bytes::zero(32),
                     get_tracing_result_with_address(&blacklisted_address_for_trace),
-                )])
+                ))]
             });
 
         // Expect specific slots to be requested for the blacklisted address
@@ -1762,11 +1764,11 @@ mod tests {
                 )]),
             )
             .return_once(move |_, _| {
-                Ok(vec![TracedEntryPoint::new(
+                vec![Ok(TracedEntryPoint::new(
                     EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
                     Bytes::zero(32),
                     get_tracing_result_with_address(&normal_address_for_trace),
-                )])
+                ))]
             });
 
         // Expect all slots (None) to be requested for normal contracts
