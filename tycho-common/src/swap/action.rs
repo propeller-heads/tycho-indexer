@@ -31,6 +31,7 @@ pub struct Swap;
 ///
 /// Specifies the target output token for the swap operation.
 /// The input token and amount are provided through the action inputs.
+#[derive(Clone)]
 pub struct SwapParameters {
     /// The token expected as output from the swap.
     output_token: Token,

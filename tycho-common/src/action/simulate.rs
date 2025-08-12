@@ -67,6 +67,7 @@ pub trait SimulateForward<A: Action> {
 ///
 /// Provides a common pattern for actions that require a list of assets as input.
 /// The wrapped vector contains the assets to be consumed or transformed.
+#[derive(Clone)]
 pub struct DefaultInputs<A: Asset>(pub Vec<A>);
 
 /// Standard output structure for asset-producing actions.
@@ -105,3 +106,5 @@ impl<A: Asset> DefaultOutputs<A> {
         &self.gas_spent
     }
 }
+
+
