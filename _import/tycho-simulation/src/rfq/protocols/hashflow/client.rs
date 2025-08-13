@@ -299,7 +299,7 @@ impl RFQClient for HashflowClient {
                                     )?;
 
                                     // Hash the pair for component id
-                                    let pair_str = format!("{}/{}", hex::encode(base_token), hex::encode(quote_token));
+                                    let pair_str = format!("hashflow_{}/{}", hex::encode(base_token), hex::encode(quote_token));
                                     let component_id = format!("{}", keccak256(pair_str.as_bytes()));
 
                                     if normalized_tvl < client.tvl {

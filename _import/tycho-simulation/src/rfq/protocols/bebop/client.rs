@@ -248,7 +248,7 @@ impl RFQClient for BebopClient {
                                                 continue;
                                             }
 
-                                            let pair_str = format!("{}/{}", hex::encode(&base_bytes), hex::encode(&quote_bytes));
+                                            let pair_str = format!("bebop_{}/{}", hex::encode(&base_bytes), hex::encode(&quote_bytes));
                                             let component_id = format!("{}", keccak256(pair_str.as_bytes()));
                                             let component_with_state = client.create_component_with_state(
                                                 component_id.clone(),
