@@ -1063,6 +1063,18 @@ mod tests {
             .expect_get_traced_entry_points()
             .return_once(move |_| Box::pin(async move { Ok(HashMap::new()) }));
 
+        // Mock get_tokens to return empty result
+        gateway
+            .expect_get_tokens()
+            .return_once(move |_, _, _, _, _| {
+                Box::pin(async move { 
+                    Ok(tycho_common::storage::WithTotal { 
+                        entity: Vec::new(), 
+                        total: Some(0) 
+                    }) 
+                })
+            });
+
         gateway
     }
 
