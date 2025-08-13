@@ -1,3 +1,11 @@
+## [0.81.6](https://github.com/propeller-heads/tycho-indexer/compare/0.81.5...0.81.6) (2025-08-13)
+
+
+### Bug Fixes
+
+* Simplify GetAmountOutParams to hold Bytes only ([cdc8509](https://github.com/propeller-heads/tycho-indexer/commit/cdc85098fddbb7aad8fe95bf98c02dd8ee2676f5))
+* Simplify GetAmountOutParams to hold Bytes only ([#653](https://github.com/propeller-heads/tycho-indexer/issues/653)) ([c35d458](https://github.com/propeller-heads/tycho-indexer/commit/c35d458fae12d98ff1818918e51c3232a3134413))
+
 ## [0.81.5](https://github.com/propeller-heads/tycho-indexer/compare/0.81.4...0.81.5) (2025-08-12)
 
 
