@@ -5,7 +5,7 @@
     "pancakeswap_v2": "0xC9db3FEB380E4fd9af239e2595ECdEcE3b5c34A4",
     "uniswap_v3": "0xbab7124C9662B15C6b9AF0b1f329907dD55a24FC",
     "pancakeswap_v3": "0x9D32e9F569B22Ae8d8C6f788037C1CD53632A059",
-    "uniswap_v4": "0xD11496EAb53A9521f0bC1e5c1098Ecb467103Ad9",
+    "uniswap_v4": "0x2C2EaB81Cf983602153E67b1890164BC4CABC6ed",
     "vm:balancer_v2": "0xB5b8dc3F0a1Be99685a0DEd015Af93bFBB55C411",
     "ekubo_v2": "0x263DD7AD20983b5E0392bf1F09C4493500EDb333",
     "vm:curve": "0x879F3008D96EBea0fc584aD684c7Df31777F3165",
@@ -15,11 +15,11 @@
   "base": {
     "uniswap_v2": "0xF744EBfaA580cF3fFc25aD046E92BD8B770a0700",
     "uniswap_v3": "0x647bffbf8bd72bf6341ecba8b0279e090313a40d",
-    "uniswap_v4": "0xb5628b97f491f85766673ac4d5d47bb1af7fcc4a"
+    "uniswap_v4": "0x7Dfa502736C7bd84DA1402F7524214215BC9534d"
   },
   "unichain": {
     "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",
     "uniswap_v3": "0xD26A838A41af3d4815DfD745a080B2062c4124d1",
-    "uniswap_v4": "0xF744EBfaA580cF3fFc25aD046E92BD8B770a0700"
+    "uniswap_v4": "0x647bfFbF8Bd72bF6341ECBa8B0279e090313A40D"
   }
 }
