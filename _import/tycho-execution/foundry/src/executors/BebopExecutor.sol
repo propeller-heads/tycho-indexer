@@ -24,9 +24,6 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
 
     /// @notice Bebop-specific errors
     error BebopExecutor__InvalidDataLength();
-    error BebopExecutor__InvalidInput();
-    error BebopExecutor__InvalidSignatureLength();
-    error BebopExecutor__InvalidSignatureType();
     error BebopExecutor__ZeroAddress();
 
     /// @notice The Bebop settlement contract address
@@ -78,17 +75,14 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
             IERC20(tokenIn).forceApprove(bebopSettlement, type(uint256).max);
         }
 
-        // Check the receiver's balance before the swap
         uint256 balanceBefore = _balanceOf(tokenOut, receiver);
-
-        // Execute the swap with the forwarded calldata
         uint256 ethValue = tokenIn == address(0) ? givenAmount : 0;
 
         // Use OpenZeppelin's Address library for safe call with value
         // This will revert if the call fails
+        // slither-disable-next-line unused-return
         bebopSettlement.functionCallWithValue(finalCalldata, ethValue);
 
-        // Calculate actual amount received by the receiver
         uint256 balanceAfter = _balanceOf(tokenOut, receiver);
         calculatedAmount = balanceAfter - balanceBefore;
     }
@@ -149,6 +143,7 @@ contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
         }
 
         // Use assembly to modify the filledTakerAmount at the correct position
+        // slither-disable-next-line assembly
         assembly {
             // Get pointer to the data portion of the bytes array
             let dataPtr := add(bebopCalldata, 0x20)

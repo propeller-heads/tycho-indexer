@@ -50,34 +50,27 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
     }
 
     function testDecodeData() public {
-        // Fork to ensure consistent setup
         vm.createSelectFork(vm.rpcUrl("mainnet"), 22667985);
-
-        // Deploy Bebop executor harness
         bebopExecutor =
             new BebopExecutorExposed(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
 
-        // Create a simple bebop calldata
         bytes memory bebopCalldata = abi.encodePacked(
             bytes4(0x4dcebcba), // swapSingle selector
             hex"00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000068470140"
         );
 
         uint256 originalAmountIn = 200000000; // 200 USDC
-
-        // Create the executor params
         bytes memory params = abi.encodePacked(
             USDC_ADDR,
             ONDO_ADDR,
             uint8(RestrictTransferFrom.TransferType.Transfer),
-            uint8(2), // partialFillOffset for swapSingle (68 = 4 + 2*32)
+            uint8(2),
             originalAmountIn,
             true,
             address(123),
             bebopCalldata
         );
 
-        // Test decoding
         (
             address tokenIn,
             address tokenOut,
@@ -325,10 +318,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
     }
 
     function testInvalidDataLength() public {
-        // Fork to ensure consistent setup
         vm.createSelectFork(vm.rpcUrl("mainnet"), 22667985);
-
-        // Deploy Bebop executor with real settlement contract
         bebopExecutor =
             new BebopExecutorExposed(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
 
@@ -342,9 +332,9 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             WETH_ADDR,
             USDC_ADDR,
             uint8(RestrictTransferFrom.TransferType.Transfer),
-            uint8(2), // partialFillOffset for swapSingle (68 = 4 + 2*32)
+            uint8(2),
             originalAmountIn,
-            uint8(1), // approvalNeeded: true
+            true,
             address(bebopExecutor),
             bebopCalldata
         );

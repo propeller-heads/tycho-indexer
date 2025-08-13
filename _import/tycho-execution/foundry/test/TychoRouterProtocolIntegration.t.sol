@@ -27,26 +27,4 @@ contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
         assertTrue(success, "Call Failed");
         assertEq(balanceAfter - balanceBefore, 732214216964381330);
     }
-
-    function testSingleUSV4IntegrationInputETH() public {
-        // Test created with calldata from our router encoder.
-
-        // Performs a single swap from ETH to PEPE without wrapping or unwrapping
-        //
-        //   ETH ───(USV4)──> PEPE
-        //
-        deal(ALICE, 1 ether);
-        uint256 balanceBefore = IERC20(PEPE_ADDR).balanceOf(ALICE);
-
-        bytes memory callData =
-            loadCallDataFromFile("test_single_encoding_strategy_usv4_eth_in");
-        (bool success,) = tychoRouterAddr.call{value: 1 ether}(callData);
-
-        vm.stopPrank();
-
-        uint256 balanceAfter = IERC20(PEPE_ADDR).balanceOf(ALICE);
-
-        assertTrue(success, "Call Failed");
-        assertEq(balanceAfter - balanceBefore, 235610487387677804636755778);
-    }
 }

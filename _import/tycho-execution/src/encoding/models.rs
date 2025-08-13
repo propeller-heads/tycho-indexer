@@ -5,7 +5,7 @@ use tycho_common::{
     models::protocol::ProtocolComponent, simulation::protocol_sim::ProtocolSim, Bytes,
 };
 
-use crate::encoding::{errors::EncodingError, serde_primitives::biguint_string};
+use crate::encoding::serde_primitives::biguint_string;
 
 /// Specifies the method for transferring user funds into Tycho execution.
 ///
@@ -221,25 +221,6 @@ pub enum TransferType {
     TransferFrom = 0,
     Transfer = 1,
     None = 2,
-}
-
-/// Bebop order types
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum BebopOrderType {
-    Single = 0,
-    Aggregate = 1,
-}
-
-impl TryFrom<u8> for BebopOrderType {
-    type Error = EncodingError;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(BebopOrderType::Single),
-            1 => Ok(BebopOrderType::Aggregate),
-            _ => Err(EncodingError::InvalidInput(format!("Invalid Bebop order type: {value}"))),
-        }
-    }
 }
 
 mod tests {

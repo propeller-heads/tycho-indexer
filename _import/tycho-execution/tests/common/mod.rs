@@ -3,7 +3,10 @@ pub mod encoding;
 
 use std::str::FromStr;
 
-use alloy::{primitives::B256, signers::local::PrivateKeySigner};
+use alloy::{
+    primitives::{B256, U256},
+    signers::local::PrivateKeySigner,
+};
 use tycho_common::{models::Chain, Bytes};
 use tycho_execution::encoding::{
     evm::encoder_builders::TychoRouterEncoderBuilder, models::UserTransferType,
@@ -70,9 +73,16 @@ pub fn get_tycho_router_encoder(user_transfer_type: UserTransferType) -> Box<dyn
 }
 
 /// Builds the complete Bebop calldata in the format expected by the encoder
-/// Returns: partialFillOffset (1 byte) | bebop_calldata (selector + ABI encoded params)
-pub fn build_bebop_calldata(calldata: &[u8], partial_fill_offset: u8) -> Bytes {
-    let mut user_data = vec![partial_fill_offset];
+/// Returns: [ partial_fill_offset (u8) | original_taker_amount (U256) | calldata (bytes (selector +
+/// ABI encoded params)) ]
+pub fn build_bebop_calldata(
+    calldata: &[u8],
+    partial_fill_offset: u8,
+    original_taker_amount: U256,
+) -> Bytes {
+    let mut user_data = Vec::with_capacity(1 + 32 + calldata.len());
+    user_data.push(partial_fill_offset);
+    user_data.extend_from_slice(&original_taker_amount.to_be_bytes::<32>());
     user_data.extend_from_slice(calldata);
 
     Bytes::from(user_data)

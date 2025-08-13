@@ -192,28 +192,6 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         );
     }
 
-    function encodeBebopSwap(
-        address tokenIn,
-        address tokenOut,
-        RestrictTransferFrom.TransferType transferType,
-        uint8 partialFillOffset,
-        uint256 originalAmountIn,
-        bool approvalNeeded,
-        address receiver,
-        bytes memory bebopCalldata
-    ) internal pure returns (bytes memory) {
-        return abi.encodePacked(
-            tokenIn,
-            tokenOut,
-            uint8(transferType),
-            partialFillOffset,
-            originalAmountIn,
-            approvalNeeded ? uint8(1) : uint8(0),
-            receiver,
-            bebopCalldata
-        );
-    }
-
     function encodeUniswapV2Swap(
         address tokenIn,
         address target,

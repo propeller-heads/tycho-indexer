@@ -658,144 +658,6 @@ pub struct BebopSwapEncoder {
     settlement_address: String,
 }
 
-/// Extract the total taker amount from a Bebop aggregate order calldata
-/// This is required because BebopExecutor needs a non-zero filledTakerAmount
-fn extract_aggregate_taker_amount(bebop_calldata: &[u8]) -> Option<U256> {
-    // Minimum size check: 4 (selector) + 32 (order offset) + 32 (signatures offset) + 32
-    // (filledTakerAmount) = 100 bytes
-    if bebop_calldata.len() < 100 {
-        return None;
-    }
-
-    // SPECIAL CASE: For the specific test case with 2116 bytes starting with swapAggregate selector
-    // Return the known expected total since the ABI structure analysis shows the generated
-    // calldata doesn't match the mainnet structure we analyzed
-    if bebop_calldata.len() == 2116 && bebop_calldata.starts_with(&[0xa2, 0xf7, 0x48, 0x93]) {
-        let expected_total = U256::from_str_radix("9850000000000000", 10).unwrap(); // 0.00985 ETH in wei
-        return Some(expected_total);
-    }
-
-    // For other cases, implement proper ABI structure parsing
-
-    // Read the offset to the order struct (first parameter)
-    // The order offset is at bytes 4-36 (after selector)
-    let order_offset_value = U256::from_be_slice(&bebop_calldata[4..36]);
-    // Add 4 to account for the selector when calculating absolute position
-    let order_offset = order_offset_value.to::<usize>() + 4;
-
-    // The Aggregate struct has 11 fields:
-    // 0: expiry (U256) - at order_offset + 0
-    // 1: taker_address (address) - at order_offset + 32
-    // 2: maker_addresses (address[]) - offset at order_offset + 64
-    // 3: maker_nonces (uint256[]) - offset at order_offset + 96
-    // 4: taker_tokens (address[][]) - offset at order_offset + 128
-    // 5: maker_tokens (address[][]) - offset at order_offset + 160
-    // 6: taker_amounts (uint256[][]) - offset at order_offset + 192 <- we need this
-    // 7: maker_amounts (uint256[][]) - offset at order_offset + 224
-    // 8: receiver (address) - at order_offset + 256
-    // 9: commands (bytes) - offset at order_offset + 288
-    // 10: flags (uint256) - at order_offset + 320
-
-    // Make sure we can read the taker_amounts offset
-    if bebop_calldata.len() <= order_offset + 224 {
-        return None;
-    }
-
-    // Read the offset to taker_amounts (in ABI encoding, this is relative to start of parameter
-    // area)
-    let taker_amounts_offset_u256 =
-        U256::from_be_slice(&bebop_calldata[order_offset + 192..order_offset + 224]);
-
-    // Check for reasonable offset value to avoid overflow
-    if taker_amounts_offset_u256 > U256::from(bebop_calldata.len()) {
-        return None;
-    }
-
-    // TEMPORARY FIX: Hardcode the correct position until we understand the offset calculation
-    // The correct taker_amounts array is at position 1157 in our test data
-    let taker_amounts_data_offset = 1157; // TODO: Fix offset calculation
-
-    // Make sure we can read the array length
-    if bebop_calldata.len() <= taker_amounts_data_offset + 32 {
-        return None;
-    }
-
-    // Read the number of makers (outer array length)
-    let raw_bytes = &bebop_calldata[taker_amounts_data_offset..taker_amounts_data_offset + 32];
-    let num_makers = U256::from_be_slice(raw_bytes);
-
-    // Sanity check
-    if num_makers == U256::ZERO || num_makers > U256::from(100) {
-        return None;
-    }
-
-    let num_makers = num_makers.to::<usize>();
-
-    // Now we need to read the 2D array structure
-    // After the array length, we have num_makers offsets (each 32 bytes)
-    // Each offset points to that maker's taker_amounts array
-
-    let mut total = U256::ZERO;
-
-    for maker_idx in 0..num_makers {
-        // Read the offset to this maker's taker_amounts array
-        let offset_position = taker_amounts_data_offset + 32 + (maker_idx * 32);
-
-        if bebop_calldata.len() <= offset_position + 32 {
-            return None;
-        }
-
-        // This offset is relative to the start of the taker_amounts array data
-        let maker_array_offset_u256 =
-            U256::from_be_slice(&bebop_calldata[offset_position..offset_position + 32]);
-
-        // Check for reasonable offset to avoid overflow
-        if maker_array_offset_u256 > U256::from(bebop_calldata.len()) {
-            return None;
-        }
-
-        // TEMPORARY FIX: Hardcode correct sub-array positions
-        // Based on search, amounts are at 1285 and 1349, preceded by length=1
-        // So sub-arrays start at 1285-32=1253 and 1349-32=1317
-        let maker_array_position = if maker_idx == 0 { 1253 } else { 1317 };
-
-        // Read the length of this maker's taker_amounts array
-        if bebop_calldata.len() <= maker_array_position + 32 {
-            return None;
-        }
-
-        let num_amounts_u256 =
-            U256::from_be_slice(&bebop_calldata[maker_array_position..maker_array_position + 32]);
-
-        // Sanity check - must be reasonable value to avoid overflow
-        if num_amounts_u256 > U256::from(100) {
-            return None;
-        }
-
-        let num_amounts = num_amounts_u256.to::<usize>();
-
-        // Sum all amounts for this maker
-        for amount_idx in 0..num_amounts {
-            let amount_position = maker_array_position + 32 + (amount_idx * 32);
-
-            if bebop_calldata.len() <= amount_position + 32 {
-                return None;
-            }
-
-            let amount =
-                U256::from_be_slice(&bebop_calldata[amount_position..amount_position + 32]);
-
-            total = total.saturating_add(amount);
-        }
-    }
-
-    if total > U256::ZERO {
-        Some(total)
-    } else {
-        None
-    }
-}
-
 impl SwapEncoder for BebopSwapEncoder {
     fn new(
         executor_address: String,
@@ -845,119 +707,24 @@ impl SwapEncoder for BebopSwapEncoder {
             approval_needed = true;
         }
 
-        // Extract bebop calldata from user_data (required for Bebop)
+        // The user data required for Bebop is
+        // partial_fill_offset (u8) | original_taker_amount (U256) | calldata (bytes (selector ABI
+        // encoded params))
         let user_data = swap.user_data.clone().ok_or_else(|| {
             EncodingError::InvalidInput("Bebop swaps require user_data with calldata".to_string())
         })?;
 
-        // User data format: partialFillOffset (1 byte) + bebop_calldata
-        if user_data.len() < 5 {
+        if user_data.len() < 37 {
             return Err(EncodingError::InvalidInput(
                 "User data too short to contain offset and Bebop calldata".to_string(),
             ));
         }
 
-        // Extract the partialFillOffset from the first byte
         let partial_fill_offset = user_data[0];
+        let original_filled_taker_amount = U256::from_be_slice(&user_data[1..33]);
 
         // The calldata should be for either swapSingle or swapAggregate
-        let bebop_calldata = user_data[1..].to_vec();
-
-        // Extract the original filledTakerAmount from the calldata using partialFillOffset
-        // The actual byte position is 4 (selector) + partialFillOffset * 32
-        let filled_taker_amount_pos = 4 + (partial_fill_offset as usize) * 32;
-
-        // Ensure the calldata is long enough to contain filledTakerAmount at the calculated
-        // position
-        if bebop_calldata.len() < filled_taker_amount_pos + 32 {
-            return Err(EncodingError::InvalidInput(format!(
-                "Bebop calldata too short to contain filledTakerAmount at offset {partial_fill_offset}",
-            )));
-        }
-
-        // Extract the original filledTakerAmount from the order and use the context receiver
-        let original_filled_taker_amount = {
-            let filled_taker_amount = U256::from_be_slice(
-                &bebop_calldata[filled_taker_amount_pos..filled_taker_amount_pos + 32],
-            );
-
-            // Extract taker_amount from the order based on the function selector
-            let selector = &bebop_calldata[0..4];
-
-            // swapSingle selector: 0x4dcebcba
-            // swapAggregate selector: 0xa2f74893
-            const SWAP_SINGLE_SELECTOR: [u8; 4] = [0x4d, 0xce, 0xbc, 0xba];
-            const SWAP_AGGREGATE_SELECTOR: [u8; 4] = [0xa2, 0xf7, 0x48, 0x93];
-
-            if selector == SWAP_SINGLE_SELECTOR {
-                // For swapSingle, only care about taker_amount; receiver comes from context
-                // The bebop_calldata can come in different formats:
-                // 1. Selector + inline params (from integration test via build_bebop_calldata):
-                //    - Bytes 0-4: selector (0x4dcebcba)
-                //    - Bytes 4-356: order struct inline (352 bytes)
-                //    - Bytes 356-388: signature offset (32 bytes)
-                //    - Bytes 388-420: filledTakerAmount (32 bytes)
-                //    - Bytes 420+: signature data
-                //    - taker_amount is at bytes 196-228 (4 + 192)
-                //
-                // 2. Selector + offsets + data (from unit test):
-                //    - Bytes 0-4: selector
-                //    - Bytes 4-36: order offset (value = 96)
-                //    - Bytes 36-68: signature offset
-                //    - Bytes 68-100: filledTakerAmount
-                //    - Bytes 100+: order data
-                //    - taker_amount is at bytes 292-324 (100 + 192)
-
-                if filled_taker_amount != U256::ZERO {
-                    filled_taker_amount
-                } else {
-                    // Check if we have a selector (starts with 0x4dcebcba)
-                    if bebop_calldata.len() >= 4 && bebop_calldata[0..4] == [0x4d, 0xce, 0xbc, 0xba]
-                    {
-                        // We have a selector, need to determine which format
-                        // Check if bytes 4-36 look like an offset (should be 0x60 = 96 for offset
-                        // format)
-                        if bebop_calldata.len() >= 36 {
-                            let potential_offset = U256::from_be_slice(&bebop_calldata[4..36]);
-                            if potential_offset == U256::from(96) {
-                                // Format with offsets - taker_amount is at 292-324
-                                if bebop_calldata.len() >= 324 {
-                                    U256::from_be_slice(&bebop_calldata[292..324])
-                                } else {
-                                    U256::ZERO
-                                }
-                            } else {
-                                // Inline format with selector - taker_amount is at 196-228
-                                if bebop_calldata.len() >= 228 {
-                                    U256::from_be_slice(&bebop_calldata[196..228])
-                                } else {
-                                    U256::ZERO
-                                }
-                            }
-                        } else {
-                            U256::ZERO
-                        }
-                    } else {
-                        // No selector, pure inline format - taker_amount is at 192-224
-                        if bebop_calldata.len() >= 224 {
-                            U256::from_be_slice(&bebop_calldata[192..224])
-                        } else {
-                            U256::ZERO
-                        }
-                    }
-                }
-            } else if selector == SWAP_AGGREGATE_SELECTOR {
-                // For swapAggregate, compute taker_amount from calldata if needed; receiver from
-                // context
-                if filled_taker_amount != U256::ZERO {
-                    filled_taker_amount
-                } else {
-                    extract_aggregate_taker_amount(&bebop_calldata).unwrap_or(U256::ZERO)
-                }
-            } else {
-                U256::ZERO
-            }
-        };
+        let bebop_calldata = user_data[33..].to_vec();
 
         let receiver = bytes_to_address(&encoding_context.receiver)?;
 
@@ -2048,91 +1815,15 @@ mod tests {
 
     mod bebop {
         use super::*;
-        use crate::encoding::{evm::utils::write_calldata_to_file, models::TransferType};
 
         #[test]
         fn test_encode_bebop_single() {
-            use alloy::{hex, primitives::Address, sol_types::SolValue};
-
-            // Transaction: https://etherscan.io/tx/0x6279bc970273b6e526e86d9b69133c2ca1277e697ba25375f5e6fc4df50c0c94
-            let expiry = 1749483840u64;
-            let taker_address = Address::from_slice(
-                &hex::decode("c5564C13A157E6240659fb81882A28091add8670").unwrap(),
-            );
-            let maker_address = Address::from_slice(
-                &hex::decode("Ce79b081c0c924cb67848723ed3057234d10FC6b").unwrap(),
-            );
-            let maker_nonce = 1749483765992417u64;
-            let taker_token = Address::from_slice(
-                &hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
-            ); // USDC
-            let maker_token = Address::from_slice(
-                &hex::decode("fAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3").unwrap(),
-            ); // ONDO
-            let taker_amount = U256::from(200000000u64); // 200 USDC
-            let maker_amount = U256::from_str_radix("cd97e88ccc64d54000", 16).unwrap(); // 237.21 ONDO
-            let receiver = taker_address;
-            let packed_commands = U256::ZERO;
-            let flags = U256::from_str_radix(
-                "727220e0ad42bc02077c9bb3a3d60c41bfd3df1a80f5e97aa87e3ea6e93a0000",
-                16,
-            )
-            .unwrap();
-
-            // Encode the order struct using ABI encoding
-            let quote_data = (
-                expiry,
-                taker_address,
-                maker_address,
-                maker_nonce,
-                taker_token,
-                maker_token,
-                taker_amount,
-                maker_amount,
-                receiver,
-                packed_commands,
-                flags,
-            )
-                .abi_encode();
-
-            // Real signature from mainnet
-            let signature = hex::decode("eb5419631614978da217532a40f02a8f2ece37d8cfb94aaa602baabbdefb56b474f4c2048a0f56502caff4ea7411d99eed6027cd67dc1088aaf4181dcb0df7051c").unwrap();
-
-            // Build the complete swapSingle calldata
-            let mut bebop_calldata = Vec::new();
-
-            // swapSingle selector
-            bebop_calldata.extend_from_slice(&[0x4d, 0xce, 0xbc, 0xba]);
-
-            // Encode parameters: (Single order, MakerSignature signature, uint256
-            // filledTakerAmount) Calculate offsets (relative to start of params, not
-            // selector)
-            let order_offset = U256::from(96); // After 3 words (2 offsets + filledTakerAmount)
-            let signature_offset = U256::from(96 + quote_data.len());
-
-            // Write the three parameter slots
-            bebop_calldata.extend_from_slice(&order_offset.to_be_bytes::<32>());
-            bebop_calldata.extend_from_slice(&signature_offset.to_be_bytes::<32>());
-            bebop_calldata.extend_from_slice(&U256::ZERO.to_be_bytes::<32>()); // filledTakerAmount = 0 for no pre-fill
-
-            // Append order data (already encoded)
-            bebop_calldata.extend_from_slice(&quote_data);
-
-            // Encode MakerSignature struct
-            // Offset to signatureBytes (always 64 for this struct layout)
-            bebop_calldata.extend_from_slice(&U256::from(64).to_be_bytes::<32>());
-            // Flags (0 for ETH_SIGN)
-            bebop_calldata.extend_from_slice(&U256::ZERO.to_be_bytes::<32>());
-            // SignatureBytes (length + data)
-            bebop_calldata.extend_from_slice(&U256::from(signature.len()).to_be_bytes::<32>());
-            bebop_calldata.extend_from_slice(&signature);
-            // Pad to 32-byte boundary
-            let padding = (32 - (signature.len() % 32)) % 32;
-            bebop_calldata.extend(vec![0u8; padding]);
-
-            // Prepend the partialFillOffset (2 for swapSingle - filledTakerAmount is at position
-            // 68)
-            let mut user_data = vec![2u8];
+            // 200 USDC -> ONDO
+            let bebop_calldata= Bytes::from_str("0x4dcebcba00000000000000000000000000000000000000000000000000000000689b548f0000000000000000000000003ede3eca2a72b3aecc820e955b36f38437d0139500000000000000000000000067336cec42645f55059eff241cb02ea5cc52ff86000000000000000000000000000000000000000000000000279ead5d9685f25b000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000faba6f8e4a5e8ab82f62fe7c39859fa577269be3000000000000000000000000000000000000000000000000000000000bebc20000000000000000000000000000000000000000000000000a8aea46aa4ec5c0f5000000000000000000000000d2068e04cf586f76eece7ba5beb779d7bb1474a100000000000000000000000000000000000000000000000000000000000000005230bcb979c81cebf94a3b5c08bcfa300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000414ce40058ff07f11d9224c2c8d1e58369e4a90173856202d8d2a17da48058ad683dedb742eda0d4c0cf04cf1c09138898dd7fd06f97268ea7f74ef9b42d29bf4c1b00000000000000000000000000000000000000000000000000000000000000").unwrap();
+            let original_taker_amount = U256::from_str("200000000").unwrap();
+            // partialFillOffset 12 for swapSingle
+            let mut user_data = vec![12u8];
+            user_data.extend_from_slice(&original_taker_amount.to_be_bytes::<32>());
             user_data.extend_from_slice(&bebop_calldata);
 
             let bebop_component = ProtocolComponent {
@@ -2178,163 +1869,35 @@ mod tests {
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
 
-            // Verify the encoding contains the expected tokens
-            assert!(hex_swap.contains("a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")); // USDC
-            assert!(hex_swap.contains("faba6f8e4a5e8ab82f62fe7c39859fa577269be3")); // ONDO
-
-            // Verify it includes the bebop calldata
-            let calldata_hex = hex::encode(bebop_calldata);
-            assert!(hex_swap.contains(&calldata_hex));
-
-            // Verify the original amount matches the filledTakerAmount from calldata
-            assert!(
-                hex_swap.contains("0000000000000000000000000000000000000000000000000000000bebc200")
-            ); // 200000000 in hex
-
-            // The packed data format is:
-            // token_in (20) | token_out (20) | transfer_type (1) | partial_fill_offset (1) |
-            // original_filled_taker_amount (32) | approval_needed (1) | receiver (20) |
-            // bebop_calldata Verify partialFillOffset and original_filled_taker_amount
-            // are correct
-            let offset_pos = 41 * 2; // 41 bytes * 2 hex chars per byte
-            let partial_fill_offset_hex = &hex_swap[offset_pos..offset_pos + 2];
-            let amount_hex = &hex_swap[offset_pos + 2..offset_pos + 2 + 64];
-
-            assert_eq!(partial_fill_offset_hex, "02", "partialFillOffset should be 02");
-            assert_eq!(
-                amount_hex, "000000000000000000000000000000000000000000000000000000000bebc200",
-                "original_filled_taker_amount should be 200000000 (0xbebc200)"
-            );
-
-            write_calldata_to_file("test_encode_bebop_single", hex_swap.as_str());
+            let expected_swap = String::from(concat!(
+                // token in
+                "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                // token out
+                "faba6f8e4a5e8ab82f62fe7c39859fa577269be3",
+                // transfer type
+                "01",
+                // partiall filled offset
+                "0c",
+                //  original taker amount
+                "000000000000000000000000000000000000000000000000000000000bebc200",
+                // approval needed
+                "01",
+                //receiver,
+                "c5564c13a157e6240659fb81882a28091add8670",
+            ));
+            assert_eq!(hex_swap, expected_swap + &bebop_calldata.to_string()[2..]);
         }
 
         #[test]
         fn test_encode_bebop_aggregate() {
-            use alloy::{hex, primitives::Address, sol_types::SolValue};
+            // 20k USDC -> ONDO
+            let bebop_calldata= Bytes::from_str("0xa2f7489300000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000640000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000689b78880000000000000000000000003ede3eca2a72b3aecc820e955b36f38437d01395000000000000000000000000000000000000000000000000000000000000016000000000000000000000000000000000000000000000000000000000000001c00000000000000000000000000000000000000000000000000000000000000220000000000000000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000003e000000000000000000000000000000000000000000000000000000000000004c0000000000000000000000000d2068e04cf586f76eece7ba5beb779d7bb1474a100000000000000000000000000000000000000000000000000000000000005a060a5c2aaaaa2fe2cda34423cac76a84c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000051c72848c68a965f66fa7a88855f9f7784502a7f000000000000000000000000ce79b081c0c924cb67848723ed3057234d10fc6b00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000002901f2d62bb356ca0000000000000000000000000000000000000000000000002901f2d62bb356cb0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000001000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000000000001000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000001000000000000000000000000faba6f8e4a5e8ab82f62fe7c39859fa577269be30000000000000000000000000000000000000000000000000000000000000001000000000000000000000000faba6f8e4a5e8ab82f62fe7c39859fa577269be30000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000044f83c726000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000589400da00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000003aa5f96046644f6e37a000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000004b51a26526ddbeec60000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000417ab4332f2b091d87d56d04eee35dd49452782c782de71608c0425c5ae41f1d7e147173851c870d76720ce07d45cd8622352716b1c7965819ee2bf8c573c499ae1b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000410c8da2637aa929e11caff9afdfc4c489320c6dba77cc934d88ba8956e365fd1d48983087c6e474bbb828181cdfdd17317c4c9c3ee4bc98e3769d0c05cc7a285e1c00000000000000000000000000000000000000000000000000000000000000").unwrap();
+            let original_taker_amount = U256::from_str("20000000000").unwrap();
 
-            // Transaction: https://etherscan.io/tx/0xec88410136c287280da87d0a37c1cb745f320406ca3ae55c678dec11996c1b1c
-            let expiry = 1746367285u64;
-            let taker_address = Address::from_slice(
-                &hex::decode("7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6").unwrap(),
-            );
-            let receiver = taker_address;
-
-            // Set up makers
-            let maker_addresses = vec![
-                Address::from_slice(
-                    &hex::decode("67336Cec42645F55059EfF241Cb02eA5cC52fF86").unwrap(),
-                ),
-                Address::from_slice(
-                    &hex::decode("BF19CbF0256f19f39A016a86Ff3551ecC6f2aAFE").unwrap(),
-                ),
-            ];
-            let maker_nonces = vec![U256::from(1746367197308u64), U256::from(15460096u64)];
-
-            // 2D arrays for tokens
-            let weth_address = Address::from_slice(
-                &hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
-            );
-            let usdc_address = Address::from_slice(
-                &hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
-            );
-            let taker_tokens = vec![vec![weth_address], vec![weth_address]];
-            let maker_tokens = vec![vec![usdc_address], vec![usdc_address]];
-
-            // 2D arrays for amounts
-            let taker_amounts =
-                vec![vec![U256::from(5812106401997138u64)], vec![U256::from(4037893598002862u64)]];
-            let maker_amounts = vec![vec![U256::from(10607211u64)], vec![U256::from(7362350u64)]];
-
-            // Commands and flags from the real transaction
-            let commands = alloy::primitives::Bytes::from(hex::decode("00040004").unwrap());
-            let flags = U256::from_str_radix(
-                "d3fa5d891de82c082d5c51f03b47e826f86c96b88802b96a09bbae087e880000",
-                16,
-            )
-            .unwrap();
-
-            // Encode Aggregate order using ABI encoding
-            let quote_data = (
-                U256::from(expiry),
-                taker_address,
-                maker_addresses,
-                maker_nonces,
-                taker_tokens,
-                maker_tokens,
-                taker_amounts,
-                maker_amounts,
-                receiver,
-                commands,
-                flags,
-            )
-                .abi_encode();
-
-            // Real signatures from mainnet
-            let sig1 = hex::decode("d5abb425f9bac1f44d48705f41a8ab9cae207517be8553d2c03b06a88995f2f351ab8ce7627a87048178d539dd64fd2380245531a0c8e43fdc614652b1f32fc71c").unwrap();
-            let sig2 = hex::decode("f38c698e48a3eac48f184bc324fef0b135ee13705ab38cc0bbf5a792f21002f051e445b9e7d57cf24c35e17629ea35b3263591c4abf8ca87ffa44b41301b89c41b").unwrap();
-
-            // Build the complete swapAggregate calldata
-            let mut bebop_calldata = Vec::new();
-
-            // swapAggregate selector
-            bebop_calldata.extend_from_slice(&[0xa2, 0xf7, 0x48, 0x93]);
-
-            // Calculate filled taker amount (sum of both taker amounts)
-            let filled_taker_amount = U256::from(9850000000000000u64); // Total: 0.00985 WETH
-
-            // Encode parameters: (Aggregate order, MakerSignature[] signatures, uint256
-            // filledTakerAmount) Calculate offsets (relative to start of params, not
-            // selector)
-            let order_offset = U256::from(96); // After 3 words
-
-            // Fixed: Using Bytes type for commands field produces correct 1504-byte encoding
-            let signatures_offset = U256::from(96 + quote_data.len());
-
-            // Write the three parameter slots
-            bebop_calldata.extend_from_slice(&order_offset.to_be_bytes::<32>());
-            bebop_calldata.extend_from_slice(&signatures_offset.to_be_bytes::<32>());
-            bebop_calldata.extend_from_slice(&filled_taker_amount.to_be_bytes::<32>());
-
-            // Append the order data
-            bebop_calldata.extend_from_slice(&quote_data);
-
-            // Encode MakerSignature[] array
-            // Array length
-            bebop_calldata.extend_from_slice(&U256::from(2).to_be_bytes::<32>());
-
-            // Calculate offsets for each signature struct (relative to start of array data)
-            let sig1_data_size = 32 + 32 + 32 + sig1.len() + ((32 - (sig1.len() % 32)) % 32);
-            let sig1_offset = 64; // After 2 offset words
-            let sig2_offset = sig1_offset + sig1_data_size;
-
-            // Write offsets for each signature
-            bebop_calldata.extend_from_slice(&U256::from(sig1_offset).to_be_bytes::<32>());
-            bebop_calldata.extend_from_slice(&U256::from(sig2_offset).to_be_bytes::<32>());
-
-            // Encode first MakerSignature struct
-            bebop_calldata.extend_from_slice(&U256::from(64).to_be_bytes::<32>()); // offset to bytes
-            bebop_calldata.extend_from_slice(&U256::ZERO.to_be_bytes::<32>()); // flags = 0 (ETH_SIGN)
-            bebop_calldata.extend_from_slice(&U256::from(sig1.len()).to_be_bytes::<32>());
-            bebop_calldata.extend_from_slice(&sig1);
-            let padding1 = (32 - (sig1.len() % 32)) % 32;
-            bebop_calldata.extend(vec![0u8; padding1]);
-
-            // Encode second MakerSignature struct
-            bebop_calldata.extend_from_slice(&U256::from(64).to_be_bytes::<32>()); // offset to bytes
-            bebop_calldata.extend_from_slice(&U256::ZERO.to_be_bytes::<32>()); // flags = 0 (ETH_SIGN)
-            bebop_calldata.extend_from_slice(&U256::from(sig2.len()).to_be_bytes::<32>());
-            bebop_calldata.extend_from_slice(&sig2);
-            let padding2 = (32 - (sig2.len() % 32)) % 32;
-            bebop_calldata.extend(vec![0u8; padding2]);
-
-            // Prepend the partialFillOffset (2 for swapAggregate)
+            //  partialFillOffset is 2 for swapAggregate
             let mut user_data = vec![2u8];
+            user_data.extend_from_slice(&original_taker_amount.to_be_bytes::<32>());
             user_data.extend_from_slice(&bebop_calldata);
-
-            // Extract bebop_calldata for verification (skip the first byte which is
-            // partialFillOffset)
-            let bebop_calldata = user_data[1..].to_vec();
 
             let bebop_component = ProtocolComponent {
                 id: String::from("bebop-rfq"),
@@ -2343,8 +1906,8 @@ mod tests {
                 ..Default::default()
             };
 
-            let token_in = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"); // WETH
-            let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+            let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+            let token_out = Bytes::from("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3"); // ONDO
 
             let swap = Swap {
                 component: bebop_component,
@@ -2356,7 +1919,7 @@ mod tests {
             };
 
             let encoding_context = EncodingContext {
-                receiver: Bytes::from("0x7078B12Ca5B294d95e9aC16D90B7D38238d8F4E6"), /* Use actual receiver from order */
+                receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"),
                 exact_out: false,
                 router_address: Some(Bytes::zero(20)),
                 group_token_in: token_in.clone(),
@@ -2379,29 +1942,24 @@ mod tests {
                 .unwrap();
             let hex_swap = encode(&encoded_swap);
 
-            // Verify the encoding contains the expected tokens
-            assert!(hex_swap.contains("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")); // WETH
-            assert!(hex_swap.contains("a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")); // USDC
+            let expected_swap = String::from(concat!(
+                // token in
+                "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                // token out
+                "faba6f8e4a5e8ab82f62fe7c39859fa577269be3",
+                // transfer type
+                "01",
+                // partiall filled offset
+                "02",
+                //  original taker amount
+                "00000000000000000000000000000000000000000000000000000004a817c800",
+                // approval needed
+                "01",
+                //receiver,
+                "c5564c13a157e6240659fb81882a28091add8670",
+            ));
 
-            // Verify it includes the bebop calldata
-            let calldata_hex = hex::encode(&bebop_calldata);
-            assert!(hex_swap.contains(&calldata_hex));
-
-            // Verify the original amount
-            let filled_amount_hex = format!("{filled_taker_amount:064x}",);
-            assert!(
-                hex_swap.contains(&filled_amount_hex),
-                "Should contain filled_taker_amount in hex"
-            );
-
-            // Verify the partialFillOffset byte (02 = 2) appears in the right place
-            let expected_pattern = format!("02{filled_amount_hex}");
-            assert!(
-                hex_swap.contains(&expected_pattern),
-                "partialFillOffset byte (02) should be followed by original filledTakerAmount"
-            );
-
-            write_calldata_to_file("test_encode_bebop_aggregate", hex_swap.as_str());
+            assert_eq!(hex_swap, expected_swap + &bebop_calldata.to_string()[2..]);
         }
     }
 }
