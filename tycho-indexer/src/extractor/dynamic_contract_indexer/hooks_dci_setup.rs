@@ -2,6 +2,8 @@
 
 use std::{collections::HashMap, sync::Arc};
 
+use serde::Deserialize;
+use tracing::info;
 use tycho_common::{
     models::{Address, Chain},
     storage::{EntryPointGateway, ProtocolGateway},
@@ -24,15 +26,16 @@ use crate::extractor::dynamic_contract_indexer::{
     rpc_metadata_provider::RPCMetadataProvider,
 };
 
-// Hardcoded Euler hook addresses for testing
-const EULER_HOOK_ADDRESSES: &[&str] = &[
-    "0x55dcf9455EEe8Fd3f5EEd17606291272cDe428a8",
-    "0x2D24b7be7942c25Ea7dd0092235dA7E618dFe8A8",
-    "0x5D04285cfD1cF5f6991FB7965D7A44cD236A28A8",
-    "0xa4e744240a15AF0AFBef2618D9A0eDAA228428A8",
-    "0xA40E0f3243b33a297650c4120277B7c4037528a8",
-    "0xC88b618C2c670c2e2a42e06B466B6F0e82A6E8A8",
-];
+#[derive(Deserialize)]
+struct EulerHooks {
+    pool_addresses: Vec<String>,
+}
+
+fn load_euler_hooks() -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let json_content = include_str!("assets/euler_hooks.json");
+    let euler_hooks: EulerHooks = serde_json::from_str(json_content)?;
+    Ok(euler_hooks.pool_addresses)
+}
 
 /// Sets up all necessary registries for Hooks DCI testing with Euler support
 pub fn setup_metadata_registries(
@@ -42,9 +45,13 @@ pub fn setup_metadata_registries(
     let mut parser_registry = MetadataResponseParserRegistry::new();
     let mut provider_registry = ProviderRegistry::new();
 
+    // Load Euler hook addresses from JSON file
+    let hook_addresses = load_euler_hooks().expect("Failed to load Euler hooks from JSON");
+    info!("Loaded {} hooks from JSON", hook_addresses.len());
+
     // Register Euler metadata generator for all hook addresses
-    for hook_address_str in EULER_HOOK_ADDRESSES {
-        let hook_address = Address::from(*hook_address_str);
+    for hook_address_str in hook_addresses {
+        let hook_address = Address::from(hook_address_str.as_str());
         generator_registry.register_hook_generator(
             hook_address,
             Box::new(EulerMetadataGenerator::new(rpc_url.clone())),
@@ -70,9 +77,12 @@ pub fn setup_hook_orchestrator_registry(
 ) -> HookOrchestratorRegistry {
     let mut hook_registry = HookOrchestratorRegistry { hooks: HashMap::new() };
 
+    // Load Euler hook addresses from JSON file
+    let hook_addresses = load_euler_hooks().expect("Failed to load Euler hooks from JSON");
+
     // Register separate orchestrator instances for each Euler hook address
-    for hook_address_str in EULER_HOOK_ADDRESSES {
-        let hook_address = Address::from(*hook_address_str);
+    for hook_address_str in hook_addresses {
+        let hook_address = Address::from(hook_address_str.as_str());
 
         // Create hook entrypoint configuration for this hook
         let config = HookEntrypointConfig {
@@ -147,9 +157,10 @@ mod tests {
 
     #[test]
     fn test_euler_hook_addresses_parsing() {
-        // Test that all hardcoded addresses can be parsed
-        for hook_address_str in EULER_HOOK_ADDRESSES {
-            let address = Address::from(*hook_address_str);
+        // Test that all addresses from JSON can be parsed
+        let hook_addresses = load_euler_hooks().expect("Failed to load Euler hooks from JSON");
+        for hook_address_str in hook_addresses {
+            let address = Address::from(hook_address_str.as_str());
             assert!(!address.is_zero(), "Hook address should not be zero: {hook_address_str}");
         }
     }
