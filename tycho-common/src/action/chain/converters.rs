@@ -28,21 +28,6 @@ pub trait TypeConverter<From, To> {
     ) -> Result<To, ChainError>;
 }
 
-/// Trait for type-erased converters that can work with Any trait objects.
-/// 
-/// This enables runtime conversion without knowing the concrete types at compile time.
-/// Used internally by the Step implementation for dynamic converter dispatch.
-pub trait ErasedTypeConverter: Send + Sync {
-    /// Convert type-erased input to type-erased output.
-    /// 
-    /// The implementor is responsible for downcasting the input to the expected type,
-    /// performing the conversion, and returning the result as a boxed Any.
-    fn convert_erased(
-        &mut self,
-        input: Box<dyn std::any::Any>,
-        inventory: &mut AssetInventory,
-    ) -> Result<Box<dyn std::any::Any>, ChainError>;
-}
 
 /// Identity converter that passes input through unchanged.
 /// 
@@ -78,26 +63,6 @@ impl<T> TypeConverter<T, T> for PassThrough<T> {
     }
 }
 
-impl<T: Clone + Send + Sync + 'static> ErasedTypeConverter for PassThrough<T> {
-    fn convert_erased(
-        &mut self,
-        input: Box<dyn std::any::Any>,
-        inventory: &mut AssetInventory,
-    ) -> Result<Box<dyn std::any::Any>, ChainError> {
-        // Try to downcast the input to T
-        let typed_input = input
-            .downcast::<T>()
-            .map_err(|_| ChainError::ConversionError(
-                "PassThrough converter: input type mismatch".to_string()
-            ))?;
-        
-        // Use the typed converter (which is just identity)
-        let result = self.convert(*typed_input, inventory)?;
-        
-        // Return as boxed Any
-        Ok(Box::new(result))
-    }
-}
 
 /// Converter that transforms DefaultOutputs to DefaultInputs by extracting produced assets.
 /// 
@@ -178,24 +143,3 @@ impl TypeConverter<DefaultOutputs<ERC20Asset>, DefaultInputs<ERC20Asset>> for Sw
     }
 }
 
-// Implement the erased converter trait for SwapOutputsPlusInventory
-impl ErasedTypeConverter for SwapOutputsPlusInventory {
-    fn convert_erased(
-        &mut self,
-        input: Box<dyn std::any::Any>,
-        inventory: &mut AssetInventory,
-    ) -> Result<Box<dyn std::any::Any>, ChainError> {
-        // Try to downcast the input to DefaultOutputs<ERC20Asset>
-        let typed_input = input
-            .downcast::<DefaultOutputs<ERC20Asset>>()
-            .map_err(|_| ChainError::ConversionError(
-                "SwapOutputsPlusInventory converter expected DefaultOutputs<ERC20Asset>".to_string()
-            ))?;
-        
-        // Use the typed converter
-        let result = self.convert(*typed_input, inventory)?;
-        
-        // Return as boxed Any
-        Ok(Box::new(result))
-    }
-}

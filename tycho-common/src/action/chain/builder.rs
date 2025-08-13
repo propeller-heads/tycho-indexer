@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use crate::action::{
     chain::{
-        converters::{TypeConverter, ErasedTypeConverter},
+        converters::TypeConverter,
         executor::ActionChain,
         step::{ErasedStep, Step},
     },
@@ -32,24 +32,24 @@ impl<I: 'static, C: Clone + 'static> ChainBuilder<I, C> {
     /// 
     /// The step can now handle type mismatches between the current chain output type C
     /// and the action's input type A::Inputs through runtime conversion.
-    pub fn add_step_with_converter<A, S, NewOutput>(
+    pub fn add_step_with_converter<A, S>(
         mut self,
         state: S,
         parameters: A::Parameters,
-        converter: impl ErasedTypeConverter + 'static,
-    ) -> ChainBuilder<I, NewOutput>
+        converter: impl TypeConverter<C, A::Inputs> + Send + Sync + 'static,
+    ) -> ChainBuilder<I, A::Outputs>
     where
         A: Action + 'static,
         S: SimulateForward<A> + Clone + 'static,
         A::Parameters: Clone + 'static,
         A::Inputs: Clone + 'static,
-        A::Outputs: Send + Sync + 'static,
-        NewOutput: 'static,
-        C: 'static,
+        A::Outputs: Clone + 'static,
+        C: Clone + 'static,
     {
-        let boxed_converter: Box<dyn ErasedTypeConverter> = Box::new(converter);
+        let boxed_converter: Box<dyn TypeConverter<C, A::Inputs> + Send + Sync> = 
+            Box::new(converter);
             
-        let step = Step::<A, S, C, NewOutput>::new(state, parameters, Some(boxed_converter));
+        let step = Step::<A, S, C, A::Outputs>::new(state, parameters, Some(boxed_converter));
         self.steps.push(Box::new(step));
         
         ChainBuilder {
@@ -85,11 +85,15 @@ impl<I: 'static> ChainBuilder<I, crate::action::simulate::DefaultOutputs<crate::
         S: SimulateForward<A> + Clone + 'static,
         A::Parameters: Clone + 'static,
     {
-        // Create a step that internally handles the OutputsToInputs conversion
+        // Create a step that converts DefaultOutputs to DefaultInputs via OutputsToInputs
+        let converter = crate::action::chain::converters::OutputsToInputs::<crate::asset::erc20::ERC20Asset>::new();
+        let boxed_converter: Box<dyn TypeConverter<crate::action::simulate::DefaultOutputs<crate::asset::erc20::ERC20Asset>, A::Inputs> + Send + Sync> = 
+            Box::new(converter);
+            
         let step = Step::<A, S, crate::action::simulate::DefaultOutputs<crate::asset::erc20::ERC20Asset>, crate::action::simulate::DefaultOutputs<crate::asset::erc20::ERC20Asset>>::new(
             state, 
             parameters, 
-            Some(Box::new(crate::action::chain::converters::PassThrough::<crate::action::simulate::DefaultOutputs<crate::asset::erc20::ERC20Asset>>::new()))
+            Some(boxed_converter)
         );
         
         ChainBuilder {

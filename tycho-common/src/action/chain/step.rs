@@ -3,7 +3,7 @@
 use std::{any::Any, fmt, marker::PhantomData};
 
 use crate::action::{
-    chain::{converters::{TypeConverter, ErasedTypeConverter}, errors::ChainError, inventory::AssetInventory},
+    chain::{converters::TypeConverter, errors::ChainError, inventory::AssetInventory},
     context::ActionContext,
     simulate::{Action, SimulateForward},
 };
@@ -28,7 +28,7 @@ where
     pub parameters: A::Parameters,
     
     /// Optional converter for transforming input from previous step.
-    pub converter: Option<Box<dyn ErasedTypeConverter>>,
+    pub converter: Option<Box<dyn TypeConverter<I, A::Inputs> + Send + Sync>>,
     
     /// Phantom data to track input/output types at compile time.
     _input_marker: PhantomData<I>,
@@ -47,7 +47,7 @@ where
     pub fn new(
         state: S,
         parameters: A::Parameters,
-        converter: Option<Box<dyn ErasedTypeConverter>>,
+        converter: Option<Box<dyn TypeConverter<I, A::Inputs> + Send + Sync>>,
     ) -> Self {
         Self {
             action: PhantomData,
@@ -104,27 +104,19 @@ where
                 )
             })?;
 
-        // Convert inputs using custom converter or default behavior  
+        // Convert inputs using custom converter or direct use
         let action_inputs: A::Inputs = if let Some(mut converter) = self.converter.take() {
-            // Use the custom converter to transform chain outputs to action inputs
-            // We need to clone the data to own it since converters consume their input
-            let owned_chain_outputs: I = chain_outputs.clone();
-            let boxed_chain_outputs = Box::new(owned_chain_outputs) as Box<dyn std::any::Any>;
-            let converted_result = converter.convert_erased(boxed_chain_outputs, inventory)?;
-            
-            // Cast the converted result to the action's input type
-            let action_inputs = converted_result
-                .downcast::<A::Inputs>()
-                .map_err(|_| ChainError::TypeCastError(
-                    "Converter produced output that doesn't match action input type".to_string()
-                ))?;
-            
-            *action_inputs
+            // Use the typed converter to transform chain outputs to action inputs
+            // The converter is typed: TypeConverter<I, A::Inputs>
+            converter.convert(chain_outputs.clone(), inventory)?
         } else {
             // No converter - the chain output type I should match action input type A::Inputs
+            // This should only happen when I == A::Inputs (compile-time enforced)
             let cloned_outputs = (chain_outputs as &dyn std::any::Any)
                 .downcast_ref::<A::Inputs>()
-                .ok_or_else(|| ChainError::TypeCastError("Failed to downcast non-converting inputs".to_string()))?
+                .ok_or_else(|| ChainError::TypeCastError(
+                    "Chain output type doesn't match action input type. Use a converter.".to_string()
+                ))?
                 .clone();
             cloned_outputs
         };

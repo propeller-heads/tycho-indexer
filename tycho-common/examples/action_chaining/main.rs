@@ -323,7 +323,7 @@ fn chain_swap_add_liquidity_with_inventory(usdc: &Token, eth: &Token, context: &
             usdc_eth_pool_swap,
             SwapParameters::new(eth.clone()),
         )
-        .add_step_with_converter::<AddLiquidityFullRange, _, DefaultOutputs<ERC20Asset>>(
+        .add_step_with_converter::<AddLiquidityFullRange, _>(
             usdc_eth_pool_lp,
             AddLiquidityFullRangeParameters,
             inventory_converter,
