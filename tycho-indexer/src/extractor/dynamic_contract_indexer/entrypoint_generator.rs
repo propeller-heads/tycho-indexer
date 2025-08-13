@@ -948,7 +948,7 @@ mod tests {
 
         ProtocolComponent {
             id: "test_component".to_string(),
-            protocol_system: "uniswap_v4".to_string(),
+            protocol_system: "uniswap_v4_hooks".to_string(),
             protocol_type_name: "pool".to_string(),
             chain: Chain::Ethereum,
             tokens: create_test_tokens(),

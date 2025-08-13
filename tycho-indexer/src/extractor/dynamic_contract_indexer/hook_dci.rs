@@ -109,7 +109,7 @@ where
             .db_gateway
             .get_protocol_components(
                 &self.chain,
-                Some("uniswap_v4".to_string()),
+                Some("uniswap_v4_hooks".to_string()),
                 None, // ids - load all
                 None, // min_tvl - no filter
                 None, // pagination - load all
@@ -174,7 +174,7 @@ where
         if !component_ids_for_batch.is_empty() {
             info!(batch_size = component_ids_for_batch.len(), "Starting batch entrypoint loading");
 
-            let filter = EntryPointFilter::new("uniswap_v4".to_string())
+            let filter = EntryPointFilter::new("uniswap_v4_hooks".to_string())
                 .with_component_ids(component_ids_for_batch.clone());
 
             let all_entrypoints = self
@@ -337,8 +337,6 @@ where
 
         if failed_components > 0 {
             warn!(failed_components, total_errors, "Components failed with metadata errors");
-        } else {
-            debug!("No metadata errors found");
         }
 
         Ok(())
@@ -1632,7 +1630,7 @@ mod tests {
             ProtocolComponent {
                 id: "0x156c3163f4cabc00f83d2bfad9ee341aebc85a5bcb566c0ba8fc4358a1023166"
                     .to_string(),
-                protocol_system: "uniswap_v4".to_string(),
+                protocol_system: "uniswap_v4_hooks".to_string(),
                 protocol_type_name: "uniswap_v4_pool".to_string(),
                 chain: Chain::Ethereum,
                 tokens: vec![
@@ -1857,7 +1855,7 @@ mod tests {
                 .expect_get_protocol_components()
                 .withf(move |chain, system, ids, min_tvl, pagination| {
                     chain == &Chain::Ethereum &&
-                        system.as_deref() == Some("uniswap_v4") &&
+                        system.as_deref() == Some("uniswap_v4_hooks") &&
                         ids.is_none() &&
                         min_tvl.is_none() &&
                         pagination.is_none()
@@ -1872,7 +1870,7 @@ mod tests {
             db_gateway2
                 .expect_get_entry_points_tracing_params()
                 .withf(move |filter: &EntryPointFilter, _| {
-                    filter.protocol_system == "uniswap_v4"
+                    filter.protocol_system == "uniswap_v4_hooks"
                         && filter
                         .component_ids
                         .as_ref()
@@ -2005,7 +2003,7 @@ mod tests {
             // This time, return some entrypoints to indicate the component has been traced before
             db_gateway
                 .expect_get_entry_points_tracing_params()
-                .withf(move |filter: &EntryPointFilter, _| filter.protocol_system == "uniswap_v4")
+                .withf(move |filter: &EntryPointFilter, _| filter.protocol_system == "uniswap_v4_hooks")
                 .return_once(move |_, _| {
                     let mut entrypoints = HashMap::new();
                     let mut ep_set = HashSet::new();
