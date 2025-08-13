@@ -945,7 +945,7 @@ mod tests {
         for i in 0..num_clients {
             let (connection, _) = tokio_tungstenite::connect_async(&url)
                 .await
-                .unwrap_or_else(|_| panic!("Failed to connect client {}", i));
+                .unwrap_or_else(|_| panic!("Failed to connect client {i}"));
             connections.push(connection);
         }
 
@@ -960,11 +960,11 @@ mod tests {
             .map(|(i, mut connection)| {
                 let msg_text = msg_text.clone();
                 async move {
-                    println!("Client {} sending subscription request", i);
+                    println!("Client {i} sending subscription request");
                     connection
                         .send(Message::Text(msg_text))
                         .await
-                        .unwrap_or_else(|_| panic!("Failed to send from client {}", i));
+                        .unwrap_or_else(|_| panic!("Failed to send from client {i}"));
 
                     // Try to receive response
                     let start = std::time::Instant::now();
@@ -994,14 +994,14 @@ mod tests {
             .count();
         let failed = results.len() - successful;
 
-        println!("Test completed in {:?}", total_time);
-        println!("Results: {} successful, {} failed", successful, failed);
+        println!("Test completed in {total_time:?}");
+        println!("Results: {successful} successful, {failed} failed");
 
         // With the original deadlock-prone code, we expect some failures due to timeouts
         // caused by the mutex being held during block_on() calls
 
         if failed > 0 {
-            println!("DEADLOCK ISSUE DETECTED: {} out of {} clients failed", failed, num_clients);
+            println!("DEADLOCK ISSUE DETECTED: {failed} out of {num_clients} clients failed");
             println!("This indicates the deadlock problem exists in the original code");
         } else {
             println!("ALL CLIENTS SUCCEEDED - deadlock not reproduced");
