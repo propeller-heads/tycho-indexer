@@ -147,13 +147,60 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             IERC20(tokenOut).balanceOf(address(bebopExecutor))
                 - initialTokenOutBalance,
             expectedAmountOut,
-            "WETH should be at receiver"
+            "WBTC should be at receiver"
         );
         assertEq(
             IERC20(tokenIn).balanceOf(address(bebopExecutor)),
             0,
-            "WBTC left in executor"
+            "WETH left in executor"
         );
+    }
+
+    function testSingleOrderSellingETH() public {
+        // 1 WETH -> WBTC
+        vm.createSelectFork(vm.rpcUrl("mainnet"), 23124275);
+
+        bebopExecutor =
+            new BebopExecutorExposed(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+
+        // Quote made manually using the BebopExecutor as the taker and receiver
+        bytes memory bebopCalldata =
+            hex"4dcebcba00000000000000000000000000000000000000000000000000000000689ca0cd0000000000000000000000005615deb798bb3e4dfa0139dfa1b3d433cc23b72f00000000000000000000000051c72848c68a965f66fa7a88855f9f7784502a7f0000000000000000000000000000000000000000000000002a65384e77863d8e000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000002260fac5e5542a773aa44fbcfedf7c193bc2c5990000000000000000000000000000000000000000000000000de0b6b3a764000000000000000000000000000000000000000000000000000000000000003a96a10000000000000000000000005615deb798bb3e4dfa0139dfa1b3d433cc23b72f0000000000000000000000000000000000000000000000000000000000000001c6d9e514c7a64e5c0e239b532e1a3ea00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000041905d474b362c4a7c901c6a4ccb5c30670a0c602456f52761b47a0a35fc3944ec1fa224bc3bc6e8925cb15258efad2cf79e22ce9720f2302d4a1a2811c54fb4341c00000000000000000000000000000000000000000000000000000000000000";
+        address tokenIn = address(0);
+        address tokenOut = WBTC_ADDR;
+        RestrictTransferFrom.TransferType transferType =
+            RestrictTransferFrom.TransferType.None;
+        uint8 partialFillOffset = 12;
+        uint256 amountIn = 1000000000000000000;
+        bool approvalNeeded = false;
+        uint256 expectedAmountOut = 3839649;
+
+        vm.deal(address(bebopExecutor), amountIn);
+
+        bytes memory params = abi.encodePacked(
+            tokenIn,
+            tokenOut,
+            transferType,
+            partialFillOffset,
+            amountIn,
+            approvalNeeded,
+            address(bebopExecutor),
+            bebopCalldata
+        );
+
+        uint256 initialTokenOutBalance =
+            IERC20(tokenOut).balanceOf(address(bebopExecutor));
+
+        uint256 amountOut = bebopExecutor.swap(amountIn, params);
+
+        assertEq(amountOut, expectedAmountOut, "Incorrect amount out");
+        assertEq(
+            IERC20(tokenOut).balanceOf(address(bebopExecutor))
+                - initialTokenOutBalance,
+            expectedAmountOut,
+            "WBTC should be at receiver"
+        );
+        assertEq(address(bebopExecutor).balance, 0, "ETH left in executor");
     }
 
     function testSingleOrder_PartialFill() public {

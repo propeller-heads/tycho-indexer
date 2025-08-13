@@ -645,10 +645,6 @@ impl SwapEncoder for BalancerV3SwapEncoder {
 /// Bebop uses a Request-for-Quote model where quotes are obtained off-chain
 /// and settled on-chain. This encoder supports PMM RFQ execution.
 ///
-/// # Signature Encoding
-/// Bebop aggregate orders use concatenated 65-byte ECDSA signatures without length prefixes.
-/// Each signature is exactly 65 bytes: r (32) + s (32) + v (1).
-///
 /// # Fields
 /// * `executor_address` - The address of the executor contract that will perform the swap.
 /// * `settlement_address` - The address of the Bebop settlement contract.
