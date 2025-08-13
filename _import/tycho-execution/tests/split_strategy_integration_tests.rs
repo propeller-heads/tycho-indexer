@@ -43,6 +43,7 @@ fn test_split_swap_strategy_encoder() {
         split: 0.5f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let swap_weth_wbtc = Swap {
         component: ProtocolComponent {
@@ -58,6 +59,7 @@ fn test_split_swap_strategy_encoder() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let swap_dai_usdc = Swap {
         component: ProtocolComponent {
@@ -70,6 +72,7 @@ fn test_split_swap_strategy_encoder() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let swap_wbtc_usdc = Swap {
         component: ProtocolComponent {
@@ -82,6 +85,7 @@ fn test_split_swap_strategy_encoder() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
@@ -149,6 +153,7 @@ fn test_split_input_cyclic_swap() {
         split: 0.6f64, // 60% of input
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
 
     // USDC -> WETH (Pool 2) - 40% of input (remaining)
@@ -172,6 +177,7 @@ fn test_split_input_cyclic_swap() {
         split: 0f64,
         user_data: None, // Remaining 40%
         protocol_state: None,
+        estimated_amount_in: None,
     };
 
     // WETH -> USDC (Pool 2)
@@ -195,6 +201,7 @@ fn test_split_input_cyclic_swap() {
         split: 0.0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
@@ -316,6 +323,7 @@ fn test_split_output_cyclic_swap() {
         split: 0.0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
 
     let swap_weth_usdc_v3_pool1 = Swap {
@@ -336,6 +344,7 @@ fn test_split_output_cyclic_swap() {
         split: 0.6f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
 
     let swap_weth_usdc_v3_pool2 = Swap {
@@ -358,6 +367,7 @@ fn test_split_output_cyclic_swap() {
         split: 0.0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);

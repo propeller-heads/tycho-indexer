@@ -49,6 +49,7 @@ fn test_uniswap_v3_uniswap_v2() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let swap_wbtc_usdc = Swap {
         component: ProtocolComponent {
@@ -61,6 +62,7 @@ fn test_uniswap_v3_uniswap_v2() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -130,6 +132,7 @@ fn test_uniswap_v3_uniswap_v3() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let swap_wbtc_usdc = Swap {
         component: ProtocolComponent {
@@ -150,6 +153,7 @@ fn test_uniswap_v3_uniswap_v3() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -218,6 +222,7 @@ fn test_uniswap_v3_curve() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
 
     let swap_wbtc_usdt = Swap {
@@ -248,6 +253,7 @@ fn test_uniswap_v3_curve() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -308,6 +314,7 @@ fn test_balancer_v2_uniswap_v2() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
 
     let swap_wbtc_usdc = Swap {
@@ -321,6 +328,7 @@ fn test_balancer_v2_uniswap_v2() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -384,6 +392,7 @@ fn test_multi_protocol() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
 
     let balancer_swap_weth_wbtc = Swap {
@@ -397,6 +406,7 @@ fn test_multi_protocol() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
 
     let curve_swap_wbtc_usdt = Swap {
@@ -427,6 +437,7 @@ fn test_multi_protocol() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
 
     // Ekubo
@@ -450,6 +461,7 @@ fn test_multi_protocol() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
 
     // USV4
@@ -474,6 +486,7 @@ fn test_multi_protocol() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
@@ -547,6 +560,7 @@ fn test_uniswap_v3_balancer_v3() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let swap_wbtc_qnt = Swap {
         component: ProtocolComponent {
@@ -559,6 +573,7 @@ fn test_uniswap_v3_balancer_v3() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 

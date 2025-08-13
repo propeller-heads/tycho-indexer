@@ -7,7 +7,7 @@ use tycho_common::{
 };
 use tycho_execution::encoding::{
     evm::encoder_builders::TychoRouterEncoderBuilder,
-    models::{Solution, Swap, UserTransferType},
+    models::{Solution, Swap, SwapBuilder, UserTransferType},
 };
 
 fn main() {
@@ -44,6 +44,7 @@ fn main() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
 
     // Then we create a solution object with the previous swap
@@ -87,56 +88,51 @@ fn main() {
     let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f")
         .expect("Failed to create DAI address");
 
-    let swap_weth_dai = Swap {
-        component: ProtocolComponent {
+    let swap_weth_dai = SwapBuilder::new(
+        ProtocolComponent {
             id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        token_in: weth.clone(),
-        token_out: dai.clone(),
-        split: 0.5f64,
-        user_data: None,
-        protocol_state: None,
-    };
-    let swap_weth_wbtc = Swap {
-        component: ProtocolComponent {
+        weth.clone(),
+        dai.clone(),
+    )
+    .split(0.5)
+    .build();
+
+    // Split 0 represents the remaining 50%, but to avoid any rounding errors we set this to
+    // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
+    let swap_weth_wbtc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        token_in: weth.clone(),
-        token_out: wbtc.clone(),
-        // This represents the remaining 50%, but to avoid any rounding errors we set this to
-        // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-    };
-    let swap_dai_usdc = Swap {
-        component: ProtocolComponent {
+        weth.clone(),
+        wbtc.clone(),
+    )
+    .build();
+
+    let swap_dai_usdc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0xAE461cA67B15dc8dc81CE7615e0320dA1A9aB8D5".to_string(),
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        token_in: dai.clone(),
-        token_out: usdc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-    };
-    let swap_wbtc_usdc = Swap {
-        component: ProtocolComponent {
+        dai.clone(),
+        usdc.clone(),
+    )
+    .build();
+    let swap_wbtc_usdc = SwapBuilder::new(
+        ProtocolComponent {
             id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        token_in: wbtc.clone(),
-        token_out: usdc.clone(),
-        split: 0f64,
-        user_data: None,
-        protocol_state: None,
-    };
+        wbtc.clone(),
+        usdc.clone(),
+    )
+    .build();
     let mut complex_solution = solution.clone();
     complex_solution.swaps = vec![swap_weth_dai, swap_weth_wbtc, swap_dai_usdc, swap_wbtc_usdc];
 
