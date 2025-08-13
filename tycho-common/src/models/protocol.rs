@@ -7,8 +7,8 @@ use tracing::warn;
 
 use crate::{
     models::{
-        blockchain::Transaction, token::Token, Address, AttrStoreKey, Balance, Chain, ChangeType,
-        ComponentId, MergeError, StoreVal, TxHash,
+        blockchain::Transaction, Address, AttrStoreKey, Balance, Chain, ChangeType, ComponentId,
+        MergeError, StoreVal, TxHash,
     },
     Bytes,
 };
@@ -319,8 +319,8 @@ impl ProtocolChangesWithTx {
 
 pub struct GetAmountOutParams {
     pub amount_in: BigUint,
-    pub token_in: Token,
-    pub token_out: Token,
+    pub token_in: Bytes,
+    pub token_out: Bytes,
     pub sender: Bytes,
     pub receiver: Bytes,
 }
