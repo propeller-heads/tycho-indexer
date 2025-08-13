@@ -27,6 +27,11 @@ pub(super) struct DCICache {
     pub(super) retriggers: VersionedCache<StorageLocation, HashSet<EntryPointWithTracingParams>>,
     /// Stores tracked contract addresses and their associated storage keys.
     pub(super) tracked_contracts: VersionedCache<Address, Option<HashSet<StoreKey>>>,
+    /// Stores addresses identified as ERC-20 tokens to skip full indexing.
+    pub(super) erc20_addresses: VersionedCache<Address, bool>,
+    /// Stores manually blacklisted addresses that should skip full indexing
+    /// but are not tokens (e.g., UniswapV4 pool manager).
+    pub(super) blacklisted_addresses: VersionedCache<Address, bool>,
 }
 
 impl DCICache {
@@ -36,6 +41,8 @@ impl DCICache {
             entrypoint_results: VersionedCache::new(),
             retriggers: VersionedCache::new(),
             tracked_contracts: VersionedCache::new(),
+            erc20_addresses: VersionedCache::new(),
+            blacklisted_addresses: VersionedCache::new(),
         }
     }
 
@@ -59,6 +66,8 @@ impl DCICache {
         self.retriggers.revert_to(block)?;
         self.tracked_contracts
             .revert_to(block)?;
+        self.erc20_addresses.revert_to(block)?;
+        self.blacklisted_addresses.revert_to(block)?;
 
         Ok(())
     }
@@ -78,6 +87,10 @@ impl DCICache {
         self.retriggers
             .handle_finality(finalized_block_height)?;
         self.tracked_contracts
+            .handle_finality(finalized_block_height)?;
+        self.erc20_addresses
+            .handle_finality(finalized_block_height)?;
+        self.blacklisted_addresses
             .handle_finality(finalized_block_height)?;
 
         Ok(())
