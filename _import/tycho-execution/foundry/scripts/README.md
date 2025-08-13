@@ -65,7 +65,7 @@ For each of the following, you must select one of `tenderly_ethereum`, `tenderly
 1. If the wallet that has the role, is a Gnosis Safe, you need to set the `SAFE_ADDRESS` env var.
 2. The scripts deploy-executors, remove-executor, set-roles and revoke-role all support this.
     1. If `SAFE_ADDRESS` is set, then it will propose a transaction to the safe wallet and later on it needs to be
-       approved in their UI to execute on chain.
+       approved in their UI to execute on chain. Be sure to change the PRIVATE_KEY to that which has permissions on the safe wallet.
     2. If it's not set, it will submit the transaction directly to the chain.
 
 ## Deploy Uniswap X filler
