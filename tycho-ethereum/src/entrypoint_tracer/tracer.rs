@@ -3,6 +3,7 @@ use std::{
     str::FromStr,
 };
 
+use alloy::rpc::client::{ClientBuilder, RpcClient};
 use async_trait::async_trait;
 use ethers::{
     prelude::{spoof, Middleware},
@@ -14,6 +15,7 @@ use ethers::{
         U256,
     },
 };
+use serde_json::{json, Value};
 use tycho_common::{
     keccak256,
     models::{
@@ -27,19 +29,22 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::{entrypoint_tracer::access_list::AccessListTracer, BytesCodec, RPCError};
+use super::{build_state_overrides, AccessListResult};
+use crate::{BytesCodec, RPCError};
 
 pub struct EVMEntrypointService {
     provider: Provider<Http>,
-    access_list_tracer: AccessListTracer,
+    alloy_client: RpcClient,
 }
 
 impl EVMEntrypointService {
     pub fn try_from_url(rpc_url: &str) -> Result<Self, RPCError> {
+        let url = url::Url::parse(rpc_url)
+            .map_err(|_| RPCError::SetupError("Invalid URL".to_string()))?;
         Ok(Self {
             provider: Provider::<Http>::try_from(rpc_url)
                 .map_err(|e| RPCError::SetupError(e.to_string()))?,
-            access_list_tracer: AccessListTracer::new(rpc_url)?,
+            alloy_client: ClientBuilder::default().http(url),
         })
     }
 
@@ -103,6 +108,50 @@ impl EVMEntrypointService {
             .await
             .map_err(RPCError::RequestError)
     }
+
+    async fn get_access_list(
+        &self,
+        block_hash: &BlockHash,
+        target: &Address,
+        params: &RPCTracerParams,
+    ) -> Result<HashMap<Address, HashSet<Bytes>>, RPCError> {
+        let mut tx_params = json!({
+            "to": target.to_string(),
+            "data": params.calldata.to_string()
+        });
+
+        if let Some(caller) = &params.caller {
+            tx_params["from"] = json!(caller.to_string());
+        }
+
+        let rpc_params = if params.state_overrides.is_none() ||
+            params
+                .state_overrides
+                .as_ref()
+                .unwrap_or(&BTreeMap::new())
+                .is_empty()
+        {
+            json!([tx_params, block_hash.to_string()])
+        } else {
+            let state_overrides = build_state_overrides(
+                params
+                    .state_overrides
+                    .as_ref()
+                    .unwrap_or(&BTreeMap::new()),
+            );
+            json!([tx_params, block_hash.to_string(), Value::Object(state_overrides)])
+        };
+
+        let res: AccessListResult = self
+            .alloy_client
+            .request("eth_createAccessList", rpc_params)
+            .await
+            .map_err(|e| {
+                RPCError::UnknownError(format!("eth_createAccessList call failed: {e}"))
+            })?;
+
+        res.try_get_accessed_slots()
+    }
 }
 
 fn convert_storage(slots: &BTreeMap<Bytes, Bytes>) -> HashMap<H256, H256> {
@@ -126,7 +175,6 @@ impl EntryPointTracer for EVMEntrypointService {
             match &entry_point.params {
                 TracingParams::RPCTracer(ref rpc_entry_point) => {
                     let mut accessed_slots = self
-                        .access_list_tracer
                         .get_access_list(
                             &block_hash,
                             &entry_point.entry_point.target,
