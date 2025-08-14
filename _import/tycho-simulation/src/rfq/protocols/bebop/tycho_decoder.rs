@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use tycho_client::feed::synchronizer::ComponentWithState;
 use tycho_common::{models::token::Token, Bytes};
@@ -7,7 +7,8 @@ use super::{models::BebopPriceData, state::BebopState};
 use crate::{
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
     rfq::{
-        constants::get_bebop_auth, models::TimestampHeader, protocols::bebop::client::BebopClient,
+        constants::get_bebop_auth, models::TimestampHeader,
+        protocols::bebop::client_builder::BebopClientBuilder,
     },
 };
 
@@ -81,19 +82,11 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
             InvalidSnapshotError::ValueError(format!("Failed to get Bebop authentication: {e}"))
         })?;
 
-        let client = BebopClient::new(
-            snapshot.component.chain.into(),
-            HashSet::new(),
-            0.0,
-            auth.user,
-            auth.key,
-            // Approved quote tokens can be empty, since no more normalization will be
-            // necessary inside the BebopState
-            HashSet::new(),
-        )
-        .map_err(|e| {
-            InvalidSnapshotError::MissingAttribute(format!("Couldn't create BebopClient: {e}"))
-        })?;
+        let client = BebopClientBuilder::new(snapshot.component.chain.into(), auth.user, auth.key)
+            .build()
+            .map_err(|e| {
+                InvalidSnapshotError::MissingAttribute(format!("Couldn't create BebopClient: {e}"))
+            })?;
 
         Ok(BebopState { base_token, quote_token, price_data, client })
     }
