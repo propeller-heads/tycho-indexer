@@ -661,7 +661,7 @@ impl SwapEncoder for BalancerV3SwapEncoder {
 pub struct BebopSwapEncoder {
     executor_address: String,
     settlement_address: String,
-    native_token_bebop_address: String,
+    native_token_bebop_address: Bytes,
     native_token_address: Bytes,
     runtime_handle: Handle,
     // Store the runtime to prevent it from being dropped before use.
@@ -693,6 +693,10 @@ impl SwapEncoder for BebopSwapEncoder {
                 "Missing native token bebop address in config".to_string(),
             ))?
             .to_string();
+        let native_token_bebop_address =
+            Bytes::from_str(&native_token_bebop_address).map_err(|_| {
+                EncodingError::FatalError("Invalid Bebop native token address".to_string())
+            })?;
         let (runtime_handle, runtime) = get_runtime()?;
         Ok(Self {
             executor_address,
@@ -748,20 +752,13 @@ impl SwapEncoder for BebopSwapEncoder {
                             "Estimated amount in is mandatory for a Bebop swap".to_string(),
                         ))?;
                 // Bebop uses another address for the native token than the zero address
-                let bebop_native_address = Bytes::from_str(&self.native_token_bebop_address)
-                    .map_err(|_| {
-                        EncodingError::FatalError(
-                            "Invalid Bebop native token curve address".to_string(),
-                        )
-                    })?;
-
                 let mut token_in = swap.token_in.clone();
                 if swap.token_in == self.native_token_address {
-                    token_in = bebop_native_address.clone()
+                    token_in = self.native_token_bebop_address.clone()
                 }
                 let mut token_out = swap.token_out.clone();
                 if swap.token_out == self.native_token_address {
-                    token_out = bebop_native_address
+                    token_out = self.native_token_bebop_address.clone()
                 }
 
                 let params = GetAmountOutParams {

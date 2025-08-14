@@ -615,7 +615,7 @@ fn test_uniswap_v3_bebop() {
     // Note: This test does not assert anything. It is only used to obtain
     // integration test data for our router solidity test.
     //
-    // Performs a sequential swap from WETH to ONDO through USDC using USV3 and
+    // Performs a sequential swap from WETH to WBTC through USDC using USV3 and
     // Bebop RFQ
     //
     //   WETH ───(USV3)──> USDC ───(Bebop RFQ)──> WBTC
