@@ -1745,14 +1745,9 @@ mod tests {
             let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
             let token_out = Bytes::from("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3"); // ONDO
 
-            let swap = Swap {
-                component: bebop_component,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: Some(Bytes::from(user_data)),
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(bebop_component, token_in.clone(), token_out.clone())
+                .user_data(Bytes::from(user_data))
+                .build();
 
             let encoding_context = EncodingContext {
                 receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"),
@@ -1818,14 +1813,9 @@ mod tests {
             let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
             let token_out = Bytes::from("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3"); // ONDO
 
-            let swap = Swap {
-                component: bebop_component,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: Some(Bytes::from(user_data)),
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(bebop_component, token_in.clone(), token_out.clone())
+                .user_data(Bytes::from(user_data))
+                .build();
 
             let encoding_context = EncodingContext {
                 receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"),

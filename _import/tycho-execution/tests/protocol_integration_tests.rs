@@ -6,7 +6,7 @@ use num_bigint::{BigInt, BigUint};
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 use tycho_execution::encoding::{
     evm::utils::{biguint_to_u256, write_calldata_to_file},
-    models::{Solution, Swap, UserTransferType},
+    models::{Solution, Swap, SwapBuilder, UserTransferType},
 };
 
 use crate::common::{
@@ -616,14 +616,9 @@ fn test_single_encoding_strategy_bebop() {
         ..Default::default()
     };
 
-    let swap = Swap {
-        component: bebop_component,
-        token_in: token_in.clone(),
-        token_out: token_out.clone(),
-        split: 0f64,
-        user_data: Some(user_data),
-        protocol_state: None,
-    };
+    let swap = SwapBuilder::new(bebop_component, token_in.clone(), token_out.clone())
+        .user_data(user_data)
+        .build();
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -682,14 +677,9 @@ fn test_single_encoding_strategy_bebop_aggregate() {
         ..Default::default()
     };
 
-    let swap = Swap {
-        component: bebop_component,
-        token_in: token_in.clone(),
-        token_out: token_out.clone(),
-        split: 0f64,
-        user_data: Some(user_data),
-        protocol_state: None,
-    };
+    let swap = SwapBuilder::new(bebop_component, token_in.clone(), token_out.clone())
+        .user_data(user_data)
+        .build();
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
