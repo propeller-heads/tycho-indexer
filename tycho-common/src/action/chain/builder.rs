@@ -2,34 +2,37 @@
 
 use std::marker::PhantomData;
 
-use crate::action::{
-    chain::{
-        converters::TypeConverter,
-        executor::ActionChain,
-        step::{ErasedStep, Step},
+use crate::{
+    action::{
+        chain::{
+            converters::TypeConverter,
+            executor::ActionChain,
+            step::{ErasedStep, Step},
+        },
+        simulate::{Action, DefaultInputs, SimulateForward},
     },
-    simulate::{Action, SimulateForward},
+    asset::erc20::{ERC20Asset, ERC20DefaultOutputs},
 };
 
 /// Type-safe builder for constructing chains of actions.
-/// 
+///
 /// Uses phantom types to track the input and output types of the chain at compile
 /// time, ensuring that steps can only be added when their input type matches the
 /// current chain output type.
 pub struct ChainBuilder<InputType, CurrentType> {
     /// Type-erased steps that will be executed in sequence.
     steps: Vec<Box<dyn ErasedStep>>,
-    
+
     /// Phantom marker for the original input type of the chain.
     _input_marker: PhantomData<InputType>,
-    
+
     /// Phantom marker for the current output type of the chain.
     _current_marker: PhantomData<CurrentType>,
 }
 
 impl<I: 'static, C: Clone + 'static> ChainBuilder<I, C> {
     /// Add a new step to the chain with a custom converter.
-    /// 
+    ///
     /// The step can now handle type mismatches between the current chain output type C
     /// and the action's input type A::Inputs through runtime conversion.
     pub fn add_step_with_converter<A, S>(
@@ -46,21 +49,17 @@ impl<I: 'static, C: Clone + 'static> ChainBuilder<I, C> {
         A::Outputs: Clone + 'static,
         C: Clone + 'static,
     {
-        let boxed_converter: Box<dyn TypeConverter<C, A::Inputs> + Send + Sync> = 
+        let boxed_converter: Box<dyn TypeConverter<C, A::Inputs> + Send + Sync> =
             Box::new(converter);
-            
+
         let step = Step::<A, S, C, A::Outputs>::new(state, parameters, Some(boxed_converter));
         self.steps.push(Box::new(step));
-        
-        ChainBuilder {
-            steps: self.steps,
-            _input_marker: PhantomData,
-            _current_marker: PhantomData,
-        }
+
+        ChainBuilder { steps: self.steps, _input_marker: PhantomData, _current_marker: PhantomData }
     }
-    
+
     /// Build the final action chain.
-    /// 
+    ///
     /// The chain can be built when the current output type matches or can be
     /// converted to the desired end type.
     pub fn build(self) -> ActionChain<I, C> {
@@ -68,10 +67,11 @@ impl<I: 'static, C: Clone + 'static> ChainBuilder<I, C> {
     }
 }
 
-/// Specialized implementation for ERC20 chains that can use add_step with OutputsToInputs conversion.
-impl<I: 'static> ChainBuilder<I, crate::action::simulate::DefaultOutputs<crate::asset::erc20::ERC20Asset>> {
+/// Specialized implementation for ERC20 chains that can use add_step with OutputsToInputs
+/// conversion.
+impl<I: 'static> ChainBuilder<I, ERC20DefaultOutputs> {
     /// Add a step with default OutputsToInputs conversion for ERC20 chains.
-    /// 
+    ///
     /// This is the standard method for chaining ERC20 actions where the output of one
     /// action becomes the input to the next action (e.g., swap chains).
     /// Uses ERC20 OutputsToInputs converter by default.
@@ -79,23 +79,25 @@ impl<I: 'static> ChainBuilder<I, crate::action::simulate::DefaultOutputs<crate::
         self,
         state: S,
         parameters: A::Parameters,
-    ) -> ChainBuilder<I, crate::action::simulate::DefaultOutputs<crate::asset::erc20::ERC20Asset>>
+    ) -> ChainBuilder<I, ERC20DefaultOutputs>
     where
-        A: Action<Inputs = crate::action::simulate::DefaultInputs<crate::asset::erc20::ERC20Asset>, Outputs = crate::action::simulate::DefaultOutputs<crate::asset::erc20::ERC20Asset>> + 'static,
+        A: Action<Inputs = DefaultInputs<ERC20Asset>, Outputs = ERC20DefaultOutputs> + 'static,
         S: SimulateForward<A> + Clone + 'static,
         A::Parameters: Clone + 'static,
     {
         // Create a step that converts DefaultOutputs to DefaultInputs via OutputsToInputs
-        let converter = crate::action::chain::converters::OutputsToInputs::<crate::asset::erc20::ERC20Asset>::new();
-        let boxed_converter: Box<dyn TypeConverter<crate::action::simulate::DefaultOutputs<crate::asset::erc20::ERC20Asset>, A::Inputs> + Send + Sync> = 
+        let converter = crate::action::chain::converters::OutputsToInputs::<
+            crate::asset::erc20::ERC20Asset,
+        >::new();
+        let boxed_converter: Box<dyn TypeConverter<ERC20DefaultOutputs, A::Inputs> + Send + Sync> =
             Box::new(converter);
-            
-        let step = Step::<A, S, crate::action::simulate::DefaultOutputs<crate::asset::erc20::ERC20Asset>, crate::action::simulate::DefaultOutputs<crate::asset::erc20::ERC20Asset>>::new(
-            state, 
-            parameters, 
-            Some(boxed_converter)
+
+        let step = Step::<A, S, ERC20DefaultOutputs, ERC20DefaultOutputs>::new(
+            state,
+            parameters,
+            Some(boxed_converter),
         );
-        
+
         ChainBuilder {
             steps: {
                 let mut new_steps = self.steps;
@@ -112,15 +114,11 @@ impl<I: 'static> ChainBuilder<I, crate::action::simulate::DefaultOutputs<crate::
 impl ChainBuilder<(), ()> {
     /// Create a new chain builder.
     pub fn new() -> Self {
-        Self {
-            steps: Vec::new(),
-            _input_marker: PhantomData,
-            _current_marker: PhantomData,
-        }
+        Self { steps: Vec::new(), _input_marker: PhantomData, _current_marker: PhantomData }
     }
-    
+
     /// Start the chain with the first step.
-    /// 
+    ///
     /// This establishes the input and initial output types for the chain.
     pub fn start_with<A, S>(
         self,
@@ -135,7 +133,7 @@ impl ChainBuilder<(), ()> {
         A::Outputs: 'static,
     {
         let step = Step::<A, S, A::Inputs, A::Outputs>::new(state, parameters, None);
-        
+
         ChainBuilder {
             steps: vec![Box::new(step)],
             _input_marker: PhantomData,

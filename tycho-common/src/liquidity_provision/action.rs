@@ -6,14 +6,14 @@ use num_bigint::BigUint;
 
 use crate::{
     action::{
+        asset::Asset,
         context::ActionContext,
-        simulate::{Action, DefaultInputs, DefaultOutputs, SimulateForward},
+        simulate::{Action, ActionOutput, DefaultInputs, DefaultOutputs, SimulateForward},
     },
-    asset::erc20::ERC20Asset,
+    asset::erc20::{ERC20Asset, ERC20DefaultOutputs},
     liquidity_provision::asset::{ConcentratedLiquidityNFT, TickRange},
     simulation::errors::SimulationError,
 };
-
 // =============================================================================
 // Actions for Full Range LP (ERC20 LP Tokens)
 // =============================================================================
@@ -96,6 +96,16 @@ pub struct ConcentratedLiquidityResult {
     pub gas_used: BigUint,
 }
 
+impl ActionOutput for ConcentratedLiquidityResult {
+    fn used(&self) -> impl Iterator<Item = Box<dyn Asset>> {
+        Vec::new().into_iter()
+    }
+
+    fn produced(&self) -> impl Iterator<Item = Box<dyn Asset>> {
+        Vec::new().into_iter()
+    }
+}
+
 // =============================================================================
 // Action Implementations
 // =============================================================================
@@ -103,7 +113,7 @@ pub struct ConcentratedLiquidityResult {
 impl Action for AddLiquidityFullRange {
     type Parameters = AddLiquidityFullRangeParameters;
     type Inputs = DefaultInputs<ERC20Asset>;
-    type Outputs = DefaultOutputs<ERC20Asset>; // Produced LP tokens + refunds
+    type Outputs = ERC20DefaultOutputs; // Produced LP tokens + refunds
 }
 
 impl Action for AddLiquidityConcentrated {
@@ -114,20 +124,20 @@ impl Action for AddLiquidityConcentrated {
 
 impl Action for RemoveLiquidityFullRange {
     type Parameters = RemoveLiquidityParameters;
-    type Inputs = ERC20Asset; // LP token to remove
-    type Outputs = DefaultOutputs<ERC20Asset>; // Used LP tokens + produced underlying tokens & incentives
+    type Inputs = DefaultInputs<ERC20Asset>; // LP token to remove
+    type Outputs = ERC20DefaultOutputs; // Used LP tokens + produced underlying tokens & incentives
 }
 
 impl Action for RemoveLiquidityConcentrated {
     type Parameters = RemoveLiquidityParameters;
-    type Inputs = ConcentratedLiquidityNFT; // NFT position to remove
-    type Outputs = DefaultOutputs<ERC20Asset>; // Produced underlying tokens & incentives
+    type Inputs = DefaultInputs<ConcentratedLiquidityNFT>; // NFT position to remove
+    type Outputs = ERC20DefaultOutputs; // Produced underlying tokens & incentives
 }
 
 impl Action for CollectFeesConcentrated {
     type Parameters = CollectFeesConcentratedParameters;
-    type Inputs = ConcentratedLiquidityNFT; // NFT position to collect from
-    type Outputs = DefaultOutputs<ERC20Asset>; // Fee tokens & incentives received
+    type Inputs = DefaultInputs<ConcentratedLiquidityNFT>; // NFT position to collect from
+    type Outputs = ERC20DefaultOutputs; // Fee tokens & incentives received
 }
 
 // =============================================================================
@@ -141,7 +151,7 @@ pub trait FullRangeLiquidityProvider: fmt::Debug + Send + Sync + 'static {
         &self,
         context: &ActionContext,
         inputs: &[ERC20Asset],
-    ) -> Result<(DefaultOutputs<ERC20Asset>, Box<Self>), SimulationError>;
+    ) -> Result<(ERC20DefaultOutputs, Box<Self>), SimulationError>;
 
     /// Remove liquidity from a full-range pool.
     fn remove_liquidity(
@@ -149,7 +159,7 @@ pub trait FullRangeLiquidityProvider: fmt::Debug + Send + Sync + 'static {
         context: &ActionContext,
         params: &RemoveLiquidityParameters,
         lp_token: &ERC20Asset,
-    ) -> Result<(DefaultOutputs<ERC20Asset>, Box<Self>), SimulationError>;
+    ) -> Result<(ERC20DefaultOutputs, Box<Self>), SimulationError>;
 }
 
 /// High-level interface for concentrated liquidity provision (NFT positions).
@@ -168,7 +178,7 @@ pub trait ConcentratedLiquidityProvider: fmt::Debug + Send + Sync + 'static {
         context: &ActionContext,
         params: &RemoveLiquidityParameters,
         position: &ConcentratedLiquidityNFT,
-    ) -> Result<(DefaultOutputs<ERC20Asset>, Box<Self>), SimulationError>;
+    ) -> Result<(ERC20DefaultOutputs, Box<Self>), SimulationError>;
 
     /// Collect fees from NFT position.
     fn collect_fees(
@@ -176,7 +186,7 @@ pub trait ConcentratedLiquidityProvider: fmt::Debug + Send + Sync + 'static {
         context: &ActionContext,
         params: &CollectFeesConcentratedParameters,
         position: &ConcentratedLiquidityNFT,
-    ) -> Result<(DefaultOutputs<ERC20Asset>, Box<Self>), SimulationError>;
+    ) -> Result<(ERC20DefaultOutputs, Box<Self>), SimulationError>;
 }
 
 // =============================================================================
@@ -210,10 +220,10 @@ where
         &self,
         context: &ActionContext,
         inputs: &[ERC20Asset],
-    ) -> Result<(DefaultOutputs<ERC20Asset>, Box<Self>), SimulationError> {
+    ) -> Result<(ERC20DefaultOutputs, Box<Self>), SimulationError> {
         let params = AddLiquidityFullRangeParameters;
         let default_inputs = DefaultInputs(inputs.to_vec());
-        let (outputs, new_state): (DefaultOutputs<ERC20Asset>, Box<T>) =
+        let (outputs, new_state): (ERC20DefaultOutputs, Box<T>) =
             <T as SimulateForward<AddLiquidityFullRange>>::simulate_forward(
                 &*self.wrapped,
                 context,
@@ -229,13 +239,13 @@ where
         context: &ActionContext,
         params: &RemoveLiquidityParameters,
         lp_token: &ERC20Asset,
-    ) -> Result<(DefaultOutputs<ERC20Asset>, Box<Self>), SimulationError> {
-        let (outputs, new_state): (DefaultOutputs<ERC20Asset>, Box<T>) =
+    ) -> Result<(ERC20DefaultOutputs, Box<Self>), SimulationError> {
+        let (outputs, new_state): (ERC20DefaultOutputs, Box<T>) =
             <T as SimulateForward<RemoveLiquidityFullRange>>::simulate_forward(
                 &*self.wrapped,
                 context,
                 params,
-                lp_token,
+                &DefaultInputs(vec![lp_token.clone()]),
             )?;
 
         Ok((outputs, Box::new(Self { wrapped: new_state })))
@@ -289,13 +299,13 @@ where
         context: &ActionContext,
         params: &RemoveLiquidityParameters,
         position: &ConcentratedLiquidityNFT,
-    ) -> Result<(DefaultOutputs<ERC20Asset>, Box<Self>), SimulationError> {
-        let (outputs, new_state): (DefaultOutputs<ERC20Asset>, Box<T>) =
+    ) -> Result<(ERC20DefaultOutputs, Box<Self>), SimulationError> {
+        let (outputs, new_state): (ERC20DefaultOutputs, Box<T>) =
             <T as SimulateForward<RemoveLiquidityConcentrated>>::simulate_forward(
                 &*self.wrapped,
                 context,
                 params,
-                position,
+                &DefaultInputs(vec![position.clone()]),
             )?;
 
         Ok((outputs, Box::new(Self { wrapped: new_state })))
@@ -306,13 +316,13 @@ where
         context: &ActionContext,
         params: &CollectFeesConcentratedParameters,
         position: &ConcentratedLiquidityNFT,
-    ) -> Result<(DefaultOutputs<ERC20Asset>, Box<Self>), SimulationError> {
-        let (outputs, new_state): (DefaultOutputs<ERC20Asset>, Box<T>) =
+    ) -> Result<(ERC20DefaultOutputs, Box<Self>), SimulationError> {
+        let (outputs, new_state): (ERC20DefaultOutputs, Box<T>) =
             <T as SimulateForward<CollectFeesConcentrated>>::simulate_forward(
                 &*self.wrapped,
                 context,
                 params,
-                position,
+                &DefaultInputs(vec![position.clone()]),
             )?;
 
         Ok((outputs, Box::new(Self { wrapped: new_state })))

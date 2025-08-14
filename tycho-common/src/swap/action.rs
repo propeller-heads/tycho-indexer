@@ -11,7 +11,7 @@ use crate::{
         asset::Asset,
         simulate::{Action, DefaultInputs, DefaultOutputs, SimulateForward},
     },
-    asset::erc20::ERC20Asset,
+    asset::erc20::{ERC20Asset, ERC20DefaultOutputs},
     models::token::Token,
     simulation::errors::SimulationError,
     swap::{
@@ -52,7 +52,7 @@ impl SwapParameters {
 impl Action for Swap {
     type Parameters = SwapParameters;
     type Inputs = DefaultInputs<ERC20Asset>;
-    type Outputs = DefaultOutputs<ERC20Asset>;
+    type Outputs = ERC20DefaultOutputs;
 }
 
 /// Adapter that bridges action-based implementations to the Swappable interface.

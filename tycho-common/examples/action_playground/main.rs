@@ -336,7 +336,7 @@ fn liquidity_scenario_2(pool: &UniswapV2Pool, context: &ActionContext, usdc: &To
         &*pool_with_liquidity,
         context,
         &params,
-        &lp_input,
+        &DefaultInputs(vec![lp_input.clone()]),
     );
     match result {
         Ok((outputs, new_state)) => {

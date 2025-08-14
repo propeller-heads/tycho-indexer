@@ -10,6 +10,11 @@ use crate::{
     simulation::errors::SimulationError,
 };
 
+pub trait ActionOutput: Clone {
+    fn used(&self) -> impl Iterator<Item = Box<dyn Asset>>;
+    fn produced(&self) -> impl Iterator<Item = Box<dyn Asset>>;
+}
+
 /// Defines the structure of an on-chain action.
 ///
 /// Actions are the fundamental building blocks of the simulation system. They specify
@@ -22,11 +27,11 @@ pub trait Action {
 
     /// Assets or data required to execute the action.
     /// These are consumed or transformed during execution.
-    type Inputs;
+    type Inputs: Clone + IntoIterator<Item = Box<dyn Asset>>;
 
     /// Results produced by the action execution.
     /// Include both asset outputs and execution metadata.
-    type Outputs;
+    type Outputs: ActionOutput;
 }
 
 /// Stateless simulation of actions.
@@ -70,35 +75,46 @@ pub trait SimulateForward<A: Action> {
 #[derive(Clone)]
 pub struct DefaultInputs<A: Asset>(pub Vec<A>);
 
+impl<A: Asset + 'static> IntoIterator for DefaultInputs<A> {
+    type Item = Box<dyn Asset>;
+    type IntoIter = std::iter::Map<std::vec::IntoIter<A>, fn(A) -> Box<dyn Asset>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0
+            .into_iter()
+            .map(|a| Box::new(a) as Box<dyn Asset>)
+    }
+}
+
 /// Standard output structure for asset-producing actions.
 ///
 /// Captures the complete result of an action execution including asset flows
 /// and gas consumption for comprehensive simulation tracking.
 #[derive(Clone)]
-pub struct DefaultOutputs<A: Asset> {
+pub struct DefaultOutputs<I: Asset, O: Asset> {
     /// Assets consumed during action execution.
-    used: Vec<A>,
+    used: Vec<I>,
 
     /// Assets produced as a result of the action.
-    produced: Vec<A>,
+    produced: Vec<O>,
 
     /// Total gas consumed by the action execution.
     gas_spent: BigUint,
 }
 
-impl<A: Asset> DefaultOutputs<A> {
+impl<I: Asset, O: Asset> DefaultOutputs<I, O> {
     /// Create new default outputs.
-    pub fn new(used: Vec<A>, produced: Vec<A>, gas_spent: BigUint) -> Self {
+    pub fn new(used: Vec<I>, produced: Vec<O>, gas_spent: BigUint) -> Self {
         Self { used, produced, gas_spent }
     }
 
     /// Get the assets that were consumed during execution.
-    pub fn used(&self) -> &Vec<A> {
+    pub fn used(&self) -> &Vec<I> {
         &self.used
     }
 
     /// Get the assets that were produced during execution.
-    pub fn produced(&self) -> &Vec<A> {
+    pub fn produced(&self) -> &Vec<O> {
         &self.produced
     }
 
@@ -108,4 +124,22 @@ impl<A: Asset> DefaultOutputs<A> {
     }
 }
 
+impl<I, O> ActionOutput for DefaultOutputs<I, O>
+where
+    I: Asset + Clone + 'static,
+    O: Asset + Clone + 'static,
+{
+    fn used(&self) -> impl Iterator<Item = Box<dyn Asset>> {
+        self.used
+            .clone()
+            .into_iter()
+            .map(|a| Box::new(a) as Box<dyn Asset>)
+    }
 
+    fn produced(&self) -> impl Iterator<Item = Box<dyn Asset>> {
+        self.produced
+            .clone()
+            .into_iter()
+            .map(|a| Box::new(a) as Box<dyn Asset>)
+    }
+}

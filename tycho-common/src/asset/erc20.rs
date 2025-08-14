@@ -3,7 +3,10 @@
 use num_bigint::BigUint;
 
 use crate::{
-    action::asset::{Asset, PredicateDescriptor},
+    action::{
+        asset::{Asset, PredicateDescriptor},
+        simulate::DefaultOutputs,
+    },
     models::token::Token,
     Bytes,
 };
@@ -53,3 +56,5 @@ impl Asset for ERC20Asset {
         todo!()
     }
 }
+
+pub type ERC20DefaultOutputs = DefaultOutputs<ERC20Asset, ERC20Asset>;

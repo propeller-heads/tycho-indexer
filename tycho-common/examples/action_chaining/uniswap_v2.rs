@@ -1,11 +1,11 @@
 //! UniswapV2 implementation for the action chaining playground.
-//! 
+//!
 //! This is a copy of the UniswapV2Pool implementation for use in chaining examples.
 //! In a real system, this would be imported from the original location.
 
-use num_bigint::BigUint;
 use std::ops::Div;
 
+use num_bigint::BigUint;
 use tycho_common::{
     action::{
         asset::Asset,
@@ -13,9 +13,7 @@ use tycho_common::{
         simulate::{DefaultInputs, DefaultOutputs, SimulateForward},
     },
     asset::erc20::ERC20Asset,
-    liquidity_provision::action::{
-        AddLiquidityFullRange, AddLiquidityFullRangeParameters,
-    },
+    liquidity_provision::action::{AddLiquidityFullRange, AddLiquidityFullRangeParameters},
     models::{token::Token, Chain},
     simulation::errors::SimulationError,
     swap::action::{Swap, SwapParameters},
@@ -58,7 +56,12 @@ impl UniswapV2Pool {
     }
 
     /// Get the amount of output tokens for a given input amount (exact input swap).
-    pub fn get_amount_out(&self, amount_in: &BigUint, reserve_in: &BigUint, reserve_out: &BigUint) -> Result<BigUint, SimulationError> {
+    pub fn get_amount_out(
+        &self,
+        amount_in: &BigUint,
+        reserve_in: &BigUint,
+        reserve_out: &BigUint,
+    ) -> Result<BigUint, SimulationError> {
         if amount_in == &BigUint::from(0u32) {
             return Err(SimulationError::InvalidInput("Input amount cannot be zero".into(), None));
         }
@@ -70,7 +73,7 @@ impl UniswapV2Pool {
         let amount_in_with_fee = amount_in * BigUint::from(997u32);
         let numerator = &amount_in_with_fee * reserve_out;
         let denominator = reserve_in * BigUint::from(1000u32) + &amount_in_with_fee;
-        
+
         Ok(numerator.div(&denominator))
     }
 
@@ -79,25 +82,32 @@ impl UniswapV2Pool {
         if value == &BigUint::from(0u32) {
             return BigUint::from(0u32);
         }
-        
+
         let mut x = value.clone();
         let mut y = (value + BigUint::from(1u32)).div(&BigUint::from(2u32));
-        
+
         while y < x {
             x = y.clone();
             y = (y.clone() + value.div(&y)).div(&BigUint::from(2u32));
         }
-        
+
         x
     }
 
     /// Calculate LP tokens to mint for given token amounts.
-    pub fn calculate_lp_tokens_to_mint(&self, amount0: &BigUint, amount1: &BigUint) -> Result<BigUint, SimulationError> {
+    pub fn calculate_lp_tokens_to_mint(
+        &self,
+        amount0: &BigUint,
+        amount1: &BigUint,
+    ) -> Result<BigUint, SimulationError> {
         if self.lp_total_supply == BigUint::from(0u32) {
             // First liquidity addition
             let liquidity = self.sqrt(&(amount0 * amount1));
             if liquidity <= self.minimum_liquidity {
-                return Err(SimulationError::InvalidInput("Insufficient liquidity minted".into(), None));
+                return Err(SimulationError::InvalidInput(
+                    "Insufficient liquidity minted".into(),
+                    None,
+                ));
             }
             Ok(liquidity - &self.minimum_liquidity)
         } else {
@@ -130,13 +140,17 @@ impl SimulateForward<Swap> for UniswapV2Pool {
         _context: &ActionContext,
         params: &SwapParameters,
         inputs: &DefaultInputs<ERC20Asset>,
-    ) -> Result<(DefaultOutputs<ERC20Asset>, Box<Self>), SimulationError> {
+    ) -> Result<(ERC20DefaultOutputs, Box<Self>), SimulationError> {
         if inputs.0.len() != 1 {
-            return Err(SimulationError::InvalidInput("Swap requires exactly one input token".into(), None));
+            return Err(SimulationError::InvalidInput(
+                "Swap requires exactly one input token".into(),
+                None,
+            ));
         }
 
         let input_asset = &inputs.0[0];
-        let input_is_token0 = self.get_token_order(input_asset.token())
+        let input_is_token0 = self
+            .get_token_order(input_asset.token())
             .ok_or_else(|| SimulationError::InvalidInput("Input token not in pool".into(), None))?;
 
         // Verify output token is the other token in the pair
@@ -153,7 +167,7 @@ impl SimulateForward<Swap> for UniswapV2Pool {
         };
 
         let output_amount = self.get_amount_out(input_amount, reserve_in, reserve_out)?;
-        
+
         // Create new pool state
         let mut new_pool = self.clone();
         if input_is_token0 {
@@ -188,18 +202,31 @@ impl SimulateForward<AddLiquidityFullRange> for UniswapV2Pool {
         _context: &ActionContext,
         _params: &AddLiquidityFullRangeParameters,
         inputs: &DefaultInputs<ERC20Asset>,
-    ) -> Result<(DefaultOutputs<ERC20Asset>, Box<Self>), SimulationError> {
+    ) -> Result<(ERC20DefaultOutputs, Box<Self>), SimulationError> {
         if inputs.0.len() != 2 {
-            return Err(SimulationError::InvalidInput("Add liquidity requires exactly two input tokens".into(), None));
+            return Err(SimulationError::InvalidInput(
+                "Add liquidity requires exactly two input tokens".into(),
+                None,
+            ));
         }
 
         // Sort inputs by token address to match pool order
         let mut sorted_inputs = inputs.0.clone();
-        sorted_inputs.sort_by(|a, b| a.token().address.cmp(&b.token().address));
+        sorted_inputs.sort_by(|a, b| {
+            a.token()
+                .address
+                .cmp(&b.token().address)
+        });
 
         let (amount0, amount1) = (
-            sorted_inputs[0].amount().unwrap().clone(),
-            sorted_inputs[1].amount().unwrap().clone(),
+            sorted_inputs[0]
+                .amount()
+                .unwrap()
+                .clone(),
+            sorted_inputs[1]
+                .amount()
+                .unwrap()
+                .clone(),
         );
 
         let lp_tokens_minted = self.calculate_lp_tokens_to_mint(&amount0, &amount1)?;
@@ -215,7 +242,7 @@ impl SimulateForward<AddLiquidityFullRange> for UniswapV2Pool {
             &"0x1111111111111111111111111111111111111111".into(),
             &format!("{}/{}", self.token0.symbol, self.token1.symbol),
             18,
-            0, // no tax
+            0,                 // no tax
             &[Some(50000u64)], // LP operations gas cost
             Chain::Ethereum,
             100, // good quality
