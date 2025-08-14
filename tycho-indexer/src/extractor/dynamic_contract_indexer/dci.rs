@@ -41,6 +41,8 @@ static MANUAL_BLACKLIST: LazyLock<Vec<Address>> = LazyLock::new(|| {
     vec![
         // UniswapV4 Pool Manager - cannot be fully tracked
         Address::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90").unwrap(),
+        // UniswapV2 Permit2
+        Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3").unwrap()
     ]
 });
 
