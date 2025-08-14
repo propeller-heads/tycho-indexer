@@ -55,6 +55,7 @@ contract Constants is Test, BaseConstants {
     address WTAO_ADDR = address(0x77E06c9eCCf2E797fd462A92B6D7642EF85b0A44);
     address BSGG_ADDR = address(0xdA16Cf041E2780618c49Dbae5d734B89a6Bac9b3);
     address GHO_ADDR = address(0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f);
+    address ONDO_ADDR = address(0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3);
 
     // Maverick v2
     address MAVERICK_V2_FACTORY = 0x0A7e848Aca42d879EF06507Fca0E7b33A0a63c1e;
@@ -123,6 +124,9 @@ contract Constants is Test, BaseConstants {
 
     // Permit2
     address PERMIT2_ADDRESS = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
+
+    // Bebop Settlement
+    address BEBOP_SETTLEMENT = 0xbbbbbBB520d69a9775E85b458C58c648259FAD5F;
 
     // Pool Code Init Hashes
     bytes32 USV2_POOL_CODE_INIT_HASH =

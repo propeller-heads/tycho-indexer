@@ -1,7 +1,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use alloy::{
-    primitives::{Address, Bytes as AlloyBytes, U8},
+    primitives::{Address, Bytes as AlloyBytes, U256, U8},
     sol_types::SolValue,
 };
 use serde_json::from_str;
@@ -634,6 +634,117 @@ impl SwapEncoder for BalancerV3SwapEncoder {
     fn executor_address(&self) -> &str {
         &self.executor_address
     }
+
+    fn clone_box(&self) -> Box<dyn SwapEncoder> {
+        Box::new(self.clone())
+    }
+}
+
+/// Encodes a swap on Bebop (PMM RFQ) through the given executor address.
+///
+/// Bebop uses a Request-for-Quote model where quotes are obtained off-chain
+/// and settled on-chain. This encoder supports PMM RFQ execution.
+///
+/// # Fields
+/// * `executor_address` - The address of the executor contract that will perform the swap.
+/// * `settlement_address` - The address of the Bebop settlement contract.
+#[derive(Clone)]
+pub struct BebopSwapEncoder {
+    executor_address: String,
+    settlement_address: String,
+}
+
+impl SwapEncoder for BebopSwapEncoder {
+    fn new(
+        executor_address: String,
+        _chain: Chain,
+        config: Option<HashMap<String, String>>,
+    ) -> Result<Self, EncodingError> {
+        let config = config.ok_or(EncodingError::FatalError(
+            "Missing bebop specific addresses in config".to_string(),
+        ))?;
+        let settlement_address = config
+            .get("bebop_settlement_address")
+            .ok_or(EncodingError::FatalError(
+                "Missing bebop settlement address in config".to_string(),
+            ))?
+            .to_string();
+        Ok(Self { executor_address, settlement_address })
+    }
+
+    fn encode_swap(
+        &self,
+        swap: &Swap,
+        encoding_context: &EncodingContext,
+    ) -> Result<Vec<u8>, EncodingError> {
+        let token_in = bytes_to_address(&swap.token_in)?;
+        let token_out = bytes_to_address(&swap.token_out)?;
+
+        let token_approvals_manager = ProtocolApprovalsManager::new()?;
+        let approval_needed: bool;
+
+        if let Some(router_address) = &encoding_context.router_address {
+            let tycho_router_address = bytes_to_address(router_address)?;
+            let token_to_approve = token_in;
+            let settlement_address = Address::from_str(&self.settlement_address)
+                .map_err(|_| EncodingError::FatalError("Invalid settlement address".to_string()))?;
+
+            // Native ETH doesn't need approval, only ERC20 tokens do
+            if token_to_approve == Address::ZERO {
+                approval_needed = false;
+            } else {
+                approval_needed = token_approvals_manager.approval_needed(
+                    token_to_approve,
+                    tycho_router_address,
+                    settlement_address,
+                )?;
+            }
+        } else {
+            approval_needed = true;
+        }
+
+        // The user data required for Bebop is
+        // partial_fill_offset (u8) | original_taker_amount (U256) | calldata (bytes (selector ABI
+        // encoded params))
+        let user_data = swap.user_data.clone().ok_or_else(|| {
+            EncodingError::InvalidInput("Bebop swaps require user_data with calldata".to_string())
+        })?;
+
+        if user_data.len() < 37 {
+            return Err(EncodingError::InvalidInput(
+                "User data too short to contain offset and Bebop calldata".to_string(),
+            ));
+        }
+
+        let partial_fill_offset = user_data[0];
+        let original_filled_taker_amount = U256::from_be_slice(&user_data[1..33]);
+
+        // The calldata should be for either swapSingle or swapAggregate
+        let bebop_calldata = user_data[33..].to_vec();
+
+        let receiver = bytes_to_address(&encoding_context.receiver)?;
+
+        // Encode packed data for the executor
+        // Format: token_in | token_out | transfer_type | partial_fill_offset |
+        //         original_filled_taker_amount | approval_needed | receiver | bebop_calldata
+        let args = (
+            token_in,
+            token_out,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
+            partial_fill_offset.to_be_bytes(),
+            original_filled_taker_amount.to_be_bytes::<32>(),
+            (approval_needed as u8).to_be_bytes(),
+            receiver,
+            &bebop_calldata[..],
+        );
+
+        Ok(args.abi_encode_packed())
+    }
+
+    fn executor_address(&self) -> &str {
+        &self.executor_address
+    }
+
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
         Box::new(self.clone())
     }
@@ -1608,6 +1719,146 @@ mod tests {
             );
 
             write_calldata_to_file("test_encode_maverick_v2", hex_swap.as_str());
+        }
+    }
+
+    mod bebop {
+        use super::*;
+
+        #[test]
+        fn test_encode_bebop_single() {
+            // 200 USDC -> ONDO
+            let bebop_calldata= Bytes::from_str("0x4dcebcba00000000000000000000000000000000000000000000000000000000689b548f0000000000000000000000003ede3eca2a72b3aecc820e955b36f38437d0139500000000000000000000000067336cec42645f55059eff241cb02ea5cc52ff86000000000000000000000000000000000000000000000000279ead5d9685f25b000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000faba6f8e4a5e8ab82f62fe7c39859fa577269be3000000000000000000000000000000000000000000000000000000000bebc20000000000000000000000000000000000000000000000000a8aea46aa4ec5c0f5000000000000000000000000d2068e04cf586f76eece7ba5beb779d7bb1474a100000000000000000000000000000000000000000000000000000000000000005230bcb979c81cebf94a3b5c08bcfa300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000414ce40058ff07f11d9224c2c8d1e58369e4a90173856202d8d2a17da48058ad683dedb742eda0d4c0cf04cf1c09138898dd7fd06f97268ea7f74ef9b42d29bf4c1b00000000000000000000000000000000000000000000000000000000000000").unwrap();
+            let original_taker_amount = U256::from_str("200000000").unwrap();
+            // partialFillOffset 12 for swapSingle
+            let mut user_data = vec![12u8];
+            user_data.extend_from_slice(&original_taker_amount.to_be_bytes::<32>());
+            user_data.extend_from_slice(&bebop_calldata);
+
+            let bebop_component = ProtocolComponent {
+                id: String::from("bebop-rfq"),
+                protocol_system: String::from("rfq:bebop"),
+                static_attributes: HashMap::new(),
+                ..Default::default()
+            };
+
+            let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+            let token_out = Bytes::from("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3"); // ONDO
+
+            let swap = SwapBuilder::new(bebop_component, token_in.clone(), token_out.clone())
+                .user_data(Bytes::from(user_data))
+                .build();
+
+            let encoding_context = EncodingContext {
+                receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"),
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::Transfer,
+            };
+
+            let encoder = BebopSwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Chain::Ethereum,
+                Some(HashMap::from([(
+                    "bebop_settlement_address".to_string(),
+                    "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F".to_string(),
+                )])),
+            )
+            .unwrap();
+
+            let encoded_swap = encoder
+                .encode_swap(&swap, &encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
+
+            let expected_swap = String::from(concat!(
+                // token in
+                "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                // token out
+                "faba6f8e4a5e8ab82f62fe7c39859fa577269be3",
+                // transfer type
+                "01",
+                // partiall filled offset
+                "0c",
+                //  original taker amount
+                "000000000000000000000000000000000000000000000000000000000bebc200",
+                // approval needed
+                "01",
+                //receiver,
+                "c5564c13a157e6240659fb81882a28091add8670",
+            ));
+            assert_eq!(hex_swap, expected_swap + &bebop_calldata.to_string()[2..]);
+        }
+
+        #[test]
+        fn test_encode_bebop_aggregate() {
+            // 20k USDC -> ONDO
+            let bebop_calldata= Bytes::from_str("0xa2f7489300000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000640000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000689b78880000000000000000000000003ede3eca2a72b3aecc820e955b36f38437d01395000000000000000000000000000000000000000000000000000000000000016000000000000000000000000000000000000000000000000000000000000001c00000000000000000000000000000000000000000000000000000000000000220000000000000000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000003e000000000000000000000000000000000000000000000000000000000000004c0000000000000000000000000d2068e04cf586f76eece7ba5beb779d7bb1474a100000000000000000000000000000000000000000000000000000000000005a060a5c2aaaaa2fe2cda34423cac76a84c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000051c72848c68a965f66fa7a88855f9f7784502a7f000000000000000000000000ce79b081c0c924cb67848723ed3057234d10fc6b00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000002901f2d62bb356ca0000000000000000000000000000000000000000000000002901f2d62bb356cb0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000001000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000000000001000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000001000000000000000000000000faba6f8e4a5e8ab82f62fe7c39859fa577269be30000000000000000000000000000000000000000000000000000000000000001000000000000000000000000faba6f8e4a5e8ab82f62fe7c39859fa577269be30000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000044f83c726000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000589400da00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000003aa5f96046644f6e37a000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000004b51a26526ddbeec60000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000417ab4332f2b091d87d56d04eee35dd49452782c782de71608c0425c5ae41f1d7e147173851c870d76720ce07d45cd8622352716b1c7965819ee2bf8c573c499ae1b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000410c8da2637aa929e11caff9afdfc4c489320c6dba77cc934d88ba8956e365fd1d48983087c6e474bbb828181cdfdd17317c4c9c3ee4bc98e3769d0c05cc7a285e1c00000000000000000000000000000000000000000000000000000000000000").unwrap();
+            let original_taker_amount = U256::from_str("20000000000").unwrap();
+
+            //  partialFillOffset is 2 for swapAggregate
+            let mut user_data = vec![2u8];
+            user_data.extend_from_slice(&original_taker_amount.to_be_bytes::<32>());
+            user_data.extend_from_slice(&bebop_calldata);
+
+            let bebop_component = ProtocolComponent {
+                id: String::from("bebop-rfq"),
+                protocol_system: String::from("rfq:bebop"),
+                static_attributes: HashMap::new(),
+                ..Default::default()
+            };
+
+            let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+            let token_out = Bytes::from("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3"); // ONDO
+
+            let swap = SwapBuilder::new(bebop_component, token_in.clone(), token_out.clone())
+                .user_data(Bytes::from(user_data))
+                .build();
+
+            let encoding_context = EncodingContext {
+                receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"),
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::Transfer,
+            };
+
+            let encoder = BebopSwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Chain::Ethereum,
+                Some(HashMap::from([(
+                    "bebop_settlement_address".to_string(),
+                    "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F".to_string(),
+                )])),
+            )
+            .unwrap();
+
+            let encoded_swap = encoder
+                .encode_swap(&swap, &encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
+
+            let expected_swap = String::from(concat!(
+                // token in
+                "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                // token out
+                "faba6f8e4a5e8ab82f62fe7c39859fa577269be3",
+                // transfer type
+                "01",
+                // partiall filled offset
+                "02",
+                //  original taker amount
+                "00000000000000000000000000000000000000000000000000000004a817c800",
+                // approval needed
+                "01",
+                //receiver,
+                "c5564c13a157e6240659fb81882a28091add8670",
+            ));
+
+            assert_eq!(hex_swap, expected_swap + &bebop_calldata.to_string()[2..]);
         }
     }
 }

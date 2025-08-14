@@ -81,6 +81,11 @@ const executors_to_deploy = {
         },
         // Args: Permit2
         {exchange: "BalancerV3Executor", args: ["0x000000000022D473030F116dDEE9F6B43aC78BA3"]},
+        // Args: Bebop Settlement contract, Permit2
+        {
+            exchange: "BebopExecutor",
+            args: ["0xbbbbbBB520d69a9775E85b458C58c648259FAD5F", "0x000000000022D473030F116dDEE9F6B43aC78BA3"]
+        },
     ],
     "base": [
         // Args: Factory, Pool Init Code Hash, Permit2, Fee BPS
