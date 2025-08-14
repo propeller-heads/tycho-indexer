@@ -14,6 +14,7 @@ services:
       - "5431:5432"
     volumes:
       - postgres_data:/bitnami/postgresql
+    shm_size: '2gb'
   
   # Grafana LGTM stack for observability (Loki, Grafana, Tempo, Mimir)
   lgtm:
@@ -58,6 +59,7 @@ services:
     environment:
       SUBSTREAMS_API_TOKEN: ${SUBSTREAMS_API_TOKEN:-readme}
       RPC_URL: ${RPC_URL:-readme}
+      TRACE_RPC_URL: ${TRACE_RPC_URL:-readme}
       DATABASE_URL: ${DATABASE_URL:-postgres://postgres:mypassword@db:5432/tycho_indexer_0}
       RUST_LOG: ${RUST_LOG:-info}
       # Configure OTLP endpoint for tracing
