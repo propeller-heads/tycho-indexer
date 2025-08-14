@@ -14,13 +14,10 @@ import "@openzeppelin/contracts/utils/Address.sol";
 /// @notice Executor for Bebop PMM RFQ (Request for Quote) swaps
 /// @dev Handles Single and Aggregate RFQ swaps through Bebop settlement contract
 /// @dev Only supports single token in to single token out swaps
-contract BebopExecutor is IExecutor, IExecutorErrors, RestrictTransferFrom {
+contract BebopExecutor is IExecutor, RestrictTransferFrom {
     using Math for uint256;
     using SafeERC20 for IERC20;
     using Address for address;
-
-    /// @notice Function selectors for Bebop settlement methods
-    bytes4 public constant SWAP_AGGREGATE_SELECTOR = 0xa2f74893;
 
     /// @notice Bebop-specific errors
     error BebopExecutor__InvalidDataLength();
