@@ -10,18 +10,19 @@ This quickstart guide enables you to:
 You need to set up the WebSocket credentials of the desired RFQs to access live pricing data:
 
 ```bash
-export BEBOP_WS_USER=<your-bebop-ws-username>
-export BEBOP_WS_KEY=<your-bebop-ws-key>
+export BEBOP_USER=<your-bebop-ws-username>
+export BEBOP_KEY=<your-bebop-ws-key>
 cargo run --release --example rfq_quickstart
 ```
 
 By default, the example will request price levels for 10 USDC -> WETH on Ethereum Mainnet using RFQs.
 If we choose a different chain, by default, price levels for USDC -> WETH will be requested on that chain.
-If you want a different trade and chain, you can use the following command, replacing the values with the token and chain that you'd like:
+If you want a different trade and chain, you can use the following command, replacing the values with the token and
+chain that you'd like:
 
 ```bash
-export BEBOP_WS_USER=<your-bebop-ws-username>
-export BEBOP_WS_KEY=<your-bebop-ws-key>
+export BEBOP_USER=<your-bebop-ws-username>
+export BEBOP_KEY=<your-bebop-ws-key>
 cargo run --release --example rfq_quickstart -- --sell-token "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb" --buy-token "0x4200000000000000000000000000000000000006" --sell-amount 10 --chain "base"
 ```
 
@@ -29,11 +30,13 @@ for 10 USDC -> WETH on Base.
 
 ## Important Notes
 
-- **Credentials**: Contact RFQ protocols directly to obtain WebSocket API credentials for accessing live market maker quotes
+- **Credentials**: Contact RFQ protocols directly to obtain WebSocket API credentials for accessing live market maker
+  quotes
 
 ## What you'll see
 
 The example will:
+
 1. Connect to the RFQ's WebSocket API using your credentials
 2. Stream live price quotes from market makers for your specified token pair
 3. Display the best available quotes with pricing information

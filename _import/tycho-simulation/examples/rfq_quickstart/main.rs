@@ -79,10 +79,10 @@ async fn main() {
         env::var("TYCHO_API_KEY").unwrap_or_else(|_| "sampletoken".to_string());
 
     // Get WebSocket credentials for any RFQ(s) we are using
-    let bebop_ws_user = env::var("BEBOP_WS_USER")
-        .expect("BEBOP_WS_USER environment variable is required. Contact Bebop for credentials.");
-    let bebop_ws_key = env::var("BEBOP_WS_KEY")
-        .expect("BEBOP_WS_KEY environment variable is required. Contact Bebop for credentials.");
+    let bebop_user = env::var("BEBOP_USER")
+        .expect("BEBOP_USER environment variable is required. Contact Bebop for credentials.");
+    let bebop_key = env::var("BEBOP_WS_KEY")
+        .expect("BEBOP_KEY environment variable is required. Contact Bebop for credentials.");
 
     println!("Loading tokens from Tycho... {url}", url = tycho_url.as_str());
     let all_tokens =
@@ -124,7 +124,7 @@ async fn main() {
     rfq_tokens.insert(buy_token_address.clone());
 
     println!("Connecting to RFQ WebSocket...");
-    let bebop_client = BebopClientBuilder::new(chain, bebop_ws_user, bebop_ws_key)
+    let bebop_client = BebopClientBuilder::new(chain, bebop_user, bebop_key)
         .tokens(rfq_tokens)
         .tvl_threshold(cli.tvl_threshold)
         .build()
