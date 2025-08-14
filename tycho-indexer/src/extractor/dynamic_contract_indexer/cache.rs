@@ -29,6 +29,7 @@ pub(super) struct DCICache {
     /// Stores tracked contract addresses and their associated storage keys.
     pub(super) tracked_contracts: VersionedCache<Address, Option<HashSet<StoreKey>>>,
     /// Stores addresses identified as ERC-20 tokens to skip full indexing.
+    /// perf: implement a versioned wrapper around HashSet, similar to VersionedCache for HashMap
     pub(super) erc20_addresses: VersionedCache<Address, bool>,
     /// Stores manually blacklisted addresses that should skip full indexing
     /// but are not tokens (e.g., UniswapV4 pool manager).
