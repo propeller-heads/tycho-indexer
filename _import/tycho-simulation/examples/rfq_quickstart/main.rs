@@ -1,13 +1,18 @@
 use std::{collections::HashSet, env, str::FromStr};
 
 use clap::Parser;
+use dotenv::dotenv;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
-use tycho_common::{models::token::Token, Bytes};
+use tycho_common::{models::token::Token, simulation::protocol_sim::ProtocolSim, Bytes};
+use tycho_execution::encoding::{
+    evm::encoder_builders::TychoRouterEncoderBuilder,
+    models::{Solution, SwapBuilder, UserTransferType},
+};
 use tycho_simulation::{
-    protocol::models::Update,
+    protocol::models::{ProtocolComponent, Update},
     rfq::{
         protocols::bebop::{client_builder::BebopClientBuilder, state::BebopState},
         stream::RFQStreamBuilder,
@@ -70,6 +75,7 @@ async fn main() {
 
     let chain = cli.chain;
 
+    dotenv().expect("Missing .env file");
     let tycho_url = env::var("TYCHO_URL").unwrap_or_else(|_| {
         get_default_url(&chain)
             .unwrap_or_else(|| panic!("Unknown URL for chain {chain}", chain = cli.chain))
@@ -81,7 +87,7 @@ async fn main() {
     // Get WebSocket credentials for any RFQ(s) we are using
     let bebop_user = env::var("BEBOP_USER")
         .expect("BEBOP_USER environment variable is required. Contact Bebop for credentials.");
-    let bebop_key = env::var("BEBOP_WS_KEY")
+    let bebop_key = env::var("BEBOP_KEY")
         .expect("BEBOP_KEY environment variable is required. Contact Bebop for credentials.");
 
     println!("Loading tokens from Tycho... {url}", url = tycho_url.as_str());
@@ -117,6 +123,13 @@ async fn main() {
         sell_symbol = sell_token.symbol,
         buy_symbol = buy_token.symbol
     );
+
+    // Initialize the encoder
+    let encoder = TychoRouterEncoderBuilder::new()
+        .chain(chain)
+        .user_transfer_type(UserTransferType::TransferFromPermit2)
+        .build()
+        .expect("Failed to build encoder");
 
     // Set up RFQ client using the builder pattern
     let mut rfq_tokens = HashSet::new();
@@ -166,13 +179,30 @@ async fn main() {
                         let amount_out = amount_out_result.amount;
 
                         println!(
-                            "Price levels from {}: {} {} -> {} {}",
+                            "Indicative price for swap {}: {} {} -> {} {}",
                             component.protocol_system,
                             format_token_amount(&amount_in, &sell_token),
                             sell_token.symbol,
                             format_token_amount(&amount_out, &buy_token),
                             buy_token.symbol
                         );
+
+                        let solution = create_solution(
+                            component.clone(),
+                            state.as_ref(),
+                            sell_token.clone(),
+                            buy_token.clone(),
+                            amount_in.clone(),
+                            // TODO: pass real user here
+                            Bytes::zero(20),
+                            amount_out,
+                        );
+                        // Encode the swaps of the solution
+                        let encoded_solution = encoder
+                            .encode_solutions(vec![solution.clone()])
+                            .expect("Failed to encode router calldata")[0]
+                            .clone();
+                        println!("We got an encoded solution yei {encoded_solution:?}");
                     }
                 }
             } else {
@@ -188,4 +218,46 @@ async fn main() {
 fn format_token_amount(amount: &BigUint, token: &Token) -> String {
     let decimal_amount = amount.to_f64().unwrap_or(0.0) / 10f64.powi(token.decimals as i32);
     format!("{decimal_amount:.6}")
+}
+
+#[allow(clippy::too_many_arguments)]
+fn create_solution<'a>(
+    component: ProtocolComponent,
+    state: &'a dyn ProtocolSim,
+    sell_token: Token,
+    buy_token: Token,
+    sell_amount: BigUint,
+    user_address: Bytes,
+    expected_amount: BigUint,
+) -> Solution<'a> {
+    // Prepare data to encode. First we need to create a swap object
+    let simple_swap =
+        SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone())
+            .protocol_state(state)
+            .estimated_amount_in(sell_amount.clone())
+            .build();
+
+    // Compute a minimum amount out
+    //
+    // # ⚠️ Important Responsibility Note
+    // For maximum security, in production code, this minimum amount out should be computed
+    // from a third-party source.
+    let slippage = 0.0025; // 0.25% slippage
+    let bps = BigUint::from(10_000u32);
+    let slippage_percent = BigUint::from((slippage * 10000.0) as u32);
+    let multiplier = &bps - slippage_percent;
+    let min_amount_out = (expected_amount * &multiplier) / &bps;
+
+    // Then we create a solution object with the previous swap
+    Solution {
+        sender: user_address.clone(),
+        receiver: user_address,
+        given_token: sell_token.address,
+        given_amount: sell_amount,
+        checked_token: buy_token.address,
+        exact_out: false, // it's an exact in solution
+        checked_amount: min_amount_out,
+        swaps: vec![simple_swap],
+        ..Default::default()
+    }
 }
