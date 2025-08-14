@@ -7,7 +7,8 @@
       "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
     },
     "rfq:bebop": {
-      "bebop_settlement_address": "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F"
+      "bebop_settlement_address": "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F",
+      "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
     }
   },
   "base": {},
