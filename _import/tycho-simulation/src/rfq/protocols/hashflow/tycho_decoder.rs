@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    env,
-};
+use std::collections::{HashMap, HashSet};
 
 use tycho_client::feed::synchronizer::ComponentWithState;
 use tycho_common::{models::token::Token, Bytes};
@@ -12,7 +9,10 @@ use super::{
 };
 use crate::{
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
-    rfq::{models::TimestampHeader, protocols::hashflow::client::HashflowClient},
+    rfq::{
+        constants::get_hashflow_auth, models::TimestampHeader,
+        protocols::hashflow::client::HashflowClient,
+    },
 };
 
 impl TryFromWithBlock<ComponentWithState, TimestampHeader> for HashflowState {
@@ -84,13 +84,8 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for HashflowState {
         };
 
         // Create HashFlow client with authentication from environment variables
-        let auth_user = env::var("HASHFLOW_USER").map_err(|_| {
-            InvalidSnapshotError::ValueError(
-                "HASHFLOW_USER environment variable is required".into(),
-            )
-        })?;
-        let auth_key = env::var("HASHFLOW_KEY").map_err(|_| {
-            InvalidSnapshotError::ValueError("HASHFLOW_KEY environment variable is required".into())
+        let auth = get_hashflow_auth().map_err(|e| {
+            InvalidSnapshotError::ValueError(format!("Failed to get Hashflow authentication: {e}"))
         })?;
 
         let client = HashflowClient::new(
@@ -102,8 +97,8 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for HashflowState {
             // Approved quote tokens can be empty, since no more normalization will be
             // necessary inside the HashflowState
             HashSet::new(),
-            auth_user,
-            auth_key,
+            auth.user,
+            auth.key,
             // Since we will not be polling for price levels, this value is irrelevant
             0u64,
         )
@@ -117,6 +112,7 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for HashflowState {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
 
     use tycho_common::{
         dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},

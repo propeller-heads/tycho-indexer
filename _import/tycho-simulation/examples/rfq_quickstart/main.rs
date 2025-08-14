@@ -78,11 +78,11 @@ async fn main() {
     let tycho_api_key: String =
         env::var("TYCHO_API_KEY").unwrap_or_else(|_| "sampletoken".to_string());
 
-    // Get WebSocket credentials for any RFQ(s) we are using
-    let bebop_ws_user = env::var("BEBOP_WS_USER")
-        .expect("BEBOP_WS_USER environment variable is required. Contact Bebop for credentials.");
-    let bebop_ws_key = env::var("BEBOP_WS_KEY")
-        .expect("BEBOP_WS_KEY environment variable is required. Contact Bebop for credentials.");
+    // Get credentials for any RFQ(s) we are using
+    let bebop_ws_user = env::var("BEBOP_USER")
+        .expect("BEBOP_USER environment variable is required. Contact Bebop for credentials.");
+    let bebop_ws_key = env::var("BEBOP_KEY")
+        .expect("BEBOP_KEY environment variable is required. Contact Bebop for credentials.");
 
     println!("Loading tokens from Tycho... {url}", url = tycho_url.as_str());
     let all_tokens =

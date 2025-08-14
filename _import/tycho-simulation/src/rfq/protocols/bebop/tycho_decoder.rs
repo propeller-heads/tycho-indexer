@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    env,
-};
+use std::collections::{HashMap, HashSet};
 
 use tycho_client::feed::synchronizer::ComponentWithState;
 use tycho_common::{models::token::Token, Bytes};
@@ -9,7 +6,9 @@ use tycho_common::{models::token::Token, Bytes};
 use super::{models::BebopPriceData, state::BebopState};
 use crate::{
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
-    rfq::{models::TimestampHeader, protocols::bebop::client::BebopClient},
+    rfq::{
+        constants::get_bebop_auth, models::TimestampHeader, protocols::bebop::client::BebopClient,
+    },
 };
 
 impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
@@ -78,19 +77,16 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
                 .collect(),
         };
 
-        let ws_user = env::var("BEBOP_USER").map_err(|_| {
-            InvalidSnapshotError::ValueError("BEBOP_USER environment variable is required".into())
-        })?;
-        let ws_key = env::var("BEBOP_KEY").map_err(|_| {
-            InvalidSnapshotError::ValueError("BEBOP_KEY environment variable is required".into())
+        let auth = get_bebop_auth().map_err(|e| {
+            InvalidSnapshotError::ValueError(format!("Failed to get Bebop authentication: {e}"))
         })?;
 
         let client = BebopClient::new(
             snapshot.component.chain.into(),
             HashSet::new(),
             0.0,
-            ws_user,
-            ws_key,
+            auth.user,
+            auth.key,
             // Approved quote tokens can be empty, since no more normalization will be
             // necessary inside the BebopState
             HashSet::new(),
@@ -105,6 +101,8 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+
     use tycho_common::{
         dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},
         models::Chain as ModelChain,

@@ -132,7 +132,6 @@ impl HashflowClient {
         // Store price levels as JSON string
         if !mm_level.levels.is_empty() {
             let levels_json = serde_json::to_string(&mm_level.levels).unwrap_or_default();
-            println!("{levels_json:?}");
             attributes.insert("levels".to_string(), levels_json.as_bytes().to_vec().into());
         }
         attributes.insert("mm".to_string(), mm_name.as_bytes().to_vec().into());
@@ -515,7 +514,10 @@ mod tests {
     use tycho_common::models::token::Token;
 
     use super::*;
-    use crate::rfq::protocols::hashflow::models::{HashflowPair, HashflowPriceLevel};
+    use crate::rfq::{
+        constants::get_hashflow_auth,
+        protocols::hashflow::models::{HashflowPair, HashflowPriceLevel},
+    };
 
     #[test]
     fn test_normalize_tvl_same_quote_token() {
@@ -591,7 +593,7 @@ mod tests {
     #[ignore] // Requires network access and HASHFLOW_KEY environment variable
     async fn test_hashflow_api_polling() {
         dotenv().expect("Missing .env file");
-        let hashflow_key = env::var("HASHFLOW_KEY").unwrap();
+        let auth = get_hashflow_auth().unwrap();
 
         let wbtc = Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap();
         let weth = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
@@ -608,8 +610,8 @@ mod tests {
             tokens,
             1.0, // $1 minimum TVL - very low to capture most pairs
             quote_tokens,
-            "propellerheads".to_string(),
-            hashflow_key,
+            auth.user,
+            auth.key,
             1,
         )
         .unwrap();
