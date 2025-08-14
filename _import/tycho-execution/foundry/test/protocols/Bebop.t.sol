@@ -45,10 +45,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
     IERC20 ONDO = IERC20(ONDO_ADDR);
     IERC20 USDT = IERC20(USDT_ADDR);
 
-    function setUp() public {
-        // Fork will be created in individual tests to allow different fork blocks
-    }
-
     function testDecodeData() public {
         vm.createSelectFork(vm.rpcUrl("mainnet"), 22667985);
         bebopExecutor =
