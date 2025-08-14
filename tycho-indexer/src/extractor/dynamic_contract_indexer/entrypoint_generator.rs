@@ -777,9 +777,17 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                     },
                 );
 
+                let entry_point_id = format!("{hook_address}:execute(bytes)");
+                debug!(
+                    entry_point_id = %entry_point_id,
+                    hook_address = %hook_address,
+                    router_address = %router_address,
+                    "Creating EntryPoint with ID"
+                );
+
                 let entry_point = EntryPointWithTracingParams::new(
                     EntryPoint::new(
-                        format!("{hook_address}:execute(bytes)"),
+                        entry_point_id.clone(),
                         router_address.clone(),
                         "execute(bytes)".to_string(),
                     ),
@@ -794,6 +802,7 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                     token_in = %token_in,
                     token_out = %token_out,
                     amount_idx,
+                    entry_point_id = %entry_point_id,
                     "Generated entrypoint for swap"
                 );
 
