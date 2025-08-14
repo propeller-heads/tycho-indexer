@@ -1,3 +1,10 @@
+## [0.114.0](https://github.com/propeller-heads/tycho-execution/compare/0.113.0...0.114.0) (2025-08-14)
+
+
+### Features
+
+* add hashflow executor ([e03ecf4](https://github.com/propeller-heads/tycho-execution/commit/e03ecf48d50f08b739a9d862b4746c3a055ea6e9))
+
 ## [0.113.0](https://github.com/propeller-heads/tycho-execution/compare/0.112.2...0.113.0) (2025-08-14)
 
 
