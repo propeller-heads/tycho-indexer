@@ -197,7 +197,7 @@ mod tests {
     use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
-    use crate::encoding::models::Swap;
+    use crate::encoding::models::{Swap, SwapBuilder};
 
     #[test]
     fn test_validate_path_single_swap() {
@@ -205,18 +205,16 @@ mod tests {
         let eth = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
         let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
-        let swaps = vec![Swap {
-            component: ProtocolComponent {
+        let swaps = vec![SwapBuilder::new(
+            ProtocolComponent {
                 id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
-            token_in: weth.clone(),
-            token_out: dai.clone(),
-            split: 0f64,
-            user_data: None,
-            protocol_state: None,
-        }];
+            weth.clone(),
+            dai.clone(),
+        )
+        .build()];
         let result = validator.validate_swap_path(&swaps, &weth, &dai, &None, &eth, &weth);
         assert_eq!(result, Ok(()));
     }
@@ -229,30 +227,27 @@ mod tests {
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let swaps = vec![
-            Swap {
-                component: ProtocolComponent {
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.5f64,
-                user_data: None,
-                protocol_state: None,
-            },
-            Swap {
-                component: ProtocolComponent {
+                weth.clone(),
+                dai.clone(),
+            )
+            .split(0.5f64)
+            .build(),
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: dai.clone(),
-                token_out: usdc.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            },
+                dai.clone(),
+                usdc.clone(),
+            )
+            .build(),
         ];
         let result = validator.validate_swap_path(&swaps, &weth, &usdc, &None, &eth, &weth);
         assert_eq!(result, Ok(()));
@@ -268,31 +263,28 @@ mod tests {
         let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
 
         let disconnected_swaps = vec![
-            Swap {
-                component: ProtocolComponent {
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool1".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.5,
-                user_data: None,
-                protocol_state: None,
-            },
+                weth.clone(),
+                dai.clone(),
+            )
+            .split(0.5f64)
+            .build(),
             // This swap is disconnected from the WETH->DAI path
-            Swap {
-                component: ProtocolComponent {
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool2".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: wbtc.clone(),
-                token_out: usdc.clone(),
-                split: 0.0,
-                user_data: None,
-                protocol_state: None,
-            },
+                wbtc.clone(),
+                usdc.clone(),
+            )
+            .build(),
         ];
         let result =
             validator.validate_swap_path(&disconnected_swaps, &weth, &usdc, &None, &eth, &weth);
@@ -310,30 +302,26 @@ mod tests {
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
         let cyclic_swaps = vec![
-            Swap {
-                component: ProtocolComponent {
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool1".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: usdc.clone(),
-                token_out: weth.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            },
-            Swap {
-                component: ProtocolComponent {
+                usdc.clone(),
+                weth.clone(),
+            )
+            .build(),
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool2".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: usdc.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            },
+                weth.clone(),
+                usdc.clone(),
+            )
+            .build(),
         ];
 
         // Test with USDC as both given token and checked token
@@ -349,18 +337,17 @@ mod tests {
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
-        let unreachable_swaps = vec![Swap {
-            component: ProtocolComponent {
+        let unreachable_swaps = vec![SwapBuilder::new(
+            ProtocolComponent {
                 id: "pool1".to_string(),
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
-            token_in: weth.clone(),
-            token_out: dai.clone(),
-            split: 1.0,
-            user_data: None,
-            protocol_state: None,
-        }];
+            weth.clone(),
+            dai.clone(),
+        )
+        .split(1.0)
+        .build()];
         let result =
             validator.validate_swap_path(&unreachable_swaps, &weth, &usdc, &None, &eth, &weth);
         assert!(matches!(
@@ -389,18 +376,16 @@ mod tests {
         let validator = SplitSwapValidator;
         let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
-        let swaps = vec![Swap {
-            component: ProtocolComponent {
+        let swaps = vec![SwapBuilder::new(
+            ProtocolComponent {
                 id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
-            token_in: weth.clone(),
-            token_out: dai.clone(),
-            split: 0f64,
-            user_data: None,
-            protocol_state: None,
-        }];
+            weth.clone(),
+            dai.clone(),
+        )
+        .build()];
         let result = validator.validate_split_percentages(&swaps);
         assert_eq!(result, Ok(()));
     }
@@ -413,42 +398,38 @@ mod tests {
 
         // Valid case: Multiple swaps with proper splits (50%, 30%, remainder)
         let valid_swaps = vec![
-            Swap {
-                component: ProtocolComponent {
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool1".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.5,
-                user_data: None,
-                protocol_state: None,
-            },
-            Swap {
-                component: ProtocolComponent {
+                weth.clone(),
+                dai.clone(),
+            )
+            .split(0.5)
+            .build(),
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool2".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.3,
-                user_data: None,
-                protocol_state: None,
-            },
-            Swap {
-                component: ProtocolComponent {
+                weth.clone(),
+                dai.clone(),
+            )
+            .split(0.3)
+            .build(),
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool3".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.0, // Remainder (20%)
-                user_data: None,
-                protocol_state: None,
-            },
+                weth.clone(),
+                dai.clone(),
+            )
+            .build(),
         ];
         assert!(validator
             .validate_split_percentages(&valid_swaps)
@@ -462,30 +443,28 @@ mod tests {
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
         let invalid_total_swaps = vec![
-            Swap {
-                component: ProtocolComponent {
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool1".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.7,
-                user_data: None,
-                protocol_state: None,
-            },
-            Swap {
-                component: ProtocolComponent {
+                weth.clone(),
+                dai.clone(),
+            )
+            .split(0.7)
+            .build(),
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool2".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.3,
-                user_data: None,
-                protocol_state: None,
-            },
+                weth.clone(),
+                dai.clone(),
+            )
+            .split(0.3)
+            .build(),
         ];
         assert!(matches!(
             validator.validate_split_percentages(&invalid_total_swaps),
@@ -500,30 +479,27 @@ mod tests {
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
         let invalid_zero_position_swaps = vec![
-            Swap {
-                component: ProtocolComponent {
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool1".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.0,
-                user_data: None,
-                protocol_state: None,
-            },
-            Swap {
-                component: ProtocolComponent {
+                weth.clone(),
+                dai.clone(),
+            )
+            .build(),
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool2".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.5,
-                user_data: None,
-                protocol_state: None,
-            },
+                weth.clone(),
+                dai.clone(),
+            )
+            .split(0.5)
+            .build(),
         ];
         assert!(matches!(
             validator.validate_split_percentages(&invalid_zero_position_swaps),
@@ -538,42 +514,38 @@ mod tests {
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
         let invalid_overflow_swaps = vec![
-            Swap {
-                component: ProtocolComponent {
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool1".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.6,
-                user_data: None,
-                protocol_state: None,
-            },
-            Swap {
-                component: ProtocolComponent {
+                weth.clone(),
+                dai.clone(),
+            )
+            .split(0.6)
+            .build(),
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool2".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.5,
-                user_data: None,
-                protocol_state: None,
-            },
-            Swap {
-                component: ProtocolComponent {
+                weth.clone(),
+                dai.clone(),
+            )
+            .split(0.5)
+            .build(),
+            SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool3".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0.0,
-                user_data: None,
-                protocol_state: None,
-            },
+                weth.clone(),
+                dai.clone(),
+            )
+            .build(),
         ];
         assert!(matches!(
             validator.validate_split_percentages(&invalid_overflow_swaps),
@@ -588,18 +560,16 @@ mod tests {
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let weth = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
 
-        let swaps = vec![Swap {
-            component: ProtocolComponent {
+        let swaps = vec![SwapBuilder::new(
+            ProtocolComponent {
                 id: "pool1".to_string(),
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
-            token_in: weth.clone(),
-            token_out: usdc.clone(),
-            split: 0f64,
-            user_data: None,
-            protocol_state: None,
-        }];
+            weth.clone(),
+            usdc.clone(),
+        )
+        .build()];
 
         let result = validator.validate_swap_path(
             &swaps,
@@ -619,18 +589,16 @@ mod tests {
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let weth = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
 
-        let swaps = vec![Swap {
-            component: ProtocolComponent {
+        let swaps = vec![SwapBuilder::new(
+            ProtocolComponent {
                 id: "pool1".to_string(),
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
-            token_in: usdc.clone(),
-            token_out: weth.clone(),
-            split: 0f64,
-            user_data: None,
-            protocol_state: None,
-        }];
+            usdc.clone(),
+            weth.clone(),
+        )
+        .build()];
 
         let result = validator.validate_swap_path(
             &swaps,
