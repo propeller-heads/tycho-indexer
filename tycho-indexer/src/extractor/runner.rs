@@ -578,9 +578,13 @@ impl ExtractorBuilder {
                                     "Failed to create account extractor for {rpc_url}: {err}"
                                 ))
                             })?;
-                    let tracer = EVMEntrypointService::try_from_url(rpc_url).map_err(|err| {
+                    // Use TRACE_RPC_URL if available, otherwise fall back to RPC_URL
+                    let trace_rpc_url = std::env::var("TRACE_RPC_URL")
+                        .unwrap_or_else(|_| rpc_url.to_string());
+                    
+                    let tracer = EVMEntrypointService::try_from_url(&trace_rpc_url).map_err(|err| {
                         ExtractionError::Setup(format!(
-                            "Failed to create entrypoint tracer for {rpc_url}: {err}"
+                            "Failed to create entrypoint tracer for {trace_rpc_url}: {err}"
                         ))
                     })?;
                     let mut base_dci = DynamicContractIndexer::new(
