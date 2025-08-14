@@ -1,3 +1,10 @@
+## [0.146.0](https://github.com/propeller-heads/tycho-simulation/compare/0.145.0...0.146.0) (2025-08-13)
+
+
+### Features
+
+* **Bebop:** Support AggregateOrders when requesting the quote ([bfb6f65](https://github.com/propeller-heads/tycho-simulation/commit/bfb6f65a6a003484939131bf06e06b859a5dacad))
+
 ## [0.145.0](https://github.com/propeller-heads/tycho-simulation/compare/0.144.0...0.145.0) (2025-08-08)
 
 

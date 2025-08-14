@@ -207,9 +207,16 @@ pub struct BebopQuotePartial {
     pub settlement_address: Bytes,
     pub tx: TxData,
     #[serde(rename = "toSign")]
-    pub to_sign: SingleOrderToSign,
+    pub to_sign: BebopOrderToSign,
     #[serde(rename = "partialFillOffset")]
     pub partial_fill_offset: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum BebopOrderToSign {
+    Single(Box<SingleOrderToSign>),
+    Aggregate(Box<AggregateOrderToSign>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -234,7 +241,15 @@ pub struct SingleOrderToSign {
     pub maker_nonce: String,
     pub expiry: u64,
     pub receiver: Bytes,
-    pub packed_commands: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AggregateOrderToSign {
+    pub taker_address: Bytes,
+    pub maker_amounts: Vec<Vec<String>>,
+    pub taker_amounts: Vec<Vec<String>>,
+    pub expiry: u64,
+    pub receiver: Bytes,
 }
 
 #[cfg(test)]
