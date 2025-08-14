@@ -1,16 +1,11 @@
 //! Asset inventory system for storing assets between chain steps.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
-use std::fmt;
-
-use crate::{
-    action::asset::Asset,
-    Bytes,
-};
+use crate::{action::asset::Asset, Bytes};
 
 /// Storage for assets that can be accessed between chain steps.
-/// 
+///
 /// The inventory uses type-erased asset storage to handle different asset types
 /// uniformly. Assets are indexed by their kind and type identifier for efficient
 /// retrieval and management.
@@ -23,9 +18,7 @@ pub struct AssetInventory {
 impl AssetInventory {
     /// Create a new empty asset inventory.
     pub fn new() -> Self {
-        Self {
-            assets: HashMap::new(),
-        }
+        Self { assets: HashMap::new() }
     }
 
     /// Generate a storage key for the given asset.
@@ -36,7 +29,10 @@ impl AssetInventory {
     /// Store an asset in the inventory.
     pub fn push(&mut self, asset: Box<dyn Asset>) {
         let key = self.storage_key(asset.as_ref());
-        self.assets.entry(key).or_default().push(asset);
+        self.assets
+            .entry(key)
+            .or_default()
+            .push(asset);
     }
 
     /// Retrieve the most recently stored asset of the given type.
@@ -55,7 +51,14 @@ impl fmt::Debug for AssetInventory {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AssetInventory")
             .field("asset_type_count", &self.assets.len())
-            .field("total_asset_count", &self.assets.values().map(|assets| assets.len()).sum::<usize>())
+            .field(
+                "total_asset_count",
+                &self
+                    .assets
+                    .values()
+                    .map(|assets| assets.len())
+                    .sum::<usize>(),
+            )
             .finish()
     }
 }

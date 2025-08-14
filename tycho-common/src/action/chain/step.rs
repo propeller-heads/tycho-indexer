@@ -9,39 +9,35 @@ use crate::action::{
 };
 
 /// A single step in an action chain with type safety.
-/// 
-/// Each step contains an action type marker, the protocol state that can execute
-/// the action, the parameters for the action, and an optional type converter
+///
+/// Each step contains the protocol state that can execute the action,
+/// the parameters for the action, and an optional type converter
 /// for linking to the next step.
-pub struct Step<A, S, I, O> 
+pub struct Step<A, S, I>
 where
     A: Action,
     S: SimulateForward<A>,
 {
-    /// Action type marker for compile-time type checking.
-    pub action: PhantomData<A>,
-    
     /// Protocol state that can execute this action.
     pub state: Box<S>,
-    
+
     /// Parameters specific to this action execution.
     pub parameters: A::Parameters,
-    
+
     /// Optional converter for transforming input from previous step.
     pub converter: Option<Box<dyn TypeConverter<I, A::Inputs> + Send + Sync>>,
-    
-    /// Phantom data to track input/output types at compile time.
+
+    /// Phantom data to track input type at compile time.
     _input_marker: PhantomData<I>,
-    _output_marker: PhantomData<O>,
 }
 
-impl<A, S, I, O> Step<A, S, I, O>
+impl<A, S, I> Step<A, S, I>
 where
     A: Action,
     S: SimulateForward<A>,
 {
     /// Create a new step with the given state and parameters.
-    /// 
+    ///
     /// The type constraint `A: Action<Inputs = I>` has been relaxed to `A: Action`
     /// to allow converters to handle type mismatches between chain outputs and action inputs.
     pub fn new(
@@ -49,25 +45,18 @@ where
         parameters: A::Parameters,
         converter: Option<Box<dyn TypeConverter<I, A::Inputs> + Send + Sync>>,
     ) -> Self {
-        Self {
-            action: PhantomData,
-            state: Box::new(state),
-            parameters,
-            converter,
-            _input_marker: PhantomData,
-            _output_marker: PhantomData,
-        }
+        Self { state: Box::new(state), parameters, converter, _input_marker: PhantomData }
     }
 }
 
 /// Type-erased interface for step execution.
-/// 
+///
 /// This trait enables storing steps of different types in a single collection
 /// while preserving the ability to execute them at runtime. The type erasure
 /// is necessary because each step may have different action and state types.
 pub trait ErasedStep {
     /// Execute the step with type-erased inputs and context.
-    /// 
+    ///
     /// Returns the type-erased outputs and the new state after execution.
     /// The caller is responsible for casting the inputs and outputs to the
     /// correct types based on the chain construction.
@@ -79,12 +68,11 @@ pub trait ErasedStep {
     ) -> Result<(Box<dyn Any>, Box<dyn ErasedStep>), ChainError>;
 }
 
-impl<A, S, I, O> ErasedStep for Step<A, S, I, O>
+impl<A, S, I> ErasedStep for Step<A, S, I>
 where
     A: Action + 'static,
     S: SimulateForward<A> + Clone + 'static,
     I: Clone + 'static,
-    O: 'static,
     A::Parameters: Clone + 'static,
     A::Inputs: Clone + 'static,
     A::Outputs: 'static,
@@ -100,7 +88,7 @@ where
             .downcast_ref::<I>()
             .ok_or_else(|| {
                 ChainError::TypeCastError(
-                    "Failed to cast inputs to expected chain output type".to_string()
+                    "Failed to cast inputs to expected chain output type".to_string(),
                 )
             })?;
 
@@ -114,9 +102,12 @@ where
             // This should only happen when I == A::Inputs (compile-time enforced)
             let cloned_outputs = (chain_outputs as &dyn std::any::Any)
                 .downcast_ref::<A::Inputs>()
-                .ok_or_else(|| ChainError::TypeCastError(
-                    "Chain output type doesn't match action input type. Use a converter.".to_string()
-                ))?
+                .ok_or_else(|| {
+                    ChainError::TypeCastError(
+                        "Chain output type doesn't match action input type. Use a converter."
+                            .to_string(),
+                    )
+                })?
                 .clone();
             cloned_outputs
         };
@@ -139,19 +130,17 @@ where
 
         // Create new step with updated state
         let new_step = Box::new(Step {
-            action: PhantomData::<A>,
             state: new_state,
             parameters: self.parameters.clone(),
             converter: None, // Converters are consumed during execution
             _input_marker: PhantomData::<I>,
-            _output_marker: PhantomData::<O>,
         });
 
         Ok((final_outputs, new_step))
     }
 }
 
-impl<A, S, I, O> fmt::Debug for Step<A, S, I, O>
+impl<A, S, I> fmt::Debug for Step<A, S, I>
 where
     A: Action,
     S: SimulateForward<A> + fmt::Debug,

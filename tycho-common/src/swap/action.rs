@@ -9,7 +9,7 @@ use std::fmt::{Debug, Formatter};
 use crate::{
     action::{
         asset::Asset,
-        simulate::{Action, DefaultInputs, DefaultOutputs, SimulateForward},
+        simulate::{Action, DefaultInputs, SimulateForward},
     },
     asset::erc20::{ERC20Asset, ERC20DefaultOutputs},
     models::token::Token,

@@ -12,7 +12,7 @@ use tycho_common::{
         context::ActionContext,
         simulate::{DefaultInputs, DefaultOutputs, SimulateForward},
     },
-    asset::erc20::ERC20Asset,
+    asset::erc20::{ERC20Asset, ERC20DefaultOutputs},
     liquidity_provision::action::{AddLiquidityFullRange, AddLiquidityFullRangeParameters},
     models::{token::Token, Chain},
     simulation::errors::SimulationError,

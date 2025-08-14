@@ -54,19 +54,13 @@ impl ConcentratedLiquidityNFT {
         liquidity_amount: BigUint,
         tokens: Vec<Token>,
     ) -> Self {
-        Self {
-            protocol,
-            pool_id,
-            position_id,
-            tick_range,
-            liquidity_amount,
-            tokens,
-        }
+        Self { protocol, pool_id, position_id, tick_range, liquidity_amount, tokens }
     }
 
     /// Check if this position is currently active (within price range).
     pub fn is_active(&self, current_tick: i32) -> bool {
-        self.tick_range.contains_tick(current_tick)
+        self.tick_range
+            .contains_tick(current_tick)
     }
 }
 

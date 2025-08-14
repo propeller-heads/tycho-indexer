@@ -2,7 +2,7 @@
 //!
 //! This module provides standardized interfaces for liquidity provision operations
 //! across different DEX protocols including UniswapV2, UniswapV3, Curve, and Balancer.
-//! 
+//!
 //! The system addresses limitations of simpler interfaces that couldn't handle:
 //! - Multi-token operations (more than 2 tokens)
 //! - Position-based liquidity (NFT positions)

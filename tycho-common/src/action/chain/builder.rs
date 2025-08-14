@@ -9,7 +9,7 @@ use crate::{
             executor::ActionChain,
             step::{ErasedStep, Step},
         },
-        simulate::{Action, DefaultInputs, SimulateForward},
+        simulate::{Action, ActionOutput, DefaultInputs, SimulateForward},
     },
     asset::erc20::{ERC20Asset, ERC20DefaultOutputs},
 };
@@ -47,12 +47,15 @@ impl<I: 'static, C: Clone + 'static> ChainBuilder<I, C> {
         A::Parameters: Clone + 'static,
         A::Inputs: Clone + 'static,
         A::Outputs: Clone + 'static,
+        // usually the output of the previous step, which is converted to this step
+        //  input using a type converter. But can also be just the input of this step
+        // (in this case the type converter would be None)
         C: Clone + 'static,
     {
         let boxed_converter: Box<dyn TypeConverter<C, A::Inputs> + Send + Sync> =
             Box::new(converter);
 
-        let step = Step::<A, S, C, A::Outputs>::new(state, parameters, Some(boxed_converter));
+        let step = Step::<A, S, C>::new(state, parameters, Some(boxed_converter));
         self.steps.push(Box::new(step));
 
         ChainBuilder { steps: self.steps, _input_marker: PhantomData, _current_marker: PhantomData }
@@ -92,11 +95,7 @@ impl<I: 'static> ChainBuilder<I, ERC20DefaultOutputs> {
         let boxed_converter: Box<dyn TypeConverter<ERC20DefaultOutputs, A::Inputs> + Send + Sync> =
             Box::new(converter);
 
-        let step = Step::<A, S, ERC20DefaultOutputs, ERC20DefaultOutputs>::new(
-            state,
-            parameters,
-            Some(boxed_converter),
-        );
+        let step = Step::<A, S, ERC20DefaultOutputs>::new(state, parameters, Some(boxed_converter));
 
         ChainBuilder {
             steps: {
@@ -132,7 +131,7 @@ impl ChainBuilder<(), ()> {
         A::Inputs: Clone + 'static,
         A::Outputs: 'static,
     {
-        let step = Step::<A, S, A::Inputs, A::Outputs>::new(state, parameters, None);
+        let step = Step::<A, S, A::Inputs>::new(state, parameters, None);
 
         ChainBuilder {
             steps: vec![Box::new(step)],

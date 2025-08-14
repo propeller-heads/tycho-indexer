@@ -8,7 +8,7 @@ use crate::{
     action::{
         asset::Asset,
         context::ActionContext,
-        simulate::{Action, ActionOutput, DefaultInputs, DefaultOutputs, SimulateForward},
+        simulate::{Action, ActionOutput, DefaultInputs, SimulateForward},
     },
     asset::erc20::{ERC20Asset, ERC20DefaultOutputs},
     liquidity_provision::asset::{ConcentratedLiquidityNFT, TickRange},

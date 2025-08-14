@@ -15,7 +15,7 @@
 //!
 //! ```rust
 //! use std::marker::PhantomData;
-//! 
+//!
 //! let chain = ChainBuilder::new()
 //!     .add_step::<Swap, _, _>(
 //!         PhantomData,

@@ -121,7 +121,7 @@ pub trait Swappable: fmt::Debug + Send + Sync + 'static {
     /// Returns the spread between bid and ask prices, representing the
     /// minimum cost of a round-trip trade.
     fn minimum_fee(&self, params: MarginalPriceParameters) -> Result<f64, SimulationError>;
-    
+
     /// Get the marginal price for the specified token pair.
     ///
     /// Returns the instantaneous exchange rate at the current pool state,
