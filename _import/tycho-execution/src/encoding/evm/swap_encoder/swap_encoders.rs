@@ -762,10 +762,14 @@ mod tests {
     };
 
     use super::*;
-    use crate::encoding::{evm::utils::write_calldata_to_file, models::TransferType};
+    use crate::encoding::{
+        evm::utils::write_calldata_to_file,
+        models::{SwapBuilder, TransferType},
+    };
 
     mod uniswap_v2 {
         use super::*;
+        use crate::encoding::models::SwapBuilder;
         #[test]
         fn test_encode_uniswap_v2() {
             let usv2_pool = ProtocolComponent {
@@ -775,14 +779,7 @@ mod tests {
 
             let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
             let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
-            let swap = Swap {
-                component: usv2_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(usv2_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
                 exact_out: false,
@@ -822,6 +819,7 @@ mod tests {
 
     mod uniswap_v3 {
         use super::*;
+        use crate::encoding::models::SwapBuilder;
         #[test]
         fn test_encode_uniswap_v3() {
             let fee = BigInt::from(500);
@@ -836,14 +834,7 @@ mod tests {
             };
             let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
             let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
-            let swap = Swap {
-                component: usv3_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(usv3_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
                 exact_out: false,
@@ -886,6 +877,7 @@ mod tests {
 
     mod balancer_v2 {
         use super::*;
+        use crate::encoding::models::SwapBuilder;
 
         #[test]
         fn test_encode_balancer_v2() {
@@ -898,14 +890,7 @@ mod tests {
             };
             let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
             let token_out = Bytes::from("0xba100000625a3754423978a60c9317c58a424e3D");
-            let swap = Swap {
-                component: balancer_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(balancer_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
@@ -952,7 +937,6 @@ mod tests {
 
     mod uniswap_v4 {
         use super::*;
-        use crate::encoding::evm::utils::write_calldata_to_file;
 
         #[test]
         fn test_encode_uniswap_v4_simple_swap() {
@@ -972,14 +956,7 @@ mod tests {
                 static_attributes,
                 ..Default::default()
             };
-            let swap = Swap {
-                component: usv4_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(usv4_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 // The receiver is ALICE to match the solidity tests
                 receiver: Bytes::from("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2"),
@@ -1046,14 +1023,7 @@ mod tests {
                 ..Default::default()
             };
 
-            let swap = Swap {
-                component: usv4_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(usv4_pool, token_in.clone(), token_out.clone()).build();
 
             let encoding_context = EncodingContext {
                 receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
@@ -1144,23 +1114,12 @@ mod tests {
                 ..Default::default()
             };
 
-            let initial_swap = Swap {
-                component: usde_usdt_component,
-                token_in: usde_address.clone(),
-                token_out: usdt_address.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
-
-            let second_swap = Swap {
-                component: usdt_wbtc_component,
-                token_in: usdt_address,
-                token_out: wbtc_address.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let initial_swap =
+                SwapBuilder::new(usde_usdt_component, usde_address.clone(), usdt_address.clone())
+                    .build();
+            let second_swap =
+                SwapBuilder::new(usdt_wbtc_component, usdt_address.clone(), wbtc_address.clone())
+                    .build();
 
             let encoder = UniswapV4SwapEncoder::new(
                 String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
@@ -1211,7 +1170,6 @@ mod tests {
     }
     mod ekubo {
         use super::*;
-        use crate::encoding::evm::utils::write_calldata_to_file;
 
         const RECEIVER: &str = "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6"; // Random address
 
@@ -1231,14 +1189,7 @@ mod tests {
 
             let component = ProtocolComponent { static_attributes, ..Default::default() };
 
-            let swap = Swap {
-                component,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(component, token_in.clone(), token_out.clone()).build();
 
             let encoding_context = EncodingContext {
                 receiver: RECEIVER.into(),
@@ -1291,8 +1242,8 @@ mod tests {
                 transfer_type: TransferType::Transfer,
             };
 
-            let first_swap = Swap {
-                component: ProtocolComponent {
+            let first_swap = SwapBuilder::new(
+                ProtocolComponent {
                     static_attributes: HashMap::from([
                         ("fee".to_string(), Bytes::from(0_u64)),
                         ("tick_spacing".to_string(), Bytes::from(0_u32)),
@@ -1303,15 +1254,13 @@ mod tests {
                     ]),
                     ..Default::default()
                 },
-                token_in: group_token_in.clone(),
-                token_out: intermediary_token.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                group_token_in.clone(),
+                intermediary_token.clone(),
+            )
+            .build();
 
-            let second_swap = Swap {
-                component: ProtocolComponent {
+            let second_swap = SwapBuilder::new(
+                ProtocolComponent {
                     // 0.0025% fee & 0.005% base pool
                     static_attributes: HashMap::from([
                         ("fee".to_string(), Bytes::from(461168601842738_u64)),
@@ -1320,12 +1269,10 @@ mod tests {
                     ]),
                     ..Default::default()
                 },
-                token_in: intermediary_token.clone(),
-                token_out: group_token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                intermediary_token.clone(),
+                group_token_out.clone(),
+            )
+            .build();
 
             let first_encoded_swap = encoder
                 .encode_swap(&first_swap, &encoding_context)
@@ -1434,19 +1381,18 @@ mod tests {
         ) {
             let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
             static_attributes.insert("coins".into(), Bytes::from_str(coins).unwrap());
-            let swap = Swap {
-                component: ProtocolComponent {
+            let swap = SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool-id".into(),
                     protocol_system: String::from("vm:curve"),
                     static_attributes,
                     ..Default::default()
                 },
-                token_in: Bytes::from(token_in),
-                token_out: Bytes::from(token_out),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                Bytes::from(token_in),
+                Bytes::from(token_out),
+            )
+            .build();
+
             let encoder =
                 CurveSwapEncoder::new(String::default(), Chain::Ethereum, curve_config()).unwrap();
             let (i, j) = encoder
@@ -1480,14 +1426,9 @@ mod tests {
             };
             let token_in = Bytes::from("0x6B175474E89094C44Da98b954EedeAC495271d0F");
             let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
-            let swap = Swap {
-                component: curve_tri_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap =
+                SwapBuilder::new(curve_tri_pool, token_in.clone(), token_out.clone()).build();
+
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
@@ -1553,14 +1494,7 @@ mod tests {
             };
             let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
             let token_out = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3");
-            let swap = Swap {
-                component: curve_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(curve_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
@@ -1627,14 +1561,7 @@ mod tests {
             };
             let token_in = Bytes::from("0x0000000000000000000000000000000000000000");
             let token_out = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
-            let swap = Swap {
-                component: curve_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(curve_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
@@ -1702,14 +1629,7 @@ mod tests {
             };
             let token_in = Bytes::from("0x7bc3485026ac48b6cf9baf0a377477fff5703af8");
             let token_out = Bytes::from("0xc71ea051a5f82c67adcf634c36ffe6334793d24c");
-            let swap = Swap {
-                component: balancer_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(balancer_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
@@ -1761,14 +1681,7 @@ mod tests {
             };
             let token_in = Bytes::from("0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f");
             let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
-            let swap = Swap {
-                component: maverick_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(maverick_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
