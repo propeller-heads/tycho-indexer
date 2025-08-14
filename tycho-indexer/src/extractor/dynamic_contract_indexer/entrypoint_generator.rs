@@ -540,6 +540,7 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
     ) -> Result<Vec<EntryPointWithTracingParams>, EntrypointGenerationError> {
         info!("Starting entrypoint generation");
 
+        let hook_address = data.hook_address.clone();
         let tokens = data.component.tokens.clone();
         let token0 = tokens[0].clone();
         let token1 = tokens[1].clone();
@@ -778,7 +779,7 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
 
                 let entry_point = EntryPointWithTracingParams::new(
                     EntryPoint::new(
-                        format!("{router_address}:execute(bytes)"),
+                        format!("{hook_address}:execute(bytes)"),
                         router_address.clone(),
                         "execute(bytes)".to_string(),
                     ),
