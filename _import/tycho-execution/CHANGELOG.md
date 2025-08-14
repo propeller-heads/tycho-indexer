@@ -1,3 +1,25 @@
+## [0.115.0](https://github.com/propeller-heads/tycho-execution/compare/0.114.0...0.115.0) (2025-08-14)
+
+
+### Features
+
+* Deploy BebopExecutor ([f9ef8e0](https://github.com/propeller-heads/tycho-execution/commit/f9ef8e0dbdfb73db132f4932911fb5a666f6fa25))
+* implement encoder and executor with single order support ([7e7e3f0](https://github.com/propeller-heads/tycho-execution/commit/7e7e3f0e0187adc2f7966fd108e9edcb5e05f20f))
+* support multi and aggregate orders ([ad0a999](https://github.com/propeller-heads/tycho-execution/commit/ad0a9991da57348a026bc43d3ca230898822614e))
+
+
+### Bug Fixes
+
+* After merge fixes with SwapBuilder ([d301dfc](https://github.com/propeller-heads/tycho-execution/commit/d301dfcc44575157997d95a571633ef4e659a197))
+* After merging main fixes ([003ab7c](https://github.com/propeller-heads/tycho-execution/commit/003ab7cea82fec67dbd54bb1248f75e8c7c74c50))
+* **Bebop:** Fix AggregateOrder tests ([7024da3](https://github.com/propeller-heads/tycho-execution/commit/7024da395d9d959fc9edecc398f8a161f76d4de1))
+* **Bebop:** Fix encoding and tests ([e793478](https://github.com/propeller-heads/tycho-execution/commit/e79347842f74e05b078d3b2da4f6fad099a6927d))
+* cargo and forge fmt ([17e5354](https://github.com/propeller-heads/tycho-execution/commit/17e535494b5f2f211eef889c768f05f00843dc5b))
+* Fix test imports ([210d4fa](https://github.com/propeller-heads/tycho-execution/commit/210d4fa604de7610ce01fd918e57970dd5498e6b))
+* Move Bebop tests according to new setup ([01ab5d2](https://github.com/propeller-heads/tycho-execution/commit/01ab5d22b182072a65221f620df7fade3ab6fe7a))
+* SafeCast => V4SafeCast to fix build issue ([946c439](https://github.com/propeller-heads/tycho-execution/commit/946c4391e825661126fc30e013ac95e87e904fdc))
+* Simplify the BebopExecutor and fix Single tests ([76a09d0](https://github.com/propeller-heads/tycho-execution/commit/76a09d0402f34563a121f0973589b523ffdf3a8f))
+
 ## [0.114.0](https://github.com/propeller-heads/tycho-execution/compare/0.113.0...0.114.0) (2025-08-14)
 
 
