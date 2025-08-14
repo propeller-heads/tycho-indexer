@@ -1,3 +1,10 @@
+## [0.113.0](https://github.com/propeller-heads/tycho-execution/compare/0.112.2...0.113.0) (2025-08-14)
+
+
+### Features
+
+* Add estimated_amount_in to Swap. Add SwapBuilder ([5eb9973](https://github.com/propeller-heads/tycho-execution/commit/5eb9973dbd5ca4eb2f4d15c3f4803b4bc7dfa1ea))
+
 ## [0.112.2](https://github.com/propeller-heads/tycho-execution/compare/0.112.1...0.112.2) (2025-08-07)
 
 
