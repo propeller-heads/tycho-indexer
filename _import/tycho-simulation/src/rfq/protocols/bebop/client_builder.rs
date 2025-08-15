@@ -91,11 +91,6 @@ impl BebopClientBuilder {
     }
 
     pub fn build(self) -> Result<BebopClient, RFQError> {
-        if self.tokens.is_empty() {
-            return Err(RFQError::InvalidInput(
-                "At least one token pair must be specified".to_string(),
-            ));
-        }
         let quote_tokens;
         if let Some(tokens) = self.quote_tokens {
             quote_tokens = tokens;
@@ -147,18 +142,5 @@ mod tests {
         .quote_tokens(custom_quote_tokens.clone())
         .build();
         assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_bebop_client_builder_validation() {
-        let result = BebopClientBuilder::new(
-            Chain::Ethereum,
-            "test_user".to_string(),
-            "test_key".to_string(),
-        )
-        .build();
-
-        assert!(result.is_err());
-        assert!(matches!(result, Err(RFQError::InvalidInput(_))), "Wrong error.");
     }
 }

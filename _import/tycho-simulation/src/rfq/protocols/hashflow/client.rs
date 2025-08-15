@@ -298,7 +298,7 @@ impl RFQClient for HashflowClient {
                                     )?;
 
                                     // Hash the pair for component id
-                                    let pair_str = format!("{}/{}", hex::encode(base_token), hex::encode(quote_token));
+                                    let pair_str = format!("hashflow_{}/{}", hex::encode(base_token), hex::encode(quote_token));
                                     let component_id = format!("{}", keccak256(pair_str.as_bytes()));
 
                                     if normalized_tvl < client.tvl {
@@ -514,7 +514,10 @@ mod tests {
     use tycho_common::models::token::Token;
 
     use super::*;
-    use crate::rfq::protocols::hashflow::models::{HashflowPair, HashflowPriceLevel};
+    use crate::rfq::{
+        constants::get_hashflow_auth,
+        protocols::hashflow::models::{HashflowPair, HashflowPriceLevel},
+    };
 
     #[test]
     fn test_normalize_tvl_same_quote_token() {
@@ -590,12 +593,12 @@ mod tests {
     #[ignore] // Requires network access and HASHFLOW_KEY environment variable
     async fn test_hashflow_api_polling() {
         dotenv().expect("Missing .env file");
-        let hashflow_key = env::var("HASHFLOW_KEY").unwrap();
+        let auth = get_hashflow_auth().unwrap();
 
-        let lpt = Bytes::from_str("0x58b6a8a3302369daec383334672404ee733ab239").unwrap();
-        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let wbtc = Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap();
+        let weth = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
 
-        let tokens = HashSet::from([lpt, usdc.clone()]);
+        let tokens = HashSet::from([wbtc, weth.clone()]);
 
         let quote_tokens = HashSet::from([
             Bytes::from_str("0xa0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(), // USDC
@@ -607,15 +610,15 @@ mod tests {
             tokens,
             1.0, // $1 minimum TVL - very low to capture most pairs
             quote_tokens,
-            "propellerheads".to_string(),
-            hashflow_key,
+            auth.user,
+            auth.key,
             1,
         )
         .unwrap();
 
         let mut stream = client.stream();
 
-        let result = timeout(Duration::from_secs(5), async {
+        let result = timeout(Duration::from_secs(10), async {
             let mut message_count = 0;
             let max_messages = 3;
             let mut total_components_received = 0;
@@ -637,9 +640,10 @@ mod tests {
 
                         for (id, component_with_state) in &snapshot.states {
                             let attributes = &component_with_state.state.attributes;
-
+                            let levels: &Bytes = attributes.get("levels").unwrap();
                             // Check that levels exist
                             if attributes.contains_key("levels") {
+                                println!("{levels:?}");
                                 assert!(!attributes["levels"].is_empty());
                             }
                             // Check that mm name exist

@@ -250,7 +250,7 @@ impl RFQClient for BebopClient {
                                                 continue;
                                             }
 
-                                            let pair_str = format!("{}/{}", hex::encode(&base_bytes), hex::encode(&quote_bytes));
+                                            let pair_str = format!("bebop_{}/{}", hex::encode(&base_bytes), hex::encode(&quote_bytes));
                                             let component_id = format!("{}", keccak256(pair_str.as_bytes()));
                                             let component_with_state = client.create_component_with_state(
                                                 component_id.clone(),
@@ -455,7 +455,6 @@ impl RFQClient for BebopClient {
 #[cfg(test)]
 mod tests {
     use std::{
-        env,
         sync::{Arc, Mutex},
         time::Duration,
     };
@@ -467,6 +466,7 @@ mod tests {
     use tycho_common::models::token::Token;
 
     use super::*;
+    use crate::rfq::constants::get_bebop_auth;
 
     #[tokio::test]
     #[ignore] // Requires network access and setting proper env vars
@@ -476,9 +476,8 @@ mod tests {
         let wbtc = Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap();
         let weth = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
 
-        let ws_user = String::from("tycho");
         dotenv().expect("Missing .env file");
-        let ws_key = env::var("BEBOP_KEY").expect("BEBOP_KEY environment variable is required");
+        let auth = get_bebop_auth().expect("Failed to get Bebop authentication");
 
         let quote_tokens = HashSet::from([
             // Use addresses we forgot to checksum (to test checksumming)
@@ -490,8 +489,8 @@ mod tests {
             Chain::Ethereum,
             HashSet::from_iter(vec![weth.clone(), wbtc.clone()]),
             10.0, // $10 minimum TVL
-            ws_user,
-            ws_key,
+            auth.user,
+            auth.key,
             quote_tokens,
         )
         .unwrap();
@@ -737,17 +736,15 @@ mod tests {
             chain: Default::default(),
             quality: 100,
         };
-        let ws_user = String::from("tycho");
         dotenv().expect("Missing .env file");
-        let ws_key =
-            env::var("BEBOP_WS_KEY").expect("BEBOP_WS_KEY environment variable is required");
+        let auth = get_bebop_auth().expect("Failed to get Bebop authentication");
 
         let client = BebopClient::new(
             Chain::Ethereum,
             HashSet::from_iter(vec![token_in.address.clone(), token_out.address.clone()]),
             10.0, // $10 minimum TVL
-            ws_user,
-            ws_key,
+            auth.user,
+            auth.key,
             HashSet::new(),
         )
         .unwrap();
@@ -817,17 +814,15 @@ mod tests {
             chain: Default::default(),
             quality: 100,
         };
-        let ws_user = String::from("tycho");
         dotenv().expect("Missing .env file");
-        let ws_key =
-            env::var("BEBOP_WS_KEY").expect("BEBOP_WS_KEY environment variable is required");
+        let auth = get_bebop_auth().expect("Failed to get Bebop authentication");
 
         let client = BebopClient::new(
             Chain::Ethereum,
             HashSet::from_iter(vec![token_in.address.clone(), token_out.address.clone()]),
             10.0, // $10 minimum TVL
-            ws_user,
-            ws_key,
+            auth.user,
+            auth.key,
             HashSet::new(),
         )
         .unwrap();
