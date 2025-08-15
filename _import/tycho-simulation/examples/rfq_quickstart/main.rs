@@ -108,7 +108,7 @@ async fn main() {
     let tycho_api_key: String =
         env::var("TYCHO_API_KEY").unwrap_or_else(|_| "sampletoken".to_string());
 
-    // Get WebSocket credentials for any RFQ(s) we are using
+    // Get credentials for any RFQ(s) we are using
     let bebop_user = env::var("BEBOP_USER")
         .expect("BEBOP_USER environment variable is required. Contact Bebop for credentials.");
     let bebop_key = env::var("BEBOP_KEY")

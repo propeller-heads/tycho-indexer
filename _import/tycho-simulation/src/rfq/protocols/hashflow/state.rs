@@ -24,6 +24,8 @@ pub struct HashflowState {
     pub base_token: Token,
     pub quote_token: Token,
     pub levels: HashflowMarketMakerLevels,
+    #[allow(dead_code)]
+    pub market_maker: String,
     pub client: HashflowClient,
 }
 
@@ -33,9 +35,10 @@ impl HashflowState {
         base_token: Token,
         quote_token: Token,
         levels: HashflowMarketMakerLevels,
+        market_maker: String,
         client: HashflowClient,
     ) -> Self {
-        Self { base_token, quote_token, levels, client }
+        Self { base_token, quote_token, levels, market_maker, client }
     }
 
     fn valid_direction_guard(
@@ -276,6 +279,7 @@ mod tests {
                     HashflowPriceLevel { quantity: 5.0, price: 2999.0 },
                 ],
             },
+            market_maker: "test_mm".to_string(),
             client: empty_hashflow_client(),
         }
     }
