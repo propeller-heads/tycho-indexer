@@ -1303,7 +1303,10 @@ mod tests {
                         AccountDelta::new(
                             Chain::Ethereum,
                             Bytes::from("0x02"),
-                            HashMap::from([(Bytes::from("0x22"), Some(Bytes::from("0x22")))]),
+                            HashMap::from([
+                                (Bytes::from("0x01"), Some(Bytes::from("0x01"))),
+                                (Bytes::from("0x22"), Some(Bytes::from("0x22"))),
+                            ]),
                             None,
                             None,
                             ChangeType::Update,
@@ -1371,7 +1374,7 @@ mod tests {
             });
 
         // Should only be called for new accounts, so account 0x01 and 0x11 are ignored because
-        // already indexed.
+        // already indexed. Both 0x05 and 0x55 are accessed by the traced entrypoints.
         account_extractor
             .expect_get_accounts_at_block()
             .with(
@@ -1380,19 +1383,19 @@ mod tests {
                     requests.len() == 2 &&
                         requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x55")) &&
+                            .any(|r| r.address == Bytes::from("0x05")) &&
                         requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x05"))
+                            .any(|r| r.address == Bytes::from("0x55"))
                 }),
             )
             .return_once(move |_, _| {
                 Ok(HashMap::from([
                     (
-                        Bytes::from("0x55"),
+                        Bytes::from("0x05"),
                         AccountDelta::new(
                             Chain::Ethereum,
-                            Bytes::from("0x55"),
+                            Bytes::from("0x05"),
                             HashMap::new(),
                             None,
                             None,
@@ -1400,10 +1403,10 @@ mod tests {
                         ),
                     ),
                     (
-                        Bytes::from("0x05"),
+                        Bytes::from("0x55"),
                         AccountDelta::new(
                             Chain::Ethereum,
-                            Bytes::from("0x05"),
+                            Bytes::from("0x55"),
                             HashMap::new(),
                             None,
                             None,
@@ -1432,6 +1435,18 @@ mod tests {
         expected_block_changes.txs_with_update = vec![TxWithChanges {
             tx: get_transaction(1),
             account_deltas: HashMap::from([
+                // Account 0x01 has the storage update that triggered the retrigger
+                (
+                    Bytes::from("0x01"),
+                    AccountDelta::new(
+                        Chain::Ethereum,
+                        Bytes::from("0x01"),
+                        HashMap::from([(Bytes::from("0x01"), Some(Bytes::from("0xabcd")))]),
+                        None,
+                        None,
+                        ChangeType::Update,
+                    ),
+                ),
                 // Two new accounts are detected in the re-tracing
                 (
                     Bytes::from("0x05"),
