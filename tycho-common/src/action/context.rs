@@ -12,6 +12,7 @@ use crate::{models::blockchain::Block, Bytes};
 /// Contains the environmental state and constraints that affect how actions
 /// are simulated. This ensures simulations account for block-specific conditions
 /// and transaction context.
+#[derive(Clone)]
 pub struct ActionContext {
     /// The blockchain block in which the action is being simulated.
     /// Used for accessing block-specific data like timestamp, gas limits, and base fees.
@@ -35,5 +36,24 @@ impl ActionContext {
         previously_accessed: HashSet<Bytes>,
     ) -> Self {
         Self { current_block, user_identity, previously_accessed }
+    }
+}
+
+impl Default for ActionContext {
+    fn default() -> Self {
+        use crate::models::{blockchain::Block, Chain};
+        use chrono::NaiveDateTime;
+        
+        Self {
+            current_block: Block {
+                number: 0,
+                chain: Chain::Ethereum,
+                hash: "0x0000000000000000000000000000000000000000000000000000000000000000".into(),
+                parent_hash: "0x0000000000000000000000000000000000000000000000000000000000000000".into(),
+                ts: NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+            },
+            user_identity: None,
+            previously_accessed: HashSet::new(),
+        }
     }
 }

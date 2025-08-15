@@ -81,27 +81,27 @@ where
     P: MarginalPriceApproximator<T> + Clone + Send + Sync + 'static,
     L: LimitsApproximator<T> + Clone + Send + Sync + 'static,
 {
-    fn minimum_fee(&self, params: MarginalPriceParameters) -> Result<f64, SimulationError> {
+    fn minimum_fee(&self, params: &MarginalPriceParameters) -> Result<f64, SimulationError> {
         let bid = self.marginal_price(params)?;
-        let ask = self.marginal_price(params.flip())?;
+        let ask = self.marginal_price(&params.flip())?;
         Ok((bid - ask).abs())
     }
 
-    fn marginal_price(&self, params: MarginalPriceParameters) -> Result<f64, SimulationError> {
+    fn marginal_price(&self, params: &MarginalPriceParameters) -> Result<f64, SimulationError> {
         Ok(self
             .price_approximator
             .approximate(self.wrapped.as_ref(), &params)?)
     }
 
-    fn quote(&self, quote_parameters: QuoteParameters) -> Result<SwapQuote, SimulationError> {
-        let params = SwapParameters::new(quote_parameters.output.clone());
+    fn quote(&self, quote_parameters: &QuoteParameters) -> Result<SwapQuote, SimulationError> {
+        let params = SwapParameters::new(quote_parameters.output().clone());
         let inputs = DefaultInputs(vec![ERC20Asset::new(
-            quote_parameters.input.clone(),
-            quote_parameters.amount,
+            quote_parameters.input().clone(),
+            quote_parameters.amount().clone(),
         )]);
         let (res, new_state) =
             self.wrapped
-                .simulate_forward(quote_parameters.context, &params, &inputs)?;
+                .simulate_forward(quote_parameters.context(), &params, &inputs)?;
 
         let output = res.produced().last().ok_or_else(|| {
             SimulationError::FatalError(
@@ -125,7 +125,7 @@ where
         ))
     }
 
-    fn get_limits(&self, params: LimitsParameters) -> Result<AmountLimits, SimulationError> {
+    fn get_limits(&self, params: &LimitsParameters) -> Result<AmountLimits, SimulationError> {
         Ok(self
             .limits_approximator
             .approximate(self.wrapped.as_ref(), &params)?)
