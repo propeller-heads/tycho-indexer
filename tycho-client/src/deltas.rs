@@ -417,7 +417,7 @@ impl WsDeltasClient {
     /// connection is established if not already connected.
     async fn ensure_connection(&self) -> Result<(), DeltasError> {
         if self.dead.load(Ordering::SeqCst) {
-            return Err(DeltasError::NotConnected)
+            return Err(DeltasError::NotConnected);
         };
         if !self.is_connected().await {
             self.conn_notify.notified().await;
