@@ -26,6 +26,8 @@ pub enum RPCError {
     SetupError(String),
     #[error("RPC error: {0}")]
     RequestError(#[from] ProviderError),
+    #[error("Tracing failure: {0}")]
+    TracingFailure(String),
     #[error("Unknown error: {0}")]
     UnknownError(String),
 }
