@@ -49,7 +49,7 @@ struct Cli {
     sell_token: Option<String>,
     #[arg(long)]
     buy_token: Option<String>,
-    #[arg(long, default_value_t = 0.002)]
+    #[arg(long, default_value_t = 10.0)]
     sell_amount: f64,
     /// The minimum TVL threshold for RFQ quotes in USD
     #[arg(long, default_value_t = 1.0)]
