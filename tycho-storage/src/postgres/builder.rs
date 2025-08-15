@@ -37,6 +37,8 @@ impl GatewayBuilder {
 
     pub async fn build(self) -> Result<(CachedGateway, JoinHandle<()>), StorageError> {
         let pool = postgres::connect(&self.database_url).await?;
+
+        postgres::ensure_partitions_exist(&pool, self.retention_horizon).await?;
         postgres::ensure_chains(&self.chains, pool.clone()).await;
         postgres::ensure_protocol_systems(&self.protocol_systems, pool.clone()).await;
 
