@@ -12,7 +12,8 @@ use crate::{
             ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
         },
         token::Token,
-        Address, Balance, BlockHash, Chain, Code, ComponentId, EntryPointId, MergeError, StoreKey, StoreVal,
+        Address, Balance, BlockHash, Chain, Code, ComponentId, EntryPointId, MergeError, StoreKey,
+        StoreVal,
     },
     Bytes,
 };
