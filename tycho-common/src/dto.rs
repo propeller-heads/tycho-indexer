@@ -19,7 +19,10 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::{
-    models::{self, blockchain::BlockAggregatedChanges, Address, Balance, Code, ComponentId, StoreKey, StoreVal},
+    models::{
+        self, blockchain::BlockAggregatedChanges, Address, Balance, Code, ComponentId, StoreKey,
+        StoreVal,
+    },
     serde_primitives::{
         hex_bytes, hex_bytes_option, hex_hashmap_key, hex_hashmap_key_value, hex_hashmap_value,
     },
