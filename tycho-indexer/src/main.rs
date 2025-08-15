@@ -620,6 +620,7 @@ async fn run_tycho_ethereum(
 
 #[cfg(test)]
 mod test_serial_db {
+    use chrono::Duration;
     use tycho_storage::postgres::testing::run_against_db;
 
     use super::*;
@@ -734,6 +735,7 @@ mod test_serial_db {
 
             let (cached_gw, _) = GatewayBuilder::new(db_url.as_str())
                 .set_chains(&[chain])
+                .set_retention_horizon(Utc::now().naive_utc() + Duration::days(1))
                 .build()
                 .await
                 .expect("Failed to create Gateway");
