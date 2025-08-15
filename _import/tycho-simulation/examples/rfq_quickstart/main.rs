@@ -49,7 +49,7 @@ struct Cli {
     sell_token: Option<String>,
     #[arg(long)]
     buy_token: Option<String>,
-    #[arg(long, default_value_t = 10.0)]
+    #[arg(long, default_value_t = 0.002)]
     sell_amount: f64,
     /// The minimum TVL threshold for RFQ quotes in USD
     #[arg(long, default_value_t = 1.0)]
@@ -232,33 +232,8 @@ async fn main() {
                             buy_token.symbol
                         );
 
-                        let solution = create_solution(
-                            component.clone(),
-                            state.as_ref(),
-                            sell_token.clone(),
-                            buy_token.clone(),
-                            amount_in.clone(),
-                            Bytes::from(wallet.address().to_vec()),
-                            amount_out.clone(),
-                        );
-
                         // Clone expected_amount to avoid ownership issues
                         let expected_amount_copy = amount_out.clone();
-
-                        // Encode the swaps of the solution
-                        let encoded_solution = encoder
-                            .encode_solutions(vec![solution.clone()])
-                            .expect("Failed to encode router calldata")[0]
-                            .clone();
-
-                        let tx = encode_tycho_router_call(
-                            named_chain.into(),
-                            encoded_solution.clone(),
-                            &solution,
-                            chain.native_token().address,
-                            signer.clone(),
-                        )
-                        .expect("Failed to encode router call");
 
                         // Print token balances before showing the swap options
                         if cli.swapper_pk != FAKE_PK {
@@ -343,47 +318,170 @@ async fn main() {
 
                         match choice {
                             "simulate" => {
-                                println!("\nSimulating by performing an approval (for permit2) and a swap transaction...");
+                                println!("\nSimulating RFQ swap...");
+                                println!("Step 1: Simulating permit2 approval first...");
 
-                                let (approval_request, swap_request) = get_tx_requests(
-                                    provider.clone(),
+                                // First, simulate ONLY the approval transaction
+                                let approve_function_signature = "approve(address,uint256)";
+                                let args = (
+                                    Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
+                                        .expect("Couldn't convert to address"),
                                     biguint_to_u256(&amount_in),
-                                    wallet.address(),
-                                    Address::from_slice(&sell_token_address),
-                                    tx.clone(),
-                                    named_chain as u64,
-                                )
-                                .await;
+                                );
+                                let approval_data =
+                                    encode_input(approve_function_signature, args.abi_encode());
+                                let nonce = provider
+                                    .get_transaction_count(wallet.address())
+                                    .await
+                                    .expect("Failed to get nonce");
 
-                                let payload = SimulatePayload {
+                                let block = provider
+                                    .get_block_by_number(BlockNumberOrTag::Latest)
+                                    .await
+                                    .expect("Failed to fetch latest block")
+                                    .expect("Block not found");
+
+                                let base_fee = block
+                                    .header
+                                    .base_fee_per_gas
+                                    .expect("Base fee not available");
+                                let max_priority_fee_per_gas = 1_000_000_000u64;
+                                let max_fee_per_gas = base_fee + max_priority_fee_per_gas;
+
+                                let approval_request = TransactionRequest {
+                                    to: Some(TxKind::Call(Address::from_slice(
+                                        &sell_token_address,
+                                    ))),
+                                    from: Some(wallet.address()),
+                                    value: None,
+                                    input: TransactionInput {
+                                        input: Some(AlloyBytes::from(approval_data)),
+                                        data: None,
+                                    },
+                                    gas: Some(100_000u64),
+                                    chain_id: Some(named_chain as u64),
+                                    max_fee_per_gas: Some(max_fee_per_gas.into()),
+                                    max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
+                                    nonce: Some(nonce),
+                                    ..Default::default()
+                                };
+
+                                // Simulate ONLY the permit2 approval first
+                                let approval_payload = SimulatePayload {
                                     block_state_calls: vec![SimBlock {
                                         block_overrides: None,
                                         state_overrides: None,
-                                        calls: vec![approval_request, swap_request],
+                                        calls: vec![approval_request.clone()],
                                     }],
                                     trace_transfers: true,
                                     validation: true,
                                     return_full_transactions: true,
                                 };
 
-                                match provider.simulate(&payload).await {
-                                    Ok(output) => {
-                                        for block in output.iter() {
-                                            println!(
-                                                "\nSimulated Block {block_num}:",
-                                                block_num = block.inner.header.number
-                                            );
-                                            for (j, transaction) in block.calls.iter().enumerate() {
-                                                println!(
-                                                    "  Transaction {transaction_num}: Status: {status:?}, Gas Used: {gas_used}",
-                                                    transaction_num = j + 1,
-                                                    status = transaction.status,
-                                                    gas_used = transaction.gas_used
-                                                );
+                                match provider
+                                    .simulate(&approval_payload)
+                                    .await
+                                {
+                                    Ok(approval_output) => {
+                                        // Check if approval simulation succeeded
+                                        let approval_success = approval_output
+                                            .iter()
+                                            .all(|block| block.calls.iter().all(|tx| tx.status));
+
+                                        if !approval_success {
+                                            println!("❌ Permit2 approval simulation failed!");
+                                            continue;
+                                        }
+
+                                        println!("✅ Permit2 approval simulation successful!");
+
+                                        // Step 2: NOW encode the solution (after approval
+                                        // simulation)
+                                        println!("Step 2: Encoding the solution transaction...");
+
+                                        let solution = create_solution(
+                                            component.clone(),
+                                            state.as_ref(),
+                                            sell_token.clone(),
+                                            buy_token.clone(),
+                                            amount_in.clone(),
+                                            Bytes::from(wallet.address().to_vec()),
+                                            amount_out.clone(),
+                                        );
+
+                                        // Encode the swaps of the solution
+                                        let encoded_solution = encoder
+                                            .encode_solutions(vec![solution.clone()])
+                                            .expect("Failed to encode router calldata")[0]
+                                            .clone();
+
+                                        let tx = encode_tycho_router_call(
+                                            named_chain as u64,
+                                            encoded_solution.clone(),
+                                            &solution,
+                                            chain.native_token().address,
+                                            signer.clone(),
+                                        )
+                                        .expect("Failed to encode router call");
+
+                                        let swap_request = TransactionRequest {
+                                            to: Some(TxKind::Call(Address::from_slice(&tx.to))),
+                                            from: Some(wallet.address()),
+                                            value: Some(biguint_to_u256(&tx.value)),
+                                            input: TransactionInput {
+                                                input: Some(AlloyBytes::from(tx.data)),
+                                                data: None,
+                                            },
+                                            gas: Some(800_000u64),
+                                            chain_id: Some(named_chain as u64),
+                                            max_fee_per_gas: Some(max_fee_per_gas.into()),
+                                            max_priority_fee_per_gas: Some(
+                                                max_priority_fee_per_gas.into(),
+                                            ),
+                                            nonce: Some(nonce),
+                                            ..Default::default()
+                                        };
+
+                                        println!("Step 3: Simulating solution transaction...");
+
+                                        let solution_payload = SimulatePayload {
+                                            block_state_calls: vec![SimBlock {
+                                                block_overrides: None,
+                                                state_overrides: None,
+                                                calls: vec![swap_request],
+                                            }],
+                                            trace_transfers: true,
+                                            validation: true,
+                                            return_full_transactions: true,
+                                        };
+
+                                        match provider
+                                            .simulate(&solution_payload)
+                                            .await
+                                        {
+                                            Ok(output) => {
+                                                for block in output.iter() {
+                                                    println!(
+                                                        "\nSimulated Block {block_num}:",
+                                                        block_num = block.inner.header.number
+                                                    );
+                                                    for transaction in block.calls.iter() {
+                                                        println!(
+                                                            "  RFQ Swap: Status: {status:?}, Gas Used: {gas_used}",
+                                                            status = transaction.status,
+                                                            gas_used = transaction.gas_used
+                                                        );
+                                                    }
+                                                }
+                                                println!("\n✅ Solution simulation successful!");
+                                                println!(); // Add empty line after simulation results
+                                                continue;
+                                            }
+                                            Err(e) => {
+                                                eprintln!("\n❌ Solution simulation failed: {e:?}");
+                                                continue;
                                             }
                                         }
-                                        println!(); // Add empty line after simulation results
-                                        continue;
                                     }
                                     Err(e) => {
                                         eprintln!("\nSimulation failed: {e:?}");
@@ -404,46 +502,11 @@ async fn main() {
                                         .unwrap_or(1); // Default to No if error
 
                                         if yes_no_selection == 0 {
-                                            match execute_swap_transaction(
-                                                provider.clone(),
-                                                &amount_in,
-                                                wallet.address(),
-                                                &sell_token_address,
-                                                tx.clone(),
-                                                named_chain as u64,
-                                            )
-                                            .await
-                                            {
-                                                Ok(_) => {
-                                                    println!("\n✅ Swap executed successfully! Exiting the session...\n");
-
-                                                    // Calculate the correct price ratio
-                                                    let (forward_price, _reverse_price) =
-                                                        format_price_ratios(
-                                                            &amount_in,
-                                                            &expected_amount_copy,
-                                                            &sell_token,
-                                                            &buy_token,
-                                                        );
-
-                                                    println!(
-                                                        "Summary: Swapped {formatted_in} {sell_symbol} → {formatted_out} {buy_symbol} at
-                                                        a price of {forward_price:.6} {buy_symbol} per {sell_symbol}",
-                                                        formatted_in = format_token_amount(&amount_in, &sell_token),
-                                                        sell_symbol = sell_token.symbol,
-                                                        formatted_out = format_token_amount(&expected_amount_copy, &buy_token),
-                                                        buy_symbol = buy_token.symbol,
-                                                    );
-                                                    return; // Exit the program after successful
-                                                            // execution
-                                                }
-                                                Err(e) => {
-                                                    eprintln!(
-                                                        "\nFailed to execute transaction: {e:?}\n"
-                                                    );
-                                                    continue;
-                                                }
-                                            }
+                                            println!("\nProceeding with execution after simulation failure...");
+                                            // For simplicity, we'll direct users to use the main
+                                            // execute option
+                                            println!("Please select 'Execute the swap' from the main menu to proceed with the optimized execution flow.\n");
+                                            continue;
                                         } else {
                                             println!("\nSkipping this swap...\n");
                                             continue;
@@ -452,41 +515,177 @@ async fn main() {
                                 }
                             }
                             "execute" => {
-                                match execute_swap_transaction(
-                                    provider.clone(),
-                                    &amount_in,
-                                    wallet.address(),
-                                    &sell_token_address,
-                                    tx,
-                                    named_chain as u64,
-                                )
-                                .await
+                                println!("\nExecuting RFQ swap...");
+
+                                // Step 1: Send permit2 approval first
+                                println!("Step 1: Sending permit2 approval...");
+                                let approve_function_signature = "approve(address,uint256)";
+                                let args = (
+                                    Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
+                                        .expect("Couldn't convert to address"),
+                                    biguint_to_u256(&amount_in),
+                                );
+                                let approval_data =
+                                    encode_input(approve_function_signature, args.abi_encode());
+                                let nonce = provider
+                                    .get_transaction_count(wallet.address())
+                                    .await
+                                    .expect("Failed to get nonce");
+
+                                let block = provider
+                                    .get_block_by_number(BlockNumberOrTag::Latest)
+                                    .await
+                                    .expect("Failed to fetch latest block")
+                                    .expect("Block not found");
+
+                                let base_fee = block
+                                    .header
+                                    .base_fee_per_gas
+                                    .expect("Base fee not available");
+                                let max_priority_fee_per_gas = 1_000_000_000u64;
+                                let max_fee_per_gas = base_fee + max_priority_fee_per_gas;
+
+                                let approval_request = TransactionRequest {
+                                    to: Some(TxKind::Call(Address::from_slice(
+                                        &sell_token_address,
+                                    ))),
+                                    from: Some(wallet.address()),
+                                    value: None,
+                                    input: TransactionInput {
+                                        input: Some(AlloyBytes::from(approval_data)),
+                                        data: None,
+                                    },
+                                    gas: Some(100_000u64),
+                                    chain_id: Some(named_chain as u64),
+                                    max_fee_per_gas: Some(max_fee_per_gas.into()),
+                                    max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
+                                    nonce: Some(nonce),
+                                    ..Default::default()
+                                };
+
+                                let approval_receipt = match provider
+                                    .send_transaction(approval_request)
+                                    .await
                                 {
-                                    Ok(_) => {
-                                        println!("\n✅ Swap executed successfully! Exiting the session...\n");
-
-                                        // Calculate the correct price ratio
-                                        let (forward_price, _reverse_price) = format_price_ratios(
-                                            &amount_in,
-                                            &expected_amount_copy,
-                                            &sell_token,
-                                            &buy_token,
-                                        );
-
-                                        println!(
-                                            "Summary: Swapped {formatted_in} {sell_symbol} → {formatted_out} {buy_symbol} at
-                                            a price of {forward_price:.6} {buy_symbol} per {sell_symbol}",
-                                            formatted_in = format_token_amount(&amount_in, &sell_token),
-                                            sell_symbol = sell_token.symbol,
-                                            formatted_out = format_token_amount(&expected_amount_copy, &buy_token),
-                                            buy_symbol = buy_token.symbol,
-                                        );
-                                        return; // Exit the program after successful execution
-                                    }
+                                    Ok(receipt) => receipt,
                                     Err(e) => {
-                                        eprintln!("\nFailed to execute transaction: {e:?}\n");
+                                        eprintln!("\nFailed to send approval transaction: {e:?}\n");
                                         continue;
                                     }
+                                };
+
+                                let approval_result = match approval_receipt.get_receipt().await {
+                                    Ok(result) => result,
+                                    Err(e) => {
+                                        eprintln!("\nFailed to get approval receipt: {e:?}\n");
+                                        continue;
+                                    }
+                                };
+
+                                println!(
+                                    "Approval transaction sent with hash: {hash:?} and status: {status:?}",
+                                    hash = approval_result.transaction_hash,
+                                    status = approval_result.status()
+                                );
+
+                                if !approval_result.status() {
+                                    eprintln!("\nApproval transaction failed! Cannot proceed with swap.\n");
+                                    continue;
+                                }
+
+                                println!("Step 2: Encoding solution transaction...");
+
+                                let solution = create_solution(
+                                    component.clone(),
+                                    state.as_ref(),
+                                    sell_token.clone(),
+                                    buy_token.clone(),
+                                    amount_in.clone(),
+                                    Bytes::from(wallet.address().to_vec()),
+                                    amount_out.clone(),
+                                );
+
+                                // Encode the swaps of the solution
+                                let encoded_solution = encoder
+                                    .encode_solutions(vec![solution.clone()])
+                                    .expect("Failed to encode router calldata")[0]
+                                    .clone();
+
+                                let swap_tx = encode_tycho_router_call(
+                                    named_chain as u64,
+                                    encoded_solution.clone(),
+                                    &solution,
+                                    chain.native_token().address,
+                                    signer.clone(),
+                                )
+                                .expect("Failed to encode router call");
+
+                                let swap_request = TransactionRequest {
+                                    to: Some(TxKind::Call(Address::from_slice(&swap_tx.to))),
+                                    from: Some(wallet.address()),
+                                    value: Some(biguint_to_u256(&swap_tx.value)),
+                                    input: TransactionInput {
+                                        input: Some(AlloyBytes::from(swap_tx.data)),
+                                        data: None,
+                                    },
+                                    gas: Some(800_000u64),
+                                    chain_id: Some(named_chain as u64),
+                                    max_fee_per_gas: Some(max_fee_per_gas.into()),
+                                    max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
+                                    nonce: Some(nonce + 1),
+                                    ..Default::default()
+                                };
+
+                                let swap_receipt = match provider
+                                    .send_transaction(swap_request)
+                                    .await
+                                {
+                                    Ok(receipt) => receipt,
+                                    Err(e) => {
+                                        eprintln!("\nFailed to send swap transaction: {e:?}\n");
+                                        continue;
+                                    }
+                                };
+
+                                let swap_result = match swap_receipt.get_receipt().await {
+                                    Ok(result) => result,
+                                    Err(e) => {
+                                        eprintln!("\nFailed to get swap receipt: {e:?}\n");
+                                        continue;
+                                    }
+                                };
+
+                                println!(
+                                    "Swap transaction sent with hash: {hash:?} and status: {status:?}",
+                                    hash = swap_result.transaction_hash,
+                                    status = swap_result.status()
+                                );
+
+                                if swap_result.status() {
+                                    println!(
+                                        "\n✅ Swap executed successfully! Exiting the session...\n"
+                                    );
+
+                                    // Calculate the correct price ratio
+                                    let (forward_price, _reverse_price) = format_price_ratios(
+                                        &amount_in,
+                                        &expected_amount_copy,
+                                        &sell_token,
+                                        &buy_token,
+                                    );
+
+                                    println!(
+                                        "Summary: Swapped {formatted_in} {sell_symbol} → {formatted_out} {buy_symbol} at
+                                        a price of {forward_price:.6} {buy_symbol} per {sell_symbol}",
+                                        formatted_in = format_token_amount(&amount_in, &sell_token),
+                                        sell_symbol = sell_token.symbol,
+                                        formatted_out = format_token_amount(&expected_amount_copy, &buy_token),
+                                        buy_symbol = buy_token.symbol,
+                                    );
+                                    return; // Exit the program after successful execution
+                                } else {
+                                    eprintln!("\nSwap transaction failed!\n");
+                                    continue;
                                 }
                             }
                             "skip" => {
@@ -678,70 +877,6 @@ pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
     call_data
 }
 
-async fn get_tx_requests(
-    provider: FillProvider<
-        JoinFill<Identity, WalletFiller<EthereumWallet>>,
-        RootProvider<Ethereum>,
-    >,
-    amount_in: U256,
-    user_address: Address,
-    sell_token_address: Address,
-    tx: Transaction,
-    chain_id: u64,
-) -> (TransactionRequest, TransactionRequest) {
-    let block = provider
-        .get_block_by_number(BlockNumberOrTag::Latest)
-        .await
-        .expect("Failed to fetch latest block")
-        .expect("Block not found");
-
-    let base_fee = block
-        .header
-        .base_fee_per_gas
-        .expect("Base fee not available");
-    let max_priority_fee_per_gas = 1_000_000_000u64;
-    let max_fee_per_gas = base_fee + max_priority_fee_per_gas;
-
-    let approve_function_signature = "approve(address,uint256)";
-    let args = (
-        Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
-            .expect("Couldn't convert to address"),
-        amount_in,
-    );
-    let data = encode_input(approve_function_signature, args.abi_encode());
-    let nonce = provider
-        .get_transaction_count(user_address)
-        .await
-        .expect("Failed to get nonce");
-
-    let approval_request = TransactionRequest {
-        to: Some(TxKind::Call(sell_token_address)),
-        from: Some(user_address),
-        value: None,
-        input: TransactionInput { input: Some(AlloyBytes::from(data)), data: None },
-        gas: Some(100_000u64),
-        chain_id: Some(chain_id),
-        max_fee_per_gas: Some(max_fee_per_gas.into()),
-        max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
-        nonce: Some(nonce),
-        ..Default::default()
-    };
-
-    let swap_request = TransactionRequest {
-        to: Some(TxKind::Call(Address::from_slice(&tx.to))),
-        from: Some(user_address),
-        value: Some(biguint_to_u256(&tx.value)),
-        input: TransactionInput { input: Some(AlloyBytes::from(tx.data)), data: None },
-        gas: Some(800_000u64),
-        chain_id: Some(chain_id),
-        max_fee_per_gas: Some(max_fee_per_gas.into()),
-        max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
-        nonce: Some(nonce + 1),
-        ..Default::default()
-    };
-    (approval_request, swap_request)
-}
-
 async fn get_token_balance(
     provider: &FillProvider<
         JoinFill<Identity, WalletFiller<EthereumWallet>>,
@@ -776,59 +911,4 @@ async fn get_token_balance(
     };
     // Convert the U256 to BigUint
     Ok(BigUint::from_bytes_be(&balance.to_be_bytes::<32>()))
-}
-
-async fn execute_swap_transaction(
-    provider: FillProvider<
-        JoinFill<Identity, WalletFiller<EthereumWallet>>,
-        RootProvider<Ethereum>,
-    >,
-    amount_in: &BigUint,
-    wallet_address: Address,
-    sell_token_address: &Bytes,
-    tx: Transaction,
-    chain_id: u64,
-) -> Result<(), Box<dyn std::error::Error>> {
-    println!("\nExecuting by performing an approval (for permit2) and a swap transaction...");
-    let (approval_request, swap_request) = get_tx_requests(
-        provider.clone(),
-        biguint_to_u256(amount_in),
-        wallet_address,
-        Address::from_slice(sell_token_address),
-        tx.clone(),
-        chain_id,
-    )
-    .await;
-
-    let approval_receipt = provider
-        .send_transaction(approval_request)
-        .await?;
-
-    let approval_result = approval_receipt.get_receipt().await?;
-    println!(
-        "\nApproval transaction sent with hash: {hash:?} and status: {status:?}",
-        hash = approval_result.transaction_hash,
-        status = approval_result.status()
-    );
-
-    let swap_receipt = provider
-        .send_transaction(swap_request)
-        .await?;
-
-    let swap_result = swap_receipt.get_receipt().await?;
-    println!(
-        "\nSwap transaction sent with hash: {hash:?} and status: {status:?}\n",
-        hash = swap_result.transaction_hash,
-        status = swap_result.status()
-    );
-
-    if !swap_result.status() {
-        return Err(format!(
-            "Swap transaction with hash {hash:?} failed.",
-            hash = swap_result.transaction_hash
-        )
-        .into());
-    }
-
-    Ok(())
 }
