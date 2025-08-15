@@ -639,10 +639,26 @@ where
         // Early stop if no hook-components are affected
         if swap_hook_components.is_empty() {
             debug!("No swap hook components found, delegating to inner DCI");
-            return self
-                .inner_dci
+            let dci_span = span!(Level::INFO, "inner_dci_processing");
+            let _dci_guard = dci_span.enter();
+
+            self.inner_dci
                 .process_block_update(block_changes)
-                .await;
+                .await?;
+
+            drop(_dci_guard);
+            info!("Inner DCI processing completed");
+
+            // 7. Handle finality for the cache
+            self.cache
+                .handle_finality(block_changes.finalized_block_height)
+                .map_err(|e| {
+                    error!("Failed to handle finality for cache: {e:?}");
+                    ExtractionError::Unknown(format!("Failed to handle finality for cache: {e:?}"))
+                })?;
+
+            info!("Block processing completed successfully");
+            return Ok(());
         }
 
         info!(
