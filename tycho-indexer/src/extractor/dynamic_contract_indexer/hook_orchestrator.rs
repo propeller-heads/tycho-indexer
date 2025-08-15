@@ -129,14 +129,33 @@ impl DefaultUniswapV4HookOrchestrator {
                                 updated_attributes,
                                 HashSet::new(),
                             );
-                            tx_delta
+                            let tx_delta_state_updates = tx_delta
                                 .state_updates
-                                .insert(component_id.clone(), pc_delta);
+                                .entry(component_id.clone())
+                                .or_insert(ProtocolComponentStateDelta::new(
+                                    component_id,
+                                    HashMap::new(),
+                                    HashSet::new(),
+                                ));
 
-                            tx_delta.entrypoints.insert(
-                                component_id.clone(),
-                                HashSet::from([limit_entrypoint.entry_point.clone()]),
-                            );
+                            tx_delta_state_updates
+                                .merge(pc_delta)
+                                .map_err(|e| {
+                                    error!(
+                                        component_id = %component_id,
+                                        error = %e,
+                                        "Failed to merge component state updates"
+                                    );
+                                    HookOrchestratorError::PrepareComponentsFailed(format!(
+                                        "Failed to merge component state updates: {e}"
+                                    ))
+                                })?;
+
+                            tx_delta
+                                .entrypoints
+                                .entry(component_id.clone())
+                                .or_default()
+                                .insert(limit_entrypoint.entry_point.clone());
                         }
 
                         tx_delta
