@@ -107,7 +107,7 @@ impl DefaultUniswapV4HookOrchestrator {
                     "Processing component limits"
                 );
                 for (idx, lim) in limit.iter().enumerate() {
-                    if let Some(limit_entrypoint) = lim.1.2.as_ref() {
+                    if let Some(limit_entrypoint) = lim.1 .2.as_ref() {
                         // Since limits should share the same entrypoint but different parameters
                         // (for 0->1 and 1->0 we only insert one Entrypoint.
                         if idx == 0 {
@@ -120,8 +120,8 @@ impl DefaultUniswapV4HookOrchestrator {
                                         limit_entrypoint.entry_point.target,
                                         limit_entrypoint.entry_point.signature
                                     )
-                                        .as_bytes()
-                                        .to_vec(),
+                                    .as_bytes()
+                                    .to_vec(),
                                 ),
                             );
                             let pc_delta = ProtocolComponentStateDelta::new(
@@ -216,7 +216,8 @@ impl DefaultUniswapV4HookOrchestrator {
                             ),
                         ))
                     })
-                    .collect::<Result<HashMap<Address, ComponentBalance>, HookOrchestratorError>>()?;
+                    .collect::<Result<HashMap<Address, ComponentBalance>, HookOrchestratorError>>(
+                    )?;
 
                 tx_delta
                     .balance_changes
@@ -379,15 +380,10 @@ impl HookOrchestrator for DefaultUniswapV4HookOrchestrator {
     ) -> Result<(), HookOrchestratorError> {
         info!("Starting component update process");
 
-        let component_entrypoints =
-            match generate_entrypoints {
-                true => {
-                    self.generate_entrypoint_params(&block_changes.block, components, metadata)?
-                }
-                false => {
-                    HashMap::new()
-                }
-            };
+        let component_entrypoints = match generate_entrypoints {
+            true => self.generate_entrypoint_params(&block_changes.block, components, metadata)?,
+            false => HashMap::new(),
+        };
 
         self.prepare_components(block_changes, metadata, component_entrypoints)?;
 

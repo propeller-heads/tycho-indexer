@@ -271,12 +271,16 @@ mod tests {
     };
 
     fn create_test_component() -> ProtocolComponent {
+        let mut static_attributes = HashMap::new();
+        static_attributes.insert("hooks".to_string(), Bytes::from("0xbeef"));
+
         ProtocolComponent {
             id: "0xbeef".to_string(),
             tokens: vec![
                 Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"), // USDC
                 Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"), // WETH
             ],
+            static_attributes,
             ..Default::default()
         }
     }
@@ -412,6 +416,7 @@ mod tests {
             ],
             contract_addresses: vec![],
             static_attributes: HashMap::from([
+                ("hooks".to_string(), Bytes::from("0xc88b618c2c670c2e2a42e06b466b6f0e82a6e8a8")),
                 ("token_0".to_string(), Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")),
                 ("token_1".to_string(), Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")),
             ]),
@@ -560,6 +565,7 @@ mod tests {
             ],
             contract_addresses: vec![],
             static_attributes: HashMap::from([
+                ("hooks".to_string(), Bytes::from("0xc88b618c2c670c2e2a42e06b466b6f0e82a6e8a8")),
                 ("token_0".to_string(), Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")),
                 ("token_1".to_string(), Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")),
             ]),
