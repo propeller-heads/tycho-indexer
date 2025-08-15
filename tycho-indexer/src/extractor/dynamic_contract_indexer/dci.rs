@@ -1,8 +1,11 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
-use std::str::FromStr;
-use std::sync::LazyLock;
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    str::FromStr,
+    sync::LazyLock,
+};
+
 use async_trait::async_trait;
-use tracing::{debug, info, warn, instrument, span, trace, Instrument, Level};
+use tracing::{debug, info, instrument, span, trace, warn, Instrument, Level};
 use tycho_common::{
     models::{
         blockchain::{
@@ -42,7 +45,7 @@ static MANUAL_BLACKLIST: LazyLock<Vec<Address>> = LazyLock::new(|| {
         // UniswapV4 Pool Manager - cannot be fully tracked
         Address::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90").unwrap(),
         // UniswapV2 Permit2
-        Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3").unwrap()
+        Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3").unwrap(),
     ]
 });
 
@@ -54,8 +57,8 @@ where
     G: EntryPointGateway + ProtocolGateway + Send + Sync,
 {
     #[instrument(skip(self, block_changes), fields(
-        chain = % self.chain, 
-        protocol = % self.protocol, 
+        chain = % self.chain,
+        protocol = % self.protocol,
         block_number = % block_changes.block.number,
         tx_count = block_changes.txs_with_update.len()
     ))]
@@ -69,11 +72,11 @@ where
         // Process new tokens from BlockChanges
         for (address, _token) in block_changes.new_tokens.iter() {
             // Add new tokens to the ERC-20 cache
-            self.cache.erc20_addresses.pending_entry(
-                &block_changes.block,
-                address
-            )?.or_insert(true);
-            
+            self.cache
+                .erc20_addresses
+                .pending_entry(&block_changes.block, address)?
+                .or_insert(true);
+
             debug!("Added new ERC-20 token to skip list: {}", address);
         }
 
@@ -182,8 +185,8 @@ where
                         .collect(),
                 )
                 .instrument(span!(
-                    Level::INFO, 
-                    "dci_rpc_tracing", 
+                    Level::INFO,
+                    "dci_rpc_tracing",
                     entrypoint_count = entrypoints_to_analyze.len(),
                     block_hash = %block_changes.block.hash
                 ))
@@ -255,10 +258,7 @@ where
                     if !self.should_skip_full_indexing(address) {
                         // Process all slots for non-token or non-blacklisted contracts
                         tracing::trace!("Skipping full storage indexing for address: {}", address);
-                        Ok(StorageSnapshotRequest { 
-                            address: address.clone(), 
-                            slots: None 
-                        })
+                        Ok(StorageSnapshotRequest { address: address.clone(), slots: None })
                     } else {
                         // Skip full storage indexing for tokens and blacklisted addresses
                         let slots = new_account_addr_to_slots
@@ -272,10 +272,7 @@ where
                             .into_iter()
                             .collect();
 
-                        Ok(StorageSnapshotRequest { 
-                            address: address.clone(), 
-                            slots: Some(slots) 
-                        })
+                        Ok(StorageSnapshotRequest { address: address.clone(), slots: Some(slots) })
                     }
                 })
                 .collect::<Result<Vec<_>, ExtractionError>>()?;
@@ -341,7 +338,8 @@ where
                 "dci_cache_update",
                 traced_entrypoints = traced_entry_points.len(),
                 block_number = block_changes.block.number
-            ).entered();
+            )
+            .entered();
             self.update_cache(&block_changes.block, &traced_entry_points)?;
             drop(_span);
 
@@ -364,8 +362,11 @@ where
         let _span = span!(
             Level::INFO,
             "dci_extract_tracked_updates",
-            block_storage_changes = block_changes.block_storage_changes.len()
-        ).entered();
+            block_storage_changes = block_changes
+                .block_storage_changes
+                .len()
+        )
+        .entered();
         let tracked_updates = self.extract_tracked_updates(block_changes)?;
         drop(_span);
 
@@ -511,19 +512,24 @@ where
 
         // Load manual blacklist into cache
         for address in MANUAL_BLACKLIST.iter() {
-            self.cache.blacklisted_addresses.insert_permanent(address.clone(), true);
+            self.cache
+                .blacklisted_addresses
+                .insert_permanent(address.clone(), true);
         }
 
         // Load known tokens from database
         let quality_range = QualityRange::min_only(0);
-        match self.entrypoint_gw
+        match self
+            .entrypoint_gw
             .get_tokens(self.chain, None, quality_range, None, None)
             .await
         {
             Ok(tokens_result) => {
                 let token_count = tokens_result.entity.len();
                 for token in tokens_result.entity {
-                    self.cache.erc20_addresses.insert_permanent(token.address, true);
+                    self.cache
+                        .erc20_addresses
+                        .insert_permanent(token.address, true);
                 }
                 info!("Loaded {} known tokens from database", token_count);
             }
@@ -544,14 +550,18 @@ where
                 return true;
             }
         }
-        
+
         // Check if it's manually blacklisted
-        if let Some(is_blacklisted) = self.cache.blacklisted_addresses.get(address) {
+        if let Some(is_blacklisted) = self
+            .cache
+            .blacklisted_addresses
+            .get(address)
+        {
             if *is_blacklisted {
                 return true;
             }
         }
-        
+
         false
     }
 
@@ -569,11 +579,8 @@ where
         &self,
         tx_with_changes: &'a [TxWithStorageChanges],
     ) -> HashMap<EntryPointWithTracingParams, &'a Transaction> {
-        let _span = span!(
-            Level::INFO,
-            "dci_retrigger_detection",
-            tx_count = tx_with_changes.len()
-        ).entered();
+        let _span = span!(Level::INFO, "dci_retrigger_detection", tx_count = tx_with_changes.len())
+            .entered();
 
         // Create a map of storage locations that have been updated in the block and the transaction
         // that last detected the update.
@@ -586,6 +593,11 @@ where
             HashMap::new();
         let mut storage_locations_scanned = 0u64;
 
+        // Collect all locations that retriggered and the entrypoints they triggered (just
+        // EntryPoint)
+        let mut retriggered_locations: HashMap<(Address, StoreKey), Vec<EntryPoint>> =
+            HashMap::new();
+
         for tx_with_changes in tx_with_changes.iter() {
             for (account, contract_store) in tx_with_changes.storage_changes.iter() {
                 for key in contract_store.keys() {
@@ -593,31 +605,64 @@ where
                     let location = (account.clone(), key.clone());
                     // Check if this storage location triggers any entrypoints
                     if let Some(entrypoints) = self.cache.retriggers.get(&location) {
-                        for entrypoint in entrypoints {
+                        for entrypoint_with_params in entrypoints {
                             // Only insert if we haven't seen this entrypoint before or if this tx
                             // is later
                             retriggered_entrypoints
-                                .entry(entrypoint.clone())
+                                .entry(entrypoint_with_params.clone())
                                 .and_modify(|entry_tx| {
                                     if entry_tx.index > tx_with_changes.tx.index {
                                         *entry_tx = &tx_with_changes.tx;
                                     }
                                 })
                                 .or_insert(&tx_with_changes.tx);
+
+                            // Collect the location and the entrypoint (not
+                            // EntryPointWithTracingParams)
+                            retriggered_locations
+                                .entry(location.clone())
+                                .or_default()
+                                .push(
+                                    entrypoint_with_params
+                                        .entry_point
+                                        .clone(),
+                                );
                         }
                     }
                 }
             }
         }
 
-        span!(Level::INFO, "retrigger_scan_complete")
-            .in_scope(|| {
-                tracing::info!(
-                    retriggered_count = retriggered_entrypoints.len(),
-                    storage_locations_scanned = storage_locations_scanned,
-                    "DCI: Retrigger detection completed"
-                );
-            });
+        // Log all retriggered locations and their entrypoints (just EntryPoint)
+        if !retriggered_locations.is_empty() {
+            let retriggered_locations_log: Vec<_> = retriggered_locations
+                .iter()
+                .map(|((address, key), entrypoints)| {
+                    format!(
+                        "location: ({}, {}), entrypoints: [{}]",
+                        address,
+                        hex::encode(key),
+                        entrypoints
+                            .iter()
+                            .map(|ep| ep.external_id.clone())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                })
+                .collect();
+            tracing::info!(
+                "DCI: Retriggered locations and entrypoints: {:?}",
+                retriggered_locations_log
+            );
+        }
+
+        span!(Level::INFO, "retrigger_scan_complete").in_scope(|| {
+            tracing::info!(
+                retriggered_count = retriggered_entrypoints.len(),
+                storage_locations_scanned = storage_locations_scanned,
+                "DCI: Retrigger detection completed"
+            );
+        });
 
         if !retriggered_entrypoints.is_empty() {
             let retrigger_log: Vec<String> = retriggered_entrypoints
@@ -1004,11 +1049,8 @@ mod tests {
         gateway
             .expect_get_tokens()
             .return_once(move |_, _, _, _, _| {
-                Box::pin(async move { 
-                    Ok(tycho_common::storage::WithTotal { 
-                        entity: Vec::new(), 
-                        total: Some(0) 
-                    }) 
+                Box::pin(async move {
+                    Ok(tycho_common::storage::WithTotal { entity: Vec::new(), total: Some(0) })
                 })
             });
 
@@ -1257,7 +1299,10 @@ mod tests {
                         AccountDelta::new(
                             Chain::Ethereum,
                             Bytes::from("0x02"),
-                            HashMap::from([(Bytes::from("0x22"), Some(Bytes::from("0x22")))]),
+                            HashMap::from([
+                                (Bytes::from("0x01"), Some(Bytes::from("0x01"))),
+                                (Bytes::from("0x22"), Some(Bytes::from("0x22"))),
+                            ]),
                             None,
                             None,
                             ChangeType::Update,
@@ -1325,7 +1370,7 @@ mod tests {
             });
 
         // Should only be called for new accounts, so account 0x01 and 0x11 are ignored because
-        // already indexed.
+        // already indexed. Both 0x05 and 0x55 are accessed by the traced entrypoints.
         account_extractor
             .expect_get_accounts_at_block()
             .with(
@@ -1334,19 +1379,19 @@ mod tests {
                     requests.len() == 2 &&
                         requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x55")) &&
+                            .any(|r| r.address == Bytes::from("0x05")) &&
                         requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x05"))
+                            .any(|r| r.address == Bytes::from("0x55"))
                 }),
             )
             .return_once(move |_, _| {
                 Ok(HashMap::from([
                     (
-                        Bytes::from("0x55"),
+                        Bytes::from("0x05"),
                         AccountDelta::new(
                             Chain::Ethereum,
-                            Bytes::from("0x55"),
+                            Bytes::from("0x05"),
                             HashMap::new(),
                             None,
                             None,
@@ -1354,10 +1399,10 @@ mod tests {
                         ),
                     ),
                     (
-                        Bytes::from("0x05"),
+                        Bytes::from("0x55"),
                         AccountDelta::new(
                             Chain::Ethereum,
-                            Bytes::from("0x05"),
+                            Bytes::from("0x55"),
                             HashMap::new(),
                             None,
                             None,
@@ -1386,6 +1431,18 @@ mod tests {
         expected_block_changes.txs_with_update = vec![TxWithChanges {
             tx: get_transaction(1),
             account_deltas: HashMap::from([
+                // Account 0x01 has the storage update that triggered the retrigger
+                (
+                    Bytes::from("0x01"),
+                    AccountDelta::new(
+                        Chain::Ethereum,
+                        Bytes::from("0x01"),
+                        HashMap::from([(Bytes::from("0x01"), Some(Bytes::from("0xabcd")))]),
+                        None,
+                        None,
+                        ChangeType::Update,
+                    ),
+                ),
                 // Two new accounts are detected in the re-tracing
                 (
                     Bytes::from("0x05"),
@@ -1468,27 +1525,34 @@ mod tests {
                         requests.len() == 1 &&
                             requests[0].address == token_address &&
                             requests[0].slots.is_some() &&
-                            requests[0].slots.as_ref().unwrap().len() == 1 &&
-                            requests[0].slots.as_ref().unwrap().contains(&Bytes::from(0x99_u8).lpad(32, 0))
+                            requests[0]
+                                .slots
+                                .as_ref()
+                                .unwrap()
+                                .len() ==
+                                1 &&
+                            requests[0]
+                                .slots
+                                .as_ref()
+                                .unwrap()
+                                .contains(&Bytes::from(0x99_u8).lpad(32, 0))
                     }
                 }),
             )
             .return_once({
                 let token_address = token_address.clone();
                 move |_, _| {
-                    Ok(HashMap::from([
-                        (
+                    Ok(HashMap::from([(
+                        token_address.clone(),
+                        AccountDelta::new(
+                            Chain::Ethereum,
                             token_address.clone(),
-                            AccountDelta::new(
-                                Chain::Ethereum,
-                                token_address.clone(),
-                                HashMap::new(),
-                                None,
-                                None,
-                                ChangeType::Update,
-                            ),
+                            HashMap::new(),
+                            None,
+                            None,
+                            ChangeType::Update,
                         ),
-                    ]))
+                    )]))
                 }
             });
 
@@ -1503,7 +1567,9 @@ mod tests {
         dci.initialize().await.unwrap();
 
         // Add the token to the cache
-        dci.cache.erc20_addresses.insert_permanent(token_address.clone(), true);
+        dci.cache
+            .erc20_addresses
+            .insert_permanent(token_address.clone(), true);
 
         let mut block_changes = get_block_changes_with_token(token_address.clone());
         dci.process_block_update(&mut block_changes)
@@ -1521,7 +1587,8 @@ mod tests {
         let mut entrypoint_tracer = MockEntryPointTracer::new();
 
         // Use the UniswapV4 pool manager (blacklisted address)
-        let blacklisted_address = Bytes::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90").unwrap();
+        let blacklisted_address =
+            Bytes::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90").unwrap();
 
         // Clone addresses for use in different closures
         let blacklisted_address_for_trace = blacklisted_address.clone();
@@ -1556,24 +1623,31 @@ mod tests {
                     requests.len() == 1 &&
                         requests[0].address == blacklisted_address_for_predicate &&
                         requests[0].slots.is_some() &&
-                        requests[0].slots.as_ref().unwrap().len() == 1 &&
-                        requests[0].slots.as_ref().unwrap().contains(&Bytes::from(0x99_u8).lpad(32, 0))
+                        requests[0]
+                            .slots
+                            .as_ref()
+                            .unwrap()
+                            .len() ==
+                            1 &&
+                        requests[0]
+                            .slots
+                            .as_ref()
+                            .unwrap()
+                            .contains(&Bytes::from(0x99_u8).lpad(32, 0))
                 }),
             )
             .return_once(move |_, _| {
-                Ok(HashMap::from([
-                    (
-                        blacklisted_address_for_return1.clone(),
-                        AccountDelta::new(
-                            Chain::Ethereum,
-                            blacklisted_address_for_return2,
-                            HashMap::new(),
-                            None,
-                            None,
-                            ChangeType::Update,
-                        ),
+                Ok(HashMap::from([(
+                    blacklisted_address_for_return1.clone(),
+                    AccountDelta::new(
+                        Chain::Ethereum,
+                        blacklisted_address_for_return2,
+                        HashMap::new(),
+                        None,
+                        None,
+                        ChangeType::Update,
                     ),
-                ]))
+                )]))
             });
 
         let mut dci = DynamicContractIndexer::new(
@@ -1640,19 +1714,17 @@ mod tests {
                 }),
             )
             .return_once(move |_, _| {
-                Ok(HashMap::from([
-                    (
-                        normal_address_for_return1.clone(),
-                        AccountDelta::new(
-                            Chain::Ethereum,
-                            normal_address_for_return2,
-                            HashMap::new(),
-                            None,
-                            None,
-                            ChangeType::Update,
-                        ),
+                Ok(HashMap::from([(
+                    normal_address_for_return1.clone(),
+                    AccountDelta::new(
+                        Chain::Ethereum,
+                        normal_address_for_return2,
+                        HashMap::new(),
+                        None,
+                        None,
+                        ChangeType::Update,
                     ),
-                ]))
+                )]))
             });
 
         let mut dci = DynamicContractIndexer::new(
@@ -1693,17 +1765,21 @@ mod tests {
         // Set up addresses in different categories
         let token_address = Bytes::from("0xA0b86991c6218a36c1d19D4a2e9Eb0cE3606eB48"); // USDC
         let normal_address = Bytes::from("0x1234567890123456789012345678901234567890");
-        
+
         // Add token to cache
-        dci.cache.erc20_addresses.insert_permanent(token_address.clone(), true);
-        
+        dci.cache
+            .erc20_addresses
+            .insert_permanent(token_address.clone(), true);
+
         // Add tracked contracts with specific slots
-        let tracked_slots = HashSet::from([
-            Bytes::from(0x01_u8).lpad(32, 0),
-            Bytes::from(0x02_u8).lpad(32, 0),
-        ]);
-        dci.cache.tracked_contracts.insert_permanent(token_address.clone(), Some(tracked_slots.clone()));
-        dci.cache.tracked_contracts.insert_permanent(normal_address.clone(), Some(tracked_slots.clone()));
+        let tracked_slots =
+            HashSet::from([Bytes::from(0x01_u8).lpad(32, 0), Bytes::from(0x02_u8).lpad(32, 0)]);
+        dci.cache
+            .tracked_contracts
+            .insert_permanent(token_address.clone(), Some(tracked_slots.clone()));
+        dci.cache
+            .tracked_contracts
+            .insert_permanent(normal_address.clone(), Some(tracked_slots.clone()));
 
         // Create block changes with storage updates
         let block_changes = BlockChanges::new(
@@ -1713,39 +1789,46 @@ mod tests {
             3,
             false,
             vec![],
-            vec![
-                TxWithStorageChanges {
-                    tx: get_transaction(1),
-                    storage_changes: HashMap::from([
-                        // Token address - should have slots filtered
-                        (
-                            token_address.clone(),
-                            HashMap::from([
-                                (Bytes::from(0x01_u8).lpad(32, 0), Bytes::from(0x100_u16).lpad(32, 0)), // Should be kept
-                                (Bytes::from(0x03_u8).lpad(32, 0), Bytes::from(0x300_u16).lpad(32, 0)), // Should be filtered out
-                            ]),
-                        ),
-                        // Normal address - should not have slots filtered
-                        (
-                            normal_address.clone(),
-                            HashMap::from([
-                                (Bytes::from(0x01_u8).lpad(32, 0), Bytes::from(0x100_u16).lpad(32, 0)), // Should be kept
-                                (Bytes::from(0x03_u8).lpad(32, 0), Bytes::from(0x300_u16).lpad(32, 0)), // Should be kept
-                            ]),
-                        ),
-                    ]),
-                },
-            ],
+            vec![TxWithStorageChanges {
+                tx: get_transaction(1),
+                storage_changes: HashMap::from([
+                    // Token address - should have slots filtered
+                    (
+                        token_address.clone(),
+                        HashMap::from([
+                            (Bytes::from(0x01_u8).lpad(32, 0), Bytes::from(0x100_u16).lpad(32, 0)), /* Should be kept */
+                            (Bytes::from(0x03_u8).lpad(32, 0), Bytes::from(0x300_u16).lpad(32, 0)), /* Should be filtered out */
+                        ]),
+                    ),
+                    // Normal address - should not have slots filtered
+                    (
+                        normal_address.clone(),
+                        HashMap::from([
+                            (Bytes::from(0x01_u8).lpad(32, 0), Bytes::from(0x100_u16).lpad(32, 0)), /* Should be kept */
+                            (Bytes::from(0x03_u8).lpad(32, 0), Bytes::from(0x300_u16).lpad(32, 0)), /* Should be kept */
+                        ]),
+                    ),
+                ]),
+            }],
         );
 
-        let tracked_updates = dci.extract_tracked_updates(&block_changes).unwrap();
+        let tracked_updates = dci
+            .extract_tracked_updates(&block_changes)
+            .unwrap();
 
         // Verify token address has filtered slots (only slot 0x01 should remain)
         if let Some(token_tx) = tracked_updates.get(&get_transaction(1).hash) {
-            if let Some(token_delta) = token_tx.account_deltas.get(&token_address) {
+            if let Some(token_delta) = token_tx
+                .account_deltas
+                .get(&token_address)
+            {
                 assert_eq!(token_delta.slots.len(), 1);
-                assert!(token_delta.slots.contains_key(&Bytes::from(0x01_u8).lpad(32, 0)));
-                assert!(!token_delta.slots.contains_key(&Bytes::from(0x03_u8).lpad(32, 0)));
+                assert!(token_delta
+                    .slots
+                    .contains_key(&Bytes::from(0x01_u8).lpad(32, 0)));
+                assert!(!token_delta
+                    .slots
+                    .contains_key(&Bytes::from(0x03_u8).lpad(32, 0)));
             } else {
                 panic!("Token delta not found");
             }
@@ -1755,10 +1838,17 @@ mod tests {
 
         // Verify normal address has all slots (both 0x01 and 0x03 should remain)
         if let Some(normal_tx) = tracked_updates.get(&get_transaction(1).hash) {
-            if let Some(normal_delta) = normal_tx.account_deltas.get(&normal_address) {
+            if let Some(normal_delta) = normal_tx
+                .account_deltas
+                .get(&normal_address)
+            {
                 assert_eq!(normal_delta.slots.len(), 2);
-                assert!(normal_delta.slots.contains_key(&Bytes::from(0x01_u8).lpad(32, 0)));
-                assert!(normal_delta.slots.contains_key(&Bytes::from(0x03_u8).lpad(32, 0)));
+                assert!(normal_delta
+                    .slots
+                    .contains_key(&Bytes::from(0x01_u8).lpad(32, 0)));
+                assert!(normal_delta
+                    .slots
+                    .contains_key(&Bytes::from(0x03_u8).lpad(32, 0)));
             } else {
                 panic!("Normal delta not found");
             }
@@ -1771,9 +1861,7 @@ mod tests {
     fn get_tracing_result_with_address(address: &Address) -> TracingResult {
         TracingResult::new(
             HashSet::new(),
-            HashMap::from([
-                (address.clone(), HashSet::from([Bytes::from(0x99_u8).lpad(32, 0)])),
-            ]),
+            HashMap::from([(address.clone(), HashSet::from([Bytes::from(0x99_u8).lpad(32, 0)]))]),
         )
     }
 
@@ -1789,18 +1877,14 @@ mod tests {
             false,
             vec![TxWithChanges {
                 tx,
-                entrypoints: HashMap::from([
-                    (
-                        "component_1".to_string(),
-                        HashSet::from([get_entrypoint(9)]),
-                    )
-                ]),
-                entrypoint_params: HashMap::from([
-                    (
-                        "entrypoint_9".to_string(),
-                        HashSet::from([(get_tracing_params(9), None)]),
-                    )
-                ]),
+                entrypoints: HashMap::from([(
+                    "component_1".to_string(),
+                    HashSet::from([get_entrypoint(9)]),
+                )]),
+                entrypoint_params: HashMap::from([(
+                    "entrypoint_9".to_string(),
+                    HashSet::from([(get_tracing_params(9), None)]),
+                )]),
                 ..Default::default()
             }],
             Vec::new(),
