@@ -1,21 +1,23 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     str::FromStr,
+    sync::Arc,
 };
 
-use alloy::rpc::client::{ClientBuilder, RpcClient};
-use async_trait::async_trait;
-use ethers::{
-    prelude::{spoof, Middleware},
-    providers::{Http, Provider},
-    types::{
-        Address as EthersAddress, BlockId, Bytes as EthersBytes, GethDebugBuiltInTracerType,
-        GethDebugTracerType, GethDebugTracingCallOptions, GethDebugTracingOptions, GethTrace,
-        GethTraceFrame, NameOrAddress, PreStateFrame, PreStateMode, TransactionRequest, H160, H256,
-        U256,
+use alloy::{
+    primitives::{
+        map::FbBuildHasher, Address as AlloyAddress, BlockHash as AlloyBlockHash,
+        Bytes as AlloyBytes, FixedBytes, U256,
     },
+    providers::{Provider, ProviderBuilder},
+    rpc::types::{state::AccountOverride, BlockId, TransactionInput, TransactionRequest},
 };
-use serde_json::{json, Value};
+use alloy_rpc_types_trace::geth::{
+    GethDebugBuiltInTracerType, GethDebugTracerConfig, GethDebugTracerType,
+    GethDebugTracingOptions, GethDefaultTracingOptions, GethTrace, PreStateFrame, PreStateMode,
+};
+use async_trait::async_trait;
+use serde_json::{json, value::to_raw_value, Value};
 use tycho_common::{
     keccak256,
     models::{
@@ -33,19 +35,17 @@ use super::{build_state_overrides, AccessListResult};
 use crate::{BytesCodec, RPCError};
 
 pub struct EVMEntrypointService {
-    provider: Provider<Http>,
-    alloy_client: RpcClient,
+    provider: Arc<dyn Provider>,
 }
 
 impl EVMEntrypointService {
     pub fn try_from_url(rpc_url: &str) -> Result<Self, RPCError> {
         let url = url::Url::parse(rpc_url)
             .map_err(|_| RPCError::SetupError("Invalid URL".to_string()))?;
-        Ok(Self {
-            provider: Provider::<Http>::try_from(rpc_url)
-                .map_err(|e| RPCError::SetupError(e.to_string()))?,
-            alloy_client: ClientBuilder::default().http(url),
-        })
+
+        let provider = Arc::new(ProviderBuilder::new().connect_http(url));
+
+        Ok(Self { provider })
     }
 
     async fn trace_call(
@@ -58,55 +58,127 @@ impl EVMEntrypointService {
         let caller = params
             .caller
             .as_ref()
-            .map(H160::from_bytes);
-        self.provider
-            .debug_trace_call(
-                TransactionRequest {
-                    to: Some(NameOrAddress::Address(H160::from_bytes(target))),
-                    from: caller,
-                    data: Some(EthersBytes::from(params.calldata.to_vec())),
-                    ..Default::default()
-                },
-                Some(BlockId::Hash(H256::from_bytes(block_hash))),
-                GethDebugTracingCallOptions {
-                    tracing_options: GethDebugTracingOptions {
-                        tracer: Some(GethDebugTracerType::BuiltInTracer(tracer_type)),
-                        enable_return_data: Some(true),
-                        ..Default::default()
+            .map(|addr| AlloyAddress::from_slice(addr.as_ref()));
+
+        let tx_request = TransactionRequest {
+            to: Some(AlloyAddress::from_slice(target.as_ref()).into()),
+            from: caller,
+            input: TransactionInput::new(AlloyBytes::from(params.calldata.to_vec())),
+            ..Default::default()
+        };
+
+        let block_id = BlockId::Hash(AlloyBlockHash::from_slice(block_hash.as_ref()).into());
+
+        // Handle state overrides if present
+        let state_overrides = params
+            .state_overrides
+            .as_ref()
+            .map(|overrides| {
+                let mut state_map = HashMap::new();
+
+                for (address, override_data) in overrides.iter() {
+                    let mut account_override = AccountOverride::default();
+
+                    // Handle storage overrides
+                    if let Some(storage_override) = &override_data.slots {
+                        let storage_map: HashMap<
+                            FixedBytes<32>,
+                            FixedBytes<32>,
+                            FbBuildHasher<32>,
+                        > = match storage_override {
+                            StorageOverride::Diff(slots) | StorageOverride::Replace(slots) => slots
+                                .iter()
+                                .map(|(k, v)| {
+                                    (
+                                        FixedBytes::from(
+                                            k.as_ref()
+                                                .try_into()
+                                                .unwrap_or([0u8; 32]),
+                                        ),
+                                        FixedBytes::from(
+                                            v.as_ref()
+                                                .try_into()
+                                                .unwrap_or([0u8; 32]),
+                                        ),
+                                    )
+                                })
+                                .collect(),
+                        };
+
+                        match storage_override {
+                            StorageOverride::Diff(_) => {
+                                account_override.state_diff = Some(storage_map);
+                            }
+                            StorageOverride::Replace(_) => {
+                                account_override.state = Some(storage_map);
+                            }
+                        }
+                    }
+
+                    // Handle balance override
+                    if let Some(balance) = &override_data.native_balance {
+                        account_override.balance = Some(U256::from_be_bytes(
+                            balance
+                                .as_ref()
+                                .try_into()
+                                .unwrap_or([0u8; 32]),
+                        ));
+                    }
+
+                    // Handle code override
+                    if let Some(code) = &override_data.code {
+                        account_override.code = Some(AlloyBytes::from(code.to_vec()));
+                    }
+
+                    state_map.insert(AlloyAddress::from_slice(address.as_ref()), account_override);
+                }
+
+                state_map
+            });
+
+        // Create tracing options
+        let tracing_options = GethDebugTracingOptions {
+            config: GethDefaultTracingOptions::default().enable_return_data(),
+            tracer: Some(GethDebugTracerType::BuiltInTracer(tracer_type)),
+            tracer_config: GethDebugTracerConfig::default(),
+            timeout: None,
+        };
+
+        // Create the parameters array manually to get the correct JSON structure
+        let params_array = match state_overrides {
+            Some(overrides) => {
+                // Create a custom tracing options object with state overrides
+                let mut tracing_with_overrides = json!({
+                    "enableReturnData": true,
+                    "tracer": match tracer_type {
+                        GethDebugBuiltInTracerType::PreStateTracer => "prestateTracer",
+                        GethDebugBuiltInTracerType::CallTracer => "callTracer",
+                        GethDebugBuiltInTracerType::FourByteTracer => "4byteTracer",
+                        GethDebugBuiltInTracerType::NoopTracer => "noopTracer",
+                        _ => "prestateTracer", // default fallback
                     },
-                    state_overrides: params
-                        .state_overrides
-                        .as_ref()
-                        .map(|s| {
-                            let mut state = spoof::state();
-                            s.iter()
-                                .for_each(|(address, overrides)| {
-                                    let account = state.account(H160::from_slice(address.as_ref()));
-                                    account.storage = match overrides.slots.as_ref() {
-                                        Some(StorageOverride::Diff(slots)) => {
-                                            Some(spoof::Storage::Diff(convert_storage(slots)))
-                                        }
-                                        Some(StorageOverride::Replace(slots)) => {
-                                            Some(spoof::Storage::Replace(convert_storage(slots)))
-                                        }
-                                        _ => None,
-                                    };
-                                    account.balance = overrides
-                                        .native_balance
-                                        .as_ref()
-                                        .map(|b| U256::from_big_endian(b.as_ref()));
-                                    account.code = overrides
-                                        .code
-                                        .as_ref()
-                                        .map(|c| ethers::types::Bytes::from(c.to_vec()));
-                                });
-                            state
-                        }),
-                    ..Default::default()
-                },
-            )
+                    "stateOverrides": overrides
+                });
+
+                json!([tx_request, block_id, tracing_with_overrides])
+            }
+            None => {
+                json!([tx_request, block_id, tracing_options])
+            }
+        };
+
+        // Use debug_trace_call with proper parameters
+        let params = to_raw_value(&params_array)
+            .map_err(|e| RPCError::UnknownError(format!("Failed to serialize params: {}", e)))?;
+
+        self.provider
+            .raw_request_dyn("debug_traceCall".into(), &params)
             .await
-            .map_err(RPCError::RequestError)
+            .map_err(|e| RPCError::UnknownError(format!("RPC request failed: {}", e)))
+            .and_then(|value| {
+                serde_json::from_str(&value.to_string())
+                    .map_err(|e| RPCError::UnknownError(format!("Failed to parse trace: {}", e)))
+            })
     }
 
     async fn get_access_list(
@@ -142,23 +214,22 @@ impl EVMEntrypointService {
             json!([tx_params, block_hash.to_string(), Value::Object(state_overrides)])
         };
 
+        let params = to_raw_value(&rpc_params)
+            .map_err(|e| RPCError::UnknownError(format!("Failed to serialize params: {}", e)))?;
+
         let res: AccessListResult = self
-            .alloy_client
-            .request("eth_createAccessList", rpc_params)
+            .provider
+            .raw_request_dyn("eth_createAccessList".into(), &params)
             .await
-            .map_err(|e| {
-                RPCError::UnknownError(format!("eth_createAccessList call failed: {e}"))
+            .map_err(|e| RPCError::UnknownError(format!("eth_createAccessList call failed: {e}")))
+            .and_then(|value| {
+                serde_json::from_str(&value.to_string()).map_err(|e| {
+                    RPCError::UnknownError(format!("Failed to parse access list: {}", e))
+                })
             })?;
 
         res.try_get_accessed_slots()
     }
-}
-
-fn convert_storage(slots: &BTreeMap<Bytes, Bytes>) -> HashMap<H256, H256> {
-    slots
-        .iter()
-        .map(|(k, v)| (H256::from_slice(k.as_ref()), H256::from_slice(v.as_ref())))
-        .collect()
 }
 
 #[async_trait]
@@ -182,8 +253,8 @@ impl EntryPointTracer for EVMEntrypointService {
                         )
                         .await?;
 
-                    // eth_createAccessList excludes the target address from the access list unless
-                    // its state is accessed. This line ensures that the target
+                    // eth_createAccessList excludes the target address from the access list
+                    // unless its state is accessed. This line ensures that the target
                     // address is included in the access list even if its state is not accessed.
                     // Source: https://github.com/ethereum/go-ethereum/blob/51342136fadf2972320cd70badb1336efe3259e1/internal/ethapi/api.go#L1180C2-L1180C87
                     if !accessed_slots.contains_key(&entry_point.entry_point.target) {
@@ -191,10 +262,7 @@ impl EntryPointTracer for EVMEntrypointService {
                             .insert(entry_point.entry_point.target.clone(), HashSet::new());
                     }
 
-                    let called_addresses: Vec<EthersAddress> = accessed_slots
-                        .keys()
-                        .map(|addr| H160::from_slice(addr.as_ref()))
-                        .collect();
+                    let called_addresses: Vec<Address> = accessed_slots.keys().cloned().collect();
 
                     // Second call to get the retriggers
                     let pre_state_trace = self
@@ -210,26 +278,25 @@ impl EntryPointTracer for EVMEntrypointService {
                     // involve using the structure of callframes. So basically iterate the call
                     // tree in a parent child manner then search the
                     // childs address in the prestate of parent.
-                    let retriggers = if let GethTrace::Known(GethTraceFrame::PreStateTracer(
-                        PreStateFrame::Default(PreStateMode(frame)),
+                    let retriggers = if let GethTrace::PreStateTracer(PreStateFrame::Default(
+                        PreStateMode(frame),
                     )) = pre_state_trace
                     {
                         let mut retriggers = HashSet::new();
                         for (address, account) in frame.iter() {
-                            if let Some(storage) = &account.storage {
-                                for (slot, val) in storage.iter() {
-                                    for call_address in called_addresses.iter() {
-                                        let address_bytes = call_address.as_bytes();
-                                        let value_bytes = val.as_bytes();
-                                        if value_bytes
-                                            .windows(address_bytes.len())
-                                            .any(|window| window == address_bytes)
-                                        {
-                                            retriggers.insert((
-                                                (*address).to_bytes(),
-                                                (*slot).to_bytes(),
-                                            ));
-                                        }
+                            let storage = &account.storage;
+                            for (slot, val) in storage.iter() {
+                                for call_address in called_addresses.iter() {
+                                    let address_bytes = call_address.as_ref();
+                                    let value_bytes: &[u8] = val.as_ref();
+                                    if value_bytes
+                                        .windows(address_bytes.len())
+                                        .any(|window| window == address_bytes)
+                                    {
+                                        retriggers.insert((
+                                            tycho_common::Bytes::from(address.as_ref() as &[u8]),
+                                            tycho_common::Bytes::from(slot.as_ref() as &[u8]),
+                                        ));
                                     }
                                 }
                             }
