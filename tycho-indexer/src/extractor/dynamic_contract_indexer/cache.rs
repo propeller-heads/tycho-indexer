@@ -69,7 +69,8 @@ impl DCICache {
         self.tracked_contracts
             .revert_to(block)?;
         self.erc20_addresses.revert_to(block)?;
-        self.blacklisted_addresses.revert_to(block)?;
+        self.blacklisted_addresses
+            .revert_to(block)?;
 
         Ok(())
     }
