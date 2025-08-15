@@ -35,7 +35,7 @@ use super::{build_state_overrides, AccessListResult};
 use crate::{BytesCodec, RPCError};
 
 pub struct EVMEntrypointService {
-    provider: Arc<dyn Provider>,
+    rpc_url: url::Url,
 }
 
 impl EVMEntrypointService {
@@ -43,18 +43,47 @@ impl EVMEntrypointService {
         let url = url::Url::parse(rpc_url)
             .map_err(|_| RPCError::SetupError("Invalid URL".to_string()))?;
 
-        let provider = Arc::new(ProviderBuilder::new().connect_http(url));
-
-        Ok(Self { provider })
+        Ok(Self { rpc_url: url })
     }
 
-    async fn trace_call(
-        &self,
+    fn create_access_list_params(
         target: &Address,
         params: &RPCTracerParams,
         block_hash: &BlockHash,
-        tracer_type: GethDebugBuiltInTracerType,
-    ) -> Result<GethTrace, RPCError> {
+    ) -> Value {
+        let mut tx_params = json!({
+            "to": target.to_string(),
+            "data": params.calldata.to_string()
+        });
+
+        if let Some(caller) = &params.caller {
+            tx_params["from"] = json!(caller.to_string());
+        }
+
+        if params.state_overrides.is_none() ||
+            params
+                .state_overrides
+                .as_ref()
+                .unwrap_or(&BTreeMap::new())
+                .is_empty()
+        {
+            json!([tx_params, block_hash.to_string()])
+        } else {
+            let state_overrides = build_state_overrides(
+                params
+                    .state_overrides
+                    .as_ref()
+                    .unwrap_or(&BTreeMap::new()),
+            );
+            json!([tx_params, block_hash.to_string(), Value::Object(state_overrides)])
+        }
+    }
+
+    fn create_trace_call_params(
+        target: &Address,
+        params: &RPCTracerParams,
+        block_hash: &BlockHash,
+    ) -> Value {
         let caller = params
             .caller
             .as_ref()
@@ -69,7 +98,6 @@ impl EVMEntrypointService {
 
         let block_id = BlockId::Hash(AlloyBlockHash::from_slice(block_hash.as_ref()).into());
 
-        // Handle state overrides if present
         let state_overrides = params
             .state_overrides
             .as_ref()
@@ -136,99 +164,120 @@ impl EVMEntrypointService {
                 state_map
             });
 
-        // Create tracing options
-        let tracing_options = GethDebugTracingOptions {
-            config: GethDefaultTracingOptions::default().enable_return_data(),
-            tracer: Some(GethDebugTracerType::BuiltInTracer(tracer_type)),
-            tracer_config: GethDebugTracerConfig::default(),
-            timeout: None,
-        };
-
-        // Create the parameters array manually to get the correct JSON structure
-        let params_array = match state_overrides {
+        match state_overrides {
             Some(overrides) => {
-                // Create a custom tracing options object with state overrides
+                // Need to manually construct this because Alloy misses `stateOverrides` in their
+                // structs.
                 let mut tracing_with_overrides = json!({
                     "enableReturnData": true,
-                    "tracer": match tracer_type {
-                        GethDebugBuiltInTracerType::PreStateTracer => "prestateTracer",
-                        GethDebugBuiltInTracerType::CallTracer => "callTracer",
-                        GethDebugBuiltInTracerType::FourByteTracer => "4byteTracer",
-                        GethDebugBuiltInTracerType::NoopTracer => "noopTracer",
-                        _ => "prestateTracer", // default fallback
-                    },
+                    "tracer": "prestateTracer",
                     "stateOverrides": overrides
                 });
 
                 json!([tx_request, block_id, tracing_with_overrides])
             }
             None => {
+                let tracing_options = GethDebugTracingOptions {
+                    config: GethDefaultTracingOptions::default().enable_return_data(),
+                    tracer: Some(GethDebugTracerType::BuiltInTracer(
+                        GethDebugBuiltInTracerType::PreStateTracer,
+                    )),
+                    tracer_config: GethDebugTracerConfig::default(),
+                    timeout: None,
+                };
                 json!([tx_request, block_id, tracing_options])
             }
-        };
-
-        // Use debug_trace_call with proper parameters
-        let params = to_raw_value(&params_array)
-            .map_err(|e| RPCError::UnknownError(format!("Failed to serialize params: {}", e)))?;
-
-        self.provider
-            .raw_request_dyn("debug_traceCall".into(), &params)
-            .await
-            .map_err(|e| RPCError::UnknownError(format!("RPC request failed: {}", e)))
-            .and_then(|value| {
-                serde_json::from_str(&value.to_string())
-                    .map_err(|e| RPCError::UnknownError(format!("Failed to parse trace: {}", e)))
-            })
+        }
     }
 
-    async fn get_access_list(
+    async fn batch_trace_and_access_list(
         &self,
-        block_hash: &BlockHash,
         target: &Address,
         params: &RPCTracerParams,
-    ) -> Result<HashMap<Address, HashSet<Bytes>>, RPCError> {
-        let mut tx_params = json!({
-            "to": target.to_string(),
-            "data": params.calldata.to_string()
-        });
+        block_hash: &BlockHash,
+    ) -> Result<(HashMap<Address, HashSet<Bytes>>, GethTrace), RPCError> {
+        let access_list_params = Self::create_access_list_params(target, params, block_hash);
+        let trace_call_params = Self::create_trace_call_params(target, params, block_hash);
 
-        if let Some(caller) = &params.caller {
-            tx_params["from"] = json!(caller.to_string());
+        // Create batch request
+        let batch_request = json!([
+            {
+                "jsonrpc": "2.0",
+                "method": "eth_createAccessList",
+                "params": access_list_params,
+                "id": 1
+            },
+            {
+                "jsonrpc": "2.0",
+                "method": "debug_traceCall",
+                "params": trace_call_params,
+                "id": 2
+            }
+        ]);
+
+        let batch_params = to_raw_value(&batch_request).map_err(|e| {
+            RPCError::UnknownError(format!("Failed to serialize batch params: {}", e))
+        })?;
+
+        // Send batch request - using HTTP POST directly for batch requests
+        let client = reqwest::Client::new();
+        let response = client
+            .post(self.rpc_url.as_str())
+            .header("Content-Type", "application/json")
+            .body(batch_params.get().to_string())
+            .send()
+            .await
+            .map_err(|e| RPCError::UnknownError(format!("HTTP request failed: {}", e)))?;
+
+        let batch_response: Vec<Value> = response.json().await.map_err(|e| {
+            RPCError::UnknownError(format!("Failed to parse batch response: {}", e))
+        })?;
+
+        if batch_response.len() != 2 {
+            return Err(RPCError::UnknownError("Invalid batch response length".to_string()));
         }
 
-        let rpc_params = if params.state_overrides.is_none() ||
-            params
-                .state_overrides
-                .as_ref()
-                .unwrap_or(&BTreeMap::new())
-                .is_empty()
-        {
-            json!([tx_params, block_hash.to_string()])
-        } else {
-            let state_overrides = build_state_overrides(
-                params
-                    .state_overrides
-                    .as_ref()
-                    .unwrap_or(&BTreeMap::new()),
-            );
-            json!([tx_params, block_hash.to_string(), Value::Object(state_overrides)])
-        };
+        // Parse access list response
+        let access_list_result = &batch_response[0];
+        if let Some(error) = access_list_result.get("error") {
+            return Err(RPCError::UnknownError(format!("eth_createAccessList failed: {}", error)));
+        }
 
-        let params = to_raw_value(&rpc_params)
-            .map_err(|e| RPCError::UnknownError(format!("Failed to serialize params: {}", e)))?;
-
-        let res: AccessListResult = self
-            .provider
-            .raw_request_dyn("eth_createAccessList".into(), &params)
-            .await
-            .map_err(|e| RPCError::UnknownError(format!("eth_createAccessList call failed: {e}")))
-            .and_then(|value| {
-                serde_json::from_str(&value.to_string()).map_err(|e| {
-                    RPCError::UnknownError(format!("Failed to parse access list: {}", e))
-                })
+        let access_list_data = access_list_result
+            .get("result")
+            .ok_or_else(|| {
+                RPCError::UnknownError("Missing result in access list response".to_string())
             })?;
 
-        res.try_get_accessed_slots()
+        let access_list: AccessListResult = serde_json::from_value(access_list_data.clone())
+            .map_err(|e| RPCError::UnknownError(format!("Failed to parse access list: {}", e)))?;
+
+        let mut accessed_slots = access_list.try_get_accessed_slots()?;
+
+        // eth_createAccessList excludes the target address from the access list unless
+        // its state is accessed. This line ensures that the target
+        // address is included in the access list even if its state is not accessed.
+        // Source: https://github.com/ethereum/go-ethereum/blob/51342136fadf2972320cd70badb1336efe3259e1/internal/ethapi/api.go#L1180C2-L1180C87
+        if !accessed_slots.contains_key(target) {
+            accessed_slots.insert(target.clone(), HashSet::new());
+        }
+
+        // Parse trace response
+        let trace_result = &batch_response[1];
+        if let Some(error) = trace_result.get("error") {
+            return Err(RPCError::UnknownError(format!("debug_traceCall failed: {}", error)));
+        }
+
+        let trace_data = trace_result
+            .get("result")
+            .ok_or_else(|| {
+                RPCError::UnknownError("Missing result in trace response".to_string())
+            })?;
+
+        let pre_state_trace: GethTrace = serde_json::from_value(trace_data.clone())
+            .map_err(|e| RPCError::UnknownError(format!("Failed to parse trace: {}", e)))?;
+
+        Ok((accessed_slots, pre_state_trace))
     }
 }
 
@@ -245,34 +294,16 @@ impl EntryPointTracer for EVMEntrypointService {
         for entry_point in &entry_points {
             match &entry_point.params {
                 TracingParams::RPCTracer(ref rpc_entry_point) => {
-                    let mut accessed_slots = self
-                        .get_access_list(
-                            &block_hash,
+                    // Use batched RPC call for both access list and trace
+                    let (accessed_slots, pre_state_trace) = self
+                        .batch_trace_and_access_list(
                             &entry_point.entry_point.target,
                             rpc_entry_point,
+                            &block_hash,
                         )
                         .await?;
-
-                    // eth_createAccessList excludes the target address from the access list
-                    // unless its state is accessed. This line ensures that the target
-                    // address is included in the access list even if its state is not accessed.
-                    // Source: https://github.com/ethereum/go-ethereum/blob/51342136fadf2972320cd70badb1336efe3259e1/internal/ethapi/api.go#L1180C2-L1180C87
-                    if !accessed_slots.contains_key(&entry_point.entry_point.target) {
-                        accessed_slots
-                            .insert(entry_point.entry_point.target.clone(), HashSet::new());
-                    }
 
                     let called_addresses: Vec<Address> = accessed_slots.keys().cloned().collect();
-
-                    // Second call to get the retriggers
-                    let pre_state_trace = self
-                        .trace_call(
-                            &entry_point.entry_point.target,
-                            rpc_entry_point,
-                            &block_hash,
-                            GethDebugBuiltInTracerType::PreStateTracer,
-                        )
-                        .await?;
 
                     // Provides a very simplistic way of finding retriggers. A better way would
                     // involve using the structure of callframes. So basically iterate the call
@@ -294,8 +325,8 @@ impl EntryPointTracer for EVMEntrypointService {
                                         .any(|window| window == address_bytes)
                                     {
                                         retriggers.insert((
-                                            tycho_common::Bytes::from(address.as_ref() as &[u8]),
-                                            tycho_common::Bytes::from(slot.as_ref() as &[u8]),
+                                            Bytes::from(address.as_slice()),
+                                            Bytes::from(slot.as_slice()),
                                         ));
                                     }
                                 }
