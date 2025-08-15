@@ -639,10 +639,21 @@ where
         // Early stop if no hook-components are affected
         if swap_hook_components.is_empty() {
             debug!("No swap hook components found, delegating to inner DCI");
-            return self
-                .inner_dci
+            self.inner_dci
                 .process_block_update(block_changes)
-                .await;
+                .await?;
+            debug!("Inner DCI processing completed");
+
+            // 7. Handle finality for the cache
+            self.cache
+                .handle_finality(block_changes.finalized_block_height)
+                .map_err(|e| {
+                    error!("Failed to handle finality for cache: {e:?}");
+                    ExtractionError::Unknown(format!("Failed to handle finality for cache: {e:?}"))
+                })?;
+
+            info!("Block processing completed successfully");
+            return Ok(());
         }
 
         info!(
@@ -668,14 +679,6 @@ where
         );
 
         // 3. Process the components - collect metadata
-        let metadata_span = span!(
-            Level::INFO, 
-            "collect_metadata",
-            balance_only_count = components_needing_balance_only.len(),
-            full_processing_count = components_needing_full_processing.len()
-        );
-        let _metadata_guard = metadata_span.enter();
-
         let component_metadata = self
             .metadata_orchestrator
             .collect_metadata_for_block(
@@ -693,7 +696,6 @@ where
             })?;
 
         info!(metadata_count = component_metadata.len(), "Collected component metadata");
-        drop(_metadata_guard);
 
         // 3a. Process metadata errors and update component states
         self.process_metadata_errors(&component_metadata, &block_changes.block)?;
@@ -928,15 +930,11 @@ where
 
         // TODO: Is pruning implemented already?
         // 6. Delegate to standard DCI (handles tracing + pruning)
-        let dci_span = span!(Level::INFO, "inner_dci_processing");
-        let _dci_guard = dci_span.enter();
-
         self.inner_dci
             .process_block_update(block_changes)
             .await?;
 
-        drop(_dci_guard);
-        info!("Inner DCI processing completed");
+        debug!("Inner DCI processing completed");
 
         // 7. Handle finality for the cache
         self.cache
