@@ -289,12 +289,12 @@ where
                     .storage_source
                     .get_accounts_at_block(&block_changes.block, &storage_request)
                     .instrument(span!(
-                    Level::INFO,
-                    "dci_account_extraction",
-                    account_count = storage_request.len(),
-                    block_number = block_changes.block.number
-                ))
-                .await
+                        Level::INFO,
+                        "dci_account_extraction",
+                        account_count = storage_request.len(),
+                        block_number = block_changes.block.number
+                    ))
+                    .await
                 {
                     Ok(accounts) => break accounts,
                     Err(e) => {
@@ -611,6 +611,11 @@ where
             HashMap::new();
         let mut storage_locations_scanned = 0u64;
 
+        // Collect all locations that retriggered and the entrypoints they triggered (just
+        // EntryPoint)
+        let mut retriggered_locations: HashMap<(Address, StoreKey), Vec<EntryPoint>> =
+            HashMap::new();
+
         for tx_with_changes in tx_with_changes.iter() {
             for (account, contract_store) in tx_with_changes.storage_changes.iter() {
                 for key in contract_store.keys() {
@@ -618,31 +623,64 @@ where
                     let location = (account.clone(), key.clone());
                     // Check if this storage location triggers any entrypoints
                     if let Some(entrypoints) = self.cache.retriggers.get_all(location) {
-                        for entrypoint in entrypoints.into_iter().flatten() {
+                        for entrypoint_with_params in entrypoints.into_iter().flatten() {
                             // Only insert if we haven't seen this entrypoint before or if this tx
                             // is later
                             retriggered_entrypoints
-                                .entry(entrypoint.clone())
+                                .entry(entrypoint_with_params.clone())
                                 .and_modify(|entry_tx| {
                                     if entry_tx.index > tx_with_changes.tx.index {
                                         *entry_tx = &tx_with_changes.tx;
                                     }
                                 })
                                 .or_insert(&tx_with_changes.tx);
+
+                            // Collect the location and the entrypoint (not
+                            // EntryPointWithTracingParams)
+                            retriggered_locations
+                                .entry(location.clone())
+                                .or_default()
+                                .push(
+                                    entrypoint_with_params
+                                        .entry_point
+                                        .clone(),
+                                );
                         }
                     }
                 }
             }
         }
 
-        span!(Level::INFO, "retrigger_scan_complete")
-            .in_scope(|| {
-                tracing::info!(
-                    retriggered_count = retriggered_entrypoints.len(),
-                    storage_locations_scanned = storage_locations_scanned,
-                    "DCI: Retrigger detection completed"
-                );
-            });
+        // Log all retriggered locations and their entrypoints (just EntryPoint)
+        if !retriggered_locations.is_empty() {
+            let retriggered_locations_log: Vec<_> = retriggered_locations
+                .iter()
+                .map(|((address, key), entrypoints)| {
+                    format!(
+                        "location: ({}, {}), entrypoints: [{}]",
+                        address,
+                        hex::encode(key),
+                        entrypoints
+                            .iter()
+                            .map(|ep| ep.external_id.clone())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                })
+                .collect();
+            tracing::info!(
+                "DCI: Retriggered locations and entrypoints: {:?}",
+                retriggered_locations_log
+            );
+        }
+
+        span!(Level::INFO, "retrigger_scan_complete").in_scope(|| {
+            tracing::info!(
+                retriggered_count = retriggered_entrypoints.len(),
+                storage_locations_scanned = storage_locations_scanned,
+                "DCI: Retrigger detection completed"
+            );
+        });
 
         if !retriggered_entrypoints.is_empty() {
             let retrigger_log: Vec<String> = retriggered_entrypoints
