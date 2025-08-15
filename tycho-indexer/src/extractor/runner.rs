@@ -579,14 +579,15 @@ impl ExtractorBuilder {
                                 ))
                             })?;
                     // Use TRACE_RPC_URL if available, otherwise fall back to RPC_URL
-                    let trace_rpc_url = std::env::var("TRACE_RPC_URL")
-                        .unwrap_or_else(|_| rpc_url.to_string());
-                    
-                    let tracer = EVMEntrypointService::try_from_url(&trace_rpc_url).map_err(|err| {
-                        ExtractionError::Setup(format!(
-                            "Failed to create entrypoint tracer for {trace_rpc_url}: {err}"
-                        ))
-                    })?;
+                    let trace_rpc_url =
+                        std::env::var("TRACE_RPC_URL").unwrap_or_else(|_| rpc_url.to_string());
+
+                    let tracer =
+                        EVMEntrypointService::try_from_url(&trace_rpc_url).map_err(|err| {
+                            ExtractionError::Setup(format!(
+                                "Failed to create entrypoint tracer for {trace_rpc_url}: {err}"
+                            ))
+                        })?;
                     let mut base_dci = DynamicContractIndexer::new(
                         self.config.chain,
                         self.config.name.clone(),
