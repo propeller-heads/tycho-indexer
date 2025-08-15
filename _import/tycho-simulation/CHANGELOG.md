@@ -1,3 +1,15 @@
+## [0.147.0](https://github.com/propeller-heads/tycho-simulation/compare/0.146.0...0.147.0) (2025-08-15)
+
+
+### Features
+
+* Hashflow decoder ([6a1d355](https://github.com/propeller-heads/tycho-simulation/commit/6a1d3552ddd3f4648721d5a4c50f81be53de1275))
+
+
+### Bug Fixes
+
+* Prepend bebop/hashflow to component id before hashing ([7cce8a8](https://github.com/propeller-heads/tycho-simulation/commit/7cce8a84eacaafd8f266e37489fbccea743197bf))
+
 ## [0.146.0](https://github.com/propeller-heads/tycho-simulation/compare/0.145.0...0.146.0) (2025-08-13)
 
 
