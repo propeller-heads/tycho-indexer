@@ -14,8 +14,8 @@ contract HashflowUtils is Test {
         RestrictTransferFrom.TransferType transferType
     ) internal pure returns (bytes memory) {
         return abi.encodePacked(
-            approvalNeeded, // needsApproval (1 byte)
             uint8(transferType), // transferType (1 byte)
+            approvalNeeded, // needsApproval (1 byte)
             quote.pool, // pool (20 bytes)
             quote.externalAccount, // externalAccount (20 bytes)
             quote.trader, // trader (20 bytes)
@@ -53,7 +53,7 @@ contract HashflowExecutorECR20Test is Constants, HashflowUtils {
     function setUp() public {
         forkBlock = 23124977; // Using expiry date: 1755001853, ECR20
         vm.createSelectFork("mainnet", forkBlock);
-        executor = new HashflowExecutorExposed(PERMIT2_ADDRESS);
+        executor = new HashflowExecutorExposed(HASHFLOW_ROUTER, PERMIT2_ADDRESS);
     }
 
     function testDecodeParams() public view {
@@ -215,7 +215,7 @@ contract HashflowExecutorNativeTest is Constants, HashflowUtils {
     function setUp() public {
         forkBlock = 23125321; // Using expiry date: 1755006017, Native
         vm.createSelectFork("mainnet", forkBlock);
-        executor = new HashflowExecutorExposed(PERMIT2_ADDRESS);
+        executor = new HashflowExecutorExposed(HASHFLOW_ROUTER, PERMIT2_ADDRESS);
     }
 
     function testSwapNoSlippage() public {
@@ -264,7 +264,9 @@ contract HashflowExecutorNativeTest is Constants, HashflowUtils {
 }
 
 contract HashflowExecutorExposed is HashflowExecutor {
-    constructor(address _permit2) HashflowExecutor(_permit2) {}
+    constructor(address _hashflowRouter, address _permit2)
+        HashflowExecutor(_hashflowRouter, _permit2)
+    {}
 
     function decodeData(bytes calldata data)
         external

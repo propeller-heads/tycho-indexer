@@ -6,8 +6,8 @@ use crate::encoding::{
     errors::EncodingError,
     evm::swap_encoder::swap_encoders::{
         BalancerV2SwapEncoder, BalancerV3SwapEncoder, BebopSwapEncoder, CurveSwapEncoder,
-        EkuboSwapEncoder, MaverickV2SwapEncoder, UniswapV2SwapEncoder, UniswapV3SwapEncoder,
-        UniswapV4SwapEncoder,
+        EkuboSwapEncoder, HashflowSwapEncoder, MaverickV2SwapEncoder, UniswapV2SwapEncoder,
+        UniswapV3SwapEncoder, UniswapV4SwapEncoder,
     },
     swap_encoder::SwapEncoder,
 };
@@ -91,6 +91,11 @@ impl SwapEncoderBuilder {
             "rfq:bebop" => {
                 Ok(Box::new(BebopSwapEncoder::new(self.executor_address, self.chain, self.config)?))
             }
+            "rfq:hashflow" => Ok(Box::new(HashflowSwapEncoder::new(
+                self.executor_address,
+                self.chain,
+                self.config,
+            )?)),
             _ => Err(EncodingError::FatalError(format!(
                 "Unknown protocol system: {}",
                 self.protocol_system

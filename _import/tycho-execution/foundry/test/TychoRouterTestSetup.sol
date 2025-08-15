@@ -2,27 +2,28 @@
 pragma solidity ^0.8.26;
 
 // Executors
+import "../src/executors/HashflowExecutor.sol";
+import "./Constants.sol";
+import "./TestUtils.sol";
+import "@src/TychoRouter.sol";
+import {
+UniswapV3Executor,
+IUniswapV3Pool
+} from "../src/executors/UniswapV3Executor.sol";
 import {BalancerV2Executor} from "../src/executors/BalancerV2Executor.sol";
 import {BalancerV3Executor} from "../src/executors/BalancerV3Executor.sol";
 import {BebopExecutor} from "../src/executors/BebopExecutor.sol";
 import {CurveExecutor} from "../src/executors/CurveExecutor.sol";
-import {EkuboExecutor} from "../src/executors/EkuboExecutor.sol";
-import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
-import {UniswapV2Executor} from "../src/executors/UniswapV2Executor.sol";
-import {
-    UniswapV3Executor,
-    IUniswapV3Pool
-} from "../src/executors/UniswapV3Executor.sol";
-import {UniswapV4Executor} from "../src/executors/UniswapV4Executor.sol";
 
 // Test utilities and mocks
-import "./Constants.sol";
-import "./TestUtils.sol";
-import {Permit2TestHelper} from "./Permit2TestHelper.sol";
+import {EkuboExecutor} from "../src/executors/EkuboExecutor.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
 
 // Core contracts and interfaces
-import "@src/TychoRouter.sol";
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {Permit2TestHelper} from "./Permit2TestHelper.sol";
+import {UniswapV2Executor} from "../src/executors/UniswapV2Executor.sol";
+import {UniswapV4Executor} from "../src/executors/UniswapV4Executor.sol";
 
 contract TychoRouterExposed is TychoRouter {
     constructor(address _permit2, address weth) TychoRouter(_permit2, weth) {}
@@ -75,6 +76,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
     MaverickV2Executor public maverickv2Executor;
     BalancerV3Executor public balancerV3Executor;
     BebopExecutor public bebopExecutor;
+    HashflowExecutor public hashflowExecutor;
 
     function getForkBlock() public view virtual returns (uint256) {
         return 22082754;
@@ -135,8 +137,9 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
             new MaverickV2Executor(MAVERICK_V2_FACTORY, PERMIT2_ADDRESS);
         balancerV3Executor = new BalancerV3Executor(PERMIT2_ADDRESS);
         bebopExecutor = new BebopExecutor(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
+        hashflowExecutor = new HashflowExecutor(HASHFLOW_ROUTER, PERMIT2_ADDRESS);
 
-        address[] memory executors = new address[](10);
+        address[] memory executors = new address[](11);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
         executors[2] = address(pancakev3Executor);
@@ -147,6 +150,7 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
         executors[7] = address(maverickv2Executor);
         executors[8] = address(balancerV3Executor);
         executors[9] = address(bebopExecutor);
+        executors[10] = address(hashflowExecutor);
 
         return executors;
     }

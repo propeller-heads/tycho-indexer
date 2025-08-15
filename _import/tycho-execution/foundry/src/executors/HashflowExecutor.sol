@@ -32,12 +32,20 @@ interface IHashflowRouter {
 contract HashflowExecutor is IExecutor, RestrictTransferFrom {
     using SafeERC20 for IERC20;
 
-    address public constant HASHFLOW_ROUTER =
-        0x55084eE0fEf03f14a305cd24286359A35D735151;
     address public constant NATIVE_TOKEN =
         0x0000000000000000000000000000000000000000;
 
-    constructor(address _permit2) RestrictTransferFrom(_permit2) {}
+    /// @notice The Hashflow router address
+    address public immutable hashflowRouter;
+
+    constructor(address _hashflowRouter, address _permit2)
+        RestrictTransferFrom(_permit2)
+    {
+        if (_hashflowRouter == address(0)) {
+            revert HashflowExecutor__InvalidHashflowRouter();
+        }
+        hashflowRouter = _hashflowRouter;
+    }
 
     function swap(uint256 givenAmount, bytes calldata data)
         external
@@ -60,7 +68,7 @@ contract HashflowExecutor is IExecutor, RestrictTransferFrom {
         if (approvalNeeded && quote.baseToken != NATIVE_TOKEN) {
             // slither-disable-next-line unused-return
             IERC20(quote.baseToken).forceApprove(
-                HASHFLOW_ROUTER, type(uint256).max
+                hashflowRouter, type(uint256).max
             );
         }
 
@@ -72,7 +80,7 @@ contract HashflowExecutor is IExecutor, RestrictTransferFrom {
             address(this), transferType, address(quote.baseToken), givenAmount
         );
         uint256 balanceBefore = _balanceOf(quote.quoteToken);
-        IHashflowRouter(HASHFLOW_ROUTER).tradeRFQT{value: ethValue}(quote);
+        IHashflowRouter(hashflowRouter).tradeRFQT{value: ethValue}(quote);
         uint256 balanceAfter = _balanceOf(quote.quoteToken);
         calculatedAmount = balanceAfter - balanceBefore;
     }
@@ -90,8 +98,8 @@ contract HashflowExecutor is IExecutor, RestrictTransferFrom {
             revert HashflowExecutor__InvalidDataLength();
         }
 
-        approvalNeeded = data[0] != 0;
-        transferType = TransferType(uint8(data[1]));
+        transferType = TransferType(uint8(data[0]));
+        approvalNeeded = data[1] != 0;
 
         quote.pool = address(bytes20(data[2:22]));
         quote.externalAccount = address(bytes20(data[22:42]));
