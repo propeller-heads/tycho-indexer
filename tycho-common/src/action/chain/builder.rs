@@ -5,11 +5,12 @@ use std::marker::PhantomData;
 use crate::{
     action::{
         chain::{
-            converters::TypeConverter,
+            converters::StepLinker,
             executor::ActionChain,
             step::{ErasedStep, Step},
+            AssetInventory,
         },
-        simulate::{Action, ActionOutput, DefaultInputs, SimulateForward},
+        simulate::{Action, DefaultInputs, SimulateForward},
     },
     asset::erc20::{ERC20Asset, ERC20DefaultOutputs},
 };
@@ -23,6 +24,8 @@ pub struct ChainBuilder<InputType, CurrentType> {
     /// Type-erased steps that will be executed in sequence.
     steps: Vec<Box<dyn ErasedStep>>,
 
+    inventory: Option<AssetInventory>,
+
     /// Phantom marker for the original input type of the chain.
     _input_marker: PhantomData<InputType>,
 
@@ -31,15 +34,15 @@ pub struct ChainBuilder<InputType, CurrentType> {
 }
 
 impl<I: 'static, C: Clone + 'static> ChainBuilder<I, C> {
-    /// Add a new step to the chain with a custom converter.
+    /// Add a new step to the chain with a custom linker.
     ///
     /// The step can now handle type mismatches between the current chain output type C
     /// and the action's input type A::Inputs through runtime conversion.
-    pub fn add_step_with_converter<A, S>(
+    pub fn add_step_with_linker<A, S>(
         mut self,
         state: S,
         parameters: A::Parameters,
-        converter: impl TypeConverter<C, A::Inputs> + Send + Sync + 'static,
+        linker: impl StepLinker<C, A::Inputs> + Send + Sync + 'static,
     ) -> ChainBuilder<I, A::Outputs>
     where
         A: Action + 'static,
@@ -48,17 +51,26 @@ impl<I: 'static, C: Clone + 'static> ChainBuilder<I, C> {
         A::Inputs: Clone + 'static,
         A::Outputs: Clone + 'static,
         // usually the output of the previous step, which is converted to this step
-        //  input using a type converter. But can also be just the input of this step
-        // (in this case the type converter would be None)
+        //  input using a step linker. But can also be just the input of this step
+        // (in this case the step linker would be None)
         C: Clone + 'static,
     {
-        let boxed_converter: Box<dyn TypeConverter<C, A::Inputs> + Send + Sync> =
-            Box::new(converter);
+        let boxed_linker: Box<dyn StepLinker<C, A::Inputs> + Send + Sync> = Box::new(linker);
 
-        let step = Step::<A, S, C>::new(state, parameters, Some(boxed_converter));
+        let step = Step::<A, S, C>::new(state, parameters, Some(boxed_linker));
         self.steps.push(Box::new(step));
 
-        ChainBuilder { steps: self.steps, _input_marker: PhantomData, _current_marker: PhantomData }
+        ChainBuilder {
+            steps: self.steps,
+            _input_marker: PhantomData,
+            _current_marker: PhantomData,
+            inventory: self.inventory,
+        }
+    }
+
+    pub fn with_inventory(mut self, inventory: AssetInventory) -> ChainBuilder<I, C> {
+        self.inventory = Some(inventory);
+        self
     }
 
     /// Build the final action chain.
@@ -66,7 +78,11 @@ impl<I: 'static, C: Clone + 'static> ChainBuilder<I, C> {
     /// The chain can be built when the current output type matches or can be
     /// converted to the desired end type.
     pub fn build(self) -> ActionChain<I, C> {
-        ActionChain::new(self.steps)
+        if let Some(inventory) = self.inventory {
+            ActionChain::with_inventory(self.steps, inventory)
+        } else {
+            ActionChain::new(self.steps)
+        }
     }
 }
 
@@ -77,7 +93,7 @@ impl<I: 'static> ChainBuilder<I, ERC20DefaultOutputs> {
     ///
     /// This is the standard method for chaining ERC20 actions where the output of one
     /// action becomes the input to the next action (e.g., swap chains).
-    /// Uses ERC20 OutputsToInputs converter by default.
+    /// Uses ERC20 OutputsToInputs linker by default.
     pub fn add_step<A, S>(
         self,
         state: S,
@@ -89,13 +105,13 @@ impl<I: 'static> ChainBuilder<I, ERC20DefaultOutputs> {
         A::Parameters: Clone + 'static,
     {
         // Create a step that converts DefaultOutputs to DefaultInputs via OutputsToInputs
-        let converter = crate::action::chain::converters::OutputsToInputs::<
+        let linker = crate::action::chain::converters::OutputsToInputs::<
             crate::asset::erc20::ERC20Asset,
         >::new();
-        let boxed_converter: Box<dyn TypeConverter<ERC20DefaultOutputs, A::Inputs> + Send + Sync> =
-            Box::new(converter);
+        let boxed_linker: Box<dyn StepLinker<ERC20DefaultOutputs, A::Inputs> + Send + Sync> =
+            Box::new(linker);
 
-        let step = Step::<A, S, ERC20DefaultOutputs>::new(state, parameters, Some(boxed_converter));
+        let step = Step::<A, S, ERC20DefaultOutputs>::new(state, parameters, Some(boxed_linker));
 
         ChainBuilder {
             steps: {
@@ -105,6 +121,7 @@ impl<I: 'static> ChainBuilder<I, ERC20DefaultOutputs> {
             },
             _input_marker: PhantomData,
             _current_marker: PhantomData,
+            inventory: self.inventory,
         }
     }
 }
@@ -113,7 +130,12 @@ impl<I: 'static> ChainBuilder<I, ERC20DefaultOutputs> {
 impl ChainBuilder<(), ()> {
     /// Create a new chain builder.
     pub fn new() -> Self {
-        Self { steps: Vec::new(), _input_marker: PhantomData, _current_marker: PhantomData }
+        Self {
+            steps: Vec::new(),
+            _input_marker: PhantomData,
+            _current_marker: PhantomData,
+            inventory: None,
+        }
     }
 
     /// Start the chain with the first step.
@@ -137,6 +159,7 @@ impl ChainBuilder<(), ()> {
             steps: vec![Box::new(step)],
             _input_marker: PhantomData,
             _current_marker: PhantomData,
+            inventory: self.inventory,
         }
     }
 }

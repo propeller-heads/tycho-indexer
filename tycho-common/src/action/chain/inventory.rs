@@ -2,17 +2,20 @@
 
 use std::{collections::HashMap, fmt};
 
-use crate::{action::asset::Asset, Bytes};
+use crate::{
+    action::asset::{Asset, AssetError},
+    Bytes,
+};
 
 /// Storage for assets that can be accessed between chain steps.
 ///
 /// The inventory uses type-erased asset storage to handle different asset types
-/// uniformly. Assets are indexed by their kind and type identifier for efficient
-/// retrieval and management.
+/// uniformly. Assets are indexed by their kind and type identifier. Multiple assets
+/// of the same type are automatically accumulated using the Asset::accumulate method.
 #[derive(Default)]
 pub struct AssetInventory {
     /// Type-erased assets stored by composite key: "kind:type_id_hex"
-    assets: HashMap<String, Vec<Box<dyn Asset>>>,
+    assets: HashMap<String, Box<dyn Asset>>,
 }
 
 impl AssetInventory {
@@ -27,18 +30,32 @@ impl AssetInventory {
     }
 
     /// Store an asset in the inventory.
-    pub fn push(&mut self, asset: Box<dyn Asset>) {
+    ///
+    /// If an asset of the same type already exists, it will be accumulated with the new asset.
+    /// Returns an error if the assets cannot be accumulated (incompatible types).
+    pub fn store(&mut self, asset: Box<dyn Asset>) -> Result<(), AssetError> {
         let key = self.storage_key(asset.as_ref());
-        self.assets
-            .entry(key)
-            .or_default()
-            .push(asset);
+        if let Some(existing_asset) = self.assets.remove(&key) {
+            // Accumulate with existing asset
+            let accumulated = existing_asset.accumulate(asset.as_ref())?;
+            self.assets.insert(key, accumulated);
+        } else {
+            // No existing asset, store directly
+            self.assets.insert(key, asset);
+        }
+        Ok(())
     }
 
-    /// Retrieve the most recently stored asset of the given type.
-    pub fn pop(&mut self, kind: &str, type_id: &Bytes) -> Option<Box<dyn Asset>> {
+    /// Retrieve and remove an asset from the inventory.
+    pub fn retrieve(&mut self, kind: &str, type_id: &Bytes) -> Option<Box<dyn Asset>> {
         let key = format!("{}:{}", kind, hex::encode(type_id));
-        self.assets.get_mut(&key)?.pop()
+        self.assets.remove(&key)
+    }
+
+    /// Get a reference to an asset without removing it from the inventory.
+    pub fn get(&self, kind: &str, type_id: &Bytes) -> Option<&Box<dyn Asset>> {
+        let key = format!("{}:{}", kind, hex::encode(type_id));
+        self.assets.get(&key)
     }
 
     /// Clear all assets from the inventory.
@@ -50,15 +67,7 @@ impl AssetInventory {
 impl fmt::Debug for AssetInventory {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AssetInventory")
-            .field("asset_type_count", &self.assets.len())
-            .field(
-                "total_asset_count",
-                &self
-                    .assets
-                    .values()
-                    .map(|assets| assets.len())
-                    .sum::<usize>(),
-            )
+            .field("asset_count", &self.assets.len())
             .finish()
     }
 }

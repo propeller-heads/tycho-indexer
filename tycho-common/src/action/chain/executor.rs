@@ -35,6 +35,13 @@ impl<I, O> ActionChain<I, O> {
         }
     }
 
+    pub(crate) fn with_inventory(
+        steps: Vec<Box<dyn ErasedStep>>,
+        inventory: AssetInventory,
+    ) -> Self {
+        Self { steps, inventory, _input_marker: PhantomData, _output_marker: PhantomData }
+    }
+
     /// Execute the entire chain with the given inputs and context.
     ///
     /// Each step is executed in sequence, with the output of one step becoming

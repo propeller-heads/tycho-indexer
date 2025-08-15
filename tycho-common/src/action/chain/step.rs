@@ -3,9 +3,9 @@
 use std::{any::Any, fmt, marker::PhantomData};
 
 use crate::action::{
-    chain::{converters::TypeConverter, errors::ChainError, inventory::AssetInventory},
+    chain::{converters::StepLinker, errors::ChainError, inventory::AssetInventory},
     context::ActionContext,
-    simulate::{Action, SimulateForward},
+    simulate::{Action, ActionOutput, SimulateForward},
 };
 
 /// A single step in an action chain with type safety.
@@ -24,8 +24,8 @@ where
     /// Parameters specific to this action execution.
     pub parameters: A::Parameters,
 
-    /// Optional converter for transforming input from previous step.
-    pub converter: Option<Box<dyn TypeConverter<I, A::Inputs> + Send + Sync>>,
+    /// Optional step linker for transforming input from previous step.
+    pub linker: Option<Box<dyn StepLinker<I, A::Inputs> + Send + Sync>>,
 
     /// Phantom data to track input type at compile time.
     _input_marker: PhantomData<I>,
@@ -39,13 +39,13 @@ where
     /// Create a new step with the given state and parameters.
     ///
     /// The type constraint `A: Action<Inputs = I>` has been relaxed to `A: Action`
-    /// to allow converters to handle type mismatches between chain outputs and action inputs.
+    /// to allow step linkers to handle type mismatches between chain outputs and action inputs.
     pub fn new(
         state: S,
         parameters: A::Parameters,
-        converter: Option<Box<dyn TypeConverter<I, A::Inputs> + Send + Sync>>,
+        linker: Option<Box<dyn StepLinker<I, A::Inputs> + Send + Sync>>,
     ) -> Self {
-        Self { state: Box::new(state), parameters, converter, _input_marker: PhantomData }
+        Self { state: Box::new(state), parameters, linker, _input_marker: PhantomData }
     }
 }
 
@@ -92,19 +92,19 @@ where
                 )
             })?;
 
-        // Convert inputs using custom converter or direct use
-        let action_inputs: A::Inputs = if let Some(mut converter) = self.converter.take() {
-            // Use the typed converter to transform chain outputs to action inputs
-            // The converter is typed: TypeConverter<I, A::Inputs>
-            converter.convert(chain_outputs.clone(), inventory)?
+        // Convert inputs using custom linker or direct use
+        let action_inputs: A::Inputs = if let Some(mut linker) = self.linker.take() {
+            // Use the typed linker to transform chain outputs to action inputs
+            // The linker is typed: StepLinker<I, A::Inputs>
+            linker.convert(chain_outputs.clone(), inventory)?
         } else {
-            // No converter - the chain output type I should match action input type A::Inputs
+            // No linker - the chain output type I should match action input type A::Inputs
             // This should only happen when I == A::Inputs (compile-time enforced)
             let cloned_outputs = (chain_outputs as &dyn std::any::Any)
                 .downcast_ref::<A::Inputs>()
                 .ok_or_else(|| {
                     ChainError::TypeCastError(
-                        "Chain output type doesn't match action input type. Use a converter."
+                        "Chain output type doesn't match action input type. Use a step linker."
                             .to_string(),
                     )
                 })?
@@ -118,11 +118,20 @@ where
             .simulate_forward(context, &self.parameters, &action_inputs)
             .map_err(ChainError::StepExecutionError)?;
 
-        // Apply the converter to the outputs if present
-        let final_outputs: Box<dyn Any> = if let Some(_converter) = &self.converter {
-            // Apply the converter to transform A::Outputs to O
+        // Store produced assets in inventory (with automatic accumulation)
+        for produced_asset in outputs.produced() {
+            inventory
+                .store(produced_asset)
+                .map_err(|e| {
+                    ChainError::InventoryError(format!("Failed to store produced asset: {}", e))
+                })?;
+        }
+
+        // Apply the linker to the outputs if present
+        let final_outputs: Box<dyn Any> = if let Some(_linker) = &self.linker {
+            // Apply the linker to transform A::Outputs to O
             // For now, we'll just return the raw action outputs
-            // In a full implementation, we would use the converter here
+            // In a full implementation, we would use the linker here
             Box::new(outputs)
         } else {
             Box::new(outputs)
@@ -132,7 +141,7 @@ where
         let new_step = Box::new(Step {
             state: new_state,
             parameters: self.parameters.clone(),
-            converter: None, // Converters are consumed during execution
+            linker: None, // Linkers are consumed during execution
             _input_marker: PhantomData::<I>,
         });
 
@@ -149,7 +158,7 @@ where
         f.debug_struct("Step")
             .field("action", &std::any::type_name::<A>())
             .field("state", &self.state)
-            .field("has_converter", &self.converter.is_some())
+            .field("has_linker", &self.linker.is_some())
             .finish()
     }
 }

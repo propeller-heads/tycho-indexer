@@ -34,7 +34,7 @@ pub mod inventory;
 pub mod step;
 
 pub use builder::ChainBuilder;
-pub use converters::{ERC20OutputsToInputs, OutputsToInputs, PassThrough, TypeConverter};
+pub use converters::{ERC20OutputsToInputs, OutputsToInputs, PassThrough, StepLinker};
 pub use errors::ChainError;
 pub use executor::ActionChain;
 pub use inventory::AssetInventory;

@@ -28,6 +28,10 @@ pub struct PredicateDescriptor {
 pub enum AssetError {
     #[error("Can't accumulate a non fungible asset")]
     NotFungible,
+    #[error("Can't accumulate assets of different kinds: {0} and {1}")]
+    IncompatibleKind(String, String),
+    #[error("Can't accumulate assets of different types: {0} and {1}")]
+    IncompatibleType(String, String),
 }
 
 /// Unified interface for blockchain assets.
@@ -61,8 +65,8 @@ pub trait Asset {
 
     /// Accumulates quantities of two fungible assets into a single one.
     ///
-    /// Will error for non-fungible assets.
-    fn accumulate(&self) -> Result<Box<dyn Asset>, AssetError> {
+    /// Will error for non-fungible assets or incompatible asset types.
+    fn accumulate(&self, _other: &dyn Asset) -> Result<Box<dyn Asset>, AssetError> {
         Err(AssetError::NotFungible)
     }
 }

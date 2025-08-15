@@ -10,6 +10,12 @@ use crate::{
     simulation::errors::SimulationError,
 };
 
+/// Defines a structure for action results
+///
+/// An action result should at least specify how much it ended up using as well as how
+/// much it produced. This is useful if e.g. not all inputs could be used (for example
+/// for lp action the tokens must be supplied in a very specific ration which often may
+/// leave some tokens for the user).
 pub trait ActionOutput: Clone {
     fn used(&self) -> impl Iterator<Item = Box<dyn Asset>>;
     fn produced(&self) -> impl Iterator<Item = Box<dyn Asset>>;

@@ -4,7 +4,7 @@ use num_bigint::BigUint;
 
 use crate::{
     action::{
-        asset::{Asset, PredicateDescriptor},
+        asset::{Asset, AssetError, PredicateDescriptor},
         simulate::DefaultOutputs,
     },
     models::token::Token,
@@ -54,6 +54,36 @@ impl Asset for ERC20Asset {
 
     fn predicate_descriptor(&self, _owner: &Bytes) -> PredicateDescriptor {
         todo!()
+    }
+
+    fn accumulate(&self, other: &dyn Asset) -> Result<Box<dyn Asset>, AssetError> {
+        // Check if other asset is compatible for accumulation
+        if self.kind() != other.kind() {
+            return Err(AssetError::IncompatibleKind(
+                self.kind().to_string(),
+                other.kind().to_string(),
+            ));
+        }
+
+        if self.type_id() != other.type_id() {
+            return Err(AssetError::IncompatibleType(
+                hex::encode(self.type_id()),
+                hex::encode(other.type_id()),
+            ));
+        }
+
+        // Try to downcast other to ERC20Asset to access amount
+        let other_amount = other
+            .amount()
+            .ok_or(AssetError::NotFungible)?;
+
+        // Add amounts
+        let combined_amount = &self.amount + other_amount;
+
+        // Create new ERC20Asset with combined amount
+        let combined_asset = ERC20Asset::new(self.token.clone(), combined_amount);
+
+        Ok(Box::new(combined_asset))
     }
 }
 
