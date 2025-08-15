@@ -628,11 +628,8 @@ where
 
         // 1. Filter components with swap hooks (beforeSwap/afterSwap only)
         let swap_hook_components = {
-            let _span = span!(
-                Level::INFO,
-                "extract_swap_hook_components"
-            ).entered();
-            
+            let _span = span!(Level::INFO, "extract_swap_hook_components").entered();
+
             self.extract_components_with_swap_hooks(block_changes)?
         };
 
@@ -667,8 +664,9 @@ where
                 Level::INFO,
                 "categorize_components",
                 total_components = swap_hook_components.len()
-            ).entered();
-            
+            )
+            .entered();
+
             self.categorize_components(&swap_hook_components)?
         };
 
@@ -701,22 +699,30 @@ where
         self.process_metadata_errors(&component_metadata, &block_changes.block)?;
 
         // 4. Group components by hook address and separate by processing needs
-        let (components_by_hook_full_processing, components_by_hook_balance_only, metadata_by_component_id) = {
+        let (
+            components_by_hook_full_processing,
+            components_by_hook_balance_only,
+            metadata_by_component_id,
+        ) = {
             let _span = span!(
                 Level::INFO,
                 "group_components_by_hook",
                 total_metadata = component_metadata.len()
-            ).entered();
-            
-            let mut components_by_hook_full_processing: HashMap<Address, Vec<ProtocolComponent>> = HashMap::new();
-            let mut components_by_hook_balance_only: HashMap<Address, Vec<ProtocolComponent>> = HashMap::new();
+            )
+            .entered();
+
+            let mut components_by_hook_full_processing: HashMap<Address, Vec<ProtocolComponent>> =
+                HashMap::new();
+            let mut components_by_hook_balance_only: HashMap<Address, Vec<ProtocolComponent>> =
+                HashMap::new();
             let mut metadata_by_component_id: HashMap<ComponentId, _> = HashMap::new();
 
             // Create lookup sets for quick component categorization
-            let full_processing_ids: std::collections::HashSet<ComponentId> = components_needing_full_processing
-                .iter()
-                .map(|(_, comp)| comp.id.clone())
-                .collect();
+            let full_processing_ids: std::collections::HashSet<ComponentId> =
+                components_needing_full_processing
+                    .iter()
+                    .map(|(_, comp)| comp.id.clone())
+                    .collect();
 
             for (component, metadata) in component_metadata {
                 metadata_by_component_id.insert(component.id.clone(), metadata);
@@ -737,11 +743,16 @@ where
                     }
                 }
             }
-            
-            (components_by_hook_full_processing, components_by_hook_balance_only, metadata_by_component_id)
+
+            (
+                components_by_hook_full_processing,
+                components_by_hook_balance_only,
+                metadata_by_component_id,
+            )
         };
 
-        // 5a. Call appropriate hook orchestrator for components needing full processing (entrypoint generation)
+        // 5a. Call appropriate hook orchestrator for components needing full processing (entrypoint
+        // generation)
         info!(
             full_processing_hook_groups = components_by_hook_full_processing.len(),
             balance_only_hook_groups = components_by_hook_balance_only.len(),
@@ -782,7 +793,7 @@ where
                     block_changes,
                     components,
                     &component_metadata_map,
-                    true
+                    true,
                 ) {
                     Ok(()) => {
                         info!(
@@ -848,7 +859,9 @@ where
                 .hooks
                 .get(hook_address)
             {
-                info!("Found hook orchestrator, processing components needing balance-only updates");
+                info!(
+                    "Found hook orchestrator, processing components needing balance-only updates"
+                );
 
                 let component_metadata_map: HashMap<String, _> = components
                     .iter()
@@ -864,8 +877,9 @@ where
                     "Prepared component metadata map for balance-only processing"
                 );
 
-                // For balance-only components, we just update their balances without generating new entrypoints
-                // The balance updates are already injected into block_changes by the metadata orchestrator
+                // For balance-only components, we just update their balances without generating new
+                // entrypoints The balance updates are already injected into
+                // block_changes by the metadata orchestrator
                 match orchestrator.update_components(
                     block_changes,
                     components,
@@ -878,10 +892,12 @@ where
                             "Hook orchestrator processed components successfully (balance-only)"
                         );
 
-                        // Update component states for successful processing - they remain TracingComplete
+                        // Update component states for successful processing - they remain
+                        // TracingComplete
                         for component in components {
-                            // Note: We don't call handle_component_success here because these components
-                            // are already TracingComplete and should remain so
+                            // Note: We don't call handle_component_success here because these
+                            // components are already TracingComplete
+                            // and should remain so
                             debug!(
                                 component_id = %component.id,
                                 "Completed balance-only update for component"
@@ -916,7 +932,9 @@ where
                 for component in components {
                     self.handle_component_failure(
                         component.id.clone(),
-                        format!("No hook orchestrator available for hook {hook_address} (balance-only)"),
+                        format!(
+                            "No hook orchestrator available for hook {hook_address} (balance-only)"
+                        ),
                         &block_changes.block,
                     )?;
                 }
@@ -1065,11 +1083,8 @@ mod tests {
         gateway
             .expect_get_tokens()
             .return_once(move |_, _, _, _, _| {
-                Box::pin(async move { 
-                    Ok(tycho_common::storage::WithTotal { 
-                        entity: Vec::new(), 
-                        total: Some(0) 
-                    }) 
+                Box::pin(async move {
+                    Ok(tycho_common::storage::WithTotal { entity: Vec::new(), total: Some(0) })
                 })
             });
 
@@ -1819,6 +1834,15 @@ mod tests {
                 .expect_get_traced_entry_points()
                 .return_once(move |_| Box::pin(async move { Ok(HashMap::new()) }));
 
+            // Mock get_tokens to return empty result
+            db_gateway
+                .expect_get_tokens()
+                .return_once(move |_, _, _, _, _| {
+                    Box::pin(async move {
+                        Ok(tycho_common::storage::WithTotal { entity: Vec::new(), total: Some(0) })
+                    })
+                });
+
             // Setup expectation for the account extractor
             account_extractor
                 .expect_get_accounts_at_block()
@@ -2013,7 +2037,9 @@ mod tests {
             // This time, return some entrypoints to indicate the component has been traced before
             db_gateway
                 .expect_get_entry_points_tracing_params()
-                .withf(move |filter: &EntryPointFilter, _| filter.protocol_system == "uniswap_v4_hooks")
+                .withf(move |filter: &EntryPointFilter, _| {
+                    filter.protocol_system == "uniswap_v4_hooks"
+                })
                 .return_once(move |_, _| {
                     let mut entrypoints = HashMap::new();
                     let mut ep_set = HashSet::new();
