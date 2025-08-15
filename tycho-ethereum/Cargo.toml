@@ -29,7 +29,8 @@ futures = "0.3"
 # Required dependencies
 ethers = "^2.0.2"
 web3 = { version = "0.19", default-features = false }
-alloy = { version = "0.14", default-features = true }
+alloy = { version = "1.0.24", default-features = true }
+alloy-rpc-types-trace = "1.0.24"
 
 # Optional dependencies
 contracts = { git = "https://github.com/cowprotocol/services", rev = "f3678428991e055ceb517f184d1b37244f2d8f51", optional = true }
