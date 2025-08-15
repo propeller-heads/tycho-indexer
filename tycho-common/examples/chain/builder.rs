@@ -2,17 +2,16 @@
 
 use std::marker::PhantomData;
 
-use crate::{
-    action::{
-        chain::{
-            converters::StepLinker,
-            executor::ActionChain,
-            step::{ErasedStep, Step},
-            AssetInventory,
-        },
-        simulate::{Action, DefaultInputs, SimulateForward},
-    },
+use tycho_common::{
+    action::simulate::{Action, DefaultInputs, SimulateForward},
     asset::erc20::{ERC20Asset, ERC20DefaultOutputs},
+};
+
+use super::{
+    converters::StepLinker,
+    executor::ActionChain,
+    step::{ErasedStep, Step},
+    AssetInventory,
 };
 
 /// Type-safe builder for constructing chains of actions.

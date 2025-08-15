@@ -2,10 +2,9 @@
 
 use std::{any::Any, marker::PhantomData};
 
-use crate::action::{
-    chain::{errors::ChainError, inventory::AssetInventory, step::ErasedStep},
-    context::ActionContext,
-};
+use tycho_common::action::context::ActionContext;
+
+use super::{errors::ChainError, inventory::AssetInventory, step::ErasedStep};
 
 /// An executable chain of actions with type safety.
 ///

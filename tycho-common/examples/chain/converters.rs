@@ -2,14 +2,15 @@
 
 use std::marker::PhantomData;
 
-use crate::{
+use tycho_common::{
     action::{
         asset::Asset,
-        chain::{errors::ChainError, inventory::AssetInventory},
         simulate::{DefaultInputs, DefaultOutputs},
     },
     asset::erc20::{ERC20Asset, ERC20DefaultOutputs},
 };
+
+use super::{errors::ChainError, inventory::AssetInventory};
 
 /// Trait for linking different input/output types in action chains.
 ///

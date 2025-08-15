@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, fmt};
 
-use crate::{
+use tycho_common::{
     action::asset::{Asset, AssetError},
     Bytes,
 };

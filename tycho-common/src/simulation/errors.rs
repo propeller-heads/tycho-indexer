@@ -1,7 +1,8 @@
 use thiserror::Error;
 
 use crate::{
-    simulation::protocol_sim::GetAmountOutResult, swap::approximation::ApproximationError,
+    action::swap::approximation::ApproximationError,
+    simulation::protocol_sim::GetAmountOutResult,
 };
 
 /// Represents the outer-level, user-facing errors of the tycho-simulation package.

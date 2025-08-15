@@ -47,6 +47,7 @@
 //! standardized error handling via `SimulationError`.
 
 pub mod asset;
-pub mod chain;
 pub mod context;
+pub mod liquidity_provision;
 pub mod simulate;
+pub mod swap;

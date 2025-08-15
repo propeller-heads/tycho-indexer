@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::simulation::errors::SimulationError;
+use tycho_common::simulation::errors::SimulationError;
 
 /// Errors that can occur during action chain construction or execution.
 #[derive(Error, Debug)]

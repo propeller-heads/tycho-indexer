@@ -14,7 +14,7 @@ use crate::{
     asset::erc20::{ERC20Asset, ERC20DefaultOutputs},
     models::token::Token,
     simulation::errors::SimulationError,
-    swap::{
+    action::swap::{
         approximation::{LimitsApproximator, MarginalPriceApproximator},
         AmountLimits, LimitsParameters, MarginalPriceParameters, QuoteParameters, SwapQuote,
         Swappable,

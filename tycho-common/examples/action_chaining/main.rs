@@ -9,16 +9,17 @@ use num_bigint::BigUint;
 use tycho_common::{
     action::{
         asset::Asset,
-        chain::{converters::SwapOutputsPlusInventory, AssetInventory, ChainBuilder},
         context::ActionContext,
-        simulate::{DefaultInputs, SimulateForward},
+        liquidity_provision::action::{AddLiquidityFullRange, AddLiquidityFullRangeParameters},
+        simulate::DefaultInputs,
+        swap::action::{Swap, SwapParameters},
     },
-    asset::erc20::{ERC20Asset, ERC20DefaultOutputs},
-    liquidity_provision::action::{AddLiquidityFullRange, AddLiquidityFullRangeParameters},
+    asset::erc20::ERC20Asset,
     models::{blockchain::Block, token::Token, Chain},
-    simulation::errors::SimulationError,
-    swap::action::{Swap, SwapParameters},
 };
+
+mod chain;
+use chain::{converters::SwapOutputsPlusInventory, AssetInventory, ChainBuilder};
 
 mod uniswap_v2;
 use uniswap_v2::UniswapV2Pool;

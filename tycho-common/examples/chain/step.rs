@@ -2,11 +2,12 @@
 
 use std::{any::Any, fmt, marker::PhantomData};
 
-use crate::action::{
-    chain::{converters::StepLinker, errors::ChainError, inventory::AssetInventory},
+use tycho_common::action::{
     context::ActionContext,
     simulate::{Action, ActionOutput, SimulateForward},
 };
+
+use super::{converters::StepLinker, errors::ChainError, inventory::AssetInventory};
 
 /// A single step in an action chain with type safety.
 ///

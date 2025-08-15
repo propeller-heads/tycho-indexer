@@ -1,7 +1,7 @@
 use thiserror::Error;
 
-use crate::{
-    action::simulate::SimulateForward,
+use crate::action::{
+    simulate::SimulateForward,
     swap::{action::Swap, AmountLimits, LimitsParameters, MarginalPriceParameters},
 };
 

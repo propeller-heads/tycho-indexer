@@ -11,7 +11,7 @@ use crate::{
         simulate::{Action, ActionOutput, DefaultInputs, SimulateForward},
     },
     asset::erc20::{ERC20Asset, ERC20DefaultOutputs},
-    liquidity_provision::asset::{ConcentratedLiquidityNFT, TickRange},
+    action::liquidity_provision::asset::{ConcentratedLiquidityNFT, TickRange},
     simulation::errors::SimulationError,
 };
 // =============================================================================
