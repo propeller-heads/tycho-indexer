@@ -1,7 +1,11 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    str::FromStr,
+    sync::LazyLock,
+};
 
 use async_trait::async_trait;
-use tracing::{debug, instrument, trace};
+use tracing::{debug, info, instrument, span, trace, warn, Instrument, Level};
 use tycho_common::{
     models::{
         blockchain::{
@@ -9,9 +13,10 @@ use tycho_common::{
             TracingResult, Transaction, TxWithChanges,
         },
         contract::AccountDelta,
+        protocol::QualityRange,
         Address, BlockHash, Chain, ChangeType, ContractStoreDeltas, EntryPointId, StoreKey, TxHash,
     },
-    storage::{EntryPointFilter, EntryPointGateway, StorageError},
+    storage::{EntryPointFilter, EntryPointGateway, ProtocolGateway, StorageError},
     traits::{AccountExtractor, EntryPointTracer, StorageSnapshotRequest},
 };
 
@@ -25,7 +30,7 @@ pub(crate) struct DynamicContractIndexer<AE, T, G>
 where
     AE: AccountExtractor + Send + Sync,
     T: EntryPointTracer + Send + Sync,
-    G: EntryPointGateway + Send + Sync,
+    G: EntryPointGateway + ProtocolGateway + Send + Sync,
 {
     chain: Chain,
     protocol: String,
@@ -35,20 +40,45 @@ where
     cache: DCICache,
 }
 
+static MANUAL_BLACKLIST: LazyLock<Vec<Address>> = LazyLock::new(|| {
+    vec![
+        // UniswapV4 Pool Manager - cannot be fully tracked
+        Address::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90").unwrap(),
+        // UniswapV2 Permit2
+        Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3").unwrap(),
+    ]
+});
+
 #[async_trait]
 impl<AE, T, G> ExtractorExtension for DynamicContractIndexer<AE, T, G>
 where
     AE: AccountExtractor + Send + Sync,
     T: EntryPointTracer + Send + Sync,
-    G: EntryPointGateway + Send + Sync,
+    G: EntryPointGateway + ProtocolGateway + Send + Sync,
 {
-    #[instrument(skip_all, fields(chain = % self.chain, protocol = % self.protocol, block_number = % block_changes.block.number))]
+    #[instrument(skip(self, block_changes), fields(
+        chain = % self.chain,
+        protocol = % self.protocol,
+        block_number = % block_changes.block.number,
+        tx_count = block_changes.txs_with_update.len()
+    ))]
     async fn process_block_update(
         &mut self,
         block_changes: &mut BlockChanges,
     ) -> Result<(), ExtractionError> {
         self.cache
             .try_insert_block_layer(&block_changes.block)?;
+
+        // Process new tokens from BlockChanges
+        for (address, _token) in block_changes.new_tokens.iter() {
+            // Add new tokens to the ERC-20 cache
+            self.cache
+                .erc20_addresses
+                .pending_entry(&block_changes.block, address)?
+                .or_insert(true);
+
+            debug!("Added new ERC-20 token to skip list: {}", address);
+        }
 
         let new_entrypoints: HashMap<EntryPointId, EntryPoint> = block_changes
             .txs_with_update
@@ -154,6 +184,12 @@ where
                         .cloned()
                         .collect(),
                 )
+                .instrument(span!(
+                    Level::INFO,
+                    "dci_rpc_tracing",
+                    entrypoint_count = entrypoints_to_analyze.len(),
+                    block_hash = %block_changes.block.hash
+                ))
                 .await
                 .map_err(|e| ExtractionError::TracingError(format!("{e:?}")))?;
 
@@ -219,26 +255,39 @@ where
             let storage_request: Vec<StorageSnapshotRequest> = new_account_addr_to_tx
                 .keys()
                 .map(|address| {
-                    let slots = new_account_addr_to_slots
-                        .get(address)
-                        .cloned()
-                        .ok_or_else(|| {
-                            ExtractionError::Unknown(format!(
-                                "Account {address} not found in the address to slots map"
-                            ))
-                        })?
-                        .into_iter()
-                        .collect();
+                    if !self.should_skip_full_indexing(address) {
+                        // Process all slots for non-token or non-blacklisted contracts
+                        tracing::trace!("Skipping full storage indexing for address: {}", address);
+                        Ok(StorageSnapshotRequest { address: address.clone(), slots: None })
+                    } else {
+                        // Skip full storage indexing for tokens and blacklisted addresses
+                        let slots = new_account_addr_to_slots
+                            .get(address)
+                            .cloned()
+                            .ok_or_else(|| {
+                                ExtractionError::Unknown(format!(
+                                    "Account {address} not found in the address to slots map"
+                                ))
+                            })?
+                            .into_iter()
+                            .collect();
 
-                    Ok(StorageSnapshotRequest { address: address.clone(), slots: Some(slots) })
+                        Ok(StorageSnapshotRequest { address: address.clone(), slots: Some(slots) })
+                    }
                 })
                 .collect::<Result<Vec<_>, ExtractionError>>()?;
 
-            tracing::debug!(storage_request = ?storage_request, "DCI: Storage request");
+            debug!(storage_request = ?storage_request, "DCI: Storage request");
 
             let mut new_accounts = self
                 .storage_source
                 .get_accounts_at_block(&block_changes.block, &storage_request)
+                .instrument(span!(
+                    Level::INFO,
+                    "dci_account_extraction",
+                    account_count = storage_request.len(),
+                    block_number = block_changes.block.number
+                ))
                 .await
                 .map_err(|e| ExtractionError::AccountExtractionError(format!("{e:?}")))?;
 
@@ -284,7 +333,15 @@ where
             }
 
             // Update the cache with new traced entrypoints
+            let _span = span!(
+                Level::INFO,
+                "dci_cache_update",
+                traced_entrypoints = traced_entry_points.len(),
+                block_number = block_changes.block.number
+            )
+            .entered();
             self.update_cache(&block_changes.block, &traced_entry_points)?;
+            drop(_span);
 
             // Update the block changes with the traced entrypoints
             block_changes.trace_results = traced_entry_points;
@@ -302,7 +359,16 @@ where
                     .map(|ep| (ep.external_id.clone(), ep)),
             )?;
 
+        let _span = span!(
+            Level::INFO,
+            "dci_extract_tracked_updates",
+            block_storage_changes = block_changes
+                .block_storage_changes
+                .len()
+        )
+        .entered();
         let tracked_updates = self.extract_tracked_updates(block_changes)?;
+        drop(_span);
 
         let mut tx_with_changes = block_changes
             .txs_with_update
@@ -346,7 +412,7 @@ impl<AE, T, G> DynamicContractIndexer<AE, T, G>
 where
     AE: AccountExtractor + Send + Sync,
     T: EntryPointTracer + Send + Sync,
-    G: EntryPointGateway + Send + Sync,
+    G: EntryPointGateway + ProtocolGateway + Send + Sync,
 {
     pub fn new(
         chain: Chain,
@@ -444,7 +510,59 @@ where
             }
         }
 
+        // Load manual blacklist into cache
+        for address in MANUAL_BLACKLIST.iter() {
+            self.cache
+                .blacklisted_addresses
+                .insert_permanent(address.clone(), true);
+        }
+
+        // Load known tokens from database
+        let quality_range = QualityRange::min_only(0);
+        match self
+            .entrypoint_gw
+            .get_tokens(self.chain, None, quality_range, None, None)
+            .await
+        {
+            Ok(tokens_result) => {
+                let token_count = tokens_result.entity.len();
+                for token in tokens_result.entity {
+                    self.cache
+                        .erc20_addresses
+                        .insert_permanent(token.address, true);
+                }
+                info!("Loaded {} known tokens from database", token_count);
+            }
+            Err(e) => {
+                warn!("Failed to load tokens from database: {:?}", e);
+                // Continue initialization even if token loading fails
+            }
+        }
+
         Ok(())
+    }
+
+    /// Check if an address should skip full storage indexing
+    fn should_skip_full_indexing(&self, address: &Address) -> bool {
+        // Check if it's a known ERC-20 token
+        if let Some(is_token) = self.cache.erc20_addresses.get(address) {
+            if *is_token {
+                return true;
+            }
+        }
+
+        // Check if it's manually blacklisted
+        if let Some(is_blacklisted) = self
+            .cache
+            .blacklisted_addresses
+            .get(address)
+        {
+            if *is_blacklisted {
+                return true;
+            }
+        }
+
+        false
     }
 
     /// Scans the storage changes of the block and detects entrypoints that need to be re-traced
@@ -453,10 +571,17 @@ where
     /// # Returns
     /// A map of entrypoints that need to be re-traced and the transaction that first detected the
     /// retriggered entrypoint.
+    #[instrument(skip(self, tx_with_changes), fields(
+        protocol = % self.protocol,
+        storage_changes_count = tx_with_changes.len()
+    ))]
     fn detect_retriggers<'a>(
         &self,
         tx_with_changes: &'a [TxWithStorageChanges],
     ) -> HashMap<EntryPointWithTracingParams, &'a Transaction> {
+        let _span = span!(Level::INFO, "dci_retrigger_detection", tx_count = tx_with_changes.len())
+            .entered();
+
         // Create a map of storage locations that have been updated in the block and the transaction
         // that last detected the update.
         // Note: tracing results are block scoped, this means if the same storage location is
@@ -466,31 +591,85 @@ where
 
         let mut retriggered_entrypoints: HashMap<EntryPointWithTracingParams, &Transaction> =
             HashMap::new();
+        let mut storage_locations_scanned = 0u64;
+
+        // Collect all locations that retriggered and the entrypoints they triggered (just
+        // EntryPoint)
+        let mut retriggered_locations: HashMap<(Address, StoreKey), Vec<EntryPoint>> =
+            HashMap::new();
+
         for tx_with_changes in tx_with_changes.iter() {
             for (account, contract_store) in tx_with_changes.storage_changes.iter() {
                 for key in contract_store.keys() {
+                    storage_locations_scanned += 1;
                     let location = (account.clone(), key.clone());
                     // Check if this storage location triggers any entrypoints
                     if let Some(entrypoints) = self.cache.retriggers.get(&location) {
-                        for entrypoint in entrypoints {
+                        for entrypoint_with_params in entrypoints {
                             // Only insert if we haven't seen this entrypoint before or if this tx
                             // is later
                             retriggered_entrypoints
-                                .entry(entrypoint.clone())
+                                .entry(entrypoint_with_params.clone())
                                 .and_modify(|entry_tx| {
                                     if entry_tx.index > tx_with_changes.tx.index {
                                         *entry_tx = &tx_with_changes.tx;
                                     }
                                 })
                                 .or_insert(&tx_with_changes.tx);
+
+                            // Collect the location and the entrypoint (not
+                            // EntryPointWithTracingParams)
+                            retriggered_locations
+                                .entry(location.clone())
+                                .or_default()
+                                .push(
+                                    entrypoint_with_params
+                                        .entry_point
+                                        .clone(),
+                                );
                         }
                     }
                 }
             }
         }
 
+        // Log all retriggered locations and their entrypoints (just EntryPoint)
+        if !retriggered_locations.is_empty() {
+            let retriggered_locations_log: Vec<_> = retriggered_locations
+                .iter()
+                .map(|((address, key), entrypoints)| {
+                    format!(
+                        "location: ({}, {}), entrypoints: [{}]",
+                        address,
+                        hex::encode(key),
+                        entrypoints
+                            .iter()
+                            .map(|ep| ep.external_id.clone())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                })
+                .collect();
+            tracing::info!(
+                "DCI: Retriggered locations and entrypoints: {:?}",
+                retriggered_locations_log
+            );
+        }
+
+        span!(Level::INFO, "retrigger_scan_complete").in_scope(|| {
+            tracing::info!(
+                retriggered_count = retriggered_entrypoints.len(),
+                storage_locations_scanned = storage_locations_scanned,
+                "DCI: Retrigger detection completed"
+            );
+        });
+
         if !retriggered_entrypoints.is_empty() {
-            tracing::info!("DCI: Retriggered entrypoints: {:?}", retriggered_entrypoints);
+            let retrigger_log: Vec<String> = retriggered_entrypoints
+                .keys()
+                .map(|e| e.entry_point.external_id.clone())
+                .collect();
+            tracing::info!("DCI: Retriggered entrypoints: {:?}", retrigger_log);
         }
 
         retriggered_entrypoints
@@ -606,8 +785,11 @@ where
                     })
                     .collect::<ContractStoreDeltas>();
 
-                if let Some(tracked_keys) = tracked_keys {
-                    slot_updates.retain(|slot, _| tracked_keys.contains(slot));
+                // Only filter slots if skipping full indexing
+                if self.should_skip_full_indexing(account) {
+                    if let Some(tracked_keys) = tracked_keys {
+                        slot_updates.retain(|slot, _| tracked_keys.contains(slot));
+                    }
                 }
 
                 if !slot_updates.is_empty() {
@@ -863,6 +1045,15 @@ mod tests {
             .expect_get_traced_entry_points()
             .return_once(move |_| Box::pin(async move { Ok(tracing_results) }));
 
+        // Mock get_tokens to return empty result
+        gateway
+            .expect_get_tokens()
+            .return_once(move |_, _, _, _, _| {
+                Box::pin(async move {
+                    Ok(tycho_common::storage::WithTotal { entity: Vec::new(), total: Some(0) })
+                })
+            });
+
         gateway
     }
 
@@ -1108,7 +1299,10 @@ mod tests {
                         AccountDelta::new(
                             Chain::Ethereum,
                             Bytes::from("0x02"),
-                            HashMap::from([(Bytes::from("0x22"), Some(Bytes::from("0x22")))]),
+                            HashMap::from([
+                                (Bytes::from("0x01"), Some(Bytes::from("0x01"))),
+                                (Bytes::from("0x22"), Some(Bytes::from("0x22"))),
+                            ]),
                             None,
                             None,
                             ChangeType::Update,
@@ -1176,7 +1370,7 @@ mod tests {
             });
 
         // Should only be called for new accounts, so account 0x01 and 0x11 are ignored because
-        // already indexed.
+        // already indexed. Both 0x05 and 0x55 are accessed by the traced entrypoints.
         account_extractor
             .expect_get_accounts_at_block()
             .with(
@@ -1185,19 +1379,19 @@ mod tests {
                     requests.len() == 2 &&
                         requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x55")) &&
+                            .any(|r| r.address == Bytes::from("0x05")) &&
                         requests
                             .iter()
-                            .any(|r| r.address == Bytes::from("0x05"))
+                            .any(|r| r.address == Bytes::from("0x55"))
                 }),
             )
             .return_once(move |_, _| {
                 Ok(HashMap::from([
                     (
-                        Bytes::from("0x55"),
+                        Bytes::from("0x05"),
                         AccountDelta::new(
                             Chain::Ethereum,
-                            Bytes::from("0x55"),
+                            Bytes::from("0x05"),
                             HashMap::new(),
                             None,
                             None,
@@ -1205,10 +1399,10 @@ mod tests {
                         ),
                     ),
                     (
-                        Bytes::from("0x05"),
+                        Bytes::from("0x55"),
                         AccountDelta::new(
                             Chain::Ethereum,
-                            Bytes::from("0x05"),
+                            Bytes::from("0x55"),
                             HashMap::new(),
                             None,
                             None,
@@ -1237,6 +1431,18 @@ mod tests {
         expected_block_changes.txs_with_update = vec![TxWithChanges {
             tx: get_transaction(1),
             account_deltas: HashMap::from([
+                // Account 0x01 has the storage update that triggered the retrigger
+                (
+                    Bytes::from("0x01"),
+                    AccountDelta::new(
+                        Chain::Ethereum,
+                        Bytes::from("0x01"),
+                        HashMap::from([(Bytes::from("0x01"), Some(Bytes::from("0xabcd")))]),
+                        None,
+                        None,
+                        ChangeType::Update,
+                    ),
+                ),
                 // Two new accounts are detected in the re-tracing
                 (
                     Bytes::from("0x05"),
@@ -1277,5 +1483,411 @@ mod tests {
         ];
 
         assert_eq!(block_changes, expected_block_changes);
+    }
+
+    #[tokio::test]
+    async fn test_storage_request_logic_for_tokens() {
+        let gateway = get_mock_gateway();
+        let mut account_extractor = MockAccountExtractor::new();
+        let mut entrypoint_tracer = MockEntryPointTracer::new();
+
+        // Set up a token address for testing
+        let token_address = Bytes::from("0xA0b86991c6218a36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+
+        entrypoint_tracer
+            .expect_trace()
+            .with(
+                eq(Bytes::from(2_u8).lpad(32, 0)),
+                eq(vec![EntryPointWithTracingParams::new(
+                    get_entrypoint(9),
+                    get_tracing_params(9),
+                )]),
+            )
+            .return_once({
+                let token_address = token_address.clone();
+                move |_, _| {
+                    Ok(vec![TracedEntryPoint::new(
+                        EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
+                        Bytes::zero(32),
+                        get_tracing_result_with_address(&token_address),
+                    )])
+                }
+            });
+
+        // Expect specific slots to be requested for the token
+        account_extractor
+            .expect_get_accounts_at_block()
+            .with(
+                eq(testing::block(2)),
+                predicate::function({
+                    let token_address = token_address.clone();
+                    move |requests: &[StorageSnapshotRequest]| {
+                        requests.len() == 1 &&
+                            requests[0].address == token_address &&
+                            requests[0].slots.is_some() &&
+                            requests[0]
+                                .slots
+                                .as_ref()
+                                .unwrap()
+                                .len() ==
+                                1 &&
+                            requests[0]
+                                .slots
+                                .as_ref()
+                                .unwrap()
+                                .contains(&Bytes::from(0x99_u8).lpad(32, 0))
+                    }
+                }),
+            )
+            .return_once({
+                let token_address = token_address.clone();
+                move |_, _| {
+                    Ok(HashMap::from([(
+                        token_address.clone(),
+                        AccountDelta::new(
+                            Chain::Ethereum,
+                            token_address.clone(),
+                            HashMap::new(),
+                            None,
+                            None,
+                            ChangeType::Update,
+                        ),
+                    )]))
+                }
+            });
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        dci.initialize().await.unwrap();
+
+        // Add the token to the cache
+        dci.cache
+            .erc20_addresses
+            .insert_permanent(token_address.clone(), true);
+
+        let mut block_changes = get_block_changes_with_token(token_address.clone());
+        dci.process_block_update(&mut block_changes)
+            .await
+            .unwrap();
+
+        // Verify the token was processed with specific slots only
+        assert!(!block_changes.txs_with_update.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_storage_request_logic_for_blacklisted_addresses() {
+        let gateway = get_mock_gateway();
+        let mut account_extractor = MockAccountExtractor::new();
+        let mut entrypoint_tracer = MockEntryPointTracer::new();
+
+        // Use the UniswapV4 pool manager (blacklisted address)
+        let blacklisted_address =
+            Bytes::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90").unwrap();
+
+        // Clone addresses for use in different closures
+        let blacklisted_address_for_trace = blacklisted_address.clone();
+        let blacklisted_address_for_predicate = blacklisted_address.clone();
+        let blacklisted_address_for_return1 = blacklisted_address.clone();
+        let blacklisted_address_for_return2 = blacklisted_address.clone();
+        let blacklisted_address_for_block_changes = blacklisted_address.clone();
+
+        entrypoint_tracer
+            .expect_trace()
+            .with(
+                eq(Bytes::from(2_u8).lpad(32, 0)),
+                eq(vec![EntryPointWithTracingParams::new(
+                    get_entrypoint(9),
+                    get_tracing_params(9),
+                )]),
+            )
+            .return_once(move |_, _| {
+                Ok(vec![TracedEntryPoint::new(
+                    EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
+                    Bytes::zero(32),
+                    get_tracing_result_with_address(&blacklisted_address_for_trace),
+                )])
+            });
+
+        // Expect specific slots to be requested for the blacklisted address
+        account_extractor
+            .expect_get_accounts_at_block()
+            .with(
+                eq(testing::block(2)),
+                predicate::function(move |requests: &[StorageSnapshotRequest]| {
+                    requests.len() == 1 &&
+                        requests[0].address == blacklisted_address_for_predicate &&
+                        requests[0].slots.is_some() &&
+                        requests[0]
+                            .slots
+                            .as_ref()
+                            .unwrap()
+                            .len() ==
+                            1 &&
+                        requests[0]
+                            .slots
+                            .as_ref()
+                            .unwrap()
+                            .contains(&Bytes::from(0x99_u8).lpad(32, 0))
+                }),
+            )
+            .return_once(move |_, _| {
+                Ok(HashMap::from([(
+                    blacklisted_address_for_return1.clone(),
+                    AccountDelta::new(
+                        Chain::Ethereum,
+                        blacklisted_address_for_return2,
+                        HashMap::new(),
+                        None,
+                        None,
+                        ChangeType::Update,
+                    ),
+                )]))
+            });
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        dci.initialize().await.unwrap();
+
+        let mut block_changes = get_block_changes_with_token(blacklisted_address_for_block_changes);
+        dci.process_block_update(&mut block_changes)
+            .await
+            .unwrap();
+
+        // Verify the blacklisted address was processed with specific slots only
+        assert!(!block_changes.txs_with_update.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_storage_request_logic_for_normal_contracts() {
+        let gateway = get_mock_gateway();
+        let mut account_extractor = MockAccountExtractor::new();
+        let mut entrypoint_tracer = MockEntryPointTracer::new();
+
+        // Use a normal contract address (not token or blacklisted)
+        let normal_address = Bytes::from("0x1234567890123456789012345678901234567890");
+
+        // Clone addresses for use in different closures
+        let normal_address_for_trace = normal_address.clone();
+        let normal_address_for_predicate = normal_address.clone();
+        let normal_address_for_return1 = normal_address.clone();
+        let normal_address_for_return2 = normal_address.clone();
+        let normal_address_for_block_changes = normal_address.clone();
+
+        entrypoint_tracer
+            .expect_trace()
+            .with(
+                eq(Bytes::from(2_u8).lpad(32, 0)),
+                eq(vec![EntryPointWithTracingParams::new(
+                    get_entrypoint(9),
+                    get_tracing_params(9),
+                )]),
+            )
+            .return_once(move |_, _| {
+                Ok(vec![TracedEntryPoint::new(
+                    EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
+                    Bytes::zero(32),
+                    get_tracing_result_with_address(&normal_address_for_trace),
+                )])
+            });
+
+        // Expect all slots (None) to be requested for normal contracts
+        account_extractor
+            .expect_get_accounts_at_block()
+            .with(
+                eq(testing::block(2)),
+                predicate::function(move |requests: &[StorageSnapshotRequest]| {
+                    requests.len() == 1 &&
+                        requests[0].address == normal_address_for_predicate &&
+                        requests[0].slots.is_none()
+                }),
+            )
+            .return_once(move |_, _| {
+                Ok(HashMap::from([(
+                    normal_address_for_return1.clone(),
+                    AccountDelta::new(
+                        Chain::Ethereum,
+                        normal_address_for_return2,
+                        HashMap::new(),
+                        None,
+                        None,
+                        ChangeType::Update,
+                    ),
+                )]))
+            });
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        dci.initialize().await.unwrap();
+
+        let mut block_changes = get_block_changes_with_token(normal_address_for_block_changes);
+        dci.process_block_update(&mut block_changes)
+            .await
+            .unwrap();
+
+        // Verify the normal contract was processed with all slots (None)
+        assert!(!block_changes.txs_with_update.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_extract_tracked_updates_slots_filtering() {
+        let gateway = get_mock_gateway();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        dci.initialize().await.unwrap();
+
+        // Set up addresses in different categories
+        let token_address = Bytes::from("0xA0b86991c6218a36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+        let normal_address = Bytes::from("0x1234567890123456789012345678901234567890");
+
+        // Add token to cache
+        dci.cache
+            .erc20_addresses
+            .insert_permanent(token_address.clone(), true);
+
+        // Add tracked contracts with specific slots
+        let tracked_slots =
+            HashSet::from([Bytes::from(0x01_u8).lpad(32, 0), Bytes::from(0x02_u8).lpad(32, 0)]);
+        dci.cache
+            .tracked_contracts
+            .insert_permanent(token_address.clone(), Some(tracked_slots.clone()));
+        dci.cache
+            .tracked_contracts
+            .insert_permanent(normal_address.clone(), Some(tracked_slots.clone()));
+
+        // Create block changes with storage updates
+        let block_changes = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            testing::block(3),
+            3,
+            false,
+            vec![],
+            vec![TxWithStorageChanges {
+                tx: get_transaction(1),
+                storage_changes: HashMap::from([
+                    // Token address - should have slots filtered
+                    (
+                        token_address.clone(),
+                        HashMap::from([
+                            (Bytes::from(0x01_u8).lpad(32, 0), Bytes::from(0x100_u16).lpad(32, 0)), /* Should be kept */
+                            (Bytes::from(0x03_u8).lpad(32, 0), Bytes::from(0x300_u16).lpad(32, 0)), /* Should be filtered out */
+                        ]),
+                    ),
+                    // Normal address - should not have slots filtered
+                    (
+                        normal_address.clone(),
+                        HashMap::from([
+                            (Bytes::from(0x01_u8).lpad(32, 0), Bytes::from(0x100_u16).lpad(32, 0)), /* Should be kept */
+                            (Bytes::from(0x03_u8).lpad(32, 0), Bytes::from(0x300_u16).lpad(32, 0)), /* Should be kept */
+                        ]),
+                    ),
+                ]),
+            }],
+        );
+
+        let tracked_updates = dci
+            .extract_tracked_updates(&block_changes)
+            .unwrap();
+
+        // Verify token address has filtered slots (only slot 0x01 should remain)
+        if let Some(token_tx) = tracked_updates.get(&get_transaction(1).hash) {
+            if let Some(token_delta) = token_tx
+                .account_deltas
+                .get(&token_address)
+            {
+                assert_eq!(token_delta.slots.len(), 1);
+                assert!(token_delta
+                    .slots
+                    .contains_key(&Bytes::from(0x01_u8).lpad(32, 0)));
+                assert!(!token_delta
+                    .slots
+                    .contains_key(&Bytes::from(0x03_u8).lpad(32, 0)));
+            } else {
+                panic!("Token delta not found");
+            }
+        } else {
+            panic!("Token transaction not found");
+        }
+
+        // Verify normal address has all slots (both 0x01 and 0x03 should remain)
+        if let Some(normal_tx) = tracked_updates.get(&get_transaction(1).hash) {
+            if let Some(normal_delta) = normal_tx
+                .account_deltas
+                .get(&normal_address)
+            {
+                assert_eq!(normal_delta.slots.len(), 2);
+                assert!(normal_delta
+                    .slots
+                    .contains_key(&Bytes::from(0x01_u8).lpad(32, 0)));
+                assert!(normal_delta
+                    .slots
+                    .contains_key(&Bytes::from(0x03_u8).lpad(32, 0)));
+            } else {
+                panic!("Normal delta not found");
+            }
+        } else {
+            panic!("Normal transaction not found");
+        }
+    }
+
+    // Helper function to create a tracing result with a specific address
+    fn get_tracing_result_with_address(address: &Address) -> TracingResult {
+        TracingResult::new(
+            HashSet::new(),
+            HashMap::from([(address.clone(), HashSet::from([Bytes::from(0x99_u8).lpad(32, 0)]))]),
+        )
+    }
+
+    // Helper function to create block changes with a specific token
+    fn get_block_changes_with_token(_address: Address) -> BlockChanges {
+        let tx = get_transaction(2);
+
+        BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            testing::block(2),
+            2,
+            false,
+            vec![TxWithChanges {
+                tx,
+                entrypoints: HashMap::from([(
+                    "component_1".to_string(),
+                    HashSet::from([get_entrypoint(9)]),
+                )]),
+                entrypoint_params: HashMap::from([(
+                    "entrypoint_9".to_string(),
+                    HashSet::from([(get_tracing_params(9), None)]),
+                )]),
+                ..Default::default()
+            }],
+            Vec::new(),
+        )
     }
 }
