@@ -53,8 +53,17 @@ impl ComponentTracingMetadata {
             Ok(MetadataValue::Balances(balances)) => {
                 self.balances = Some(Ok(balances));
             }
-            Ok(MetadataValue::Limits(limits)) => {
-                self.limits = Some(Ok(limits));
+            Ok(MetadataValue::Limits(new_limits)) => {
+                match &mut self.limits {
+                    Some(Ok(existing_limits)) => {
+                        // Merge new limits with existing limits
+                        existing_limits.extend(new_limits);
+                    }
+                    _ => {
+                        // No existing limits or existing was an error, set new limits
+                        self.limits = Some(Ok(new_limits));
+                    }
+                }
             }
             Ok(MetadataValue::Tvl(tvl)) => {
                 self.tvl = Some(Ok(tvl));
@@ -114,8 +123,8 @@ impl MetadataRequest {
     }
 }
 
-#[derive(Clone)]
-#[cfg_attr(test, derive(PartialEq, Debug))]
+#[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum MetadataRequestType {
     ComponentBalance { token_addresses: Vec<Address> },
     Tvl,
@@ -316,6 +325,12 @@ pub struct MetadataResponseParserRegistry {
     parsers: HashMap<String, Box<dyn MetadataResponseParser>>,
 }
 
+impl Default for MetadataResponseParserRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetadataResponseParserRegistry {
     pub fn new() -> Self {
         Self { parsers: HashMap::new() }
@@ -382,6 +397,12 @@ pub struct MetadataGeneratorRegistry {
     default_generator: Option<Box<dyn MetadataRequestGenerator>>,
 }
 
+impl Default for MetadataGeneratorRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetadataGeneratorRegistry {
     pub fn new() -> Self {
         Self { hook_generators: HashMap::new(), default_generator: None }
@@ -435,7 +456,7 @@ impl MetadataGeneratorRegistry {
         &self,
         component: &ProtocolComponent,
     ) -> Result<Option<&dyn MetadataRequestGenerator>, MetadataError> {
-        if let Some(hook_address) = component.static_attributes.get("hook") {
+        if let Some(hook_address) = component.static_attributes.get("hooks") {
             Ok(self
                 .hook_generators
                 .get(hook_address)
@@ -445,7 +466,7 @@ impl MetadataGeneratorRegistry {
                     .as_ref()
                     .map(|boxed_generator| boxed_generator.as_ref())))
         } else {
-            Err(MetadataError::MissingData("hook".to_string(), component.id.clone()))
+            Err(MetadataError::MissingData("hooks".to_string(), component.id.clone()))
         }
     }
 }
@@ -562,6 +583,12 @@ pub enum MetadataValue {
 // Provider registry with configurable routing keys
 pub struct ProviderRegistry {
     providers: HashMap<RoutingKey, Arc<dyn RequestProvider>>,
+}
+
+impl Default for ProviderRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ProviderRegistry {
@@ -788,7 +815,7 @@ mod tests {
     fn create_test_component(id: &str, hook_address: Option<Address>) -> ProtocolComponent {
         let mut static_attributes = HashMap::new();
         if let Some(hook) = hook_address {
-            static_attributes.insert("hook".to_string(), hook);
+            static_attributes.insert("hooks".to_string(), hook);
         }
 
         ProtocolComponent { id: id.to_string(), static_attributes, ..Default::default() }
@@ -836,7 +863,7 @@ mod tests {
             // Component has no hook, so we expect an error
             assert!(generator_result.is_err());
             if let Err(MetadataError::MissingData(field, component_id)) = generator_result {
-                assert_eq!(field, "hook");
+                assert_eq!(field, "hooks");
                 assert_eq!(component_id, "test_component");
             } else {
                 panic!("Expected MissingData error for component without hook");

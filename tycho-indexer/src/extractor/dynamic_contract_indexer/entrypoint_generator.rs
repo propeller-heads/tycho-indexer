@@ -15,6 +15,7 @@ use alloy_sol_types::{
 use num_bigint::BigInt;
 use num_traits::Zero;
 use thiserror::Error;
+use tracing::{debug, error, info, instrument, warn};
 use tycho_common::{
     keccak256,
     models::{
@@ -241,110 +242,258 @@ impl ERC6909Overwrites {
     }
 }
 
+/// Preferred method for estimating swap amounts
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EstimationMethod {
+    /// Prefer limits for estimation (if available)
+    Limits,
+    /// Prefer balances for estimation (if available)
+    Balances,
+}
+
 /// Default implementation of SwapAmountEstimator
-/// Uses limits when available, falls back to balances
-pub struct DefaultSwapAmountEstimator;
+/// Can be configured to prefer either limits or balances
+pub struct DefaultSwapAmountEstimator {
+    pub preferred_method: EstimationMethod,
+}
+
+impl DefaultSwapAmountEstimator {
+    /// Create a new estimator with the specified preferred method
+    pub fn new(preferred_method: EstimationMethod) -> Self {
+        Self { preferred_method }
+    }
+
+    /// Create an estimator that prefers limits
+    pub fn with_limits() -> Self {
+        Self::new(EstimationMethod::Limits)
+    }
+
+    /// Create an estimator that prefers balances
+    pub fn with_balances() -> Self {
+        Self::new(EstimationMethod::Balances)
+    }
+}
 
 impl SwapAmountEstimator for DefaultSwapAmountEstimator {
+    #[instrument(skip(self, metadata), fields(
+        token_count = tokens.len(),
+        has_limits = metadata.limits.is_some(),
+        has_balances = metadata.balances.is_some(),
+        preferred_method = ?self.preferred_method
+    ))]
     fn estimate_swap_amounts(
         &self,
         metadata: &ComponentTracingMetadata,
         tokens: &[Address],
     ) -> Result<HashMap<(Address, Address), Vec<Bytes>>, EntrypointGenerationError> {
+        debug!(
+            "Starting swap amount estimation with preferred method: {:?}",
+            self.preferred_method
+        );
+
+        // Check based on preferred method
+        let result = match self.preferred_method {
+            EstimationMethod::Balances => {
+                // Try balances first
+                let mut result = self.try_estimate_from_balances(metadata, tokens);
+                if result.is_empty() {
+                    // Fallback to limits
+                    result = self.try_estimate_from_limits(metadata);
+                }
+                result
+            }
+            EstimationMethod::Limits => {
+                // Try limits first
+                let mut result = self.try_estimate_from_limits(metadata);
+                if result.is_empty() {
+                    // Fallback to balances
+                    result = self.try_estimate_from_balances(metadata, tokens);
+                }
+                result
+            }
+        };
+
+        if !result.is_empty() {
+            return Ok(result);
+        }
+
+        // If neither limits nor balances are available, return error
+        warn!("No usable limits or balances found for swap amount estimation");
+        Err(EntrypointGenerationError::NoDataAvailable(
+            "No limits or balances available for swap amount estimation".to_string(),
+        ))
+    }
+}
+
+impl DefaultSwapAmountEstimator {
+    fn try_estimate_from_limits(
+        &self,
+        metadata: &ComponentTracingMetadata,
+    ) -> HashMap<(Address, Address), Vec<Bytes>> {
         let mut result = HashMap::new();
 
-        // Try to use limits first (preferred)
         if let Some(Ok(limits)) = &metadata.limits {
+            debug!(limit_count = limits.len(), "Found limits data, trying estimation");
             if !limits.is_empty() {
+                let mut valid_limits = 0;
+                let mut zero_limits = 0;
+
                 for ((token0, token1), (limit0, _limit1, _)) in limits {
                     let limit_amount =
                         BigInt::from_bytes_be(num_bigint::Sign::Plus, limit0.as_ref());
 
                     if !limit_amount.is_zero() {
-                        let one_hundred = BigInt::from(100);
+                        valid_limits += 1;
+
+                        debug!(
+                            token0 = %token0,
+                            token1 = %token1,
+                            limit_amount_hex = %format!("{:#x}", &limit_amount),
+                            "Processing limit for token pair"
+                        );
+                        let ten_thousand = BigInt::from(10000);
                         let amounts = vec![
                             Bytes::from(
-                                (&limit_amount / &one_hundred)
+                                ((&limit_amount * BigInt::from(5)) / &ten_thousand)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 0.05%
+                            Bytes::from(
+                                ((&limit_amount * BigInt::from(10)) / &ten_thousand)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 0.1%
+                            Bytes::from(
+                                ((&limit_amount * BigInt::from(50)) / &ten_thousand)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 0.5%
+                            Bytes::from(
+                                (&limit_amount / BigInt::from(100))
                                     .to_bytes_be()
                                     .1,
                             ), // 1%
-                            Bytes::from(
-                                (&limit_amount / BigInt::from(10))
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 10%
-                            Bytes::from(
-                                (&limit_amount / BigInt::from(2))
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 50%
-                            Bytes::from(
-                                ((&limit_amount * BigInt::from(95)) / &one_hundred)
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 95%
                         ];
+
+                        debug!(
+                            token0 = %token0,
+                            token1 = %token1,
+                            amount_count = amounts.len(),
+                            "Generated amounts from limits"
+                        );
+
                         result.insert((token0.clone(), token1.clone()), amounts);
+                    } else {
+                        zero_limits += 1;
+                        debug!(
+                            token0 = %token0,
+                            token1 = %token1,
+                            "Skipping zero limit"
+                        );
                     }
                 }
-                if !result.is_empty() {
-                    return Ok(result);
-                }
+
+                info!(
+                    valid_limits,
+                    zero_limits,
+                    total_pairs_generated = result.len(),
+                    "Processed all limits"
+                );
             }
         }
 
-        // Fallback to using balances if no limits available
-        // For each token that has a balance, create amounts for all possible sell->buy pairs
+        result
+    }
+
+    fn try_estimate_from_balances(
+        &self,
+        metadata: &ComponentTracingMetadata,
+        tokens: &[Address],
+    ) -> HashMap<(Address, Address), Vec<Bytes>> {
+        let mut result = HashMap::new();
+
         if let Some(Ok(balances)) = &metadata.balances {
+            debug!(balance_count = balances.len(), "Found balance data, using for estimation");
+
+            let mut tokens_with_balance = 0;
+            let mut tokens_without_balance = 0;
             for sell_token in tokens {
                 if let Some(balance_bytes) = balances.get(sell_token) {
                     let balance =
                         BigInt::from_bytes_be(num_bigint::Sign::Plus, balance_bytes.as_ref());
                     if !balance.is_zero() {
-                        let one_hundred = BigInt::from(100);
+                        tokens_with_balance += 1;
+
+                        debug!(
+                            sell_token = %sell_token,
+                            balance_hex = %format!("{:#x}", &balance),
+                            "Processing balance for token"
+                        );
+                        let ten_thousand = BigInt::from(10000);
                         let amounts = vec![
                             Bytes::from(
-                                (&balance / &one_hundred)
+                                ((&balance * BigInt::from(5)) / &ten_thousand)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 0.05%
+                            Bytes::from(
+                                ((&balance * BigInt::from(10)) / &ten_thousand)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 0.1%
+                            Bytes::from(
+                                ((&balance * BigInt::from(50)) / &ten_thousand)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 0.5%
+                            Bytes::from(
+                                (&balance / BigInt::from(100))
                                     .to_bytes_be()
                                     .1,
                             ), // 1%
-                            Bytes::from(
-                                (&balance / BigInt::from(10))
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 10%
-                            Bytes::from(
-                                (&balance / BigInt::from(2))
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 50%
-                            Bytes::from(
-                                ((&balance * BigInt::from(95)) / &one_hundred)
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 95%
                         ];
                         // Create entries for each possible buy token
+                        let mut pairs_created = 0;
                         for buy_token in tokens {
                             if sell_token != buy_token {
+                                pairs_created += 1;
                                 result.insert(
                                     (sell_token.clone(), buy_token.clone()),
                                     amounts.clone(),
                                 );
                             }
                         }
+
+                        debug!(
+                            sell_token = %sell_token,
+                            pairs_created,
+                            "Created swap pairs from balance"
+                        );
+                    } else {
+                        tokens_without_balance += 1;
+                        debug!(
+                            sell_token = %sell_token,
+                            "Token has zero balance, skipping"
+                        );
                     }
+                } else {
+                    tokens_without_balance += 1;
+                    debug!(
+                        sell_token = %sell_token,
+                        "Token not found in balances, skipping"
+                    );
                 }
             }
-            if !result.is_empty() {
-                return Ok(result);
-            }
+
+            info!(
+                tokens_with_balance,
+                tokens_without_balance,
+                total_pairs_generated = result.len(),
+                "Processed all token balances"
+            );
         }
 
-        // If neither limits nor balances are available, return error
-        Err(EntrypointGenerationError::NoDataAvailable(
-            "No limits or balances available for swap amount estimation".to_string(),
-        ))
+        result
     }
 }
 
@@ -375,15 +524,32 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
     for UniswapV4DefaultHookEntrypointGenerator<E>
 {
     fn set_config(&mut self, config: HookEntrypointConfig) {
+        debug!("Updating hook entrypoint generator configuration");
         self.config = config;
     }
 
+    #[instrument(skip(self, data, _context), fields(
+        component_id = %data.component.id,
+        hook_address = %data.hook_address,
+        token_count = data.component.tokens.len()
+    ))]
     fn generate_entrypoints(
         &self,
         data: &HookEntrypointData,
         _context: &HookTracerContext,
     ) -> Result<Vec<EntryPointWithTracingParams>, EntrypointGenerationError> {
+        info!("Starting entrypoint generation");
+
+        let hook_address = data.hook_address.clone();
         let tokens = data.component.tokens.clone();
+        let token0 = tokens[0].clone();
+        let token1 = tokens[1].clone();
+
+        if token1 < token0 {
+            return Err(EntrypointGenerationError::EntrypointGenerationFailed(
+                "Component has out-of-order tokens".to_string(),
+            ));
+        }
 
         // Defaults to random predefined address.
         let router_address = self
@@ -395,22 +561,57 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
         let max_sample_size = self.config.max_sample_size.unwrap_or(4);
         let min_samples = self.config.min_samples;
 
+        debug!(
+            router_address = %router_address,
+            max_sample_size,
+            min_samples,
+            "Configuration for entrypoint generation"
+        );
+
         let mut entrypoints = Vec::new();
 
         let swap_amounts = self
             .estimator
-            .estimate_swap_amounts(&data.component_metadata, &tokens)?;
+            .estimate_swap_amounts(&data.component_metadata, &tokens)
+            .map_err(|e| {
+                error!(
+                    component_id = %data.component.id,
+                    error = %e,
+                    "Failed to estimate swap amounts"
+                );
+                e
+            })?;
 
-        for ((token0, token1), amounts) in swap_amounts.iter() {
-            let currency0 = SolAddress::from_slice(token0.as_ref());
-            let currency1 = SolAddress::from_slice(token1.as_ref());
+        info!(swap_pair_count = swap_amounts.len(), "Estimated swap amounts for token pairs");
+
+        for ((token_in, token_out), amounts) in swap_amounts.iter() {
+            debug!(
+                token_in = %token_in,
+                token_out = %token_out,
+                amount_count = amounts.len(),
+                "Processing token pair"
+            );
+            let sell_token = SolAddress::from_slice(token_in.as_ref());
+            let buy_token = SolAddress::from_slice(token_out.as_ref());
+
+            let token_0 = SolAddress::from_slice(token0.as_ref());
+            let token_1 = SolAddress::from_slice(token1.as_ref());
+
             let hooks = SolAddress::from_slice(data.hook_address.as_ref());
 
             let fee = u32::from(
                 data.component
                     .static_attributes
                     .get("key_lp_fee")
-                    .expect("Fee attribute not found for component")
+                    .ok_or_else(|| {
+                        error!(
+                            component_id = %data.component.id,
+                            "Fee attribute not found for component"
+                        );
+                        EntrypointGenerationError::EntrypointGenerationFailed(
+                            "Fee attribute not found for component".to_string(),
+                        )
+                    })?
                     .clone(),
             );
 
@@ -418,44 +619,89 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                 data.component
                     .static_attributes
                     .get("tick_spacing")
-                    .expect("tick_spacing attribute not found for component")
+                    .ok_or_else(|| {
+                        error!(
+                            component_id = %data.component.id,
+                            "tick_spacing attribute not found for component"
+                        );
+                        EntrypointGenerationError::EntrypointGenerationFailed(
+                            "tick_spacing attribute not found for component".to_string(),
+                        )
+                    })?
                     .clone(),
             );
 
+            debug!(fee, tick_spacing, "Extracted pool parameters from component");
+
             let pool_key = PoolKey {
-                currency0,
-                currency1,
+                currency0: token_0,
+                currency1: token_1,
                 fee: U24::try_from(fee).expect("Fee value too large for U24"),
                 tickSpacing: I24::try_from(tick_spacing)
                     .expect("tick_spacing value out of range for I24"),
                 hooks,
             };
 
-            let is_zero_for_one = token0 < token1;
+            let is_zero_for_one = token_in < token_out;
 
             let amounts_to_use = if amounts.len() >= max_sample_size {
+                debug!(
+                    token_in = %token_in,
+                    token_out = %token_out,
+                    "Using max sample size, taking {} out of {} amounts",
+                    max_sample_size,
+                    amounts.len()
+                );
                 amounts
                     .iter()
                     .take(max_sample_size)
                     .collect::<Vec<_>>()
             } else if amounts.len() >= min_samples {
+                debug!(
+                    token_in = %token_in,
+                    token_out = %token_out,
+                    "Using all {} available amounts",
+                    amounts.len()
+                );
                 amounts.iter().collect::<Vec<_>>()
             } else {
+                error!(
+                    token_in = %token_in,
+                    token_out = %token_out,
+                    available_amounts = amounts.len(),
+                    min_samples,
+                    "Insufficient swap amounts for token pair"
+                );
                 return Err(EntrypointGenerationError::AmountsEstimationFailed(
                     format!(
                         "Insufficient swap amounts for token pair {:?} -> {:?}: got {}, need at least {}",
-                        token0, token1, amounts.len(), min_samples
+                        token_in, token_out, amounts.len(), min_samples
                     ),
                 ));
             };
 
-            for amount_bytes in amounts_to_use {
+            for (amount_idx, amount_bytes) in amounts_to_use.iter().enumerate() {
                 let amount_u256 = U256::from_be_slice(amount_bytes.as_ref());
                 let amount_in = u128::try_from(amount_u256).map_err(|_| {
+                    error!(
+                        token0 = %token_in,
+                        token1 = %token_out,
+                        amount_hex = %format!("{:#x}", amount_u256),
+                        "Amount too large for u128"
+                    );
                     EntrypointGenerationError::EntrypointGenerationFailed(
                         "Amount too large for u128".to_string(),
                     )
                 })?;
+
+                debug!(
+                    token_in = %token_in,
+                    token_out = %token_out,
+                    amount_idx,
+                    amount_in,
+                    amount_hex = %format!("{:#x}", amount_in),
+                    "Processing swap amount"
+                );
 
                 let swap_params = ExactInputSingleParams {
                     poolKey: pool_key.clone(),
@@ -466,27 +712,28 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                     hookData: Default::default(),
                 };
 
-                let plan = Plan {
-                    actions: SolBytes::from(vec![
-                        ACTION_SWAP_EXACT_IN_SINGLE,
-                        ACTION_SETTLE_ALL,
-                        ACTION_TAKE_ALL,
-                    ]),
-                    params: vec![
-                        SolBytes::from(swap_params.abi_encode()),
-                        // Token In // amount in
-                        SolBytes::from((currency0, amount_in).abi_encode()),
-                        // Token Out // amount out
-                        SolBytes::from((currency1, 0u128).abi_encode()),
-                    ],
-                };
+                let actions = SolBytes::from(vec![
+                    ACTION_SWAP_EXACT_IN_SINGLE,
+                    ACTION_SETTLE_ALL,
+                    ACTION_TAKE_ALL,
+                ]);
+                let params = vec![
+                    SolBytes::from(swap_params.abi_encode()),
+                    SolBytes::from((sell_token, amount_in).abi_encode()),
+                    SolBytes::from((buy_token, 0u128).abi_encode()),
+                ];
 
-                // Build calldata for execute(bytes) function call
-                let mut calldata = EXECUTE_FUNCTION_SELECTOR.to_vec();
-                calldata.extend(plan.abi_encode());
+                let mut calldata = hex::decode("09c5eabe").unwrap();
+                let mut tmp = (actions, params).abi_encode();
+
+                // Remove first 32 bytes like the reference implementation
+                tmp.drain(0..32);
+
+                calldata.extend(tmp.abi_encode());
 
                 let overwrites = ERC6909Overwrites::default();
-                let balance_slot = overwrites.balance_slot(router_address.clone(), token0.clone());
+                let balance_slot =
+                    overwrites.balance_slot(router_address.clone(), token_in.clone());
 
                 let pool_manager = self.config.pool_manager.clone();
 
@@ -500,7 +747,11 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
 
                 state_overrides.insert(
                     router_address.clone(),
-                    AccountOverrides { slots: None, native_balance: None, code: Some(router_code) },
+                    AccountOverrides {
+                        slots: None,
+                        native_balance: None,
+                        code: Some(router_code.clone()),
+                    },
                 );
 
                 let mut storage_diff = BTreeMap::new();
@@ -518,7 +769,7 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                 );
 
                 state_overrides.insert(
-                    pool_manager,
+                    pool_manager.clone(),
                     AccountOverrides {
                         slots: Some(StorageOverride::Diff(storage_diff)),
                         native_balance: None,
@@ -526,16 +777,33 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                     },
                 );
 
+                let entry_point_id = format!("{hook_address}:execute(bytes)");
+                debug!(
+                    entry_point_id = %entry_point_id,
+                    hook_address = %hook_address,
+                    router_address = %router_address,
+                    "Creating EntryPoint with ID"
+                );
+
                 let entry_point = EntryPointWithTracingParams::new(
                     EntryPoint::new(
-                        format!("{router_address}:execute(bytes)"),
+                        entry_point_id.clone(),
                         router_address.clone(),
                         "execute(bytes)".to_string(),
                     ),
                     TracingParams::RPCTracer(
                         RPCTracerParams::new(None, Bytes::from(calldata))
-                            .with_state_overrides(state_overrides),
+                            .with_state_overrides(state_overrides)
+                            .with_prune_addresses(vec![router_address.clone()]),
                     ),
+                );
+
+                debug!(
+                    token_in = %token_in,
+                    token_out = %token_out,
+                    amount_idx,
+                    entry_point_id = %entry_point_id,
+                    "Generated entrypoint for swap"
                 );
 
                 entrypoints.push(entry_point);
@@ -543,10 +811,20 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
         }
 
         if entrypoints.is_empty() {
+            warn!(
+                component_id = %data.component.id,
+                "No entrypoints could be generated"
+            );
             return Err(EntrypointGenerationError::NoDataAvailable(
                 "No entrypoints could be generated".to_string(),
             ));
         }
+
+        info!(
+            component_id = %data.component.id,
+            entrypoint_count = entrypoints.len(),
+            "Successfully generated entrypoints"
+        );
 
         Ok(entrypoints)
     }
@@ -594,10 +872,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_estimate_with_limits() {
-        let estimator = DefaultSwapAmountEstimator;
+        let estimator = DefaultSwapAmountEstimator::with_limits();
         let tokens = create_test_tokens();
 
-        let limit_value = BigInt::from(1000u64);
+        let limit_value = BigInt::from(10000u64);
         let limits = vec![(
             (tokens[0].clone(), tokens[1].clone()),
             (Bytes::from(limit_value.to_bytes_be().1), Bytes::from(limit_value.to_bytes_be().1)),
@@ -614,18 +892,18 @@ mod tests {
             .get(&(tokens[0].clone(), tokens[1].clone()))
             .unwrap();
         assert_eq!(amounts.len(), 4);
-        assert_eq!(amounts[0], Bytes::from(BigInt::from(10u64).to_bytes_be().1)); // 1%
-        assert_eq!(amounts[1], Bytes::from(BigInt::from(100u64).to_bytes_be().1)); // 10%
-        assert_eq!(amounts[2], Bytes::from(BigInt::from(500u64).to_bytes_be().1)); // 50%
-        assert_eq!(amounts[3], Bytes::from(BigInt::from(950u64).to_bytes_be().1)); // 95%
+        assert_eq!(amounts[0], Bytes::from(BigInt::from(5u64).to_bytes_be().1)); // 0.05%
+        assert_eq!(amounts[1], Bytes::from(BigInt::from(10u64).to_bytes_be().1)); // 0.1%
+        assert_eq!(amounts[2], Bytes::from(BigInt::from(50u64).to_bytes_be().1)); // 0.5%
+        assert_eq!(amounts[3], Bytes::from(BigInt::from(100u64).to_bytes_be().1)); // 1%
     }
 
     #[tokio::test]
     async fn test_estimate_with_balances_fallback() {
-        let estimator = DefaultSwapAmountEstimator;
+        let estimator = DefaultSwapAmountEstimator::with_balances();
         let tokens = create_test_tokens();
 
-        let balance_value = BigInt::from(2000u64);
+        let balance_value = BigInt::from(20000u64);
         let mut balances = HashMap::new();
         balances.insert(tokens[0].clone(), Bytes::from(balance_value.to_bytes_be().1));
         balances.insert(tokens[1].clone(), Bytes::from(balance_value.to_bytes_be().1));
@@ -642,24 +920,24 @@ mod tests {
             .get(&(tokens[0].clone(), tokens[1].clone()))
             .unwrap();
         assert_eq!(amounts01.len(), 4);
-        assert_eq!(amounts01[0], Bytes::from(BigInt::from(20u64).to_bytes_be().1)); // 1%
-        assert_eq!(amounts01[1], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 10%
-        assert_eq!(amounts01[2], Bytes::from(BigInt::from(1000u64).to_bytes_be().1)); // 50%
-        assert_eq!(amounts01[3], Bytes::from(BigInt::from(1900u64).to_bytes_be().1)); // 95%
+        assert_eq!(amounts01[0], Bytes::from(BigInt::from(10u64).to_bytes_be().1)); // 0.05%
+        assert_eq!(amounts01[1], Bytes::from(BigInt::from(20u64).to_bytes_be().1)); // 0.1%
+        assert_eq!(amounts01[2], Bytes::from(BigInt::from(100u64).to_bytes_be().1)); // 0.5%
+        assert_eq!(amounts01[3], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 1%
 
         let amounts10 = result
             .get(&(tokens[1].clone(), tokens[0].clone()))
             .unwrap();
         assert_eq!(amounts10.len(), 4);
-        assert_eq!(amounts10[0], Bytes::from(BigInt::from(20u64).to_bytes_be().1)); // 1%
-        assert_eq!(amounts10[1], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 10%
-        assert_eq!(amounts10[2], Bytes::from(BigInt::from(1000u64).to_bytes_be().1)); // 50%
-        assert_eq!(amounts10[3], Bytes::from(BigInt::from(1900u64).to_bytes_be().1)); // 95%
+        assert_eq!(amounts10[0], Bytes::from(BigInt::from(10u64).to_bytes_be().1)); // 0.05%
+        assert_eq!(amounts10[1], Bytes::from(BigInt::from(20u64).to_bytes_be().1)); // 0.1%
+        assert_eq!(amounts10[2], Bytes::from(BigInt::from(100u64).to_bytes_be().1)); // 0.5%
+        assert_eq!(amounts10[3], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 1%
     }
 
     #[tokio::test]
     async fn test_estimate_with_no_data() {
-        let estimator = DefaultSwapAmountEstimator;
+        let estimator = DefaultSwapAmountEstimator::with_balances();
         let tokens = create_test_tokens();
 
         let metadata = ComponentTracingMetadata {
@@ -680,7 +958,7 @@ mod tests {
 
         ProtocolComponent {
             id: "test_component".to_string(),
-            protocol_system: "uniswap_v4".to_string(),
+            protocol_system: "uniswap_v4_hooks".to_string(),
             protocol_type_name: "pool".to_string(),
             chain: Chain::Ethereum,
             tokens: create_test_tokens(),
