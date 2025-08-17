@@ -1,7 +1,7 @@
-use alloy::primitives::U256;
 use super::constants::{BONE, U256_1, U256_10E_10, U256_2};
 use super::error::CowAMMError;
 use crate::tycho_common::Bytes;
+use alloy::primitives::U256;
 
 // https://github.com/darkforestry/amms-rs/blob/main/src/amms/balancer/bmath.rs
 pub fn btoi(a: U256) -> U256 {
@@ -116,7 +116,7 @@ pub fn bsub_sign(a: U256, b: U256) -> (U256, bool) {
     } else {
         (b - a, true)
     }
-} 
+}
 
 // Reference:
 // https://github.com/balancer/balancer-core/blob/f4ed5d65362a8d6cec21662fb6eae233b0babc1f/contracts/BNum.sol#L63C4-L73C6
@@ -184,25 +184,25 @@ pub fn calculate_out_given_in(
 }
 
 /** @dev Computes how many tokens must be sent to a pool in order to take `tokenAmountOut`, given the current balances
-     * and price bounds. */
-      /**
-   * @notice Calculate the amount of token in given the amount of token out for a swap
-   * @param tokenBalanceIn The balance of the input token in the pool
-   * @param tokenWeightIn The weight of the input token in the pool
-   * @param tokenBalanceOut The balance of the output token in the pool
-   * @param tokenWeightOut The weight of the output token in the pool
-   * @param tokenAmountOut The amount of the output token
-   * @param swapFee The swap fee of the pool
-   * @return tokenAmountIn The amount of token in given the amount of token out for a swap
-   * @dev Formula:
-   * aI = tokenAmountIn
-   * bO = tokenBalanceOut               /  /     bO      \    (wO / wI)      \
-   * bI = tokenBalanceIn          bI * |  | ------------  | ^            - 1  |
-   * aO = tokenAmountOut    aI =        \  \ ( bO - aO ) /                   /
-   * wI = tokenWeightIn           --------------------------------------------
-   * wO = tokenWeightOut                          ( 1 - sF )
-   * sF = swapFee
-   */
+ * and price bounds. */
+/**
+ * @notice Calculate the amount of token in given the amount of token out for a swap
+ * @param tokenBalanceIn The balance of the input token in the pool
+ * @param tokenWeightIn The weight of the input token in the pool
+ * @param tokenBalanceOut The balance of the output token in the pool
+ * @param tokenWeightOut The weight of the output token in the pool
+ * @param tokenAmountOut The amount of the output token
+ * @param swapFee The swap fee of the pool
+ * @return tokenAmountIn The amount of token in given the amount of token out for a swap
+ * @dev Formula:
+ * aI = tokenAmountIn
+ * bO = tokenBalanceOut               /  /     bO      \    (wO / wI)      \
+ * bI = tokenBalanceIn          bI * |  | ------------  | ^            - 1  |
+ * aO = tokenAmountOut    aI =        \  \ ( bO - aO ) /                   /
+ * wI = tokenWeightIn           --------------------------------------------
+ * wO = tokenWeightOut                          ( 1 - sF )
+ * sF = swapFee
+ */
 
 pub fn calculate_in_given_out(
     token_balance_in: U256,

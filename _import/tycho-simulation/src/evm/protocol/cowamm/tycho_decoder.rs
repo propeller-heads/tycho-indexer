@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 
-use alloy::primitives::{U256};
-use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
-use tycho_common::{models::token::Token, simulation::errors::{SimulationError,TransitionError}, dto::{ResponseProtocolState, ProtocolComponent}, Bytes};
 use crate::{
-    evm::protocol::{
-        cowamm::{
-            state::CowAMMState,
-            bmath,
-        },
-    },
+    evm::protocol::cowamm::{bmath, state::CowAMMState},
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
+};
+use alloy::primitives::U256;
+use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
+use tycho_common::{
+    dto::{ProtocolComponent, ResponseProtocolState},
+    models::token::Token,
+    simulation::errors::{SimulationError, TransitionError},
+    Bytes,
 };
 
 const BYTES: usize = 32;
@@ -35,18 +35,18 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
         _all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
         let address = snapshot
-                .component
-                .static_attributes
-                .get("address")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("address".to_string()))?
-                .clone();
+            .component
+            .static_attributes
+            .get("address")
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("address".to_string()))?
+            .clone();
 
         let token_a = snapshot
-                .component
-                .static_attributes
-                .get("token_a")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("token_a".to_string()))?
-                .clone();
+            .component
+            .static_attributes
+            .get("token_a")
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("token_a".to_string()))?
+            .clone();
 
         let liquidity_a = U256::from_be_bytes::<BYTES>(
             snapshot
@@ -57,7 +57,9 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
                 .as_ref()
                 .try_into()
                 .map_err(|err| {
-                    InvalidSnapshotError::ValueError(format!("liquidity_a length mismatch: {err:?}"))
+                    InvalidSnapshotError::ValueError(format!(
+                        "liquidity_a length mismatch: {err:?}"
+                    ))
                 })?,
         );
 
@@ -70,42 +72,48 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
                 .as_ref()
                 .try_into()
                 .map_err(|err| {
-                    InvalidSnapshotError::ValueError(format!("liquidity_b length mismatch: {err:?}"))
+                    InvalidSnapshotError::ValueError(format!(
+                        "liquidity_b length mismatch: {err:?}"
+                    ))
                 })?,
         );
 
         let token_b = snapshot
-                .component
-                .static_attributes
-                .get("token_b")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("token_b".to_string()))?
-                .clone();
+            .component
+            .static_attributes
+            .get("token_b")
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("token_b".to_string()))?
+            .clone();
 
         let lp_token = snapshot
-                .component
-                .static_attributes
-                .get("lp_token")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("lp_token".to_string()))?
-                .clone();
-        
-       let lp_token_supply = U256::from_be_bytes::<BYTES>(
+            .component
+            .static_attributes
+            .get("lp_token")
+            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("lp_token".to_string()))?
+            .clone();
+
+        let lp_token_supply = U256::from_be_bytes::<BYTES>(
             snapshot
                 .state
                 .attributes
                 .get("lp_token_supply")
-                .ok_or_else(|| InvalidSnapshotError::MissingAttribute("lp_token_supply".to_string()))?
+                .ok_or_else(|| {
+                    InvalidSnapshotError::MissingAttribute("lp_token_supply".to_string())
+                })?
                 .as_ref()
                 .try_into()
                 .map_err(|err| {
-                    InvalidSnapshotError::ValueError(format!("lp_token_supply length mismatch: {err:?}"))
+                    InvalidSnapshotError::ValueError(format!(
+                        "lp_token_supply length mismatch: {err:?}"
+                    ))
                 })?,
         );
 
         let fee = 0u64;
 
-        //weight_a and weight_b are left padded big endian numbers of 32 bytes 
+        //weight_a and weight_b are left padded big endian numbers of 32 bytes
         //we want a U256 number from the hex representation
-        let weight_a =  U256::from_be_bytes::<BYTES>(
+        let weight_a = U256::from_be_bytes::<BYTES>(
             snapshot
                 .component
                 .static_attributes
@@ -132,59 +140,55 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CowAMMState {
         );
 
         Ok(Self::new(
-            address, 
-            token_a, 
-            token_b, 
-            liquidity_a, 
-            liquidity_b, 
-            lp_token, 
-            lp_token_supply, 
-            weight_a, 
-            weight_b, 
-            fee
+            address,
+            token_a,
+            token_b,
+            liquidity_a,
+            liquidity_b,
+            lp_token,
+            lp_token_supply,
+            weight_a,
+            weight_b,
+            fee,
         ))
     }
 }
 
 pub fn attributes() -> HashMap<String, Bytes> {
-     HashMap::from([
-            ("liquidity_a".to_string(),  Bytes::from(vec![0; 32])),
-            ("liquidity_b".to_string(),  Bytes::from(vec![0; 32])),
-            ("lp_token_supply".to_string(), Bytes::from(vec![0; 32])), 
-        ])
+    HashMap::from([
+        ("liquidity_a".to_string(), Bytes::from(vec![0; 32])),
+        ("liquidity_b".to_string(), Bytes::from(vec![0; 32])),
+        ("lp_token_supply".to_string(), Bytes::from(vec![0; 32])),
+    ])
 }
 pub fn static_attributes() -> HashMap<String, Bytes> {
-     HashMap::from([
-            ("address".to_string(), Bytes::from(vec![0; 32])),
-            ("weight_a".to_string(), Bytes::from(vec![0; 32])),
-            ("weight_b".to_string(), Bytes::from(vec![0; 32])),
-            ("token_a".to_string(),  Bytes::from(vec![0; 32])),
-            ("token_b".to_string(),  Bytes::from(vec![0; 32])),
-            ("lp_token".to_string(), Bytes::from(vec![0; 32])), 
-            ("fee".to_string(), 0u64.into()), 
-        ])
+    HashMap::from([
+        ("address".to_string(), Bytes::from(vec![0; 32])),
+        ("weight_a".to_string(), Bytes::from(vec![0; 32])),
+        ("weight_b".to_string(), Bytes::from(vec![0; 32])),
+        ("token_a".to_string(), Bytes::from(vec![0; 32])),
+        ("token_b".to_string(), Bytes::from(vec![0; 32])),
+        ("lp_token".to_string(), Bytes::from(vec![0; 32])),
+        ("fee".to_string(), 0u64.into()),
+    ])
 }
 
-
 pub fn component() -> ProtocolComponent {
-    ProtocolComponent {
-        static_attributes: static_attributes(),
-        ..Default::default()
-    }
+    ProtocolComponent { static_attributes: static_attributes(), ..Default::default() }
 }
 
 pub fn state() -> CowAMMState {
-     CowAMMState::new(
+    CowAMMState::new(
         Bytes::from(vec![0; 32]),
-        Bytes::from(vec![0; 32]), 
         Bytes::from(vec![0; 32]),
-        U256::from(0), 
-        U256::from(0),
         Bytes::from(vec![0; 32]),
         U256::from(0),
         U256::from(0),
-        U256::from(0), 
-        0u64
+        Bytes::from(vec![0; 32]),
+        U256::from(0),
+        U256::from(0),
+        U256::from(0),
+        0u64,
     )
 }
 
@@ -192,16 +196,13 @@ pub fn state() -> CowAMMState {
 mod tests {
     use rstest::rstest;
     use tycho_common::dto::ResponseProtocolState;
-    
+
     use super::*;
 
     #[tokio::test]
     async fn test_cowamm_try_from_with_block() {
         let snapshot = ComponentWithState {
-            state: ResponseProtocolState {
-                attributes: attributes(),
-               ..Default::default()
-            },
+            state: ResponseProtocolState { attributes: attributes(), ..Default::default() },
             component: component(),
             component_tvl: None,
             entrypoints: Vec::new(),
@@ -236,18 +237,14 @@ mod tests {
         let mut attributes = attributes();
 
         let _ = match missing_attribute {
-            "liquidity_a" | "liquidity_b" |"lp_token_supply" => {
-                attributes
-                    .remove(missing_attribute)
-            },
-            "address" | "weight_a" | "weight_b" | "token_a" | "token_b" |  "lp_token" => {
-                component
-                    .static_attributes
-                    .remove(missing_attribute)
-            },
-            &_ => None
+            "liquidity_a" | "liquidity_b" | "lp_token_supply" => {
+                attributes.remove(missing_attribute)
+            }
+            "address" | "weight_a" | "weight_b" | "token_a" | "token_b" | "lp_token" => component
+                .static_attributes
+                .remove(missing_attribute),
+            &_ => None,
         };
-      
 
         let snapshot = ComponentWithState {
             state: ResponseProtocolState {
@@ -271,8 +268,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
-            InvalidSnapshotError::MissingAttribute(ref attr) if attr == missing_attribute 
+            InvalidSnapshotError::MissingAttribute(ref attr) if attr == missing_attribute
         ));
     }
 }
-
