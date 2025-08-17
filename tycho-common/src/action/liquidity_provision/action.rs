@@ -8,10 +8,10 @@ use crate::{
     action::{
         asset::Asset,
         context::ActionContext,
+        liquidity_provision::asset::{ConcentratedLiquidityNFT, TickRange},
         simulate::{Action, ActionOutput, DefaultInputs, SimulateForward},
     },
     asset::erc20::{ERC20Asset, ERC20DefaultOutputs},
-    action::liquidity_provision::asset::{ConcentratedLiquidityNFT, TickRange},
     simulation::errors::SimulationError,
 };
 // =============================================================================
@@ -58,14 +58,62 @@ pub struct AddLiquidityFullRangeParameters;
 #[derive(Debug, Clone)]
 pub struct AddLiquidityConcentratedParameters {
     /// Price range for the concentrated position.
-    pub tick_range: TickRange,
+    tick_range: TickRange,
+}
+
+impl AddLiquidityConcentratedParameters {
+    /// Create new parameters with the specified tick range.
+    pub fn new(tick_range: TickRange) -> Result<Self, SimulationError> {
+        tick_range.validate()?;
+        Ok(Self { tick_range })
+    }
+
+    /// Create new parameters with full range (tick bounds covering entire price range).
+    pub fn full_range() -> Self {
+        Self { tick_range: TickRange::full_range() }
+    }
+
+    /// Get the tick range.
+    pub fn tick_range(&self) -> &TickRange {
+        &self.tick_range
+    }
+
+    /// Set a new tick range with validation.
+    pub fn with_tick_range(mut self, tick_range: TickRange) -> Result<Self, SimulationError> {
+        tick_range.validate()?;
+        self.tick_range = tick_range;
+        Ok(self)
+    }
 }
 
 /// Parameters for removing liquidity.
 #[derive(Debug, Clone)]
 pub struct RemoveLiquidityParameters {
     /// How much liquidity to remove.
-    pub amount: LiquidityAmount,
+    amount: LiquidityAmount,
+}
+
+impl RemoveLiquidityParameters {
+    /// Create new parameters to remove a specific amount of liquidity.
+    pub fn exact_amount(amount: BigUint) -> Result<Self, SimulationError> {
+        if amount == BigUint::from(0u32) {
+            return Err(SimulationError::InvalidInput(
+                "Liquidity amount must be greater than 0".into(),
+                None,
+            ));
+        }
+        Ok(Self { amount: LiquidityAmount::Exact(amount) })
+    }
+
+    /// Create new parameters to remove all liquidity from the position.
+    pub fn remove_all() -> Self {
+        Self { amount: LiquidityAmount::All }
+    }
+
+    /// Get the liquidity amount.
+    pub fn amount(&self) -> &LiquidityAmount {
+        &self.amount
+    }
 }
 
 /// Parameters for collecting fees from concentrated positions.
@@ -89,11 +137,37 @@ pub enum LiquidityAmount {
 #[derive(Debug, Clone)]
 pub struct ConcentratedLiquidityResult {
     /// The NFT position created.
-    pub position: ConcentratedLiquidityNFT,
+    position: ConcentratedLiquidityNFT,
     /// Any refunded tokens (unused inputs).
-    pub refunds: Vec<ERC20Asset>,
+    refunds: Vec<ERC20Asset>,
     /// Gas consumed in the operation.
-    pub gas_used: BigUint,
+    gas_used: BigUint,
+}
+
+impl ConcentratedLiquidityResult {
+    /// Create a new concentrated liquidity result.
+    pub fn new(
+        position: ConcentratedLiquidityNFT,
+        refunds: Vec<ERC20Asset>,
+        gas_used: BigUint,
+    ) -> Self {
+        Self { position, refunds, gas_used }
+    }
+
+    /// Get the NFT position created.
+    pub fn position(&self) -> &ConcentratedLiquidityNFT {
+        &self.position
+    }
+
+    /// Get any refunded tokens.
+    pub fn refunds(&self) -> &[ERC20Asset] {
+        &self.refunds
+    }
+
+    /// Get the gas consumed.
+    pub fn gas_used(&self) -> &BigUint {
+        &self.gas_used
+    }
 }
 
 impl ActionOutput for ConcentratedLiquidityResult {
@@ -337,5 +411,98 @@ impl LiquidityAmount {
     /// Check if this represents removing the entire position.
     pub fn is_full_withdrawal(&self) -> bool {
         matches!(self, LiquidityAmount::All)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{token::Token, Chain};
+
+    fn create_test_token(symbol: &str, address: &str) -> Token {
+        Token::new(&address.into(), symbol, 18, 0, &[Some(21000u64)], Chain::Ethereum, 100)
+    }
+
+    #[test]
+    fn test_add_liquidity_concentrated_parameters() {
+        let tick_range = TickRange::new(-1000, 1000).unwrap();
+
+        // Test successful creation
+        let params = AddLiquidityConcentratedParameters::new(tick_range.clone()).unwrap();
+        assert_eq!(params.tick_range(), &tick_range);
+
+        // Test full range creation
+        let full_range_params = AddLiquidityConcentratedParameters::full_range();
+        assert!(
+            full_range_params
+                .tick_range()
+                .tick_lower() <
+                full_range_params
+                    .tick_range()
+                    .tick_upper()
+        );
+
+        // Test with_tick_range
+        let new_tick_range = TickRange::new(-500, 500).unwrap();
+        let updated = params
+            .with_tick_range(new_tick_range.clone())
+            .unwrap();
+        assert_eq!(updated.tick_range(), &new_tick_range);
+    }
+
+    #[test]
+    fn test_add_liquidity_concentrated_parameters_invalid() {
+        // Test invalid tick range
+        let invalid_tick_range = TickRange::new(1000, -1000); // upper < lower
+        assert!(invalid_tick_range.is_err());
+
+        if let Ok(tick_range) = TickRange::new(-1000, 1000) {
+            let params = AddLiquidityConcentratedParameters::new(tick_range);
+            assert!(params.is_ok());
+        }
+    }
+
+    #[test]
+    fn test_remove_liquidity_parameters() {
+        // Test exact amount
+        let amount = BigUint::from(1000u32);
+        let params = RemoveLiquidityParameters::exact_amount(amount.clone()).unwrap();
+        if let LiquidityAmount::Exact(exact_amount) = params.amount() {
+            assert_eq!(exact_amount, &amount);
+        } else {
+            panic!("Expected Exact amount");
+        }
+
+        // Test remove all
+        let params = RemoveLiquidityParameters::remove_all();
+        assert!(params.amount().is_full_withdrawal());
+
+        // Test invalid amount (zero)
+        let zero_params = RemoveLiquidityParameters::exact_amount(BigUint::from(0u32));
+        assert!(zero_params.is_err());
+    }
+
+    #[test]
+    fn test_concentrated_liquidity_result() {
+        let token1 = create_test_token("USDC", "0x1111111111111111111111111111111111111111");
+        let token2 = create_test_token("ETH", "0x2222222222222222222222222222222222222222");
+        let tick_range = TickRange::new(-1000, 1000).unwrap();
+
+        let position = ConcentratedLiquidityNFT::new(
+            crate::Bytes::from("0xpool".as_bytes()),
+            crate::Bytes::from("0xposition".as_bytes()),
+            tick_range,
+            BigUint::from(1000u32),
+        )
+        .unwrap();
+
+        let refunds = vec![];
+        let gas_used = BigUint::from(50000u32);
+
+        let result = ConcentratedLiquidityResult::new(position, refunds.clone(), gas_used.clone());
+
+        assert_eq!(result.refunds().len(), refunds.len());
+        assert_eq!(result.gas_used(), &gas_used);
+        assert!(result.position().liquidity_amount() == &BigUint::from(1000u32));
     }
 }

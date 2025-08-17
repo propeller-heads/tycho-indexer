@@ -99,7 +99,8 @@ pub fn run_chaining_playground() {
 
     // Execute the complete chain with 500 USDC input
     let input_amount = BigUint::from(500_000_000_000u64); // 500 USDC for swap
-    let inputs = DefaultInputs(vec![ERC20Asset::new(usdc.clone(), input_amount.clone())]);
+    let inputs =
+        DefaultInputs(vec![ERC20Asset::new(usdc.clone(), BigUint::from(500_000_000_000u64))]);
 
     println!(
         "Input: {} USDC ({:.2})",
