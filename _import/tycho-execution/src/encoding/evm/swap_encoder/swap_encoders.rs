@@ -779,8 +779,7 @@ impl SwapEncoder for BebopSwapEncoder {
                             .request_signed_quote(params)
                             .await
                     })
-                })
-                .map_err(|e| EncodingError::FatalError(format!("Failed to get Bebop quote {e}")))?;
+                })?;
                 let bebop_calldata = signed_quote
                     .quote_attributes
                     .get("calldata")
