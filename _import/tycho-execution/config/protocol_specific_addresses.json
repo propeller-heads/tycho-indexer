@@ -11,6 +11,11 @@
       "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
     }
   },
-  "base": {},
+  "base": {
+    "rfq:bebop": {
+      "bebop_settlement_address": "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F",
+      "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+    }
+  },
   "unichain": {}
 }
