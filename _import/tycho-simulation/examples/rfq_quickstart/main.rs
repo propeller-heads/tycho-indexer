@@ -52,7 +52,7 @@ struct Cli {
     #[arg(long, default_value_t = 10.0)]
     sell_amount: f64,
     /// The minimum TVL threshold for RFQ quotes in USD
-    #[arg(long, default_value_t = 1.0)]
+    #[arg(long, default_value_t = 1000.0)]
     tvl_threshold: f64,
     #[arg(long, default_value = FAKE_PK)]
     swapper_pk: String,
@@ -319,7 +319,7 @@ async fn main() {
                         match choice {
                             "simulate" => {
                                 println!("\nSimulating RFQ swap...");
-                                println!("Step 1: Simulating permit2 approval first...");
+                                println!("Step 1: Encoding the permit2 transaction...");
 
                                 // First, simulate ONLY the approval transaction
                                 let approve_function_signature = "approve(address,uint256)";
@@ -334,13 +334,11 @@ async fn main() {
                                     .get_transaction_count(wallet.address())
                                     .await
                                     .expect("Failed to get nonce");
-
                                 let block = provider
                                     .get_block_by_number(BlockNumberOrTag::Latest)
                                     .await
                                     .expect("Failed to fetch latest block")
                                     .expect("Block not found");
-
                                 let base_fee = block
                                     .header
                                     .base_fee_per_gas
@@ -366,12 +364,59 @@ async fn main() {
                                     ..Default::default()
                                 };
 
+                                // Step 2: NOW encode the solution (after approval
+                                // simulation)
+                                println!("Step 2: Encoding the solution transaction...");
+
+                                let solution = create_solution(
+                                    component.clone(),
+                                    state.as_ref(),
+                                    sell_token.clone(),
+                                    buy_token.clone(),
+                                    amount_in.clone(),
+                                    Bytes::from(wallet.address().to_vec()),
+                                    amount_out.clone(),
+                                );
+
+                                // Encode the swaps of the solution
+                                let encoded_solution = encoder
+                                    .encode_solutions(vec![solution.clone()])
+                                    .expect("Failed to encode router calldata")[0]
+                                    .clone();
+
+                                let tx = encode_tycho_router_call(
+                                    named_chain as u64,
+                                    encoded_solution.clone(),
+                                    &solution,
+                                    chain.native_token().address,
+                                    signer.clone(),
+                                )
+                                .expect("Failed to encode router call");
+
+                                let swap_request = TransactionRequest {
+                                    to: Some(TxKind::Call(Address::from_slice(&tx.to))),
+                                    from: Some(wallet.address()),
+                                    value: Some(biguint_to_u256(&tx.value)),
+                                    input: TransactionInput {
+                                        input: Some(AlloyBytes::from(tx.data)),
+                                        data: None,
+                                    },
+                                    gas: Some(800_000u64),
+                                    chain_id: Some(named_chain as u64),
+                                    max_fee_per_gas: Some(max_fee_per_gas.into()),
+                                    max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
+                                    nonce: Some(nonce + 1),
+                                    ..Default::default()
+                                };
+
+                                println!("Step 3: Simulating approval and solution transactions together...");
+
                                 // Simulate ONLY the permit2 approval first
                                 let approval_payload = SimulatePayload {
                                     block_state_calls: vec![SimBlock {
                                         block_overrides: None,
                                         state_overrides: None,
-                                        calls: vec![approval_request.clone()],
+                                        calls: vec![approval_request.clone(), swap_request],
                                     }],
                                     trace_transfers: true,
                                     validation: true,
@@ -382,106 +427,23 @@ async fn main() {
                                     .simulate(&approval_payload)
                                     .await
                                 {
-                                    Ok(approval_output) => {
-                                        // Check if approval simulation succeeded
-                                        let approval_success = approval_output
-                                            .iter()
-                                            .all(|block| block.calls.iter().all(|tx| tx.status));
-
-                                        if !approval_success {
-                                            println!("❌ Permit2 approval simulation failed!");
-                                            continue;
-                                        }
-
-                                        println!("✅ Permit2 approval simulation successful!");
-
-                                        // Step 2: NOW encode the solution (after approval
-                                        // simulation)
-                                        println!("Step 2: Encoding the solution transaction...");
-
-                                        let solution = create_solution(
-                                            component.clone(),
-                                            state.as_ref(),
-                                            sell_token.clone(),
-                                            buy_token.clone(),
-                                            amount_in.clone(),
-                                            Bytes::from(wallet.address().to_vec()),
-                                            amount_out.clone(),
-                                        );
-
-                                        // Encode the swaps of the solution
-                                        let encoded_solution = encoder
-                                            .encode_solutions(vec![solution.clone()])
-                                            .expect("Failed to encode router calldata")[0]
-                                            .clone();
-
-                                        let tx = encode_tycho_router_call(
-                                            named_chain as u64,
-                                            encoded_solution.clone(),
-                                            &solution,
-                                            chain.native_token().address,
-                                            signer.clone(),
-                                        )
-                                        .expect("Failed to encode router call");
-
-                                        let swap_request = TransactionRequest {
-                                            to: Some(TxKind::Call(Address::from_slice(&tx.to))),
-                                            from: Some(wallet.address()),
-                                            value: Some(biguint_to_u256(&tx.value)),
-                                            input: TransactionInput {
-                                                input: Some(AlloyBytes::from(tx.data)),
-                                                data: None,
-                                            },
-                                            gas: Some(800_000u64),
-                                            chain_id: Some(named_chain as u64),
-                                            max_fee_per_gas: Some(max_fee_per_gas.into()),
-                                            max_priority_fee_per_gas: Some(
-                                                max_priority_fee_per_gas.into(),
-                                            ),
-                                            nonce: Some(nonce),
-                                            ..Default::default()
-                                        };
-
-                                        println!("Step 3: Simulating solution transaction...");
-
-                                        let solution_payload = SimulatePayload {
-                                            block_state_calls: vec![SimBlock {
-                                                block_overrides: None,
-                                                state_overrides: None,
-                                                calls: vec![swap_request],
-                                            }],
-                                            trace_transfers: true,
-                                            validation: true,
-                                            return_full_transactions: true,
-                                        };
-
-                                        match provider
-                                            .simulate(&solution_payload)
-                                            .await
-                                        {
-                                            Ok(output) => {
-                                                for block in output.iter() {
-                                                    println!(
-                                                        "\nSimulated Block {block_num}:",
-                                                        block_num = block.inner.header.number
-                                                    );
-                                                    for transaction in block.calls.iter() {
-                                                        println!(
-                                                            "  RFQ Swap: Status: {status:?}, Gas Used: {gas_used}",
-                                                            status = transaction.status,
-                                                            gas_used = transaction.gas_used
-                                                        );
-                                                    }
-                                                }
-                                                println!("\n✅ Solution simulation successful!");
-                                                println!(); // Add empty line after simulation results
-                                                continue;
-                                            }
-                                            Err(e) => {
-                                                eprintln!("\n❌ Solution simulation failed: {e:?}");
-                                                continue;
+                                    Ok(output) => {
+                                        for block in output.iter() {
+                                            println!(
+                                                "\nSimulated Block {block_num}:",
+                                                block_num = block.inner.header.number
+                                            );
+                                            for transaction in block.calls.iter() {
+                                                println!(
+                                                    "  RFQ Swap: Status: {status:?}, Gas Used: {gas_used}",
+                                                    status = transaction.status,
+                                                    gas_used = transaction.gas_used
+                                                );
                                             }
                                         }
+                                        println!("\n✅ Simulation successful!");
+                                        println!(); // Add empty line after simulation results
+                                        continue;
                                     }
                                     Err(e) => {
                                         eprintln!("\nSimulation failed: {e:?}");
