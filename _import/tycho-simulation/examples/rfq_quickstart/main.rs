@@ -314,8 +314,6 @@ async fn main() {
                             "simulate" => {
                                 println!("\nSimulating RFQ swap...");
                                 println!("Step 1: Encoding the permit2 transaction...");
-
-                                // First, simulate ONLY the approval transaction
                                 let approve_function_signature = "approve(address,uint256)";
                                 let args = (
                                     Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
@@ -358,8 +356,6 @@ async fn main() {
                                     ..Default::default()
                                 };
 
-                                // Step 2: NOW encode the solution (after approval
-                                // simulation)
                                 println!("Step 2: Encoding the solution transaction...");
 
                                 let solution = create_solution(
@@ -372,7 +368,6 @@ async fn main() {
                                     amount_out.clone(),
                                 );
 
-                                // Encode the swaps of the solution
                                 let encoded_solution = encoder
                                     .encode_solutions(vec![solution.clone()])
                                     .expect("Failed to encode router calldata")[0]
@@ -404,8 +399,6 @@ async fn main() {
                                 };
 
                                 println!("Step 3: Simulating approval and solution transactions together...");
-
-                                // Simulate ONLY the permit2 approval first
                                 let approval_payload = SimulatePayload {
                                     block_state_calls: vec![SimBlock {
                                         block_overrides: None,
@@ -436,37 +429,12 @@ async fn main() {
                                             }
                                         }
                                         println!("\n✅ Simulation successful!");
-                                        println!(); // Add empty line after simulation results
+                                        println!();
                                         continue;
                                     }
                                     Err(e) => {
                                         eprintln!("\nSimulation failed: {e:?}");
-                                        println!("Your RPC provider does not support transaction simulation.");
-                                        println!(
-                                            "Do you want to proceed with execution instead?\n"
-                                        );
-                                        let yes_no_options = vec!["Yes", "No"];
-                                        let yes_no_selection = Select::with_theme(
-                                            &ColorfulTheme::default(),
-                                        )
-                                        .with_prompt(
-                                            "Do you want to proceed with execution instead?",
-                                        )
-                                        .default(1) // Default to No
-                                        .items(&yes_no_options)
-                                        .interact()
-                                        .unwrap_or(1); // Default to No if error
-
-                                        if yes_no_selection == 0 {
-                                            println!("\nProceeding with execution after simulation failure...");
-                                            // For simplicity, we'll direct users to use the main
-                                            // execute option
-                                            println!("Please select 'Execute the swap' from the main menu to proceed with the optimized execution flow.\n");
-                                            continue;
-                                        } else {
-                                            println!("\nSkipping this swap...\n");
-                                            continue;
-                                        }
+                                        println!("Your RPC provider does not support transaction simulation. Consider proceeding with execution instead or switching RPC provider.");
                                     }
                                 }
                             }
