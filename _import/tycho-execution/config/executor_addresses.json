@@ -16,7 +16,8 @@
   "base": {
     "uniswap_v2": "0xF744EBfaA580cF3fFc25aD046E92BD8B770a0700",
     "uniswap_v3": "0x647bffbf8bd72bf6341ecba8b0279e090313a40d",
-    "uniswap_v4": "0xb5628b97f491f85766673ac4d5d47bb1af7fcc4a"
+    "uniswap_v4": "0xb5628b97f491f85766673ac4d5d47bb1af7fcc4a",
+    "rfq:bebop": "0x489A3f531dA3873D6585BF3f8E0dEE48CAC6F7BC"
   },
   "unichain": {
     "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",
