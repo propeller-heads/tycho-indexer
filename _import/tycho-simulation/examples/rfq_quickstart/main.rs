@@ -163,14 +163,8 @@ async fn main() {
     )
     .expect("Failed to private key signer");
     let tx_signer = EthereumWallet::from(wallet.clone());
-    let named_chain = NamedChain::from_str(
-        &chain
-            .to_string()
-            .replace("ethereum", "mainnet"),
-    )
-    .expect("Invalid chain");
     let provider = ProviderBuilder::default()
-        .with_chain(named_chain)
+        .with_chain(NamedChain::try_from(chain.id()).expect("Invalid chain"))
         .wallet(tx_signer.clone())
         .connect(&env::var("RPC_URL").expect("RPC_URL env var not set"))
         .await
@@ -224,7 +218,7 @@ async fn main() {
                         let amount_out = amount_out_result.amount;
 
                         println!(
-                            "Indicative price for swap {}: {} {} -> {} {}",
+                            "Best indicative price for swap {}: {} {} -> {} {}",
                             component.protocol_system,
                             format_token_amount(&amount_in, &sell_token),
                             sell_token.symbol,
@@ -357,7 +351,7 @@ async fn main() {
                                         data: None,
                                     },
                                     gas: Some(100_000u64),
-                                    chain_id: Some(named_chain as u64),
+                                    chain_id: Some(chain.id()),
                                     max_fee_per_gas: Some(max_fee_per_gas.into()),
                                     max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
                                     nonce: Some(nonce),
@@ -385,7 +379,7 @@ async fn main() {
                                     .clone();
 
                                 let tx = encode_tycho_router_call(
-                                    named_chain as u64,
+                                    chain.id(),
                                     encoded_solution.clone(),
                                     &solution,
                                     chain.native_token().address,
@@ -402,7 +396,7 @@ async fn main() {
                                         data: None,
                                     },
                                     gas: Some(800_000u64),
-                                    chain_id: Some(named_chain as u64),
+                                    chain_id: Some(chain.id()),
                                     max_fee_per_gas: Some(max_fee_per_gas.into()),
                                     max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
                                     nonce: Some(nonce + 1),
@@ -518,7 +512,7 @@ async fn main() {
                                         data: None,
                                     },
                                     gas: Some(100_000u64),
-                                    chain_id: Some(named_chain as u64),
+                                    chain_id: Some(chain.id()),
                                     max_fee_per_gas: Some(max_fee_per_gas.into()),
                                     max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
                                     nonce: Some(nonce),
@@ -574,7 +568,7 @@ async fn main() {
                                     .clone();
 
                                 let swap_tx = encode_tycho_router_call(
-                                    named_chain as u64,
+                                    chain.id(),
                                     encoded_solution.clone(),
                                     &solution,
                                     chain.native_token().address,
@@ -591,7 +585,7 @@ async fn main() {
                                         data: None,
                                     },
                                     gas: Some(800_000u64),
-                                    chain_id: Some(named_chain as u64),
+                                    chain_id: Some(chain.id()),
                                     max_fee_per_gas: Some(max_fee_per_gas.into()),
                                     max_priority_fee_per_gas: Some(max_priority_fee_per_gas.into()),
                                     nonce: Some(nonce + 1),

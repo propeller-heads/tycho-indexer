@@ -41,5 +41,6 @@ The example will:
 2. Stream live price quotes from market makers for your specified token pair
 3. Display the best available quotes with pricing information
 
+TODO: update this once docs are merged
 See [here](https://docs.propellerheads.xyz/tycho/for-solvers/tycho-quickstart) a complete guide on how to run the
 Quickstart example.
