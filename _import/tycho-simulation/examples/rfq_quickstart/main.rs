@@ -54,8 +54,7 @@ struct Cli {
     /// The minimum TVL threshold for RFQ quotes in USD
     #[arg(long, default_value_t = 1000.0)]
     tvl_threshold: f64,
-    #[arg(long, default_value = FAKE_PK)]
-    swapper_pk: String,
+
     #[arg(long, default_value = "ethereum")]
     chain: Chain,
 }
@@ -148,7 +147,8 @@ async fn main() {
         buy_symbol = buy_token.symbol
     );
 
-    let pk = B256::from_str(&cli.swapper_pk).expect("Failed to convert swapper pk to B256");
+    let swapper_pk = env::var("PRIVATE_KEY").unwrap_or_else(|_| FAKE_PK.to_string());
+    let pk = B256::from_str(&swapper_pk).expect("Failed to convert swapper pk to B256");
     let signer = PrivateKeySigner::from_bytes(&pk).expect("Failed to create PrivateKeySigner");
 
     // Initialize the encoder
@@ -158,10 +158,7 @@ async fn main() {
         .build()
         .expect("Failed to build encoder");
 
-    let wallet = PrivateKeySigner::from_bytes(
-        &B256::from_str(&cli.swapper_pk).expect("Failed to convert swapper pk to B256"),
-    )
-    .expect("Failed to private key signer");
+    let wallet = PrivateKeySigner::from_bytes(&pk).expect("Failed to private key signer");
     let tx_signer = EthereumWallet::from(wallet.clone());
     let provider = ProviderBuilder::default()
         .with_chain(NamedChain::try_from(chain.id()).expect("Invalid chain"))
@@ -230,7 +227,7 @@ async fn main() {
                         let expected_amount_copy = amount_out.clone();
 
                         // Print token balances before showing the swap options
-                        if cli.swapper_pk != FAKE_PK {
+                        if swapper_pk != FAKE_PK {
                             match get_token_balance(
                                 &provider,
                                 Address::from_slice(&sell_token.address),
@@ -283,7 +280,7 @@ async fn main() {
                             }
                         }
 
-                        if cli.swapper_pk == FAKE_PK {
+                        if swapper_pk == FAKE_PK {
                             println!(
                                 "\nSigner private key was not provided. Skipping simulation/execution...\n"
                             );

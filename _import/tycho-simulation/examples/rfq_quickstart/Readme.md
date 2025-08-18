@@ -28,6 +28,14 @@ cargo run --release --example rfq_quickstart -- --sell-token "0x50c5725949A6F0c7
 
 for 10 USDC -> WETH on Base.
 
+To be able to execute or simulate the best swap, you need to set your private key as an environment variable before running the quickstart. Be sure not to save it to your terminal history:
+
+```bash
+unset HISTFILE
+export PRIVATE_KEY=<your-private-key>
+...
+```
+
 ## Important Notes
 
 - **Credentials**: Contact RFQ protocols directly to obtain WebSocket API credentials for accessing live market maker
@@ -40,6 +48,7 @@ The example will:
 1. Connect to the RFQ's WebSocket API using your credentials
 2. Stream live price quotes from market makers for your specified token pair
 3. Display the best available quotes with pricing information
+4. Allow you to simulate or execute swaps when a private key is provided
 
 TODO: update this once docs are merged
 See [here](https://docs.propellerheads.xyz/tycho/for-solvers/tycho-quickstart) a complete guide on how to run the
