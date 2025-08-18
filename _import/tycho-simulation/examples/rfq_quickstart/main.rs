@@ -599,8 +599,7 @@ async fn main() {
                                     );
 
                                     println!(
-                                        "Summary: Swapped {formatted_in} {sell_symbol} → {formatted_out} {buy_symbol} at
-                                        a price of {forward_price:.6} {buy_symbol} per {sell_symbol}",
+                                        "Summary: Swapped {formatted_in} {sell_symbol} → {formatted_out} {buy_symbol} at a price of {forward_price:.6} {buy_symbol} per {sell_symbol}",
                                         formatted_in = format_token_amount(&amount_in, &sell_token),
                                         sell_symbol = sell_token.symbol,
                                         formatted_out = format_token_amount(&expected_amount_copy, &buy_token),
