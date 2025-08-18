@@ -542,14 +542,13 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
 
         let hook_address = data.hook_address.clone();
         let tokens = data.component.tokens.clone();
-        let token0 = tokens[0].clone();
-        let token1 = tokens[1].clone();
 
-        if token1 < token0 {
-            return Err(EntrypointGenerationError::EntrypointGenerationFailed(
-                "Component has out-of-order tokens".to_string(),
-            ));
-        }
+        // Ensure tokens are properly ordered according to UniswapV4 logic
+        let (token0, token1) = if tokens[0] < tokens[1] {
+            (tokens[0].clone(), tokens[1].clone())
+        } else {
+            (tokens[1].clone(), tokens[0].clone())
+        };
 
         // Defaults to random predefined address.
         let router_address = self
@@ -642,7 +641,8 @@ impl<E: SwapAmountEstimator + Send + Sync> HookEntrypointGenerator
                 hooks,
             };
 
-            let is_zero_for_one = token_in < token_out;
+            // Determine swap direction: true if swapping token0 for token1
+            let is_zero_for_one = token_in == &token0;
 
             let amounts_to_use = if amounts.len() >= max_sample_size {
                 debug!(
@@ -1098,5 +1098,86 @@ mod tests {
         let result = generator.generate_entrypoints(&hook_data, &context);
 
         assert!(matches!(result, Err(EntrypointGenerationError::NoDataAvailable(_))));
+    }
+
+    #[tokio::test]
+    async fn test_token_reordering() {
+        // Create tokens in reverse order (token1 < token0)
+        let token0 = Address::from([2u8; 20]);
+        let token1 = Address::from([1u8; 20]);
+        let tokens = vec![token0.clone(), token1.clone()];
+
+        // Create component with reversed tokens
+        let mut component = create_test_component();
+        component.tokens = tokens;
+
+        // Create amounts for both swap directions
+        let mut amounts = HashMap::new();
+        amounts.insert(
+            (token0.clone(), token1.clone()),
+            vec![Bytes::from(U256::from(100u64).to_be_bytes_vec())],
+        );
+        amounts.insert(
+            (token1.clone(), token0.clone()),
+            vec![Bytes::from(U256::from(200u64).to_be_bytes_vec())],
+        );
+
+        let estimator = MockEstimator { result: Ok(amounts) };
+        let generator = UniswapV4DefaultHookEntrypointGenerator::new(
+            estimator,
+            Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90")),
+        );
+
+        let hook_data = HookEntrypointData {
+            hook_address: Address::from([4u8; 20]),
+            component,
+            component_metadata: create_metadata_with_limits(vec![]),
+        };
+        let context = create_test_context();
+
+        // This should not fail despite tokens being out of order
+        let result = generator.generate_entrypoints(&hook_data, &context);
+
+        assert!(result.is_ok());
+        let entrypoints = result.unwrap();
+        assert_eq!(entrypoints.len(), 2); // One for each swap direction
+    }
+
+    #[tokio::test]
+    async fn test_swap_direction_determination() {
+        // Create properly ordered tokens
+        let token0 = Address::from([1u8; 20]);
+        let token1 = Address::from([2u8; 20]);
+
+        // Test data for token0 -> token1 swap
+        let mut amounts = HashMap::new();
+        amounts.insert(
+            (token0.clone(), token1.clone()),
+            vec![Bytes::from(U256::from(100u64).to_be_bytes_vec())],
+        );
+
+        let estimator = MockEstimator { result: Ok(amounts) };
+        let generator = UniswapV4DefaultHookEntrypointGenerator::new(
+            estimator,
+            Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90")),
+        );
+
+        let mut component = create_test_component();
+        component.tokens = vec![token0.clone(), token1.clone()];
+
+        let hook_data = HookEntrypointData {
+            hook_address: Address::from([4u8; 20]),
+            component,
+            component_metadata: create_metadata_with_limits(vec![]),
+        };
+        let context = create_test_context();
+
+        let result = generator.generate_entrypoints(&hook_data, &context);
+        assert!(result.is_ok());
+
+        // For token0 -> token1 swap, zeroForOne should be true
+        // We can't directly test the internal state, but we can verify the entrypoint was created
+        let entrypoints = result.unwrap();
+        assert_eq!(entrypoints.len(), 1);
     }
 }
