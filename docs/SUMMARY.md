@@ -23,6 +23,7 @@
   * [Execution Venues](../tycho/for-solvers/execution/execution-venues.md)
 * [Hosted Endpoints](for-solvers/hosted-endpoints.md)
 * [Supported Protocols](for-solvers/supported-protocols.md)
+* [Request for Quote Protocols](for-solvers/request-for-quote-protocols.md)
 
 ## For DEXs
 
@@ -45,4 +46,5 @@
     * [Code Architecture](for-dexs/protocol-integration/execution/code-architecture.md)
   * [Testing](for-dexs/protocol-integration/3.-testing/README.md)
     * [How to Run](for-dexs/protocol-integration/3.-testing/how-to-run.md)
+  * [Request for Quote Protocols](for-dexs/protocol-integration/request-for-quote-protocols.md)
   * [Contributing guidelines](for-dexs/protocol-integration/contributing-guidelines.md)

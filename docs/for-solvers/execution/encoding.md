@@ -40,14 +40,17 @@ A solution consists of one or more swaps. A swap represents a swap operation to 
 
 The `Swap` struct has the following attributes:
 
-| Attribute      |         Type        |                                        Description                                       |
-| -------------- | :-----------------: | :--------------------------------------------------------------------------------------: |
-| **component**  | `ProtocolComponent` |                            Protocol component from Tycho core                            |
-| **token\_in**  |       `Bytes`       |                               Token you provide to the pool                              |
-| **token\_out** |       `Bytes`       |                              Token you expect from the pool                              |
-| **split**      |        `f64`        | Percentage of the amount in to be swapped in this operation (for example, 0.5 means 50%) |
+| Attribute           |              Type             |                                                        Description                                                        |
+| ------------------- | :---------------------------: | :-----------------------------------------------------------------------------------------------------------------------: |
+| **component**       |      `ProtocolComponent`      |                                             Protocol component from Tycho core                                            |
+| **token\_in**       |            `Bytes`            |                                               Token you provide to the pool                                               |
+| **token\_out**      |            `Bytes`            |                                               Token you expect from the pool                                              |
+| **split**           |             `f64`             |                  Percentage of the amount in to be swapped in this operation (for example, 0.5 means 50%)                 |
+| **user\_data**      |        `Option<Bytes>`        |                                        Optional user data to be passed to encoding                                        |
+| **protocol\_state** | `Option<&'a dyn ProtocolSim>` |                                      Optional protocol state used to perform the swap                                     |
+| **protocol\_state** |       `Option<BigUint>`       | Optional estimated amount in for this Swap. This is necessary for RFQ protocols. This value is used to request the quote. |
 
-To create a `Swap`, use the `new` [function](https://github.com/propeller-heads/tycho-execution/blob/28bfe2e32aa175d8165f58f147f2dfc63240c81c/src/encoding/models.rs#L82) where you can pass any struct that implements `Into<ProtocolComponent>`.
+To create a `Swap`, use the [SwapBuilder](https://github.com/propeller-heads/tycho-execution/blob/6d88d0a1444da2e3d951b11257c322c62c3dd6f5/src/encoding/models.rs#L130) where you can pass any struct that implements `Into<ProtocolComponent>`.
 
 #### Split Swaps
 

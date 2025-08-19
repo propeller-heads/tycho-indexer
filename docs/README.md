@@ -93,8 +93,8 @@ The quickstart shows you how to:
 
 1. **Set up and load** necessary data, like available tokens.
 2. **Connect to the Tycho Indexer** to fetch on-chain protocol data (e.g., Uniswap V2, Balancer V2) and **build a Protocol Stream** that streams updates, like new pools and states, in real-time.
-3. **Simulate** swaps on all available pools for a specified pair (e.g., USDC, WETH), and print out the most USDC available for 1 WETH.
-4. **Encode** a swap to swap 1 WETH against the best pool.
+3. **Simulate** swaps on all available pools for a specified pair (e.g., USDC, WETH), and print out the most WETH available for 10 USDC.
+4. **Encode** a swap of 10 USDC against the best pool.
 5. **Execute** the swap against the Tycho Router.
 
 ### 1. Set up
@@ -161,17 +161,7 @@ By inspecting each of the amount outs, you can then choose the protocol componen
 
 After choosing the best swap, you can use Tycho Execution to encode it.
 
-**a. Create encoder**
-
-```rust
-let encoder = TychoRouterEncoderBuilder::new()
-    .chain(chain)
-    .user_transfer_type(UserTransferType::TransferFromPermit2)
-    .build()
-    .expect("Failed to build encoder");
-```
-
-#### b. Create a solution object
+#### a. Create a solution object
 
 Now you know the best protocol component (i.e., pool), you can compute a minimum amount out. And you can put the swap into the expected input format for your encoder.&#x20;
 
@@ -185,18 +175,15 @@ let multiplier = &bps - slippage_percent;
 let min_amount_out = (expected_amount * &multiplier) / &bps;
 ```
 
-:warning:  For maximum security, you should determine the minimum amount should from a **third-party source.**
+{% hint style="warning" %}
+For maximum security, you should determine the minimum amount from a **third-party source.**
+{% endhint %}
 
 After this, you can create the Swap and Solution objects. For more info about the `Swap` and `Solution` models, see [here](for-solvers/execution/encoding.md#solution-struct).
 
 ```rust
-let simple_swap = Swap::new(
-    protocol_component,
-    sell_token.address.clone(),
-    buy_token.address.clone(),
-    // Split defines the fraction of the amount to be swapped.
-    0f64,
-);
+let simple_swap =
+    SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone()).build();
 
 // Then we create a solution object with the previous swap
 let solution = Solution {
@@ -212,9 +199,15 @@ let solution = Solution {
 };
 ```
 
-#### c. Encode swap
+#### b. Encode solution
 
 ```rust
+let encoder = TychoRouterEncoderBuilder::new()
+    .chain(chain)
+    .user_transfer_type(UserTransferType::TransferFromPermit2)
+    .build()
+    .expect("Failed to build encoder");
+
 let encoded_solution = encoder
     .encode_solutions(vec![solution.clone()])
     .expect("Failed to encode router calldata")[0]
@@ -237,6 +230,7 @@ let tx = encode_tycho_router_call(
 .expect("Failed to encode router call");
 ```
 
+{% hint style="danger" %}
 :warning: These functions are only examples intended for use within the quickstart.\
 **Do not use them in production.** You must write your own logic to:
 
@@ -244,6 +238,7 @@ let tx = encode_tycho_router_call(
 * Sign the permit2 object safely and correctly.
 
 This gives you full control over execution. And it protects you from MEV and slippage risks.
+{% endhint %}
 
 ### 6. Simulate or execute the best swap
 
@@ -313,9 +308,11 @@ After a successful execution, the program will exit. If the transaction fails, t
 
 3. **Skip this swap:** Ignores this swap. Then the program resumes listening for blocks.
 
-:warning: **Important Note**
+{% hint style="warning" %}
+**Important Note**
 
 Market conditions can change rapidly. Delays in your decision-making can lead to transaction reverts, especially if you've set parameters like minimum amount out or slippage. Always ensure you're comfortable with the potential risks before executing swaps.
+{% endhint %}
 
 ### Recap
 

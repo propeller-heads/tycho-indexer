@@ -156,16 +156,16 @@ let mut protocol_stream = ProtocolStreamBuilder::new("tycho-beta.propellerheads.
 
 Some protocols, such as Balancer V2 and Curve, require a pool filter to be defined to filter out unsupported pools. If a protocol needs a pool filter and the user does not provide one, a warning will be raised during the stream setup process.
 
-The stream created emits `BlockUpdate` messages which consist of:
+The stream created emits `Update` messages which consist of:
 
-* `block number`- the block this update message refers to
+* `block number_or_timestamp`- the block this update message refers to
 * `new_pairs`- new components witnessed (either recently created or newly meeting filter criteria)
 * `removed_pairs`- components no longer tracked (either deleted due to a reorg or no longer meeting filter criteria)
-* `states`- the updated `ProtocolSim`states for all components modified in this block
+* `states`- the updated `ProtocolSim` states for all components modified in this block
 
 The first message received will contain states for all protocol components registered to. Thereafter, further block updates will only contain data for updated or new components.
 
-> Note: For efficiency, `ProtocolSim`states contain simulation-critical data only. Reference data such as protocol names and token information is provided in the `ProtocolComponent`objects within the `new_pairs`field. Consider maintaining a store of these components if you need this metadata.
+> Note: For efficiency, `ProtocolSim` states contain simulation-critical data only. Reference data such as protocol names and token information is provided in the `ProtocolComponent` objects within the `new_pairs` field. Consider maintaining a store of these components if you need this metadata.
 
 For a full list of supported protocols and the simulation state implementations they use, see [Supported Protocols](supported-protocols.md).
 
