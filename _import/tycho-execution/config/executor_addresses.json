@@ -11,12 +11,13 @@
     "vm:curve": "0x879F3008D96EBea0fc584aD684c7Df31777F3165",
     "vm:maverick_v2": "0xF35e3F5F205769B41508A18787b62A21bC80200B",
     "vm:balancer_v3": "0xec5cE4bF6FbcB7bB0148652c92a4AEC8c1d474Ec",
-    "rfq:bebop": "0xEDCA8A3ACEB5db816d5CF833248d05Ed2784A304"
+    "rfq:bebop": "0xFE42BFb115eD9671011cA52BDD23A52A2e077a7c"
   },
   "base": {
     "uniswap_v2": "0xF744EBfaA580cF3fFc25aD046E92BD8B770a0700",
     "uniswap_v3": "0x647bffbf8bd72bf6341ecba8b0279e090313a40d",
-    "uniswap_v4": "0xb5628b97f491f85766673ac4d5d47bb1af7fcc4a"
+    "uniswap_v4": "0xb5628b97f491f85766673ac4d5d47bb1af7fcc4a",
+    "rfq:bebop": "0x489A3f531dA3873D6585BF3f8E0dEE48CAC6F7BC"
   },
   "unichain": {
     "uniswap_v2": "0x00C1b81e3C8f6347E69e2DDb90454798A6Be975E",

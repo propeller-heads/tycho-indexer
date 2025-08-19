@@ -17,6 +17,10 @@ pub fn router_address() -> Bytes {
     Bytes::from_str("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395").unwrap()
 }
 
+pub fn bob_address() -> Bytes {
+    Bytes::from_str("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e").unwrap()
+}
+
 pub fn eth_chain() -> Chain {
     Chain::Ethereum
 }
@@ -64,7 +68,7 @@ pub fn get_signer() -> PrivateKeySigner {
 
 pub fn get_tycho_router_encoder(user_transfer_type: UserTransferType) -> Box<dyn TychoEncoder> {
     TychoRouterEncoderBuilder::new()
-        .chain(tycho_common::models::Chain::Ethereum)
+        .chain(Chain::Ethereum)
         .user_transfer_type(user_transfer_type)
         .executors_file_path("config/test_executor_addresses.json".to_string())
         .router_address(router_address())
