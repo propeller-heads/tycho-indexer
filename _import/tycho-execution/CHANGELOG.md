@@ -1,3 +1,18 @@
+## [0.116.0](https://github.com/propeller-heads/tycho-execution/compare/0.115.0...0.116.0) (2025-08-19)
+
+
+### Features
+
+* Bebop executor in base ([c974312](https://github.com/propeller-heads/tycho-execution/commit/c974312a377d950948e76dd1dbb3303421f9f5f8))
+* Support Bebop quote through IndicativelyPriced state ([2292061](https://github.com/propeller-heads/tycho-execution/commit/22920617ebca35199a8cc927245cfa7e6209ade8))
+* Update BebopExecutor deployed address ([72b60aa](https://github.com/propeller-heads/tycho-execution/commit/72b60aa324d136ab999ff04339433a83743aee5e))
+
+
+### Bug Fixes
+
+* Add bebop to protocol specific addresses ([6e68d19](https://github.com/propeller-heads/tycho-execution/commit/6e68d199c90395a9204329e462e5027e81e61171))
+* Implement From<SimulationError> for EncodingError ([987956e](https://github.com/propeller-heads/tycho-execution/commit/987956eb0bea2a46115d160ea05db395ce17077a))
+
 ## [0.115.0](https://github.com/propeller-heads/tycho-execution/compare/0.114.0...0.115.0) (2025-08-14)
 
 
