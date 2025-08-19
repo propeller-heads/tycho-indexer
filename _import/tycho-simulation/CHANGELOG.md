@@ -1,3 +1,10 @@
+## [0.148.0](https://github.com/propeller-heads/tycho-simulation/compare/0.147.0...0.148.0) (2025-08-19)
+
+
+### Features
+
+* implement `as_indicatively_priced` for hashflow ([539e936](https://github.com/propeller-heads/tycho-simulation/commit/539e9365396e76dcbde98b1177b0c630460b94cb))
+
 ## [0.147.0](https://github.com/propeller-heads/tycho-simulation/compare/0.146.0...0.147.0) (2025-08-15)
 
 
