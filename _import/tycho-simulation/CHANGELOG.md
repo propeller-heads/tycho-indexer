@@ -1,3 +1,19 @@
+## [0.149.0](https://github.com/propeller-heads/tycho-simulation/compare/0.148.0...0.149.0) (2025-08-19)
+
+
+### Features
+
+* Add encoding to RFQ quickstart ([b5031bd](https://github.com/propeller-heads/tycho-simulation/commit/b5031bd6d3491344a4430ab0a95c2d1b6c982b74))
+* Add execution to RFQ Quickstart ([1a730c7](https://github.com/propeller-heads/tycho-simulation/commit/1a730c7dc104f4edadc17d0072ef391b8e1bf92d))
+* Update tycho execution version ([db23231](https://github.com/propeller-heads/tycho-simulation/commit/db232318e7f5701d19639d5998a02c67e8bb821c))
+* Upgrade tycho-common and tycho-execution ([9d0d828](https://github.com/propeller-heads/tycho-simulation/commit/9d0d828b224c89823cc0726c4cdfb2654b06ad80))
+* Wait for approval success before encoding solution ([5292a64](https://github.com/propeller-heads/tycho-simulation/commit/5292a647a2293ea3b23dc242726f0160f7a1e385))
+
+
+### Bug Fixes
+
+* Raise TVL threshold and send simulation txs together ([1912f7d](https://github.com/propeller-heads/tycho-simulation/commit/1912f7d554f2a1be48e57ba585209c186b9e1153))
+
 ## [0.148.0](https://github.com/propeller-heads/tycho-simulation/compare/0.147.0...0.148.0) (2025-08-19)
 
 
