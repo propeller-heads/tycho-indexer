@@ -847,37 +847,54 @@ fn test_uniswap_v3_hashflow() {
     .build();
 
     // Second swap: USDC -> WBTC via Hashflow RFQ using real order data
-    let quote_amount_out = BigUint::from_str("1735332").unwrap();
+    let quote_amount_out = BigUint::from_str("3714751").unwrap();
 
     let hashflow_state = MockRFQState {
         quote_amount_out,
         quote_data: vec![
             (
                 "pool".to_string(),
-                Bytes::from_str("0x031903307c517c11b71f8313d19afde0a4f41cb5").unwrap(),
+                Bytes::from_str("0x478eca1b93865dca0b9f325935eb123c8a4af011").unwrap(),
+            ),
+            (
+                "external_account".to_string(),
+                Bytes::from_str("0xbee3211ab312a8d065c4fef0247448e17a8da000").unwrap(),
             ),
             (
                 "trader".to_string(),
-                Bytes::from_str("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f").unwrap(),
-            ),
-            ("nonce".to_string(), Bytes::from(1755512134141u64.to_be_bytes().to_vec())),
-            (
-                "tx_id".to_string(),
-                Bytes::from_str(
-                    "0x125000064000640000001747937188ffffffffffffff00295e467232b36d0000",
-                )
-                .unwrap(),
-            ),
-            ("signature".to_string(), Bytes::from_str("0xfda99100ffd8adfc818a827e1698c1d1fa2f59f7723ff84bfeba0f80e5298b1077f590d8d99aec6f6801c611eb270b5d89fac02a680ab38f03f3c5d16039c6f11c").unwrap()),
-            ("quote_expiry".to_string(), Bytes::from(1755512162u64.to_be_bytes().to_vec())),
-            (
-                "external_account".to_string(),
-                Bytes::from_str("0xbb289bc97591f70d8216462df40ed713011b968a").unwrap(),
+                Bytes::from_str("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2").unwrap(),
             ),
             (
+                // Passing the tycho router address here has no effect
                 "effective_trader".to_string(),
                 Bytes::from_str("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2").unwrap(),
             ),
+            (
+                "base_token".to_string(),
+                Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+            ),
+            (
+                "quote_token".to_string(),
+                Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap(),
+            ),
+            (
+                "base_token_amount".to_string(),
+                Bytes::from(biguint_to_u256(&BigUint::from(4308094737_u64)).to_be_bytes::<32>().to_vec()),
+            ),
+            (
+                "quote_token_amount".to_string(),
+                Bytes::from(biguint_to_u256(&BigUint::from(3714751_u64)).to_be_bytes::<32>().to_vec()),
+            ),
+            ("quote_expiry".to_string(), Bytes::from(biguint_to_u256(&BigUint::from(1755610328_u64)).to_be_bytes::<32>().to_vec())),
+            ("nonce".to_string(), Bytes::from(biguint_to_u256(&BigUint::from(1755610283723_u64)).to_be_bytes::<32>().to_vec())),
+            (
+                "tx_id".to_string(),
+                Bytes::from_str(
+                    "0x125000064000640000001747eb8c38ffffffffffffff0029642016edb36d0000",
+                )
+                    .unwrap(),
+            ),
+            ("signature".to_string(), Bytes::from_str("0x6ddb3b21fe8509e274ddf46c55209cdbf30360944abbca6569ed6b26740d052f419964dcb5a3bdb98b4ed1fb3642a2760b8312118599a962251f7a8f73fe4fbe1c").unwrap()),
         ],
         quote_partial_fill_offset: 0,
     };
@@ -889,7 +906,7 @@ fn test_uniswap_v3_hashflow() {
     };
 
     let swap_usdc_wbtc = SwapBuilder::new(hashflow_component, usdc.clone(), wbtc.clone())
-        .estimated_amount_in(BigUint::from_str("2000000000").unwrap())
+        .estimated_amount_in(BigUint::from_str("4308094737").unwrap())
         .protocol_state(&hashflow_state)
         .build();
 
@@ -898,9 +915,9 @@ fn test_uniswap_v3_hashflow() {
     let solution = Solution {
         exact_out: false,
         given_token: weth,
-        given_amount: BigUint::from_str("2000000000").unwrap(),
+        given_amount: BigUint::from_str("1000000000000000000").unwrap(),
         checked_token: wbtc,
-        checked_amount: BigUint::from_str("2000000000").unwrap(),
+        checked_amount: BigUint::from_str("3714751").unwrap(),
         sender: alice_address(),
         receiver: alice_address(),
         swaps: vec![swap_weth_usdc, swap_usdc_wbtc],

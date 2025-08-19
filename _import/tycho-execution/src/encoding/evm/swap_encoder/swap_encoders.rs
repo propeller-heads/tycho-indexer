@@ -2243,30 +2243,47 @@ mod tests {
             let hashflow_quote_data = vec![
                 (
                     "pool".to_string(),
-                    Bytes::from_str("0x031903307c517c11b71f8313d19afde0a4f41cb5").unwrap(),
+                    Bytes::from_str("0x478eca1b93865dca0b9f325935eb123c8a4af011").unwrap(),
+                ),
+                (
+                    "external_account".to_string(),
+                    Bytes::from_str("0xbee3211ab312a8d065c4fef0247448e17a8da000").unwrap(),
                 ),
                 (
                     "trader".to_string(),
-                    Bytes::from_str("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f").unwrap(),
-                ),
-                ("nonce".to_string(), Bytes::from(1755512134141u64.to_be_bytes().to_vec())),
-                (
-                    "tx_id".to_string(),
-                    Bytes::from_str(
-                        "0x125000064000640000001747937188ffffffffffffff00295e467232b36d0000",
-                    )
-                        .unwrap(),
-                ),
-                ("signature".to_string(), Bytes::from_str("0xfda99100ffd8adfc818a827e1698c1d1fa2f59f7723ff84bfeba0f80e5298b1077f590d8d99aec6f6801c611eb270b5d89fac02a680ab38f03f3c5d16039c6f11c").unwrap()),
-                ("quote_expiry".to_string(), Bytes::from(1755512162u64.to_be_bytes().to_vec())),
-                (
-                    "external_account".to_string(),
-                    Bytes::from_str("0xbb289bc97591f70d8216462df40ed713011b968a").unwrap(),
+                    Bytes::from_str("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2").unwrap(),
                 ),
                 (
+                    // Passing the tycho router address here has no effect
                     "effective_trader".to_string(),
                     Bytes::from_str("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2").unwrap(),
                 ),
+                (
+                    "base_token".to_string(),
+                    Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+                ),
+                (
+                    "quote_token".to_string(),
+                    Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap(),
+                ),
+                (
+                    "base_token_amount".to_string(),
+                    Bytes::from(biguint_to_u256(&BigUint::from(3000_u64)).to_be_bytes::<32>().to_vec()),
+                ),
+                (
+                    "quote_token_amount".to_string(),
+                    Bytes::from(biguint_to_u256(&BigUint::from(1_u64)).to_be_bytes::<32>().to_vec()),
+                ),
+                ("quote_expiry".to_string(), Bytes::from(biguint_to_u256(&BigUint::from(1755610328_u64)).to_be_bytes::<32>().to_vec())),
+                ("nonce".to_string(), Bytes::from(biguint_to_u256(&BigUint::from(1755610283723_u64)).to_be_bytes::<32>().to_vec())),
+                (
+                    "tx_id".to_string(),
+                    Bytes::from_str(
+                        "0x125000064000640000001747eb8c38ffffffffffffff0029642016edb36d0000",
+                    )
+                        .unwrap(),
+                ),
+                ("signature".to_string(), Bytes::from_str("0x6ddb3b21fe8509e274ddf46c55209cdbf30360944abbca6569ed6b26740d052f419964dcb5a3bdb98b4ed1fb3642a2760b8312118599a962251f7a8f73fe4fbe1c").unwrap()),
             ];
             let hashflow_quote_data_values =
                 hashflow_quote_data
@@ -2316,11 +2333,6 @@ mod tests {
                 "01", // approval needed
             ));
             assert_eq!(hex_swap, expected_swap + &hashflow_calldata.to_string()[2..]);
-        }
-
-        #[test]
-        fn test_encode_hashflow_aggregate_with_protocol_state() {
-            todo!()
         }
     }
 }

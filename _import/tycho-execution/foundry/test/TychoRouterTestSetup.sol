@@ -7,8 +7,8 @@ import "./Constants.sol";
 import "./TestUtils.sol";
 import "@src/TychoRouter.sol";
 import {
-UniswapV3Executor,
-IUniswapV3Pool
+    UniswapV3Executor,
+    IUniswapV3Pool
 } from "../src/executors/UniswapV3Executor.sol";
 import {BalancerV2Executor} from "../src/executors/BalancerV2Executor.sol";
 import {BalancerV3Executor} from "../src/executors/BalancerV3Executor.sol";
@@ -137,7 +137,8 @@ contract TychoRouterTestSetup is Constants, Permit2TestHelper, TestUtils {
             new MaverickV2Executor(MAVERICK_V2_FACTORY, PERMIT2_ADDRESS);
         balancerV3Executor = new BalancerV3Executor(PERMIT2_ADDRESS);
         bebopExecutor = new BebopExecutor(BEBOP_SETTLEMENT, PERMIT2_ADDRESS);
-        hashflowExecutor = new HashflowExecutor(HASHFLOW_ROUTER, PERMIT2_ADDRESS);
+        hashflowExecutor =
+            new HashflowExecutor(HASHFLOW_ROUTER, PERMIT2_ADDRESS);
 
         address[] memory executors = new address[](11);
         executors[0] = address(usv2Executor);
