@@ -235,6 +235,26 @@ async fn main() {
             }
         };
 
+        // Drain any additional buffered messages to get the most recent one
+        let mut latest_message = message;
+        let mut drained_count = 0;
+        while let Ok(newer_message_result) =
+            tokio::time::timeout(std::time::Duration::from_millis(10), protocol_stream.next()).await
+        {
+            if let Some(Ok(newer_message)) = newer_message_result {
+                latest_message = newer_message;
+                drained_count += 1;
+            } else {
+                break;
+            }
+        }
+        if drained_count > 0 {
+            println!(
+                "Fast-forwarded through {drained_count} older messages to get latest prices"
+            );
+        }
+        let message = latest_message;
+
         let best_swap = get_best_swap(
             message,
             &mut pairs,
