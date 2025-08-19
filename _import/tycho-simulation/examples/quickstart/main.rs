@@ -391,6 +391,7 @@ async fn main() {
 
                     match provider.simulate(&payload).await {
                         Ok(output) => {
+                            let mut all_successful = true;
                             for block in output.iter() {
                                 println!(
                                     "\nSimulated Block {block_num}:",
@@ -403,13 +404,25 @@ async fn main() {
                                         status = transaction.status,
                                         gas_used = transaction.gas_used
                                     );
+                                    if !transaction.status {
+                                        all_successful = false;
+                                    }
                                 }
+                            }
+
+                            if all_successful {
+                                println!("\n✅ Simulation successful!");
+                            } else {
+                                println!(
+                                    "\n❌ Simulation failed! One or more transactions reverted."
+                                );
+                                println!("Consider adjusting parameters and re-simulating before execution.");
                             }
                             println!(); // Add empty line after simulation results
                             continue;
                         }
                         Err(e) => {
-                            eprintln!("\nSimulation failed: {e:?}");
+                            eprintln!("\n❌ Simulation failed: {e:?}");
                             println!("Your RPC provider does not support transaction simulation.");
                             println!("Do you want to proceed with execution instead?\n");
                             let yes_no_options = vec!["Yes", "No"];
