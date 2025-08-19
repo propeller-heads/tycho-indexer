@@ -79,9 +79,9 @@ contract HashflowExecutor is IExecutor, RestrictTransferFrom {
         _transfer(
             address(this), transferType, address(quote.baseToken), givenAmount
         );
-        uint256 balanceBefore = _balanceOf(quote.quoteToken);
+        uint256 balanceBefore = _balanceOf(quote.trader, quote.quoteToken);
         IHashflowRouter(hashflowRouter).tradeRFQT{value: ethValue}(quote);
-        uint256 balanceAfter = _balanceOf(quote.quoteToken);
+        uint256 balanceAfter = _balanceOf(quote.trader, quote.quoteToken);
         calculatedAmount = balanceAfter - balanceBefore;
     }
 
@@ -116,13 +116,13 @@ contract HashflowExecutor is IExecutor, RestrictTransferFrom {
         quote.signature = data[282:347];
     }
 
-    function _balanceOf(address token)
+    function _balanceOf(address trader, address token)
         internal
         view
         returns (uint256 balance)
     {
         balance = token == NATIVE_TOKEN
-            ? address(this).balance
-            : IERC20(token).balanceOf(address(this));
+            ? trader.balance
+            : IERC20(token).balanceOf(trader);
     }
 }
