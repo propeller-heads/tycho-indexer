@@ -2153,15 +2153,6 @@ mod tests {
         assert!(!block_changes.trace_results.is_empty());
     }
 
-    // TODO: Add test for the case where no new slots are found
-    // This test currently fails because there's a bug where account extraction
-    // is still called even when there are no new slots. The bug is that our
-    // new slot filtering logic isn't being applied correctly in all cases.
-    //
-    // The test would verify that when a tracked token accesses only slots that
-    // are already in the cache, no account extraction should happen.
-    //
-    // Uncomment and fix the implementation to make this test pass:
     #[tokio::test]
     async fn test_process_block_update_no_new_slots_found() {
         let gateway = get_mock_gateway();
