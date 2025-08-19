@@ -32,7 +32,7 @@ use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder},
     models,
-    models::{EncodedSolution, Solution, Swap, Transaction, UserTransferType},
+    models::{EncodedSolution, Solution, SwapBuilder, Transaction, UserTransferType},
 };
 use tycho_simulation::{
     evm::{
@@ -73,7 +73,7 @@ struct Cli {
     #[arg(long, default_value = FAKE_PK)]
     swapper_pk: String,
     #[arg(long, default_value = "ethereum")]
-    chain: String,
+    chain: Chain,
 }
 
 impl Cli {
@@ -81,7 +81,7 @@ impl Cli {
         // By default, we swap a small amount of USDC to WETH on whatever chain we choose
 
         if self.buy_token.is_none() {
-            self.buy_token = Some(match self.chain.as_str() {
+            self.buy_token = Some(match self.chain.to_string().as_str() {
                 "ethereum" => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(),
                 "base" => "0x4200000000000000000000000000000000000006".to_string(),
                 "unichain" => "0x4200000000000000000000000000000000000006".to_string(),
@@ -90,7 +90,7 @@ impl Cli {
         }
 
         if self.sell_token.is_none() {
-            self.sell_token = Some(match self.chain.as_str() {
+            self.sell_token = Some(match self.chain.to_string().as_str() {
                 "ethereum" => "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
                 "base" => "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913".to_string(),
                 "unichain" => "0x078d782b760474a361dda0af3839290b0ef57ad6".to_string(),
@@ -111,8 +111,7 @@ async fn main() {
 
     let cli = Cli::parse().with_defaults();
 
-    let chain = Chain::from_str(&cli.chain)
-        .unwrap_or_else(|_| panic!("Unknown chain {chain}", chain = cli.chain));
+    let chain = cli.chain;
 
     let tycho_url = env::var("TYCHO_URL").unwrap_or_else(|_| {
         get_default_url(&chain)
@@ -236,10 +235,8 @@ async fn main() {
     )
     .expect("Failed to private key signer");
     let tx_signer = EthereumWallet::from(wallet.clone());
-    let named_chain =
-        NamedChain::from_str(&cli.chain.replace("ethereum", "mainnet")).expect("Invalid chain");
     let provider = ProviderBuilder::default()
-        .with_chain(named_chain)
+        .with_chain(NamedChain::try_from(chain.id()).expect("Invalid chain"))
         .wallet(tx_signer.clone())
         .connect(&env::var("RPC_URL").expect("RPC_URL env var not set"))
         .await
@@ -288,7 +285,7 @@ async fn main() {
                 .clone();
 
             let tx = encode_tycho_router_call(
-                named_chain.into(),
+                chain.id(),
                 encoded_solution.clone(),
                 &solution,
                 chain.native_token().address,
@@ -381,7 +378,7 @@ async fn main() {
                         wallet.address(),
                         Address::from_slice(&sell_token_address),
                         tx.clone(),
-                        named_chain as u64,
+                        chain.id(),
                     )
                     .await;
 
@@ -434,7 +431,7 @@ async fn main() {
                                     wallet.address(),
                                     &sell_token_address,
                                     tx.clone(),
-                                    named_chain as u64,
+                                    chain.id(),
                                 )
                                 .await
                                 {
@@ -478,7 +475,7 @@ async fn main() {
                         wallet.address(),
                         &sell_token_address,
                         tx,
-                        named_chain as u64,
+                        chain.id(),
                     )
                     .await
                     {
@@ -608,16 +605,8 @@ fn create_solution(
     expected_amount: BigUint,
 ) -> Solution<'static> {
     // Prepare data to encode. First we need to create a swap object
-    let simple_swap = Swap::new(
-        component,
-        sell_token.address.clone(),
-        buy_token.address.clone(),
-        // Split defines the fraction of the amount to be swapped. A value of 0 indicates 100% of
-        // the amount or the total remaining balance.
-        0f64,
-        None,
-        None,
-    );
+    let simple_swap =
+        SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone()).build();
 
     // Compute a minimum amount out
     //

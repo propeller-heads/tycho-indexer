@@ -331,8 +331,8 @@ impl RFQClient for BebopClient {
         &self,
         params: &GetAmountOutParams,
     ) -> Result<SignedQuote, RFQError> {
-        let sell_token = bytes_to_address(&params.token_in.address)?.to_string();
-        let buy_token = bytes_to_address(&params.token_out.address)?.to_string();
+        let sell_token = bytes_to_address(&params.token_in)?.to_string();
+        let buy_token = bytes_to_address(&params.token_out)?.to_string();
         let sell_amount = params.amount_in.to_string();
         let sender = bytes_to_address(&params.sender)?.to_string();
         let receiver = bytes_to_address(&params.receiver)?.to_string();
@@ -389,8 +389,8 @@ impl RFQClient for BebopClient {
                 );
                 let signed_quote = match quote.to_sign {
                     BebopOrderToSign::Single(ref single) => SignedQuote {
-                        base_token: params.token_in.address.clone(),
-                        quote_token: params.token_out.address.clone(),
+                        base_token: params.token_in.clone(),
+                        quote_token: params.token_out.clone(),
                         amount_in: BigUint::from_str(&single.taker_amount).map_err(|_| {
                             RFQError::ParsingError(format!(
                                 "Failed to parse amount in string: {}",
@@ -431,8 +431,8 @@ impl RFQClient for BebopClient {
                             })
                             .collect::<Result<Vec<_>, _>>()?;
                         SignedQuote {
-                            base_token: params.token_in.address.clone(),
-                            quote_token: params.token_out.address.clone(),
+                            base_token: params.token_in.clone(),
+                            quote_token: params.token_out.clone(),
                             amount_in: taker_amounts.into_iter().sum(),
                             amount_out: maker_amounts.into_iter().sum(),
                             quote_attributes,
@@ -463,7 +463,6 @@ mod tests {
     use futures::SinkExt;
     use tokio::{net::TcpListener, time::timeout};
     use tokio_tungstenite::accept_async;
-    use tycho_common::models::token::Token;
 
     use super::*;
     use crate::rfq::constants::get_bebop_auth;
@@ -718,30 +717,14 @@ mod tests {
     #[tokio::test]
     #[ignore] // Requires network access and setting proper env vars
     async fn test_bebop_quote_single_order() {
-        let token_out = Token {
-            address: Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap(),
-            symbol: "WBTC".to_string(),
-            decimals: 8,
-            tax: 0,
-            gas: vec![],
-            chain: Default::default(),
-            quality: 100,
-        };
-        let token_in = Token {
-            address: Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
-            symbol: "WETH".to_string(),
-            decimals: 18,
-            tax: 0,
-            gas: vec![],
-            chain: Default::default(),
-            quality: 100,
-        };
+        let token_in = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
+        let token_out = Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap();
         dotenv().expect("Missing .env file");
         let auth = get_bebop_auth().expect("Failed to get Bebop authentication");
 
         let client = BebopClient::new(
             Chain::Ethereum,
-            HashSet::from_iter(vec![token_in.address.clone(), token_out.address.clone()]),
+            HashSet::from_iter(vec![token_in.clone(), token_out.clone()]),
             10.0, // $10 minimum TVL
             auth.user,
             auth.key,
@@ -763,8 +746,8 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(quote.base_token, token_in.address);
-        assert_eq!(quote.quote_token, token_out.address);
+        assert_eq!(quote.base_token, token_in);
+        assert_eq!(quote.quote_token, token_out);
         assert_eq!(quote.amount_in, BigUint::from(1_000000000000000000u64));
 
         // Assuming the BTC - WETH price doesn't change too much at the time of running this
@@ -796,30 +779,14 @@ mod tests {
     async fn test_bebop_quote_aggregate_order() {
         // This will make a quote request similar to the previous test but with a very big amount
         // We expect the Bebop Quote to have an aggregate order (split between different mms)
-        let token_in = Token {
-            address: Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
-            symbol: "USDC".to_string(),
-            decimals: 6,
-            tax: 0,
-            gas: vec![],
-            chain: Default::default(),
-            quality: 100,
-        };
-        let token_out = Token {
-            address: Bytes::from_str("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3").unwrap(),
-            symbol: "ONDO".to_string(),
-            decimals: 18,
-            tax: 0,
-            gas: vec![],
-            chain: Default::default(),
-            quality: 100,
-        };
+        let token_in = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let token_out = Bytes::from_str("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3").unwrap();
         dotenv().expect("Missing .env file");
         let auth = get_bebop_auth().expect("Failed to get Bebop authentication");
 
         let client = BebopClient::new(
             Chain::Ethereum,
-            HashSet::from_iter(vec![token_in.address.clone(), token_out.address.clone()]),
+            HashSet::from_iter(vec![token_in.clone(), token_out.clone()]),
             10.0, // $10 minimum TVL
             auth.user,
             auth.key,
@@ -842,8 +809,8 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(quote.base_token, token_in.address);
-        assert_eq!(quote.quote_token, token_out.address);
+        assert_eq!(quote.base_token, token_in);
+        assert_eq!(quote.quote_token, token_out);
         assert_eq!(quote.amount_in, amount_in);
 
         // Assuming the USDC - ONDO price doesn't change too much at the time of running this

@@ -367,8 +367,8 @@ impl RFQClient for HashflowClient {
             base_chain: hashflow_chain.clone(),
             quote_chain: hashflow_chain,
             rfqs: vec![HashflowRFQ {
-                base_token: params.token_in.address.to_string(),
-                quote_token: params.token_out.address.to_string(),
+                base_token: params.token_in.to_string(),
+                quote_token: params.token_out.to_string(),
                 base_token_amount: Some(params.amount_in.to_string()),
                 quote_token_amount: None,
                 trader: params.receiver.to_string(),
@@ -417,14 +417,14 @@ impl RFQClient for HashflowClient {
                     if quotes.is_empty() {
                         return Err(RFQError::QuoteNotFound(format!(
                             "Hashflow quote not found for {} {} ->{}",
-                            params.amount_in, params.token_in.address, params.token_out.address,
+                            params.amount_in, params.token_in, params.token_out,
                         )))
                     }
                     // We assume there will be only one quote request at a time
                     let quote = quotes[0].clone();
 
-                    if (quote.quote_data.base_token != params.token_in.address) ||
-                        (quote.quote_data.quote_token != params.token_out.address)
+                    if (quote.quote_data.base_token != params.token_in) ||
+                        (quote.quote_data.quote_token != params.token_out)
                     {
                         return Err(RFQError::FatalError(
                             "Quote tokens don't match request tokens".to_string(),
@@ -464,8 +464,8 @@ impl RFQClient for HashflowClient {
                     }
 
                     let signed_quote = SignedQuote {
-                        base_token: params.token_in.address.clone(),
-                        quote_token: params.token_out.address.clone(),
+                        base_token: params.token_in.clone(),
+                        quote_token: params.token_out.clone(),
                         amount_in: BigUint::from_str(&quote.quote_data.base_token_amount).map_err(
                             |_| {
                                 RFQError::ParsingError(format!(
@@ -487,7 +487,7 @@ impl RFQClient for HashflowClient {
                 } else {
                     return Err(RFQError::QuoteNotFound(format!(
                         "Hashflow quote not found for {} {} ->{}",
-                        params.amount_in, params.token_in.address, params.token_out.address,
+                        params.amount_in, params.token_in, params.token_out,
                     )))
                 }
             }
@@ -511,7 +511,6 @@ mod tests {
     use dotenv::dotenv;
     use futures::StreamExt;
     use tokio::time::timeout;
-    use tycho_common::models::token::Token;
 
     use super::*;
     use crate::rfq::{
@@ -683,31 +682,16 @@ mod tests {
     #[tokio::test]
     #[ignore] // Requires network access and setting proper env vars
     async fn test_request_binding_quote() {
-        let wbtc = Token {
-            address: Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap(),
-            symbol: "WBTC".to_string(),
-            decimals: 8,
-            tax: 0,
-            gas: vec![],
-            chain: Default::default(),
-            quality: 100,
-        };
-        let weth = Token {
-            address: Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
-            symbol: "WETH".to_string(),
-            decimals: 18,
-            tax: 0,
-            gas: vec![],
-            chain: Default::default(),
-            quality: 100,
-        };
+        let wbtc = Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap();
+        let weth = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
+
         let auth_user = String::from("propellerheads");
         dotenv().expect("Missing .env file");
         let auth_key = env::var("HASHFLOW_KEY").unwrap();
 
         let client = HashflowClient::new(
             Chain::Ethereum,
-            HashSet::from_iter(vec![weth.address.clone(), wbtc.address.clone()]),
+            HashSet::from_iter(vec![weth.clone(), wbtc.clone()]),
             10.0,
             HashSet::new(),
             auth_user,
@@ -730,8 +714,8 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(quote.base_token, weth.address);
-        assert_eq!(quote.quote_token, wbtc.address);
+        assert_eq!(quote.base_token, weth);
+        assert_eq!(quote.quote_token, wbtc);
         assert_eq!(quote.amount_in, BigUint::from(1_000000000000000000u64));
 
         // // Assuming the BTC - WETH price doesn't change too much at the time of running this
