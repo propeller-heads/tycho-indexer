@@ -888,27 +888,28 @@ impl SwapEncoder for HashflowSwapEncoder {
         encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         // Native tokens doesn't need approval, only ERC20 tokens do
-        let approval_needed: bool;
-        if let Some(router_address) = &encoding_context.router_address {
-            let tycho_router_address = bytes_to_address(router_address)?;
-            let hashflow_router_address = Address::from_str(&self.hashflow_router_address)
-                .map_err(|_| {
-                    EncodingError::FatalError("Invalid hashflow router address address".to_string())
-                })?;
+        let sender = encoding_context
+            .router_address
+            .clone()
+            .ok_or(EncodingError::FatalError(
+                "The router address is needed to perform a Hashflow swap".to_string(),
+            ))?;
+        let tycho_router_address = bytes_to_address(&sender)?;
+        let hashflow_router_address =
+            Address::from_str(&self.hashflow_router_address).map_err(|_| {
+                EncodingError::FatalError("Invalid hashflow router address address".to_string())
+            })?;
 
-            // Native ETH doesn't need approval, only ERC20 tokens do
-            if swap.token_in == self.native_token_address {
-                approval_needed = false;
-            } else {
-                approval_needed = ProtocolApprovalsManager::new()?.approval_needed(
-                    bytes_to_address(&swap.token_in)?,
-                    tycho_router_address,
-                    hashflow_router_address,
-                )?;
-            }
+        // Native ETH doesn't need approval, only ERC20 tokens do
+        let approval_needed = if swap.token_in == self.native_token_address {
+            false
         } else {
-            approval_needed = true;
-        }
+            ProtocolApprovalsManager::new()?.approval_needed(
+                bytes_to_address(&swap.token_in)?,
+                tycho_router_address,
+                hashflow_router_address,
+            )?
+        };
 
         // Get quote
         let protocol_state = swap
