@@ -235,26 +235,6 @@ async fn main() {
             }
         };
 
-        // Drain any additional buffered messages to get the most recent one
-        let mut latest_message = message;
-        let mut drained_count = 0;
-        while let Ok(newer_message_result) =
-            tokio::time::timeout(std::time::Duration::from_millis(10), protocol_stream.next()).await
-        {
-            if let Some(Ok(newer_message)) = newer_message_result {
-                latest_message = newer_message;
-                drained_count += 1;
-            } else {
-                break;
-            }
-        }
-        if drained_count > 0 {
-            println!(
-                "Fast-forwarded through {drained_count} older messages to get latest prices"
-            );
-        }
-        let message = latest_message;
-
         let best_swap = get_best_swap(
             message,
             &mut pairs,
@@ -411,7 +391,6 @@ async fn main() {
 
                     match provider.simulate(&payload).await {
                         Ok(output) => {
-                            let mut all_successful = true;
                             for block in output.iter() {
                                 println!(
                                     "\nSimulated Block {block_num}:",
@@ -424,25 +403,13 @@ async fn main() {
                                         status = transaction.status,
                                         gas_used = transaction.gas_used
                                     );
-                                    if !transaction.status {
-                                        all_successful = false;
-                                    }
                                 }
-                            }
-
-                            if all_successful {
-                                println!("\n✅ Simulation successful!");
-                            } else {
-                                println!(
-                                    "\n❌ Simulation failed! One or more transactions reverted."
-                                );
-                                println!("Consider adjusting parameters and re-simulating before execution.");
                             }
                             println!(); // Add empty line after simulation results
                             continue;
                         }
                         Err(e) => {
-                            eprintln!("\n❌ Simulation failed: {e:?}");
+                            eprintln!("\nSimulation failed: {e:?}");
                             println!("Your RPC provider does not support transaction simulation.");
                             println!("Do you want to proceed with execution instead?\n");
                             let yes_no_options = vec!["Yes", "No"];
