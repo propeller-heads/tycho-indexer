@@ -1,6 +1,6 @@
 [package]
 name = "tycho-simulation"
-version = "0.147.0"
+version = "0.149.0"
 edition = "2021"
 description = "Provides tools for interacting with protocol states, calculating spot prices, and quoting token swaps."
 repository = "https://github.com/propeller-heads/tycho-simulation"
@@ -97,7 +97,7 @@ unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
 
 # tycho execution for quickstart
-tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", rev = "6e68d199c90395a9204329e462e5027e81e61171" }
+tycho-execution = "0.116.0"
 
 [features]
 default = ["evm", "rfq"]
