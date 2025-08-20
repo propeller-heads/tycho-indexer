@@ -2200,7 +2200,7 @@ mod tests {
         }
 
         #[test]
-        fn test_encode_hashflow_single_with_user_data() {
+        fn test_encode_hashflow_single_fails_without_protocol_data() {
             // Hashflow requires a swap with protocol data, otherwise will return an error
             let hashflow_component = ProtocolComponent {
                 id: String::from("hashflow-rfq"),

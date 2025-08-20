@@ -558,11 +558,14 @@ contract TychoRouterSequentialSwapTestForHashflow is TychoRouterTestSetup {
         //
         //   WETH ──(USV3)──> USDC ───(Hashflow RFQ)──> WBTC
 
-        // The Hashflow order expects:
-        // - 4308094737 USDC input -> 3724533 WBTC output
+        // The Uniswap pool outputs:
+        // - 1 weth -> 4322430557 USDC
+        // The Hashflow tradeRFQT call expects:
+        // - 4308094737 USDC input -> 3714751 WBTC output
+        // The difference in USDC (14335820) will stay in the TychoRouter contract
 
         uint256 amountIn = 1 ether;
-        uint256 expectedAmountOut = 3724533;
+        uint256 expectedAmountOut = 3714751;
         deal(WETH_ADDR, ALICE, amountIn);
         uint256 balanceBefore = IERC20(WBTC_ADDR).balanceOf(ALICE);
 
@@ -576,8 +579,8 @@ contract TychoRouterSequentialSwapTestForHashflow is TychoRouterTestSetup {
         uint256 balanceAfter = IERC20(WBTC_ADDR).balanceOf(ALICE);
 
         assertTrue(success, "Call Failed");
-        assertGt(balanceAfter - balanceBefore, 0);
-        assertLe(balanceAfter - balanceBefore, expectedAmountOut);
+        assertEq(balanceAfter - balanceBefore, expectedAmountOut);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 14335820);
     }
 }
