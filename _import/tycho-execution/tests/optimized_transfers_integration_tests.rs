@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use alloy::hex::encode;
 use num_bigint::{BigInt, BigUint};
@@ -662,7 +662,7 @@ fn test_uniswap_v3_bebop() {
 
     let swap_usdc_wbtc = SwapBuilder::new(bebop_component, usdc.clone(), wbtc.clone())
         .estimated_amount_in(BigUint::from_str("2021750881").unwrap())
-        .protocol_state(&bebop_state)
+        .protocol_state(Arc::new(bebop_state))
         .build();
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);

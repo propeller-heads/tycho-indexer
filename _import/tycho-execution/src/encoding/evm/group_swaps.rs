@@ -12,15 +12,15 @@ use crate::encoding::{evm::constants::GROUPABLE_PROTOCOLS, models::Swap};
 /// * `swaps`: Vec<Swap>, the sequence of swaps to be executed as a group
 /// * `split`: f64, the split percentage of the first swap in the group
 #[derive(Clone, Debug)]
-pub struct SwapGroup<'a> {
+pub struct SwapGroup {
     pub token_in: Bytes,
     pub token_out: Bytes,
     pub protocol_system: String,
-    pub swaps: Vec<Swap<'a>>,
+    pub swaps: Vec<Swap>,
     pub split: f64,
 }
 
-impl<'a> PartialEq for SwapGroup<'a> {
+impl PartialEq for SwapGroup {
     fn eq(&self, other: &Self) -> bool {
         self.token_in == other.token_in &&
             self.token_out == other.token_out &&
@@ -34,7 +34,7 @@ impl<'a> PartialEq for SwapGroup<'a> {
 ///
 /// An example where this applies is the case of USV4, which uses a PoolManager contract
 /// to save token transfers on consecutive swaps.
-pub fn group_swaps<'a>(swaps: &'a Vec<Swap<'a>>) -> Vec<SwapGroup<'a>> {
+pub fn group_swaps(swaps: &Vec<Swap>) -> Vec<SwapGroup> {
     let mut grouped_swaps: Vec<SwapGroup> = Vec::new();
     let mut current_group: Option<SwapGroup> = None;
     let mut last_swap_protocol = "".to_string();
