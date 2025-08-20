@@ -2,28 +2,28 @@
 pragma solidity ^0.8.26;
 
 // Executors
-import "../src/executors/HashflowExecutor.sol";
-import "./Constants.sol";
-import "./TestUtils.sol";
-import "@src/TychoRouter.sol";
-import {
-    UniswapV3Executor,
-    IUniswapV3Pool
-} from "../src/executors/UniswapV3Executor.sol";
 import {BalancerV2Executor} from "../src/executors/BalancerV2Executor.sol";
 import {BalancerV3Executor} from "../src/executors/BalancerV3Executor.sol";
 import {BebopExecutor} from "../src/executors/BebopExecutor.sol";
 import {CurveExecutor} from "../src/executors/CurveExecutor.sol";
+import {EkuboExecutor} from "../src/executors/EkuboExecutor.sol";
+import {HashflowExecutor} from "../src/executors/HashflowExecutor.sol";
+import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
+import {UniswapV2Executor} from "../src/executors/UniswapV2Executor.sol";
+import {
+UniswapV3Executor,
+IUniswapV3Pool
+} from "../src/executors/UniswapV3Executor.sol";
+import {UniswapV4Executor} from "../src/executors/UniswapV4Executor.sol";
 
 // Test utilities and mocks
-import {EkuboExecutor} from "../src/executors/EkuboExecutor.sol";
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
+import "./Constants.sol";
+import "./TestUtils.sol";
+import {Permit2TestHelper} from "./Permit2TestHelper.sol";
 
 // Core contracts and interfaces
-import {Permit2TestHelper} from "./Permit2TestHelper.sol";
-import {UniswapV2Executor} from "../src/executors/UniswapV2Executor.sol";
-import {UniswapV4Executor} from "../src/executors/UniswapV4Executor.sol";
+import "@src/TychoRouter.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 
 contract TychoRouterExposed is TychoRouter {
     constructor(address _permit2, address weth) TychoRouter(_permit2, weth) {}
