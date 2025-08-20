@@ -23,11 +23,12 @@ cargo run --release --example quickstart -- --sell-token "0x833589fCD6eDb6E08f4c
 
 for 10 USDC -> WETH on Base.
 
-To be able to execute or simulate the best swap, you need to pass your private key. Assuming your private key is stored
-in your PK env var:
+To be able to execute or simulate the best swap, you need to set your private key as an environment variable. Be sure not to save it to your terminal history:
 
 ```bash
-cargo run --release --example quickstart -- --swapper-pk $PK
+unset HISTFILE
+export PRIVATE_KEY=<your-private-key>
+cargo run --release --example quickstart
 ```
 
 See [here](https://docs.propellerheads.xyz/tycho) a complete guide on how to run the
