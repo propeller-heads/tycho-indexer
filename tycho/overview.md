@@ -4,7 +4,7 @@ description: Overview of Tycho, its components and how to get started.
 
 # About
 
-<figure><img src="../.gitbook/assets/Tycho-header (1).png" alt=""><figcaption></figcaption></figure>
+<figure><img src="../docs/.gitbook/assets/Tycho-header (1).png" alt=""><figcaption></figcaption></figure>
 
 ## What is Tycho?
 
@@ -16,7 +16,7 @@ Tycho is an open-source interface to on-chain liquidity. Tycho
 
 ## Ending the integration nightmare
 
-<figure><img src="../.gitbook/assets/image (5).png" alt=""><figcaption></figcaption></figure>
+<figure><img src="../docs/.gitbook/assets/image (5).png" alt=""><figcaption></figcaption></figure>
 
 Integrations are the largest point of friction for both DEXs and Solvers:
 
@@ -38,24 +38,24 @@ Tycho lowers barriers to entry so that both innovative DEXs and Solvers have a c
 
 Tycho makes it easy to simulate and execute over on-chain liquidity sources – without needing to understand protocol internals, run nodes, or do RPC calls.
 
-To set up, go to the [Tycho Indexer quickstart](../for-solvers/indexer/) and start your liquidity stream.
+To set up, go to the [Tycho Indexer quickstart](../docs/for-solvers/indexer/) and start your liquidity stream.
 
 ### DEXs – Get more flow
 
 To integrate your DEX, submit a PR to Tycho Protocol Integrations on [GitHub](https://github.com/propeller-heads/tycho-protocol-sdk).
 
-To get started, check the [Protocol SDK ](../for-dexs/protocol-integration/)docs.
+To get started, check the [Protocol SDK ](../docs/for-dexs/protocol-integration/)docs.
 
 Or [contact our team](https://t.me/jaintanay_) so we can help you integrate.
 
 ## Components of Tycho
 
-<figure><img src="../.gitbook/assets/tycho.png" alt="" width="563"><figcaption></figcaption></figure>
+<figure><img src="../docs/.gitbook/assets/tycho.png" alt="" width="563"><figcaption></figcaption></figure>
 
 Tycho has three components for solvers:
 
-* **Tycho Indexer**: Infrastructure to parse, store and stream protocol state deltas. It also comes with clients in Python and Rust and a hosted webstream if you don't want to run your version of the Indexer. ->  [Indexer docs](../for-solvers/indexer/).
-* **Tycho Protocol Simulation:** A simulation library with a unified interface to query swaps and price&#x73;**.** Optimized for speed, running on compiled contracts in REVM with in-memory storage. -> [Protocol Simulation docs](../for-solvers/simulation.md).
+* **Tycho Indexer**: Infrastructure to parse, store and stream protocol state deltas. It also comes with clients in Python and Rust and a hosted webstream if you don't want to run your version of the Indexer. ->  [Indexer docs](../docs/for-solvers/indexer/).
+* **Tycho Protocol Simulation:** A simulation library with a unified interface to query swaps and price&#x73;**.** Optimized for speed, running on compiled contracts in REVM with in-memory storage. -> [Protocol Simulation docs](../docs/for-solvers/simulation.md).
 * **Tycho Execution:** Audited and gas-efficient router and DEX executor contracts for safe, simple, and competitive execution of swaps.
 
 And one integration SDK for DEXs:

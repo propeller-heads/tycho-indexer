@@ -24,7 +24,7 @@ The client is written in Rust and available as:
 
 Follow one of the guides above to learn how to set up the client appropriate for you.
 
-We welcome community contributions to expand language support. See our contribution guidelines [how-to-contribute](../../../overview/how-to-contribute/ "mention").
+We welcome community contributions to expand language support. See our contribution guidelines [how-to-contribute](../../../how-to-contribute/ "mention").
 
 ***
 

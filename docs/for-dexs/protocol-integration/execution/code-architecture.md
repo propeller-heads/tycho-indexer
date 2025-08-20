@@ -15,7 +15,7 @@ The following diagram summarizes the code architecture:
 
 The `TychoRouterEncoder` and `TychoExecutorEncoder` are responsible for validating the solutions of orders and providing you with a list of transactions that you must execute against the `TychoRouter` or `Executor`s.&#x20;
 
-The `TychoRouterEncoder` uses a `StrategyEncoder` that it choses automatically depending on the solution (see more about strategies [here](../../../overview/concepts.md#strategy)).
+The `TychoRouterEncoder` uses a `StrategyEncoder` that it choses automatically depending on the solution (see more about strategies [here](../../../concepts.md#strategy)).
 
 Internally, both encoders choose the appropriate `SwapEncoder`(s) to encode the individual swaps, which depend on the protocols used in the solution.&#x20;
 

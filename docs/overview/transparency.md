@@ -23,4 +23,4 @@ Tycho finances development and maintenance through:
 
 ### Road to Community Ownership
 
-Control over Tycho projects, grant funding, and fees earned will gradually transfer to Tycho users. (Still in planning).
+Control over Tycho projects, grant funding, and fees earned will gradually transfer to Tycho users. (in planning).

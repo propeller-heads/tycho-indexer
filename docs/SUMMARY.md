@@ -1,11 +1,11 @@
 # Table of contents
 
 * [Quickstart](README.md)
-* [About](overview/README.md)
-  * [Motivation](overview/motivation.md)
-  * [Concepts](overview/concepts.md)
-  * [How to Contribute](overview/how-to-contribute/README.md)
-    * [Bounties](overview/how-to-contribute/bounties.md)
+* [About](../tycho/overview.md)
+  * [Motivation](motivation.md)
+  * [Concepts](concepts.md)
+  * [How to Contribute](how-to-contribute/README.md)
+    * [Bounties](how-to-contribute/bounties.md)
   * [Transparency](overview/transparency.md)
 
 ## For Solvers
