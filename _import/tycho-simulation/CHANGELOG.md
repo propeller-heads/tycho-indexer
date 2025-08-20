@@ -1,3 +1,10 @@
+## [0.150.0](https://github.com/propeller-heads/tycho-simulation/compare/0.149.0...0.150.0) (2025-08-20)
+
+
+### Features
+
+* Don't pass PK as CLI command ([54a44f9](https://github.com/propeller-heads/tycho-simulation/commit/54a44f97d5597ef9369c62bff98ba5f96f1b1a0e))
+
 ## [0.149.0](https://github.com/propeller-heads/tycho-simulation/compare/0.148.0...0.149.0) (2025-08-19)
 
 
