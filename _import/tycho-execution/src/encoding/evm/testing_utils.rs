@@ -17,8 +17,7 @@ use tycho_common::{
 #[derive(Debug)]
 pub struct MockRFQState {
     pub quote_amount_out: BigUint,
-    pub quote_data: Vec<(String, Bytes)>,
-    pub quote_partial_fill_offset: u64,
+    pub quote_data: HashMap<String, Bytes>,
 }
 impl ProtocolSim for MockRFQState {
     fn fee(&self) -> f64 {
@@ -82,25 +81,12 @@ impl IndicativelyPriced for MockRFQState {
         &self,
         params: GetAmountOutParams,
     ) -> Result<SignedQuote, SimulationError> {
-        let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
-        for (attr, value) in &self.quote_data {
-            quote_attributes.insert(attr.clone(), value.clone());
-        }
-        quote_attributes.insert(
-            "partial_fill_offset".to_string(),
-            Bytes::from(
-                self.quote_partial_fill_offset
-                    .to_be_bytes()
-                    .to_vec(),
-            ),
-        );
-
         Ok(SignedQuote {
             base_token: params.token_in,
             quote_token: params.token_out,
             amount_in: params.amount_in,
             amount_out: self.quote_amount_out.clone(),
-            quote_attributes,
+            quote_attributes: self.quote_data.clone(),
         })
     }
 }

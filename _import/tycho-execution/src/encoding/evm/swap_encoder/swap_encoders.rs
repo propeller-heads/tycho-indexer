@@ -868,7 +868,7 @@ impl SwapEncoder for HashflowSwapEncoder {
         let hashflow_router_address = config
             .get("hashflow_router_address")
             .ok_or(EncodingError::FatalError(
-                "Missing bebop settlement address in config".to_string(),
+                "Missing hashflow router address in config".to_string(),
             ))?
             .to_string();
         let native_token_address = chain.native_token().address;
@@ -2123,8 +2123,17 @@ mod tests {
             };
             let bebop_state = MockRFQState {
                 quote_amount_out,
-                quote_data: vec![("calldata".to_string(), bebop_calldata.clone())],
-                quote_partial_fill_offset: partial_fill_offset,
+                quote_data: HashMap::from([
+                    ("calldata".to_string(), bebop_calldata.clone()),
+                    (
+                        "partial_fill_offset".to_string(),
+                        Bytes::from(
+                            partial_fill_offset
+                                .to_be_bytes()
+                                .to_vec(),
+                        ),
+                    ),
+                ]),
             };
 
             let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
@@ -2232,7 +2241,6 @@ mod tests {
         #[test]
         fn test_encode_hashflow_single_with_protocol_state() {
             // 3000 USDC -> 1 WETH using a mocked RFQ state to get a quote
-            let partial_fill_offset = 12u64;
             let quote_amount_out = BigUint::from_str("1000000000000000000").unwrap();
 
             let hashflow_component = ProtocolComponent {
@@ -2295,8 +2303,9 @@ mod tests {
             let hashflow_calldata = Bytes::from(hashflow_quote_data_values);
             let hashflow_state = MockRFQState {
                 quote_amount_out,
-                quote_data: hashflow_quote_data,
-                quote_partial_fill_offset: partial_fill_offset,
+                quote_data: hashflow_quote_data
+                    .into_iter()
+                    .collect(),
             };
 
             let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC

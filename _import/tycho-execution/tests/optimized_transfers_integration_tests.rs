@@ -653,8 +653,17 @@ fn test_uniswap_v3_bebop() {
 
     let bebop_state = MockRFQState {
         quote_amount_out,
-        quote_data: vec![("calldata".to_string(), bebop_calldata)],
-        quote_partial_fill_offset: partial_fill_offset,
+        quote_data: HashMap::from([
+            ("calldata".to_string(), bebop_calldata),
+            (
+                "partial_fill_offset".to_string(),
+                Bytes::from(
+                    partial_fill_offset
+                        .to_be_bytes()
+                        .to_vec(),
+                ),
+            ),
+        ]),
     };
 
     let bebop_component = ProtocolComponent {
@@ -719,7 +728,7 @@ fn test_hashflow() {
 
     let hashflow_state = MockRFQState {
         quote_amount_out,
-        quote_data: vec![
+        quote_data: HashMap::from([
             (
                 "pool".to_string(),
                 Bytes::from_str("0x478eca1b93865dca0b9f325935eb123c8a4af011").unwrap(),
@@ -763,8 +772,7 @@ fn test_hashflow() {
                     .unwrap(),
             ),
             ("signature".to_string(), Bytes::from_str("0x6ddb3b21fe8509e274ddf46c55209cdbf30360944abbca6569ed6b26740d052f419964dcb5a3bdb98b4ed1fb3642a2760b8312118599a962251f7a8f73fe4fbe1c").unwrap()),
-        ],
-        quote_partial_fill_offset: 0,
+        ]),
     };
 
     let hashflow_component = ProtocolComponent {
@@ -851,7 +859,7 @@ fn test_uniswap_v3_hashflow() {
 
     let hashflow_state = MockRFQState {
         quote_amount_out,
-        quote_data: vec![
+        quote_data: HashMap::from([
             (
                 "pool".to_string(),
                 Bytes::from_str("0x478eca1b93865dca0b9f325935eb123c8a4af011").unwrap(),
@@ -895,8 +903,7 @@ fn test_uniswap_v3_hashflow() {
                     .unwrap(),
             ),
             ("signature".to_string(), Bytes::from_str("0x6ddb3b21fe8509e274ddf46c55209cdbf30360944abbca6569ed6b26740d052f419964dcb5a3bdb98b4ed1fb3642a2760b8312118599a962251f7a8f73fe4fbe1c").unwrap()),
-        ],
-        quote_partial_fill_offset: 0,
+        ]),
     };
 
     let hashflow_component = ProtocolComponent {
