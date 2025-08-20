@@ -280,3 +280,36 @@ contract HashflowExecutorExposed is HashflowExecutor {
         return _decodeData(data);
     }
 }
+
+contract TychoRouterSingleSwapTestForHashflow is TychoRouterTestSetup {
+    function getForkBlock() public pure override returns (uint256) {
+        return 23175437;
+    }
+
+    function testHashflowIntegration() public {
+        // Performs a swap from USDC to WBTC using Hashflow RFQ
+        //
+        //   USDC ───(Hashflow RFQ)──> WBTC
+
+        // The Hashflow order expects:
+        // - 4308094737 USDC input -> 3714751 WBTC output
+
+        uint256 amountIn = 4308094737;
+        uint256 expectedAmountOut = 3714751;
+        deal(USDC_ADDR, ALICE, amountIn);
+        uint256 balanceBefore = IERC20(WBTC_ADDR).balanceOf(ALICE);
+
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, type(uint256).max);
+        bytes memory callData = loadCallDataFromFile("test_hashflow");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = IERC20(WBTC_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertEq(balanceAfter - balanceBefore, expectedAmountOut);
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+    }
+}
