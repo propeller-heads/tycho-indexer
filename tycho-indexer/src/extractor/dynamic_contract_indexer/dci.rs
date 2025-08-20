@@ -222,6 +222,12 @@ where
                         .accessed_slots
                         .iter()
                     {
+                        // Check if account is new (not previously tracked)
+                        let is_new_account = !self
+                            .cache
+                            .tracked_contracts
+                            .contains_key(account);
+
                         // Determine which slots are new (not previously tracked)
                         let new_slots: HashSet<StoreKey> = if let Some(tracked_slots_opt) = self
                             .cache
@@ -245,15 +251,17 @@ where
                             slots.iter().cloned().collect()
                         };
 
-                        // Only add new slots to new_account_addr_to_slots
-                        if !new_slots.is_empty() {
+                        // Add account if it's new OR has new slots
+                        if is_new_account || !new_slots.is_empty() {
+                            // Only add new slots to new_account_addr_to_slots (might be empty for
+                            // new accounts)
                             new_account_addr_to_slots
                                 .entry(account.clone())
                                 .or_default()
                                 .extend(new_slots.iter().cloned());
 
                             // Keep track of the first transaction that pushed the entrypoint that
-                            // calls this account with new slots.
+                            // calls this account (new account or with new slots).
                             new_account_addr_to_tx
                                 .entry(account.clone())
                                 .and_modify(|existing_tx| {
@@ -2154,7 +2162,96 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_process_block_update_new_account_without_slots() {
+        let gateway = get_mock_gateway();
+        let mut account_extractor = MockAccountExtractor::new();
+        let mut entrypoint_tracer = MockEntryPointTracer::new();
+
+        // Create a new account address that is not tracked
+        let new_account = Bytes::from("0xABCDEF1234567890123456789012345678901234");
+
+        entrypoint_tracer
+            .expect_trace()
+            .with(
+                eq(Bytes::from(2_u8).lpad(32, 0)),
+                eq(vec![EntryPointWithTracingParams::new(
+                    get_entrypoint(9),
+                    get_tracing_params(9),
+                )]),
+            )
+            .return_once({
+                let new_account = new_account.clone();
+                move |_, _| {
+                    Ok(vec![TracedEntryPoint::new(
+                        EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
+                        Bytes::zero(32),
+                        // Account with empty slots - this is the key scenario
+                        get_tracing_result_with_addresses_and_slots(vec![
+                            (new_account.clone(), vec![]), // No slots!
+                        ]),
+                    )])
+                }
+            });
+
+        // Should still fetch the account even though it has no slots
+        account_extractor
+            .expect_get_accounts_at_block()
+            .with(
+                eq(testing::block(2)),
+                predicate::function({
+                    let new_account = new_account.clone();
+                    move |requests: &[StorageSnapshotRequest]| {
+                        requests.len() == 1 &&
+                            requests[0].address == new_account &&
+                            requests[0].slots.is_none() // Should request all slots for new
+                                                        // non-token account
+                    }
+                }),
+            )
+            .return_once({
+                let new_account = new_account.clone();
+                move |_, _| {
+                    Ok(HashMap::from([(
+                        new_account.clone(),
+                        AccountDelta::new(
+                            Chain::Ethereum,
+                            new_account,
+                            HashMap::new(),
+                            None,
+                            None,
+                            ChangeType::Update,
+                        ),
+                    )]))
+                }
+            });
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        dci.initialize().await.unwrap();
+
+        let mut block_changes = get_block_changes(2);
+        dci.process_block_update(&mut block_changes)
+            .await
+            .unwrap();
+
+        // Verify the account was processed even without slots
+        assert!(!block_changes.txs_with_update.is_empty());
+        assert!(block_changes.txs_with_update[0]
+            .account_deltas
+            .contains_key(&new_account));
+        assert!(!block_changes.trace_results.is_empty());
+    }
+
+    #[tokio::test]
     async fn test_process_block_update_no_new_slots_found() {
+        // This test verifies that when an already tracked account is accessed again
+        // but with no new slots, it doesn't trigger unnecessary account fetching
         let gateway = get_mock_gateway();
         let mut account_extractor = MockAccountExtractor::new();
         let mut entrypoint_tracer = MockEntryPointTracer::new();
