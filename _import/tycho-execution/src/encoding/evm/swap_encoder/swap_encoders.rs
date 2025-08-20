@@ -711,28 +711,24 @@ impl SwapEncoder for BebopSwapEncoder {
     ) -> Result<Vec<u8>, EncodingError> {
         let token_in = bytes_to_address(&swap.token_in)?;
         let token_out = bytes_to_address(&swap.token_out)?;
-
-        let token_approvals_manager = ProtocolApprovalsManager::new()?;
-        let approval_needed: bool;
-
-        if let Some(router_address) = &encoding_context.router_address {
-            let tycho_router_address = bytes_to_address(router_address)?;
+        let sender = encoding_context
+            .router_address
+            .clone()
+            .ok_or(EncodingError::FatalError(
+                "The router address is needed to perform a Hashflow swap".to_string(),
+            ))?;
+        let approval_needed = if swap.token_in == self.native_token_address {
+            false
+        } else {
+            let tycho_router_address = bytes_to_address(&sender)?;
             let settlement_address = Address::from_str(&self.settlement_address)
                 .map_err(|_| EncodingError::FatalError("Invalid settlement address".to_string()))?;
-
-            // Native ETH doesn't need approval, only ERC20 tokens do
-            if swap.token_in == self.native_token_address {
-                approval_needed = false;
-            } else {
-                approval_needed = token_approvals_manager.approval_needed(
-                    token_in,
-                    tycho_router_address,
-                    settlement_address,
-                )?;
-            }
-        } else {
-            approval_needed = true;
-        }
+            ProtocolApprovalsManager::new()?.approval_needed(
+                token_in,
+                tycho_router_address,
+                settlement_address,
+            )?
+        };
 
         let (partial_fill_offset, original_filled_taker_amount, bebop_calldata) =
             if let Some(state) = swap.protocol_state {
@@ -894,16 +890,16 @@ impl SwapEncoder for HashflowSwapEncoder {
             .ok_or(EncodingError::FatalError(
                 "The router address is needed to perform a Hashflow swap".to_string(),
             ))?;
-        let tycho_router_address = bytes_to_address(&sender)?;
-        let hashflow_router_address =
-            Address::from_str(&self.hashflow_router_address).map_err(|_| {
-                EncodingError::FatalError("Invalid hashflow router address address".to_string())
-            })?;
 
         // Native ETH doesn't need approval, only ERC20 tokens do
         let approval_needed = if swap.token_in == self.native_token_address {
             false
         } else {
+            let tycho_router_address = bytes_to_address(&sender)?;
+            let hashflow_router_address = Address::from_str(&self.hashflow_router_address)
+                .map_err(|_| {
+                    EncodingError::FatalError("Invalid hashflow router address address".to_string())
+                })?;
             ProtocolApprovalsManager::new()?.approval_needed(
                 bytes_to_address(&swap.token_in)?,
                 tycho_router_address,
