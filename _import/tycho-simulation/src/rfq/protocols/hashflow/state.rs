@@ -152,6 +152,10 @@ impl ProtocolSim for HashflowState {
         Ok((sell_limit, buy_limit))
     }
 
+    fn as_indicatively_priced(&self) -> Result<&dyn IndicativelyPriced, SimulationError> {
+        Ok(self)
+    }
+
     fn delta_transition(
         &mut self,
         _delta: ProtocolStateDelta,
