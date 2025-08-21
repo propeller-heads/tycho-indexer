@@ -78,6 +78,9 @@ pub fn get_static_attribute(swap: &Swap, attribute_name: &str) -> Result<Vec<u8>
         .to_vec())
 }
 
+/// Returns the current Tokio runtime handle, or creates a new one if it doesn't exist.
+/// It also returns the runtime to prevent it from being dropped before use.
+/// This is required since tycho-execution does not have a pre-existing runtime.
 pub fn get_runtime() -> Result<(Handle, Option<Arc<Runtime>>), EncodingError> {
     match Handle::try_current() {
         Ok(h) => Ok((h, None)),

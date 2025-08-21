@@ -128,6 +128,9 @@ contract Constants is Test, BaseConstants {
     // Bebop Settlement
     address BEBOP_SETTLEMENT = 0xbbbbbBB520d69a9775E85b458C58c648259FAD5F;
 
+    // Hashflow Router
+    address HASHFLOW_ROUTER = 0x55084eE0fEf03f14a305cd24286359A35D735151;
+
     // Pool Code Init Hashes
     bytes32 USV2_POOL_CODE_INIT_HASH =
         0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f;

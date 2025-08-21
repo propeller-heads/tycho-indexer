@@ -4,12 +4,15 @@ use alloy::hex::encode;
 use num_bigint::{BigInt, BigUint};
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 use tycho_execution::encoding::{
-    evm::{testing_utils::MockRFQState, utils::write_calldata_to_file},
+    evm::{
+        testing_utils::MockRFQState,
+        utils::{biguint_to_u256, write_calldata_to_file},
+    },
     models::{Solution, Swap, SwapBuilder, UserTransferType},
 };
 
 use crate::common::{
-    bob_address, encoding::encode_tycho_router_call, eth, eth_chain, get_signer,
+    alice_address, bob_address, encoding::encode_tycho_router_call, eth, eth_chain, get_signer,
     get_tycho_router_encoder, usdc, wbtc, weth,
 };
 
@@ -650,8 +653,17 @@ fn test_uniswap_v3_bebop() {
 
     let bebop_state = MockRFQState {
         quote_amount_out,
-        quote_calldata: bebop_calldata.clone(),
-        quote_partial_fill_offset: partial_fill_offset,
+        quote_data: HashMap::from([
+            ("calldata".to_string(), bebop_calldata),
+            (
+                "partial_fill_offset".to_string(),
+                Bytes::from(
+                    partial_fill_offset
+                        .to_be_bytes()
+                        .to_vec(),
+                ),
+            ),
+        ]),
     };
 
     let bebop_component = ProtocolComponent {
@@ -697,4 +709,130 @@ fn test_uniswap_v3_bebop() {
 
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_uniswap_v3_bebop", hex_calldata.as_str());
+}
+
+#[test]
+#[ignore]
+fn test_uniswap_v3_hashflow() {
+    // Note: This test does not assert anything. It is only used to obtain
+    // integration test data for our router solidity test.
+    //
+    // Performs a sequential swap from WETH to WBTC through USDC using USV3 and
+    // Hashflow RFQ
+    //
+    //   WETH ───(USV3)──> USDC ───(Hashflow RFQ)──> WBTC
+
+    let weth = weth();
+    let usdc = usdc();
+    let wbtc = wbtc();
+
+    // First swap: WETH -> USDC via UniswapV3
+    let swap_weth_usdc = SwapBuilder::new(
+        ProtocolComponent {
+            id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* WETH-USDC USV3 Pool
+                                                                           * 0.05% */
+            protocol_system: "uniswap_v3".to_string(),
+            static_attributes: {
+                let mut attrs = HashMap::new();
+                attrs
+                    .insert("fee".to_string(), Bytes::from(BigInt::from(500).to_signed_bytes_be()));
+                attrs
+            },
+            ..Default::default()
+        },
+        weth.clone(),
+        usdc.clone(),
+    )
+    .build();
+
+    // Second swap: USDC -> WBTC via Hashflow RFQ using real order data
+    let quote_amount_out = BigUint::from_str("3714751").unwrap();
+
+    let hashflow_state = MockRFQState {
+        quote_amount_out,
+        quote_data: HashMap::from([
+            (
+                "pool".to_string(),
+                Bytes::from_str("0x478eca1b93865dca0b9f325935eb123c8a4af011").unwrap(),
+            ),
+            (
+                "external_account".to_string(),
+                Bytes::from_str("0xbee3211ab312a8d065c4fef0247448e17a8da000").unwrap(),
+            ),
+            (
+                "trader".to_string(),
+                Bytes::from_str("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2").unwrap(),
+            ),
+            (
+                "base_token".to_string(),
+                Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+            ),
+            (
+                "quote_token".to_string(),
+                Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap(),
+            ),
+            (
+                "base_token_amount".to_string(),
+                Bytes::from(biguint_to_u256(&BigUint::from(4308094737_u64)).to_be_bytes::<32>().to_vec()),
+            ),
+            (
+                "quote_token_amount".to_string(),
+                Bytes::from(biguint_to_u256(&BigUint::from(3714751_u64)).to_be_bytes::<32>().to_vec()),
+            ),
+            ("quote_expiry".to_string(), Bytes::from(biguint_to_u256(&BigUint::from(1755610328_u64)).to_be_bytes::<32>().to_vec())),
+            ("nonce".to_string(), Bytes::from(biguint_to_u256(&BigUint::from(1755610283723_u64)).to_be_bytes::<32>().to_vec())),
+            (
+                "tx_id".to_string(),
+                Bytes::from_str(
+                    "0x125000064000640000001747eb8c38ffffffffffffff0029642016edb36d0000",
+                )
+                    .unwrap(),
+            ),
+            ("signature".to_string(), Bytes::from_str("0x6ddb3b21fe8509e274ddf46c55209cdbf30360944abbca6569ed6b26740d052f419964dcb5a3bdb98b4ed1fb3642a2760b8312118599a962251f7a8f73fe4fbe1c").unwrap()),
+        ]),
+    };
+
+    let hashflow_component = ProtocolComponent {
+        id: String::from("hashflow-rfq"),
+        protocol_system: String::from("rfq:hashflow"),
+        ..Default::default()
+    };
+
+    let swap_usdc_wbtc = SwapBuilder::new(hashflow_component, usdc.clone(), wbtc.clone())
+        .estimated_amount_in(BigUint::from_str("4308094737").unwrap())
+        .protocol_state(&hashflow_state)
+        .build();
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: weth,
+        given_amount: BigUint::from_str("1000000000000000000").unwrap(),
+        checked_token: wbtc,
+        checked_amount: BigUint::from_str("3714751").unwrap(),
+        sender: alice_address(),
+        receiver: alice_address(),
+        swaps: vec![swap_weth_usdc, swap_usdc_wbtc],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_uniswap_v3_hashflow", hex_calldata.as_str());
 }

@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.26;
 
+import "../TychoRouterTestSetup.sol";
 import "@src/executors/HashflowExecutor.sol";
-import {Constants} from "../Constants.sol";
 import "forge-std/Test.sol";
+import {Constants} from "../Constants.sol";
 
 contract HashflowUtils is Test {
     constructor() {}
@@ -14,12 +15,11 @@ contract HashflowUtils is Test {
         RestrictTransferFrom.TransferType transferType
     ) internal pure returns (bytes memory) {
         return abi.encodePacked(
-            approvalNeeded, // needsApproval (1 byte)
             uint8(transferType), // transferType (1 byte)
+            approvalNeeded, // needsApproval (1 byte)
             quote.pool, // pool (20 bytes)
             quote.externalAccount, // externalAccount (20 bytes)
             quote.trader, // trader (20 bytes)
-            quote.effectiveTrader, // effectiveTrader (20 bytes)
             quote.baseToken, // baseToken (20 bytes)
             quote.quoteToken, // quoteToken (20 bytes)
             quote.baseTokenAmount, // baseTokenAmount (32 bytes)
@@ -51,9 +51,9 @@ contract HashflowExecutorECR20Test is Constants, HashflowUtils {
     IERC20 USDC = IERC20(USDC_ADDR);
 
     function setUp() public {
-        forkBlock = 23124977; // Using expiry date: 1755001853, ECR20
+        forkBlock = 23188416; // Using expiry date: 1755766775, ECR20
         vm.createSelectFork("mainnet", forkBlock);
-        executor = new HashflowExecutorExposed(PERMIT2_ADDRESS);
+        executor = new HashflowExecutorExposed(HASHFLOW_ROUTER, PERMIT2_ADDRESS);
     }
 
     function testDecodeParams() public view {
@@ -123,54 +123,54 @@ contract HashflowExecutorECR20Test is Constants, HashflowUtils {
     }
 
     function testSwapNoSlippage() public {
-        address trader = address(executor);
+        address trader = address(ALICE);
         IHashflowRouter.RFQTQuote memory quote = rfqtQuote();
         uint256 amountIn = quote.baseTokenAmount;
         bytes memory encodedQuote = encodeRfqtQuoteWithDefaults(quote);
 
-        deal(USDC_ADDR, address(executor), amountIn);
-        uint256 balanceBefore = WETH.balanceOf(trader);
+        deal(WETH_ADDR, address(executor), amountIn);
+        uint256 balanceBefore = USDC.balanceOf(trader);
 
         vm.prank(trader);
         uint256 amountOut = executor.swap(amountIn, encodedQuote);
 
-        uint256 balanceAfter = WETH.balanceOf(trader);
+        uint256 balanceAfter = USDC.balanceOf(trader);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(amountOut, quote.quoteTokenAmount);
     }
 
     function testSwapRouterAmountUnderQuoteAmount() public {
-        address trader = address(executor);
+        address trader = address(ALICE);
         IHashflowRouter.RFQTQuote memory quote = rfqtQuote();
         uint256 amountIn = quote.baseTokenAmount - 1;
         bytes memory encodedQuote = encodeRfqtQuoteWithDefaults(quote);
 
-        deal(USDC_ADDR, address(executor), amountIn);
-        uint256 balanceBefore = WETH.balanceOf(trader);
+        deal(WETH_ADDR, address(executor), amountIn);
+        uint256 balanceBefore = USDC.balanceOf(trader);
 
         vm.prank(trader);
         uint256 amountOut = executor.swap(amountIn, encodedQuote);
 
-        uint256 balanceAfter = WETH.balanceOf(trader);
+        uint256 balanceAfter = USDC.balanceOf(trader);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertLt(amountOut, quote.quoteTokenAmount);
     }
 
     function testSwapRouterAmountOverQuoteAmount() public {
-        address trader = address(executor);
+        address trader = address(ALICE);
         IHashflowRouter.RFQTQuote memory quote = rfqtQuote();
         uint256 amountIn = quote.baseTokenAmount + 1;
         bytes memory encodedQuote = encodeRfqtQuoteWithDefaults(quote);
 
-        deal(USDC_ADDR, address(executor), amountIn);
-        uint256 balanceBefore = WETH.balanceOf(trader);
+        deal(WETH_ADDR, address(executor), amountIn);
+        uint256 balanceBefore = USDC.balanceOf(trader);
 
         vm.prank(trader);
         uint256 amountOut = executor.swap(amountIn, encodedQuote);
 
-        uint256 balanceAfter = WETH.balanceOf(trader);
+        uint256 balanceAfter = USDC.balanceOf(trader);
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(amountOut, quote.quoteTokenAmount);
@@ -182,23 +182,23 @@ contract HashflowExecutorECR20Test is Constants, HashflowUtils {
         returns (IHashflowRouter.RFQTQuote memory)
     {
         return IHashflowRouter.RFQTQuote({
-            pool: address(0x4cE18FD7b44F40Aebd6911362d3AC25F14D5007f),
-            externalAccount: address(0x50C03775C8E5b6227F1E00C4b3e479b4A7C57983),
-            trader: address(executor),
+            pool: address(0x5d8853028fbF6a2da43c7A828cc5f691E9456B44),
+            externalAccount: address(0x9bA0CF1588E1DFA905eC948F7FE5104dD40EDa31),
+            trader: address(ALICE),
             effectiveTrader: address(ALICE),
-            baseToken: USDC_ADDR,
-            quoteToken: WETH_ADDR,
+            baseToken: WETH_ADDR,
+            quoteToken: USDC_ADDR,
             effectiveBaseTokenAmount: 0,
-            baseTokenAmount: 100,
-            quoteTokenAmount: 23224549208,
-            quoteExpiry: 1755001853,
-            nonce: 1755001793084,
+            baseTokenAmount: 1000000000000000000,
+            quoteTokenAmount: 4286117034,
+            quoteExpiry: 1755766775,
+            nonce: 1755766744988,
             txid: bytes32(
                 uint256(
-                    0x12500006400064000000174813b960ffffffffffffff00293fdb4569fe760000
+                    0x12500006400064000186078c183380ffffffffffffff00296d737ff6ae950000
                 )
             ),
-            signature: hex"5b26977fecaf794c3d6900b9523b9632b5c62623f92732347dc9f24d8b5c4d611f5d733bbe82b594b6b47ab8aa1923c9f6b8aa66ef822ce412a767200f1520e11b"
+            signature: hex"649d31cd74f1b11b4a3b32bd38c2525d78ce8f23bc2eaf7700899c3a396d3a137c861737dc780fa154699eafb3108a34cbb2d4e31a6f0623c169cc19e0fa296a1c"
         });
     }
 }
@@ -213,13 +213,13 @@ contract HashflowExecutorNativeTest is Constants, HashflowUtils {
     IERC20 USDC = IERC20(USDC_ADDR);
 
     function setUp() public {
-        forkBlock = 23125321; // Using expiry date: 1755006017, Native
+        forkBlock = 23188504; // Using expiry date: 1755767859, Native
         vm.createSelectFork("mainnet", forkBlock);
-        executor = new HashflowExecutorExposed(PERMIT2_ADDRESS);
+        executor = new HashflowExecutorExposed(HASHFLOW_ROUTER, PERMIT2_ADDRESS);
     }
 
     function testSwapNoSlippage() public {
-        address trader = address(executor);
+        address trader = address(ALICE);
         IHashflowRouter.RFQTQuote memory quote = rfqtQuote();
         uint256 amountIn = quote.baseTokenAmount;
         bytes memory encodedQuote = encodeRfqtQuoteWithDefaults(quote);
@@ -242,29 +242,31 @@ contract HashflowExecutorNativeTest is Constants, HashflowUtils {
         returns (IHashflowRouter.RFQTQuote memory)
     {
         return IHashflowRouter.RFQTQuote({
-            pool: address(0x51199bE500A8c59262478b621B1096F17638dc6F),
-            externalAccount: address(0xCe79b081c0c924cb67848723ed3057234d10FC6b),
-            trader: address(executor),
+            pool: address(0x713DC4Df480235dBe2fB766E7120Cbd4041Dcb58),
+            externalAccount: address(0x111BB8c3542F2B92fb41B8d913c01D3788431111),
+            trader: address(ALICE),
             effectiveTrader: address(ALICE),
             baseToken: address(0x0000000000000000000000000000000000000000),
             quoteToken: USDC_ADDR,
             effectiveBaseTokenAmount: 0,
             baseTokenAmount: 10000000000000000,
-            quoteTokenAmount: 43930745,
-            quoteExpiry: 1755006017,
-            nonce: 1755005977455,
+            quoteTokenAmount: 42586008,
+            quoteExpiry: 1755767859,
+            nonce: 1755767819299,
             txid: bytes32(
                 uint256(
-                    0x1250000640006400019071ef777818ffffffffffffff0029401b1bc51da00000
+                    0x1250000640006400018380fd594810ffffffffffffff00296d83e467cddd0000
                 )
             ),
-            signature: hex"4c3554c928e4b15cd53d1047aee69a66103effa5107047b84949e48460b6978f25da9ad5b9ed31aa9ab2130e597fabea872f14b8c1b166ea079413cbaf2f4b4c1c"
+            signature: hex"63c1c9c7d6902d1d4d2ae82777015433ef08366dde1c579a8c4cbc01059166064246f61f15b2cb130be8f2b28ea40d2c3586ef0133647fefa30003e70ffbd6131b"
         });
     }
 }
 
 contract HashflowExecutorExposed is HashflowExecutor {
-    constructor(address _permit2) HashflowExecutor(_permit2) {}
+    constructor(address _hashflowRouter, address _permit2)
+        HashflowExecutor(_hashflowRouter, _permit2)
+    {}
 
     function decodeData(bytes calldata data)
         external
@@ -276,5 +278,39 @@ contract HashflowExecutorExposed is HashflowExecutor {
         )
     {
         return _decodeData(data);
+    }
+}
+
+contract TychoRouterSingleSwapTestForHashflow is TychoRouterTestSetup {
+    function getForkBlock() public pure override returns (uint256) {
+        return 23175437;
+    }
+
+    function testHashflowIntegration() public {
+        // Performs a swap from USDC to WBTC using Hashflow RFQ
+        //
+        //   USDC ───(Hashflow RFQ)──> WBTC
+
+        // The Hashflow order expects:
+        // - 4308094737 USDC input -> 3714751 WBTC output
+
+        uint256 amountIn = 4308094737;
+        uint256 expectedAmountOut = 3714751;
+        deal(USDC_ADDR, ALICE, amountIn);
+        uint256 balanceBefore = IERC20(WBTC_ADDR).balanceOf(ALICE);
+
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, type(uint256).max);
+        bytes memory callData =
+            loadCallDataFromFile("test_single_encoding_strategy_hashflow");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = IERC20(WBTC_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertEq(balanceAfter - balanceBefore, expectedAmountOut);
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 }

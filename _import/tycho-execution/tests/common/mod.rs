@@ -21,6 +21,10 @@ pub fn bob_address() -> Bytes {
     Bytes::from_str("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e").unwrap()
 }
 
+pub fn alice_address() -> Bytes {
+    Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap()
+}
+
 pub fn eth_chain() -> Chain {
     Chain::Ethereum
 }

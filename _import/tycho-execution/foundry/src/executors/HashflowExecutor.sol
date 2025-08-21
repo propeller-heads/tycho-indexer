@@ -32,12 +32,20 @@ interface IHashflowRouter {
 contract HashflowExecutor is IExecutor, RestrictTransferFrom {
     using SafeERC20 for IERC20;
 
-    address public constant HASHFLOW_ROUTER =
-        0x55084eE0fEf03f14a305cd24286359A35D735151;
     address public constant NATIVE_TOKEN =
         0x0000000000000000000000000000000000000000;
 
-    constructor(address _permit2) RestrictTransferFrom(_permit2) {}
+    /// @notice The Hashflow router address
+    address public immutable hashflowRouter;
+
+    constructor(address _hashflowRouter, address _permit2)
+        RestrictTransferFrom(_permit2)
+    {
+        if (_hashflowRouter == address(0)) {
+            revert HashflowExecutor__InvalidHashflowRouter();
+        }
+        hashflowRouter = _hashflowRouter;
+    }
 
     function swap(uint256 givenAmount, bytes calldata data)
         external
@@ -60,7 +68,7 @@ contract HashflowExecutor is IExecutor, RestrictTransferFrom {
         if (approvalNeeded && quote.baseToken != NATIVE_TOKEN) {
             // slither-disable-next-line unused-return
             IERC20(quote.baseToken).forceApprove(
-                HASHFLOW_ROUTER, type(uint256).max
+                hashflowRouter, type(uint256).max
             );
         }
 
@@ -71,9 +79,9 @@ contract HashflowExecutor is IExecutor, RestrictTransferFrom {
         _transfer(
             address(this), transferType, address(quote.baseToken), givenAmount
         );
-        uint256 balanceBefore = _balanceOf(quote.quoteToken);
-        IHashflowRouter(HASHFLOW_ROUTER).tradeRFQT{value: ethValue}(quote);
-        uint256 balanceAfter = _balanceOf(quote.quoteToken);
+        uint256 balanceBefore = _balanceOf(quote.trader, quote.quoteToken);
+        IHashflowRouter(hashflowRouter).tradeRFQT{value: ethValue}(quote);
+        uint256 balanceAfter = _balanceOf(quote.trader, quote.quoteToken);
         calculatedAmount = balanceAfter - balanceBefore;
     }
 
@@ -86,35 +94,37 @@ contract HashflowExecutor is IExecutor, RestrictTransferFrom {
             TransferType transferType
         )
     {
-        if (data.length != 347) {
+        if (data.length != 327) {
             revert HashflowExecutor__InvalidDataLength();
         }
 
-        approvalNeeded = data[0] != 0;
-        transferType = TransferType(uint8(data[1]));
+        transferType = TransferType(uint8(data[0]));
+        approvalNeeded = data[1] != 0;
 
         quote.pool = address(bytes20(data[2:22]));
         quote.externalAccount = address(bytes20(data[22:42]));
         quote.trader = address(bytes20(data[42:62]));
-        quote.effectiveTrader = address(bytes20(data[62:82]));
-        quote.baseToken = address(bytes20(data[82:102]));
-        quote.quoteToken = address(bytes20(data[102:122]));
-        quote.effectiveBaseTokenAmount = 0; // Not included in the calldata, set in the swap function
-        quote.baseTokenAmount = uint256(bytes32(data[122:154]));
-        quote.quoteTokenAmount = uint256(bytes32(data[154:186]));
-        quote.quoteExpiry = uint256(bytes32(data[186:218]));
-        quote.nonce = uint256(bytes32(data[218:250]));
-        quote.txid = bytes32(data[250:282]);
-        quote.signature = data[282:347];
+        // Assumes we never set the effectiveTrader when requesting a quote.
+        quote.effectiveTrader = quote.trader;
+        quote.baseToken = address(bytes20(data[62:82]));
+        quote.quoteToken = address(bytes20(data[82:102]));
+        // Not included in the calldata. Will be set in the swap function.
+        quote.effectiveBaseTokenAmount = 0;
+        quote.baseTokenAmount = uint256(bytes32(data[102:134]));
+        quote.quoteTokenAmount = uint256(bytes32(data[134:166]));
+        quote.quoteExpiry = uint256(bytes32(data[166:198]));
+        quote.nonce = uint256(bytes32(data[198:230]));
+        quote.txid = bytes32(data[230:262]);
+        quote.signature = data[262:327];
     }
 
-    function _balanceOf(address token)
+    function _balanceOf(address trader, address token)
         internal
         view
         returns (uint256 balance)
     {
         balance = token == NATIVE_TOKEN
-            ? address(this).balance
-            : IERC20(token).balanceOf(address(this));
+            ? trader.balance
+            : IERC20(token).balanceOf(trader);
     }
 }
