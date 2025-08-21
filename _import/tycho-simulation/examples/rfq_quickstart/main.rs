@@ -1,4 +1,4 @@
-use std::{collections::HashSet, env, str::FromStr};
+use std::{collections::HashSet, env, str::FromStr, sync::Arc};
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -52,7 +52,6 @@ struct Cli {
     /// The minimum TVL threshold for RFQ quotes in USD
     #[arg(long, default_value_t = 1000.0)]
     tvl_threshold: f64,
-
     #[arg(long, default_value = "ethereum")]
     chain: Chain,
 }
@@ -379,7 +378,7 @@ async fn main() {
 
                                 let solution = create_solution(
                                     component.clone(),
-                                    state.as_ref(),
+                                    Arc::from(state.clone_box()),
                                     sell_token.clone(),
                                     buy_token.clone(),
                                     amount_in.clone(),
@@ -550,7 +549,7 @@ async fn main() {
 
                                 let solution = create_solution(
                                     component.clone(),
-                                    state.as_ref(),
+                                    Arc::from(state.clone_box()),
                                     sell_token.clone(),
                                     buy_token.clone(),
                                     amount_in.clone(),
@@ -686,15 +685,15 @@ fn format_price_ratios(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn create_solution<'a>(
+fn create_solution(
     component: ProtocolComponent,
-    state: &'a dyn ProtocolSim,
+    state: Arc<dyn ProtocolSim>,
     sell_token: Token,
     buy_token: Token,
     sell_amount: BigUint,
     user_address: Bytes,
     expected_amount: BigUint,
-) -> Solution<'a> {
+) -> Solution {
     // Prepare data to encode. First we need to create a swap object
     let simple_swap =
         SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone())
