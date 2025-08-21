@@ -210,8 +210,8 @@ where
                     .new_tokens
                     .iter()
                     .filter(|(addr, t)| {
-                        t.quality >= self.min_token_quality
-                            && !state_guard.tokens.contains_key(*addr)
+                        t.quality >= self.min_token_quality &&
+                            !state_guard.tokens.contains_key(*addr)
                     })
                     .filter_map(|(addr, t)| {
                         t.clone()

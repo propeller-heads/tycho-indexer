@@ -129,7 +129,7 @@ async fn main() {
 
     println!("Loading tokens from Tycho... {url}", url = tycho_url.as_str());
     let all_tokens =
-        load_all_tokens(tycho_url.as_str(), true, Some(tycho_api_key.as_str()), chain, None, None)
+        load_all_tokens(tycho_url.as_str(), false, Some(tycho_api_key.as_str()), chain, None, None)
             .await;
     println!("Tokens loaded: {num}", num = all_tokens.len());
 
@@ -167,12 +167,11 @@ async fn main() {
 
     match chain {
         Chain::Ethereum => {
-            protocol_stream = protocol_stream
-                .exchange::<UniswapV4State>(
-                    "uniswap_v4",
-                    tvl_filter.clone(),
-                    Some(uniswap_v4_pool_with_hook_filter),
-                );
+            protocol_stream = protocol_stream.exchange::<UniswapV4State>(
+                "uniswap_v4_hooks",
+                tvl_filter.clone(),
+                Some(uniswap_v4_pool_with_hook_filter),
+            );
             // COMING SOON!
             // .exchange::<EVMPoolState<PreCachedDB>>("vm:maverick_v2", tvl_filter.clone(), None);
         }
@@ -201,7 +200,7 @@ async fn main() {
 
     let mut protocol_stream = protocol_stream
         // This for some reason sets tls=True
-        // .auth_key(Some(tycho_api_key.clone()))
+        .auth_key(Some(tycho_api_key.clone()))
         .skip_state_decode_failures(true)
         .set_tokens(all_tokens.clone())
         .await
