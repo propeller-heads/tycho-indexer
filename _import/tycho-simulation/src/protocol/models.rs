@@ -28,7 +28,7 @@ use std::{collections::HashMap, default::Default, future::Future};
 
 use chrono::NaiveDateTime;
 use serde::Serialize;
-use tycho_client::feed::HeaderLike;
+use tycho_client::feed::{HeaderLike, SynchronizerState};
 use tycho_common::{
     models::{token::Token, Chain},
     simulation::protocol_sim::ProtocolSim,
@@ -143,6 +143,8 @@ where
 #[derive(Debug, Clone)]
 pub struct Update {
     pub block_number_or_timestamp: u64,
+    /// Synchronization state per protocol
+    pub sync_states: HashMap<String, SynchronizerState>,
     /// The new and updated states of this block
     pub states: HashMap<String, Box<dyn ProtocolSim>>,
     /// The new pairs that were added in this block
@@ -159,6 +161,7 @@ impl Update {
     ) -> Self {
         Update {
             block_number_or_timestamp: block_number,
+            sync_states: HashMap::new(),
             states,
             new_pairs,
             removed_pairs: HashMap::new(),
@@ -167,6 +170,11 @@ impl Update {
 
     pub fn set_removed_pairs(mut self, pairs: HashMap<String, ProtocolComponent>) -> Self {
         self.removed_pairs = pairs;
+        self
+    }
+
+    pub fn set_sync_states(mut self, sync_states: HashMap<String, SynchronizerState>) -> Self {
+        self.sync_states = sync_states;
         self
     }
 

@@ -1,3 +1,118 @@
+## [0.151.0](https://github.com/propeller-heads/tycho-simulation/compare/0.150.2...0.151.0) (2025-08-21)
+
+
+### Features
+
+* Pass protocol_state as Arc in quickstart ([a074b9b](https://github.com/propeller-heads/tycho-simulation/commit/a074b9b31b30c7afcb7bc4be4b57381b7d104ede))
+
+## [0.150.2](https://github.com/propeller-heads/tycho-simulation/compare/0.150.1...0.150.2) (2025-08-21)
+
+
+### Bug Fixes
+
+* Don't show green check if simulation failed ([0ffab6b](https://github.com/propeller-heads/tycho-simulation/commit/0ffab6b44eef6b2d52d86f0e8258c7fcb4d3b0b1))
+* Fast-forward to latest message in quickstart ([b4bd5da](https://github.com/propeller-heads/tycho-simulation/commit/b4bd5dad3a5cc7a8134fd4fbd2d23a5ba487f6c9))
+* Revert message fast-forwarding in normal quickstart ([6842dfd](https://github.com/propeller-heads/tycho-simulation/commit/6842dfd198fc08ae24cb5b84a959f56dc5b23d3c))
+
+## [0.150.1](https://github.com/propeller-heads/tycho-simulation/compare/0.150.0...0.150.1) (2025-08-21)
+
+
+### Bug Fixes
+
+* `external_account` fallbacks to zero address if not present in the quote (as defined in the api docs) ([8570ce9](https://github.com/propeller-heads/tycho-simulation/commit/8570ce922b9ebc7889f6f4ba71d7deab8a74672e))
+* add missing fields when parsing hashflow quote ([6a88330](https://github.com/propeller-heads/tycho-simulation/commit/6a883300f4439bffa7601b4c8a726c85ca77f281))
+
+## [0.150.0](https://github.com/propeller-heads/tycho-simulation/compare/0.149.0...0.150.0) (2025-08-20)
+
+
+### Features
+
+* Don't pass PK as CLI command ([54a44f9](https://github.com/propeller-heads/tycho-simulation/commit/54a44f97d5597ef9369c62bff98ba5f96f1b1a0e))
+
+## [0.149.0](https://github.com/propeller-heads/tycho-simulation/compare/0.148.0...0.149.0) (2025-08-19)
+
+
+### Features
+
+* Add encoding to RFQ quickstart ([b5031bd](https://github.com/propeller-heads/tycho-simulation/commit/b5031bd6d3491344a4430ab0a95c2d1b6c982b74))
+* Add execution to RFQ Quickstart ([1a730c7](https://github.com/propeller-heads/tycho-simulation/commit/1a730c7dc104f4edadc17d0072ef391b8e1bf92d))
+* Update tycho execution version ([db23231](https://github.com/propeller-heads/tycho-simulation/commit/db232318e7f5701d19639d5998a02c67e8bb821c))
+* Upgrade tycho-common and tycho-execution ([9d0d828](https://github.com/propeller-heads/tycho-simulation/commit/9d0d828b224c89823cc0726c4cdfb2654b06ad80))
+* Wait for approval success before encoding solution ([5292a64](https://github.com/propeller-heads/tycho-simulation/commit/5292a647a2293ea3b23dc242726f0160f7a1e385))
+
+
+### Bug Fixes
+
+* Raise TVL threshold and send simulation txs together ([1912f7d](https://github.com/propeller-heads/tycho-simulation/commit/1912f7d554f2a1be48e57ba585209c186b9e1153))
+
+## [0.148.0](https://github.com/propeller-heads/tycho-simulation/compare/0.147.0...0.148.0) (2025-08-19)
+
+
+### Features
+
+* implement `as_indicatively_priced` for hashflow ([539e936](https://github.com/propeller-heads/tycho-simulation/commit/539e9365396e76dcbde98b1177b0c630460b94cb))
+
+## [0.147.0](https://github.com/propeller-heads/tycho-simulation/compare/0.146.0...0.147.0) (2025-08-15)
+
+
+### Features
+
+* Hashflow decoder ([6a1d355](https://github.com/propeller-heads/tycho-simulation/commit/6a1d3552ddd3f4648721d5a4c50f81be53de1275))
+
+
+### Bug Fixes
+
+* Prepend bebop/hashflow to component id before hashing ([7cce8a8](https://github.com/propeller-heads/tycho-simulation/commit/7cce8a84eacaafd8f266e37489fbccea743197bf))
+
+## [0.146.0](https://github.com/propeller-heads/tycho-simulation/compare/0.145.0...0.146.0) (2025-08-13)
+
+
+### Features
+
+* **Bebop:** Support AggregateOrders when requesting the quote ([bfb6f65](https://github.com/propeller-heads/tycho-simulation/commit/bfb6f65a6a003484939131bf06e06b859a5dacad))
+
+## [0.145.0](https://github.com/propeller-heads/tycho-simulation/compare/0.144.0...0.145.0) (2025-08-08)
+
+
+### Features
+
+* **hashflow:** Implement request_binding_quote ([49728dd](https://github.com/propeller-heads/tycho-simulation/commit/49728dd044596e7149b1e70ae8e4c4af68cd0c8e))
+
+## [0.144.0](https://github.com/propeller-heads/tycho-simulation/compare/0.143.0...0.144.0) (2025-08-07)
+
+
+### Features
+
+* implement spot_price and get_limits for hashflow client ([254fc6a](https://github.com/propeller-heads/tycho-simulation/commit/254fc6ae35da5bf6ef2dad58945d34bb9a41d62b))
+
+## [0.143.0](https://github.com/propeller-heads/tycho-simulation/compare/0.142.0...0.143.0) (2025-08-07)
+
+
+### Features
+
+* implement ProtocolSim trait for HashflowState ([0f47276](https://github.com/propeller-heads/tycho-simulation/commit/0f47276959c610eb5e8f5c9aa6273527341b582e))
+
+## [0.142.0](https://github.com/propeller-heads/tycho-simulation/compare/0.141.0...0.142.0) (2025-08-05)
+
+
+### Features
+
+* Exposes state synchronization info on Update struct. ([fb332a9](https://github.com/propeller-heads/tycho-simulation/commit/fb332a91379848b0c2c5bc056e01daa9ac88479f))
+
+## [0.141.0](https://github.com/propeller-heads/tycho-simulation/compare/0.140.0...0.141.0) (2025-08-01)
+
+
+### Features
+
+* Don't store market makers in HashflowClient ([2d0982f](https://github.com/propeller-heads/tycho-simulation/commit/2d0982f7ef15ed9bfcb1c2066d0b0879ff400d94))
+* **Hashflow:** Hashflow price levels API client ([444bc01](https://github.com/propeller-heads/tycho-simulation/commit/444bc01e472efe114e5108a5e1e05e57b3f38283))
+* misc improvements ([b3e5ace](https://github.com/propeller-heads/tycho-simulation/commit/b3e5ace851f690c71c5a9853ae98f0ece8fb290d))
+
+
+### Bug Fixes
+
+* Fetch mms every time we poll for levels ([50b921a](https://github.com/propeller-heads/tycho-simulation/commit/50b921acc5d4497b226cde21f659b05dfa07f5be))
+
 ## [0.140.0](https://github.com/propeller-heads/tycho-simulation/compare/0.139.0...0.140.0) (2025-07-29)
 
 
