@@ -1,3 +1,10 @@
+## [0.151.0](https://github.com/propeller-heads/tycho-simulation/compare/0.150.2...0.151.0) (2025-08-21)
+
+
+### Features
+
+* Pass protocol_state as Arc in quickstart ([a074b9b](https://github.com/propeller-heads/tycho-simulation/commit/a074b9b31b30c7afcb7bc4be4b57381b7d104ede))
+
 ## [0.150.2](https://github.com/propeller-heads/tycho-simulation/compare/0.150.1...0.150.2) (2025-08-21)
 
 
