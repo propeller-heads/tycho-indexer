@@ -15,11 +15,12 @@ The RFQ quickstart is similar to the other protocols [quickstart](../).&#x20;
 
 See the code [here](https://github.com/propeller-heads/tycho-simulation/tree/main/examples/rfq_quickstart). As of now, [Bebop](https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/pmm-rfq-api-intro) is the only supported provider.
 
-You need to set up the API credentials of the desired RFQs to access live pricing data and quoting:
+You need to set up the API credentials of the desired RFQs to access live pricing data and quoting, as well as your private key if you wish to execute against the Tycho Router:
 
 ```bash
 export BEBOP_USER=<your-bebop-ws-username>
 export BEBOP_KEY=<your-bebop-ws-key>
+export PRIVATE_KEY=<your-wallet-private-key>
 ```
 
 Then run the example:
@@ -40,10 +41,10 @@ The quickstart:
 * Simulates the best available amount out for a given pair (default: 10 USDC → WETH on mainnet).
 * Encodes the swap and prepares calldata to execute it via the Tycho Router.
 
-If you want to see results for a different token, amount, or chain, you can set additional flags:
+If you want to see results for a different token, amount, minimum TVL, or chain, you can set additional flags:
 
 ```bash
-cargo run --release --example rfq_quickstart -- --sell-token "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" --buy-token "0x4200000000000000000000000000000000000006" --sell-amount 10 --chain "base" --swapper-pk $PK
+cargo run --release --example rfq_quickstart -- --sell-token "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" --buy-token "0x4200000000000000000000000000000000000006" --sell-amount 10 --tvl-threshold 1000 --chain "base"
 ```
 
 This example would seek the best swap for 10 USDC -> WETH on Base.
@@ -55,6 +56,7 @@ You’ll need to configure:
 * Tycho URL (by default `"tycho-beta.propellerheads.xyz"`)
 * Tycho API key (by default, the test key is `sampletoken`)
 * RFQ API keys (currenlty only the Bebop user and key are needed. Have a look at `src/rfq/constants.rs` to see the authentication variables that are expected)
+* Private key if you wish to execute the swap against the Tycho Router
 
 To get token information from Tycho Indexer RPC please use [load\_all\_tokens](simulation.md#step-1-fetch-tokens).
 

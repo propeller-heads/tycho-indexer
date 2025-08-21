@@ -21,31 +21,31 @@ Run the quickstart with execution using the following commands:
 {% tab title="Mainnet" %}
 ```sh
 export RPC_URL=https://ethereum.publicnode.com
-export PK=<your-private-key>
-cargo run --release --example quickstart -- --swapper-pk $PK
+export PRIVATE_KEY=<your-private-key>
+cargo run --release --example quickstart --
 ```
 {% endtab %}
 
 {% tab title="Base" %}
 ```bash
 export RPC_URL=https://base-rpc.publicnode.com
-export PK=<your-private-key>
-cargo run --release --example quickstart -- --chain base --swapper-pk $PK
+export PRIVATE_KEY=<your-private-key>
+cargo run --release --example quickstart -- --chain base
 ```
 {% endtab %}
 
 {% tab title="Unichain" %}
 ```sh
 export RPC_URL=https://unichain-rpc.publicnode.com
-export PK=<your-private-key>
-cargo run --release --example quickstart -- --chain unichain --swapper-pk $PK
+export PRIVATE_KEY=<your-private-key>
+cargo run --release --example quickstart -- --chain unichain
 ```
 {% endtab %}
 {% endtabs %}
 
 If you don't have an RPC URL, here are some public ones for [Ethereum Mainnet](https://ethereumnodes.com/), [Unichain](https://chainlist.org/chain/130), and [Base](https://chainlist.org/chain/8453).
 
-The `--swapper-pk` flag is unnecessary if you want to run the quickstart without simulation or execution.
+The `PRIVATE_KEY` environment variable is unnecessary if you want to run the quickstart without simulation or execution.
 
 ### What it does
 
@@ -66,25 +66,27 @@ Pool address: "0x65081cb48d74a32e9ccfed75164b8c09972dbcf1"
 Swap: 10.000000 USDC -> 0.006293 WETH 
 Price: 0.000629 WETH per USDC, 1589.052587 USDC per WETH
 
-Signer private key was not provided. Skipping simulation/execution...
+Signer private key was not provided. Skipping simulation/execution. Set PRIVATE_KEY env variable to perform simulation/execution.
 ```
 
-If you want to see results for a different token, amount, or chain, you can set additional flags:
+If you want to see results for a different token, amount, or chain, or minimum TVL, you can set additional flags:
 
 ```bash
 export TYCHO_URL=<tycho-api-url-for-chain>
 export TYCHO_API_KEY=<tycho-api-key-for-chain>
-cargo run --release --example quickstart -- --sell-token "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" --buy-token "0x4200000000000000000000000000000000000006" --sell-amount 10 --chain "base" --swapper-pk $PK
+cargo run --release --example quickstart -- --sell-token "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" --buy-token "0x4200000000000000000000000000000000000006" --tvl-threshold 100 --sell-amount 10 --chain "base"
 ```
 
-This example would seek the best swap for 10 USDC -> WETH on Base.
+This example would seek the best swap for 10 USDC -> WETH on Base.&#x20;
+
+The TVL filter means we will only look for snapshot data for pools with TVL greater than the specified threshold (in ETH). Its default is **1000 ETH** to limit the data you pull.
 
 #### Logs
 
 If you want to see all the Tycho Indexer and Simulation logs, run with `RUST_LOG=info`:
 
 ```bash
-RUST_LOG=info cargo run --release --example quickstart --swapper-pk $PK
+RUST_LOG=info cargo run --release --example quickstart
 ```
 
 ## How the quickstart works
@@ -101,9 +103,9 @@ The quickstart shows you how to:
 
 Run Tycho Indexer by setting up the following environment variables:
 
-* URL (by default `"tycho-beta.propellerheads.xyz"`)
-* API key (by default, the test key is `sampletoken`)
-* TVL threshold: This is a filter for snapshot data for pools with TVL greater than the specified threshold (in ETH). Its default is **10,000 ETH** to limit the data you pull.
+* TYCHO\_URL (by default `"tycho-beta.propellerheads.xyz"`)
+* TYCHO\_API\_KEY key (by default, the test key is `sampletoken`)
+* PRIVATE\_KEY if you wish to execute the swap against the Tycho Router
 
 The Indexer stream or the Simulation does not manage tokens; you manage them yourself.
 
