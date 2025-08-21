@@ -1,3 +1,10 @@
+## [0.119.0](https://github.com/propeller-heads/tycho-execution/compare/0.118.0...0.119.0) (2025-08-21)
+
+
+### Features
+
+* Add BytecodeExporter to TestUtils ([cea964e](https://github.com/propeller-heads/tycho-execution/commit/cea964e0a54a75b1bd89007794daf467b812f021))
+
 ## [0.118.0](https://github.com/propeller-heads/tycho-execution/compare/0.117.0...0.118.0) (2025-08-21)
 
 
