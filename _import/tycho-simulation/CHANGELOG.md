@@ -1,3 +1,11 @@
+## [0.150.1](https://github.com/propeller-heads/tycho-simulation/compare/0.150.0...0.150.1) (2025-08-21)
+
+
+### Bug Fixes
+
+* `external_account` fallbacks to zero address if not present in the quote (as defined in the api docs) ([8570ce9](https://github.com/propeller-heads/tycho-simulation/commit/8570ce922b9ebc7889f6f4ba71d7deab8a74672e))
+* add missing fields when parsing hashflow quote ([6a88330](https://github.com/propeller-heads/tycho-simulation/commit/6a883300f4439bffa7601b4c8a726c85ca77f281))
+
 ## [0.150.0](https://github.com/propeller-heads/tycho-simulation/compare/0.149.0...0.150.0) (2025-08-20)
 
 

@@ -1,11 +1,10 @@
-#![allow(dead_code)] // TODO remove this
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
     time::SystemTime,
 };
 
-use alloy::primitives::utils::keccak256;
+use alloy::primitives::{utils::keccak256, Address, U256};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use num_bigint::BigUint;
@@ -19,6 +18,7 @@ use tycho_common::{
 };
 
 use crate::{
+    evm::protocol::u256_num::biguint_to_u256,
     rfq::{
         client::RFQClient,
         errors::RFQError,
@@ -405,10 +405,7 @@ impl RFQClient for HashflowClient {
             .json::<HashflowQuoteResponse>()
             .await
             .map_err(|e| {
-                RFQError::ParsingError(format!(
-                    "Failed to parse Hashflow quote response:
-        {e}"
-                ))
+                RFQError::ParsingError(format!("Failed to parse Hashflow quote response: {e}"))
             })?;
 
         match quote_response.status.as_str() {
@@ -433,35 +430,72 @@ impl RFQClient for HashflowClient {
 
                     let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
                     quote_attributes.insert("pool".to_string(), quote.quote_data.pool);
+                    if let Some(external_account) = quote.quote_data.external_account {
+                        quote_attributes.insert("external_account".to_string(), external_account);
+                    } else {
+                        quote_attributes.insert(
+                            "external_account".to_string(),
+                            Bytes::from_str(&Address::ZERO.to_string()).map_err(|_| {
+                                RFQError::ParsingError("Failed to parse zero address".to_string())
+                            })?,
+                        );
+                    }
                     quote_attributes.insert("trader".to_string(), quote.quote_data.trader);
+                    quote_attributes.insert("base_token".to_string(), quote.quote_data.base_token);
+                    quote_attributes
+                        .insert("quote_token".to_string(), quote.quote_data.quote_token);
+                    quote_attributes.insert(
+                        "base_token_amount".to_string(),
+                        Bytes::from(
+                            biguint_to_u256(
+                                &BigUint::from_str(&quote.quote_data.base_token_amount).map_err(
+                                    |_| {
+                                        RFQError::ParsingError(format!(
+                                            "Failed to parse base token amount: {}",
+                                            quote.quote_data.base_token_amount
+                                        ))
+                                    },
+                                )?,
+                            )
+                            .to_be_bytes::<32>()
+                            .to_vec(),
+                        ),
+                    );
+                    quote_attributes.insert(
+                        "quote_token_amount".to_string(),
+                        Bytes::from(
+                            biguint_to_u256(
+                                &BigUint::from_str(&quote.quote_data.quote_token_amount).map_err(
+                                    |_| {
+                                        RFQError::ParsingError(format!(
+                                            "Failed to parse quote token amount: {}",
+                                            quote.quote_data.quote_token_amount
+                                        ))
+                                    },
+                                )?,
+                            )
+                            .to_be_bytes::<32>()
+                            .to_vec(),
+                        ),
+                    );
+                    quote_attributes.insert(
+                        "quote_expiry".to_string(),
+                        Bytes::from(
+                            U256::from(quote.quote_data.quote_expiry)
+                                .to_be_bytes::<32>()
+                                .to_vec(),
+                        ),
+                    );
                     quote_attributes.insert(
                         "nonce".to_string(),
                         Bytes::from(
-                            quote
-                                .quote_data
-                                .nonce
-                                .to_be_bytes()
+                            U256::from(quote.quote_data.nonce)
+                                .to_be_bytes::<32>()
                                 .to_vec(),
                         ),
                     );
                     quote_attributes.insert("tx_id".to_string(), quote.quote_data.tx_id);
                     quote_attributes.insert("signature".to_string(), quote.signature);
-                    quote_attributes.insert(
-                        "quote_expiry".to_string(),
-                        Bytes::from(
-                            quote
-                                .quote_data
-                                .quote_expiry
-                                .to_be_bytes()
-                                .to_vec(),
-                        ),
-                    );
-                    if let Some(external_account) = quote.quote_data.external_account {
-                        quote_attributes.insert("external_account".to_string(), external_account);
-                    }
-                    if let Some(effective_trader) = quote.quote_data.effective_trader {
-                        quote_attributes.insert("effective_trader".to_string(), effective_trader);
-                    }
 
                     let signed_quote = SignedQuote {
                         base_token: params.token_in.clone(),
@@ -721,6 +755,28 @@ mod tests {
         // // Assuming the BTC - WETH price doesn't change too much at the time of running this
         assert!(quote.amount_out > BigUint::from(3000000u64));
 
+        assert_eq!(quote.quote_attributes.len(), 11);
+        let expected_attributes = [
+            "pool",
+            "external_account",
+            "trader",
+            "base_token",
+            "quote_token",
+            "base_token_amount",
+            "quote_token_amount",
+            "quote_expiry",
+            "nonce",
+            "tx_id",
+            "signature",
+        ];
+        for attr in expected_attributes {
+            assert!(
+                quote
+                    .quote_attributes
+                    .contains_key(attr),
+                "Missing attribute: {attr}"
+            );
+        }
         assert_eq!(
             quote
                 .quote_attributes
@@ -728,24 +784,5 @@ mod tests {
                 .unwrap(),
             &router
         );
-        assert!(
-            quote
-                .quote_attributes
-                .get("nonce")
-                .unwrap() >
-                &Bytes::from(1u64)
-        );
-        assert!(quote
-            .quote_attributes
-            .contains_key("pool"));
-        assert!(quote
-            .quote_attributes
-            .contains_key("tx_id"));
-        assert!(quote
-            .quote_attributes
-            .contains_key("signature"));
-        assert!(quote
-            .quote_attributes
-            .contains_key("quote_expiry"));
     }
 }
