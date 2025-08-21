@@ -237,10 +237,11 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 
         let grouped_swaps = group_swaps(&solution.swaps);
 
-        let mut wrap = false;
+        let (mut wrap, mut unwrap) = (false, false);
         if let Some(action) = &solution.native_action {
-            if action == &NativeAction::Wrap {
-                wrap = true
+            match *action {
+                NativeAction::Wrap => wrap = true,
+                NativeAction::Unwrap => unwrap = true,
             }
         }
 
@@ -260,7 +261,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
             let next_swap = grouped_swaps.get(i + 1);
             let (swap_receiver, next_swap_optimization) = self
                 .transfer_optimization
-                .get_receiver(&solution.receiver, next_swap)?;
+                .get_receiver(&solution.receiver, next_swap, unwrap)?;
             next_in_between_swap_optimization_allowed = next_swap_optimization;
 
             let transfer = self
@@ -544,7 +545,6 @@ mod tests {
     };
 
     use super::*;
-    use crate::encoding::models::Swap;
 
     fn eth_chain() -> Chain {
         Chain::Ethereum
@@ -565,8 +565,8 @@ mod tests {
     }
 
     mod single {
-
         use super::*;
+        use crate::encoding::models::SwapBuilder;
         #[test]
         fn test_single_swap_strategy_encoder() {
             // Performs a single swap from WETH to DAI on a USV2 pool, with no grouping
@@ -575,18 +575,16 @@ mod tests {
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-            let swap = Swap {
-                component: ProtocolComponent {
+            let swap = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                weth.clone(),
+                dai.clone(),
+            )
+            .build();
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
@@ -637,18 +635,16 @@ mod tests {
 
             let checked_amount = BigUint::from_str("1_640_000000000000000000").unwrap();
 
-            let swap = Swap {
-                component: ProtocolComponent {
+            let swap = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: dai.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                weth.clone(),
+                dai.clone(),
+            )
+            .build();
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SingleSwapStrategyEncoder::new(
                 eth_chain(),
@@ -698,6 +694,7 @@ mod tests {
 
     mod sequential {
         use super::*;
+        use crate::encoding::models::SwapBuilder;
 
         #[test]
         fn test_sequential_swap_strategy_encoder_no_permit2() {
@@ -709,30 +706,26 @@ mod tests {
             let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
             let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
-            let swap_weth_wbtc = Swap {
-                component: ProtocolComponent {
+            let swap_weth_wbtc = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xBb2b8038a1640196FbE3e38816F3e67Cba72D940".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: wbtc.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
-            let swap_wbtc_usdc = Swap {
-                component: ProtocolComponent {
+                weth.clone(),
+                wbtc.clone(),
+            )
+            .build();
+            let swap_wbtc_usdc = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0x004375Dff511095CC5A197A54140a24eFEF3A416".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: wbtc.clone(),
-                token_out: usdc.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                wbtc.clone(),
+                usdc.clone(),
+            )
+            .build();
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SequentialSwapStrategyEncoder::new(
                 eth_chain(),
@@ -790,6 +783,7 @@ mod tests {
 
     mod split {
         use super::*;
+        use crate::encoding::models::SwapBuilder;
 
         #[test]
         fn test_split_input_cyclic_swap() {
@@ -805,8 +799,8 @@ mod tests {
             let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
             // USDC -> WETH (Pool 1) - 60% of input
-            let swap_usdc_weth_pool1 = Swap {
-                component: ProtocolComponent {
+            let swap_usdc_weth_pool1 = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* USDC-WETH USV3
                                                                                    * Pool 1 */
                     protocol_system: "uniswap_v3".to_string(),
@@ -820,16 +814,15 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                token_in: usdc.clone(),
-                token_out: weth.clone(),
-                split: 0.6f64, // 60% of input
-                user_data: None,
-                protocol_state: None,
-            };
+                usdc.clone(),
+                weth.clone(),
+            )
+            .split(0.6f64)
+            .build();
 
             // USDC -> WETH (Pool 2) - 40% of input (remaining)
-            let swap_usdc_weth_pool2 = Swap {
-                component: ProtocolComponent {
+            let swap_usdc_weth_pool2 = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8".to_string(), /* USDC-WETH USV3
                                                                                    * Pool 2 */
                     protocol_system: "uniswap_v3".to_string(),
@@ -843,16 +836,14 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                token_in: usdc.clone(),
-                token_out: weth.clone(),
-                split: 0f64,
-                user_data: None, // Remaining 40%
-                protocol_state: None,
-            };
+                usdc.clone(),
+                weth.clone(),
+            )
+            .build();
 
             // WETH -> USDC (Pool 2)
-            let swap_weth_usdc_pool2 = Swap {
-                component: ProtocolComponent {
+            let swap_weth_usdc_pool2 = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc".to_string(), /* USDC-WETH USV2
                                                                                    * Pool 2 */
                     protocol_system: "uniswap_v2".to_string(),
@@ -866,13 +857,10 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: usdc.clone(),
-                split: 0.0f64,
-                user_data: None,
-                protocol_state: None,
-            };
-
+                weth.clone(),
+                usdc.clone(),
+            )
+            .build();
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SplitSwapStrategyEncoder::new(
                 eth_chain(),
@@ -961,8 +949,8 @@ mod tests {
             let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
             let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
-            let swap_usdc_weth_v2 = Swap {
-                component: ProtocolComponent {
+            let swap_usdc_weth_v2 = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc".to_string(), // USDC-WETH USV2
                     protocol_system: "uniswap_v2".to_string(),
                     static_attributes: {
@@ -975,15 +963,13 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                token_in: usdc.clone(),
-                token_out: weth.clone(),
-                split: 0.0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                usdc.clone(),
+                weth.clone(),
+            )
+            .build();
 
-            let swap_weth_usdc_v3_pool1 = Swap {
-                component: ProtocolComponent {
+            let swap_weth_usdc_v3_pool1 = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* USDC-WETH USV3
                                                                                    * Pool 1 */
                     protocol_system: "uniswap_v3".to_string(),
@@ -997,17 +983,16 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: usdc.clone(),
-                split: 0.6f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                weth.clone(),
+                usdc.clone(),
+            )
+            .split(0.6f64)
+            .build();
 
-            let swap_weth_usdc_v3_pool2 = Swap {
-                component: ProtocolComponent {
+            let swap_weth_usdc_v3_pool2 = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8".to_string(), /* USDC-WETH USV3
-                                                                                   * Pool 2 */
+                                                                                   * Pool 1 */
                     protocol_system: "uniswap_v3".to_string(),
                     static_attributes: {
                         let mut attrs = HashMap::new();
@@ -1019,12 +1004,10 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                token_in: weth.clone(),
-                token_out: usdc.clone(),
-                split: 0.0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                weth.clone(),
+                usdc.clone(),
+            )
+            .build();
 
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SplitSwapStrategyEncoder::new(

@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import "./TychoRouterTestSetup.sol";
 import "./protocols/UniswapV4Utils.sol";
+import "@src/executors/BebopExecutor.sol";
 
 contract TychoRouterTestProtocolIntegration is TychoRouterTestSetup {
     function testMultiProtocolIntegration() public {

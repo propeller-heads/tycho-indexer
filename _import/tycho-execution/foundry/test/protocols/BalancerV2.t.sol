@@ -134,4 +134,9 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
     }
+
+    function testExportContract() public {
+        vm.skip(true);
+        exportRuntimeBytecode(address(balancerV2Exposed), "BalancerV2");
+    }
 }

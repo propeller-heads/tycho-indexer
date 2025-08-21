@@ -34,6 +34,7 @@ fn test_single_swap_strategy_encoder() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
@@ -121,6 +122,7 @@ fn test_single_swap_strategy_encoder_no_permit2() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -204,6 +206,7 @@ fn test_single_swap_strategy_encoder_no_transfer_in() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::None);
 
@@ -288,6 +291,7 @@ fn test_single_swap_strategy_encoder_wrap() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 
@@ -341,6 +345,7 @@ fn test_single_swap_strategy_encoder_unwrap() {
         split: 0f64,
         user_data: None,
         protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
 

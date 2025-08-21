@@ -406,7 +406,7 @@ mod tests {
     use tycho_common::models::{protocol::ProtocolComponent, Chain};
 
     use super::*;
-    use crate::encoding::models::Swap;
+    use crate::encoding::models::{Swap, SwapBuilder};
 
     fn dai() -> Bytes {
         Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap()
@@ -435,48 +435,44 @@ mod tests {
     // Fee and tick spacing information for this test is obtained by querying the
     // USV4 Position Manager contract: 0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e
     // Using the poolKeys function with the first 25 bytes of the pool id
-    fn swap_usdc_eth_univ4() -> Swap<'static> {
+    fn swap_usdc_eth_univ4() -> Swap {
         let pool_fee_usdc_eth = Bytes::from(BigInt::from(3000).to_signed_bytes_be());
         let tick_spacing_usdc_eth = Bytes::from(BigInt::from(60).to_signed_bytes_be());
         let mut static_attributes_usdc_eth: HashMap<String, Bytes> = HashMap::new();
         static_attributes_usdc_eth.insert("key_lp_fee".into(), pool_fee_usdc_eth);
         static_attributes_usdc_eth.insert("tick_spacing".into(), tick_spacing_usdc_eth);
-        Swap {
-            component: ProtocolComponent {
+        SwapBuilder::new(
+            ProtocolComponent {
                 id: "0xdce6394339af00981949f5f3baf27e3610c76326a700af57e4b3e3ae4977f78d"
                     .to_string(),
                 protocol_system: "uniswap_v4_hooks".to_string(),
                 static_attributes: static_attributes_usdc_eth,
                 ..Default::default()
             },
-            token_in: usdc().clone(),
-            token_out: eth().clone(),
-            split: 0f64,
-            user_data: None,
-            protocol_state: None,
-        }
+            usdc().clone(),
+            eth().clone(),
+        )
+        .build()
     }
 
-    fn swap_eth_pepe_univ4() -> Swap<'static> {
+    fn swap_eth_pepe_univ4() -> Swap {
         let pool_fee_eth_pepe = Bytes::from(BigInt::from(25000).to_signed_bytes_be());
         let tick_spacing_eth_pepe = Bytes::from(BigInt::from(500).to_signed_bytes_be());
         let mut static_attributes_eth_pepe: HashMap<String, Bytes> = HashMap::new();
         static_attributes_eth_pepe.insert("key_lp_fee".into(), pool_fee_eth_pepe);
         static_attributes_eth_pepe.insert("tick_spacing".into(), tick_spacing_eth_pepe);
-        Swap {
-            component: ProtocolComponent {
+        SwapBuilder::new(
+            ProtocolComponent {
                 id: "0xecd73ecbf77219f21f129c8836d5d686bbc27d264742ddad620500e3e548e2c9"
                     .to_string(),
                 protocol_system: "uniswap_v4_hooks".to_string(),
                 static_attributes: static_attributes_eth_pepe,
                 ..Default::default()
             },
-            token_in: eth().clone(),
-            token_out: pepe().clone(),
-            split: 0f64,
-            user_data: None,
-            protocol_state: None,
-        }
+            eth().clone(),
+            pepe().clone(),
+        )
+        .build()
     }
 
     fn router_address() -> Bytes {
@@ -514,18 +510,16 @@ mod tests {
         fn test_encode_router_calldata_single_swap() {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
             let eth_amount_in = BigUint::from(1000u32);
-            let swap = Swap {
-                component: ProtocolComponent {
+            let swap = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth(),
-                token_out: dai(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                weth().clone(),
+                dai().clone(),
+            )
+            .build();
 
             let solution = Solution {
                 exact_out: false,
@@ -580,31 +574,27 @@ mod tests {
         fn test_encode_router_calldata_sequential_swap() {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
             let eth_amount_in = BigUint::from(1000u32);
-            let swap_weth_dai = Swap {
-                component: ProtocolComponent {
+            let swap_weth_dai = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth(),
-                token_out: dai(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                weth().clone(),
+                dai().clone(),
+            )
+            .build();
 
-            let swap_dai_usdc = Swap {
-                component: ProtocolComponent {
+            let swap_dai_usdc = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: dai(),
-                token_out: usdc(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                dai().clone(),
+                usdc().clone(),
+            )
+            .build();
 
             let solution = Solution {
                 exact_out: false,
@@ -674,18 +664,16 @@ mod tests {
         #[test]
         fn test_validate_passes_for_wrap() {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let swap = Swap {
-                component: ProtocolComponent {
+            let swap = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth(),
-                token_out: dai(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                weth().clone(),
+                dai().clone(),
+            )
+            .build();
 
             let solution = Solution {
                 exact_out: false,
@@ -704,18 +692,16 @@ mod tests {
         #[test]
         fn test_validate_fails_for_wrap_wrong_input() {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let swap = Swap {
-                component: ProtocolComponent {
+            let swap = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: weth(),
-                token_out: dai(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                weth().clone(),
+                dai().clone(),
+            )
+            .build();
 
             let solution = Solution {
                 exact_out: false,
@@ -739,18 +725,16 @@ mod tests {
         #[test]
         fn test_validate_fails_for_wrap_wrong_first_swap() {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let swap = Swap {
-                component: ProtocolComponent {
+            let swap = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: eth(),
-                token_out: dai(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                eth().clone(),
+                dai().clone(),
+            )
+            .build();
 
             let solution = Solution {
                 exact_out: false,
@@ -794,18 +778,16 @@ mod tests {
         #[test]
         fn test_validate_passes_for_unwrap() {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let swap = Swap {
-                component: ProtocolComponent {
+            let swap = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: dai(),
-                token_out: weth(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                dai().clone(),
+                weth().clone(),
+            )
+            .build();
 
             let solution = Solution {
                 exact_out: false,
@@ -823,18 +805,16 @@ mod tests {
         #[test]
         fn test_validate_fails_for_unwrap_wrong_output() {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let swap = Swap {
-                component: ProtocolComponent {
+            let swap = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: dai(),
-                token_out: weth(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                dai().clone(),
+                weth().clone(),
+            )
+            .build();
 
             let solution = Solution {
                 exact_out: false,
@@ -859,18 +839,16 @@ mod tests {
         #[test]
         fn test_validate_fails_for_unwrap_wrong_last_swap() {
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
-            let swap = Swap {
-                component: ProtocolComponent {
+            let swap = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: dai(),
-                token_out: eth(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                dai().clone(),
+                eth().clone(),
+            )
+            .build();
 
             let solution = Solution {
                 exact_out: false,
@@ -900,42 +878,36 @@ mod tests {
             // (some of the pool addresses in this test are fake)
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
             let swaps = vec![
-                Swap {
-                    component: ProtocolComponent {
+                SwapBuilder::new(
+                    ProtocolComponent {
                         id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                         protocol_system: "uniswap_v2".to_string(),
                         ..Default::default()
                     },
-                    token_in: dai(),
-                    token_out: weth(),
-                    split: 0.5f64,
-                    user_data: None,
-                    protocol_state: None,
-                },
-                Swap {
-                    component: ProtocolComponent {
+                    dai().clone(),
+                    weth().clone(),
+                )
+                .build(),
+                SwapBuilder::new(
+                    ProtocolComponent {
                         id: "0x0000000000000000000000000000000000000000".to_string(),
                         protocol_system: "uniswap_v2".to_string(),
                         ..Default::default()
                     },
-                    token_in: dai(),
-                    token_out: weth(),
-                    split: 0f64,
-                    user_data: None,
-                    protocol_state: None,
-                },
-                Swap {
-                    component: ProtocolComponent {
+                    dai().clone(),
+                    weth().clone(),
+                )
+                .build(),
+                SwapBuilder::new(
+                    ProtocolComponent {
                         id: "0x0000000000000000000000000000000000000000".to_string(),
                         protocol_system: "uniswap_v2".to_string(),
                         ..Default::default()
                     },
-                    token_in: weth(),
-                    token_out: dai(),
-                    split: 0f64,
-                    user_data: None,
-                    protocol_state: None,
-                },
+                    weth().clone(),
+                    dai().clone(),
+                )
+                .build(),
             ];
 
             let solution = Solution {
@@ -958,54 +930,46 @@ mod tests {
             // (some of the pool addresses in this test are fake)
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
             let swaps = vec![
-                Swap {
-                    component: ProtocolComponent {
+                SwapBuilder::new(
+                    ProtocolComponent {
                         id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                         protocol_system: "uniswap_v2".to_string(),
                         ..Default::default()
                     },
-                    token_in: dai(),
-                    token_out: weth(),
-                    split: 0f64,
-                    user_data: None,
-                    protocol_state: None,
-                },
-                Swap {
-                    component: ProtocolComponent {
+                    dai().clone(),
+                    weth().clone(),
+                )
+                .build(),
+                SwapBuilder::new(
+                    ProtocolComponent {
                         id: "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc".to_string(),
                         protocol_system: "uniswap_v2".to_string(),
                         ..Default::default()
                     },
-                    token_in: weth(),
-                    token_out: usdc(),
-                    split: 0f64,
-                    user_data: None,
-                    protocol_state: None,
-                },
-                Swap {
-                    component: ProtocolComponent {
+                    weth().clone(),
+                    usdc().clone(),
+                )
+                .build(),
+                SwapBuilder::new(
+                    ProtocolComponent {
                         id: "0x0000000000000000000000000000000000000000".to_string(),
                         protocol_system: "uniswap_v2".to_string(),
                         ..Default::default()
                     },
-                    token_in: usdc(),
-                    token_out: dai(),
-                    split: 0f64,
-                    user_data: None,
-                    protocol_state: None,
-                },
-                Swap {
-                    component: ProtocolComponent {
+                    usdc().clone(),
+                    dai().clone(),
+                )
+                .build(),
+                SwapBuilder::new(
+                    ProtocolComponent {
                         id: "0x0000000000000000000000000000000000000000".to_string(),
                         protocol_system: "uniswap_v2".to_string(),
                         ..Default::default()
                     },
-                    token_in: dai(),
-                    token_out: wbtc(),
-                    split: 0f64,
-                    user_data: None,
-                    protocol_state: None,
-                },
+                    dai().clone(),
+                    wbtc().clone(),
+                )
+                .build(),
             ];
 
             let solution = Solution {
@@ -1035,42 +999,37 @@ mod tests {
             // (some of the pool addresses in this test are fake)
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
             let swaps = vec![
-                Swap {
-                    component: ProtocolComponent {
+                SwapBuilder::new(
+                    ProtocolComponent {
                         id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                         protocol_system: "uniswap_v2".to_string(),
                         ..Default::default()
                     },
-                    token_in: weth(),
-                    token_out: dai(),
-                    split: 0f64,
-                    user_data: None,
-                    protocol_state: None,
-                },
-                Swap {
-                    component: ProtocolComponent {
+                    weth(),
+                    dai(),
+                )
+                .build(),
+                SwapBuilder::new(
+                    ProtocolComponent {
                         id: "0x0000000000000000000000000000000000000000".to_string(),
                         protocol_system: "uniswap_v2".to_string(),
                         ..Default::default()
                     },
-                    token_in: dai(),
-                    token_out: weth(),
-                    split: 0.5f64,
-                    user_data: None,
-                    protocol_state: None,
-                },
-                Swap {
-                    component: ProtocolComponent {
+                    dai(),
+                    weth(),
+                )
+                .split(0.5)
+                .build(),
+                SwapBuilder::new(
+                    ProtocolComponent {
                         id: "0x0000000000000000000000000000000000000000".to_string(),
                         protocol_system: "uniswap_v2".to_string(),
                         ..Default::default()
                     },
-                    token_in: dai(),
-                    token_out: weth(),
-                    split: 0f64,
-                    user_data: None,
-                    protocol_state: None,
-                },
+                    dai(),
+                    weth(),
+                )
+                .build(),
             ];
 
             let solution = Solution {
@@ -1093,30 +1052,26 @@ mod tests {
             // (some of the pool addresses in this test are fake)
             let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
             let swaps = vec![
-                Swap {
-                    component: ProtocolComponent {
+                SwapBuilder::new(
+                    ProtocolComponent {
                         id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                         protocol_system: "uniswap_v2".to_string(),
                         ..Default::default()
                     },
-                    token_in: weth(),
-                    token_out: dai(),
-                    split: 0f64,
-                    user_data: None,
-                    protocol_state: None,
-                },
-                Swap {
-                    component: ProtocolComponent {
-                        id: "0x0000000000000000000000000000000000000000".to_string(),
+                    weth(),
+                    dai(),
+                )
+                .build(),
+                SwapBuilder::new(
+                    ProtocolComponent {
+                        id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                         protocol_system: "uniswap_v2".to_string(),
                         ..Default::default()
                     },
-                    token_in: dai(),
-                    token_out: weth(),
-                    split: 0f64,
-                    user_data: None,
-                    protocol_state: None,
-                },
+                    dai(),
+                    weth(),
+                )
+                .build(),
             ];
 
             let solution = Solution {
@@ -1150,7 +1105,7 @@ mod tests {
         use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
         use super::*;
-        use crate::encoding::models::{Solution, Swap};
+        use crate::encoding::models::Solution;
 
         #[test]
         fn test_executor_encoder_encode() {
@@ -1160,18 +1115,16 @@ mod tests {
             let token_in = weth();
             let token_out = dai();
 
-            let swap = Swap {
-                component: ProtocolComponent {
+            let swap = SwapBuilder::new(
+                ProtocolComponent {
                     id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                token_in.clone(),
+                token_out.clone(),
+            )
+            .build();
 
             let solution = Solution {
                 exact_out: false,
@@ -1222,17 +1175,16 @@ mod tests {
             let token_in = weth();
             let token_out = dai();
 
-            let swap = Swap {
-                component: ProtocolComponent {
+            let swap = SwapBuilder::new(
+                ProtocolComponent {
+                    id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                token_in.clone(),
+                token_out.clone(),
+            )
+            .build();
 
             let solution = Solution {
                 exact_out: false,

@@ -1,17 +1,26 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use alloy::{
-    primitives::{Address, Bytes as AlloyBytes, U8},
+    primitives::{Address, Bytes as AlloyBytes, U256, U8},
     sol_types::SolValue,
 };
 use serde_json::from_str;
-use tycho_common::{models::Chain, Bytes};
+use tokio::{
+    runtime::{Handle, Runtime},
+    task::block_in_place,
+};
+use tycho_common::{
+    models::{protocol::GetAmountOutParams, Chain},
+    Bytes,
+};
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
-        utils::{bytes_to_address, get_static_attribute, pad_to_fixed_size},
+        utils::{
+            biguint_to_u256, bytes_to_address, get_runtime, get_static_attribute, pad_to_fixed_size,
+        },
     },
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
@@ -655,6 +664,342 @@ impl SwapEncoder for BalancerV3SwapEncoder {
     fn executor_address(&self) -> &str {
         &self.executor_address
     }
+
+    fn clone_box(&self) -> Box<dyn SwapEncoder> {
+        Box::new(self.clone())
+    }
+}
+
+/// Encodes a swap on Bebop (PMM RFQ) through the given executor address.
+///
+/// Bebop uses a Request-for-Quote model where quotes are obtained off-chain
+/// and settled on-chain. This encoder supports PMM RFQ execution.
+///
+/// # Fields
+/// * `executor_address` - The address of the executor contract that will perform the swap.
+/// * `settlement_address` - The address of the Bebop settlement contract.
+#[derive(Clone)]
+pub struct BebopSwapEncoder {
+    executor_address: String,
+    settlement_address: String,
+    native_token_bebop_address: Bytes,
+    native_token_address: Bytes,
+    runtime_handle: Handle,
+    #[allow(dead_code)]
+    runtime: Option<Arc<Runtime>>,
+}
+
+impl SwapEncoder for BebopSwapEncoder {
+    fn new(
+        executor_address: String,
+        chain: Chain,
+        config: Option<HashMap<String, String>>,
+    ) -> Result<Self, EncodingError> {
+        let config = config.ok_or(EncodingError::FatalError(
+            "Missing bebop specific addresses in config".to_string(),
+        ))?;
+        let settlement_address = config
+            .get("bebop_settlement_address")
+            .ok_or(EncodingError::FatalError(
+                "Missing bebop settlement address in config".to_string(),
+            ))?
+            .to_string();
+        let native_token_bebop_address = config
+            .get("native_token_address")
+            .ok_or(EncodingError::FatalError(
+                "Missing native token bebop address in config".to_string(),
+            ))?
+            .to_string();
+        let native_token_bebop_address =
+            Bytes::from_str(&native_token_bebop_address).map_err(|_| {
+                EncodingError::FatalError("Invalid Bebop native token address".to_string())
+            })?;
+        let (runtime_handle, runtime) = get_runtime()?;
+        Ok(Self {
+            executor_address,
+            settlement_address,
+            runtime_handle,
+            runtime,
+            native_token_bebop_address,
+            native_token_address: chain.native_token().address,
+        })
+    }
+
+    fn encode_swap(
+        &self,
+        swap: &Swap,
+        encoding_context: &EncodingContext,
+    ) -> Result<Vec<u8>, EncodingError> {
+        let token_in = bytes_to_address(&swap.token_in)?;
+        let token_out = bytes_to_address(&swap.token_out)?;
+        let sender = encoding_context
+            .router_address
+            .clone()
+            .ok_or(EncodingError::FatalError(
+                "The router address is needed to perform a Hashflow swap".to_string(),
+            ))?;
+        let approval_needed = if swap.token_in == self.native_token_address {
+            false
+        } else {
+            let tycho_router_address = bytes_to_address(&sender)?;
+            let settlement_address = Address::from_str(&self.settlement_address)
+                .map_err(|_| EncodingError::FatalError("Invalid settlement address".to_string()))?;
+            ProtocolApprovalsManager::new()?.approval_needed(
+                token_in,
+                tycho_router_address,
+                settlement_address,
+            )?
+        };
+
+        let (partial_fill_offset, original_filled_taker_amount, bebop_calldata) =
+            if let Some(state) = &swap.protocol_state {
+                let indicatively_priced_state = state
+                    .as_indicatively_priced()
+                    .map_err(|e| {
+                        EncodingError::FatalError(format!("State is not indicatively priced {e}"))
+                    })?;
+                let estimated_amount_in =
+                    swap.estimated_amount_in
+                        .clone()
+                        .ok_or(EncodingError::FatalError(
+                            "Estimated amount in is mandatory for a Bebop swap".to_string(),
+                        ))?;
+                // Bebop uses another address for the native token than the zero address
+                let mut token_in = swap.token_in.clone();
+                if swap.token_in == self.native_token_address {
+                    token_in = self.native_token_bebop_address.clone()
+                }
+                let mut token_out = swap.token_out.clone();
+                if swap.token_out == self.native_token_address {
+                    token_out = self.native_token_bebop_address.clone()
+                }
+
+                let params = GetAmountOutParams {
+                    amount_in: estimated_amount_in,
+                    token_in,
+                    token_out,
+                    sender: encoding_context
+                        .router_address
+                        .clone()
+                        .ok_or(EncodingError::FatalError(
+                            "The router address is needed to perform a Bebop swap".to_string(),
+                        ))?,
+                    receiver: encoding_context.receiver.clone(),
+                };
+                let signed_quote = block_in_place(|| {
+                    self.runtime_handle.block_on(async {
+                        indicatively_priced_state
+                            .request_signed_quote(params)
+                            .await
+                    })
+                })?;
+                let bebop_calldata = signed_quote
+                    .quote_attributes
+                    .get("calldata")
+                    .ok_or(EncodingError::FatalError(
+                        "Bebop quote must have a calldata attribute".to_string(),
+                    ))?;
+                let partial_fill_offset = signed_quote
+                    .quote_attributes
+                    .get("partial_fill_offset")
+                    .ok_or(EncodingError::FatalError(
+                        "Bebop quote must have a partial_fill_offset attribute".to_string(),
+                    ))?;
+                let original_filled_taker_amount = biguint_to_u256(&signed_quote.amount_out);
+                (
+                    // we are only interested in the last byte to get a u8
+                    partial_fill_offset[partial_fill_offset.len() - 1],
+                    original_filled_taker_amount,
+                    bebop_calldata.to_vec(),
+                )
+            } else {
+                // The user data required for Bebop is
+                // partial_fill_offset (u8) | original_taker_amount (U256) | calldata (bytes
+                // (selector ABI encoded params))
+                let user_data = swap.user_data.clone().ok_or_else(|| {
+                    EncodingError::InvalidInput(
+                        "Bebop swaps require user_data with calldata".to_string(),
+                    )
+                })?;
+
+                if user_data.len() < 37 {
+                    return Err(EncodingError::InvalidInput(
+                        "User data too short to contain offset and Bebop calldata".to_string(),
+                    ));
+                }
+
+                let partial_fill_offset = user_data[0];
+                let original_filled_taker_amount = U256::from_be_slice(&user_data[1..33]);
+
+                // The calldata should be for either swapSingle or swapAggregate
+                let bebop_calldata = user_data[33..].to_vec();
+                (partial_fill_offset, original_filled_taker_amount, bebop_calldata)
+            };
+        let receiver = bytes_to_address(&encoding_context.receiver)?;
+
+        // Encode packed data for the executor
+        // Format: token_in | token_out | transfer_type | partial_fill_offset |
+        //         original_filled_taker_amount | approval_needed | receiver | bebop_calldata
+        let args = (
+            token_in,
+            token_out,
+            (encoding_context.transfer_type as u8).to_be_bytes(),
+            partial_fill_offset.to_be_bytes(),
+            original_filled_taker_amount.to_be_bytes::<32>(),
+            (approval_needed as u8).to_be_bytes(),
+            receiver,
+            &bebop_calldata[..],
+        );
+
+        Ok(args.abi_encode_packed())
+    }
+
+    fn executor_address(&self) -> &str {
+        &self.executor_address
+    }
+
+    fn clone_box(&self) -> Box<dyn SwapEncoder> {
+        Box::new(self.clone())
+    }
+}
+
+#[derive(Clone)]
+pub struct HashflowSwapEncoder {
+    executor_address: String,
+    hashflow_router_address: String,
+    native_token_address: Bytes,
+    runtime_handle: Handle,
+    #[allow(dead_code)]
+    runtime: Option<Arc<Runtime>>,
+}
+
+impl SwapEncoder for HashflowSwapEncoder {
+    fn new(
+        executor_address: String,
+        chain: Chain,
+        config: Option<HashMap<String, String>>,
+    ) -> Result<Self, EncodingError> {
+        let config = config.ok_or(EncodingError::FatalError(
+            "Missing hashflow specific addresses in config".to_string(),
+        ))?;
+        let hashflow_router_address = config
+            .get("hashflow_router_address")
+            .ok_or(EncodingError::FatalError(
+                "Missing hashflow router address in config".to_string(),
+            ))?
+            .to_string();
+        let native_token_address = chain.native_token().address;
+        let (runtime_handle, runtime) = get_runtime()?;
+        Ok(Self {
+            executor_address,
+            hashflow_router_address,
+            native_token_address,
+            runtime_handle,
+            runtime,
+        })
+    }
+
+    fn encode_swap(
+        &self,
+        swap: &Swap,
+        encoding_context: &EncodingContext,
+    ) -> Result<Vec<u8>, EncodingError> {
+        // Native tokens doesn't need approval, only ERC20 tokens do
+        let sender = encoding_context
+            .router_address
+            .clone()
+            .ok_or(EncodingError::FatalError(
+                "The router address is needed to perform a Hashflow swap".to_string(),
+            ))?;
+
+        // Native ETH doesn't need approval, only ERC20 tokens do
+        let approval_needed = if swap.token_in == self.native_token_address {
+            false
+        } else {
+            let tycho_router_address = bytes_to_address(&sender)?;
+            let hashflow_router_address = Address::from_str(&self.hashflow_router_address)
+                .map_err(|_| {
+                    EncodingError::FatalError("Invalid hashflow router address address".to_string())
+                })?;
+            ProtocolApprovalsManager::new()?.approval_needed(
+                bytes_to_address(&swap.token_in)?,
+                tycho_router_address,
+                hashflow_router_address,
+            )?
+        };
+
+        // Get quote
+        let protocol_state = swap
+            .protocol_state
+            .as_ref()
+            .ok_or_else(|| {
+                EncodingError::FatalError("protocol_state is required for Hashflow".to_string())
+            })?;
+        let amount_in = swap
+            .estimated_amount_in
+            .as_ref()
+            .ok_or(EncodingError::FatalError(
+                "Estimated amount in is mandatory for a Hashflow swap".to_string(),
+            ))?
+            .clone();
+        let sender = encoding_context
+            .router_address
+            .clone()
+            .ok_or(EncodingError::FatalError(
+                "The router address is needed to perform a Hashflow swap".to_string(),
+            ))?;
+        let signed_quote = block_in_place(|| {
+            self.runtime_handle.block_on(async {
+                protocol_state
+                    .as_indicatively_priced()?
+                    .request_signed_quote(GetAmountOutParams {
+                        amount_in,
+                        token_in: swap.token_in.clone(),
+                        token_out: swap.token_out.clone(),
+                        sender,
+                        receiver: encoding_context.receiver.clone(),
+                    })
+                    .await
+            })
+        })?;
+
+        // Encode packed data for the executor
+        // Format: approval_needed | transfer_type | hashflow_calldata[..]
+        let hashflow_fields = [
+            "pool",
+            "external_account",
+            "trader",
+            "base_token",
+            "quote_token",
+            "base_token_amount",
+            "quote_token_amount",
+            "quote_expiry",
+            "nonce",
+            "tx_id",
+            "signature",
+        ];
+        let mut hashflow_calldata = vec![];
+        for field in &hashflow_fields {
+            let value = signed_quote
+                .quote_attributes
+                .get(*field)
+                .ok_or(EncodingError::FatalError(format!(
+                    "Hashflow quote must have a {field} attribute"
+                )))?;
+            hashflow_calldata.extend_from_slice(value);
+        }
+        let args = (
+            (encoding_context.transfer_type as u8).to_be_bytes(),
+            (approval_needed as u8).to_be_bytes(),
+            &hashflow_calldata[..],
+        );
+        Ok(args.abi_encode_packed())
+    }
+
+    fn executor_address(&self) -> &str {
+        &self.executor_address
+    }
+
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
         Box::new(self.clone())
     }
@@ -672,10 +1017,14 @@ mod tests {
     };
 
     use super::*;
-    use crate::encoding::{evm::utils::write_calldata_to_file, models::TransferType};
+    use crate::encoding::{
+        evm::utils::write_calldata_to_file,
+        models::{SwapBuilder, TransferType},
+    };
 
     mod uniswap_v2 {
         use super::*;
+        use crate::encoding::models::SwapBuilder;
         #[test]
         fn test_encode_uniswap_v2() {
             let usv2_pool = ProtocolComponent {
@@ -685,14 +1034,7 @@ mod tests {
 
             let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
             let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
-            let swap = Swap {
-                component: usv2_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(usv2_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 receiver: Bytes::from("0x1D96F2f6BeF1202E4Ce1Ff6Dad0c2CB002861d3e"), // BOB
                 exact_out: false,
@@ -732,6 +1074,7 @@ mod tests {
 
     mod uniswap_v3 {
         use super::*;
+        use crate::encoding::models::SwapBuilder;
         #[test]
         fn test_encode_uniswap_v3() {
             let fee = BigInt::from(500);
@@ -746,14 +1089,7 @@ mod tests {
             };
             let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
             let token_out = Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f");
-            let swap = Swap {
-                component: usv3_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(usv3_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
                 exact_out: false,
@@ -796,6 +1132,7 @@ mod tests {
 
     mod balancer_v2 {
         use super::*;
+        use crate::encoding::models::SwapBuilder;
 
         #[test]
         fn test_encode_balancer_v2() {
@@ -808,14 +1145,7 @@ mod tests {
             };
             let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
             let token_out = Bytes::from("0xba100000625a3754423978a60c9317c58a424e3D");
-            let swap = Swap {
-                component: balancer_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(balancer_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
@@ -882,14 +1212,7 @@ mod tests {
                 static_attributes,
                 ..Default::default()
             };
-            let swap = Swap {
-                component: usv4_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(usv4_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 // The receiver is ALICE to match the solidity tests
                 receiver: Bytes::from("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2"),
@@ -958,14 +1281,7 @@ mod tests {
                 ..Default::default()
             };
 
-            let swap = Swap {
-                component: usv4_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(usv4_pool, token_in.clone(), token_out.clone()).build();
 
             let encoding_context = EncodingContext {
                 receiver: Bytes::from("0x0000000000000000000000000000000000000001"),
@@ -1056,23 +1372,12 @@ mod tests {
                 ..Default::default()
             };
 
-            let initial_swap = Swap {
-                component: usde_usdt_component,
-                token_in: usde_address.clone(),
-                token_out: usdt_address.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
-
-            let second_swap = Swap {
-                component: usdt_wbtc_component,
-                token_in: usdt_address,
-                token_out: wbtc_address.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let initial_swap =
+                SwapBuilder::new(usde_usdt_component, usde_address.clone(), usdt_address.clone())
+                    .build();
+            let second_swap =
+                SwapBuilder::new(usdt_wbtc_component, usdt_address.clone(), wbtc_address.clone())
+                    .build();
 
             let encoder = UniswapV4SwapEncoder::new(
                 String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
@@ -1131,7 +1436,6 @@ mod tests {
     }
     mod ekubo {
         use super::*;
-        use crate::encoding::evm::utils::write_calldata_to_file;
 
         const RECEIVER: &str = "ca4f73fe97d0b987a0d12b39bbd562c779bab6f6"; // Random address
 
@@ -1151,14 +1455,7 @@ mod tests {
 
             let component = ProtocolComponent { static_attributes, ..Default::default() };
 
-            let swap = Swap {
-                component,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(component, token_in.clone(), token_out.clone()).build();
 
             let encoding_context = EncodingContext {
                 receiver: RECEIVER.into(),
@@ -1211,8 +1508,8 @@ mod tests {
                 transfer_type: TransferType::Transfer,
             };
 
-            let first_swap = Swap {
-                component: ProtocolComponent {
+            let first_swap = SwapBuilder::new(
+                ProtocolComponent {
                     static_attributes: HashMap::from([
                         ("fee".to_string(), Bytes::from(0_u64)),
                         ("tick_spacing".to_string(), Bytes::from(0_u32)),
@@ -1223,15 +1520,13 @@ mod tests {
                     ]),
                     ..Default::default()
                 },
-                token_in: group_token_in.clone(),
-                token_out: intermediary_token.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                group_token_in.clone(),
+                intermediary_token.clone(),
+            )
+            .build();
 
-            let second_swap = Swap {
-                component: ProtocolComponent {
+            let second_swap = SwapBuilder::new(
+                ProtocolComponent {
                     // 0.0025% fee & 0.005% base pool
                     static_attributes: HashMap::from([
                         ("fee".to_string(), Bytes::from(461168601842738_u64)),
@@ -1240,12 +1535,10 @@ mod tests {
                     ]),
                     ..Default::default()
                 },
-                token_in: intermediary_token.clone(),
-                token_out: group_token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                intermediary_token.clone(),
+                group_token_out.clone(),
+            )
+            .build();
 
             let first_encoded_swap = encoder
                 .encode_swap(&first_swap, &encoding_context)
@@ -1354,19 +1647,18 @@ mod tests {
         ) {
             let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
             static_attributes.insert("coins".into(), Bytes::from_str(coins).unwrap());
-            let swap = Swap {
-                component: ProtocolComponent {
+            let swap = SwapBuilder::new(
+                ProtocolComponent {
                     id: "pool-id".into(),
                     protocol_system: String::from("vm:curve"),
                     static_attributes,
                     ..Default::default()
                 },
-                token_in: Bytes::from(token_in),
-                token_out: Bytes::from(token_out),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+                Bytes::from(token_in),
+                Bytes::from(token_out),
+            )
+            .build();
+
             let encoder =
                 CurveSwapEncoder::new(String::default(), Chain::Ethereum, curve_config()).unwrap();
             let (i, j) = encoder
@@ -1400,14 +1692,9 @@ mod tests {
             };
             let token_in = Bytes::from("0x6B175474E89094C44Da98b954EedeAC495271d0F");
             let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
-            let swap = Swap {
-                component: curve_tri_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap =
+                SwapBuilder::new(curve_tri_pool, token_in.clone(), token_out.clone()).build();
+
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
@@ -1473,14 +1760,7 @@ mod tests {
             };
             let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
             let token_out = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3");
-            let swap = Swap {
-                component: curve_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(curve_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
@@ -1547,14 +1827,7 @@ mod tests {
             };
             let token_in = Bytes::from("0x0000000000000000000000000000000000000000");
             let token_out = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
-            let swap = Swap {
-                component: curve_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(curve_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
@@ -1622,14 +1895,7 @@ mod tests {
             };
             let token_in = Bytes::from("0x7bc3485026ac48b6cf9baf0a377477fff5703af8");
             let token_out = Bytes::from("0xc71ea051a5f82c67adcf634c36ffe6334793d24c");
-            let swap = Swap {
-                component: balancer_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(balancer_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
@@ -1681,14 +1947,7 @@ mod tests {
             };
             let token_in = Bytes::from("0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f");
             let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
-            let swap = Swap {
-                component: maverick_pool,
-                token_in: token_in.clone(),
-                token_out: token_out.clone(),
-                split: 0f64,
-                user_data: None,
-                protocol_state: None,
-            };
+            let swap = SwapBuilder::new(maverick_pool, token_in.clone(), token_out.clone()).build();
             let encoding_context = EncodingContext {
                 // The receiver was generated with `makeAddr("bob") using forge`
                 receiver: Bytes::from("0x1d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e"),
@@ -1726,6 +1985,386 @@ mod tests {
             );
 
             write_calldata_to_file("test_encode_maverick_v2", hex_swap.as_str());
+        }
+    }
+
+    mod bebop {
+        use num_bigint::BigUint;
+
+        use super::*;
+        use crate::encoding::evm::testing_utils::MockRFQState;
+
+        fn bebop_config() -> HashMap<String, String> {
+            HashMap::from([
+                (
+                    "bebop_settlement_address".to_string(),
+                    "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F".to_string(),
+                ),
+                (
+                    "native_token_address".to_string(),
+                    "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE".to_string(),
+                ),
+            ])
+        }
+
+        #[test]
+        fn test_encode_bebop_single_with_user_data() {
+            // 200 USDC -> ONDO
+            let bebop_calldata= Bytes::from_str("0x4dcebcba00000000000000000000000000000000000000000000000000000000689b548f0000000000000000000000003ede3eca2a72b3aecc820e955b36f38437d0139500000000000000000000000067336cec42645f55059eff241cb02ea5cc52ff86000000000000000000000000000000000000000000000000279ead5d9685f25b000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000faba6f8e4a5e8ab82f62fe7c39859fa577269be3000000000000000000000000000000000000000000000000000000000bebc20000000000000000000000000000000000000000000000000a8aea46aa4ec5c0f5000000000000000000000000d2068e04cf586f76eece7ba5beb779d7bb1474a100000000000000000000000000000000000000000000000000000000000000005230bcb979c81cebf94a3b5c08bcfa300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000414ce40058ff07f11d9224c2c8d1e58369e4a90173856202d8d2a17da48058ad683dedb742eda0d4c0cf04cf1c09138898dd7fd06f97268ea7f74ef9b42d29bf4c1b00000000000000000000000000000000000000000000000000000000000000").unwrap();
+            let original_taker_amount = U256::from_str("200000000").unwrap();
+            // partialFillOffset 12 for swapSingle
+            let mut user_data = vec![12u8];
+            user_data.extend_from_slice(&original_taker_amount.to_be_bytes::<32>());
+            user_data.extend_from_slice(&bebop_calldata);
+
+            let bebop_component = ProtocolComponent {
+                id: String::from("bebop-rfq"),
+                protocol_system: String::from("rfq:bebop"),
+                static_attributes: HashMap::new(),
+                ..Default::default()
+            };
+
+            let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+            let token_out = Bytes::from("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3"); // ONDO
+
+            let swap = SwapBuilder::new(bebop_component, token_in.clone(), token_out.clone())
+                .user_data(Bytes::from(user_data))
+                .build();
+
+            let encoding_context = EncodingContext {
+                receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"),
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::Transfer,
+            };
+
+            let encoder = BebopSwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Chain::Ethereum,
+                Some(bebop_config()),
+            )
+            .unwrap();
+
+            let encoded_swap = encoder
+                .encode_swap(&swap, &encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
+
+            let expected_swap = String::from(concat!(
+                // token in
+                "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                // token out
+                "faba6f8e4a5e8ab82f62fe7c39859fa577269be3",
+                // transfer type
+                "01",
+                // partiall filled offset
+                "0c",
+                //  original taker amount
+                "000000000000000000000000000000000000000000000000000000000bebc200",
+                // approval needed
+                "01",
+                //receiver,
+                "c5564c13a157e6240659fb81882a28091add8670",
+            ));
+            assert_eq!(hex_swap, expected_swap + &bebop_calldata.to_string()[2..]);
+        }
+
+        #[test]
+        fn test_encode_bebop_aggregate_with_user_data() {
+            // 20k USDC -> ONDO
+            let bebop_calldata= Bytes::from_str("0xa2f7489300000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000640000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000689b78880000000000000000000000003ede3eca2a72b3aecc820e955b36f38437d01395000000000000000000000000000000000000000000000000000000000000016000000000000000000000000000000000000000000000000000000000000001c00000000000000000000000000000000000000000000000000000000000000220000000000000000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000003e000000000000000000000000000000000000000000000000000000000000004c0000000000000000000000000d2068e04cf586f76eece7ba5beb779d7bb1474a100000000000000000000000000000000000000000000000000000000000005a060a5c2aaaaa2fe2cda34423cac76a84c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000051c72848c68a965f66fa7a88855f9f7784502a7f000000000000000000000000ce79b081c0c924cb67848723ed3057234d10fc6b00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000002901f2d62bb356ca0000000000000000000000000000000000000000000000002901f2d62bb356cb0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000001000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000000000001000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000001000000000000000000000000faba6f8e4a5e8ab82f62fe7c39859fa577269be30000000000000000000000000000000000000000000000000000000000000001000000000000000000000000faba6f8e4a5e8ab82f62fe7c39859fa577269be30000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000044f83c726000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000589400da00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000003aa5f96046644f6e37a000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000004b51a26526ddbeec60000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000417ab4332f2b091d87d56d04eee35dd49452782c782de71608c0425c5ae41f1d7e147173851c870d76720ce07d45cd8622352716b1c7965819ee2bf8c573c499ae1b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000410c8da2637aa929e11caff9afdfc4c489320c6dba77cc934d88ba8956e365fd1d48983087c6e474bbb828181cdfdd17317c4c9c3ee4bc98e3769d0c05cc7a285e1c00000000000000000000000000000000000000000000000000000000000000").unwrap();
+            let original_taker_amount = U256::from_str("20000000000").unwrap();
+
+            //  partialFillOffset is 2 for swapAggregate
+            let mut user_data = vec![2u8];
+            user_data.extend_from_slice(&original_taker_amount.to_be_bytes::<32>());
+            user_data.extend_from_slice(&bebop_calldata);
+
+            let bebop_component = ProtocolComponent {
+                id: String::from("bebop-rfq"),
+                protocol_system: String::from("rfq:bebop"),
+                static_attributes: HashMap::new(),
+                ..Default::default()
+            };
+
+            let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+            let token_out = Bytes::from("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3"); // ONDO
+
+            let swap = SwapBuilder::new(bebop_component, token_in.clone(), token_out.clone())
+                .user_data(Bytes::from(user_data))
+                .build();
+
+            let encoding_context = EncodingContext {
+                receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"),
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::Transfer,
+            };
+
+            let encoder = BebopSwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Chain::Ethereum,
+                Some(bebop_config()),
+            )
+            .unwrap();
+
+            let encoded_swap = encoder
+                .encode_swap(&swap, &encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
+
+            let expected_swap = String::from(concat!(
+                // token in
+                "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                // token out
+                "faba6f8e4a5e8ab82f62fe7c39859fa577269be3",
+                // transfer type
+                "01",
+                // partiall filled offset
+                "02",
+                //  original taker amount
+                "00000000000000000000000000000000000000000000000000000004a817c800",
+                // approval needed
+                "01",
+                //receiver,
+                "c5564c13a157e6240659fb81882a28091add8670",
+            ));
+
+            assert_eq!(hex_swap, expected_swap + &bebop_calldata.to_string()[2..]);
+        }
+
+        #[test]
+        fn test_encode_bebop_single_with_protocol_state() {
+            // 3000 USDC -> 1 WETH using a mocked RFQ state to get a quote
+            let bebop_calldata = Bytes::from_str("0x123456").unwrap();
+            let partial_fill_offset = 12u64;
+            let quote_amount_out = BigUint::from_str("1000000000000000000").unwrap();
+
+            let bebop_component = ProtocolComponent {
+                id: String::from("bebop-rfq"),
+                protocol_system: String::from("rfq:bebop"),
+                ..Default::default()
+            };
+            let bebop_state = MockRFQState {
+                quote_amount_out,
+                quote_data: HashMap::from([
+                    ("calldata".to_string(), bebop_calldata.clone()),
+                    (
+                        "partial_fill_offset".to_string(),
+                        Bytes::from(
+                            partial_fill_offset
+                                .to_be_bytes()
+                                .to_vec(),
+                        ),
+                    ),
+                ]),
+            };
+
+            let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+            let token_out = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"); // WETH
+
+            let swap = SwapBuilder::new(bebop_component, token_in.clone(), token_out.clone())
+                .estimated_amount_in(BigUint::from_str("3000000000").unwrap())
+                .protocol_state(Arc::new(bebop_state))
+                .build();
+
+            let encoding_context = EncodingContext {
+                receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"),
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::Transfer,
+            };
+
+            let encoder = BebopSwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Chain::Ethereum,
+                Some(bebop_config()),
+            )
+            .unwrap();
+
+            let encoded_swap = encoder
+                .encode_swap(&swap, &encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
+
+            let expected_swap = String::from(concat!(
+                // token in
+                "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                // token out
+                "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                // transfer type
+                "01",
+                // partiall filled offset
+                "0c",
+                //  original taker amount
+                "0000000000000000000000000000000000000000000000000de0b6b3a7640000",
+                // approval needed
+                "01",
+                //receiver,
+                "c5564c13a157e6240659fb81882a28091add8670",
+            ));
+            assert_eq!(hex_swap, expected_swap + &bebop_calldata.to_string()[2..]);
+        }
+    }
+
+    mod hashflow {
+        use alloy::hex::encode;
+        use num_bigint::BigUint;
+
+        use super::*;
+        use crate::encoding::{
+            evm::testing_utils::MockRFQState,
+            models::{SwapBuilder, TransferType},
+        };
+
+        fn hashflow_config() -> Option<HashMap<String, String>> {
+            Some(HashMap::from([(
+                "hashflow_router_address".to_string(),
+                "0x55084eE0fEf03f14a305cd24286359A35D735151".to_string(),
+            )]))
+        }
+
+        #[test]
+        fn test_encode_hashflow_single_fails_without_protocol_data() {
+            // Hashflow requires a swap with protocol data, otherwise will return an error
+            let hashflow_component = ProtocolComponent {
+                id: String::from("hashflow-rfq"),
+                protocol_system: String::from("rfq:hashflow"),
+                ..Default::default()
+            };
+
+            let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+            let token_out = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"); // WETH
+
+            let swap = SwapBuilder::new(hashflow_component, token_in.clone(), token_out.clone())
+                .estimated_amount_in(BigUint::from_str("3000000000").unwrap())
+                .build();
+
+            let encoding_context = EncodingContext {
+                receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"),
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::Transfer,
+            };
+
+            let encoder = HashflowSwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Chain::Ethereum,
+                hashflow_config(),
+            )
+            .unwrap();
+            encoder
+                .encode_swap(&swap, &encoding_context)
+                .expect_err("Should returned an error if the swap has no protocol state");
+        }
+
+        #[test]
+        fn test_encode_hashflow_single_with_protocol_state() {
+            // 3000 USDC -> 1 WETH using a mocked RFQ state to get a quote
+            let quote_amount_out = BigUint::from_str("1000000000000000000").unwrap();
+
+            let hashflow_component = ProtocolComponent {
+                id: String::from("hashflow-rfq"),
+                protocol_system: String::from("rfq:hashflow"),
+                ..Default::default()
+            };
+            let hashflow_quote_data = vec![
+                (
+                    "pool".to_string(),
+                    Bytes::from_str("0x478eca1b93865dca0b9f325935eb123c8a4af011").unwrap(),
+                ),
+                (
+                    "external_account".to_string(),
+                    Bytes::from_str("0xbee3211ab312a8d065c4fef0247448e17a8da000").unwrap(),
+                ),
+                (
+                    "trader".to_string(),
+                    Bytes::from_str("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2").unwrap(),
+                ),
+                (
+                    "base_token".to_string(),
+                    Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+                ),
+                (
+                    "quote_token".to_string(),
+                    Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap(),
+                ),
+                (
+                    "base_token_amount".to_string(),
+                    Bytes::from(biguint_to_u256(&BigUint::from(3000_u64)).to_be_bytes::<32>().to_vec()),
+                ),
+                (
+                    "quote_token_amount".to_string(),
+                    Bytes::from(biguint_to_u256(&BigUint::from(1_u64)).to_be_bytes::<32>().to_vec()),
+                ),
+                ("quote_expiry".to_string(), Bytes::from(biguint_to_u256(&BigUint::from(1755610328_u64)).to_be_bytes::<32>().to_vec())),
+                ("nonce".to_string(), Bytes::from(biguint_to_u256(&BigUint::from(1755610283723_u64)).to_be_bytes::<32>().to_vec())),
+                (
+                    "tx_id".to_string(),
+                    Bytes::from_str(
+                        "0x125000064000640000001747eb8c38ffffffffffffff0029642016edb36d0000",
+                    )
+                        .unwrap(),
+                ),
+                ("signature".to_string(), Bytes::from_str("0x6ddb3b21fe8509e274ddf46c55209cdbf30360944abbca6569ed6b26740d052f419964dcb5a3bdb98b4ed1fb3642a2760b8312118599a962251f7a8f73fe4fbe1c").unwrap()),
+            ];
+            let hashflow_quote_data_values =
+                hashflow_quote_data
+                    .iter()
+                    .fold(vec![], |mut acc, (_key, value)| {
+                        acc.extend_from_slice(value);
+                        acc
+                    });
+            let hashflow_calldata = Bytes::from(hashflow_quote_data_values);
+            let hashflow_state = MockRFQState {
+                quote_amount_out,
+                quote_data: hashflow_quote_data
+                    .into_iter()
+                    .collect(),
+            };
+
+            let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
+            let token_out = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"); // WETH
+
+            let swap = SwapBuilder::new(hashflow_component, token_in.clone(), token_out.clone())
+                .estimated_amount_in(BigUint::from_str("3000000000").unwrap())
+                .protocol_state(Arc::new(hashflow_state))
+                .build();
+
+            let encoding_context = EncodingContext {
+                receiver: Bytes::from("0xc5564C13A157E6240659fb81882A28091add8670"),
+                exact_out: false,
+                router_address: Some(Bytes::zero(20)),
+                group_token_in: token_in.clone(),
+                group_token_out: token_out.clone(),
+                transfer_type: TransferType::Transfer,
+            };
+
+            let encoder = HashflowSwapEncoder::new(
+                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Chain::Ethereum,
+                hashflow_config(),
+            )
+            .unwrap();
+
+            let encoded_swap = encoder
+                .encode_swap(&swap, &encoding_context)
+                .unwrap();
+            let hex_swap = encode(&encoded_swap);
+
+            let expected_swap = String::from(concat!(
+                "01", // transfer type
+                "01", // approval needed
+            ));
+            assert_eq!(hex_swap, expected_swap + &hashflow_calldata.to_string()[2..]);
         }
     }
 }

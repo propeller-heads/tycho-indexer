@@ -1,6 +1,6 @@
 [package]
 name = "tycho-execution"
-version = "0.112.0"
+version = "0.119.0"
 edition = "2021"
 description = "Provides tools for encoding and executing swaps against Tycho router and protocol executors."
 repository = "https://github.com/propeller-heads/tycho-execution"
@@ -11,12 +11,12 @@ license = "MIT"
 categories = ["finance", "cryptography::cryptocurrencies"]
 readme = "README.md"
 exclude = [
-    "foundry/*",
-    "foundry",
-    "tests/*",
-    "tests/common",
-    ".github/*",
-    ".gitmodules",
+  "foundry/*",
+  "foundry",
+  "tests/*",
+  "tests/common",
+  ".github/*",
+  ".gitmodules",
 ]
 
 [[bin]]
@@ -37,17 +37,19 @@ tokio = { version = "1.38.0", features = ["full"] }
 chrono = "0.4.39"
 clap = { version = "4.5.3", features = ["derive"] }
 once_cell = "1.20.2"
-tycho-common = ">0.78.1"
-
+tycho-common = ">=0.81.6"
 alloy = { version = "1.0.6", features = ["providers", "rpc-types-eth", "eip712", "signer-local", "node-bindings"], optional = true }
+async-trait = { version = "0.1.88", optional = true }
 
 [dev-dependencies]
 rstest = "0.24.0"
+tycho-execution = { path = "../tycho-execution", features = ["test-utils"] }
 
 [features]
 default = ["evm"]
 evm = ["alloy"]
 fork-tests = []
+test-utils = ["async-trait"]
 
 [profile.bench]
 debug = true

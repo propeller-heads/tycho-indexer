@@ -5,8 +5,20 @@
     },
     "vm:curve": {
       "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+    },
+    "rfq:bebop": {
+      "bebop_settlement_address": "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F",
+      "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+    },
+    "rfq:hashflow": {
+      "hashflow_router_address": "0x55084eE0fEf03f14a305cd24286359A35D735151"
     }
   },
-  "base": {},
+  "base": {
+    "rfq:bebop": {
+      "bebop_settlement_address": "0xbbbbbBB520d69a9775E85b458C58c648259FAD5F",
+      "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+    }
+  },
   "unichain": {}
 }
