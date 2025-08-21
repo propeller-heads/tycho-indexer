@@ -185,7 +185,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             EncodingError::FatalError("Failed to pad tick spacing bytes".to_string())
         })?;
 
-        let hook_address = match get_static_attribute(swap, "hook") {
+        let hook_address = match get_static_attribute(swap, "hooks") {
             Ok(hook) => Address::from_slice(&hook),
             Err(_) => Address::ZERO,
         };
