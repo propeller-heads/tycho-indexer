@@ -32,7 +32,7 @@ use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder},
     models,
-    models::{EncodedSolution, Solution, Swap, Transaction, UserTransferType},
+    models::{EncodedSolution, Solution, SwapBuilder, Transaction, UserTransferType},
 };
 use tycho_simulation::{
     evm::{
@@ -57,23 +57,19 @@ use tycho_simulation::{
     utils::{get_default_url, load_all_tokens},
 };
 
-const FAKE_PK: &str = "0x123456789abcdef123456789abcdef123456789abcdef123456789abcdef1234";
-
 #[derive(Parser)]
 struct Cli {
-    #[arg(short, long)]
+    #[arg(long)]
     sell_token: Option<String>,
-    #[arg(short, long)]
+    #[arg(long)]
     buy_token: Option<String>,
-    #[arg(short, long, default_value_t = 1.0)]
+    #[arg(long, default_value_t = 1.0)]
     sell_amount: f64,
     /// The tvl threshold to filter the graph by
-    #[arg(short, long, default_value_t = 1.0)]
+    #[arg(long, default_value_t = 1.0)]
     tvl_threshold: f64,
-    #[arg(short, long, default_value = FAKE_PK)]
-    swapper_pk: String,
-    #[arg(short, long, default_value = "ethereum")]
-    chain: String,
+    #[arg(long, default_value = "ethereum")]
+    chain: Chain,
 }
 
 impl Cli {
@@ -81,7 +77,7 @@ impl Cli {
         // By default, we swap a small amount of USDC to WETH on whatever chain we choose
 
         if self.buy_token.is_none() {
-            self.buy_token = Some(match self.chain.as_str() {
+            self.buy_token = Some(match self.chain.to_string().as_str() {
                 "ethereum" => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(),
                 "base" => "0x4200000000000000000000000000000000000006".to_string(),
                 "unichain" => "0x4200000000000000000000000000000000000006".to_string(),
@@ -90,7 +86,7 @@ impl Cli {
         }
 
         if self.sell_token.is_none() {
-            self.sell_token = Some(match self.chain.as_str() {
+            self.sell_token = Some(match self.chain.to_string().as_str() {
                 "ethereum" => "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0".to_string(),
                 "base" => "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913".to_string(),
                 "unichain" => "0x078d782b760474a361dda0af3839290b0ef57ad6".to_string(),
@@ -111,8 +107,7 @@ async fn main() {
 
     let cli = Cli::parse().with_defaults();
 
-    let chain = Chain::from_str(&cli.chain)
-        .unwrap_or_else(|_| panic!("Unknown chain {chain}", chain = cli.chain));
+    let chain = cli.chain;
 
     let tycho_url = env::var("TYCHO_URL").unwrap_or_else(|_| {
         get_default_url(&chain)
@@ -124,8 +119,7 @@ async fn main() {
 
     let tvl_filter = ComponentFilter::with_tvl_range(cli.tvl_threshold, cli.tvl_threshold);
 
-    let pk = B256::from_str(&cli.swapper_pk).expect("Failed to convert swapper pk to B256");
-    let signer = PrivateKeySigner::from_bytes(&pk).expect("Failed to create PrivateKeySigner");
+    let swapper_pk = env::var("PRIVATE_KEY").ok();
 
     println!("Loading tokens from Tycho... {url}", url = tycho_url.as_str());
     let all_tokens =
@@ -215,20 +209,6 @@ async fn main() {
         .build()
         .expect("Failed to build encoder");
 
-    let wallet = PrivateKeySigner::from_bytes(
-        &B256::from_str(&cli.swapper_pk).expect("Failed to convert swapper pk to B256"),
-    )
-    .expect("Failed to private key signer");
-    let tx_signer = EthereumWallet::from(wallet.clone());
-    let named_chain =
-        NamedChain::from_str(&cli.chain.replace("ethereum", "mainnet")).expect("Invalid chain");
-    let provider = ProviderBuilder::default()
-        .with_chain(named_chain)
-        .wallet(tx_signer.clone())
-        .connect(&env::var("RPC_URL").expect("RPC_URL env var not set"))
-        .await
-        .expect("Failed to connect provider");
-
     while let Some(message_result) = protocol_stream.next().await {
         let message = match message_result {
             Ok(msg) => msg,
@@ -256,12 +236,33 @@ async fn main() {
             // Clone expected_amount to avoid ownership issues
             let expected_amount_copy = expected_amount.clone();
 
+            // Check if we have a private key first
+            if swapper_pk.is_none() {
+                println!(
+                    "\nSigner private key was not provided. Skipping simulation/execution. Set PRIVATE_KEY env variable to perform simulation/execution.\n"
+                );
+                continue;
+            }
+
+            // Create signer and provider now that we know we have a private key
+            let pk_str = swapper_pk.as_ref().unwrap();
+            let pk = B256::from_str(pk_str).expect("Failed to convert swapper pk to B256");
+            let signer =
+                PrivateKeySigner::from_bytes(&pk).expect("Failed to create PrivateKeySigner");
+            let tx_signer = EthereumWallet::from(signer.clone());
+            let provider = ProviderBuilder::default()
+                .with_chain(NamedChain::try_from(chain.id()).expect("Invalid chain"))
+                .wallet(tx_signer)
+                .connect(&env::var("RPC_URL").expect("RPC_URL env var not set"))
+                .await
+                .expect("Failed to connect provider");
+
             let solution = create_solution(
                 component,
                 sell_token.clone(),
                 buy_token.clone(),
                 amount_in.clone(),
-                Bytes::from(wallet.address().to_vec()),
+                Bytes::from(signer.address().to_vec()),
                 expected_amount,
             );
 
@@ -272,7 +273,7 @@ async fn main() {
                 .clone();
 
             let tx = encode_tycho_router_call(
-                named_chain.into(),
+                chain.id(),
                 encoded_solution.clone(),
                 &solution,
                 chain.native_token().address,
@@ -281,62 +282,53 @@ async fn main() {
             .expect("Failed to encode router call");
 
             // Print token balances before showing the swap options
-            if cli.swapper_pk != FAKE_PK {
-                match get_token_balance(
-                    &provider,
-                    Address::from_slice(&sell_token.address),
-                    wallet.address(),
-                    Address::from_slice(&chain.native_token().address),
-                )
-                .await
-                {
-                    Ok(balance) => {
-                        let formatted_balance = format_token_amount(&balance, &sell_token);
-                        println!(
-                            "\nYour balance: {formatted_balance} {sell_symbol}",
-                            sell_symbol = sell_token.symbol
-                        );
+            match get_token_balance(
+                &provider,
+                Address::from_slice(&sell_token.address),
+                signer.address(),
+                Address::from_slice(&chain.native_token().address),
+            )
+            .await
+            {
+                Ok(balance) => {
+                    let formatted_balance = format_token_amount(&balance, &sell_token);
+                    println!(
+                        "\nYour balance: {formatted_balance} {sell_symbol}",
+                        sell_symbol = sell_token.symbol
+                    );
 
-                        if balance < amount_in {
-                            let required = format_token_amount(&amount_in, &sell_token);
-                            println!("⚠️ Warning: Insufficient balance for swap. You have {formatted_balance} {sell_symbol} but need {required} {sell_symbol}",
-                                formatted_balance = formatted_balance,
-                                sell_symbol = sell_token.symbol,
-                            );
-                            return;
-                        }
-                    }
-                    Err(e) => eprintln!("Failed to get token balance: {e}"),
-                }
-
-                // Also show buy token balance
-                match get_token_balance(
-                    &provider,
-                    Address::from_slice(&buy_token.address),
-                    wallet.address(),
-                    Address::from_slice(&chain.native_token().address),
-                )
-                .await
-                {
-                    Ok(balance) => {
-                        let formatted_balance = format_token_amount(&balance, &buy_token);
-                        println!(
-                            "Your {buy_symbol} balance: {formatted_balance} {buy_symbol}",
-                            buy_symbol = buy_token.symbol
+                    if balance < amount_in {
+                        let required = format_token_amount(&amount_in, &sell_token);
+                        println!("⚠️ Warning: Insufficient balance for swap. You have {formatted_balance} {sell_symbol} but need {required} {sell_symbol}",
+                            formatted_balance = formatted_balance,
+                            sell_symbol = sell_token.symbol,
                         );
+                        return;
                     }
-                    Err(e) => eprintln!(
-                        "Failed to get {buy_symbol} balance: {e}",
-                        buy_symbol = buy_token.symbol
-                    ),
                 }
+                Err(e) => eprintln!("Failed to get token balance: {e}"),
             }
 
-            if cli.swapper_pk == FAKE_PK {
-                println!(
-                    "\nSigner private key was not provided. Skipping simulation/execution...\n"
-                );
-                continue;
+            // Also show buy token balance
+            match get_token_balance(
+                &provider,
+                Address::from_slice(&buy_token.address),
+                signer.address(),
+                Address::from_slice(&chain.native_token().address),
+            )
+            .await
+            {
+                Ok(balance) => {
+                    let formatted_balance = format_token_amount(&balance, &buy_token);
+                    println!(
+                        "Your {buy_symbol} balance: {formatted_balance} {buy_symbol}",
+                        buy_symbol = buy_token.symbol
+                    );
+                }
+                Err(e) => eprintln!(
+                    "Failed to get {buy_symbol} balance: {e}",
+                    buy_symbol = buy_token.symbol
+                ),
             }
             println!("Would you like to simulate or execute this swap?");
             println!("Please be aware that the market might move while you make your decision, which might lead to a revert if you've set a min amount out or slippage.");
@@ -362,10 +354,10 @@ async fn main() {
                     let (approval_request, swap_request) = get_tx_requests(
                         provider.clone(),
                         biguint_to_u256(&amount_in),
-                        wallet.address(),
+                        signer.address(),
                         Address::from_slice(&sell_token_address),
                         tx.clone(),
-                        named_chain as u64,
+                        chain.id(),
                     )
                     .await;
 
@@ -415,10 +407,10 @@ async fn main() {
                                 match execute_swap_transaction(
                                     provider.clone(),
                                     &amount_in,
-                                    wallet.address(),
+                                    signer.address(),
                                     &sell_token_address,
                                     tx.clone(),
-                                    named_chain as u64,
+                                    chain.id(),
                                 )
                                 .await
                                 {
@@ -459,10 +451,10 @@ async fn main() {
                     match execute_swap_transaction(
                         provider.clone(),
                         &amount_in,
-                        wallet.address(),
+                        signer.address(),
                         &sell_token_address,
                         tx,
-                        named_chain as u64,
+                        chain.id(),
                     )
                     .await
                     {
@@ -590,18 +582,10 @@ fn create_solution(
     sell_amount: BigUint,
     user_address: Bytes,
     expected_amount: BigUint,
-) -> Solution<'static> {
+) -> Solution {
     // Prepare data to encode. First we need to create a swap object
-    let simple_swap = Swap::new(
-        component,
-        sell_token.address.clone(),
-        buy_token.address.clone(),
-        // Split defines the fraction of the amount to be swapped. A value of 0 indicates 100% of
-        // the amount or the total remaining balance.
-        0f64,
-        None,
-        None,
-    );
+    let simple_swap =
+        SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone()).build();
 
     // Compute a minimum amount out
     //

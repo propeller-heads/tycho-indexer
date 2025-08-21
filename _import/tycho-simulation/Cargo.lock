@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "_tycho_simulation_py"
-version = "0.140.0"
+version = "0.151.0"
 dependencies = [
  "alloy",
  "num-bigint",
@@ -8362,9 +8362,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.81.0"
+version = "0.81.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e0c4673468107df0a0eabc943ee089cc1cfc0f6b00f80dfb95e9b8e6b22a262"
+checksum = "05d26b88038925afa54281c40b2fb16186e656a4598eaebe117136bd7fa055b8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8389,9 +8389,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.81.0"
+version = "0.81.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0787788c21137066577613779c59f61a07bdb6ecb3de94df658882a0af557552"
+checksum = "68d44780891254a0155d1aaa765a8625b48672158b6e12ce4f06771e9d369ffa"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8435,7 +8435,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.140.0"
+version = "0.151.0"
 dependencies = [
  "alloy",
  "anyhow",

@@ -741,7 +741,8 @@ where
 
         // Send the tick with all updated states
         Ok(Update::new(header.block_number_or_timestamp(), updated_states, new_pairs)
-            .set_removed_pairs(removed_pairs))
+            .set_removed_pairs(removed_pairs)
+            .set_sync_states(msg.sync_states))
     }
 
     fn apply_update(
@@ -956,6 +957,8 @@ mod tests {
 
         assert_eq!(res1.states.len(), 1);
         assert_eq!(res2.states.len(), 1);
+        assert_eq!(res1.sync_states.len(), 1);
+        assert_eq!(res2.sync_states.len(), 1);
     }
 
     #[tokio::test]

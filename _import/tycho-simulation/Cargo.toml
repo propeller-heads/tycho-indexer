@@ -1,6 +1,6 @@
 [package]
 name = "tycho-simulation"
-version = "0.140.0"
+version = "0.151.0"
 edition = "2021"
 description = "Provides tools for interacting with protocol states, calculating spot prices, and quoting token swaps."
 repository = "https://github.com/propeller-heads/tycho-simulation"
@@ -48,8 +48,8 @@ mini-moka = "0.10"
 lazy_static = "1.4.0"
 
 # Tycho dependencies
-tycho-common = "0.81.0"
-tycho-client = "0.81.0"
+tycho-common = "0.81.5"
+tycho-client = "0.81.5"
 
 # EVM dependencies
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "5a552bb0de7126fa35170fd84532bbd3d40cd348", optional = true }
@@ -97,7 +97,7 @@ unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
 
 # tycho execution for quickstart
-tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", package = "tycho-execution", features = ["evm"], rev = "c1d88be3295d9f9959a271795541e7ee4bbcfc4c" }
+tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", package = "tycho-execution", features = ["evm"], rev = "03414532c602d698a27af56b3f66275bfc9ddab2" }
 
 [features]
 default = ["evm", "rfq"]

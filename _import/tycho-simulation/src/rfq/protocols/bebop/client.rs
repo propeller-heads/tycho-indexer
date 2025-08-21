@@ -28,7 +28,9 @@ use crate::{
         client::RFQClient,
         errors::RFQError,
         models::TimestampHeader,
-        protocols::bebop::models::{BebopPriceData, BebopPricingUpdate, BebopQuoteResponse},
+        protocols::bebop::models::{
+            BebopOrderToSign, BebopPriceData, BebopPricingUpdate, BebopQuoteResponse,
+        },
     },
     tycho_client::feed::synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
     tycho_common::dto::{ProtocolComponent, ResponseProtocolState},
@@ -248,7 +250,7 @@ impl RFQClient for BebopClient {
                                                 continue;
                                             }
 
-                                            let pair_str = format!("{}/{}", hex::encode(&base_bytes), hex::encode(&quote_bytes));
+                                            let pair_str = format!("bebop_{}/{}", hex::encode(&base_bytes), hex::encode(&quote_bytes));
                                             let component_id = format!("{}", keccak256(pair_str.as_bytes()));
                                             let component_with_state = client.create_component_with_state(
                                                 component_id.clone(),
@@ -329,8 +331,8 @@ impl RFQClient for BebopClient {
         &self,
         params: &GetAmountOutParams,
     ) -> Result<SignedQuote, RFQError> {
-        let sell_token = bytes_to_address(&params.token_in.address)?.to_string();
-        let buy_token = bytes_to_address(&params.token_out.address)?.to_string();
+        let sell_token = bytes_to_address(&params.token_in)?.to_string();
+        let buy_token = bytes_to_address(&params.token_out)?.to_string();
         let sell_amount = params.amount_in.to_string();
         let sender = bytes_to_address(&params.sender)?.to_string();
         let receiver = bytes_to_address(&params.receiver)?.to_string();
@@ -354,30 +356,28 @@ impl RFQClient for BebopClient {
                 ("expiry_type", "standard".into()),
                 ("fee", "0".into()),
                 ("is_ui", "false".into()),
+                ("source", self.ws_user.clone()),
             ])
             .header("accept", "application/json")
             .header("name", &self.ws_user)
+            .header("source-auth", &self.ws_key)
             .header("Authorization", &self.ws_key);
 
-        let response = request
-            .send()
-            .await
-            .map_err(|e| RFQError::ConnectionError(format!("Failed to send quote request: {e}")))?;
+        let response = request.send().await.map_err(|e| {
+            RFQError::ConnectionError(format!("Failed to send Bebop quote request: {e}"))
+        })?;
 
         let quote_response = response
             .json::<BebopQuoteResponse>()
             .await
-            .map_err(|e| RFQError::ParsingError(format!("Failed to parse quote response: {e}")))?;
+            .map_err(|e| {
+                RFQError::ParsingError(format!("Failed to parse Bebop quote response: {e}"))
+            })?;
 
         match quote_response {
             BebopQuoteResponse::Success(quote) => {
                 let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
-                quote_attributes.insert(
-                    "calldata".into(),
-                    Bytes::from_str(&quote.tx.data).map_err(|_| {
-                        RFQError::ParsingError("Failed to parse quote result's calldata".into())
-                    })?,
-                );
+                quote_attributes.insert("calldata".into(), quote.tx.data);
                 quote_attributes.insert(
                     "partial_fill_offset".into(),
                     Bytes::from(
@@ -387,23 +387,59 @@ impl RFQClient for BebopClient {
                             .to_vec(),
                     ),
                 );
-                let signed_quote = SignedQuote {
-                    base_token: params.token_in.address.clone(),
-                    quote_token: params.token_out.address.clone(),
-                    amount_in: BigUint::from_str(&quote.to_sign.taker_amount).map_err(|_| {
-                        RFQError::ParsingError(format!(
-                            "Failed to parse amount in string: {}",
-                            quote.to_sign.taker_amount
-                        ))
-                    })?,
-                    amount_out: BigUint::from_str(&quote.to_sign.maker_amount).map_err(|_| {
-                        RFQError::ParsingError(format!(
-                            "Failed to parse amount out string: {}",
-                            quote.to_sign.maker_amount
-                        ))
-                    })?,
-                    quote_attributes,
+                let signed_quote = match quote.to_sign {
+                    BebopOrderToSign::Single(ref single) => SignedQuote {
+                        base_token: params.token_in.clone(),
+                        quote_token: params.token_out.clone(),
+                        amount_in: BigUint::from_str(&single.taker_amount).map_err(|_| {
+                            RFQError::ParsingError(format!(
+                                "Failed to parse amount in string: {}",
+                                single.taker_amount
+                            ))
+                        })?,
+                        amount_out: BigUint::from_str(&single.maker_amount).map_err(|_| {
+                            RFQError::ParsingError(format!(
+                                "Failed to parse amount out string: {}",
+                                single.maker_amount
+                            ))
+                        })?,
+                        quote_attributes,
+                    },
+                    BebopOrderToSign::Aggregate(aggregate) => {
+                        let taker_amounts: Vec<BigUint> = aggregate
+                            .taker_amounts
+                            .into_iter()
+                            .flatten()
+                            .map(|amount| {
+                                BigUint::from_str(&amount).map_err(|_| {
+                                    RFQError::ParsingError(format!(
+                                        "Failed to parse amount in string: {amount}",
+                                    ))
+                                })
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        let maker_amounts: Vec<BigUint> = aggregate
+                            .maker_amounts
+                            .into_iter()
+                            .flatten()
+                            .map(|amount| {
+                                BigUint::from_str(&amount).map_err(|_| {
+                                    RFQError::ParsingError(format!(
+                                        "Failed to parse amount in string: {amount}",
+                                    ))
+                                })
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        SignedQuote {
+                            base_token: params.token_in.clone(),
+                            quote_token: params.token_out.clone(),
+                            amount_in: taker_amounts.into_iter().sum(),
+                            amount_out: maker_amounts.into_iter().sum(),
+                            quote_attributes,
+                        }
+                    }
                 };
+
                 Ok(signed_quote)
             }
             BebopQuoteResponse::Error(err) => {
@@ -419,7 +455,6 @@ impl RFQClient for BebopClient {
 #[cfg(test)]
 mod tests {
     use std::{
-        env,
         sync::{Arc, Mutex},
         time::Duration,
     };
@@ -428,9 +463,9 @@ mod tests {
     use futures::SinkExt;
     use tokio::{net::TcpListener, time::timeout};
     use tokio_tungstenite::accept_async;
-    use tycho_common::models::token::Token;
 
     use super::*;
+    use crate::rfq::constants::get_bebop_auth;
 
     #[tokio::test]
     #[ignore] // Requires network access and setting proper env vars
@@ -440,9 +475,8 @@ mod tests {
         let wbtc = Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap();
         let weth = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
 
-        let ws_user = String::from("tycho");
         dotenv().expect("Missing .env file");
-        let ws_key = env::var("BEBOP_KEY").expect("BEBOP_KEY environment variable is required");
+        let auth = get_bebop_auth().expect("Failed to get Bebop authentication");
 
         let quote_tokens = HashSet::from([
             // Use addresses we forgot to checksum (to test checksumming)
@@ -454,8 +488,8 @@ mod tests {
             Chain::Ethereum,
             HashSet::from_iter(vec![weth.clone(), wbtc.clone()]),
             10.0, // $10 minimum TVL
-            ws_user,
-            ws_key,
+            auth.user,
+            auth.key,
             quote_tokens,
         )
         .unwrap();
@@ -682,35 +716,18 @@ mod tests {
 
     #[tokio::test]
     #[ignore] // Requires network access and setting proper env vars
-    async fn test_bebop_quote() {
-        let wbtc = Token {
-            address: Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap(),
-            symbol: "WBTC".to_string(),
-            decimals: 8,
-            tax: 0,
-            gas: vec![],
-            chain: Default::default(),
-            quality: 100,
-        };
-        let weth = Token {
-            address: Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap(),
-            symbol: "WETH".to_string(),
-            decimals: 18,
-            tax: 0,
-            gas: vec![],
-            chain: Default::default(),
-            quality: 100,
-        };
-        let ws_user = String::from("tycho");
+    async fn test_bebop_quote_single_order() {
+        let token_in = Bytes::from_str("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
+        let token_out = Bytes::from_str("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599").unwrap();
         dotenv().expect("Missing .env file");
-        let ws_key = env::var("BEBOP_KEY").expect("BEBOP_KEY environment variable is required");
+        let auth = get_bebop_auth().expect("Failed to get Bebop authentication");
 
         let client = BebopClient::new(
             Chain::Ethereum,
-            HashSet::from_iter(vec![weth.address.clone(), wbtc.address.clone()]),
+            HashSet::from_iter(vec![token_in.clone(), token_out.clone()]),
             10.0, // $10 minimum TVL
-            ws_user,
-            ws_key,
+            auth.user,
+            auth.key,
             HashSet::new(),
         )
         .unwrap();
@@ -719,8 +736,8 @@ mod tests {
 
         let params = GetAmountOutParams {
             amount_in: BigUint::from(1_000000000000000000u64),
-            token_in: weth.clone(),
-            token_out: wbtc.clone(),
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
             sender: router.clone(),
             receiver: router,
         };
@@ -729,21 +746,22 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(quote.base_token, weth.address);
-        assert_eq!(quote.quote_token, wbtc.address);
+        assert_eq!(quote.base_token, token_in);
+        assert_eq!(quote.quote_token, token_out);
         assert_eq!(quote.amount_in, BigUint::from(1_000000000000000000u64));
 
         // Assuming the BTC - WETH price doesn't change too much at the time of running this
         assert!(quote.amount_out > BigUint::from(3000000u64));
 
-        // At least contains the fn signature
-        assert!(
+        // SWAP_SINGLE_SELECTOR = 0x4dcebcba;
+        assert_eq!(
             quote
                 .quote_attributes
                 .get("calldata")
+                .unwrap()[..4],
+            Bytes::from_str("0x4dcebcba")
                 .unwrap()
-                .len() >
-                4
+                .to_vec()
         );
         let partial_fill_offset_slice = quote
             .quote_attributes
@@ -754,5 +772,70 @@ mod tests {
         partial_fill_offset_array.copy_from_slice(partial_fill_offset_slice);
 
         assert_eq!(u64::from_be_bytes(partial_fill_offset_array), 12);
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires network access and setting proper env vars
+    async fn test_bebop_quote_aggregate_order() {
+        // This will make a quote request similar to the previous test but with a very big amount
+        // We expect the Bebop Quote to have an aggregate order (split between different mms)
+        let token_in = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let token_out = Bytes::from_str("0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3").unwrap();
+        dotenv().expect("Missing .env file");
+        let auth = get_bebop_auth().expect("Failed to get Bebop authentication");
+
+        let client = BebopClient::new(
+            Chain::Ethereum,
+            HashSet::from_iter(vec![token_in.clone(), token_out.clone()]),
+            10.0, // $10 minimum TVL
+            auth.user,
+            auth.key,
+            HashSet::new(),
+        )
+        .unwrap();
+
+        let router = Bytes::from_str("0xfD0b31d2E955fA55e3fa641Fe90e08b677188d35").unwrap();
+
+        let amount_in = BigUint::from_str("20_000_000_000").unwrap(); // 20k USDC
+        let params = GetAmountOutParams {
+            amount_in: amount_in.clone(),
+            token_in: token_in.clone(),
+            token_out: token_out.clone(),
+            sender: router.clone(),
+            receiver: router,
+        };
+        let quote = client
+            .request_binding_quote(&params)
+            .await
+            .unwrap();
+
+        assert_eq!(quote.base_token, token_in);
+        assert_eq!(quote.quote_token, token_out);
+        assert_eq!(quote.amount_in, amount_in);
+
+        // Assuming the USDC - ONDO price doesn't change too much at the time of running this
+        assert!(quote.amount_out > BigUint::from_str("18000000000000000000000").unwrap()); // ~19k ONDO
+
+        // SWAP_AGGREGATE_SELECTOR = 0xa2f74893;
+        assert_eq!(
+            quote
+                .quote_attributes
+                .get("calldata")
+                .unwrap()[..4],
+            Bytes::from_str("0xa2f74893")
+                .unwrap()
+                .to_vec()
+        );
+        let partial_fill_offset_slice = quote
+            .quote_attributes
+            .get("partial_fill_offset")
+            .unwrap()
+            .as_ref();
+        let mut partial_fill_offset_array = [0u8; 8];
+        partial_fill_offset_array.copy_from_slice(partial_fill_offset_slice);
+
+        // This is the only attribute that is significantly different for the Single and Aggregate
+        // Order
+        assert_eq!(u64::from_be_bytes(partial_fill_offset_array), 2);
     }
 }
