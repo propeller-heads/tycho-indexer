@@ -1,5 +1,4 @@
-use std::{collections::HashSet, env, str::FromStr};
-use std::sync::Arc;
+use std::{collections::HashSet, env, str::FromStr, sync::Arc};
 
 use alloy::{
     eips::BlockNumberOrTag,
