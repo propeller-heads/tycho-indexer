@@ -107,7 +107,7 @@ mod tests {
 
         let swap_weth_wbtc = Swap {
             component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
+                protocol_system: "uniswap_v4_hooks".to_string(),
                 ..Default::default()
             },
             token_in: weth.clone(),
@@ -120,7 +120,7 @@ mod tests {
         };
         let swap_wbtc_usdc = Swap {
             component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
+                protocol_system: "uniswap_v4_hooks".to_string(),
                 ..Default::default()
             },
             token_in: wbtc.clone(),
@@ -150,7 +150,7 @@ mod tests {
                     swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
                     token_in: weth,
                     token_out: usdc.clone(),
-                    protocol_system: "uniswap_v4".to_string(),
+                    protocol_system: "uniswap_v4_hooks".to_string(),
                     split: 0f64,
                 },
                 SwapGroup {
@@ -181,7 +181,7 @@ mod tests {
 
         let swap_wbtc_weth = Swap {
             component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
+                protocol_system: "uniswap_v4_hooks".to_string(),
                 ..Default::default()
             },
             token_in: wbtc.clone(),
@@ -192,7 +192,7 @@ mod tests {
         };
         let swap_weth_usdc = Swap {
             component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
+                protocol_system: "uniswap_v4_hooks".to_string(),
                 ..Default::default()
             },
             token_in: weth.clone(),
@@ -203,7 +203,7 @@ mod tests {
         };
         let swap_weth_dai = Swap {
             component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
+                protocol_system: "uniswap_v4_hooks".to_string(),
                 ..Default::default()
             },
             token_in: weth.clone(),
@@ -216,7 +216,7 @@ mod tests {
         };
         let swap_dai_usdc = Swap {
             component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
+                protocol_system: "uniswap_v4_hooks".to_string(),
                 ..Default::default()
             },
             token_in: dai.clone(),
@@ -240,21 +240,21 @@ mod tests {
                     swaps: vec![swap_wbtc_weth],
                     token_in: wbtc.clone(),
                     token_out: weth.clone(),
-                    protocol_system: "uniswap_v4".to_string(),
+                    protocol_system: "uniswap_v4_hooks".to_string(),
                     split: 0f64,
                 },
                 SwapGroup {
                     swaps: vec![swap_weth_usdc],
                     token_in: weth.clone(),
                     token_out: usdc.clone(),
-                    protocol_system: "uniswap_v4".to_string(),
+                    protocol_system: "uniswap_v4_hooks".to_string(),
                     split: 0.5f64,
                 },
                 SwapGroup {
                     swaps: vec![swap_weth_dai, swap_dai_usdc],
                     token_in: weth,
                     token_out: usdc,
-                    protocol_system: "uniswap_v4".to_string(),
+                    protocol_system: "uniswap_v4_hooks".to_string(),
                     split: 0f64,
                 }
             ]
@@ -299,7 +299,7 @@ mod tests {
         };
         let swap_weth_dai = Swap {
             component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
+                protocol_system: "uniswap_v4_hooks".to_string(),
                 ..Default::default()
             },
             token_in: weth.clone(),
@@ -312,7 +312,7 @@ mod tests {
         };
         let swap_dai_usdc = Swap {
             component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
+                protocol_system: "uniswap_v4_hooks".to_string(),
                 ..Default::default()
             },
             token_in: dai.clone(),
@@ -344,7 +344,7 @@ mod tests {
                     swaps: vec![swap_weth_dai, swap_dai_usdc],
                     token_in: weth,
                     token_out: usdc,
-                    protocol_system: "uniswap_v4".to_string(),
+                    protocol_system: "uniswap_v4_hooks".to_string(),
                     split: 0f64,
                 }
             ]
