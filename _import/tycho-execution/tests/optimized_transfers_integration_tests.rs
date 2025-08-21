@@ -742,11 +742,6 @@ fn test_hashflow() {
                 Bytes::from_str("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2").unwrap(),
             ),
             (
-                // Passing the tycho router address here has no effect
-                "effective_trader".to_string(),
-                Bytes::from_str("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2").unwrap(),
-            ),
-            (
                 "base_token".to_string(),
                 Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
             ),
@@ -870,11 +865,6 @@ fn test_uniswap_v3_hashflow() {
             ),
             (
                 "trader".to_string(),
-                Bytes::from_str("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2").unwrap(),
-            ),
-            (
-                // Passing the tycho router address here has no effect
-                "effective_trader".to_string(),
                 Bytes::from_str("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2").unwrap(),
             ),
             (

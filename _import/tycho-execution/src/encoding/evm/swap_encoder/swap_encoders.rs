@@ -948,7 +948,6 @@ impl SwapEncoder for HashflowSwapEncoder {
             "pool",
             "external_account",
             "trader",
-            "effective_trader",
             "base_token",
             "quote_token",
             "base_token_amount",
@@ -2256,11 +2255,6 @@ mod tests {
                 ),
                 (
                     "trader".to_string(),
-                    Bytes::from_str("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2").unwrap(),
-                ),
-                (
-                    // Passing the tycho router address here has no effect
-                    "effective_trader".to_string(),
                     Bytes::from_str("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2").unwrap(),
                 ),
                 (

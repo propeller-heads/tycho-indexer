@@ -94,7 +94,7 @@ contract HashflowExecutor is IExecutor, RestrictTransferFrom {
             TransferType transferType
         )
     {
-        if (data.length != 347) {
+        if (data.length != 327) {
             revert HashflowExecutor__InvalidDataLength();
         }
 
@@ -104,16 +104,18 @@ contract HashflowExecutor is IExecutor, RestrictTransferFrom {
         quote.pool = address(bytes20(data[2:22]));
         quote.externalAccount = address(bytes20(data[22:42]));
         quote.trader = address(bytes20(data[42:62]));
-        quote.effectiveTrader = address(bytes20(data[62:82]));
-        quote.baseToken = address(bytes20(data[82:102]));
-        quote.quoteToken = address(bytes20(data[102:122]));
-        quote.effectiveBaseTokenAmount = 0; // Not included in the calldata, set in the swap function
-        quote.baseTokenAmount = uint256(bytes32(data[122:154]));
-        quote.quoteTokenAmount = uint256(bytes32(data[154:186]));
-        quote.quoteExpiry = uint256(bytes32(data[186:218]));
-        quote.nonce = uint256(bytes32(data[218:250]));
-        quote.txid = bytes32(data[250:282]);
-        quote.signature = data[282:347];
+        // Assumes we never set the effectiveTrader when requesting a quote.
+        quote.effectiveTrader = quote.trader;
+        quote.baseToken = address(bytes20(data[62:82]));
+        quote.quoteToken = address(bytes20(data[82:102]));
+        // Not included in the calldata. Will be set in the swap function.
+        quote.effectiveBaseTokenAmount = 0;
+        quote.baseTokenAmount = uint256(bytes32(data[102:134]));
+        quote.quoteTokenAmount = uint256(bytes32(data[134:166]));
+        quote.quoteExpiry = uint256(bytes32(data[166:198]));
+        quote.nonce = uint256(bytes32(data[198:230]));
+        quote.txid = bytes32(data[230:262]);
+        quote.signature = data[262:327];
     }
 
     function _balanceOf(address trader, address token)
