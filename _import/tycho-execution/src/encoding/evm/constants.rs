@@ -12,6 +12,7 @@ pub const PROTOCOL_SPECIFIC_CONFIG: &str =
 /// transfers.
 pub static GROUPABLE_PROTOCOLS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     let mut set = HashSet::new();
+    set.insert("uniswap_v4");
     set.insert("uniswap_v4_hooks");
     set.insert("vm:balancer_v3");
     set.insert("ekubo_v2");
@@ -28,6 +29,7 @@ pub static IN_TRANSFER_REQUIRED_PROTOCOLS: LazyLock<HashSet<&'static str>> = Laz
     set.insert("pancakeswap_v2");
     set.insert("uniswap_v3");
     set.insert("pancakeswap_v3");
+    set.insert("uniswap_v4");
     set.insert("uniswap_v4_hooks");
     set.insert("ekubo_v2");
     set.insert("vm:maverick_v2");
@@ -45,7 +47,7 @@ pub static CALLBACK_CONSTRAINED_PROTOCOLS: LazyLock<HashSet<&'static str>> = Laz
     let mut set = HashSet::new();
     set.insert("uniswap_v3");
     set.insert("pancakeswap_v3");
-    set.insert("uniswap_v4_hooks");
+    set.insert("uniswap_v4");
     set.insert("ekubo_v2");
     set.insert("vm:balancer_v3");
     set

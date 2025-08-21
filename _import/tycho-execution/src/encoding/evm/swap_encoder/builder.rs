@@ -67,6 +67,11 @@ impl SwapEncoderBuilder {
                 self.chain,
                 self.config,
             )?)),
+            "uniswap_v4" => Ok(Box::new(UniswapV4SwapEncoder::new(
+                self.executor_address,
+                self.chain,
+                self.config,
+            )?)),
             "uniswap_v4_hooks" => Ok(Box::new(UniswapV4SwapEncoder::new(
                 self.executor_address,
                 self.chain,

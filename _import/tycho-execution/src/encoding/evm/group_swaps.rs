@@ -106,14 +106,20 @@ mod tests {
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
         let swap_weth_wbtc = SwapBuilder::new(
-            ProtocolComponent { protocol_system: "uniswap_v4_hooks".to_string(), ..Default::default() },
+            ProtocolComponent {
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
             weth.clone(),
             wbtc.clone(),
         )
         .build();
 
         let swap_wbtc_usdc = SwapBuilder::new(
-            ProtocolComponent { protocol_system: "uniswap_v4_hooks".to_string(), ..Default::default() },
+            ProtocolComponent {
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
             wbtc.clone(),
             usdc.clone(),
         )
@@ -135,7 +141,7 @@ mod tests {
                     swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
                     token_in: weth,
                     token_out: usdc.clone(),
-                    protocol_system: "uniswap_v4_hooks".to_string(),
+                    protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
                 },
                 SwapGroup {
@@ -165,20 +171,29 @@ mod tests {
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
         let swap_wbtc_weth = SwapBuilder::new(
-            ProtocolComponent { protocol_system: "uniswap_v4_hooks".to_string(), ..Default::default() },
+            ProtocolComponent {
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
             wbtc.clone(),
             weth.clone(),
         )
         .build();
         let swap_weth_usdc = SwapBuilder::new(
-            ProtocolComponent { protocol_system: "uniswap_v4_hooks".to_string(), ..Default::default() },
+            ProtocolComponent {
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
             weth.clone(),
             usdc.clone(),
         )
         .split(0.5f64)
         .build();
         let swap_weth_dai = SwapBuilder::new(
-            ProtocolComponent { protocol_system: "uniswap_v4_hooks".to_string(), ..Default::default() },
+            ProtocolComponent {
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
             weth.clone(),
             dai.clone(),
         )
@@ -187,7 +202,10 @@ mod tests {
         // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
 
         let swap_dai_usdc = SwapBuilder::new(
-            ProtocolComponent { protocol_system: "uniswap_v4_hooks".to_string(), ..Default::default() },
+            ProtocolComponent {
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
             dai.clone(),
             usdc.clone(),
         )
@@ -207,21 +225,21 @@ mod tests {
                     swaps: vec![swap_wbtc_weth],
                     token_in: wbtc.clone(),
                     token_out: weth.clone(),
-                    protocol_system: "uniswap_v4_hooks".to_string(),
+                    protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
                 },
                 SwapGroup {
                     swaps: vec![swap_weth_usdc],
                     token_in: weth.clone(),
                     token_out: usdc.clone(),
-                    protocol_system: "uniswap_v4_hooks".to_string(),
+                    protocol_system: "uniswap_v4".to_string(),
                     split: 0.5f64,
                 },
                 SwapGroup {
                     swaps: vec![swap_weth_dai, swap_dai_usdc],
                     token_in: weth,
                     token_out: usdc,
-                    protocol_system: "uniswap_v4_hooks".to_string(),
+                    protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
                 }
             ]
@@ -263,13 +281,19 @@ mod tests {
         )
         .build();
         let swap_weth_dai = SwapBuilder::new(
-            ProtocolComponent { protocol_system: "uniswap_v4_hooks".to_string(), ..Default::default() },
+            ProtocolComponent {
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
             weth.clone(),
             dai.clone(),
         )
         .build();
         let swap_dai_usdc = SwapBuilder::new(
-            ProtocolComponent { protocol_system: "uniswap_v4_hooks".to_string(), ..Default::default() },
+            ProtocolComponent {
+                protocol_system: "uniswap_v4".to_string(),
+                ..Default::default()
+            },
             dai.clone(),
             usdc.clone(),
         )
@@ -297,7 +321,7 @@ mod tests {
                     swaps: vec![swap_weth_dai, swap_dai_usdc],
                     token_in: weth,
                     token_out: usdc,
-                    protocol_system: "uniswap_v4_hooks".to_string(),
+                    protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
                 }
             ]

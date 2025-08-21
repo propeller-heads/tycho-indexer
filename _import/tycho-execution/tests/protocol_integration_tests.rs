@@ -156,7 +156,7 @@ fn test_single_encoding_strategy_usv4_eth_in() {
     let swap_eth_pepe = Swap {
         component: ProtocolComponent {
             id: "0xecd73ecbf77219f21f129c8836d5d686bbc27d264742ddad620500e3e548e2c9".to_string(),
-            protocol_system: "uniswap_v4_hooks".to_string(),
+            protocol_system: "uniswap_v4".to_string(),
             static_attributes: static_attributes_eth_pepe,
             ..Default::default()
         },
@@ -224,7 +224,7 @@ fn test_single_encoding_strategy_usv4_eth_out() {
     let swap_usdc_eth = Swap {
         component: ProtocolComponent {
             id: "0xdce6394339af00981949f5f3baf27e3610c76326a700af57e4b3e3ae4977f78d".to_string(),
-            protocol_system: "uniswap_v4_hooks".to_string(),
+            protocol_system: "uniswap_v4".to_string(),
             static_attributes: static_attributes_usdc_eth,
             ..Default::default()
         },
@@ -300,7 +300,7 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
     let swap_usdc_eth = Swap {
         component: ProtocolComponent {
             id: "0xdce6394339af00981949f5f3baf27e3610c76326a700af57e4b3e3ae4977f78d".to_string(),
-            protocol_system: "uniswap_v4_hooks".to_string(),
+            protocol_system: "uniswap_v4".to_string(),
             static_attributes: static_attributes_usdc_eth,
             ..Default::default()
         },
@@ -315,7 +315,7 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
     let swap_eth_pepe = Swap {
         component: ProtocolComponent {
             id: "0xecd73ecbf77219f21f129c8836d5d686bbc27d264742ddad620500e3e548e2c9".to_string(),
-            protocol_system: "uniswap_v4_hooks".to_string(),
+            protocol_system: "uniswap_v4".to_string(),
             static_attributes: static_attributes_eth_pepe,
             ..Default::default()
         },
