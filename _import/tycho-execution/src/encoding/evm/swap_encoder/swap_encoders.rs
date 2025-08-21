@@ -731,7 +731,7 @@ impl SwapEncoder for BebopSwapEncoder {
         };
 
         let (partial_fill_offset, original_filled_taker_amount, bebop_calldata) =
-            if let Some(state) = swap.protocol_state {
+            if let Some(state) = &swap.protocol_state {
                 let indicatively_priced_state = state
                     .as_indicatively_priced()
                     .map_err(|e| {
@@ -2137,7 +2137,7 @@ mod tests {
 
             let swap = SwapBuilder::new(bebop_component, token_in.clone(), token_out.clone())
                 .estimated_amount_in(BigUint::from_str("3000000000").unwrap())
-                .protocol_state(&bebop_state)
+                .protocol_state(Arc::new(bebop_state))
                 .build();
 
             let encoding_context = EncodingContext {
@@ -2304,7 +2304,7 @@ mod tests {
 
             let swap = SwapBuilder::new(hashflow_component, token_in.clone(), token_out.clone())
                 .estimated_amount_in(BigUint::from_str("3000000000").unwrap())
-                .protocol_state(&hashflow_state)
+                .protocol_state(Arc::new(hashflow_state))
                 .build();
 
             let encoding_context = EncodingContext {
