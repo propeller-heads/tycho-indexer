@@ -1,3 +1,12 @@
+## [0.150.2](https://github.com/propeller-heads/tycho-simulation/compare/0.150.1...0.150.2) (2025-08-21)
+
+
+### Bug Fixes
+
+* Don't show green check if simulation failed ([0ffab6b](https://github.com/propeller-heads/tycho-simulation/commit/0ffab6b44eef6b2d52d86f0e8258c7fcb4d3b0b1))
+* Fast-forward to latest message in quickstart ([b4bd5da](https://github.com/propeller-heads/tycho-simulation/commit/b4bd5dad3a5cc7a8134fd4fbd2d23a5ba487f6c9))
+* Revert message fast-forwarding in normal quickstart ([6842dfd](https://github.com/propeller-heads/tycho-simulation/commit/6842dfd198fc08ae24cb5b84a959f56dc5b23d3c))
+
 ## [0.150.1](https://github.com/propeller-heads/tycho-simulation/compare/0.150.0...0.150.1) (2025-08-21)
 
 

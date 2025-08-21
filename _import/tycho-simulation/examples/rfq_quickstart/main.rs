@@ -178,6 +178,31 @@ async fn main() {
 
     // Stream quotes from RFQ stream
     while let Some(update) = rx.recv().await {
+        // Drain any additional buffered messages to get the most recent one
+        //
+        // ⚠️Warning: This works fine only if you assume that this message is entirely
+        // representative of the current state, as done in this quickstart.
+        // You should comment out this code portion if you would like to manually track removed
+        // components.
+        let mut latest_update = update;
+        let mut drained_count = 0;
+        while let Ok(newer_update) =
+            tokio::time::timeout(std::time::Duration::from_millis(10), rx.recv()).await
+        {
+            if let Some(newer_update) = newer_update {
+                latest_update = newer_update;
+                drained_count += 1;
+            } else {
+                break;
+            }
+        }
+        if drained_count > 0 {
+            println!(
+                "Fast-forwarded through {drained_count} older RFQ updates to get latest prices"
+            );
+        }
+        let update = latest_update;
+
         println!(
             "Received RFQ price levels with {} new pairs for block/timestamp {}",
             &update.states.len(),
@@ -408,6 +433,7 @@ async fn main() {
                                     .await
                                 {
                                     Ok(output) => {
+                                        let mut all_successful = true;
                                         for block in output.iter() {
                                             println!(
                                                 "\nSimulated Block {block_num}:",
@@ -419,14 +445,23 @@ async fn main() {
                                                     status = transaction.status,
                                                     gas_used = transaction.gas_used
                                                 );
+                                                if !transaction.status {
+                                                    all_successful = false;
+                                                }
                                             }
                                         }
-                                        println!("\n✅ Simulation successful!");
+
+                                        if all_successful {
+                                            println!("\n✅ Simulation successful!");
+                                        } else {
+                                            println!("\n❌ Simulation failed! One or more transactions reverted.");
+                                            println!("Consider adjusting parameters and re-simulating before execution.");
+                                        }
                                         println!();
                                         continue;
                                     }
                                     Err(e) => {
-                                        eprintln!("\nSimulation failed: {e:?}");
+                                        eprintln!("\n❌ Simulation failed: {e:?}");
                                         println!("Your RPC provider does not support transaction simulation. Consider proceeding with execution instead or switching RPC provider.");
                                     }
                                 }
