@@ -68,7 +68,6 @@ struct Cli {
     /// The tvl threshold to filter the graph by
     #[arg(long, default_value_t = 100.0)]
     tvl_threshold: f64,
-
     #[arg(long, default_value = "ethereum")]
     chain: Chain,
 }
@@ -599,7 +598,7 @@ fn create_solution(
     sell_amount: BigUint,
     user_address: Bytes,
     expected_amount: BigUint,
-) -> Solution<'static> {
+) -> Solution {
     // Prepare data to encode. First we need to create a swap object
     let simple_swap =
         SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone()).build();

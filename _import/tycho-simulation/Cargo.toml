@@ -97,7 +97,7 @@ unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
 
 # tycho execution for quickstart
-tycho-execution = "0.116.0"
+tycho-execution = "0.118.0"
 
 [features]
 default = ["evm", "rfq"]
