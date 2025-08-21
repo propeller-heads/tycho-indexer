@@ -1,3 +1,17 @@
+## [0.117.0](https://github.com/propeller-heads/tycho-execution/compare/0.116.0...0.117.0) (2025-08-21)
+
+
+### Features
+
+* implement `SwapEncoder` for `Hashflow` ([93db953](https://github.com/propeller-heads/tycho-execution/commit/93db953c620f4d52e8852ff8148f2dfdbc580029))
+
+
+### Bug Fixes
+
+* in bebop's encode_swap, fail early if router address is not present ([c013bf7](https://github.com/propeller-heads/tycho-execution/commit/c013bf707225b171e76f3f3dac88624b6a3458dc))
+* in hashflow's encode_swap, fail early if router address is not present ([c506f2c](https://github.com/propeller-heads/tycho-execution/commit/c506f2c048a20d1ffd066d2903d2cc469fd167ed))
+* in HashflowExecutor, _balanceOf must use `trader` address instead of the executor's to get the balance ([a09d648](https://github.com/propeller-heads/tycho-execution/commit/a09d648f3c50f87b392c7c5eb14af07307c5ccea))
+
 ## [0.116.0](https://github.com/propeller-heads/tycho-execution/compare/0.115.0...0.116.0) (2025-08-19)
 
 
