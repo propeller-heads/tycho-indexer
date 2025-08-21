@@ -162,6 +162,23 @@ impl TickList {
         }
     }
 
+    pub(crate) fn has_initialized_ticks(&self) -> bool {
+        // If the tick list is empty, there are no initialized ticks
+        if self.ticks.is_empty() {
+            return false;
+        }
+
+        // Check if any ticks have non-zero net liquidity (are initialized)
+        for tick_info in &self.ticks {
+            if tick_info.net_liquidity != 0 {
+                return true;
+            }
+        }
+
+        // All ticks have zero net liquidity, so no initialized ticks
+        false
+    }
+
     fn next_initialized_tick(&self, index: i32, lte: bool) -> Result<&TickInfo, TickListError> {
         if lte {
             if self.is_below_smallest(index) {
