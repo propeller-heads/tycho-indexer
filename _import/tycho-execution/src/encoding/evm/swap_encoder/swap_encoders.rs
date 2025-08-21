@@ -2304,7 +2304,7 @@ mod tests {
 
             let swap = SwapBuilder::new(hashflow_component, token_in.clone(), token_out.clone())
                 .estimated_amount_in(BigUint::from_str("3000000000").unwrap())
-                .protocol_state(&hashflow_state)
+                .protocol_state(Arc::new(hashflow_state))
                 .build();
 
             let encoding_context = EncodingContext {

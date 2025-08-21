@@ -1,5 +1,5 @@
 mod common;
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use alloy::{hex, hex::encode};
 use num_bigint::{BigInt, BigUint};
@@ -785,7 +785,7 @@ fn test_single_encoding_strategy_hashflow() {
 
     let swap_usdc_wbtc = SwapBuilder::new(hashflow_component, usdc.clone(), wbtc.clone())
         .estimated_amount_in(BigUint::from_str("4308094737").unwrap())
-        .protocol_state(&hashflow_state)
+        .protocol_state(Arc::new(hashflow_state))
         .build();
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
