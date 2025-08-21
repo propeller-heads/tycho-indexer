@@ -432,6 +432,13 @@ impl RFQClient for HashflowClient {
                     quote_attributes.insert("pool".to_string(), quote.quote_data.pool);
                     if let Some(external_account) = quote.quote_data.external_account {
                         quote_attributes.insert("external_account".to_string(), external_account);
+                    } else {
+                        quote_attributes.insert(
+                            "external_account".to_string(),
+                            Bytes::from_str(&Address::ZERO.to_string()).map_err(|_| {
+                                RFQError::ParsingError("Failed to parse zero address".to_string())
+                            })?,
+                        );
                     }
                     quote_attributes.insert("trader".to_string(), quote.quote_data.trader);
                     quote_attributes.insert("base_token".to_string(), quote.quote_data.base_token);
