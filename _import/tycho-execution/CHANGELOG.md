@@ -1,3 +1,15 @@
+## [0.118.0](https://github.com/propeller-heads/tycho-execution/compare/0.117.0...0.118.0) (2025-08-21)
+
+
+### Features
+
+* Use Arc instead of & for protocol_state in Swap ([a2a5319](https://github.com/propeller-heads/tycho-execution/commit/a2a53195edbc631bea8fbc758a3bf5ee33a87dda))
+
+
+### Bug Fixes
+
+* Updates to new datatype after merging main ([e9c1a39](https://github.com/propeller-heads/tycho-execution/commit/e9c1a39608bba786bbed2b53c4596e94ddcbe03c))
+
 ## [0.117.0](https://github.com/propeller-heads/tycho-execution/compare/0.116.0...0.117.0) (2025-08-21)
 
 
