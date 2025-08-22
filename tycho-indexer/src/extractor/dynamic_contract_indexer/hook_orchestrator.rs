@@ -55,7 +55,62 @@ pub trait HookOrchestrator: Send + Sync {
 }
 
 pub struct HookOrchestratorRegistry {
-    pub hooks: HashMap<Address, Box<dyn HookOrchestrator>>,
+    hooks: HashMap<Address, Box<dyn HookOrchestrator>>,
+    hook_identifiers: HashMap<String, Box<dyn HookOrchestrator>>,
+}
+
+impl HookOrchestratorRegistry {
+    pub fn new() -> Self {
+        Self { hooks: HashMap::new(), hook_identifiers: HashMap::new() }
+    }
+
+    #[allow(dead_code)]
+    pub fn register_hook_orchestrator(
+        &mut self,
+        hook_address: Address,
+        orchestrator: Box<dyn HookOrchestrator>,
+    ) {
+        self.hooks
+            .insert(hook_address, orchestrator);
+    }
+
+    pub fn register_hook_identifier(
+        &mut self,
+        hook_identifier: String,
+        orchestrator: Box<dyn HookOrchestrator>,
+    ) {
+        self.hook_identifiers
+            .insert(hook_identifier, orchestrator);
+    }
+
+    pub fn get_orchestrator_for_component(
+        &self,
+        component: &ProtocolComponent,
+    ) -> Option<&dyn HookOrchestrator> {
+        let hook_address = component
+            .static_attributes
+            .get("hooks")?;
+
+        // Priority: hook address first, then hook identifier
+        match self.hooks.get(hook_address) {
+            Some(orchestrator) => Some(orchestrator.as_ref()),
+            None => {
+                // Try hook identifier if available
+                if let Some(hook_identifier_bytes) = component
+                    .static_attributes
+                    .get("hook_identifier")
+                {
+                    if let Ok(identifier) = String::from_utf8(hook_identifier_bytes.to_vec()) {
+                        return self
+                            .hook_identifiers
+                            .get(&identifier)
+                            .map(|o| o.as_ref());
+                    }
+                }
+                None
+            }
+        }
+    }
 }
 
 pub struct DefaultUniswapV4HookOrchestrator {
