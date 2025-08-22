@@ -1,9 +1,8 @@
 #![allow(dead_code)] // TODO: Remove this once the setup is fully implemented
 
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use serde::Deserialize;
-use tracing::info;
 use tycho_common::{
     models::{Address, Chain},
     storage::{EntryPointGateway, ProtocolGateway},
@@ -31,12 +30,6 @@ struct EulerHooks {
     pool_addresses: Vec<String>,
 }
 
-fn load_euler_hooks() -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    let json_content = include_str!("assets/euler_hooks.json");
-    let euler_hooks: EulerHooks = serde_json::from_str(json_content)?;
-    Ok(euler_hooks.pool_addresses)
-}
-
 /// Sets up all necessary registries for Hooks DCI testing with Euler support
 pub fn setup_metadata_registries(
     rpc_url: String,
@@ -45,18 +38,11 @@ pub fn setup_metadata_registries(
     let mut parser_registry = MetadataResponseParserRegistry::new();
     let mut provider_registry = ProviderRegistry::new();
 
-    // Load Euler hook addresses from JSON file
-    let hook_addresses = load_euler_hooks().expect("Failed to load Euler hooks from JSON");
-    info!("Loaded {} hooks from JSON", hook_addresses.len());
-
     // Register Euler metadata generator for all hook addresses
-    for hook_address_str in hook_addresses {
-        let hook_address = Address::from(hook_address_str.as_str());
-        generator_registry.register_hook_generator(
-            hook_address,
-            Box::new(EulerMetadataGenerator::new(rpc_url.clone())),
-        );
-    }
+    generator_registry.register_hook_identifier(
+        "euler_v1".to_string(),
+        Box::new(EulerMetadataGenerator::new(rpc_url.clone())),
+    );
 
     // Register Euler response parser
     parser_registry.register_parser("euler".to_string(), Box::new(EulerMetadataResponseParser));
@@ -75,38 +61,28 @@ pub fn setup_hook_orchestrator_registry(
     router_address: Address,
     pool_manager: Address,
 ) -> HookOrchestratorRegistry {
-    let mut hook_registry = HookOrchestratorRegistry { hooks: HashMap::new() };
+    let mut hook_registry = HookOrchestratorRegistry::new();
 
-    // Load Euler hook addresses from JSON file
-    let hook_addresses = load_euler_hooks().expect("Failed to load Euler hooks from JSON");
+    // Create hook entrypoint configuration for Euler V1
+    let config = HookEntrypointConfig {
+        max_sample_size: Some(10), // Reasonable default for testing
+        min_samples: 1,
+        router_address: Some(router_address.clone()),
+        sender: Some(router_address.clone()), // Use router as sender for testing
+        router_code: None,                    // Use default V4MiniRouter bytecode
+        pool_manager: pool_manager.clone(),
+    };
 
-    // Register separate orchestrator instances for each Euler hook address
-    for hook_address_str in hook_addresses {
-        let hook_address = Address::from(hook_address_str.as_str());
+    // Create entrypoint generator with default swap amount estimator (preferring balances)
+    let mut entrypoint_generator = UniswapV4DefaultHookEntrypointGenerator::new(
+        DefaultSwapAmountEstimator::with_balances(),
+        pool_manager.clone(),
+    );
+    entrypoint_generator.set_config(config);
 
-        // Create hook entrypoint configuration for this hook
-        let config = HookEntrypointConfig {
-            max_sample_size: Some(10), // Reasonable default for testing
-            min_samples: 1,
-            router_address: Some(router_address.clone()),
-            sender: Some(router_address.clone()), // Use router as sender for testing
-            router_code: None,                    // Use default V4MiniRouter bytecode
-            pool_manager: pool_manager.clone(),
-        };
+    let orchestrator = DefaultUniswapV4HookOrchestrator::new(entrypoint_generator);
 
-        // Create entrypoint generator with default swap amount estimator (preferring balances)
-        let mut entrypoint_generator = UniswapV4DefaultHookEntrypointGenerator::new(
-            DefaultSwapAmountEstimator::with_balances(),
-            pool_manager.clone(),
-        );
-        entrypoint_generator.set_config(config);
-
-        let orchestrator = DefaultUniswapV4HookOrchestrator::new(entrypoint_generator);
-
-        hook_registry
-            .hooks
-            .insert(hook_address, Box::new(orchestrator));
-    }
+    hook_registry.register_hook_identifier("euler_v1".to_string(), Box::new(orchestrator));
 
     hook_registry
 }
@@ -154,16 +130,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_euler_hook_addresses_parsing() {
-        // Test that all addresses from JSON can be parsed
-        let hook_addresses = load_euler_hooks().expect("Failed to load Euler hooks from JSON");
-        for hook_address_str in hook_addresses {
-            let address = Address::from(hook_address_str.as_str());
-            assert!(!address.is_zero(), "Hook address should not be zero: {hook_address_str}");
-        }
-    }
 
     #[test]
     fn test_setup_metadata_registries() {

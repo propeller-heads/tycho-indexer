@@ -389,6 +389,12 @@ pub struct MetadataGeneratorRegistry {
     /// how to create metadata requests for components using that hook.
     hook_generators: HashMap<Address, Box<dyn MetadataRequestGenerator>>,
 
+    /// Maps hook identifiers to their specific generator instances.
+    ///
+    /// Each hook identifier corresponds to a protocol-specific generator that understands
+    /// how to create metadata requests for components using that hook identifier.
+    hook_identifiers: HashMap<String, Box<dyn MetadataRequestGenerator>>,
+
     /// Fallback generator for components without specific hook mappings.
     ///
     /// This ensures that all components can have metadata generated, even if they
@@ -405,7 +411,11 @@ impl Default for MetadataGeneratorRegistry {
 
 impl MetadataGeneratorRegistry {
     pub fn new() -> Self {
-        Self { hook_generators: HashMap::new(), default_generator: None }
+        Self {
+            hook_generators: HashMap::new(),
+            hook_identifiers: HashMap::new(),
+            default_generator: None,
+        }
     }
 
     pub fn register_hook_generator(
@@ -417,6 +427,15 @@ impl MetadataGeneratorRegistry {
             .insert(hook_address, generator);
     }
 
+    pub fn register_hook_identifier(
+        &mut self,
+        hook_identifier: String,
+        generator: Box<dyn MetadataRequestGenerator>,
+    ) {
+        self.hook_identifiers
+            .insert(hook_identifier, generator);
+    }
+
     pub fn set_default_generator(&mut self, generator: Option<Box<dyn MetadataRequestGenerator>>) {
         self.default_generator = generator;
     }
@@ -424,7 +443,8 @@ impl MetadataGeneratorRegistry {
     /// Retrieves the appropriate metadata generator for a given component.
     ///
     /// This method implements the lookup logic, first checking for a hook-specific
-    /// generator, then falling back to the default generator if available.
+    /// generator, then falling back to the hook identifier generator, then falling back to the
+    /// default generator if available.
     ///
     /// # Arguments
     ///
@@ -456,17 +476,33 @@ impl MetadataGeneratorRegistry {
         &self,
         component: &ProtocolComponent,
     ) -> Result<Option<&dyn MetadataRequestGenerator>, MetadataError> {
-        if let Some(hook_address) = component.static_attributes.get("hooks") {
-            Ok(self
-                .hook_generators
-                .get(hook_address)
-                .map(|boxed_generator| boxed_generator.as_ref())
-                .or(self
-                    .default_generator
-                    .as_ref()
-                    .map(|boxed_generator| boxed_generator.as_ref())))
-        } else {
-            Err(MetadataError::MissingData("hooks".to_string(), component.id.clone()))
+        let hook_address = component
+            .static_attributes
+            .get("hooks")
+            .ok_or_else(|| MetadataError::MissingData("hooks".to_string(), component.id.clone()))?;
+
+        // Priority: address > identifier > default
+        match self.hook_generators.get(hook_address) {
+            // Found generator by address (highest priority)
+            Some(generator) => Ok(Some(generator.as_ref())),
+            // No address match, try identifier if available
+            None => match component
+                .static_attributes
+                .get("hook_identifier")
+            {
+                Some(hook_identifier_bytes) => {
+                    let identifier =
+                        String::from_utf8(hook_identifier_bytes.to_vec()).map_err(|_| {
+                            MetadataError::UnknownError("Invalid hook identifier".to_string())
+                        })?;
+                    match self.hook_identifiers.get(&identifier) {
+                        Some(generator) => Ok(Some(generator.as_ref())),
+                        None => Ok(self.default_generator.as_deref()),
+                    }
+                }
+                // No identifier, use default
+                None => Ok(self.default_generator.as_deref()),
+            },
         }
     }
 }
