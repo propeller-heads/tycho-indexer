@@ -34,7 +34,10 @@ use tycho_simulation::{
     evm::protocol::u256_num::biguint_to_u256,
     protocol::models::{ProtocolComponent, Update},
     rfq::{
-        protocols::bebop::{client_builder::BebopClientBuilder, state::BebopState},
+        protocols::{
+            bebop::{client_builder::BebopClientBuilder, state::BebopState},
+            hashflow::{client::HashflowClient, state::HashflowState},
+        },
         stream::RFQStreamBuilder,
     },
     tycho_common::models::Chain,
@@ -105,10 +108,14 @@ async fn main() {
         env::var("TYCHO_API_KEY").unwrap_or_else(|_| "sampletoken".to_string());
 
     // Get credentials for any RFQ(s) we are using
-    let bebop_user = env::var("BEBOP_USER")
-        .expect("BEBOP_USER environment variable is required. Contact Bebop for credentials.");
-    let bebop_key = env::var("BEBOP_KEY")
-        .expect("BEBOP_KEY environment variable is required. Contact Bebop for credentials.");
+    let (bebop_user, bebop_key) = (env::var("BEBOP_USER").ok(), env::var("BEBOP_KEY").ok());
+    let (hashflow_user, hashflow_key) =
+        (env::var("HASHFLOW_USER").ok(), env::var("HASHFLOW_KEY").ok());
+    if (bebop_user.is_none() || bebop_key.is_none()) &&
+        (hashflow_user.is_none() || hashflow_key.is_none())
+    {
+        panic!("No RFQ credentials found. Please set BEBOP_USER and BEBOP_KEY or HASHFLOW_USER and HASHFLOW_KEY environment variables.");
+    }
 
     println!("Loading tokens from Tycho... {url}", url = tycho_url.as_str());
     let all_tokens =
@@ -157,24 +164,39 @@ async fn main() {
     rfq_tokens.insert(sell_token_address.clone());
     rfq_tokens.insert(buy_token_address.clone());
 
-    println!("Connecting to RFQ WebSocket...");
-    let bebop_client = BebopClientBuilder::new(chain, bebop_user, bebop_key)
-        .tokens(rfq_tokens)
-        .tvl_threshold(cli.tvl_threshold)
-        .build()
-        .expect("Failed to create RFQ clients");
-
-    let (tx, mut rx) = mpsc::channel::<Update>(100);
-
-    let rfq_stream_builder = RFQStreamBuilder::new()
-        .add_client::<BebopState>("bebop", Box::new(bebop_client))
+    let mut rfq_stream_builder = RFQStreamBuilder::new()
         .set_tokens(all_tokens.clone())
         .await;
-
-    println!("Connected to RFQs! Streaming live price levels...\n");
+    if let (Some(user), Some(key)) = (bebop_user, bebop_key) {
+        println!("Setting up Bebop RFQ client...\n");
+        let bebop_client = BebopClientBuilder::new(chain, user, key)
+            .tokens(rfq_tokens.clone())
+            .tvl_threshold(cli.tvl_threshold)
+            .build()
+            .expect("Failed to create Bebop RFQ client");
+        rfq_stream_builder =
+            rfq_stream_builder.add_client::<BebopState>("bebop", Box::new(bebop_client))
+    }
+    if let (Some(user), Some(key)) = (hashflow_user, hashflow_key) {
+        println!("Setting up Hashflow RFQ client...\n");
+        let hashflow_client = HashflowClient::new(
+            chain,
+            rfq_tokens,
+            cli.tvl_threshold,
+            [sell_token_address.clone()].into(),
+            user,
+            key,
+            5u64,
+        )
+        .expect("Failed to create Hashflow RFQ client");
+        rfq_stream_builder =
+            rfq_stream_builder.add_client::<HashflowState>("hashflow", Box::new(hashflow_client))
+    }
 
     // Start the RFQ stream in a background task
+    let (tx, mut rx) = mpsc::channel::<Update>(100);
     tokio::spawn(rfq_stream_builder.build(tx));
+    println!("Connected to RFQs! Streaming live price levels...\n");
 
     // Stream quotes from RFQ stream
     while let Some(update) = rx.recv().await {
