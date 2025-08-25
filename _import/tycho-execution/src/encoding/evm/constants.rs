@@ -48,6 +48,7 @@ pub static CALLBACK_CONSTRAINED_PROTOCOLS: LazyLock<HashSet<&'static str>> = Laz
     set.insert("uniswap_v3");
     set.insert("pancakeswap_v3");
     set.insert("uniswap_v4");
+    set.insert("uniswap_v4_hooks");
     set.insert("ekubo_v2");
     set.insert("vm:balancer_v3");
     set
