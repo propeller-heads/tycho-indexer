@@ -1,12 +1,14 @@
 #![allow(unused_variables)] // TODO: Remove this
 #![allow(dead_code)] // TODO: Remove this
 
-use std::collections::HashMap;
+use std::{collections::HashMap, slice};
 
 use tonic::async_trait;
 use tracing::{debug, error, info, instrument, span, warn, Level};
+#[cfg(test)]
+use tycho_common::models::Address;
 use tycho_common::{
-    models::{protocol::ProtocolComponent, Address, BlockHash, Chain, ComponentId, TxHash},
+    models::{protocol::ProtocolComponent, BlockHash, Chain, ComponentId, TxHash},
     storage::{EntryPointFilter, EntryPointGateway, ProtocolGateway},
     traits::{AccountExtractor, EntryPointTracer},
 };
@@ -699,11 +701,7 @@ where
         self.process_metadata_errors(&component_metadata, &block_changes.block)?;
 
         // 4. Group components by hook address and separate by processing needs
-        let (
-            components_by_hook_full_processing,
-            components_by_hook_balance_only,
-            metadata_by_component_id,
-        ) = {
+        let (components_full_processing, components_balance_only, metadata_by_component_id) = {
             let _span = span!(
                 Level::INFO,
                 "group_components_by_hook",
@@ -711,10 +709,8 @@ where
             )
             .entered();
 
-            let mut components_by_hook_full_processing: HashMap<Address, Vec<ProtocolComponent>> =
-                HashMap::new();
-            let mut components_by_hook_balance_only: HashMap<Address, Vec<ProtocolComponent>> =
-                HashMap::new();
+            let mut components_full_processing: Vec<ProtocolComponent> = Vec::new();
+            let mut components_balance_only: Vec<ProtocolComponent> = Vec::new();
             let mut metadata_by_component_id: HashMap<ComponentId, _> = HashMap::new();
 
             // Create lookup sets for quick component categorization
@@ -730,52 +726,43 @@ where
                 if let Some(hook_address) = component.static_attributes.get("hooks") {
                     if full_processing_ids.contains(&component.id) {
                         // Component needs full processing (entrypoint generation)
-                        components_by_hook_full_processing
-                            .entry(hook_address.clone())
-                            .or_default()
-                            .push(component);
+                        components_full_processing.push(component);
                     } else {
                         // Component only needs balance updates
-                        components_by_hook_balance_only
-                            .entry(hook_address.clone())
-                            .or_default()
-                            .push(component);
+                        components_balance_only.push(component);
                     }
                 }
             }
 
-            (
-                components_by_hook_full_processing,
-                components_by_hook_balance_only,
-                metadata_by_component_id,
-            )
+            (components_full_processing, components_balance_only, metadata_by_component_id)
         };
 
         // 5a. Call appropriate hook orchestrator for components needing full processing (entrypoint
         // generation)
         info!(
-            full_processing_hook_groups = components_by_hook_full_processing.len(),
-            balance_only_hook_groups = components_by_hook_balance_only.len(),
-            "Processing components by hook orchestrator"
+            full_processing_components = components_full_processing.len(),
+            balance_only_components = components_balance_only.len(),
+            "Processing components"
         );
 
-        for (hook_address, components) in &components_by_hook_full_processing {
+        for component in &components_full_processing {
             let orchestrator_span = span!(
                 Level::INFO,
                 "hook_orchestrator_full_processing",
-                hook_address = %hook_address,
-                component_count = components.len()
+                component_id = %component.id,
             );
             let _orchestrator_guard = orchestrator_span.enter();
 
             if let Some(orchestrator) = self
                 .hook_orchestrator_registry
-                .hooks
-                .get(hook_address)
+                .get_orchestrator_for_component(component)
             {
-                info!("Found hook orchestrator, processing components needing full processing");
+                debug!(
+                    component_id = %component.id,
+                    "Found hook orchestrator, processing components needing full processing"
+                );
 
-                let component_metadata_map: HashMap<String, _> = components
+                let component_metadata_map: HashMap<String, _> = [component]
                     .iter()
                     .filter_map(|comp| {
                         metadata_by_component_id
@@ -791,86 +778,66 @@ where
 
                 match orchestrator.update_components(
                     block_changes,
-                    components,
+                    slice::from_ref(component),
                     &component_metadata_map,
                     true,
                 ) {
                     Ok(()) => {
-                        info!(
-                            processed_components = components.len(),
-                            "Hook orchestrator processed components successfully (full processing)"
-                        );
-
                         // Update component states for successful processing
-                        for component in components {
-                            self.handle_component_success(
-                                component.id.clone(),
-                                &block_changes.block,
-                            )?;
-                        }
+                        self.handle_component_success(component.id.clone(), &block_changes.block)?;
                     }
                     Err(e) => {
                         error!(
                             error = %e,
-                            failed_components = components.len(),
+                            failed_components = component.id,
                             "Hook orchestrator failed (full processing)"
                         );
 
                         // Mark all components in this group as failed
-                        for component in components {
-                            self.handle_component_failure(
-                                component.id.clone(),
-                                format!("Hook orchestrator error: {e:?}"),
-                                &block_changes.block,
-                            )?;
-                        }
+                        self.handle_component_failure(
+                            component.id.clone(),
+                            format!("Hook orchestrator error: {e:?}"),
+                            &block_changes.block,
+                        )?;
                     }
                 }
             } else {
                 warn!(
-                    hook_address = %hook_address,
-                    missing_components = components.len(),
-                    "No hook orchestrator found for hook address"
+                    missing_components = component.id,
+                    "No hook orchestrator found for component"
                 );
 
                 // Mark components as failed since we can't process them
-                for component in components {
-                    self.handle_component_failure(
-                        component.id.clone(),
-                        format!("No hook orchestrator available for hook {hook_address}"),
-                        &block_changes.block,
-                    )?;
-                }
+                self.handle_component_failure(
+                    component.id.clone(),
+                    format!("No hook orchestrator available for component {}", component.id),
+                    &block_changes.block,
+                )?;
             }
         }
 
         // 5b. Handle components that only need balance updates (no entrypoint generation)
-        for (hook_address, components) in &components_by_hook_balance_only {
+        for component in &components_balance_only {
             let balance_span = span!(
                 Level::INFO,
                 "hook_balance_only_processing",
-                hook_address = %hook_address,
-                component_count = components.len()
+                component_id = %component.id,
             );
             let _balance_guard = balance_span.enter();
 
             if let Some(orchestrator) = self
                 .hook_orchestrator_registry
-                .hooks
-                .get(hook_address)
+                .get_orchestrator_for_component(component)
             {
-                info!(
+                debug!(
+                    component_id = %component.id,
                     "Found hook orchestrator, processing components needing balance-only updates"
                 );
 
-                let component_metadata_map: HashMap<String, _> = components
-                    .iter()
-                    .filter_map(|comp| {
-                        metadata_by_component_id
-                            .get(&comp.id)
-                            .map(|meta| (comp.id.clone(), meta.clone()))
-                    })
-                    .collect();
+                let component_metadata_map: HashMap<String, _> = metadata_by_component_id
+                    .get(&component.id)
+                    .map(|meta| HashMap::from([(component.id.clone(), meta.clone())]))
+                    .unwrap_or_default();
 
                 debug!(
                     metadata_entries = component_metadata_map.len(),
@@ -882,68 +849,49 @@ where
                 // block_changes by the metadata orchestrator
                 match orchestrator.update_components(
                     block_changes,
-                    components,
+                    slice::from_ref(component),
                     &component_metadata_map,
                     false, // Skip entrypoint generation
                 ) {
                     Ok(()) => {
-                        info!(
-                            processed_components = components.len(),
-                            "Hook orchestrator processed components successfully (balance-only)"
-                        );
-
                         // Update component states for successful processing - they remain
                         // TracingComplete
-                        for component in components {
-                            // Note: We don't call handle_component_success here because these
-                            // components are already TracingComplete
-                            // and should remain so
-                            debug!(
-                                component_id = %component.id,
-                                "Completed balance-only update for component"
-                            );
-                        }
+                        // Note: We don't call handle_component_success here because these
+                        // components are already TracingComplete
+                        // and should remain so
+                        debug!(
+                            component_id = %component.id,
+                            "Completed balance-only update for component"
+                        );
                     }
                     Err(e) => {
                         error!(
                             error = %e,
-                            failed_components = components.len(),
+                            failed_components = component.id,
                             "Hook orchestrator failed (balance-only)"
                         );
 
                         // Mark all components in this group as failed
-                        for component in components {
-                            self.handle_component_failure(
-                                component.id.clone(),
-                                format!("Hook orchestrator balance update error: {e:?}"),
-                                &block_changes.block,
-                            )?;
-                        }
+                        self.handle_component_failure(
+                            component.id.clone(),
+                            format!("Hook orchestrator balance update error: {e:?}"),
+                            &block_changes.block,
+                        )?;
                     }
                 }
             } else {
                 warn!(
-                    hook_address = %hook_address,
-                    missing_components = components.len(),
-                    "No hook orchestrator found for hook address (balance-only processing)"
+                    missing_components = component.id,
+                    "No hook orchestrator found for component (balance-only processing)"
                 );
 
                 // Mark components as failed since we can't process them
-                for component in components {
-                    self.handle_component_failure(
-                        component.id.clone(),
-                        format!(
-                            "No hook orchestrator available for hook {hook_address} (balance-only)"
-                        ),
-                        &block_changes.block,
-                    )?;
-                }
+                self.handle_component_failure(
+                    component.id.clone(),
+                    format!("No hook orchestrator available for component {}", component.id),
+                    &block_changes.block,
+                )?;
             }
-
-            info!(
-                processed_components = components.len(),
-                "Completed balance-only processing for hook"
-            );
         }
 
         // TODO: Is pruning implemented already?
@@ -1002,7 +950,7 @@ mod tests {
                 Transaction, TxWithChanges,
             },
             protocol::{ProtocolComponent, ProtocolComponentState, ProtocolComponentStateDelta},
-            Chain, ChangeType, TxHash,
+            Address, Chain, ChangeType, TxHash,
         },
         storage::WithTotal,
         traits::{MockAccountExtractor, MockEntryPointTracer},
@@ -1111,7 +1059,7 @@ mod tests {
             ProviderRegistry::new(),
         );
 
-        let hook_orchestrator_registry = HookOrchestratorRegistry { hooks: HashMap::new() };
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
 
         let mut gateway2 = MockGateway::new();
         gateway2
@@ -1154,7 +1102,7 @@ mod tests {
             ProviderRegistry::new(),
         );
 
-        let hook_orchestrator_registry = HookOrchestratorRegistry { hooks: HashMap::new() };
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
 
         let mut gateway2 = MockGateway::new();
         gateway2
@@ -1213,7 +1161,7 @@ mod tests {
             ProviderRegistry::new(),
         );
 
-        let hook_orchestrator_registry = HookOrchestratorRegistry { hooks: HashMap::new() };
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
 
         let gateway2 = MockGateway::new();
         let mut hook_dci = UniswapV4HookDCI::new(
@@ -1288,7 +1236,7 @@ mod tests {
             ProviderRegistry::new(),
         );
 
-        let hook_orchestrator_registry = HookOrchestratorRegistry { hooks: HashMap::new() };
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
 
         let gateway2 = MockGateway::new();
         let mut hook_dci = UniswapV4HookDCI::new(
@@ -1371,7 +1319,7 @@ mod tests {
             ProviderRegistry::new(),
         );
 
-        let hook_orchestrator_registry = HookOrchestratorRegistry { hooks: HashMap::new() };
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
 
         let gateway2 = MockGateway::new();
         let mut hook_dci = UniswapV4HookDCI::new(
@@ -1449,7 +1397,7 @@ mod tests {
             ProviderRegistry::new(),
         );
 
-        let hook_orchestrator_registry = HookOrchestratorRegistry { hooks: HashMap::new() };
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
 
         let gateway2 = MockGateway::new();
         let mut hook_dci = UniswapV4HookDCI::new(
@@ -1533,7 +1481,7 @@ mod tests {
             ProviderRegistry::new(),
         );
 
-        let hook_orchestrator_registry = HookOrchestratorRegistry { hooks: HashMap::new() };
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
 
         let gateway2 = MockGateway::new();
         let mut hook_dci = UniswapV4HookDCI::new(
@@ -1592,7 +1540,7 @@ mod tests {
             ProviderRegistry::new(),
         );
 
-        let hook_orchestrator_registry = HookOrchestratorRegistry { hooks: HashMap::new() };
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
 
         let gateway2 = MockGateway::new();
         let mut hook_dci = UniswapV4HookDCI::new(
@@ -1743,7 +1691,7 @@ mod tests {
             router_address: Address,
             pool_manager: Address,
         ) -> HookOrchestratorRegistry {
-            let mut hook_registry = HookOrchestratorRegistry { hooks: HashMap::new() };
+            let mut hook_registry = HookOrchestratorRegistry::new();
 
             let hook_address = Address::from("0x55dcf9455eee8fd3f5eed17606291272cde428a8");
 
@@ -1764,9 +1712,7 @@ mod tests {
 
             let orchestrator = DefaultUniswapV4HookOrchestrator::new(entrypoint_generator);
 
-            hook_registry
-                .hooks
-                .insert(hook_address, Box::new(orchestrator));
+            hook_registry.register_hook_orchestrator(hook_address, Box::new(orchestrator));
 
             hook_registry
         }
