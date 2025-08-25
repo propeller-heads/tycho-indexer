@@ -12,7 +12,7 @@
     "vm:maverick_v2": "0xF35e3F5F205769B41508A18787b62A21bC80200B",
     "vm:balancer_v3": "0xec5cE4bF6FbcB7bB0148652c92a4AEC8c1d474Ec",
     "rfq:bebop": "0xFE42BFb115eD9671011cA52BDD23A52A2e077a7c",
-    "rfq:hashflow": "0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"
+    "rfq:hashflow": "0x19e49Db786c87F4e46B10aFb21c0C06d34270f98"
   },
   "base": {
     "uniswap_v2": "0xF744EBfaA580cF3fFc25aD046E92BD8B770a0700",
