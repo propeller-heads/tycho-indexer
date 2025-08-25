@@ -6,7 +6,7 @@
 //! Structs in here implement utoipa traits so they can be used to derive an OpenAPI schema.
 #![allow(deprecated)]
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fmt,
     hash::{Hash, Hasher},
 };
@@ -18,7 +18,10 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::{
-    models::{self, blockchain::BlockAggregatedChanges, Address, ComponentId, StoreKey, StoreVal},
+    models::{
+        self, blockchain::BlockAggregatedChanges, Address, Balance, Code, ComponentId, StoreKey,
+        StoreVal,
+    },
     serde_primitives::{
         hex_bytes, hex_bytes_option, hex_hashmap_key, hex_hashmap_key_value, hex_hashmap_value,
     },
@@ -1565,6 +1568,54 @@ pub struct EntryPoint {
     pub signature: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, Eq, Hash)]
+pub enum StorageOverride {
+    /// Applies changes incrementally to the existing account storage.
+    /// Only modifies the specific storage slots provided in the map while
+    /// preserving all other storage slots.
+    Diff(BTreeMap<StoreKey, StoreVal>),
+
+    /// Completely replaces the account's storage state.
+    /// Only the storage slots provided in the map will exist after the operation,
+    /// and any existing storage slots not included will be cleared/zeroed.
+    Replace(BTreeMap<StoreKey, StoreVal>),
+}
+
+impl From<models::blockchain::StorageOverride> for StorageOverride {
+    fn from(value: models::blockchain::StorageOverride) -> Self {
+        match value {
+            models::blockchain::StorageOverride::Diff(diff) => StorageOverride::Diff(diff),
+            models::blockchain::StorageOverride::Replace(replace) => {
+                StorageOverride::Replace(replace)
+            }
+        }
+    }
+}
+
+/// State overrides for an account.
+///
+/// Used to modify account state. Commonly used for testing contract interactions with specific
+/// state conditions or simulating transactions with modified balances/code.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, Eq, Hash)]
+pub struct AccountOverrides {
+    /// Storage slots to override
+    pub slots: Option<StorageOverride>,
+    /// Native token balance override
+    pub native_balance: Option<Balance>,
+    /// Contract code override
+    pub code: Option<Code>,
+}
+
+impl From<models::blockchain::AccountOverrides> for AccountOverrides {
+    fn from(value: models::blockchain::AccountOverrides) -> Self {
+        AccountOverrides {
+            slots: value.slots.map(|s| s.into()),
+            native_balance: value.native_balance,
+            code: value.code,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
 pub struct RPCTracerParams {
     /// The caller address of the transaction, if not provided tracing uses the default value
@@ -1576,11 +1627,28 @@ pub struct RPCTracerParams {
     #[schema(value_type=String, example="0x679aefce")]
     #[serde(with = "hex_bytes")]
     pub calldata: Bytes,
+    /// Optionally allow for state overrides so that the call works as expected
+    pub state_overrides: Option<BTreeMap<Address, AccountOverrides>>,
+    /// Addresses to prune from trace results. Useful for hooks that use mock
+    /// accounts/routers that shouldn't be tracked in the final DCI results.
+    #[schema(value_type=Option<Vec<String>>)]
+    #[serde(default)]
+    pub prune_addresses: Option<Vec<Address>>,
 }
 
 impl From<models::blockchain::RPCTracerParams> for RPCTracerParams {
     fn from(value: models::blockchain::RPCTracerParams) -> Self {
-        RPCTracerParams { caller: value.caller, calldata: value.calldata }
+        RPCTracerParams {
+            caller: value.caller,
+            calldata: value.calldata,
+            state_overrides: value.state_overrides.map(|overrides| {
+                overrides
+                    .into_iter()
+                    .map(|(address, account_overrides)| (address, account_overrides.into()))
+                    .collect()
+            }),
+            prune_addresses: value.prune_addresses,
+        }
     }
 }
 
