@@ -12,6 +12,14 @@ You need to set up the WebSocket credentials of the desired RFQs to access live 
 ```bash
 export BEBOP_USER=<your-bebop-ws-username>
 export BEBOP_KEY=<your-bebop-ws-key>
+
+export HASHFLOW_USER=<your-ws-hashflow-username>
+export HASHFLOW_KEY=<your-ws-hashflow-key>
+```
+
+Then, you can run the example with:
+
+```bash
 cargo run --release --example rfq_quickstart
 ```
 
@@ -21,14 +29,13 @@ If you want a different trade and chain, you can use the following command, repl
 chain that you'd like:
 
 ```bash
-export BEBOP_USER=<your-bebop-ws-username>
-export BEBOP_KEY=<your-bebop-ws-key>
 cargo run --release --example rfq_quickstart -- --sell-token "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb" --buy-token "0x4200000000000000000000000000000000000006" --sell-amount 10 --chain "base"
 ```
 
 for 10 USDC -> WETH on Base.
 
-To be able to execute or simulate the best swap, you need to set your private key as an environment variable before running the quickstart. Be sure not to save it to your terminal history:
+To be able to execute or simulate the best swap, you need to set your private key as an environment variable before
+running the quickstart. Be sure not to save it to your terminal history:
 
 ```bash
 unset HISTFILE
