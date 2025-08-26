@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use actix_web::{web, HttpResponse, ResponseError};
+use actix_web::{web, HttpRequest, HttpResponse, ResponseError};
 use anyhow::Error;
 use chrono::{Duration, Utc};
 use diesel_async::pooled_connection::deadpool;
@@ -1028,21 +1028,35 @@ where
          ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all, fields(user_identity, page, page_size, protocol_system))]
 pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
+    req: HttpRequest,
     body: web::Json<dto::StateRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
     // Note - filtering by protocol system is not supported on this endpoint. This is due to the
     // complexity of paginating this endpoint with the current design.
 
+    let user_identity = req
+        .headers()
+        .get("user-identity")
+        .map(|value| {
+            value
+                .to_str()
+                .unwrap_or("unknown")
+                .to_string()
+        })
+        .unwrap_or_else(|| "unknown".to_string());
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
-    tracing::Span::current().record("page.size", body.pagination.page_size);
-    tracing::Span::current().record("protocol.system", &body.protocol_system);
-    counter!("rpc_requests", "endpoint" => "contract_state").increment(1);
+    tracing::Span::current().record("page_size", body.pagination.page_size);
+    tracing::Span::current().record("protocol_system", &body.protocol_system);
+    tracing::Span::current().record("user_identity", &user_identity);
+    counter!("rpc_requests", "endpoint" => "contract_state", "user_identity" => user_identity.clone()).increment(1);
 
     if body.pagination.page_size > 100 {
-        counter!("rpc_requests_failed", "endpoint" => "contract_state", "status" => "400")
+        counter!("rpc_requests_failed", "endpoint" => "contract_state", "status" => "400", "user_identity" => user_identity)
             .increment(1);
         return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
     }
@@ -1058,7 +1072,7 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
         Err(err) => {
             error!(error = %err, ?body, "Error while getting contract state.");
             let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "contract_state", "status" => status)
+            counter!("rpc_requests_failed", "endpoint" => "contract_state", "status" => status, "user_identity" => user_identity)
                 .increment(1);
             HttpResponse::from_error(err)
         }
@@ -1080,17 +1094,32 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
          ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all, fields(user_identity, page, page_size))]
 pub async fn tokens<G: Gateway, T: EntryPointTracer>(
+    req: HttpRequest,
     body: web::Json<dto::TokensRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
+    let user_identity = req
+        .headers()
+        .get("user-identity")
+        .map(|value| {
+            value
+                .to_str()
+                .unwrap_or("unknown")
+                .to_string()
+        })
+        .unwrap_or_else(|| "unknown".to_string());
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
-    tracing::Span::current().record("page.size", body.pagination.page_size);
-    counter!("rpc_requests", "endpoint" => "tokens").increment(1);
+    tracing::Span::current().record("page_size", body.pagination.page_size);
+    tracing::Span::current().record("user_identity", &user_identity);
+    counter!("rpc_requests", "endpoint" => "tokens", "user_identity" => user_identity.clone())
+        .increment(1);
 
     if body.pagination.page_size > 3000 {
-        counter!("rpc_requests_failed", "endpoint" => "tokens", "status" => "400").increment(1);
+        counter!("rpc_requests_failed", "endpoint" => "tokens", "status" => "400", "user_identity" => user_identity).increment(1);
         return HttpResponse::BadRequest().body("Page size must be less than or equal to 3000.");
     }
 
@@ -1105,7 +1134,7 @@ pub async fn tokens<G: Gateway, T: EntryPointTracer>(
         Err(err) => {
             error!(error = %err, ?body, "Error while getting tokens.");
             let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "tokens", "status" => status)
+            counter!("rpc_requests_failed", "endpoint" => "tokens", "status" => status, "user_identity" => user_identity)
                 .increment(1);
             HttpResponse::from_error(err)
         }
@@ -1127,18 +1156,32 @@ pub async fn tokens<G: Gateway, T: EntryPointTracer>(
          ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all, fields(user_identity, page, page_size, protocol_system))]
 pub async fn protocol_components<G: Gateway, T: EntryPointTracer>(
+    req: HttpRequest,
     body: web::Json<dto::ProtocolComponentsRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
+    let user_identity = req
+        .headers()
+        .get("user-identity")
+        .map(|value| {
+            value
+                .to_str()
+                .unwrap_or("unknown")
+                .to_string()
+        })
+        .unwrap_or_else(|| "unknown".to_string());
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
-    tracing::Span::current().record("page.size", body.pagination.page_size);
-    tracing::Span::current().record("protocol.system", &body.protocol_system);
-    counter!("rpc_requests", "endpoint" => "protocol_components").increment(1);
+    tracing::Span::current().record("page_size", body.pagination.page_size);
+    tracing::Span::current().record("protocol_system", &body.protocol_system);
+    tracing::Span::current().record("user_identity", &user_identity);
+    counter!("rpc_requests", "endpoint" => "protocol_components", "user_identity" => user_identity.clone()).increment(1);
 
     if body.pagination.page_size > 500 {
-        counter!("rpc_requests_failed", "endpoint" => "protocol_components", "status" => "400")
+        counter!("rpc_requests_failed", "endpoint" => "protocol_components", "status" => "400", "user_identity" => user_identity)
             .increment(1);
         return HttpResponse::BadRequest().body("Page size must be less than or equal to 500.");
     }
@@ -1154,7 +1197,7 @@ pub async fn protocol_components<G: Gateway, T: EntryPointTracer>(
         Err(err) => {
             error!(error = %err, ?body, "Error while getting tokens.");
             let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "protocol_components", "status" => status).increment(1);
+            counter!("rpc_requests_failed", "endpoint" => "protocol_components", "status" => status, "user_identity" => user_identity).increment(1);
             HttpResponse::from_error(err)
         }
     }
@@ -1174,18 +1217,32 @@ pub async fn protocol_components<G: Gateway, T: EntryPointTracer>(
          ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all, fields(user_identity, page, page_size, protocol_system))]
 pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
+    req: HttpRequest,
     body: web::Json<dto::ProtocolStateRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
+    let user_identity = req
+        .headers()
+        .get("user-identity")
+        .map(|value| {
+            value
+                .to_str()
+                .unwrap_or("unknown")
+                .to_string()
+        })
+        .unwrap_or_else(|| "unknown".to_string());
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
-    tracing::Span::current().record("page.size", body.pagination.page_size);
-    tracing::Span::current().record("protocol.system", &body.protocol_system);
-    counter!("rpc_requests", "endpoint" => "protocol_state").increment(1);
+    tracing::Span::current().record("page_size", body.pagination.page_size);
+    tracing::Span::current().record("protocol_system", &body.protocol_system);
+    tracing::Span::current().record("user_identity", &user_identity);
+    counter!("rpc_requests", "endpoint" => "protocol_state", "user_identity" => user_identity.clone()).increment(1);
 
     if body.pagination.page_size > 100 {
-        counter!("rpc_requests_failed", "endpoint" => "protocol_state", "status" => "400")
+        counter!("rpc_requests_failed", "endpoint" => "protocol_state", "status" => "400", "user_identity" => user_identity)
             .increment(1);
         return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
     }
@@ -1201,7 +1258,7 @@ pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
         Err(err) => {
             error!(error = %err, ?body, "Error while getting protocol states.");
             let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "protocol_state", "status" => status)
+            counter!("rpc_requests_failed", "endpoint" => "protocol_state", "status" => status, "user_identity" => user_identity)
                 .increment(1);
             HttpResponse::from_error(err)
         }
@@ -1222,17 +1279,31 @@ pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
         ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all, fields(user_identity, page, page_size))]
 pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
+    req: HttpRequest,
     body: web::Json<dto::ProtocolSystemsRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
+    let user_identity = req
+        .headers()
+        .get("user-identity")
+        .map(|value| {
+            value
+                .to_str()
+                .unwrap_or("unknown")
+                .to_string()
+        })
+        .unwrap_or_else(|| "unknown".to_string());
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
-    tracing::Span::current().record("page.size", body.pagination.page_size);
-    counter!("rpc_requests", "endpoint" => "protocol_systems").increment(1);
+    tracing::Span::current().record("page_size", body.pagination.page_size);
+    tracing::Span::current().record("user_identity", &user_identity);
+    counter!("rpc_requests", "endpoint" => "protocol_systems", "user_identity" => user_identity.clone()).increment(1);
 
     if body.pagination.page_size > 100 {
-        counter!("rpc_requests_failed", "endpoint" => "protocol_systems", "status" => "400")
+        counter!("rpc_requests_failed", "endpoint" => "protocol_systems", "status" => "400", "user_identity" => user_identity)
             .increment(1);
         return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
     }
@@ -1248,7 +1319,7 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
         Err(err) => {
             error!(error = %err, ?body, "Error while getting protocol systems.");
             let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "protocol_systems", "status" => status)
+            counter!("rpc_requests_failed", "endpoint" => "protocol_systems", "status" => status, "user_identity" => user_identity)
                 .increment(1);
             HttpResponse::from_error(err)
         }
@@ -1269,14 +1340,28 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
          ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all, fields(user_identity, page, page_size))]
 pub async fn component_tvl<G: Gateway, T: EntryPointTracer>(
+    req: HttpRequest,
     body: web::Json<dto::ComponentTvlRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
+    let user_identity = req
+        .headers()
+        .get("user-identity")
+        .map(|value| {
+            value
+                .to_str()
+                .unwrap_or("unknown")
+                .to_string()
+        })
+        .unwrap_or_else(|| "unknown".to_string());
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
-    tracing::Span::current().record("page.size", body.pagination.page_size);
-    counter!("rpc_requests", "endpoint" => "component_tvl").increment(1);
+    tracing::Span::current().record("page_size", body.pagination.page_size);
+    tracing::Span::current().record("user_identity", &user_identity);
+    counter!("rpc_requests", "endpoint" => "component_tvl", "user_identity" => user_identity.clone()).increment(1);
 
     // Call the handler to get component tvl
     let response = handler
@@ -1289,7 +1374,7 @@ pub async fn component_tvl<G: Gateway, T: EntryPointTracer>(
         Err(err) => {
             error!(error = %err, ?body, "Error while getting component tvl.");
             let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "component_tvl", "status" => status)
+            counter!("rpc_requests_failed", "endpoint" => "component_tvl", "status" => status, "user_identity" => user_identity)
                 .increment(1);
             HttpResponse::from_error(err)
         }
@@ -1310,17 +1395,31 @@ pub async fn component_tvl<G: Gateway, T: EntryPointTracer>(
     ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all, fields(user_identity, page, page_size))]
 pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
+    req: HttpRequest,
     body: web::Json<dto::TracedEntryPointRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
+    let user_identity = req
+        .headers()
+        .get("user-identity")
+        .map(|value| {
+            value
+                .to_str()
+                .unwrap_or("unknown")
+                .to_string()
+        })
+        .unwrap_or_else(|| "unknown".to_string());
+
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
-    tracing::Span::current().record("page.size", body.pagination.page_size);
-    counter!("rpc_requests", "endpoint" => "traced_entry_points").increment(1);
+    tracing::Span::current().record("page_size", body.pagination.page_size);
+    tracing::Span::current().record("user_identity", &user_identity);
+    counter!("rpc_requests", "endpoint" => "traced_entry_points", "user_identity" => user_identity.clone()).increment(1);
 
     if body.pagination.page_size > 100 {
-        counter!("rpc_requests_failed", "endpoint" => "traced_entry_points", "status" => "400")
+        counter!("rpc_requests_failed", "endpoint" => "traced_entry_points", "status" => "400", "user_identity" => user_identity)
             .increment(1);
         return HttpResponse::BadRequest().body("Page size must be less than or equal to 100.");
     }
@@ -1336,7 +1435,7 @@ pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
         Err(err) => {
             error!(error = %err, ?body, "Error while getting traced entry points.");
             let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "traced_entry_points", "status" => status)
+            counter!("rpc_requests_failed", "endpoint" => "traced_entry_points", "status" => status, "user_identity" => user_identity)
                 .increment(1);
             HttpResponse::from_error(err)
         }
@@ -1357,12 +1456,26 @@ pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
     ("apiKey" = [])
     ),
 )]
+#[instrument(skip_all, fields(user_identity))]
 pub async fn add_entry_points<G: Gateway, T: EntryPointTracer>(
+    req: HttpRequest,
     body: web::Json<dto::AddEntryPointRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
+    let user_identity = req
+        .headers()
+        .get("user-identity")
+        .map(|value| {
+            value
+                .to_str()
+                .unwrap_or("unknown")
+                .to_string()
+        })
+        .unwrap_or_else(|| "unknown".to_string());
+
     // Tracing and metrics
-    counter!("rpc_requests", "endpoint" => "add_entry_points").increment(1);
+    tracing::Span::current().record("user_identity", &user_identity);
+    counter!("rpc_requests", "endpoint" => "add_entry_points", "user_identity" => user_identity.clone()).increment(1);
 
     // Call the handler to add entry points
     let response = handler
@@ -1375,7 +1488,7 @@ pub async fn add_entry_points<G: Gateway, T: EntryPointTracer>(
         Err(err) => {
             error!(error = %err, ?body, "Error while adding entry points.");
             let status = err.status_code().as_u16().to_string();
-            counter!("rpc_requests_failed", "endpoint" => "add_entry_points", "status" => status)
+            counter!("rpc_requests_failed", "endpoint" => "add_entry_points", "status" => status, "user_identity" => user_identity)
                 .increment(1);
             HttpResponse::from_error(err)
         }
