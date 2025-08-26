@@ -150,22 +150,25 @@ impl App {
                 .iter()
                 .map(|a| a.symbol.clone())
                 .join("/");
-            let price = update
-                .states
-                .get(id)
-                .map(|el| el.spot_price(&comp.tokens[0], &comp.tokens[1]))
-                .unwrap_or(Ok(0.0))
-                .expect("Expected spot price as f64");
 
             match update.states.get(id) {
                 Some(state) => {
-                    self.items.push(Data {
-                        component: comp.clone(),
-                        state: state.clone(),
-                        name,
-                        tokens,
-                        price: price.to_string(),
-                    });
+                    // Check if spot_price calculation is successful
+                    match state.spot_price(&comp.tokens[0], &comp.tokens[1]) {
+                        Ok(price) => {
+                            self.items.push(Data {
+                                component: comp.clone(),
+                                state: state.clone(),
+                                name,
+                                tokens,
+                                price: price.to_string(),
+                            });
+                        }
+                        Err(_) => {
+                            // Skip pools with spot_price errors
+                            warn!("Skipping pool {comp_id} due to spot_price error", comp_id = comp.id);
+                        }
+                    }
                 }
                 None => {
                     warn!("Received update for unknown pool {comp_id}", comp_id = comp.id)
@@ -180,12 +183,20 @@ impl App {
                 .iter()
                 .find_position(|e| e.component.id == eth_address);
             if let Some((index, _)) = entry {
-                let row = self.items.get_mut(index).unwrap();
-                let price = state
-                    .spot_price(&row.component.tokens[0], &row.component.tokens[1])
-                    .expect("Expected spot price as f64");
-                row.price = price.to_string();
-                row.state = state.clone();
+                let row = &self.items[index];
+                match state.spot_price(&row.component.tokens[0], &row.component.tokens[1]) {
+                    Ok(price) => {
+                        // Update the price and state if calculation is successful
+                        let row = self.items.get_mut(index).unwrap();
+                        row.price = price.to_string();
+                        row.state = state.clone();
+                    }
+                    Err(_) => {
+                        // Remove the pool if spot_price calculation fails
+                        warn!("Removing pool {} due to spot_price error", address);
+                        self.items.remove(index);
+                    }
+                }
             }
         }
 
