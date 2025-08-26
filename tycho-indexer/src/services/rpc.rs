@@ -1028,7 +1028,7 @@ where
          ("apiKey" = [])
     ),
 )]
-#[instrument(skip_all, fields(user_identity, page, page_size))]
+#[instrument(skip_all, fields(user_identity, page, page_size, protocol_system))]
 pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
     req: HttpRequest,
     body: web::Json<dto::StateRequestBody>,
@@ -1050,8 +1050,8 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
 
     // Tracing and metrics
     tracing::Span::current().record("page", body.pagination.page);
-    tracing::Span::current().record("page.size", body.pagination.page_size);
-    tracing::Span::current().record("protocol.system", &body.protocol_system);
+    tracing::Span::current().record("page_size", body.pagination.page_size);
+    tracing::Span::current().record("protocol_system", &body.protocol_system);
     tracing::Span::current().record("user_identity", &user_identity);
     counter!("rpc_requests", "endpoint" => "contract_state", "user_identity" => user_identity.clone()).increment(1);
 
