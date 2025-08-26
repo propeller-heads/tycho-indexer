@@ -37,6 +37,7 @@ use tycho_simulation::{
         protocols::{
             bebop::{client_builder::BebopClientBuilder, state::BebopState},
             hashflow::{client::HashflowClient, state::HashflowState},
+            utils::default_quote_tokens_for_chain,
         },
         stream::RFQStreamBuilder,
     },
@@ -183,7 +184,7 @@ async fn main() {
             chain,
             rfq_tokens,
             cli.tvl_threshold,
-            [sell_token_address.clone()].into(),
+            default_quote_tokens_for_chain(chain).expect(""),
             user,
             key,
             5u64,
