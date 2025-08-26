@@ -23,9 +23,13 @@ use crate::{
         client::RFQClient,
         errors::RFQError,
         models::TimestampHeader,
-        protocols::hashflow::models::{
-            HashflowChain, HashflowMarketMakerLevels, HashflowMarketMakersResponse,
-            HashflowPriceLevelsResponse, HashflowQuoteRequest, HashflowQuoteResponse, HashflowRFQ,
+        protocols::{
+            hashflow::models::{
+                HashflowChain, HashflowMarketMakerLevels, HashflowMarketMakersResponse,
+                HashflowPriceLevelsResponse, HashflowQuoteRequest, HashflowQuoteResponse,
+                HashflowRFQ,
+            },
+            utils::default_quote_tokens_for_chain,
         },
     },
     tycho_client::feed::synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
@@ -60,6 +64,12 @@ impl HashflowClient {
         auth_key: String,
         poll_time: u64,
     ) -> Result<Self, RFQError> {
+        let quote_tokens = if quote_tokens.is_empty() {
+            default_quote_tokens_for_chain(&chain)?
+        } else {
+            quote_tokens
+        };
+
         Ok(Self {
             chain,
             price_levels_endpoint: "https://api.hashflow.com/taker/v3/price-levels".to_string(),

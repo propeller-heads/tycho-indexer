@@ -11,7 +11,7 @@ fn str_to_bytes(address: &str) -> Result<Bytes, RFQError> {
 }
 
 /// Returns default quote tokens for TVL calculation based on the chain
-pub fn default_quote_tokens_for_chain(chain: Chain) -> Result<HashSet<Bytes>, RFQError> {
+pub fn default_quote_tokens_for_chain(chain: &Chain) -> Result<HashSet<Bytes>, RFQError> {
     match chain {
         Chain::Ethereum => Ok(HashSet::from([
             str_to_bytes("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")?, // USDC

@@ -73,7 +73,7 @@ impl BebopClientBuilder {
         if let Some(tokens) = self.quote_tokens {
             quote_tokens = tokens;
         } else {
-            quote_tokens = default_quote_tokens_for_chain(self.chain)?
+            quote_tokens = default_quote_tokens_for_chain(&self.chain)?
         }
 
         BebopClient::new(self.chain, self.tokens, self.tvl, self.ws_user, self.ws_key, quote_tokens)
