@@ -1,3 +1,11 @@
+## [0.82.0](https://github.com/propeller-heads/tycho-indexer/compare/0.81.6...0.82.0) (2025-08-26)
+
+
+### Features
+
+* add user identity in metrics and spans ([382f408](https://github.com/propeller-heads/tycho-indexer/commit/382f408dd8a93b4a41a9f5f2dfc22ef69ce699f2))
+* add user identity in metrics and spans ([#669](https://github.com/propeller-heads/tycho-indexer/issues/669)) ([1aadf8d](https://github.com/propeller-heads/tycho-indexer/commit/1aadf8de18c055b0a4eea8c8f544130b8d7ccdaf))
+
 ## [0.81.6](https://github.com/propeller-heads/tycho-indexer/compare/0.81.5...0.81.6) (2025-08-13)
 
 
