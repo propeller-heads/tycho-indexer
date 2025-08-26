@@ -532,6 +532,13 @@ fn get_best_swap(
                 if let Some(amount_out) = amount_out {
                     amounts_out.insert(id.clone(), amount_out.amount);
                 }
+
+                // If you would like to know how much of each token you are able to swap on the
+                // pool, do
+                // let limits = state
+                //     .get_limits(sell_token.address.clone(), buy_token.address.clone())
+                //     .unwrap();
+
                 // If you would like to save spot prices instead of the amount out, do
                 // let spot_price = state
                 //     .spot_price(&tokens[0], &tokens[1])
