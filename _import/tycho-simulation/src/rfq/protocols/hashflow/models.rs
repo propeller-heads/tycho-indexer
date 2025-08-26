@@ -38,10 +38,18 @@ where
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HashflowPriceLevel {
-    #[serde(rename = "q", deserialize_with = "deserialize_string_to_f64")]
+    #[serde(
+        rename = "q",
+        deserialize_with = "deserialize_string_to_f64",
+        serialize_with = "serialize_f64_to_string"
+    )]
     /// Quantity of tokens that can be traded at this level
     pub quantity: f64,
-    #[serde(rename = "p", deserialize_with = "deserialize_string_to_f64")]
+    #[serde(
+        rename = "p",
+        deserialize_with = "deserialize_string_to_f64",
+        serialize_with = "serialize_f64_to_string"
+    )]
     /// Price per token at this level
     pub price: f64,
 }
@@ -53,6 +61,13 @@ where
     let s = String::deserialize(deserializer)?;
     s.parse()
         .map_err(serde::de::Error::custom)
+}
+
+fn serialize_f64_to_string<S>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&value.to_string())
 }
 
 impl HashflowMarketMakerLevels {
