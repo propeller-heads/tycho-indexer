@@ -13,11 +13,8 @@ use tycho_common::models::Chain;
 use tycho_simulation::{
     evm::{
         protocol::{
-            filters::{uniswap_v4_pool_with_hook_filter,
-            },
-            uniswap_v2::state::UniswapV2State,
-            uniswap_v3::state::UniswapV3State,
-            uniswap_v4::state::UniswapV4State,
+            filters::uniswap_v4_pool_with_hook_filter, uniswap_v2::state::UniswapV2State,
+            uniswap_v3::state::UniswapV3State, uniswap_v4::state::UniswapV4State,
         },
         stream::ProtocolStreamBuilder,
     },
