@@ -211,3 +211,7 @@ Once the best swap is found you can:
 
 Market conditions can change rapidly. Delays in your decision-making can lead to transaction reverts, especially if you've set parameters like minimum amount out or slippage. Always ensure you're comfortable with the potential risks before executing swaps.
 {% endhint %}
+
+{% hint style="info" %}
+Because the RFQ will only let you swap up to the amount of tokens specified in the quote, when the RFQ swap happens after another protocol in a sequential swap, if positive slippage occurs, any additional tokens beyond the permitted quote amount will remain in the Tycho Router.
+{% endhint %}
