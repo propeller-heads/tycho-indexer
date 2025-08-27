@@ -286,6 +286,7 @@ where
                         .get_vm_storage()
                         .len()
                 );
+
                 let storage_by_address: HashMap<Address, ResponseAccount> = protocol_msg
                     .snapshots
                     .get_vm_storage()

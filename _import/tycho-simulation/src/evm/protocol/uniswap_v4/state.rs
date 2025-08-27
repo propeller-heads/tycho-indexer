@@ -221,12 +221,12 @@ impl UniswapV4State {
                     safe_add_u256(step.amount_in, step.fee_amount)?,
                 )
                 .unwrap();
-                state.amount_calculated +=
+                state.amount_calculated -=
                     I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
             } else {
                 state.amount_remaining -=
                     I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
-                state.amount_calculated -= I256::checked_from_sign_and_abs(
+                state.amount_calculated += I256::checked_from_sign_and_abs(
                     Sign::Positive,
                     safe_add_u256(step.amount_in, step.fee_amount)?,
                 )
@@ -514,7 +514,11 @@ impl ProtocolSim for UniswapV4State {
         // Perform the swap with potential hook modifications
         let result = self.swap(zero_for_one, amount_to_swap, None, lp_fee_override)?;
 
-        let mut swap_delta = BalanceDelta(result.amount_calculated);
+        // Create BalanceDelta from swap result using the proper constructor
+        let mut swap_delta = BalanceDelta::from_swap_result(result.amount_calculated, zero_for_one);
+
+        // Get deltas (change in the specified/given and unspecified/computed token balances after
+        // calling before swap)
         let hook_delta_specified = before_swap_delta.get_specified_delta();
         let mut hook_delta_unspecified = before_swap_delta.get_unspecified_delta();
 
@@ -549,6 +553,7 @@ impl ProtocolSim for UniswapV4State {
             // This is a BalanceDelta subtraction
             swap_delta = swap_delta - hook_delta
         }
+
         let amount_out = if (amount_specified < I256::ZERO) == zero_for_one {
             swap_delta.amount1()
         } else {
@@ -845,6 +850,18 @@ mod tests {
         )
     }
 
+    fn eth() -> Token {
+        Token::new(
+            &Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+            "ETH",
+            18,
+            0,
+            &[Some(10_000)],
+            Default::default(),
+            100,
+        )
+    }
+
     #[test]
     fn test_delta_transition() {
         let block = BlockHeader {
@@ -1056,6 +1073,274 @@ mod tests {
             .expect("swap for limit in didn't work");
 
         assert_eq!(&res.1, &out.amount);
+    }
+    #[test]
+    fn test_get_amount_out_no_hook() {
+        // Test using transaction 0x78ea4bbb7d4405000f33fdf6f3fa08b5e557d50e5e7f826a79766d50bd643b6f
+        let block = BlockHeader {
+            number: 23234805,
+            parent_hash: Default::default(),
+            hash: Bytes::from_str(
+                "0xb00f46215c5f07b73ab02226f82e408a35f1c8ef057d4684429d65c47b5ab1ae",
+            )
+            .expect("Invalid block hash"),
+            timestamp: 1749739055,
+            revert: false,
+        };
+
+        // Pool ID: 0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7
+        // Information taken from Tenderly simulation / event emitted on Etherscan
+        let usv4_state = UniswapV4State::new(
+            541501951282951892,
+            U256::from_str("5362798333066270795901222").unwrap(), // Sqrt price
+            UniswapV4Fees { zero_for_one: 0, one_for_zero: 0, lp_fee: 100 },
+            -192022,
+            1,
+            // Ticks taken from indexer logs
+            vec![
+                TickInfo {
+                    index: -887272,
+                    net_liquidity: 460382969070005,
+                    sqrt_price: U256::from(4295128739_u64),
+                },
+                TickInfo {
+                    index: -207244,
+                    net_liquidity: 561268407024557,
+                    sqrt_price: U256::from_str("2505291706254206075074035").unwrap(),
+                },
+                TickInfo {
+                    index: -196411,
+                    net_liquidity: 825711941800452,
+                    sqrt_price: U256::from_str("4306080513146952705853399").unwrap(),
+                },
+                TickInfo {
+                    index: -196257,
+                    net_liquidity: 64844666874010,
+                    sqrt_price: U256::from_str("4339363644587371378270009").unwrap(),
+                },
+                TickInfo {
+                    index: -195611,
+                    net_liquidity: 2344045150766798,
+                    sqrt_price: U256::from_str("4481806029599743916020126").unwrap(),
+                },
+                TickInfo {
+                    index: -194715,
+                    net_liquidity: 391037380558274654,
+                    sqrt_price: U256::from_str("4687145946111116896040494").unwrap(),
+                },
+                TickInfo {
+                    index: -194599,
+                    net_liquidity: 89032603464508,
+                    sqrt_price: U256::from_str("4714409015946702405379370").unwrap(),
+                },
+                TickInfo {
+                    index: -194389,
+                    net_liquidity: 66635600426483168,
+                    sqrt_price: U256::from_str("4764168603367683402636621").unwrap(),
+                },
+                TickInfo {
+                    index: -194160,
+                    net_liquidity: 6123093436523361,
+                    sqrt_price: U256::from_str("4819029067726467394386780").unwrap(),
+                },
+                TickInfo {
+                    index: -194025,
+                    net_liquidity: 79940813798964,
+                    sqrt_price: U256::from_str("4851665907541490407930032").unwrap(),
+                },
+                TickInfo {
+                    index: -193922,
+                    net_liquidity: 415630967437234,
+                    sqrt_price: U256::from_str("4876715181040466809166531").unwrap(),
+                },
+                TickInfo {
+                    index: -193876,
+                    net_liquidity: 9664144015186047,
+                    sqrt_price: U256::from_str("4887943972687250473582419").unwrap(),
+                },
+                TickInfo {
+                    index: -193818,
+                    net_liquidity: 435344726052344,
+                    sqrt_price: U256::from_str("4902138873132735049121973").unwrap(),
+                },
+                TickInfo {
+                    index: -193804,
+                    net_liquidity: 221726179374067,
+                    sqrt_price: U256::from_str("4905571399964683340605904").unwrap(),
+                },
+                TickInfo {
+                    index: -193719,
+                    net_liquidity: 101340835774487,
+                    sqrt_price: U256::from_str("4926463397882393957462188").unwrap(),
+                },
+                TickInfo {
+                    index: -193690,
+                    net_liquidity: 193367475630077,
+                    sqrt_price: U256::from_str("4933611593595025190448924").unwrap(),
+                },
+                TickInfo {
+                    index: -193643,
+                    net_liquidity: 357016631583746,
+                    sqrt_price: U256::from_str("4945218633428068823432932").unwrap(),
+                },
+                TickInfo {
+                    index: -193520,
+                    net_liquidity: 917243184365178,
+                    sqrt_price: U256::from_str("4975723910367862081017120").unwrap(),
+                },
+                TickInfo {
+                    index: -193440,
+                    net_liquidity: 114125890211958292,
+                    sqrt_price: U256::from_str("4995665665861492533686137").unwrap(),
+                },
+                TickInfo {
+                    index: -193380,
+                    net_liquidity: -65980729148766579,
+                    sqrt_price: U256::from_str("5010674414300823856025303").unwrap(),
+                },
+                TickInfo {
+                    index: -192891,
+                    net_liquidity: 1687883551433195,
+                    sqrt_price: U256::from_str("5134689105039642314202223").unwrap(),
+                },
+                TickInfo {
+                    index: -192573,
+                    net_liquidity: 11108903221360975,
+                    sqrt_price: U256::from_str("5216979018647067786855495").unwrap(),
+                },
+                TickInfo {
+                    index: -192448,
+                    net_liquidity: 32888457482352,
+                    sqrt_price: U256::from_str("5249685603828944002327927").unwrap(),
+                },
+                TickInfo {
+                    index: -191525,
+                    net_liquidity: -221726179374067,
+                    sqrt_price: U256::from_str("5497623359964843320146512").unwrap(),
+                },
+                TickInfo {
+                    index: -191447,
+                    net_liquidity: -32888457482352,
+                    sqrt_price: U256::from_str("5519104878745833608097296").unwrap(),
+                },
+                TickInfo {
+                    index: -191444,
+                    net_liquidity: -114125890211958292,
+                    sqrt_price: U256::from_str("5519932765173943847315221").unwrap(),
+                },
+                TickInfo {
+                    index: -191417,
+                    net_liquidity: -101340835774487,
+                    sqrt_price: U256::from_str("5527389333636021285046380").unwrap(),
+                },
+                TickInfo {
+                    index: -191384,
+                    net_liquidity: -9664144015186047,
+                    sqrt_price: U256::from_str("5536516597603056457376182").unwrap(),
+                },
+                TickInfo {
+                    index: -191148,
+                    net_liquidity: -561268407024557,
+                    sqrt_price: U256::from_str("5602231161238705865493165").unwrap(),
+                },
+                TickInfo {
+                    index: -191147,
+                    net_liquidity: -1687883551433195,
+                    sqrt_price: U256::from_str("5602511265794328966803451").unwrap(),
+                },
+                TickInfo {
+                    index: -191091,
+                    net_liquidity: -89032603464508,
+                    sqrt_price: U256::from_str("5618219493196441347292357").unwrap(),
+                },
+                TickInfo {
+                    index: -190950,
+                    net_liquidity: -189177935487638,
+                    sqrt_price: U256::from_str("5657965894785859782969011").unwrap(),
+                },
+                TickInfo {
+                    index: -190756,
+                    net_liquidity: -6123093436523361,
+                    sqrt_price: U256::from_str("5713112435031881967192022").unwrap(),
+                },
+                TickInfo {
+                    index: -190548,
+                    net_liquidity: -193367475630077,
+                    sqrt_price: U256::from_str("5772835841671084402427710").unwrap(),
+                },
+                TickInfo {
+                    index: -190430,
+                    net_liquidity: -11108903221360975,
+                    sqrt_price: U256::from_str("5806994534290341208820930").unwrap(),
+                },
+                TickInfo {
+                    index: -190195,
+                    net_liquidity: -391583014714302569,
+                    sqrt_price: U256::from_str("5875625707132601785181387").unwrap(),
+                },
+                TickInfo {
+                    index: -190043,
+                    net_liquidity: -357016631583746,
+                    sqrt_price: U256::from_str("5920448331650864936739481").unwrap(),
+                },
+                TickInfo {
+                    index: -189779,
+                    net_liquidity: -917243184365178,
+                    sqrt_price: U256::from_str("5999112356918485175181346").unwrap(),
+                },
+                TickInfo {
+                    index: -189663,
+                    net_liquidity: -2344045150766798,
+                    sqrt_price: U256::from_str("6034006559279282606084981").unwrap(),
+                },
+                TickInfo {
+                    index: -189620,
+                    net_liquidity: -435344726052344,
+                    sqrt_price: U256::from_str("6046992979471024289177519").unwrap(),
+                },
+                TickInfo {
+                    index: -189409,
+                    net_liquidity: -825711941800452,
+                    sqrt_price: U256::from_str("6111123241285165242130911").unwrap(),
+                },
+                TickInfo {
+                    index: -189325,
+                    net_liquidity: -3947182209207,
+                    sqrt_price: U256::from_str("6136842645893819031257990").unwrap(),
+                },
+                TickInfo {
+                    index: -189324,
+                    net_liquidity: -415630967437234,
+                    sqrt_price: U256::from_str("6137149480355443943537284").unwrap(),
+                },
+                TickInfo {
+                    index: -115136,
+                    net_liquidity: 462452451821,
+                    sqrt_price: U256::from_str("250529060232794967902094762").unwrap(),
+                },
+                TickInfo {
+                    index: -92109,
+                    net_liquidity: -462452451821,
+                    sqrt_price: U256::from_str("792242363124136400178523925").unwrap(),
+                },
+                TickInfo {
+                    index: 887272,
+                    net_liquidity: -521280453734808,
+                    sqrt_price: U256::from_str("1461446703485210103287273052203988822378723970342")
+                        .unwrap(),
+                },
+            ],
+            block,
+        );
+
+        let t0 = usdc();
+        let t1 = eth();
+
+        let out = usv4_state
+            .get_amount_out(BigUint::from_u64(2000000).unwrap(), &t0, &t1)
+            .unwrap();
+
+        assert_eq!(out.amount, BigUint::from_str("436478419853848").unwrap())
     }
 
     #[test]
