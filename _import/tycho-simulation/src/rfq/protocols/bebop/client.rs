@@ -376,6 +376,8 @@ impl RFQClient for BebopClient {
 
         match quote_response {
             BebopQuoteResponse::Success(quote) => {
+                quote.validate(params)?;
+
                 let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
                 quote_attributes.insert("calldata".into(), quote.tx.data);
                 quote_attributes.insert(
