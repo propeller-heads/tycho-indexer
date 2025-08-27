@@ -1,3 +1,10 @@
+## [0.153.0](https://github.com/propeller-heads/tycho-simulation/compare/0.152.0...0.153.0) (2025-08-27)
+
+
+### Features
+
+* validate rfq quotes in `request_binding_quote` ([dc1d497](https://github.com/propeller-heads/tycho-simulation/commit/dc1d497f05416c5023eb869a3c0aca83756fc959))
+
 ## [0.152.0](https://github.com/propeller-heads/tycho-simulation/compare/0.151.0...0.152.0) (2025-08-26)
 
 
