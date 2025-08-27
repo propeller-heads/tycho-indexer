@@ -375,38 +375,41 @@ impl ProtocolSim for UniswapV4State {
                 Err(SimulationError::RecoverableError(_)) => {
                     // Calculate spot price by swapping two amounts and use the approximation
                     // to get the derivative, following the pattern from vm/state.rs
-                    
+
                     // Calculate the first sell amount (x1) as a small amount
                     let x1 = BigUint::from(10u64).pow(base.decimals as u32) / BigUint::from(100u64); // 0.01 token
-                    
+
                     // Calculate the second sell amount (x2) as x1 + 1% of x1
                     let x2 = &x1 + (&x1 / BigUint::from(100u64));
-                    
+
                     // Perform swaps to get the received amounts
                     let y1 = self.get_amount_out(x1.clone(), base, quote)?;
                     let y2 = self.get_amount_out(x2.clone(), base, quote)?;
-                    
+
                     // Calculate the marginal price
                     let num = &y2.amount - &y1.amount;
                     let den = &x2 - &x1;
-                    
+
                     if den == BigUint::from(0u64) {
                         return Err(SimulationError::FatalError(
                             "Cannot calculate spot price: denominator is zero".to_string(),
                         ));
                     }
-                    
+
                     // Convert to f64 and adjust for decimals
                     let num_f64 = num.to_f64().ok_or_else(|| {
-                        SimulationError::FatalError("Failed to convert numerator to f64".to_string())
+                        SimulationError::FatalError(
+                            "Failed to convert numerator to f64".to_string(),
+                        )
                     })?;
                     let den_f64 = den.to_f64().ok_or_else(|| {
-                        SimulationError::FatalError("Failed to convert denominator to f64".to_string())
+                        SimulationError::FatalError(
+                            "Failed to convert denominator to f64".to_string(),
+                        )
                     })?;
-                    
-                    let token_correction = 
-                        10f64.powi(base.decimals as i32 - quote.decimals as i32);
-                    
+
+                    let token_correction = 10f64.powi(base.decimals as i32 - quote.decimals as i32);
+
                     return Ok(num_f64 / den_f64 * token_correction);
                 }
                 Err(e) => return Err(e),
@@ -1141,7 +1144,7 @@ mod tests {
         };
 
         let usv4_state = UniswapV4State::new(
-            1000000000000000000u128, // 1e18 liquidity
+            1000000000000000000u128,                                  // 1e18 liquidity
             U256::from_str("79228162514264337593543950336").unwrap(), // 1:1 price
             UniswapV4Fees { zero_for_one: 100, one_for_zero: 100, lp_fee: 100 },
             0,
@@ -1156,7 +1159,7 @@ mod tests {
         // Test spot price calculation without a hook (should use default implementation)
         let spot_price_result = usv4_state.spot_price(&usdc(), &weth());
         assert!(spot_price_result.is_ok());
-        
+
         // The price should be approximately 1.0 (since we set sqrt_price for 1:1)
         // Adjusting for decimals difference (USDC has 6, WETH has 18)
         let price = spot_price_result.unwrap();

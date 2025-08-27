@@ -166,7 +166,10 @@ impl App {
                         }
                         Err(_) => {
                             // Skip pools with spot_price errors
-                            warn!("Skipping pool {comp_id} due to spot_price error", comp_id = comp.id);
+                            warn!(
+                                "Skipping pool {comp_id} due to spot_price error",
+                                comp_id = comp.id
+                            );
                         }
                     }
                 }
