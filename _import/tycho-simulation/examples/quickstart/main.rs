@@ -36,10 +36,16 @@ use tycho_execution::encoding::{
 };
 use tycho_simulation::{
     evm::{
+        engine_db::tycho_db::PreCachedDB,
         protocol::{
-            filters::uniswap_v4_pool_with_hook_filter, u256_num::biguint_to_u256,
-            uniswap_v2::state::UniswapV2State, uniswap_v3::state::UniswapV3State,
+            ekubo::state::EkuboState,
+            filters::{balancer_v2_pool_filter, curve_pool_filter},
+            pancakeswap_v2::state::PancakeswapV2State,
+            u256_num::biguint_to_u256,
+            uniswap_v2::state::UniswapV2State,
+            uniswap_v3::state::UniswapV3State,
             uniswap_v4::state::UniswapV4State,
+            vm::state::EVMPoolState,
         },
         stream::ProtocolStreamBuilder,
     },
@@ -55,7 +61,7 @@ struct Cli {
     sell_token: Option<String>,
     #[arg(long)]
     buy_token: Option<String>,
-    #[arg(long, default_value_t = 1.0)]
+    #[arg(long, default_value_t = 2.0)]
     sell_amount: f64,
     /// The tvl threshold to filter the graph by
     #[arg(long, default_value_t = 1.0)]
@@ -70,7 +76,7 @@ impl Cli {
 
         if self.buy_token.is_none() {
             self.buy_token = Some(match self.chain.to_string().as_str() {
-                "ethereum" => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(),
+                "ethereum" => "0x0000000000000000000000000000000000000000".to_string(),
                 "base" => "0x4200000000000000000000000000000000000006".to_string(),
                 "unichain" => "0x4200000000000000000000000000000000000006".to_string(),
                 _ => panic!("Execution does not yet support chain {chain}", chain = self.chain),
@@ -79,7 +85,7 @@ impl Cli {
 
         if self.sell_token.is_none() {
             self.sell_token = Some(match self.chain.to_string().as_str() {
-                "ethereum" => "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0".to_string(),
+                "ethereum" => "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
                 "base" => "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913".to_string(),
                 "unichain" => "0x078d782b760474a361dda0af3839290b0ef57ad6".to_string(),
                 _ => panic!("Execution does not yet support chain {chain}", chain = self.chain),
@@ -123,12 +129,12 @@ async fn main() {
         &cli.sell_token
             .expect("Sell token not provided"),
     )
-    .expect("Invalid address for sell token");
+        .expect("Invalid address for sell token");
     let buy_token_address = Bytes::from_str(
         &cli.buy_token
             .expect("NBuy token not provided"),
     )
-    .expect("Invalid address for buy token");
+        .expect("Invalid address for buy token");
     let sell_token = all_tokens
         .get(&sell_token_address)
         .expect("Sell token not found")
@@ -153,11 +159,33 @@ async fn main() {
 
     match chain {
         Chain::Ethereum => {
-            protocol_stream = protocol_stream.exchange::<UniswapV4State>(
-                "uniswap_v4_hooks",
-                tvl_filter.clone(),
-                None,
-            );
+            protocol_stream = protocol_stream
+                // .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
+                // .exchange::<UniswapV2State>("sushiswap_v2", tvl_filter.clone(), None)
+                // .exchange::<PancakeswapV2State>("pancakeswap_v2", tvl_filter.clone(), None)
+                // .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
+                // .exchange::<UniswapV3State>("pancakeswap_v3", tvl_filter.clone(), None)
+                // .exchange::<EVMPoolState<PreCachedDB>>(
+                //     "vm:balancer_v2",
+                //     tvl_filter.clone(),
+                //     Some(balancer_v2_pool_filter),
+                // )
+                .exchange::<UniswapV4State>(
+                    "uniswap_v4",
+                    tvl_filter.clone(),
+                    None,
+                    // )
+                    // .exchange::<UniswapV4State>(
+                    //     "uniswap_v4_hooks",
+                    //     tvl_filter.clone(),
+                    //     None,
+                    // )
+                    // .exchange::<EkuboState>("ekubo_v2", tvl_filter.clone(), None)
+                    // .exchange::<EVMPoolState<PreCachedDB>>(
+                    //     "vm:curve",
+                    //     tvl_filter.clone(),
+                    //     Some(curve_pool_filter),
+                );
             // COMING SOON!
             // .exchange::<EVMPoolState<PreCachedDB>>("vm:maverick_v2", tvl_filter.clone(), None);
         }
@@ -165,27 +193,18 @@ async fn main() {
             protocol_stream = protocol_stream
                 .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
                 .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
-                .exchange::<UniswapV4State>(
-                    "uniswap_v4",
-                    tvl_filter.clone(),
-                    Some(uniswap_v4_pool_with_hook_filter),
-                )
+                .exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None)
         }
         Chain::Unichain => {
             protocol_stream = protocol_stream
                 .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
                 .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
-                .exchange::<UniswapV4State>(
-                    "uniswap_v4",
-                    tvl_filter.clone(),
-                    Some(uniswap_v4_pool_with_hook_filter),
-                )
+                .exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None)
         }
         _ => {}
     }
 
     let mut protocol_stream = protocol_stream
-        // This for some reason sets tls=True
         .auth_key(Some(tycho_api_key.clone()))
         .skip_state_decode_failures(true)
         .set_tokens(all_tokens.clone())
@@ -271,7 +290,7 @@ async fn main() {
                 chain.native_token().address,
                 signer.clone(),
             )
-            .expect("Failed to encode router call");
+                .expect("Failed to encode router call");
 
             // Print token balances before showing the swap options
             match get_token_balance(
@@ -280,7 +299,7 @@ async fn main() {
                 signer.address(),
                 Address::from_slice(&chain.native_token().address),
             )
-            .await
+                .await
             {
                 Ok(balance) => {
                     let formatted_balance = format_token_amount(&balance, &sell_token);
@@ -292,8 +311,8 @@ async fn main() {
                     if balance < amount_in {
                         let required = format_token_amount(&amount_in, &sell_token);
                         println!("⚠️ Warning: Insufficient balance for swap. You have {formatted_balance} {sell_symbol} but need {required} {sell_symbol}",
-                            formatted_balance = formatted_balance,
-                            sell_symbol = sell_token.symbol,
+                                 formatted_balance = formatted_balance,
+                                 sell_symbol = sell_token.symbol,
                         );
                         return;
                     }
@@ -308,7 +327,7 @@ async fn main() {
                 signer.address(),
                 Address::from_slice(&chain.native_token().address),
             )
-            .await
+                .await
             {
                 Ok(balance) => {
                     let formatted_balance = format_token_amount(&balance, &buy_token);
@@ -351,7 +370,7 @@ async fn main() {
                         tx.clone(),
                         chain.id(),
                     )
-                    .await;
+                        .await;
 
                     let payload = SimulatePayload {
                         block_state_calls: vec![SimBlock {
@@ -404,7 +423,7 @@ async fn main() {
                                     tx.clone(),
                                     chain.id(),
                                 )
-                                .await
+                                    .await
                                 {
                                     Ok(_) => {
                                         println!("\n✅ Swap executed successfully! Exiting the session...\n");
@@ -448,7 +467,7 @@ async fn main() {
                         tx,
                         chain.id(),
                     )
-                    .await
+                        .await
                     {
                         Ok(_) => {
                             println!("\n✅ Swap executed successfully! Exiting the session...\n");
@@ -517,11 +536,13 @@ fn get_best_swap(
             if HashSet::from([&sell_token, &buy_token])
                 .is_subset(&HashSet::from_iter(tokens.iter()))
             {
-                let amount_out = state
+                let amount_out_result = state
                     .get_amount_out(amount_in.clone(), &sell_token, &buy_token)
                     .map_err(|e| eprintln!("Error calculating amount out for Pool {id:?}: {e:?}"))
                     .ok();
-                if let Some(amount_out) = amount_out {
+
+                if let Some(amount_out) = amount_out_result {
+                    println!("Calculated amount out for pool: {:?}", amount_out.amount);
                     amounts_out.insert(id.clone(), amount_out.amount);
                 }
 
@@ -858,7 +879,7 @@ async fn execute_swap_transaction(
         tx.clone(),
         chain_id,
     )
-    .await;
+        .await;
 
     let approval_receipt = provider
         .send_transaction(approval_request)
@@ -887,7 +908,7 @@ async fn execute_swap_transaction(
             "Swap transaction with hash {hash:?} failed.",
             hash = swap_result.transaction_hash
         )
-        .into());
+            .into());
     }
 
     Ok(())
