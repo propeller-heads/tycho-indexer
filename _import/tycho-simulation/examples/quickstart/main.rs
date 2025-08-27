@@ -129,12 +129,12 @@ async fn main() {
         &cli.sell_token
             .expect("Sell token not provided"),
     )
-        .expect("Invalid address for sell token");
+    .expect("Invalid address for sell token");
     let buy_token_address = Bytes::from_str(
         &cli.buy_token
             .expect("NBuy token not provided"),
     )
-        .expect("Invalid address for buy token");
+    .expect("Invalid address for buy token");
     let sell_token = all_tokens
         .get(&sell_token_address)
         .expect("Sell token not found")
@@ -160,31 +160,23 @@ async fn main() {
     match chain {
         Chain::Ethereum => {
             protocol_stream = protocol_stream
-                // .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
-                // .exchange::<UniswapV2State>("sushiswap_v2", tvl_filter.clone(), None)
-                // .exchange::<PancakeswapV2State>("pancakeswap_v2", tvl_filter.clone(), None)
-                // .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
-                // .exchange::<UniswapV3State>("pancakeswap_v3", tvl_filter.clone(), None)
-                // .exchange::<EVMPoolState<PreCachedDB>>(
-                //     "vm:balancer_v2",
-                //     tvl_filter.clone(),
-                //     Some(balancer_v2_pool_filter),
-                // )
-                .exchange::<UniswapV4State>(
-                    "uniswap_v4",
+                .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
+                .exchange::<UniswapV2State>("sushiswap_v2", tvl_filter.clone(), None)
+                .exchange::<PancakeswapV2State>("pancakeswap_v2", tvl_filter.clone(), None)
+                .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
+                .exchange::<UniswapV3State>("pancakeswap_v3", tvl_filter.clone(), None)
+                .exchange::<EVMPoolState<PreCachedDB>>(
+                    "vm:balancer_v2",
                     tvl_filter.clone(),
-                    None,
-                    // )
-                    // .exchange::<UniswapV4State>(
-                    //     "uniswap_v4_hooks",
-                    //     tvl_filter.clone(),
-                    //     None,
-                    // )
-                    // .exchange::<EkuboState>("ekubo_v2", tvl_filter.clone(), None)
-                    // .exchange::<EVMPoolState<PreCachedDB>>(
-                    //     "vm:curve",
-                    //     tvl_filter.clone(),
-                    //     Some(curve_pool_filter),
+                    Some(balancer_v2_pool_filter),
+                )
+                .exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None)
+                .exchange::<UniswapV4State>("uniswap_v4_hooks", tvl_filter.clone(), None)
+                .exchange::<EkuboState>("ekubo_v2", tvl_filter.clone(), None)
+                .exchange::<EVMPoolState<PreCachedDB>>(
+                    "vm:curve",
+                    tvl_filter.clone(),
+                    Some(curve_pool_filter),
                 );
             // COMING SOON!
             // .exchange::<EVMPoolState<PreCachedDB>>("vm:maverick_v2", tvl_filter.clone(), None);
@@ -290,7 +282,7 @@ async fn main() {
                 chain.native_token().address,
                 signer.clone(),
             )
-                .expect("Failed to encode router call");
+            .expect("Failed to encode router call");
 
             // Print token balances before showing the swap options
             match get_token_balance(
@@ -299,7 +291,7 @@ async fn main() {
                 signer.address(),
                 Address::from_slice(&chain.native_token().address),
             )
-                .await
+            .await
             {
                 Ok(balance) => {
                     let formatted_balance = format_token_amount(&balance, &sell_token);
@@ -327,7 +319,7 @@ async fn main() {
                 signer.address(),
                 Address::from_slice(&chain.native_token().address),
             )
-                .await
+            .await
             {
                 Ok(balance) => {
                     let formatted_balance = format_token_amount(&balance, &buy_token);
@@ -370,7 +362,7 @@ async fn main() {
                         tx.clone(),
                         chain.id(),
                     )
-                        .await;
+                    .await;
 
                     let payload = SimulatePayload {
                         block_state_calls: vec![SimBlock {
@@ -423,7 +415,7 @@ async fn main() {
                                     tx.clone(),
                                     chain.id(),
                                 )
-                                    .await
+                                .await
                                 {
                                     Ok(_) => {
                                         println!("\n✅ Swap executed successfully! Exiting the session...\n");
@@ -467,7 +459,7 @@ async fn main() {
                         tx,
                         chain.id(),
                     )
-                        .await
+                    .await
                     {
                         Ok(_) => {
                             println!("\n✅ Swap executed successfully! Exiting the session...\n");
@@ -879,7 +871,7 @@ async fn execute_swap_transaction(
         tx.clone(),
         chain_id,
     )
-        .await;
+    .await;
 
     let approval_receipt = provider
         .send_transaction(approval_request)
@@ -908,7 +900,7 @@ async fn execute_swap_transaction(
             "Swap transaction with hash {hash:?} failed.",
             hash = swap_result.transaction_hash
         )
-            .into());
+        .into());
     }
 
     Ok(())

@@ -188,21 +188,6 @@ pub fn curve_pool_filter(component: &ComponentWithState) -> bool {
     true
 }
 
-/// Filters out pools that have hooks in Uniswap V4
-pub fn uniswap_v4_pool_with_hook_filter(component: &ComponentWithState) -> bool {
-    if let Some(hooks) = component
-        .component
-        .static_attributes
-        .get("hooks")
-    {
-        if hooks.to_vec() != ZERO_ADDRESS_ARR {
-            debug!("Filtering out UniswapV4 pool {} because it has hooks", component.component.id);
-            return false;
-        }
-    }
-    true
-}
-
 /// Filters out pools that rely on ERC4626 in Balancer V3
 pub fn balancer_v3_pool_filter(component: &ComponentWithState) -> bool {
     if let Some(erc4626) = component
