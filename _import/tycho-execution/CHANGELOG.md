@@ -1,3 +1,10 @@
+## [0.120.0](https://github.com/propeller-heads/tycho-execution/compare/0.119.0...0.120.0) (2025-08-27)
+
+
+### Features
+
+* Deploy new hashflow router ([eac45fa](https://github.com/propeller-heads/tycho-execution/commit/eac45faf5a56a50dacff374da7c3701e5a1d3f33))
+
 ## [0.119.0](https://github.com/propeller-heads/tycho-execution/compare/0.118.0...0.119.0) (2025-08-21)
 
 
