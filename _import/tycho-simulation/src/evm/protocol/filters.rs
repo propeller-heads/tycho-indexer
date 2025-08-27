@@ -7,6 +7,7 @@ use tycho_client::feed::synchronizer::ComponentWithState;
 use crate::evm::protocol::vm::utils::json_deserialize_be_bigint_list;
 
 const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
+#[allow(dead_code)]
 const ZERO_ADDRESS_ARR: [u8; 20] = [0u8; 20];
 
 // Defines the default Balancer V2 Filter
@@ -161,7 +162,7 @@ pub fn curve_pool_filter(component: &ComponentWithState) -> bool {
                 "Filtering out Curve pool {} because it belongs to an unsupported factory",
                 component.component.id
             );
-            return false
+            return false;
         }
     };
 
@@ -181,7 +182,7 @@ pub fn curve_pool_filter(component: &ComponentWithState) -> bool {
             "Filtering out Curve pool {} because it has a rebasing token that is not supported",
             component.component.id
         );
-        return false
+        return false;
     }
 
     true
@@ -189,13 +190,17 @@ pub fn curve_pool_filter(component: &ComponentWithState) -> bool {
 
 /// Filters out pools that have hooks in Uniswap V4
 pub fn uniswap_v4_pool_with_hook_filter(component: &ComponentWithState) -> bool {
-    if component.component.id ==
-        "0x156c3163f4cabc00f83d2bfad9ee341aebc85a5bcb566c0ba8fc4358a1023166".to_string()
+    if let Some(hooks) = component
+        .component
+        .static_attributes
+        .get("hooks")
     {
-        true
-    } else {
-        false
+        if hooks.to_vec() != ZERO_ADDRESS_ARR {
+            debug!("Filtering out UniswapV4 pool {} because it has hooks", component.component.id);
+            return false;
+        }
     }
+    true
 }
 
 /// Filters out pools that rely on ERC4626 in Balancer V3

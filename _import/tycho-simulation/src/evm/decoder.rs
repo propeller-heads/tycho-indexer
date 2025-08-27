@@ -190,8 +190,6 @@ where
         let mut new_pairs = HashMap::new();
         let mut removed_pairs = HashMap::new();
         let mut contracts_map = HashMap::new();
-        let weth = &Bytes::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
-        let steth = &Bytes::from_str("0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0").unwrap();
 
         let header = msg
             .state_msgs

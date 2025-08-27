@@ -377,7 +377,7 @@ impl ProtocolSim for UniswapV4State {
                     // to get the derivative, following the pattern from vm/state.rs
 
                     // Calculate the first sell amount (x1) as a small amount
-                    let x1 = BigUint::from(10u64).pow(base.decimals as u32) / BigUint::from(100u64); // 0.01 token
+                    let x1 = BigUint::from(10u64).pow(base.decimals) / BigUint::from(100u64); // 0.01 token
 
                     // Calculate the second sell amount (x2) as x1 + 1% of x1
                     let x2 = &x1 + (&x1 / BigUint::from(100u64));

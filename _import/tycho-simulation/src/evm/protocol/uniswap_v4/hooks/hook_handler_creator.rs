@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use std::{collections::HashMap, str::FromStr, sync::RwLock};
+use std::{collections::HashMap, sync::RwLock};
 
 use alloy::primitives::{Address, U256};
 use lazy_static::lazy_static;
