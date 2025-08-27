@@ -213,5 +213,5 @@ Market conditions can change rapidly. Delays in your decision-making can lead to
 {% endhint %}
 
 {% hint style="info" %}
-Because the RFQ will only let you swap up to the amount of tokens specified in the quote, when the RFQ swap happens after another protocol in a sequential swap, if positive slippage occurs, any additional tokens beyond the permitted quote amount will remain in the Tycho Router.
+Because the RFQ will only let you swap up to the amount of tokens specified in the quote, when the RFQ swap happens after another protocol in a sequential swap, if positive slippage occurs during the preceding swap, any additional input tokens beyond the permitted quote amount will remain in the Tycho Router and not be sent to the RFQ protocol.
 {% endhint %}
