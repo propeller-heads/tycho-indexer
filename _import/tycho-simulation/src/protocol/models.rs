@@ -27,7 +27,7 @@
 use std::{collections::HashMap, default::Default, future::Future};
 
 use chrono::NaiveDateTime;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tycho_client::feed::{HeaderLike, SynchronizerState};
 use tycho_common::{
     models::{token::Token, Chain},
@@ -40,7 +40,7 @@ use tycho_common::{
 ///
 /// * `address`: String, the address of the trading pair
 /// * `tokens`: `Vec<ERC20Token>`, the tokens of the trading pair
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProtocolComponent {
     #[deprecated(since = "0.73.0", note = "Use `id` instead")]
     pub address: Bytes,
