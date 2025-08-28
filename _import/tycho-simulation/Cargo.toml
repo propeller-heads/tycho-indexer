@@ -97,7 +97,7 @@ unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
 
 # tycho execution for quickstart
-tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", package = "tycho-execution", features = ["evm"], rev = "0daccfea9ab85fcf967c593f684a75fca7f0061e" }
+tycho-execution = "0.121.0"
 
 [features]
 default = ["evm", "rfq"]
