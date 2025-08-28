@@ -66,7 +66,7 @@ struct Cli {
     #[arg(long, default_value_t = 10.0)]
     sell_amount: f64,
     /// The tvl threshold to filter the graph by
-    #[arg(long, default_value_t = 1.0)]
+    #[arg(long, default_value_t = 100.0)]
     tvl_threshold: f64,
     #[arg(long, default_value = "ethereum")]
     chain: Chain,
@@ -192,13 +192,21 @@ async fn main() {
             protocol_stream = protocol_stream
                 .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
                 .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
-                .exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None)
+                .exchange::<UniswapV4State>(
+                    "uniswap_v4",
+                    tvl_filter.clone(),
+                    Some(uniswap_v4_pool_with_hook_filter),
+                )
         }
         Chain::Unichain => {
             protocol_stream = protocol_stream
                 .exchange::<UniswapV2State>("uniswap_v2", tvl_filter.clone(), None)
                 .exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None)
-                .exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None)
+                .exchange::<UniswapV4State>(
+                    "uniswap_v4",
+                    tvl_filter.clone(),
+                    Some(uniswap_v4_pool_with_hook_filter),
+                )
         }
         _ => {}
     }
