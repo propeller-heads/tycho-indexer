@@ -1379,7 +1379,6 @@ mod tests {
             UniswapV4Fees { zero_for_one: 100, one_for_zero: 90, lp_fee: 500 },
             0,
             1,
-            // Except the ticks - not sure where to get these...
             vec![],
             block.clone(),
         );
