@@ -1,3 +1,10 @@
+## [0.154.1](https://github.com/propeller-heads/tycho-simulation/compare/0.154.0...0.154.1) (2025-08-28)
+
+
+### Bug Fixes
+
+* pin solar-config version to 0.1.5 to prevent solar-sema from using 0.1.6, which contains breaking changes ([e29e471](https://github.com/propeller-heads/tycho-simulation/commit/e29e471740a7787254baa12bc5af9e39d9ffb996))
+
 ## [0.154.0](https://github.com/propeller-heads/tycho-simulation/compare/0.153.0...0.154.0) (2025-08-28)
 
 
