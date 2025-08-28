@@ -39,7 +39,9 @@ use tycho_simulation::{
         engine_db::tycho_db::PreCachedDB,
         protocol::{
             ekubo::state::EkuboState,
-            filters::{balancer_v2_pool_filter, curve_pool_filter},
+            filters::{
+                balancer_v2_pool_filter, curve_pool_filter, uniswap_v4_pool_with_hook_filter,
+            },
             pancakeswap_v2::state::PancakeswapV2State,
             u256_num::biguint_to_u256,
             uniswap_v2::state::UniswapV2State,
@@ -61,7 +63,7 @@ struct Cli {
     sell_token: Option<String>,
     #[arg(long)]
     buy_token: Option<String>,
-    #[arg(long, default_value_t = 2.0)]
+    #[arg(long, default_value_t = 10.0)]
     sell_amount: f64,
     /// The tvl threshold to filter the graph by
     #[arg(long, default_value_t = 1.0)]
@@ -76,7 +78,7 @@ impl Cli {
 
         if self.buy_token.is_none() {
             self.buy_token = Some(match self.chain.to_string().as_str() {
-                "ethereum" => "0x0000000000000000000000000000000000000000".to_string(),
+                "ethereum" => "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2".to_string(),
                 "base" => "0x4200000000000000000000000000000000000006".to_string(),
                 "unichain" => "0x4200000000000000000000000000000000000006".to_string(),
                 _ => panic!("Execution does not yet support chain {chain}", chain = self.chain),
@@ -170,8 +172,11 @@ async fn main() {
                     tvl_filter.clone(),
                     Some(balancer_v2_pool_filter),
                 )
-                .exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None)
-                .exchange::<UniswapV4State>("uniswap_v4_hooks", tvl_filter.clone(), None)
+                .exchange::<UniswapV4State>(
+                    "uniswap_v4",
+                    tvl_filter.clone(),
+                    Some(uniswap_v4_pool_with_hook_filter),
+                )
                 .exchange::<EkuboState>("ekubo_v2", tvl_filter.clone(), None)
                 .exchange::<EVMPoolState<PreCachedDB>>(
                     "vm:curve",
@@ -179,6 +184,8 @@ async fn main() {
                     Some(curve_pool_filter),
                 );
             // COMING SOON!
+            // .exchange::<UniswapV4State>("uniswap_v4_hooks", tvl_filter.clone(),
+            // Some(uniswap_v4_pool_with_euler_hook_filter));
             // .exchange::<EVMPoolState<PreCachedDB>>("vm:maverick_v2", tvl_filter.clone(), None);
         }
         Chain::Base => {
@@ -534,7 +541,6 @@ fn get_best_swap(
                     .ok();
 
                 if let Some(amount_out) = amount_out_result {
-                    println!("Calculated amount out for pool: {:?}", amount_out.amount);
                     amounts_out.insert(id.clone(), amount_out.amount);
                 }
 

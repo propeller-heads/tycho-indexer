@@ -7,10 +7,38 @@ use tycho_client::feed::synchronizer::ComponentWithState;
 use crate::evm::protocol::vm::utils::json_deserialize_be_bigint_list;
 
 const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
+const ZERO_ADDRESS_ARR: [u8; 20] = [0u8; 20];
 
 // Defines the default Balancer V2 Filter
 pub fn balancer_v2_pool_filter(component: &ComponentWithState) -> bool {
     balancer_v2_pool_filter_after_dci_update(component)
+}
+
+/// Filters out pools that have hooks in Uniswap V4
+pub fn uniswap_v4_pool_with_hook_filter(component: &ComponentWithState) -> bool {
+    if let Some(hooks) = component
+        .component
+        .static_attributes
+        .get("hooks")
+    {
+        if hooks.to_vec() != ZERO_ADDRESS_ARR {
+            debug!("Filtering out UniswapV4 pool {} because it has hooks", component.component.id);
+            return false;
+        }
+    }
+    true
+}
+
+pub fn uniswap_v4_pool_with_euler_hook_filter(component: &ComponentWithState) -> bool {
+    if let Some(_hooks_data) = component
+        .component
+        .static_attributes
+        .get("hook_identifier")
+    {
+        // Only Euler pools have a hook_identifier
+        return true;
+    }
+    false
 }
 
 /// Filters out pools that are failing at the moment after DCI update
