@@ -901,7 +901,7 @@ impl PostgresGateway {
         Ok(())
     }
 
-    #[instrument(level = Level::DEBUG, skip(self, addresses, _conn))]
+    // #[instrument(level = Level::DEBUG, skip(self, addresses, _conn))]
     pub async fn get_tokens(
         &self,
         chain: Chain,
@@ -912,13 +912,18 @@ impl PostgresGateway {
         _conn: &mut AsyncPgConnection, //TODO: remove this
     ) -> Result<WithTotal<Vec<CurrencyToken>>, StorageError> {
         self.token_cache
-            .query_tokens(
-                &chain,
-                addresses,
-                quality_filter,
+            .query_tokens(super::token_cache::TokenQuery {
+                chain,
+                addresses: addresses.map(|addrs| {
+                    addrs
+                        .iter()
+                        .map(|a| (*a).clone())
+                        .collect()
+                }),
+                quality_range: quality_filter,
                 last_traded_ts_threshold,
-                pagination_params,
-            )
+                pagination: pagination_params.cloned(),
+            })
             .await
     }
 

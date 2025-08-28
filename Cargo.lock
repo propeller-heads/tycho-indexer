@@ -4794,6 +4794,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "iter-set"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d383de7eb06945341d858e79642070db6c357978a753ebf6aacf43975d73ad9b"
+
+[[package]]
 name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8698,6 +8704,7 @@ dependencies = [
  "diesel-derive-enum",
  "diesel_migrations",
  "hex",
+ "iter-set",
  "itertools 0.12.1",
  "lazy_static",
  "lru 0.12.2",

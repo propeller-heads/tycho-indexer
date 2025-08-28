@@ -28,6 +28,7 @@ diesel_migrations = "2.1.0"
 itertools = "0.12.1"
 lazy_static = "1.4.0"
 bimap = "0.6.3"
+iter-set = "2.0.2"
 
 
 [dev-dependencies]

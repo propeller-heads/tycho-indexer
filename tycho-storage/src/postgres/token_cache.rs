@@ -1,27 +1,40 @@
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     ops::Bound,
     str::FromStr,
     sync::Arc,
+    time::Instant,
 };
 
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection, RunQueryDsl};
+use iter_set::{intersection, union};
+use itertools::Itertools;
 use tokio::sync::RwLock;
+use tracing::{debug, info};
 use tycho_common::{
     models::{protocol::QualityRange, token::CurrencyToken, Address, Chain, PaginationParams},
     storage::{StorageError, WithTotal},
 };
 
+#[derive(Debug, Clone)]
+pub(crate) struct TokenQuery {
+    pub(crate) chain: Chain,
+    pub(crate) addresses: Option<Vec<Address>>,
+    pub(crate) quality_range: QualityRange,
+    pub(crate) last_traded_ts_threshold: Option<NaiveDateTime>,
+    pub(crate) pagination: Option<PaginationParams>,
+}
+
 use crate::postgres::{orm, schema, PostgresError};
 
 /// Index of tokens by address.
-type TokenIndex = Arc<RwLock<HashMap<Address, CurrencyToken>>>;
+type TokenIndex = Arc<RwLock<HashMap<Address, Arc<CurrencyToken>>>>;
 /// Index of tokens by quality.
-type QualityIndex = Arc<RwLock<BTreeMap<i32, HashSet<Address>>>>;
+type QualityIndex = Arc<RwLock<BTreeMap<i32, BTreeSet<Address>>>>;
 /// Index of tokens by last traded timestamp.
-type TradedTsIndex = Arc<RwLock<BTreeMap<NaiveDateTime, HashSet<Address>>>>;
+type TradedTsIndex = Arc<RwLock<BTreeMap<NaiveDateTime, BTreeSet<Address>>>>;
 
 #[derive(Debug, Clone)]
 pub struct TokenCache {
@@ -61,16 +74,16 @@ impl TokenCache {
 
             let chain_id = schema::chain::table
                 .select(schema::chain::id)
-                .filter(schema::chain::name.eq(chain_str))
+                .filter(schema::chain::name.eq(&chain_str))
                 .first::<i64>(&mut conn)
                 .await
                 .map_err(PostgresError::from)?;
 
             let chain_tokens = Arc::new(RwLock::new(HashMap::new()));
             let chain_quality_index =
-                Arc::new(RwLock::new(BTreeMap::<i32, HashSet<Address>>::new()));
+                Arc::new(RwLock::new(BTreeMap::<i32, BTreeSet<Address>>::new()));
             let chain_traded_ts_index =
-                Arc::new(RwLock::new(BTreeMap::<NaiveDateTime, HashSet<Address>>::new()));
+                Arc::new(RwLock::new(BTreeMap::<NaiveDateTime, BTreeSet<Address>>::new()));
 
             let raw_results: Vec<_> = dsl_token::table
                 .inner_join(schema::account::table)
@@ -104,6 +117,7 @@ impl TokenCache {
                     )
                 })
                 .collect();
+            let res_len = results.len();
 
             // Scope for holding the locks
             {
@@ -111,7 +125,8 @@ impl TokenCache {
                 let mut quality_index_lock = chain_quality_index.write().await;
 
                 results.into_iter().for_each(|token| {
-                    tokens_lock.insert(token.address.clone(), token.clone());
+                    let arc_token = Arc::new(token.clone());
+                    tokens_lock.insert(token.address.clone(), arc_token);
                     quality_index_lock
                         .entry(token.quality as i32)
                         .or_default()
@@ -150,6 +165,10 @@ impl TokenCache {
                 }
             }
 
+            info!("TokenCache created with {} chains, {} tokens", chain_str.len(), res_len);
+            info!("Quality index: {:?}", chain_quality_index.read().await.len());
+            info!("Traded ts index: {:?}", chain_traded_ts_index.read().await.len());
+
             tokens.insert(chain, chain_tokens);
             quality_index.insert(chain, chain_quality_index);
             traded_ts_index.insert(chain, chain_traded_ts_index);
@@ -172,7 +191,8 @@ impl TokenCache {
             .write()
             .await;
         for token in tokens {
-            let old_token = tokens_lock.insert(token.address.clone(), token.clone());
+            let arc_token = Arc::new(token.clone());
+            let old_token = tokens_lock.insert(token.address.clone(), arc_token);
             if let Some(old_token) = old_token {
                 quality_index_lock
                     .entry(old_token.quality as i32)
@@ -211,115 +231,139 @@ impl TokenCache {
 
     pub(crate) async fn query_tokens(
         &self,
-        chain: &Chain,
-        addresses: Option<&[&Address]>,
-        quality_range: QualityRange,
-        last_traded_ts_threshold: Option<NaiveDateTime>,
-        pagination: Option<&PaginationParams>,
+        query: TokenQuery,
     ) -> Result<WithTotal<Vec<CurrencyToken>>, StorageError> {
+        info!("Querying tokens: {:?}", query);
+        let query_start = Instant::now();
+        info!("Querying tokens for chain: {:?}", query.chain);
+
+        let lock_start = Instant::now();
         let tokens_lock = self
             .tokens
-            .get(chain)
+            .get(&query.chain)
             .unwrap()
             .read()
             .await;
-        let mut candidate_addrs: HashSet<&Address> = match addresses {
-            Some(addrs) => addrs.iter().copied().collect(),
-            None => tokens_lock.keys().collect(),
+        debug!("Tokens lock acquisition took: {:?}", lock_start.elapsed());
+
+        // Smart filter ordering - start with the most restrictive filter to minimize work
+        let intersection_start = Instant::now();
+
+        // Determine filter priorities and get the most restrictive one first
+        let has_addresses = query.addresses.is_some();
+        let has_quality = query.quality_range.min.is_some() || query.quality_range.max.is_some();
+        let has_timestamp = query.last_traded_ts_threshold.is_some();
+
+        let addresses_iter = match query.addresses {
+            Some(addresses) => Some(addresses.iter().sorted()),
+            None => None,
         };
 
-        match (quality_range.min, quality_range.max) {
+        let quality_lookup_start = Instant::now();
+        let quality_index_lock = self
+            .quality_index
+            .get(&query.chain)
+            .unwrap()
+            .read()
+            .await;
+        let quality_iter = match (query.quality_range.min, query.quality_range.max) {
             (Some(min_q), Some(max_q)) => {
-                let quality_index_lock = self
-                    .quality_index
-                    .get(chain)
-                    .unwrap()
-                    .read()
-                    .await;
-
-                let quality_ids: HashSet<_> = quality_index_lock
-                    .range(min_q..=max_q)
-                    .flat_map(|(_, addrs)| addrs)
-                    .collect();
-
-                candidate_addrs.retain(|addr| quality_ids.contains(addr));
+                info!("qualities range: {:?}", min_q..=max_q);
+                Some(
+                    quality_index_lock
+                        .range(min_q..=max_q)
+                        .map(|(_, addrs)| addrs.iter())
+                        .kmerge()
+                        .dedup(),
+                )
             }
             (Some(min_q), None) => {
-                let quality_index_lock = self
-                    .quality_index
-                    .get(chain)
-                    .unwrap()
-                    .read()
-                    .await;
-                let quality_ids: HashSet<_> = quality_index_lock
-                    .range((Bound::Excluded(min_q), Bound::Unbounded))
-                    .flat_map(|(_, addrs)| addrs)
-                    .collect();
-                candidate_addrs.retain(|addr| quality_ids.contains(addr));
+                info!("qualities range: {:?}", (Bound::Included(min_q), Bound::<i32>::Unbounded));
+                Some(
+                    quality_index_lock
+                        .range((Bound::Included(min_q), Bound::Unbounded))
+                        .map(|(_, addrs)| addrs.iter())
+                        .kmerge()
+                        .dedup(),
+                )
             }
             (None, Some(max_q)) => {
-                let quality_index_lock = self
-                    .quality_index
-                    .get(chain)
+                info!("qualities range: {:?}", (Bound::<i32>::Unbounded, Bound::Excluded(max_q)));
+                Some(
+                    quality_index_lock
+                        .range(..=max_q)
+                        .map(|(_, addrs)| addrs.iter())
+                        .kmerge()
+                        .dedup(),
+                )
+            }
+            (None, None) => None,
+        };
+        drop(quality_index_lock);
+        debug!("Quality lookup took: {:?}", quality_lookup_start.elapsed());
+
+        let ts_lookup_start = Instant::now();
+        let ts_iter = match (query.last_traded_ts_threshold) {
+            Some(ts) => {
+                let traded_ts_index_lock = self
+                    .traded_ts_index
+                    .get(&query.chain)
                     .unwrap()
                     .read()
                     .await;
-                let quality_ids: HashSet<_> = quality_index_lock
-                    .range(..=max_q)
-                    .flat_map(|(_, addrs)| addrs)
-                    .collect();
-                candidate_addrs.retain(|addr| quality_ids.contains(addr));
+                Some(
+                    traded_ts_index_lock
+                        .range((Bound::Excluded(ts), Bound::Unbounded))
+                        .map(|(_, addrs)| addrs.iter())
+                        .kmerge()
+                        .dedup(),
+                )
             }
-            (None, None) => {
-                // No filter; no-op
-            }
-        }
+            None => None,
+        };
+        debug!("Traded timestamp lookup took: {:?}", ts_lookup_start.elapsed());
 
-        if let Some(ts) = last_traded_ts_threshold {
-            let traded_ts_index_lock = self
-                .traded_ts_index
-                .get(chain)
-                .unwrap()
-                .read()
-                .await;
-            let ts_ids: HashSet<_> = traded_ts_index_lock
-                .range((Bound::Excluded(ts), Bound::Unbounded))
-                .flat_map(|(_, addrs)| addrs)
-                .collect();
-
-            candidate_addrs.retain(|addr| ts_ids.contains(addr));
-        }
-
-        let mut candidate_addrs = candidate_addrs
+        let candidate_iter = [quality_iter, ts_iter, addresses_iter]
             .into_iter()
-            .collect::<Vec<_>>();
-        candidate_addrs.sort_unstable_by_key(|addr| addr.to_string());
+            .flatten() // Remove None values, keep Some iterators
+            .reduce(|acc, iter| intersection(&acc, &iter));
 
         let total_candidates = candidate_addrs.len() as i64;
+        info!("Total candidates: {:?}", total_candidates);
 
-        let paginated_addrs: Vec<_> = if let Some(pagination) = pagination {
+        // Apply pagination and lookup tokens using iterators
+        let pagination_start = Instant::now();
+        let results: Result<Vec<_>, StorageError> = if let Some(pagination) = query.pagination {
             let offset = pagination.offset() as usize;
             let limit = pagination.page_size as usize;
             candidate_addrs
                 .iter()
                 .skip(offset)
                 .take(limit)
-                .copied()
+                .map(|addr| {
+                    tokens_lock
+                        .get(addr)
+                        .map(|arc_token| (**arc_token).clone())
+                        .ok_or(StorageError::NotFound("Token".to_string(), format!("{addr}")))
+                })
                 .collect()
         } else {
-            candidate_addrs.to_vec()
+            candidate_addrs
+                .iter()
+                .map(|addr| {
+                    tokens_lock
+                        .get(addr)
+                        .map(|arc_token| (**arc_token).clone())
+                        .ok_or(StorageError::NotFound("Token".to_string(), format!("{addr}")))
+                })
+                .collect()
         };
+        debug!("Pagination and token lookup took: {:?}", pagination_start.elapsed());
 
-        let results: Vec<_> = paginated_addrs
-            .into_iter()
-            .map(|addr| {
-                tokens_lock
-                    .get(addr)
-                    .cloned()
-                    .ok_or(StorageError::NotFound("Token".to_string(), format!("{addr}")))
-            })
-            .collect::<Result<Vec<_>, StorageError>>()?;
+        let results = results?;
+        info!("Final results: {:?}", results.len());
 
+        info!("Total query_tokens took: {:?}", query_start.elapsed());
         Ok(WithTotal { total: Some(total_candidates), entity: results })
     }
 }
