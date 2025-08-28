@@ -1,17 +1,21 @@
 #![allow(dead_code)]
 use std::{collections::HashMap, sync::RwLock};
 
-use alloy::primitives::Address;
+use alloy::primitives::{Address, U256};
 use lazy_static::lazy_static;
+use revm::{primitives::B256, state::AccountInfo};
 use tycho_client::feed::BlockHeader;
 use tycho_common::{models::token::Token, simulation::errors::SimulationError, Bytes};
 
 use crate::{
     evm::{
-        engine_db::{create_engine, SHARED_TYCHO_DB},
-        protocol::uniswap_v4::{
-            hooks::{generic_vm_hook_handler::GenericVMHookHandler, hook_handler::HookHandler},
-            state::UniswapV4State,
+        engine_db::{create_engine, engine_db_interface::EngineDatabaseInterface, SHARED_TYCHO_DB},
+        protocol::{
+            uniswap_v4::{
+                hooks::{generic_vm_hook_handler::GenericVMHookHandler, hook_handler::HookHandler},
+                state::UniswapV4State,
+            },
+            vm::constants::EXTERNAL_ACCOUNT,
         },
     },
     protocol::errors::InvalidSnapshotError,
@@ -20,6 +24,7 @@ use crate::{
 /// Parameters for creating a HookHandler.
 pub struct HookCreationParams<'a> {
     block: BlockHeader,
+    hook_address: Address,
     account_balances: &'a HashMap<Bytes, HashMap<Bytes, Bytes>>,
     all_tokens: &'a HashMap<Bytes, Token>,
     state: UniswapV4State,
@@ -34,13 +39,14 @@ pub struct HookCreationParams<'a> {
 impl<'a> HookCreationParams<'a> {
     pub fn new(
         block: BlockHeader,
+        hook_address: Address,
         account_balances: &'a HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &'a HashMap<Bytes, Token>,
         state: UniswapV4State,
         attributes: &'a HashMap<String, Bytes>,
         balances: &'a HashMap<Bytes, Bytes>,
     ) -> Self {
-        Self { block, account_balances, all_tokens, state, attributes, balances }
+        Self { block, hook_address, account_balances, all_tokens, state, attributes, balances }
     }
 }
 
@@ -58,19 +64,13 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
         &self,
         params: HookCreationParams<'_>,
     ) -> Result<Box<dyn HookHandler>, InvalidSnapshotError> {
-        let hook_address_bytes = params
-            .attributes
-            .get("hook_address")
-            .ok_or_else(|| InvalidSnapshotError::MissingAttribute("hook_address".to_string()))?;
-
         let pool_manager_address_bytes = params
             .attributes
-            .get("pool_manager_address")
+            .get("balance_owner")
             .ok_or_else(|| {
                 InvalidSnapshotError::MissingAttribute("pool_manager_address".to_string())
             })?;
 
-        let hook_address = Address::from_slice(&hook_address_bytes.0);
         let pool_manager_address = Address::from_slice(&pool_manager_address_bytes.0);
 
         let limits_entrypoint = params
@@ -78,14 +78,21 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
             .get("limits_entrypoint")
             .and_then(|bytes| String::from_utf8(bytes.0.to_vec()).ok());
 
-        let engine = create_engine(SHARED_TYCHO_DB.clone(), true).map_err(|e| {
+        let engine = create_engine(SHARED_TYCHO_DB.clone(), false).map_err(|e| {
             InvalidSnapshotError::VMError(SimulationError::FatalError(format!(
                 "Failed to create engine: {e:?}"
             )))
         })?;
 
+        let external_account_info =
+            AccountInfo { balance: U256::from(0), nonce: 0u64, code_hash: B256::ZERO, code: None };
+
+        engine
+            .state
+            .init_account(*EXTERNAL_ACCOUNT, external_account_info, None, true);
+
         let hook_handler = GenericVMHookHandler::new(
-            hook_address,
+            params.hook_address,
             engine,
             pool_manager_address,
             params.all_tokens.clone(),

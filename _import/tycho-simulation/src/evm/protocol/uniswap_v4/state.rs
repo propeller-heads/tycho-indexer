@@ -2,7 +2,7 @@ use std::{any::Any, collections::HashMap};
 
 use alloy::primitives::{Address, Sign, I256, U256};
 use num_bigint::BigUint;
-use num_traits::Zero;
+use num_traits::{ToPrimitive, Zero};
 use revm::primitives::I128;
 use tracing::trace;
 use tycho_client::feed::BlockHeader;
@@ -221,12 +221,12 @@ impl UniswapV4State {
                     safe_add_u256(step.amount_in, step.fee_amount)?,
                 )
                 .unwrap();
-                state.amount_calculated +=
+                state.amount_calculated -=
                     I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
             } else {
                 state.amount_remaining -=
                     I256::checked_from_sign_and_abs(Sign::Positive, step.amount_out).unwrap();
-                state.amount_calculated -= I256::checked_from_sign_and_abs(
+                state.amount_calculated += I256::checked_from_sign_and_abs(
                     Sign::Positive,
                     safe_add_u256(step.amount_in, step.fee_amount)?,
                 )
@@ -372,8 +372,45 @@ impl ProtocolSim for UniswapV4State {
         if let Some(hook) = &self.hook {
             match hook.spot_price(base, quote) {
                 Ok(price) => return Ok(price),
-                Err(SimulationError::RecoverableError(msg)) if msg.contains("not implemented") => {
-                    // Fall back to default implementation
+                Err(SimulationError::RecoverableError(_)) => {
+                    // Calculate spot price by swapping two amounts and use the approximation
+                    // to get the derivative, following the pattern from vm/state.rs
+
+                    // Calculate the first sell amount (x1) as a small amount
+                    let x1 = BigUint::from(10u64).pow(base.decimals) / BigUint::from(100u64); // 0.01 token
+
+                    // Calculate the second sell amount (x2) as x1 + 1% of x1
+                    let x2 = &x1 + (&x1 / BigUint::from(100u64));
+
+                    // Perform swaps to get the received amounts
+                    let y1 = self.get_amount_out(x1.clone(), base, quote)?;
+                    let y2 = self.get_amount_out(x2.clone(), base, quote)?;
+
+                    // Calculate the marginal price
+                    let num = &y2.amount - &y1.amount;
+                    let den = &x2 - &x1;
+
+                    if den == BigUint::from(0u64) {
+                        return Err(SimulationError::FatalError(
+                            "Cannot calculate spot price: denominator is zero".to_string(),
+                        ));
+                    }
+
+                    // Convert to f64 and adjust for decimals
+                    let num_f64 = num.to_f64().ok_or_else(|| {
+                        SimulationError::FatalError(
+                            "Failed to convert numerator to f64".to_string(),
+                        )
+                    })?;
+                    let den_f64 = den.to_f64().ok_or_else(|| {
+                        SimulationError::FatalError(
+                            "Failed to convert denominator to f64".to_string(),
+                        )
+                    })?;
+
+                    let token_correction = 10f64.powi(base.decimals as i32 - quote.decimals as i32);
+
+                    return Ok(num_f64 / den_f64 * token_correction);
                 }
                 Err(e) => return Err(e),
             }
@@ -477,7 +514,11 @@ impl ProtocolSim for UniswapV4State {
         // Perform the swap with potential hook modifications
         let result = self.swap(zero_for_one, amount_to_swap, None, lp_fee_override)?;
 
-        let mut swap_delta = BalanceDelta(result.amount_calculated);
+        // Create BalanceDelta from swap result using the proper constructor
+        let mut swap_delta = BalanceDelta::from_swap_result(result.amount_calculated, zero_for_one);
+
+        // Get deltas (change in the specified/given and unspecified/computed token balances after
+        // calling before swap)
         let hook_delta_specified = before_swap_delta.get_specified_delta();
         let mut hook_delta_unspecified = before_swap_delta.get_unspecified_delta();
 
@@ -512,6 +553,7 @@ impl ProtocolSim for UniswapV4State {
             // This is a BalanceDelta subtraction
             swap_delta = swap_delta - hook_delta
         }
+
         let amount_out = if (amount_specified < I256::ZERO) == zero_for_one {
             swap_delta.amount1()
         } else {
@@ -808,6 +850,18 @@ mod tests {
         )
     }
 
+    fn eth() -> Token {
+        Token::new(
+            &Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+            "ETH",
+            18,
+            0,
+            &[Some(10_000)],
+            Default::default(),
+            100,
+        )
+    }
+
     #[test]
     fn test_delta_transition() {
         let block = BlockHeader {
@@ -1020,6 +1074,274 @@ mod tests {
 
         assert_eq!(&res.1, &out.amount);
     }
+    #[test]
+    fn test_get_amount_out_no_hook() {
+        // Test using transaction 0x78ea4bbb7d4405000f33fdf6f3fa08b5e557d50e5e7f826a79766d50bd643b6f
+        let block = BlockHeader {
+            number: 23234805,
+            parent_hash: Default::default(),
+            hash: Bytes::from_str(
+                "0xb00f46215c5f07b73ab02226f82e408a35f1c8ef057d4684429d65c47b5ab1ae",
+            )
+            .expect("Invalid block hash"),
+            timestamp: 1749739055,
+            revert: false,
+        };
+
+        // Pool ID: 0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7
+        // Information taken from Tenderly simulation / event emitted on Etherscan
+        let usv4_state = UniswapV4State::new(
+            541501951282951892,
+            U256::from_str("5362798333066270795901222").unwrap(), // Sqrt price
+            UniswapV4Fees { zero_for_one: 0, one_for_zero: 0, lp_fee: 100 },
+            -192022,
+            1,
+            // Ticks taken from indexer logs
+            vec![
+                TickInfo {
+                    index: -887272,
+                    net_liquidity: 460382969070005,
+                    sqrt_price: U256::from(4295128739_u64),
+                },
+                TickInfo {
+                    index: -207244,
+                    net_liquidity: 561268407024557,
+                    sqrt_price: U256::from_str("2505291706254206075074035").unwrap(),
+                },
+                TickInfo {
+                    index: -196411,
+                    net_liquidity: 825711941800452,
+                    sqrt_price: U256::from_str("4306080513146952705853399").unwrap(),
+                },
+                TickInfo {
+                    index: -196257,
+                    net_liquidity: 64844666874010,
+                    sqrt_price: U256::from_str("4339363644587371378270009").unwrap(),
+                },
+                TickInfo {
+                    index: -195611,
+                    net_liquidity: 2344045150766798,
+                    sqrt_price: U256::from_str("4481806029599743916020126").unwrap(),
+                },
+                TickInfo {
+                    index: -194715,
+                    net_liquidity: 391037380558274654,
+                    sqrt_price: U256::from_str("4687145946111116896040494").unwrap(),
+                },
+                TickInfo {
+                    index: -194599,
+                    net_liquidity: 89032603464508,
+                    sqrt_price: U256::from_str("4714409015946702405379370").unwrap(),
+                },
+                TickInfo {
+                    index: -194389,
+                    net_liquidity: 66635600426483168,
+                    sqrt_price: U256::from_str("4764168603367683402636621").unwrap(),
+                },
+                TickInfo {
+                    index: -194160,
+                    net_liquidity: 6123093436523361,
+                    sqrt_price: U256::from_str("4819029067726467394386780").unwrap(),
+                },
+                TickInfo {
+                    index: -194025,
+                    net_liquidity: 79940813798964,
+                    sqrt_price: U256::from_str("4851665907541490407930032").unwrap(),
+                },
+                TickInfo {
+                    index: -193922,
+                    net_liquidity: 415630967437234,
+                    sqrt_price: U256::from_str("4876715181040466809166531").unwrap(),
+                },
+                TickInfo {
+                    index: -193876,
+                    net_liquidity: 9664144015186047,
+                    sqrt_price: U256::from_str("4887943972687250473582419").unwrap(),
+                },
+                TickInfo {
+                    index: -193818,
+                    net_liquidity: 435344726052344,
+                    sqrt_price: U256::from_str("4902138873132735049121973").unwrap(),
+                },
+                TickInfo {
+                    index: -193804,
+                    net_liquidity: 221726179374067,
+                    sqrt_price: U256::from_str("4905571399964683340605904").unwrap(),
+                },
+                TickInfo {
+                    index: -193719,
+                    net_liquidity: 101340835774487,
+                    sqrt_price: U256::from_str("4926463397882393957462188").unwrap(),
+                },
+                TickInfo {
+                    index: -193690,
+                    net_liquidity: 193367475630077,
+                    sqrt_price: U256::from_str("4933611593595025190448924").unwrap(),
+                },
+                TickInfo {
+                    index: -193643,
+                    net_liquidity: 357016631583746,
+                    sqrt_price: U256::from_str("4945218633428068823432932").unwrap(),
+                },
+                TickInfo {
+                    index: -193520,
+                    net_liquidity: 917243184365178,
+                    sqrt_price: U256::from_str("4975723910367862081017120").unwrap(),
+                },
+                TickInfo {
+                    index: -193440,
+                    net_liquidity: 114125890211958292,
+                    sqrt_price: U256::from_str("4995665665861492533686137").unwrap(),
+                },
+                TickInfo {
+                    index: -193380,
+                    net_liquidity: -65980729148766579,
+                    sqrt_price: U256::from_str("5010674414300823856025303").unwrap(),
+                },
+                TickInfo {
+                    index: -192891,
+                    net_liquidity: 1687883551433195,
+                    sqrt_price: U256::from_str("5134689105039642314202223").unwrap(),
+                },
+                TickInfo {
+                    index: -192573,
+                    net_liquidity: 11108903221360975,
+                    sqrt_price: U256::from_str("5216979018647067786855495").unwrap(),
+                },
+                TickInfo {
+                    index: -192448,
+                    net_liquidity: 32888457482352,
+                    sqrt_price: U256::from_str("5249685603828944002327927").unwrap(),
+                },
+                TickInfo {
+                    index: -191525,
+                    net_liquidity: -221726179374067,
+                    sqrt_price: U256::from_str("5497623359964843320146512").unwrap(),
+                },
+                TickInfo {
+                    index: -191447,
+                    net_liquidity: -32888457482352,
+                    sqrt_price: U256::from_str("5519104878745833608097296").unwrap(),
+                },
+                TickInfo {
+                    index: -191444,
+                    net_liquidity: -114125890211958292,
+                    sqrt_price: U256::from_str("5519932765173943847315221").unwrap(),
+                },
+                TickInfo {
+                    index: -191417,
+                    net_liquidity: -101340835774487,
+                    sqrt_price: U256::from_str("5527389333636021285046380").unwrap(),
+                },
+                TickInfo {
+                    index: -191384,
+                    net_liquidity: -9664144015186047,
+                    sqrt_price: U256::from_str("5536516597603056457376182").unwrap(),
+                },
+                TickInfo {
+                    index: -191148,
+                    net_liquidity: -561268407024557,
+                    sqrt_price: U256::from_str("5602231161238705865493165").unwrap(),
+                },
+                TickInfo {
+                    index: -191147,
+                    net_liquidity: -1687883551433195,
+                    sqrt_price: U256::from_str("5602511265794328966803451").unwrap(),
+                },
+                TickInfo {
+                    index: -191091,
+                    net_liquidity: -89032603464508,
+                    sqrt_price: U256::from_str("5618219493196441347292357").unwrap(),
+                },
+                TickInfo {
+                    index: -190950,
+                    net_liquidity: -189177935487638,
+                    sqrt_price: U256::from_str("5657965894785859782969011").unwrap(),
+                },
+                TickInfo {
+                    index: -190756,
+                    net_liquidity: -6123093436523361,
+                    sqrt_price: U256::from_str("5713112435031881967192022").unwrap(),
+                },
+                TickInfo {
+                    index: -190548,
+                    net_liquidity: -193367475630077,
+                    sqrt_price: U256::from_str("5772835841671084402427710").unwrap(),
+                },
+                TickInfo {
+                    index: -190430,
+                    net_liquidity: -11108903221360975,
+                    sqrt_price: U256::from_str("5806994534290341208820930").unwrap(),
+                },
+                TickInfo {
+                    index: -190195,
+                    net_liquidity: -391583014714302569,
+                    sqrt_price: U256::from_str("5875625707132601785181387").unwrap(),
+                },
+                TickInfo {
+                    index: -190043,
+                    net_liquidity: -357016631583746,
+                    sqrt_price: U256::from_str("5920448331650864936739481").unwrap(),
+                },
+                TickInfo {
+                    index: -189779,
+                    net_liquidity: -917243184365178,
+                    sqrt_price: U256::from_str("5999112356918485175181346").unwrap(),
+                },
+                TickInfo {
+                    index: -189663,
+                    net_liquidity: -2344045150766798,
+                    sqrt_price: U256::from_str("6034006559279282606084981").unwrap(),
+                },
+                TickInfo {
+                    index: -189620,
+                    net_liquidity: -435344726052344,
+                    sqrt_price: U256::from_str("6046992979471024289177519").unwrap(),
+                },
+                TickInfo {
+                    index: -189409,
+                    net_liquidity: -825711941800452,
+                    sqrt_price: U256::from_str("6111123241285165242130911").unwrap(),
+                },
+                TickInfo {
+                    index: -189325,
+                    net_liquidity: -3947182209207,
+                    sqrt_price: U256::from_str("6136842645893819031257990").unwrap(),
+                },
+                TickInfo {
+                    index: -189324,
+                    net_liquidity: -415630967437234,
+                    sqrt_price: U256::from_str("6137149480355443943537284").unwrap(),
+                },
+                TickInfo {
+                    index: -115136,
+                    net_liquidity: 462452451821,
+                    sqrt_price: U256::from_str("250529060232794967902094762").unwrap(),
+                },
+                TickInfo {
+                    index: -92109,
+                    net_liquidity: -462452451821,
+                    sqrt_price: U256::from_str("792242363124136400178523925").unwrap(),
+                },
+                TickInfo {
+                    index: 887272,
+                    net_liquidity: -521280453734808,
+                    sqrt_price: U256::from_str("1461446703485210103287273052203988822378723970342")
+                        .unwrap(),
+                },
+            ],
+            block,
+        );
+
+        let t0 = usdc();
+        let t1 = eth();
+
+        let out = usv4_state
+            .get_amount_out(BigUint::from_u64(2000000).unwrap(), &t0, &t1)
+            .unwrap();
+
+        assert_eq!(out.amount, BigUint::from_str("436478419853848").unwrap())
+    }
 
     #[test]
     fn test_get_amount_out_euler_hook() {
@@ -1089,6 +1411,44 @@ mod tests {
             .unwrap();
 
         assert_eq!(out.amount, BigUint::from_str("2681115183499232721").unwrap())
+    }
+
+    #[test]
+    fn test_spot_price_with_recoverable_error() {
+        // Test that spot_price correctly falls back to swap-based calculation
+        // when a RecoverableError (other than "not implemented") is returned
+        let block = BlockHeader {
+            number: 22689128,
+            parent_hash: Default::default(),
+            hash: Bytes::from_str(
+                "0xfbfa716523d25d6d5248c18d001ca02b1caf10cabd1ab7321465e2262c41157b",
+            )
+            .expect("Invalid block hash"),
+            timestamp: 1749739055,
+            revert: false,
+        };
+
+        let usv4_state = UniswapV4State::new(
+            1000000000000000000u128,                                  // 1e18 liquidity
+            U256::from_str("79228162514264337593543950336").unwrap(), // 1:1 price
+            UniswapV4Fees { zero_for_one: 100, one_for_zero: 100, lp_fee: 100 },
+            0,
+            60,
+            vec![
+                TickInfo::new(-600, 500000000000000000i128),
+                TickInfo::new(600, -500000000000000000i128),
+            ],
+            block,
+        );
+
+        // Test spot price calculation without a hook (should use default implementation)
+        let spot_price_result = usv4_state.spot_price(&usdc(), &weth());
+        assert!(spot_price_result.is_ok());
+
+        // The price should be approximately 1.0 (since we set sqrt_price for 1:1)
+        // Adjusting for decimals difference (USDC has 6, WETH has 18)
+        let price = spot_price_result.unwrap();
+        assert!(price > 0.0);
     }
 
     #[test]

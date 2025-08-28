@@ -184,6 +184,8 @@ async fn main() {
                     Some(curve_pool_filter),
                 );
             // COMING SOON!
+            // .exchange::<UniswapV4State>("uniswap_v4_hooks", tvl_filter.clone(),
+            // Some(uniswap_v4_pool_with_euler_hook_filter));
             // .exchange::<EVMPoolState<PreCachedDB>>("vm:maverick_v2", tvl_filter.clone(), None);
         }
         Chain::Base => {
@@ -316,8 +318,8 @@ async fn main() {
                     if balance < amount_in {
                         let required = format_token_amount(&amount_in, &sell_token);
                         println!("⚠️ Warning: Insufficient balance for swap. You have {formatted_balance} {sell_symbol} but need {required} {sell_symbol}",
-                            formatted_balance = formatted_balance,
-                            sell_symbol = sell_token.symbol,
+                                 formatted_balance = formatted_balance,
+                                 sell_symbol = sell_token.symbol,
                         );
                         return;
                     }
@@ -541,13 +543,21 @@ fn get_best_swap(
             if HashSet::from([&sell_token, &buy_token])
                 .is_subset(&HashSet::from_iter(tokens.iter()))
             {
-                let amount_out = state
+                let amount_out_result = state
                     .get_amount_out(amount_in.clone(), &sell_token, &buy_token)
                     .map_err(|e| eprintln!("Error calculating amount out for Pool {id:?}: {e:?}"))
                     .ok();
-                if let Some(amount_out) = amount_out {
+
+                if let Some(amount_out) = amount_out_result {
                     amounts_out.insert(id.clone(), amount_out.amount);
                 }
+
+                // If you would like to know how much of each token you are able to swap on the
+                // pool, do
+                // let limits = state
+                //     .get_limits(sell_token.address.clone(), buy_token.address.clone())
+                //     .unwrap();
+
                 // If you would like to save spot prices instead of the amount out, do
                 // let spot_price = state
                 //     .spot_price(&tokens[0], &tokens[1])

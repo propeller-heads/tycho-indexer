@@ -26,6 +26,7 @@ pub struct SwapParams {
     pub sqrt_price_limit: U256,
 }
 
+#[derive(Debug)]
 pub struct BeforeSwapParameters {
     pub context: StateContext,
     pub sender: Address,
@@ -67,6 +68,24 @@ impl BalanceDelta {
         let unspecified_mask = I256::from_raw(U256::from_limbs([u64::MAX, u64::MAX, 0, 0]));
         let unspecified_masked = I256::from(amount1) & unspecified_mask;
         BalanceDelta(specified_shifted | unspecified_masked)
+    }
+
+    /// Creates a BalanceDelta from swap result's amount_calculated based on swap direction
+    ///
+    /// For exact input swaps:
+    /// - amount_calculated is negative (amount of output token received)
+    /// - We convert it to positive for the appropriate amount field
+    /// - The other amount field is set to zero
+    pub fn from_swap_result(amount_calculated: I256, zero_for_one: bool) -> BalanceDelta {
+        // For exact input swaps, amount_calculated is negative (output amount from pool's
+        // perspective) We negate it to convert to positive amount from user's perspective
+        if zero_for_one {
+            // Swapping token0 for token1: amount_calculated represents change in token1
+            BalanceDelta::new(I128::ZERO, get_lower_i128(-amount_calculated))
+        } else {
+            // Swapping token1 for token0: amount_calculated represents change in token0
+            BalanceDelta::new(get_lower_i128(-amount_calculated), I128::ZERO)
+        }
     }
 
     pub fn as_i256(&self) -> I256 {
