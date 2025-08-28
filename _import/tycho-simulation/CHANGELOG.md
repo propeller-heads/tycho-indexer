@@ -1,3 +1,22 @@
+## [0.153.0](https://github.com/propeller-heads/tycho-simulation/compare/0.152.0...0.153.0) (2025-08-27)
+
+
+### Features
+
+* validate rfq quotes in `request_binding_quote` ([dc1d497](https://github.com/propeller-heads/tycho-simulation/commit/dc1d497f05416c5023eb869a3c0aca83756fc959))
+
+## [0.152.0](https://github.com/propeller-heads/tycho-simulation/compare/0.151.0...0.152.0) (2025-08-26)
+
+
+### Features
+
+* add hashflow client to rfq_quickstart ([f42d2a9](https://github.com/propeller-heads/tycho-simulation/commit/f42d2a94cdb0377ffb603dd37423d09df23512fd))
+
+
+### Bug Fixes
+
+* serialize floats as strings in HashflowPriceLevel so it can be decoded correctly ([83c932d](https://github.com/propeller-heads/tycho-simulation/commit/83c932dfdbf6d0e9bdcdc78746ee1a06194bb74c))
+
 ## [0.151.0](https://github.com/propeller-heads/tycho-simulation/compare/0.150.2...0.151.0) (2025-08-21)
 
 

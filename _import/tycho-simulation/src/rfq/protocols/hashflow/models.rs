@@ -2,7 +2,12 @@ use std::{collections::HashMap, str::FromStr};
 
 use alloy::primitives::Address;
 use serde::{Deserialize, Serialize};
-use tycho_common::{models::Chain, Bytes};
+use tycho_common::{
+    models::{protocol::GetAmountOutParams, Chain},
+    Bytes,
+};
+
+use crate::rfq::errors::RFQError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HashflowPriceLevelsResponse {
@@ -38,10 +43,18 @@ where
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HashflowPriceLevel {
-    #[serde(rename = "q", deserialize_with = "deserialize_string_to_f64")]
+    #[serde(
+        rename = "q",
+        deserialize_with = "deserialize_string_to_f64",
+        serialize_with = "serialize_f64_to_string"
+    )]
     /// Quantity of tokens that can be traded at this level
     pub quantity: f64,
-    #[serde(rename = "p", deserialize_with = "deserialize_string_to_f64")]
+    #[serde(
+        rename = "p",
+        deserialize_with = "deserialize_string_to_f64",
+        serialize_with = "serialize_f64_to_string"
+    )]
     /// Price per token at this level
     pub price: f64,
 }
@@ -53,6 +66,13 @@ where
     let s = String::deserialize(deserializer)?;
     s.parse()
         .map_err(serde::de::Error::custom)
+}
+
+fn serialize_f64_to_string<S>(value: &f64, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&value.to_string())
 }
 
 impl HashflowMarketMakerLevels {
@@ -184,9 +204,40 @@ pub struct HashflowQuote {
     pub quote_data: HashflowQuoteData,
     pub signature: Bytes,
     #[serde(rename = "targetContract")]
-    target_contract: Option<Bytes>,
-    value: Option<String>,
+    pub target_contract: Option<Bytes>,
+    pub value: Option<String>,
 }
+
+impl HashflowQuote {
+    pub fn validate(&self, params: &GetAmountOutParams) -> Result<(), RFQError> {
+        if self.quote_data.base_token != params.token_in {
+            return Err(RFQError::FatalError(format!(
+                "Base token mismatch: expected {}, got {}",
+                params.token_in, self.quote_data.base_token
+            )));
+        }
+        if self.quote_data.quote_token != params.token_out {
+            return Err(RFQError::FatalError(format!(
+                "Quote token mismatch: expected {}, got {}",
+                params.token_out, self.quote_data.quote_token
+            )));
+        }
+        if self.quote_data.trader != params.receiver {
+            return Err(RFQError::FatalError(format!(
+                "Trader address mismatch: expected {}, got {}",
+                params.receiver, self.quote_data.trader
+            )));
+        }
+        if self.quote_data.base_token_amount != params.amount_in.to_string() {
+            return Err(RFQError::FatalError(format!(
+                "Base token amount mismatch: expected {}, got {}",
+                params.amount_in, self.quote_data.base_token_amount
+            )));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HashflowQuoteData {
     #[serde(rename = "baseToken")]
@@ -281,5 +332,97 @@ mod tests {
         let (amount_out, remaining) = mm_level.get_amount_out_from_levels(5.0);
         assert_eq!(amount_out, 8998.0); // 1.0 * 3000.0 + 2.0 * 2999.0 = 3000.0 + 5998.0
         assert_eq!(remaining, 2.0); // 5.0 - 3.0 (total available)
+    }
+
+    #[cfg(test)]
+    mod hashflow_quote_validate_tests {
+        use num_bigint::BigUint;
+        use tycho_common::models::protocol::GetAmountOutParams;
+
+        use super::*;
+
+        fn hex_to_bytes(hex: &str) -> Bytes {
+            Bytes::from_str(hex).unwrap()
+        }
+
+        fn quote_data() -> HashflowQuoteData {
+            HashflowQuoteData {
+                base_token: hex_to_bytes("0x1111111111111111111111111111111111111111"),
+                quote_token: hex_to_bytes("0x2222222222222222222222222222222222222222"),
+                base_token_amount: "1000".to_string(),
+                quote_token_amount: "2000".to_string(),
+                trader: hex_to_bytes("0x3333333333333333333333333333333333333333"),
+                effective_trader: None,
+                tx_id: hex_to_bytes("0x4444444444444444444444444444444444444444"),
+                pool: hex_to_bytes("0x5555555555555555555555555555555555555555"),
+                quote_expiry: 123456,
+                nonce: 1,
+                external_account: None,
+            }
+        }
+
+        fn params() -> GetAmountOutParams {
+            GetAmountOutParams {
+                amount_in: BigUint::from(1000u32),
+                token_in: hex_to_bytes("0x1111111111111111111111111111111111111111"),
+                token_out: hex_to_bytes("0x2222222222222222222222222222222222222222"),
+                sender: hex_to_bytes("0x6666666666666666666666666666666666666666"),
+                receiver: hex_to_bytes("0x3333333333333333333333333333333333333333"),
+            }
+        }
+
+        fn quote() -> HashflowQuote {
+            HashflowQuote {
+                quote_data: quote_data(),
+                signature: hex_to_bytes("0x7777777777777777777777777777777777777777"),
+                target_contract: None,
+                value: None,
+            }
+        }
+
+        #[test]
+        fn test_validate_success() {
+            let quote = quote();
+            let params = params();
+            assert!(quote.validate(&params).is_ok());
+        }
+
+        #[test]
+        fn test_validate_base_token_mismatch() {
+            let mut quote = quote();
+            quote.quote_data.base_token =
+                hex_to_bytes("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef");
+            let params = params();
+            let err = quote.validate(&params).unwrap_err();
+            assert!(format!("{:?}", err).contains("Base token mismatch"));
+        }
+
+        #[test]
+        fn test_validate_quote_token_mismatch() {
+            let mut quote = quote();
+            quote.quote_data.quote_token =
+                hex_to_bytes("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef");
+            let params = params();
+            let err = quote.validate(&params).unwrap_err();
+            assert!(format!("{:?}", err).contains("Quote token mismatch"));
+        }
+
+        #[test]
+        fn test_validate_trader_mismatch() {
+            let mut quote = quote();
+            quote.quote_data.trader = hex_to_bytes("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd");
+            let params = params();
+            let err = quote.validate(&params).unwrap_err();
+            assert!(format!("{:?}", err).contains("Trader address mismatch"));
+        }
+
+        #[test]
+        fn test_validate_base_token_amount_mismatch() {
+            let mut quote = quote();
+            quote.quote_data.base_token_amount = "9999".to_string();
+            let params = params();
+            let err = quote.validate(&params).unwrap_err();
+            assert!(format!("{:?}", err).contains("Base token amount mismatch"));
+        }
     }
 }
