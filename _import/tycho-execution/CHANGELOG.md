@@ -1,3 +1,24 @@
+## [0.121.0](https://github.com/propeller-heads/tycho-execution/compare/0.120.0...0.121.0) (2025-08-28)
+
+
+### Features
+
+* rename "uniswap_v4" to "uniswap_v4_hooks" ([c1d88be](https://github.com/propeller-heads/tycho-execution/commit/c1d88be3295d9f9959a271795541e7ee4bbcfc4c))
+* Support hooks (without special calldata) ([a058177](https://github.com/propeller-heads/tycho-execution/commit/a0581773cd35fa2c34f8e305f62901e7b5f1cf71))
+* **univ4:** Pass user_data as hook_data in execution ([93678d9](https://github.com/propeller-heads/tycho-execution/commit/93678d9d1987eaa9fff8c19a6fe69e7771ed582c))
+* Update UniswapV4 executor addresses ([d7e377e](https://github.com/propeller-heads/tycho-execution/commit/d7e377e44323014661b21e79197eaf1ad7748587))
+
+
+### Bug Fixes
+
+* access hooks attr, not hook ([2c38cf8](https://github.com/propeller-heads/tycho-execution/commit/2c38cf84fcbfd195112a11b770e3f70328c1d1b2))
+* Add missing uniswap v4 hooks executor addresses ([0daccfe](https://github.com/propeller-heads/tycho-execution/commit/0daccfea9ab85fcf967c593f684a75fca7f0061e))
+* Add missing uniswap v4 hooks executor addresses ([5ab9e99](https://github.com/propeller-heads/tycho-execution/commit/5ab9e9925ab6855a05226bfac9fd5723c7ca1cea))
+* After rebase fixes ([1d952b1](https://github.com/propeller-heads/tycho-execution/commit/1d952b19be226475cd7451bad899f4bbe6a4c52e))
+* Recalculate calldata after merging main ([2adcb89](https://github.com/propeller-heads/tycho-execution/commit/2adcb89e6d3666bf76f223e55bb9d8e8b6db06ee))
+* revert hooks rename ([ea9a1a8](https://github.com/propeller-heads/tycho-execution/commit/ea9a1a88ca3dae3f9099dd0b84cff456d4ad5bfc))
+* Small safe wallet fixes ([c9d09e9](https://github.com/propeller-heads/tycho-execution/commit/c9d09e91098f0a76c96ad1cd157e1a461887f468))
+
 ## [0.120.0](https://github.com/propeller-heads/tycho-execution/compare/0.119.0...0.120.0) (2025-08-27)
 
 
