@@ -7,8 +7,6 @@ use tycho_client::feed::synchronizer::ComponentWithState;
 use crate::evm::protocol::vm::utils::json_deserialize_be_bigint_list;
 
 const ZERO_ADDRESS: &str = "0x0000000000000000000000000000000000000000";
-#[allow(dead_code)]
-const ZERO_ADDRESS_ARR: [u8; 20] = [0u8; 20];
 
 // Defines the default Balancer V2 Filter
 pub fn balancer_v2_pool_filter(component: &ComponentWithState) -> bool {
