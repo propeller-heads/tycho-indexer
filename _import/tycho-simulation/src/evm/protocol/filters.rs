@@ -14,6 +14,33 @@ pub fn balancer_v2_pool_filter(component: &ComponentWithState) -> bool {
     balancer_v2_pool_filter_after_dci_update(component)
 }
 
+/// Filters out pools that have hooks in Uniswap V4
+pub fn uniswap_v4_pool_with_hook_filter(component: &ComponentWithState) -> bool {
+    if let Some(hooks) = component
+        .component
+        .static_attributes
+        .get("hooks")
+    {
+        if hooks.to_vec() != ZERO_ADDRESS_ARR {
+            debug!("Filtering out UniswapV4 pool {} because it has hooks", component.component.id);
+            return false;
+        }
+    }
+    true
+}
+
+pub fn uniswap_v4_pool_with_euler_hook_filter(component: &ComponentWithState) -> bool {
+    if let Some(_hooks_data) = component
+        .component
+        .static_attributes
+        .get("hook_identifier")
+    {
+        // Only Euler pools have a hook_identifier
+        return true;
+    }
+    false
+}
+
 /// Filters out pools that are failing at the moment after DCI update
 pub fn balancer_v2_pool_filter_after_dci_update(component: &ComponentWithState) -> bool {
     const UNSUPPORTED_COMPONENT_IDS: [&str; 6] = [
@@ -161,7 +188,7 @@ pub fn curve_pool_filter(component: &ComponentWithState) -> bool {
                 "Filtering out Curve pool {} because it belongs to an unsupported factory",
                 component.component.id
             );
-            return false
+            return false;
         }
     };
 
@@ -181,24 +208,9 @@ pub fn curve_pool_filter(component: &ComponentWithState) -> bool {
             "Filtering out Curve pool {} because it has a rebasing token that is not supported",
             component.component.id
         );
-        return false
+        return false;
     }
 
-    true
-}
-
-/// Filters out pools that have hooks in Uniswap V4
-pub fn uniswap_v4_pool_with_hook_filter(component: &ComponentWithState) -> bool {
-    if let Some(hooks) = component
-        .component
-        .static_attributes
-        .get("hooks")
-    {
-        if hooks.to_vec() != ZERO_ADDRESS_ARR {
-            debug!("Filtering out UniswapV4 pool {} because it has hooks", component.component.id);
-            return false;
-        }
-    }
     true
 }
 

@@ -1,3 +1,67 @@
+## [0.155.0](https://github.com/propeller-heads/tycho-simulation/compare/0.154.1...0.155.0) (2025-08-28)
+
+
+### Features
+
+* bump tycho-common version ([9a7ffbe](https://github.com/propeller-heads/tycho-simulation/commit/9a7ffbe1aaac5d4f6f93a7077bd12a3144dc6137))
+
+## [0.154.1](https://github.com/propeller-heads/tycho-simulation/compare/0.154.0...0.154.1) (2025-08-28)
+
+
+### Bug Fixes
+
+* pin solar-config version to 0.1.5 to prevent solar-sema from using 0.1.6, which contains breaking changes ([e29e471](https://github.com/propeller-heads/tycho-simulation/commit/e29e471740a7787254baa12bc5af9e39d9ffb996))
+
+## [0.154.0](https://github.com/propeller-heads/tycho-simulation/compare/0.153.0...0.154.0) (2025-08-28)
+
+
+### Features
+
+* (WIP) test swap with hooks using EulerSwap ([9bb0fc0](https://github.com/propeller-heads/tycho-simulation/commit/9bb0fc0dd053ce3e2e4298e2002d2a0f3e05a18a))
+* bump tycho-execution version ([99a2503](https://github.com/propeller-heads/tycho-simulation/commit/99a2503949ddb88826db7b9a7ba4d6a1c88978b4))
+* Finish implement get_amount_out with hooks ([c013c7b](https://github.com/propeller-heads/tycho-simulation/commit/c013c7bc2009cff2b668f2b29f432950ed12d54b))
+* get_limits for USV4 if no liquidity ([0007265](https://github.com/propeller-heads/tycho-simulation/commit/0007265aa62a5dc6cd468a39fa7bdf64dcb1f553))
+* **Hooks:** Implement get_amount_ranges ([3b068f9](https://github.com/propeller-heads/tycho-simulation/commit/3b068f952def3b322de94d7a6837d90b7493f03b))
+* Implement derivative spot_prices function for UniV4 Hooks ([81be25a](https://github.com/propeller-heads/tycho-simulation/commit/81be25ae2a291d8d43b2776d64c00afe41abab29))
+* Implement has_permission for hooks ([46bbce0](https://github.com/propeller-heads/tycho-simulation/commit/46bbce0d205e4b7ed3226475abd8f67c2c2f9975))
+* Implement has_permission for hooks ([338a88f](https://github.com/propeller-heads/tycho-simulation/commit/338a88fb0a59fc086db66f43d8dd1e78a5f1e028))
+* Inverse signs for uniswap v4 swap logic ([135d98c](https://github.com/propeller-heads/tycho-simulation/commit/135d98c87df67d4dd668960c6e08a3a3dac0b1ea))
+* test_get_amount_ranges w/ real euler contract ([947e40c](https://github.com/propeller-heads/tycho-simulation/commit/947e40c30124713bb2ce8caf94516825fd493a78))
+* **UniswapV4State:** Add hook attr and setter ([2019aa4](https://github.com/propeller-heads/tycho-simulation/commit/2019aa4b7bbd098d82bdc14139aaae2b1afdb7ea))
+* **UniswapV4State:** Add hook attr and setter ([2460fc8](https://github.com/propeller-heads/tycho-simulation/commit/2460fc801f8b56e664911d9f3a33f78a49c8e038))
+* **UniswapV4State:** Call hooks in swap method ([0252485](https://github.com/propeller-heads/tycho-simulation/commit/0252485a7bc277872d057eb3a5e9100e0d79074b))
+* **univ4:** Create and set hook handler in tycho decoder ([7c4bdcf](https://github.com/propeller-heads/tycho-simulation/commit/7c4bdcf292f84082a458bf27aabe940d00e11866))
+* **univ4:** Update spot_price, get_limits, delta_transition to use hooks ([b8b5b19](https://github.com/propeller-heads/tycho-simulation/commit/b8b5b1984423a39741741608d77436af814f8545))
+* update with feature branch ([0cdfd80](https://github.com/propeller-heads/tycho-simulation/commit/0cdfd80f688bb4c65c43e0a7122c4c9cbffca25e))
+
+
+### Bug Fixes
+
+* Add back hook filter for prod ([3949444](https://github.com/propeller-heads/tycho-simulation/commit/3949444895bb5598f2706badaedab235c9edda69))
+* Add back hook filters for base and unichain ([e192ebf](https://github.com/propeller-heads/tycho-simulation/commit/e192ebfe203669b28e9998103cf3d00fb72468ce))
+* Address TODOs, improve test setup ([e2a876b](https://github.com/propeller-heads/tycho-simulation/commit/e2a876b613c3d0953eae11fc00aa0bca4839de96))
+* After rebase fixes ([6bbcb84](https://github.com/propeller-heads/tycho-simulation/commit/6bbcb84d6ab575fcd5ac82d55574864c777d7437))
+* Don't call find_max_amount twice... ([3cf57bf](https://github.com/propeller-heads/tycho-simulation/commit/3cf57bfe6072b8b438297e34ab61b12da4052d53))
+* enable getting limits ([5eedce6](https://github.com/propeller-heads/tycho-simulation/commit/5eedce6547d0d048069a47c3ddc8960e599b471f))
+* Fixes after merging main ([70d9114](https://github.com/propeller-heads/tycho-simulation/commit/70d9114de1b0ea69f94b5fa25ed467121f571da6))
+* get_amount_out for usv4 pools w/o hooks ([054282d](https://github.com/propeller-heads/tycho-simulation/commit/054282d084aa11ac5ef85c533d7571cad8ac64dd))
+* Remove unnecessary pool manager init ([f5b62e8](https://github.com/propeller-heads/tycho-simulation/commit/f5b62e831dc8cc7f8d08fd8d3ef129f12991867a))
+* return amount_in_range if hook has get_amount_ranges method ([5fc232b](https://github.com/propeller-heads/tycho-simulation/commit/5fc232b12f01ce6749e6cfe45538f661b2e76e50))
+* temporarily bypass weth & steth overrides ([34ac000](https://github.com/propeller-heads/tycho-simulation/commit/34ac000503c96e56fd5c720f54829ec0c8f3e084))
+* **univ4:** Allow for empty ticks if hook is set ([a36f358](https://github.com/propeller-heads/tycho-simulation/commit/a36f3583418f8da7620e90a158f9cf24b71ef78a))
+* update correct TokenProxy bin ([dce49c7](https://github.com/propeller-heads/tycho-simulation/commit/dce49c7a0c98daee5741bc38894fb92676f84ff4))
+* update correct TokenProxy bin ([523c730](https://github.com/propeller-heads/tycho-simulation/commit/523c7307fcad43fed36a5e9d853fef12840ecea4))
+* Update TokenProxy to use delegate instead of static calls ([7df9b5a](https://github.com/propeller-heads/tycho-simulation/commit/7df9b5a608719b9b22ecf93dfd0d956bbe6cdebb))
+* use delegateCall on TokenProxy for transfers and approvals ([bd704f7](https://github.com/propeller-heads/tycho-simulation/commit/bd704f71b1e2aeba7a0ab8806bdf46686f673149))
+* Use TLS to connect to indexer ([b44655e](https://github.com/propeller-heads/tycho-simulation/commit/b44655e39fbe8f2203c1ee3a6f7dc038a338e510))
+
+## [0.153.0](https://github.com/propeller-heads/tycho-simulation/compare/0.152.0...0.153.0) (2025-08-27)
+
+
+### Features
+
+* validate rfq quotes in `request_binding_quote` ([dc1d497](https://github.com/propeller-heads/tycho-simulation/commit/dc1d497f05416c5023eb869a3c0aca83756fc959))
+
 ## [0.152.0](https://github.com/propeller-heads/tycho-simulation/compare/0.151.0...0.152.0) (2025-08-26)
 
 

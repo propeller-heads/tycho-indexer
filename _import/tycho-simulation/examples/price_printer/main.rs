@@ -64,8 +64,10 @@ fn register_exchanges(
                     "uniswap_v4",
                     tvl_filter.clone(),
                     Some(uniswap_v4_pool_with_hook_filter),
-                )
+                );
             // COMING SOON!
+            // .exchange::<UniswapV4State>("uniswap_v4_hooks", tvl_filter.clone(),
+            // Some(uniswap_v4_pool_with_euler_hook_filter));
             // .exchange::<EVMPoolState<PreCachedDB>>("vm:maverick_v2", tvl_filter.clone(), None)
         }
         Chain::Base => {

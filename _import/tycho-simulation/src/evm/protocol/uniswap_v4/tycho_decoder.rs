@@ -1,13 +1,16 @@
 use std::collections::HashMap;
 
-use alloy::primitives::U256;
+use alloy::primitives::{Address, U256};
 use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
 use tycho_common::{models::token::Token, Bytes};
 
 use super::state::UniswapV4State;
 use crate::{
     evm::protocol::{
-        uniswap_v4::state::UniswapV4Fees,
+        uniswap_v4::{
+            hooks::hook_handler_creator::{instantiate_hook_handler, HookCreationParams},
+            state::UniswapV4Fees,
+        },
         utils::uniswap::{i24_be_bytes_to_i32, tick_list::TickInfo},
     },
     protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
@@ -20,9 +23,9 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
     /// if the snapshot is missing any required attributes.
     async fn try_from_with_header(
         snapshot: ComponentWithState,
-        _block: BlockHeader,
-        _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
-        _all_tokens: &HashMap<Bytes, Token>,
+        block: BlockHeader,
+        account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
+        all_tokens: &HashMap<Bytes, Token>,
     ) -> Result<Self, Self::Error> {
         let liq = snapshot
             .state
@@ -110,17 +113,64 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
             })
             .collect();
 
+        let hook_address = snapshot
+            .component
+            .static_attributes
+            .get("hooks");
+
         let mut ticks = match ticks {
             Ok(ticks) if !ticks.is_empty() => ticks
                 .into_iter()
                 .filter(|t| t.net_liquidity != 0)
                 .collect::<Vec<_>>(),
-            _ => return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string())),
+            _ => {
+                // there might be pools where the liquidity is managed by the hook
+                if hook_address.is_some() {
+                    Vec::new()
+                } else {
+                    return Err(InvalidSnapshotError::MissingAttribute(
+                        "tick_liquidities".to_string(),
+                    ))
+                }
+            }
         };
 
         ticks.sort_by_key(|tick| tick.index);
 
-        Ok(UniswapV4State::new(liquidity, sqrt_price, fees, tick, tick_spacing, ticks))
+        let mut state = UniswapV4State::new(
+            liquidity,
+            sqrt_price,
+            fees,
+            tick,
+            tick_spacing,
+            ticks,
+            block.clone(),
+        );
+
+        if let Some(hook_address) = hook_address {
+            let hook_address = Address::from_slice(&hook_address.0);
+
+            // Merge state attributes into static_attributes for hook creation
+            let mut merged_attributes = snapshot
+                .component
+                .static_attributes
+                .clone();
+            merged_attributes.extend(snapshot.state.attributes.clone());
+
+            let hook_params = HookCreationParams::new(
+                block,
+                hook_address,
+                account_balances,
+                all_tokens,
+                state.clone(),
+                &merged_attributes,
+                &snapshot.state.balances,
+            );
+
+            let hook_handler = instantiate_hook_handler(&hook_address, hook_params)?;
+            state.set_hook_handler(hook_handler);
+        }
+        Ok(state)
     }
 }
 
@@ -207,6 +257,17 @@ mod tests {
         .await
         .unwrap();
 
+        let block = BlockHeader {
+            number: 22689129,
+            hash: Bytes::from_str(
+                "0x7763ea30d11aef68da729b65250c09a88ad00458c041064aad8c9a9dbf17adde",
+            )
+            .expect("Invalid block hash"),
+            parent_hash: Bytes::from(vec![0; 32]),
+            revert: false,
+            timestamp: 0,
+        };
+
         let fees = UniswapV4Fees::new(0, 0, 500);
         let expected = UniswapV4State::new(
             100,
@@ -215,6 +276,7 @@ mod tests {
             300,
             60,
             vec![TickInfo::new(60, 400)],
+            block,
         );
         assert_eq!(result, expected);
     }

@@ -109,12 +109,12 @@ contract TokenProxy {
     }
 
     // View functions that check for custom values first
-    function name() public view returns (string memory) {
+    function name() public returns (string memory) {
         if (_hasCustomMetadata("name")) {
             return _customNameStorage()["name"];
         }
         
-        (bool success, bytes memory data) = _implementation().staticcall(
+        (bool success, bytes memory data) = _implementation().delegatecall(
             abi.encodeWithSignature("name()")
         );
         
@@ -124,12 +124,12 @@ contract TokenProxy {
         return "";
     }
 
-    function symbol() public view returns (string memory) {
+    function symbol() public returns (string memory) {
         if (_hasCustomMetadata("symbol")) {
             return _customSymbolStorage()["symbol"];
         }
         
-        (bool success, bytes memory data) = _implementation().staticcall(
+        (bool success, bytes memory data) = _implementation().delegatecall(
             abi.encodeWithSignature("symbol()")
         );
         
@@ -139,7 +139,7 @@ contract TokenProxy {
         return "";
     }
 
-    function decimals() public view returns (uint8) {
+    function decimals() public returns (uint8) {
         if (_hasCustomMetadata("decimals")) {
             bytes32 position = _customDecimalsStorage();
             uint8 value;
@@ -149,7 +149,7 @@ contract TokenProxy {
             return value;
         }
         
-        (bool success, bytes memory data) = _implementation().staticcall(
+        (bool success, bytes memory data) = _implementation().delegatecall(
             abi.encodeWithSignature("decimals()")
         );
         
@@ -159,7 +159,7 @@ contract TokenProxy {
         return 0;
     }
 
-    function totalSupply() public view returns (uint256) {
+    function totalSupply() public returns (uint256) {
         if (_hasCustomMetadata("totalSupply")) {
             bytes32 position = _customTotalSupplyStorage();
             uint256 value;
@@ -169,7 +169,7 @@ contract TokenProxy {
             return value;
         }
         
-        (bool success, bytes memory data) = _implementation().staticcall(
+        (bool success, bytes memory data) = _implementation().delegatecall(
             abi.encodeWithSignature("totalSupply()")
         );
         
@@ -192,13 +192,13 @@ contract TokenProxy {
         _setHasCustomBalance(account, true);
     }
     
-    function balanceOf(address account) public view returns (uint256) {
+    function balanceOf(address account) public returns (uint256) {
         mapping(address => uint256) storage balances = _customBalanceStorage();
         if (balances[account] > 0 || _hasCustomBalance(account)) {
             return balances[account];
         }
         
-        (bool success, bytes memory data) = _implementation().staticcall(
+        (bool success, bytes memory data) = _implementation().delegatecall(
             abi.encodeWithSignature("balanceOf(address)", account)
         );
         
@@ -269,7 +269,7 @@ contract TokenProxy {
                 // Get receiver's balance from implementation and set it as custom
                 address impl = _implementation();
                 if (impl != address(0)) {
-                    (bool balanceSuccess, bytes memory balanceData) = impl.staticcall(
+                    (bool balanceSuccess, bytes memory balanceData) = impl.delegatecall(
                         abi.encodeWithSignature("balanceOf(address)", to)
                     );
                     require(balanceSuccess && balanceData.length >= 32, "Failed to get receiver balance");
@@ -293,7 +293,7 @@ contract TokenProxy {
         }
         
         // If sender doesn't have custom balance, delegate to implementation
-        (bool success,) = _implementation().call(
+        (bool success,) = _implementation().delegatecall(
             abi.encodeWithSignature("transfer(address,uint256)", to, amount)
         );
         
@@ -357,7 +357,7 @@ contract TokenProxy {
                 address impl = _implementation();
                 if (impl != address(0)) {
                     // Get receiver's balance from implementation and set it as custom
-                    (bool balanceSuccess, bytes memory balanceData) = impl.staticcall(
+                    (bool balanceSuccess, bytes memory balanceData) = impl.delegatecall(
                         abi.encodeWithSignature("balanceOf(address)", to)
                     );
                     require(balanceSuccess && balanceData.length >= 32, "Failed to get receiver balance");
@@ -381,7 +381,7 @@ contract TokenProxy {
         }
         
         // If we don't have custom balances/approvals, delegate to implementation
-        (bool success,) = _implementation().call(
+        (bool success,) = _implementation().delegatecall(
             abi.encodeWithSignature("transferFrom(address,address,uint256)", from, to, amount)
         );
         
@@ -392,12 +392,12 @@ contract TokenProxy {
         return false;
     }
 
-    function allowance(address owner, address spender) public view returns (uint256) {
+    function allowance(address owner, address spender) public returns (uint256) {
         if (_hasCustomApproval(owner)) {
             return _customApprovalStorage()[owner][spender];
         }
         
-        (bool success, bytes memory data) = _implementation().staticcall(
+        (bool success, bytes memory data) = _implementation().delegatecall(
             abi.encodeWithSignature("allowance(address,address)", owner, spender)
         );
         

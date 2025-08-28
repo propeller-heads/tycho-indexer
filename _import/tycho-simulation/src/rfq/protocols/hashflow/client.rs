@@ -429,14 +429,7 @@ impl RFQClient for HashflowClient {
                     }
                     // We assume there will be only one quote request at a time
                     let quote = quotes[0].clone();
-
-                    if (quote.quote_data.base_token != params.token_in) ||
-                        (quote.quote_data.quote_token != params.token_out)
-                    {
-                        return Err(RFQError::FatalError(
-                            "Quote tokens don't match request tokens".to_string(),
-                        ))
-                    }
+                    quote.validate(params)?;
 
                     let mut quote_attributes: HashMap<String, Bytes> = HashMap::new();
                     quote_attributes.insert("pool".to_string(), quote.quote_data.pool);
@@ -529,21 +522,16 @@ impl RFQClient for HashflowClient {
                     };
                     Ok(signed_quote)
                 } else {
-                    return Err(RFQError::QuoteNotFound(format!(
+                    Err(RFQError::QuoteNotFound(format!(
                         "Hashflow quote not found for {} {} ->{}",
                         params.amount_in, params.token_in, params.token_out,
                     )))
                 }
             }
             "fail" => {
-                return Err(RFQError::FatalError(format!(
-                    "Hashflow API error: {:?}",
-                    quote_response.error
-                )));
+                Err(RFQError::FatalError(format!("Hashflow API error: {:?}", quote_response.error)))
             }
-            _ => {
-                return Err(RFQError::FatalError("Hashflow API error: Unknown status".to_string()));
-            }
+            _ => Err(RFQError::FatalError("Hashflow API error: Unknown status".to_string())),
         }
     }
 }

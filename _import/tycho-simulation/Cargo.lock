@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "_tycho_simulation_py"
-version = "0.152.0"
+version = "0.155.0"
 dependencies = [
  "alloy",
  "num-bigint",
@@ -8362,9 +8362,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.81.6"
+version = "0.82.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05d26b88038925afa54281c40b2fb16186e656a4598eaebe117136bd7fa055b8"
+checksum = "19a7ed885ea7e01efc3c98135b1be5c0472e81ada6455517f61ca67313271587"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8389,9 +8389,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.81.6"
+version = "0.82.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68d44780891254a0155d1aaa765a8625b48672158b6e12ce4f06771e9d369ffa"
+checksum = "096c87ebe011785fcd7ed59ec501ac12b465a64fbd2914b8c0c57125c253682b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8414,9 +8414,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.118.0"
+version = "0.122.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75ff04e765aba7152cde906b748574ddf153628baa762bd46839d5ec60420194"
+checksum = "81e88fe8ee0d32032e0270804c8fd8d4b56fa5055daa6a64720cd4c39c3984e1"
 dependencies = [
  "alloy",
  "chrono",
@@ -8436,7 +8436,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.152.0"
+version = "0.155.0"
 dependencies = [
  "alloy",
  "anyhow",
@@ -8470,6 +8470,7 @@ dependencies = [
  "rstest_reuse",
  "serde",
  "serde_json",
+ "solar-config",
  "strum 0.25.0",
  "strum_macros 0.25.3",
  "tempfile",

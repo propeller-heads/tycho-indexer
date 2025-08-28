@@ -1,7 +1,9 @@
 use alloy::primitives::Address;
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use tycho_common::Bytes;
+use tycho_common::{models::protocol::GetAmountOutParams, Bytes};
+
+use crate::rfq::errors::RFQError;
 
 /// Protobuf message for Bebop pricing updates
 #[derive(Clone, PartialEq, Message)]
@@ -212,6 +214,61 @@ pub struct BebopQuotePartial {
     pub partial_fill_offset: u64,
 }
 
+impl BebopQuotePartial {
+    pub fn validate(&self, params: &GetAmountOutParams) -> Result<(), RFQError> {
+        match &self.to_sign {
+            BebopOrderToSign::Single(single) => {
+                if single.taker_token != params.token_in {
+                    return Err(RFQError::FatalError(format!(
+                        "Base token mismatch: expected {}, got {}",
+                        params.token_in, single.taker_token
+                    )));
+                }
+                if single.maker_token != params.token_out {
+                    return Err(RFQError::FatalError(format!(
+                        "Quote token mismatch: expected {}, got {}",
+                        params.token_out, single.maker_token
+                    )));
+                }
+                if single.taker_address != params.sender {
+                    return Err(RFQError::FatalError(format!(
+                        "Taker address mismatch: expected {}, got {}",
+                        params.sender, single.taker_address
+                    )));
+                }
+                if single.receiver != params.receiver {
+                    return Err(RFQError::FatalError(format!(
+                        "Receiver address mismatch: expected {}, got {}",
+                        params.receiver, single.receiver
+                    )));
+                }
+                let amount_in = params.amount_in.to_string();
+                if single.taker_amount != amount_in {
+                    return Err(RFQError::FatalError(format!(
+                        "Base token amount mismatch: expected {}, got {}",
+                        amount_in, single.taker_amount
+                    )));
+                }
+            }
+            BebopOrderToSign::Aggregate(aggregate) => {
+                if aggregate.taker_address != params.sender {
+                    return Err(RFQError::FatalError(format!(
+                        "Taker address mismatch: expected {}, got {}",
+                        params.sender, aggregate.taker_address
+                    )));
+                }
+                if aggregate.receiver != params.receiver {
+                    return Err(RFQError::FatalError(format!(
+                        "Receiver address mismatch: expected {}, got {}",
+                        params.receiver, aggregate.receiver
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum BebopOrderToSign {
@@ -350,5 +407,178 @@ mod tests {
         };
         let insufficient_mid = price_data.get_mid_price(10.0);
         assert_eq!(insufficient_mid, Some(2000.325));
+    }
+
+    #[cfg(test)]
+    mod bebop_quote_partial_validate_tests {
+        use std::str::FromStr;
+
+        use num_bigint::BigUint;
+        use tycho_common::models::protocol::GetAmountOutParams;
+
+        use super::*;
+
+        fn hex_to_bytes(hex: &str) -> Bytes {
+            Bytes::from_str(hex).unwrap()
+        }
+
+        fn single_order() -> SingleOrderToSign {
+            SingleOrderToSign {
+                maker_address: hex_to_bytes("0x1111111111111111111111111111111111111111"),
+                taker_address: hex_to_bytes("0x2222222222222222222222222222222222222222"),
+                maker_token: hex_to_bytes("0x3333333333333333333333333333333333333333"),
+                taker_token: hex_to_bytes("0x4444444444444444444444444444444444444444"),
+                maker_amount: "2000".to_string(),
+                taker_amount: "1000".to_string(),
+                maker_nonce: "1".to_string(),
+                expiry: 123456,
+                receiver: hex_to_bytes("0x5555555555555555555555555555555555555555"),
+            }
+        }
+
+        fn aggregate_order() -> AggregateOrderToSign {
+            AggregateOrderToSign {
+                taker_address: hex_to_bytes("0x2222222222222222222222222222222222222222"),
+                maker_amounts: vec![vec!["2000".to_string()]],
+                taker_amounts: vec![vec!["1000".to_string()]],
+                expiry: 123456,
+                receiver: hex_to_bytes("0x5555555555555555555555555555555555555555"),
+            }
+        }
+
+        fn params() -> GetAmountOutParams {
+            GetAmountOutParams {
+                amount_in: BigUint::from(1000u32),
+                token_in: hex_to_bytes("0x4444444444444444444444444444444444444444"),
+                token_out: hex_to_bytes("0x3333333333333333333333333333333333333333"),
+                sender: hex_to_bytes("0x2222222222222222222222222222222222222222"),
+                receiver: hex_to_bytes("0x5555555555555555555555555555555555555555"),
+            }
+        }
+
+        fn quote_partial_single() -> BebopQuotePartial {
+            BebopQuotePartial {
+                status: "success".to_string(),
+                settlement_address: hex_to_bytes("0x9999999999999999999999999999999999999999"),
+                tx: TxData {
+                    to: hex_to_bytes("0x8888888888888888888888888888888888888888"),
+                    data: hex_to_bytes("0x1234"),
+                    value: "0".to_string(),
+                    from: hex_to_bytes("0x7777777777777777777777777777777777777777"),
+                    gas: 21000,
+                    gas_price: 100,
+                },
+                to_sign: BebopOrderToSign::Single(Box::new(single_order())),
+                partial_fill_offset: 0,
+            }
+        }
+
+        fn quote_partial_aggregate() -> BebopQuotePartial {
+            BebopQuotePartial {
+                status: "success".to_string(),
+                settlement_address: hex_to_bytes("0x9999999999999999999999999999999999999999"),
+                tx: TxData {
+                    to: hex_to_bytes("0x8888888888888888888888888888888888888888"),
+                    data: hex_to_bytes("0x1234"),
+                    value: "0".to_string(),
+                    from: hex_to_bytes("0x7777777777777777777777777777777777777777"),
+                    gas: 21000,
+                    gas_price: 100,
+                },
+                to_sign: BebopOrderToSign::Aggregate(Box::new(aggregate_order())),
+                partial_fill_offset: 0,
+            }
+        }
+
+        #[test]
+        fn test_validate_single_success() {
+            let quote = quote_partial_single();
+            let params = params();
+            assert!(quote.validate(&params).is_ok());
+        }
+
+        #[test]
+        fn test_validate_single_base_token_mismatch() {
+            let mut quote = quote_partial_single();
+            if let BebopOrderToSign::Single(ref mut single) = quote.to_sign {
+                single.taker_token = hex_to_bytes("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef");
+            }
+            let params = params();
+            let err = quote.validate(&params).unwrap_err();
+            assert!(format!("{:?}", err).contains("Base token mismatch"));
+        }
+
+        #[test]
+        fn test_validate_single_quote_token_mismatch() {
+            let mut quote = quote_partial_single();
+            if let BebopOrderToSign::Single(ref mut single) = quote.to_sign {
+                single.maker_token = hex_to_bytes("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef");
+            }
+            let params = params();
+            let err = quote.validate(&params).unwrap_err();
+            assert!(format!("{:?}", err).contains("Quote token mismatch"));
+        }
+
+        #[test]
+        fn test_validate_single_taker_address_mismatch() {
+            let mut quote = quote_partial_single();
+            if let BebopOrderToSign::Single(ref mut single) = quote.to_sign {
+                single.taker_address = hex_to_bytes("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd");
+            }
+            let params = params();
+            let err = quote.validate(&params).unwrap_err();
+            assert!(format!("{:?}", err).contains("Taker address mismatch"));
+        }
+
+        #[test]
+        fn test_validate_single_receiver_mismatch() {
+            let mut quote = quote_partial_single();
+            if let BebopOrderToSign::Single(ref mut single) = quote.to_sign {
+                single.receiver = hex_to_bytes("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd");
+            }
+            let params = params();
+            let err = quote.validate(&params).unwrap_err();
+            assert!(format!("{:?}", err).contains("Receiver address mismatch"));
+        }
+
+        #[test]
+        fn test_validate_single_base_token_amount_mismatch() {
+            let mut quote = quote_partial_single();
+            if let BebopOrderToSign::Single(ref mut single) = quote.to_sign {
+                single.taker_amount = "9999".to_string();
+            }
+            let params = params();
+            let err = quote.validate(&params).unwrap_err();
+            assert!(format!("{:?}", err).contains("Base token amount mismatch"));
+        }
+
+        #[test]
+        fn test_validate_aggregate_success() {
+            let quote = quote_partial_aggregate();
+            let params = params();
+            assert!(quote.validate(&params).is_ok());
+        }
+
+        #[test]
+        fn test_validate_aggregate_taker_address_mismatch() {
+            let mut quote = quote_partial_aggregate();
+            if let BebopOrderToSign::Aggregate(ref mut agg) = quote.to_sign {
+                agg.taker_address = hex_to_bytes("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd");
+            }
+            let params = params();
+            let err = quote.validate(&params).unwrap_err();
+            assert!(format!("{:?}", err).contains("Taker address mismatch"));
+        }
+
+        #[test]
+        fn test_validate_aggregate_receiver_mismatch() {
+            let mut quote = quote_partial_aggregate();
+            if let BebopOrderToSign::Aggregate(ref mut agg) = quote.to_sign {
+                agg.receiver = hex_to_bytes("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd");
+            }
+            let params = params();
+            let err = quote.validate(&params).unwrap_err();
+            assert!(format!("{:?}", err).contains("Receiver address mismatch"));
+        }
     }
 }
