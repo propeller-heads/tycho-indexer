@@ -48,8 +48,8 @@ mini-moka = "0.10"
 lazy_static = "1.4.0"
 
 # Tycho dependencies
-tycho-common = "0.81.5"
-tycho-client = "0.81.5"
+tycho-common = "0.82.0"
+tycho-client = "0.82.0"
 
 # EVM dependencies
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "5a552bb0de7126fa35170fd84532bbd3d40cd348", optional = true }
@@ -98,7 +98,7 @@ unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
 
 # tycho execution for quickstart
-tycho-execution = "0.121.0"
+tycho-execution = "0.122.0"
 
 [features]
 default = ["evm", "rfq"]
