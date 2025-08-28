@@ -8470,6 +8470,7 @@ dependencies = [
  "rstest_reuse",
  "serde",
  "serde_json",
+ "solar-config",
  "strum 0.25.0",
  "strum_macros 0.25.3",
  "tempfile",

@@ -54,6 +54,7 @@ tycho-client = "0.81.5"
 # EVM dependencies
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "5a552bb0de7126fa35170fd84532bbd3d40cd348", optional = true }
 foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "5a552bb0de7126fa35170fd84532bbd3d40cd348", optional = true }
+solar-config = "=0.1.5"
 alloy = { version = "1.0.6", features = ["providers", "signer-local", "rpc-types-eth"], optional = true }
 revm = { version = "27.0.3", features = ["alloydb", "serde"], optional = true }
 revm-inspectors = { version = "0.26.5", features = ["serde"], optional = true }
@@ -80,8 +81,8 @@ approx = "0.5.1"
 rstest = "0.23.0"
 rstest_reuse = "0.7.0"
 tracing-subscriber = { version = "0.3.17", default-features = false, features = [
-    "env-filter",
-    "fmt",
+  "env-filter",
+  "fmt",
 ] }
 tempfile = "3.13.0"
 
@@ -103,7 +104,7 @@ tycho-execution = "0.121.0"
 default = ["evm", "rfq"]
 network_tests = []
 evm = [
-    "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors", "dep:alloy",
+  "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors", "dep:alloy",
 ]
 rfq = ["dep:reqwest", "dep:async-trait", "dep:tokio-tungstenite", "dep:async-stream", "dep:http", "dep:prost"]
 
