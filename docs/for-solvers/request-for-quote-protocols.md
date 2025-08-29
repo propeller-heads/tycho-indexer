@@ -13,13 +13,15 @@ Tycho supports streaming, simulating, and executing RFQ quotes as part of multi-
 
 The RFQ quickstart is similar to the other protocols [quickstart](../).&#x20;
 
-See the code [here](https://github.com/propeller-heads/tycho-simulation/tree/main/examples/rfq_quickstart). As of now, [Bebop](https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/pmm-rfq-api-intro) is the only supported provider.
+See the code [here](https://github.com/propeller-heads/tycho-simulation/tree/main/examples/rfq_quickstart). As of now, [Bebop](https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/pmm-rfq-api-intro) and [Hashflow](https://docs.hashflow.com/hashflow/taker/getting-started-api-v3) are the only supported providers.
 
 You need to set up the API credentials of the desired RFQs to access live pricing data and quoting, as well as your private key if you wish to execute against the Tycho Router:
 
 ```bash
 export BEBOP_USER=<your-bebop-ws-username>
 export BEBOP_KEY=<your-bebop-ws-key>
+export HASHFLOW_USER=<your-hashflow-api-username>
+export HASHFLOW_KEY=<your-hashflow-api-key>
 export PRIVATE_KEY=<your-wallet-private-key>
 ```
 
@@ -55,7 +57,7 @@ You’ll need to configure:
 
 * Tycho URL (by default `"tycho-beta.propellerheads.xyz"`)
 * Tycho API key (by default, the test key is `sampletoken`)
-* RFQ API keys (currenlty only the Bebop user and key are needed. Have a look at `src/rfq/constants.rs` to see the authentication variables that are expected)
+* RFQ API keys (Have a look at `src/rfq/constants.rs` to see the authentication variables that are expected)
 * Private key if you wish to execute the swap against the Tycho Router
 
 To get token information from Tycho Indexer RPC please use [load\_all\_tokens](simulation.md#step-1-fetch-tokens).
