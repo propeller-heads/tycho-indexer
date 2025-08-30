@@ -118,6 +118,40 @@ pub mod hex_hashmap_key {
     }
 }
 
+/// serde functions for handling Vec of Bytes as hex strings
+pub mod hex_bytes_vec {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use super::decode_hex_with_prefix;
+
+    /// Serialize Vec<Vec<u8>> as a list of hex strings with 0x prefix
+    pub fn serialize<S>(list: &[Vec<u8>], s: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Each element to hex string
+        let hex_strings: Vec<String> = list
+            .iter()
+            .map(|x| format!("0x{}", hex::encode(x)))
+            .collect();
+        hex_strings.serialize(s)
+    }
+
+    /// Deserialize a list of hex strings into Vec<Vec<u8>>
+    pub fn deserialize<'de, D>(d: D) -> Result<Vec<Vec<u8>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let hex_strings = Vec::<String>::deserialize(d)?;
+        hex_strings
+            .into_iter()
+            .map(|s| {
+                decode_hex_with_prefix(&s).map_err(|e| serde::de::Error::custom(e.to_string()))
+            })
+            .collect()
+    }
+}
+
 /// serde functions for handling HashMap with bytes value
 pub mod hex_hashmap_value {
     use std::collections::HashMap;
@@ -205,32 +239,44 @@ mod tests {
 
         #[serde(with = "hex_bytes_option")]
         bytes_option: Option<Vec<u8>>,
+
+        #[serde(with = "hex_bytes_vec")]
+        bytes_vec: Vec<Vec<u8>>,
     }
 
     #[test]
     fn hex_bytes_serialize_deserialize() {
-        let test_struct = TestStruct { bytes: vec![0u8; 10], bytes_option: Some(vec![0u8; 10]) };
+        let test_struct = TestStruct {
+            bytes: vec![0u8; 10],
+            bytes_option: Some(vec![0u8; 10]),
+            bytes_vec: vec![vec![0, 1, 2, 3], vec![0xFF, 0xAB]],
+        };
 
         // Serialize to JSON
         let serialized = serde_json::to_string(&test_struct).unwrap();
         assert_eq!(
             serialized,
-            "{\"bytes\":\"0x00000000000000000000\",\"bytes_option\":\"0x00000000000000000000\"}"
+            "{\"bytes\":\"0x00000000000000000000\",\"bytes_option\":\"0x00000000000000000000\",\"bytes_vec\":[\"0x00010203\",\"0xffab\"]}"
         );
 
         // Deserialize from JSON
         let deserialized: TestStruct = serde_json::from_str(&serialized).unwrap();
         assert_eq!(deserialized.bytes, vec![0u8; 10]);
         assert_eq!(deserialized.bytes_option, Some(vec![0u8; 10]));
+        assert_eq!(deserialized.bytes_vec, vec![vec![0, 1, 2, 3], vec![0xFF, 0xAB]]);
     }
 
     #[test]
     fn hex_bytes_option_none() {
-        let test_struct = TestStruct { bytes: vec![0u8; 10], bytes_option: None };
+        let test_struct =
+            TestStruct { bytes: vec![0u8; 10], bytes_option: None, bytes_vec: vec![] };
 
         // Serialize to JSON
         let serialized = serde_json::to_string(&test_struct).unwrap();
-        assert_eq!(serialized, "{\"bytes\":\"0x00000000000000000000\",\"bytes_option\":null}");
+        assert_eq!(
+            serialized,
+            "{\"bytes\":\"0x00000000000000000000\",\"bytes_option\":null,\"bytes_vec\":[]}"
+        );
 
         // Deserialize from JSON
         let deserialized: TestStruct = serde_json::from_str(&serialized).unwrap();
