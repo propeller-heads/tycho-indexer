@@ -1,3 +1,10 @@
+## [0.155.1](https://github.com/propeller-heads/tycho-simulation/compare/0.155.0...0.155.1) (2025-08-30)
+
+
+### Bug Fixes
+
+* return error instead of panic in code_by_hash_ref ([c5bd737](https://github.com/propeller-heads/tycho-simulation/commit/c5bd737e8e921a5fbcb9401a86a167b7f7c5e2ee))
+
 ## [0.155.0](https://github.com/propeller-heads/tycho-simulation/compare/0.154.1...0.155.0) (2025-08-28)
 
 
