@@ -6,6 +6,7 @@ use std::{
 use alloy::primitives::{Address, Bytes as AlloyBytes, B256, U256};
 use revm::{
     context::DBErrorMarker,
+    primitives::KECCAK_EMPTY,
     state::{AccountInfo, Bytecode},
     DatabaseRef,
 };
@@ -251,6 +252,12 @@ impl EngineDatabaseInterface for PreCachedDB {
         permanent_storage: Option<HashMap<U256, U256>>,
         _mocked: bool,
     ) {
+        if account.code.is_none() && account.code_hash != KECCAK_EMPTY {
+            warn!("Code is None for account {address} but code hash is not KECCAK_EMPTY");
+        } else if account.code.is_some() && account.code_hash == KECCAK_EMPTY {
+            warn!("Code is Some for account {address} but code hash is KECCAK_EMPTY");
+        }
+
         self.inner
             .write()
             .unwrap()
@@ -580,7 +587,7 @@ mod tests {
     //     --module map_changes \
     //     --spkg substreams/ethereum-ambient/substreams-ethereum-ambient-v0.3.0.spkg
     /// ```
-    /// 
+    ///
     /// Then run the test with:
     /// ```bash
     /// cargo test --package src --lib -- --ignored --exact --nocapture
