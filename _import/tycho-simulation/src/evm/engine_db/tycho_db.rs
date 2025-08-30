@@ -587,7 +587,7 @@ mod tests {
     //     --module map_changes \
     //     --spkg substreams/ethereum-ambient/substreams-ethereum-ambient-v0.3.0.spkg
     /// ```
-    ///
+    /// 
     /// Then run the test with:
     /// ```bash
     /// cargo test --package src --lib -- --ignored --exact --nocapture
