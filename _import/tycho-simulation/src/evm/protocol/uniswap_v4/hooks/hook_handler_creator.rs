@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::RwLock};
 
 use alloy::primitives::{Address, U256};
 use lazy_static::lazy_static;
-use revm::{primitives::B256, state::AccountInfo};
+use revm::{primitives::KECCAK_EMPTY, state::AccountInfo};
 use tycho_client::feed::BlockHeader;
 use tycho_common::{models::token::Token, simulation::errors::SimulationError, Bytes};
 
@@ -84,8 +84,12 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
             )))
         })?;
 
-        let external_account_info =
-            AccountInfo { balance: U256::from(0), nonce: 0u64, code_hash: B256::ZERO, code: None };
+        let external_account_info = AccountInfo {
+            balance: U256::from(0),
+            nonce: 0u64,
+            code_hash: KECCAK_EMPTY,
+            code: None,
+        };
 
         engine
             .state
