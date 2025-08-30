@@ -27,7 +27,7 @@ pub struct StorageSnapshotRequest {
 #[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
 #[async_trait]
 pub trait AccountExtractor {
-    type Error: Debug;
+    type Error: Debug + Send + Sync;
 
     /// Get the account states at the end of the given block (after all transactions in the block
     /// have been applied).

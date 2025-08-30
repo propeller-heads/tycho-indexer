@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use chrono::NaiveDateTime;
-use tracing::{debug, instrument, trace, warn, Level};
+use tracing::{debug, error, instrument, trace, warn, Level};
 use tycho_common::{
     models::{
         blockchain::{Block, BlockScoped},
@@ -121,6 +121,12 @@ where
             warn!(?first, ?final_block_height, "Finalized block not found in ReorgBuffer");
             Ok(Vec::new())
         } else {
+            error!(
+                ?first,
+                ?final_block_height,
+                "Finalized block not found in ReorgBuffer. Strict mode is {}",
+                self.strict
+            );
             Err(StorageError::NotFound("block".into(), final_block_height.to_string()))
         }
     }

@@ -295,7 +295,8 @@ impl EVMBatchAccountExtractor {
                                 )
                                 .map_err(|e| {
                                     RPCError::RequestError(ProviderError::CustomError(format!(
-                                        "Failed to get storage: {e}",
+                                        "Failed to get storage: {e}, address: {}, block: {}",
+                                        request.address, block.number,
                                     )))
                                 })?
                                 .map_resp(|res: Bytes| res.to_vec()),
@@ -371,7 +372,8 @@ impl EVMBatchAccountExtractor {
                 .await
                 .map_err(|e| {
                     RPCError::RequestError(ProviderError::CustomError(format!(
-                        "Failed to get storage: {e}",
+                        "Failed to get storage: {e}, address: {address}, block: {}",
+                        block.number,
                     )))
                 })?;
 

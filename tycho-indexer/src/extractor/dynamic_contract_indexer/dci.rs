@@ -236,11 +236,29 @@ where
 
             tracing::debug!(storage_request = ?storage_request, "DCI: Storage request");
 
-            let mut new_accounts = self
-                .storage_source
-                .get_accounts_at_block(&block_changes.block, &storage_request)
-                .await
-                .map_err(|e| ExtractionError::AccountExtractionError(format!("{e:?}")))?;
+            // TODO: this is a quickfix. Handle this properly.
+            let max_retries = 3;
+            let retry_delay_ms = 1000;
+            let mut retry_count = 0;
+
+            let mut new_accounts = loop {
+                match self
+                    .storage_source
+                    .get_accounts_at_block(&block_changes.block, &storage_request)
+                    .await
+                {
+                    Ok(accounts) => break accounts,
+                    Err(e) => {
+                        if retry_count < max_retries {
+                            retry_count += 1;
+                            tokio::time::sleep(tokio::time::Duration::from_millis(retry_delay_ms))
+                                .await;
+                        } else {
+                            return Err(ExtractionError::AccountExtractionError(format!("{e:?}")));
+                        }
+                    }
+                }
+            };
 
             // Update the block changes
             for (account, tx) in new_account_addr_to_tx.into_iter() {
