@@ -1,3 +1,10 @@
+## [0.155.2](https://github.com/propeller-heads/tycho-simulation/compare/0.155.1...0.155.2) (2025-08-30)
+
+
+### Bug Fixes
+
+* correctly initialize external account hash ([ac682b6](https://github.com/propeller-heads/tycho-simulation/commit/ac682b6557863f94065700d9b6bbda661ff4aaf1))
+
 ## [0.155.1](https://github.com/propeller-heads/tycho-simulation/compare/0.155.0...0.155.1) (2025-08-30)
 
 
