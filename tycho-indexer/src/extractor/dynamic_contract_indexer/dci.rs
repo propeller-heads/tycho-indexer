@@ -314,12 +314,12 @@ where
                     .storage_source
                     .get_accounts_at_block(&block_changes.block, &storage_request)
                     .instrument(span!(
-                    Level::INFO,
-                    "dci_account_extraction",
-                    account_count = storage_request.len(),
-                    block_number = block_changes.block.number
-                ))
-                .await
+                        Level::INFO,
+                        "dci_account_extraction",
+                        account_count = storage_request.len(),
+                        block_number = block_changes.block.number
+                    ))
+                    .await
                 {
                     Ok(accounts) => break accounts,
                     Err(e) => {
