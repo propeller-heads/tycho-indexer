@@ -1,3 +1,11 @@
+## [0.83.0](https://github.com/propeller-heads/tycho-indexer/compare/0.82.0...0.83.0) (2025-08-30)
+
+
+### Features
+
+* add a retry logic for account extraction in DCI ([fc6d226](https://github.com/propeller-heads/tycho-indexer/commit/fc6d22696baf91d123cfc8c7ea08de4093995d95))
+* add retry loop around account extraction in DCI ([#671](https://github.com/propeller-heads/tycho-indexer/issues/671)) ([f529864](https://github.com/propeller-heads/tycho-indexer/commit/f5298642ac0b86ba6c6dafa5770bbeb6c1192524))
+
 ## [0.82.0](https://github.com/propeller-heads/tycho-indexer/compare/0.81.6...0.82.0) (2025-08-26)
 
 
