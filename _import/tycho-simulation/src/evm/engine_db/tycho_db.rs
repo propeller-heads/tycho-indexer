@@ -39,6 +39,8 @@ pub enum PreCachedDBError {
     BlockNotSet(),
     #[error("Tycho Client error: {0}")]
     TychoClientError(#[from] TychoClientError),
+    #[error("{0}")]
+    Fatal(String),
 }
 
 impl DBErrorMarker for PreCachedDBError {}
@@ -286,8 +288,8 @@ impl DatabaseRef for PreCachedDB {
             .ok_or(PreCachedDBError::MissingAccount(address))
     }
 
-    fn code_by_hash_ref(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
-        panic!("Code by hash is not implemented")
+    fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        Err(PreCachedDBError::Fatal(format!("Code by hash not supported: {code_hash}")))
     }
 
     /// Retrieves the storage value at the specified address and index.
