@@ -1971,7 +1971,7 @@ mod tests {
                 let tracked_address = tracked_address.clone();
                 let new_slot = new_slot.clone();
                 move |_, _| {
-                    Ok(vec![TracedEntryPoint::new(
+                    vec![Ok(TracedEntryPoint::new(
                         EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
                         Bytes::zero(32),
                         get_tracing_result_with_addresses_and_slots(vec![
@@ -1980,7 +1980,7 @@ mod tests {
                                 vec![Bytes::from(0x22_u8).lpad(32, 0), new_slot],
                             ), // One existing slot, one new
                         ]),
-                    )])
+                    ))]
                 }
             });
 
@@ -2059,13 +2059,13 @@ mod tests {
                 let existing_slot = existing_slot.clone();
                 let new_slot = new_slot.clone();
                 move |_, _| {
-                    Ok(vec![TracedEntryPoint::new(
+                    vec![Ok(TracedEntryPoint::new(
                         EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
                         Bytes::zero(32),
                         get_tracing_result_with_addresses_and_slots(vec![
                             (token_address.clone(), vec![existing_slot, new_slot]), // One existing slot, one new
                         ]),
-                    )])
+                    ))]
                 }
             });
 
@@ -2161,14 +2161,14 @@ mod tests {
             .return_once({
                 let new_account = new_account.clone();
                 move |_, _| {
-                    Ok(vec![TracedEntryPoint::new(
+                    vec![Ok(TracedEntryPoint::new(
                         EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
                         Bytes::zero(32),
                         // Account with empty slots - this is the key scenario
                         get_tracing_result_with_addresses_and_slots(vec![
                             (new_account.clone(), vec![]), // No slots!
                         ]),
-                    )])
+                    ))]
                 }
             });
 
@@ -2252,13 +2252,13 @@ mod tests {
                 let token_address = token_address.clone();
                 let existing_slot = existing_slot.clone();
                 move |_, _| {
-                    Ok(vec![TracedEntryPoint::new(
+                    vec![Ok(TracedEntryPoint::new(
                         EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
                         Bytes::zero(32),
                         get_tracing_result_with_addresses_and_slots(vec![
                             (token_address.clone(), vec![existing_slot]), // Only existing slots, no new ones
                         ]),
-                    )])
+                    ))]
                 }
             });
 
