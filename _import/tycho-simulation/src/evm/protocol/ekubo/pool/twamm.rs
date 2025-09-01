@@ -222,7 +222,7 @@ impl EkuboPool for TwammPool {
 
                 self.imp
                     .get_sale_rate_deltas()
-                    .partition_point(|srd| srd.time > last_execution_time)
+                    .partition_point(|srd| srd.time <= last_execution_time)
             } else {
                 0
             };

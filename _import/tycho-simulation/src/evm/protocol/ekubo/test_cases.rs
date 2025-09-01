@@ -326,7 +326,10 @@ pub fn twamm() -> TestCase {
     const LAST_EXECUTION_TIME: u64 = 10;
     const TOKEN0_SALE_RATE: u128 = 10 << 32;
     const TOKEN1_SALE_RATE: u128 = TOKEN0_SALE_RATE / 2;
-    const ORDER_END_TIME: u64 = TEST_TIMESTAMP;
+    const FIRST_ORDER_START_TIME: u64 = LAST_EXECUTION_TIME;
+    const FIRST_ORDER_END_TIME: u64 = TEST_TIMESTAMP / 2;
+    const SECOND_ORDER_START_TIME: u64 = u64::midpoint(FIRST_ORDER_END_TIME, SECOND_ORDER_END_TIME);
+    const SECOND_ORDER_END_TIME: u64 = TEST_TIMESTAMP;
 
     TestCase {
         component: component([
@@ -356,7 +359,18 @@ pub fn twamm() -> TestCase {
                     token1_sale_rate: 0,
                     last_execution_time: 0,
                 },
-                vec![],
+                vec![
+                    TwammSaleRateDelta {
+                        time: FIRST_ORDER_START_TIME,
+                        sale_rate_delta0: TOKEN0_SALE_RATE as i128,
+                        sale_rate_delta1: TOKEN1_SALE_RATE as i128,
+                    },
+                    TwammSaleRateDelta {
+                        time: FIRST_ORDER_END_TIME,
+                        sale_rate_delta0: (TOKEN0_SALE_RATE as i128).neg(),
+                        sale_rate_delta1: (TOKEN1_SALE_RATE as i128).neg(),
+                    },
+                ],
             )
             .unwrap(),
         ),
@@ -372,11 +386,23 @@ pub fn twamm() -> TestCase {
                     token1_sale_rate: TOKEN1_SALE_RATE,
                     last_execution_time: LAST_EXECUTION_TIME,
                 },
-                vec![TwammSaleRateDelta {
-                    time: ORDER_END_TIME,
-                    sale_rate_delta0: (TOKEN0_SALE_RATE as i128).neg(),
-                    sale_rate_delta1: (TOKEN1_SALE_RATE as i128).neg(),
-                }],
+                vec![
+                    TwammSaleRateDelta {
+                        time: FIRST_ORDER_END_TIME,
+                        sale_rate_delta0: (TOKEN0_SALE_RATE as i128).neg(),
+                        sale_rate_delta1: (TOKEN1_SALE_RATE as i128).neg(),
+                    },
+                    TwammSaleRateDelta {
+                        time: SECOND_ORDER_START_TIME,
+                        sale_rate_delta0: TOKEN0_SALE_RATE as i128,
+                        sale_rate_delta1: TOKEN1_SALE_RATE as i128,
+                    },
+                    TwammSaleRateDelta {
+                        time: SECOND_ORDER_END_TIME,
+                        sale_rate_delta0: (TOKEN0_SALE_RATE as i128).neg(),
+                        sale_rate_delta1: (TOKEN1_SALE_RATE as i128).neg(),
+                    },
+                ],
             )
             .unwrap(),
         ),
@@ -392,6 +418,10 @@ pub fn twamm() -> TestCase {
             "last_execution_time".to_string(),
             "token0_sale_rate".to_string(),
             "token1_sale_rate".to_string(),
+            format!("orders/token0/{FIRST_ORDER_START_TIME}"),
+            format!("orders/token1/{FIRST_ORDER_START_TIME}"),
+            format!("orders/token0/{FIRST_ORDER_END_TIME}"),
+            format!("orders/token1/{FIRST_ORDER_END_TIME}"),
         ]
         .into(),
         transition_attributes: [
@@ -401,14 +431,26 @@ pub fn twamm() -> TestCase {
             ("token1_sale_rate".to_string(), TOKEN1_SALE_RATE.to_be_bytes().into()),
             ("last_execution_time".to_string(), LAST_EXECUTION_TIME.to_be_bytes().into()),
             (
-                format!("orders/token0/{ORDER_END_TIME}"),
+                format!("orders/token0/{SECOND_ORDER_START_TIME}"),
+                (TOKEN0_SALE_RATE as i128)
+                    .to_be_bytes()
+                    .into(),
+            ),
+            (
+                format!("orders/token1/{SECOND_ORDER_START_TIME}"),
+                (TOKEN1_SALE_RATE as i128)
+                    .to_be_bytes()
+                    .into(),
+            ),
+            (
+                format!("orders/token0/{SECOND_ORDER_END_TIME}"),
                 (TOKEN0_SALE_RATE as i128)
                     .neg()
                     .to_be_bytes()
                     .into(),
             ),
             (
-                format!("orders/token1/{ORDER_END_TIME}"),
+                format!("orders/token1/{SECOND_ORDER_END_TIME}"),
                 (TOKEN1_SALE_RATE as i128)
                     .neg()
                     .to_be_bytes()
@@ -422,10 +464,36 @@ pub fn twamm() -> TestCase {
             ("token0_sale_rate".to_string(), 0_u128.to_be_bytes().into()),
             ("token1_sale_rate".to_string(), 0_u128.to_be_bytes().into()),
             ("last_execution_time".to_string(), 0_u64.to_be_bytes().into()),
+            (
+                format!("orders/token0/{}", FIRST_ORDER_START_TIME),
+                (TOKEN0_SALE_RATE as i128)
+                    .to_be_bytes()
+                    .into(),
+            ),
+            (
+                format!("orders/token1/{}", FIRST_ORDER_START_TIME),
+                (TOKEN1_SALE_RATE as i128)
+                    .to_be_bytes()
+                    .into(),
+            ),
+            (
+                format!("orders/token0/{}", FIRST_ORDER_END_TIME),
+                (TOKEN0_SALE_RATE as i128)
+                    .neg()
+                    .to_be_bytes()
+                    .into(),
+            ),
+            (
+                format!("orders/token1/{}", FIRST_ORDER_END_TIME),
+                (TOKEN1_SALE_RATE as i128)
+                    .neg()
+                    .to_be_bytes()
+                    .into(),
+            ),
         ]
         .into(),
-        swap_token0: (100_000_000u64.into(), 49996287_u64.into()),
-        expected_limit_token0: 1844629699405272373941011106_u128.into(),
+        swap_token0: (100_000_000u64.into(), 49997225_u64.into()),
+        expected_limit_token0: 1844629699405272373941012355_u128.into(),
     }
 }
 
