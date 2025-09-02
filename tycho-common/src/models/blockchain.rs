@@ -589,11 +589,29 @@ impl Serialize for RPCTracerParams {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct AddressStorageLocation {
+    pub key: StoreKey,
+    pub offset: u8,
+}
+
+impl AddressStorageLocation {
+    pub fn new(key: StoreKey, offset: u8) -> Self {
+        Self { key, offset }
+    }
+}
+
+impl From<StoreKey> for AddressStorageLocation {
+    fn from(value: StoreKey) -> Self {
+        AddressStorageLocation::new(value, 0)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct TracingResult {
     /// A set of (address, storage slot) pairs representing state that contain a called address.
     /// If any of these storage slots change, the execution path might change.
-    pub retriggers: HashSet<(Address, StoreKey)>,
+    pub retriggers: HashSet<(Address, AddressStorageLocation)>,
     /// A map of all addresses that were called during the trace with a list of storage slots that
     /// were accessed.
     pub accessed_slots: HashMap<Address, HashSet<StoreKey>>,
@@ -601,7 +619,7 @@ pub struct TracingResult {
 
 impl TracingResult {
     pub fn new(
-        retriggers: HashSet<(Address, StoreKey)>,
+        retriggers: HashSet<(Address, AddressStorageLocation)>,
         accessed_slots: HashMap<Address, HashSet<StoreKey>>,
     ) -> Self {
         Self { retriggers, accessed_slots }
@@ -921,7 +939,7 @@ pub mod fixtures {
         let store_key2 = StoreKey::from(vec![5, 6, 7, 8]);
 
         let mut result1 = TracingResult::new(
-            HashSet::from([(address1.clone(), store_key1.clone())]),
+            HashSet::from([(address1.clone(), store_key1.clone().into())]),
             HashMap::from([
                 (address2.clone(), HashSet::from([store_key1.clone()])),
                 (address3.clone(), HashSet::from([store_key2.clone()])),
@@ -929,7 +947,7 @@ pub mod fixtures {
         );
 
         let result2 = TracingResult::new(
-            HashSet::from([(address3.clone(), store_key2.clone())]),
+            HashSet::from([(address3.clone(), store_key2.clone().into())]),
             HashMap::from([
                 (address1.clone(), HashSet::from([store_key1.clone()])),
                 (address2.clone(), HashSet::from([store_key2.clone()])),
@@ -942,10 +960,10 @@ pub mod fixtures {
         assert_eq!(result1.retriggers.len(), 2);
         assert!(result1
             .retriggers
-            .contains(&(address1.clone(), store_key1.clone())));
+            .contains(&(address1.clone(), store_key1.clone().into())));
         assert!(result1
             .retriggers
-            .contains(&(address3.clone(), store_key2.clone())));
+            .contains(&(address3.clone(), store_key2.clone().into())));
 
         // Verify accessed slots were merged
         assert_eq!(result1.accessed_slots.len(), 3);
