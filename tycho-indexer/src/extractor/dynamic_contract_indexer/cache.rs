@@ -39,8 +39,9 @@ pub(super) struct DCICache {
     /// Stores tracing results for entry points paired with specific tracing parameters.
     pub(super) entrypoint_results: VersionedCache<(EntryPointId, TracingParams), TracingResult>,
     /// Maps a storage location to entry points that should be retriggered when that location
-    /// changes.
-    pub(super) retriggers: VersionedCache<StorageLocation, HashSet<EntryPointWithTracingParams>>,
+    /// changes and the address storage offset for packed slots.
+    pub(super) retriggers:
+        VersionedCache<StorageLocation, (HashSet<EntryPointWithTracingParams>, u8)>,
     /// Stores tracked contract addresses and their associated storage keys.
     pub(super) tracked_contracts: VersionedCache<Address, HashSet<StoreKey>>,
     /// Stores addresses identified as ERC-20 tokens to skip full indexing.
@@ -634,7 +635,7 @@ mod tests {
 
     fn get_tracing_result(version: u8) -> TracingResult {
         TracingResult::new(
-            HashSet::from([(Bytes::from(version), Bytes::from(version))]),
+            HashSet::from([(Bytes::from(version), Bytes::from(version).into())]),
             HashMap::from([
                 (Bytes::from(version), HashSet::from([Bytes::from(version + version * 16)])),
                 (
@@ -804,7 +805,7 @@ mod tests {
             .insert_pending(
                 block1.clone(),
                 (address.clone(), store_key.clone()),
-                retrigger_set.clone(),
+                (retrigger_set.clone(), 0),
             )
             .unwrap();
 
