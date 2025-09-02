@@ -6,12 +6,14 @@ services:
       dockerfile: postgres.Dockerfile
     restart: "always"
     environment:
-      POSTGRESQL_PASSWORD: mypassword
-      POSTGRESQL_DATABASE: tycho_indexer_0
-      POSTGRESQL_USERNAME: postgres
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DATABASE: tycho_indexer_0
+      POSTGRES_USERNAME: postgres
       POSTGRESQL_SHARED_PRELOAD_LIBRARIES: pg_cron
     ports:
       - "5431:5432"
     shm_size: "1gb"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 volumes:
   postgres_data:

@@ -17,8 +17,9 @@ RUN cd /tmp \
     && cd .. && rm -r pg_cron-${PGCRON_VERSION} v${PGCRON_VERSION}.tar.gz
 
 # Add configuration to postgresql.conf template
+# Start with postgres database, then switch to tycho_indexer_0 after it's created
 RUN echo "shared_preload_libraries = 'pg_partman_bgw,pg_cron'" >> /usr/local/share/postgresql/postgresql.conf.sample \
-    && echo "cron.database_name = 'tycho_indexer_0'" >> /usr/local/share/postgresql/postgresql.conf.sample
+        && echo "cron.database_name = 'tycho_indexer_0'" >> /usr/local/share/postgresql/postgresql.conf.sample
 
 # Stay as root user for PostgreSQL to work properly
 # USER 1001
