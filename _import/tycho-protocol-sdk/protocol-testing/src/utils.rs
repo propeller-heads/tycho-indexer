@@ -1,5 +1,4 @@
 use std::{
-    error::Error,
     fs,
     path::{Path, PathBuf},
     process::Command,
@@ -10,16 +9,17 @@ use figment::{
     value::Value,
     Figment,
 };
+use miette::IntoDiagnostic;
 use tracing::error;
 
 /// Build a Substreams package with modifications to the YAML file.
-pub fn build_spkg(yaml_file_path: &PathBuf, initial_block: u64) -> Result<String, Box<dyn Error>> {
+pub fn build_spkg(yaml_file_path: &PathBuf, initial_block: u64) -> miette::Result<String> {
     // Create a backup file of the unmodified Substreams protocol YAML config file.
     let backup_file_path = yaml_file_path.with_extension("backup");
-    fs::copy(yaml_file_path, &backup_file_path)?;
+    fs::copy(yaml_file_path, &backup_file_path).into_diagnostic()?;
 
     let figment = Figment::new().merge(Yaml::file(yaml_file_path));
-    let mut data: Value = figment.extract()?;
+    let mut data: Value = figment.extract().into_diagnostic()?;
 
     // Apply the modification function to update the YAML files
     modify_initial_block(&mut data, initial_block);
@@ -52,8 +52,8 @@ pub fn build_spkg(yaml_file_path: &PathBuf, initial_block: u64) -> Result<String
     let spkg_name = format!("{}/{}-{}.spkg", parent_dir, package_name, package_version);
 
     // Write the modified YAML back to the file
-    let yaml_string = serde_yaml::to_string(&data)?;
-    fs::write(yaml_file_path, yaml_string)?;
+    let yaml_string = serde_yaml::to_string(&data).into_diagnostic()?;
+    fs::write(yaml_file_path, yaml_string).into_diagnostic()?;
 
     // Run the substreams pack command to create the spkg
     // WARNING: Ensure substreams is in the PATH
@@ -71,15 +71,18 @@ pub fn build_spkg(yaml_file_path: &PathBuf, initial_block: u64) -> Result<String
             }
         }
         Err(e) => {
-            error!("Error running substreams pack command: {}. \
+            error!(
+                "Error running substreams pack command: {}. \
             Ensure that the wasm target was built and that substreams CLI\
-             is installed and exported on PATH", e);
+             is installed and exported on PATH",
+                e
+            );
         }
     }
 
     // Restore the original YAML from backup
-    fs::copy(&backup_file_path, yaml_file_path)?;
-    fs::remove_file(&backup_file_path)?;
+    fs::copy(&backup_file_path, yaml_file_path).into_diagnostic()?;
+    fs::remove_file(&backup_file_path).into_diagnostic()?;
 
     Ok(spkg_name)
 }

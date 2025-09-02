@@ -7,6 +7,7 @@ use std::{
 };
 
 use dotenv::dotenv;
+use miette::{miette, IntoDiagnostic, WrapErr};
 use tracing::debug;
 
 use crate::config::ProtocolComponentWithTestConfig;
@@ -30,7 +31,7 @@ impl TychoRunner {
         start_block: u64,
         end_block: u64,
         protocol_type_names: &[String],
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> miette::Result<()> {
         // Expects a .env present in the same folder as package root (where Cargo.toml is)
         dotenv().ok();
 
@@ -67,28 +68,21 @@ impl TychoRunner {
         cmd.stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        let mut process = match cmd.spawn() {
-            Ok(p) => p,
-            Err(e) => {
-                println!("Error running Tycho indexer: {}", e);
-                return Err(e.into());
-            }
-        };
+        let mut process = cmd
+            .spawn()
+            .into_diagnostic()
+            .wrap_err("Error running Tycho indexer")?;
 
         if self.with_binary_logs {
             Self::handle_process_output(&mut process);
         }
 
-        match process.wait() {
-            Ok(status) => {
-                if !status.success() {
-                    return Err(format!("Process exited with non-zero status: {}", status).into());
-                }
-            }
-            Err(e) => {
-                println!("Error waiting for Tycho indexer: {}", e);
-                return Err(e.into());
-            }
+        let status = process
+            .wait()
+            .into_diagnostic()
+            .wrap_err("Failed to wait on Tycho indexer process")?;
+        if !status.success() {
+            return Err(miette!("Process exited with non-zero status: {status}"));
         }
 
         Ok(())
@@ -101,7 +95,7 @@ impl TychoRunner {
         start_block: u64,
         stop_block: u64,
         skip_balance_check: bool,
-    ) -> R
+    ) -> miette::Result<R>
     where
         F: FnOnce(&Vec<ProtocolComponentWithTestConfig>, u64, u64, bool) -> R,
     {
@@ -152,7 +146,7 @@ impl TychoRunner {
             eprintln!("Failed to join RPC thread");
         }
 
-        result
+        Ok(result)
     }
 
     // Helper method to handle process output in separate threads

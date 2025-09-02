@@ -1,17 +1,19 @@
 use std::{collections::HashMap, env, path::PathBuf, str::FromStr};
-use alloy::{primitives::U256};
+
+use alloy::primitives::U256;
 use figment::{
     providers::{Format, Yaml},
     Figment,
 };
+use miette::{miette, IntoDiagnostic, WrapErr};
 use postgres::{Client, Error, NoTls};
 use tokio::runtime::Runtime;
 use tracing::{debug, info};
 use tycho_client::feed::BlockHeader;
 use tycho_common::{
     dto::{Chain, ProtocolComponent, ResponseAccount, ResponseProtocolState},
+    models::token::Token,
     Bytes,
-    models::token::Token
 };
 use tycho_simulation::{
     evm::{
@@ -47,7 +49,7 @@ impl TestRunner {
         Self { package, tycho_logs, db_url, vm_traces, substreams_path }
     }
 
-    pub fn run_tests(&self) {
+    pub fn run_tests(&self) -> miette::Result<()> {
         info!("Running tests...");
         let config_yaml_path = self
             .substreams_path
@@ -56,20 +58,21 @@ impl TestRunner {
         info!("Config YAML: {}", config_yaml_path.display());
         let figment = Figment::new().merge(Yaml::file(&config_yaml_path));
 
-        match figment.extract::<IntegrationTestsConfig>() {
-            Ok(config) => {
-                info!("Loaded test configuration:");
-                info!("Protocol types: {:?}", config.protocol_type_names);
-                info!("Found {} tests to run", config.tests.len());
+        let config = figment
+            .extract::<IntegrationTestsConfig>()
+            .into_diagnostic()
+            .wrap_err("Failed to load test configuration:")?;
+        info!("Loaded test configuration:");
+        info!("Protocol types: {:?}", config.protocol_type_names);
+        info!("Found {} tests to run", config.tests.len());
 
-                for test in &config.tests {
-                    self.run_test(test, &config, config.skip_balance_check);
-                }
-            }
-            Err(e) => {
-                eprintln!("Failed to load test configuration: {}", e);
+        for test in &config.tests {
+            if let Err(e) = self.run_test(test, &config, config.skip_balance_check) {
+                eprintln!("Test '{}' failed: {e}", test.name);
             }
         }
+
+        Ok(())
     }
 
     fn run_test(
@@ -77,10 +80,11 @@ impl TestRunner {
         test: &IntegrationTest,
         config: &IntegrationTestsConfig,
         skip_balance_check: bool,
-    ) {
+    ) -> miette::Result<()> {
         info!("Running test: {}", test.name);
         self.empty_database()
-            .expect("Failed to empty the database");
+            .into_diagnostic()
+            .wrap_err("Failed to empty the database")?;
 
         let substreams_yaml_path = self
             .substreams_path
@@ -98,7 +102,7 @@ impl TestRunner {
         );
 
         let spkg_path =
-            build_spkg(&substreams_yaml_path, test.start_block).expect("Failed to build spkg");
+            build_spkg(&substreams_yaml_path, test.start_block).wrap_err("Failed to build spkg")?;
 
         let tycho_runner =
             TychoRunner::new(self.db_url.clone(), initialized_accounts, self.tycho_logs);
@@ -110,15 +114,17 @@ impl TestRunner {
                 test.stop_block,
                 &config.protocol_type_names,
             )
-            .expect("Failed to run Tycho");
+            .wrap_err("Failed to run Tycho")?;
 
-        tycho_runner.run_with_rpc_server(
+        let _ = tycho_runner.run_with_rpc_server(
             validate_state,
             &test.expected_components,
             test.start_block,
             test.stop_block,
             skip_balance_check,
-        );
+        )?;
+
+        Ok(())
     }
 
     fn empty_database(&self) -> Result<(), Error> {
@@ -144,12 +150,13 @@ fn validate_state(
     start_block: u64,
     stop_block: u64,
     skip_balance_check: bool,
-) {
+) -> miette::Result<()> {
     let rt = Runtime::new().unwrap();
 
     // Create Tycho client for the RPC server
-    let tycho_client =
-        TychoClient::new("http://localhost:4242").expect("Failed to create Tycho client");
+    let tycho_client = TychoClient::new("http://localhost:4242")
+        .into_diagnostic()
+        .wrap_err("Failed to create Tycho client")?;
 
     let chain = Chain::Ethereum;
     let protocol_system = "test_protocol";
@@ -158,7 +165,8 @@ fn validate_state(
     // module, in order to simplify debugging
     let protocol_components = rt
         .block_on(tycho_client.get_protocol_components(protocol_system, chain))
-        .expect("Failed to get protocol components");
+        .into_diagnostic()
+        .wrap_err("Failed to get protocol components")?;
 
     let expected_ids = expected_components
         .iter()
@@ -167,11 +175,13 @@ fn validate_state(
 
     let protocol_states = rt
         .block_on(tycho_client.get_protocol_state(protocol_system, expected_ids, chain))
-        .expect("Failed to get protocol state");
+        .into_diagnostic()
+        .wrap_err("Failed to get protocol state")?;
 
     let vm_storages = rt
         .block_on(tycho_client.get_contract_state(protocol_system, chain))
-        .expect("Failed to get contract state");
+        .into_diagnostic()
+        .wrap_err("Failed to get contract state")?;
 
     // Create a map of component IDs to components for easy lookup
     let components_by_id: HashMap<String, ProtocolComponent> = protocol_components
@@ -210,7 +220,11 @@ fn validate_state(
             .compare(component, true);
         match diff {
             Some(diff) => {
-                panic!("Component {} does not match the expected state:\n{}", component_id, diff);
+                return Err(miette!(
+                    "Component {} does not match the expected state:\n{}",
+                    component_id,
+                    diff
+                ));
             }
             None => {
                 info!("Component {} matches the expected state", component_id);
@@ -222,7 +236,9 @@ fn validate_state(
     // Step 2: Validate Token Balances
     // In this step, we validate that the token balances of the components match the values
     // on-chain, extracted by querying the token balances using a node.
-    let rpc_url = env::var("RPC_URL").expect("Missing ETH_RPC_URL in environment");
+    let rpc_url = env::var("RPC_URL")
+        .into_diagnostic()
+        .wrap_err("Missing ETH_RPC_URL in environment")?;
     let rpc_provider = RPCProvider::new(rpc_url.to_string());
 
     for (id, component) in components_by_id.iter() {
@@ -280,9 +296,10 @@ fn validate_state(
         let component_id = &id.clone();
         let state = protocol_states_by_id
             .get(component_id)
-            .expect("Failed to get state for component")
+            .wrap_err("Failed to get state for component")?
             .clone();
-        let component_with_state = ComponentWithState { state, component, component_tvl: None, entrypoints: vec![] }; // TODO
+        let component_with_state =
+            ComponentWithState { state, component, component_tvl: None, entrypoints: vec![] }; // TODO
         states.insert(component_id.clone(), component_with_state);
     }
     let vm_storage: HashMap<Bytes, ResponseAccount> = vm_storages
@@ -311,7 +328,8 @@ fn validate_state(
 
     let all_tokens = rt
         .block_on(tycho_client.get_tokens(Chain::Ethereum, None, None))
-        .expect("Failed to get tokens");
+        .into_diagnostic()
+        .wrap_err("Failed to get tokens")?;
     info!("Loaded {} tokens", all_tokens.len());
 
     rt.block_on(decoder.set_tokens(all_tokens));
@@ -322,7 +340,8 @@ fn validate_state(
 
     let block_msg = rt
         .block_on(decoder.decode(message))
-        .expect("Failed to decode message");
+        .into_diagnostic()
+        .wrap_err("Failed to decode message")?;
 
     for (id, comp) in block_msg.new_pairs.iter() {
         pairs
@@ -333,8 +352,8 @@ fn validate_state(
     // This is where we get blocked. Currently, Tycho Simulation expects the runtime to be
     // prebuild and accessible from TychoSim - we should allow passing it when parsing the block
 
-    // TODO: Since we don't have balances on the VM State, we could try to use Limits, otherwise ask the user
-    // to specify a set of values on the YAML file.
+    // TODO: Since we don't have balances on the VM State, we could try to use Limits, otherwise ask
+    //  the user to specify a set of values on the YAML file.
     for (id, state) in block_msg.states.iter() {
         if let Some(tokens) = pairs.get(id) {
             let formatted_token_str = format!("{:}/{:}", &tokens[0].symbol, &tokens[1].symbol);
@@ -358,4 +377,5 @@ fn validate_state(
             // e))     .ok();
         }
     }
+    Ok(())
 }

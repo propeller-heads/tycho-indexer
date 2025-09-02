@@ -30,7 +30,7 @@ struct Args {
     vm_traces: bool,
 }
 
-fn main() {
+fn main() -> miette::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .with_target(false)
@@ -40,5 +40,5 @@ fn main() {
 
     let test_runner = TestRunner::new(args.package, args.tycho_logs, args.db_url, args.vm_traces);
 
-    test_runner.run_tests();
+    test_runner.run_tests()
 }

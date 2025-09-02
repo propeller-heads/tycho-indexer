@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+miette = "7.6.0"
 # Logging & Tracing
 tracing = "0.1.37"
 # Tycho dependencies
