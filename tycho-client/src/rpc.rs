@@ -1344,7 +1344,7 @@ mod tests {
                             "retriggers": [
                                 [
                                     "0x00000000000000000000000000000000000000aa",
-                                    "0x0000000000000000000000000000000000000aaa"
+                                    {"key": "0x0000000000000000000000000000000000000aaa", "offset": 0}
                                 ]
                             ],
                             "accessed_slots": {
@@ -1405,7 +1405,7 @@ mod tests {
             trace_result.retriggers,
             HashSet::from([(
                 Bytes::from("0x00000000000000000000000000000000000000aa"),
-                Bytes::from("0x0000000000000000000000000000000000000aaa")
+                Bytes::from("0x0000000000000000000000000000000000000aaa").into()
             )])
         );
         assert_eq!(trace_result.accessed_slots.len(), 1);
