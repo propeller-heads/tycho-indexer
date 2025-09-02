@@ -632,10 +632,12 @@ where
                         param.clone(),
                     );
 
+                    let retrigger_key = (location.0.clone(), location.1.key.clone());
                     self.cache
                         .retriggers
-                        .permanent_entry(&location)
-                        .or_default()
+                        .permanent_entry(&retrigger_key)
+                        .or_insert_with(|| (HashSet::new(), location.1.offset))
+                        .0
                         .insert(entrypoint_with_params);
                 }
 
@@ -751,7 +753,7 @@ where
                     storage_locations_scanned += 1;
                     let location = (account.clone(), key.clone());
                     // Check if this storage location triggers any entrypoints
-                    if let Some(entrypoints) = self
+                    if let Some((entrypoints, _offset)) = self
                         .cache
                         .retriggers
                         .get_all(location.clone())
@@ -841,10 +843,12 @@ where
                 .retriggers
                 .iter()
             {
+                let retrigger_key = (location.0.clone(), location.1.key.clone());
                 self.cache
                     .retriggers
-                    .pending_entry(block, location)?
-                    .or_default()
+                    .pending_entry(block, &retrigger_key)?
+                    .or_insert_with(|| (HashSet::new(), location.1.offset))
+                    .0
                     .insert(
                         traced_entry_point
                             .entry_point_with_params
@@ -1127,7 +1131,7 @@ mod tests {
 
     fn get_tracing_result(version: u8) -> TracingResult {
         TracingResult::new(
-            HashSet::from([(Bytes::from(version), Bytes::from(version))]),
+            HashSet::from([(Bytes::from(version), Bytes::from(version).into())]),
             HashMap::from([
                 (Bytes::from(version), HashSet::from([Bytes::from(version + version * 16)])),
                 (
@@ -1260,17 +1264,29 @@ mod tests {
             &HashMap::from([
                 (
                     (Bytes::from(1_u8), Bytes::from(1_u8)),
-                    HashSet::from([
-                        EntryPointWithTracingParams::new(get_entrypoint(1), get_tracing_params(1)),
-                        EntryPointWithTracingParams::new(get_entrypoint(4), get_tracing_params(1)),
-                    ]),
+                    (
+                        HashSet::from([
+                            EntryPointWithTracingParams::new(
+                                get_entrypoint(1),
+                                get_tracing_params(1)
+                            ),
+                            EntryPointWithTracingParams::new(
+                                get_entrypoint(4),
+                                get_tracing_params(1)
+                            ),
+                        ]),
+                        0
+                    ),
                 ),
                 (
                     (Bytes::from(2_u8), Bytes::from(2_u8)),
-                    HashSet::from([EntryPointWithTracingParams::new(
-                        get_entrypoint(2),
-                        get_tracing_params(3)
-                    )])
+                    (
+                        HashSet::from([EntryPointWithTracingParams::new(
+                            get_entrypoint(2),
+                            get_tracing_params(3)
+                        )]),
+                        0
+                    )
                 )
             ])
         );

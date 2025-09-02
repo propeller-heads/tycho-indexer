@@ -1732,17 +1732,42 @@ impl From<models::blockchain::EntryPointWithTracingParams> for EntryPointWithTra
     }
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash, Serialize, Deserialize)]
+pub struct AddressStorageLocation {
+    pub key: StoreKey,
+    pub offset: u8,
+}
+
+impl From<models::blockchain::AddressStorageLocation> for AddressStorageLocation {
+    fn from(value: models::blockchain::AddressStorageLocation) -> Self {
+        Self { key: value.key, offset: value.offset }
+    }
+}
+
+impl From<Bytes> for AddressStorageLocation {
+    fn from(value: Bytes) -> Self {
+        Self { key: value, offset: 0 }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Clone)]
 pub struct TracingResult {
     #[schema(value_type=HashSet<(String, String)>)]
-    pub retriggers: HashSet<(StoreKey, StoreVal)>,
+    pub retriggers: HashSet<(StoreKey, AddressStorageLocation)>,
     #[schema(value_type=HashMap<String,HashSet<String>>)]
     pub accessed_slots: HashMap<Address, HashSet<StoreKey>>,
 }
 
 impl From<models::blockchain::TracingResult> for TracingResult {
     fn from(value: models::blockchain::TracingResult) -> Self {
-        TracingResult { retriggers: value.retriggers, accessed_slots: value.accessed_slots }
+        TracingResult {
+            retriggers: value
+                .retriggers
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            accessed_slots: value.accessed_slots,
+        }
     }
 }
 
@@ -2319,7 +2344,7 @@ mod test {
                 "trace_results": {
                     "0x01:sig()": {
                         "retriggers": [
-                            ["0x01", "0x02"]
+                            ["0x01", {"key": "0x02", "offset": 12}]
                         ],
                         "accessed_slots": {
                             "0x03": ["0x03", "0x04"]
@@ -2436,7 +2461,7 @@ mod test {
                     "trace_results": {
                         "0x01:sig()": {
                             "retriggers": [
-                                ["0x01", "0x02"]
+                                ["0x01", {"key": "0x02", "offset": 12}]
                             ],
                             "accessed_slots": {
                                 "0x03": ["0x03", "0x04"]
