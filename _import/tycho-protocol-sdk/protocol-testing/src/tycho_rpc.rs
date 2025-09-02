@@ -1,17 +1,17 @@
+use tycho_client::rpc::RPCClient;
 use std::{collections::HashMap, error::Error as StdError, fmt};
 
 use tracing::info;
-use tycho_client::{rpc::RPCClient, HttpRPCClient};
+use tycho_client::{HttpRPCClient};
 use tycho_common::{
     dto::{
         Chain, PaginationParams, ProtocolComponent, ProtocolComponentsRequestBody, ResponseAccount,
         ResponseProtocolState, StateRequestBody, VersionParam,
     },
-    models::Address,
     Bytes,
 };
 use tycho_common::dto::ResponseToken;
-use tycho_simulation::models::Token;
+use tycho_common::models::token::Token;
 
 /// Custom error type for RPC operations
 #[derive(Debug)]

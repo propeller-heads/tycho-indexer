@@ -31,7 +31,7 @@ impl RPCProvider {
         wallet_address: Address,
         block_number: u64,
     ) -> U256 {
-        let provider = ProviderBuilder::new().on_http(self.url.clone());
+        let provider = ProviderBuilder::new().connect_http(self.url.clone());
         let block_id: BlockId = BlockId::from(block_number);
 
         match NATIVE_ALIASES.contains(&token_address) {
@@ -65,13 +65,13 @@ impl RPCProvider {
         }
     }
 
-    async fn get_block_header(&self, block_number: u64) {
-        // TODO: Implement
-        // let provider = ProviderBuilder::new().on_http(self.url);
-        // let block_id: BlockId = BlockId::from(block_number);
-        //
-        // let block = provider.get_block(block_id)
-    }
+    // TODO: Implement
+    // async fn get_block_header(&self, _block_number: u64) {
+    //     let provider = ProviderBuilder::new().on_http(self.url);
+    //     let block_id: BlockId = BlockId::from(block_number);
+    //
+    //     let block = provider.get_block(block_id)
+    // }
 }
 
 #[cfg(test)]

@@ -1,6 +1,5 @@
 use std::{collections::HashMap, env, path::PathBuf, str::FromStr};
-
-use alloy::{primitives::U256, providers::Provider};
+use alloy::{primitives::U256};
 use figment::{
     providers::{Format, Yaml},
     Figment,
@@ -8,9 +7,11 @@ use figment::{
 use postgres::{Client, Error, NoTls};
 use tokio::runtime::Runtime;
 use tracing::{debug, info};
+use tycho_client::feed::BlockHeader;
 use tycho_common::{
     dto::{Chain, ProtocolComponent, ResponseAccount, ResponseProtocolState},
     Bytes,
+    models::token::Token
 };
 use tycho_simulation::{
     evm::{
@@ -18,12 +19,10 @@ use tycho_simulation::{
         engine_db::tycho_db::PreCachedDB,
         protocol::{u256_num::bytes_to_u256, vm::state::EVMPoolState},
     },
-    models::Token,
     tycho_client::feed::{
         synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
-        FeedMessage, Header,
+        FeedMessage,
     },
-    utils::load_all_tokens,
 };
 
 use crate::{
@@ -39,7 +38,6 @@ pub struct TestRunner {
     tycho_logs: bool,
     db_url: String,
     vm_traces: bool,
-
     substreams_path: PathBuf,
 }
 
@@ -284,7 +282,7 @@ fn validate_state(
             .get(component_id)
             .expect("Failed to get state for component")
             .clone();
-        let component_with_state = ComponentWithState { state, component };
+        let component_with_state = ComponentWithState { state, component, component_tvl: None, entrypoints: vec![] }; // TODO
         states.insert(component_id.clone(), component_with_state);
     }
     let vm_storage: HashMap<Bytes, ResponseAccount> = vm_storages
@@ -295,14 +293,15 @@ fn validate_state(
 
     let bytes = [0u8; 32];
 
-    let state_msgs: HashMap<String, StateSyncMessage> = HashMap::from([(
+    let state_msgs: HashMap<String, StateSyncMessage<BlockHeader>> = HashMap::from([(
         String::from("test_protocol"),
         StateSyncMessage {
-            header: Header {
+            header: BlockHeader {
                 hash: Bytes::from(bytes),
                 number: stop_block,
                 parent_hash: Bytes::from(bytes),
                 revert: false,
+                timestamp: 0, // TODO
             },
             snapshots: snapshot,
             deltas: None,

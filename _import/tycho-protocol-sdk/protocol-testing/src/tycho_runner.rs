@@ -29,7 +29,7 @@ impl TychoRunner {
         spkg_path: &str,
         start_block: u64,
         end_block: u64,
-        protocol_type_names: &Vec<String>,
+        protocol_type_names: &[String],
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Expects a .env present in the same folder as package root (where Cargo.toml is)
         dotenv().ok();
@@ -160,7 +160,7 @@ impl TychoRunner {
         if let Some(stdout) = child.stdout.take() {
             thread::spawn(move || {
                 let reader = BufReader::new(stdout);
-                for line in reader.lines().flatten() {
+                for line in reader.lines().map_while(Result::ok) {
                     println!("{}", line);
                 }
             });
@@ -169,7 +169,7 @@ impl TychoRunner {
         if let Some(stderr) = child.stderr.take() {
             thread::spawn(move || {
                 let reader = BufReader::new(stderr);
-                for line in reader.lines().flatten() {
+                for line in reader.lines().map_while(Result::ok) {
                     eprintln!("{}", line);
                 }
             });
