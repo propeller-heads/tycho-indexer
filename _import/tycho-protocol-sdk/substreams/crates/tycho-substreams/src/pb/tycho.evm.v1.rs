@@ -138,6 +138,9 @@ pub struct ContractSlot {
     /// The new value for this storage slot.
     #[prost(bytes="vec", tag="3")]
     pub value: ::prost::alloc::vec::Vec<u8>,
+    /// The old value of this storage slot
+    #[prost(bytes="vec", tag="4")]
+    pub previous_value: ::prost::alloc::vec::Vec<u8>,
 }
 /// A struct for following the token balance changes for a contract.
 #[allow(clippy::derive_partial_eq_without_eq)]

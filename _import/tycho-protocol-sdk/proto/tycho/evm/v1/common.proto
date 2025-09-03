@@ -123,6 +123,8 @@ message ContractSlot {
   bytes slot = 2;
   // The new value for this storage slot.
   bytes value = 3;
+  // The old value of this storage slot
+  bytes previous_value = 4;
 }
 
 // A struct for following the token balance changes for a contract.

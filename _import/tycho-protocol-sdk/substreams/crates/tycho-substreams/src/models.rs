@@ -72,7 +72,7 @@ impl TransactionChangesBuilder {
     }
 
     /// Unique contract/account addresses that have been changed so far.
-    pub fn changed_contracts(&self) -> impl Iterator<Item = &[u8]> {
+    pub fn changed_contracts(&self) -> impl Iterator<Item=&[u8]> {
         self.contract_changes
             .keys()
             .map(|k| k.as_slice())
@@ -124,7 +124,7 @@ impl TransactionChangesBuilder {
                     .attributes
                     .clone()
                     .iter()
-                    .filter(|&attr| (attr.change == i32::from(ChangeType::Creation)))
+                    .filter(|&attr| attr.change == i32::from(ChangeType::Creation))
                     .map(|attr| attr.name.clone())
                     .collect(),
             });
@@ -578,7 +578,11 @@ impl From<InterimContractChange> for Option<ContractChange> {
                 .slots
                 .into_iter()
                 .filter(|(_, value)| value.has_changed())
-                .map(|(slot, value)| ContractSlot { slot, value: value.new_value })
+                .map(|(slot, value)| ContractSlot {
+                    slot,
+                    value: value.new_value,
+                    previous_value: value.start_value,
+                })
                 .collect(),
             change: value.change.into(),
             token_balances: value

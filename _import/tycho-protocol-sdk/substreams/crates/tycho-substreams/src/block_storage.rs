@@ -56,7 +56,11 @@ pub fn get_block_storage_changes(block: &eth::v2::Block) -> Vec<TransactionStora
                 for change in changes {
                     latest_changes.insert(
                         change.key.clone(),
-                        ContractSlot { slot: change.key, value: change.new_value },
+                        ContractSlot {
+                            slot: change.key,
+                            value: change.new_value,
+                            previous_value: change.old_value,
+                        },
                     );
                 }
 
