@@ -23,9 +23,4 @@ USER root
 COPY --from=builder /usr/local/lib/postgresql/pg_cron.so /usr/local/lib/postgresql/
 COPY --from=builder /usr/local/share/postgresql/extension/pg_cron* /usr/local/share/postgresql/extension/
 
-# Add configuration to postgresql.conf template
-# Start with postgres database, then switch to tycho_indexer_0 after it's created
-RUN echo "shared_preload_libraries = 'pg_partman_bgw,pg_cron'" >> /usr/local/share/postgresql/postgresql.conf.sample \
-    && echo "cron.database_name = 'tycho_indexer_0'" >> /usr/local/share/postgresql/postgresql.conf.sample
-
 USER postgres

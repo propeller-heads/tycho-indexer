@@ -8,6 +8,7 @@ services:
       POSTGRES_PASSWORD: mypassword
       POSTGRES_USER: postgres
       POSTGRES_DB: tycho_indexer_0
+    command: postgres -c shared_preload_libraries=pg_partman_bgw,pg_cron -c cron.database_name=tycho_indexer_0
     ports:
       - "5431:5432"
     shm_size: "1gb"
