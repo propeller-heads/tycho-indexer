@@ -8,7 +8,7 @@ use tycho_common::{
         blockchain::{
             Block, EntryPoint, RPCTracerParams, TracingParams, Transaction, TxWithChanges,
         },
-        contract::{AccountBalance, AccountChangesWithTx, AccountDelta},
+        contract::{AccountBalance, AccountChangesWithTx, AccountDelta, ContractStorageChange},
         protocol::{
             ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
         },
@@ -638,7 +638,10 @@ impl TryFromMessage for TxWithStorageChanges {
             .for_each(|contract_changes| {
                 let mut storage_changes = HashMap::new();
                 for change in contract_changes.slots.into_iter() {
-                    storage_changes.insert(change.slot.into(), change.value.into());
+                    storage_changes.insert(
+                        change.slot.into(),
+                        ContractStorageChange::new(change.value, change.previous_value),
+                    );
                 }
                 all_storage_changes.insert(contract_changes.address.into(), storage_changes);
             });
@@ -741,15 +744,21 @@ mod test {
                 (
                     Bytes::from_str("0000000000000000000000000000000000000001").unwrap(),
                     HashMap::from([
-                        (Bytes::from_str("0x01").unwrap(), Bytes::from_str("0x01").unwrap()),
-                        (Bytes::from_str("0x02").unwrap(), Bytes::from_str("0x02").unwrap()),
+                        (
+                            Bytes::from_str("0x01").unwrap(),
+                            ContractStorageChange::initial(Bytes::from_str("0x01").unwrap()),
+                        ),
+                        (
+                            Bytes::from_str("0x02").unwrap(),
+                            ContractStorageChange::initial(Bytes::from_str("0x02").unwrap()),
+                        ),
                     ]),
                 ),
                 (
                     Bytes::from_str("0000000000000000000000000000000000000002").unwrap(),
                     HashMap::from([(
                         Bytes::from_str("0x03").unwrap(),
-                        Bytes::from_str("0x03").unwrap(),
+                        ContractStorageChange::initial(Bytes::from_str("0x03").unwrap()),
                     )]),
                 ),
             ]),
