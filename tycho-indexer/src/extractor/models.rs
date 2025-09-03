@@ -7,10 +7,10 @@ use tycho_common::{
             Block, BlockAggregatedChanges, BlockScoped, DCIUpdate, TracedEntryPoint, TracingResult,
             Transaction, TxWithChanges,
         },
-        contract::{AccountBalance, AccountChangesWithTx},
+        contract::{AccountBalance, AccountChangesWithTx, AccountToContractChange},
         protocol::{ComponentBalance, ProtocolChangesWithTx, ProtocolComponent},
         token::Token,
-        AccountToContractStore, Address, AttrStoreKey, Chain, ComponentId,
+        Address, AttrStoreKey, Chain, ComponentId,
     },
     Bytes,
 };
@@ -139,7 +139,7 @@ impl BlockScoped for BlockEntityChanges {
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct TxWithStorageChanges {
     pub tx: Transaction,
-    pub storage_changes: AccountToContractStore,
+    pub storage_changes: AccountToContractChange,
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
