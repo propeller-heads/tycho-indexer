@@ -22,8 +22,8 @@ use tycho_common::{
     keccak256,
     models::{
         blockchain::{
-            EntryPointWithTracingParams, RPCTracerParams, StorageOverride, TracedEntryPoint,
-            TracingParams, TracingResult,
+            AddressStorageLocation, EntryPointWithTracingParams, RPCTracerParams, StorageOverride,
+            TracedEntryPoint, TracingParams, TracingResult,
         },
         Address, BlockHash,
     },
@@ -218,7 +218,7 @@ impl EVMEntrypointService {
         ]);
 
         let batch_params = to_raw_value(&batch_request).map_err(|e| {
-            RPCError::UnknownError(format!("Failed to serialize batch params: {}", e))
+            RPCError::UnknownError(format!("Failed to serialize batch params: {e}"))
         })?;
 
         // Send batch request - using HTTP POST directly for batch requests
@@ -229,11 +229,12 @@ impl EVMEntrypointService {
             .body(batch_params.get().to_string())
             .send()
             .await
-            .map_err(|e| RPCError::UnknownError(format!("HTTP request failed: {}", e)))?;
+            .map_err(|e| RPCError::UnknownError(format!("HTTP request failed: {e}")))?;
 
-        let batch_response: Vec<Value> = response.json().await.map_err(|e| {
-            RPCError::UnknownError(format!("Failed to parse batch response: {}", e))
-        })?;
+        let batch_response: Vec<Value> = response
+            .json()
+            .await
+            .map_err(|e| RPCError::UnknownError(format!("Failed to parse batch response: {e}")))?;
 
         if batch_response.len() != 2 {
             return Err(RPCError::UnknownError("Invalid batch response length".to_string()));
@@ -242,7 +243,7 @@ impl EVMEntrypointService {
         // Parse access list response
         let access_list_result = &batch_response[0];
         if let Some(error) = access_list_result.get("error") {
-            return Err(RPCError::UnknownError(format!("eth_createAccessList failed: {}", error)));
+            return Err(RPCError::UnknownError(format!("eth_createAccessList failed: {error}")));
         }
 
         let access_list_data = access_list_result
@@ -252,7 +253,7 @@ impl EVMEntrypointService {
             })?;
 
         let access_list: AccessListResult = serde_json::from_value(access_list_data.clone())
-            .map_err(|e| RPCError::UnknownError(format!("Failed to parse access list: {}", e)))?;
+            .map_err(|e| RPCError::UnknownError(format!("Failed to parse access list: {e}")))?;
 
         let mut accessed_slots = access_list.try_get_accessed_slots()?;
 
@@ -267,7 +268,7 @@ impl EVMEntrypointService {
         // Parse trace response
         let trace_result = &batch_response[1];
         if let Some(error) = trace_result.get("error") {
-            return Err(RPCError::UnknownError(format!("debug_traceCall failed: {}", error)));
+            return Err(RPCError::UnknownError(format!("debug_traceCall failed: {error}")));
         }
 
         let trace_data = trace_result
@@ -277,7 +278,7 @@ impl EVMEntrypointService {
             })?;
 
         let pre_state_trace: GethTrace = serde_json::from_value(trace_data.clone())
-            .map_err(|e| RPCError::UnknownError(format!("Failed to parse trace: {}", e)))?;
+            .map_err(|e| RPCError::UnknownError(format!("Failed to parse trace: {e}")))?;
 
         Ok((accessed_slots, pre_state_trace))
     }
@@ -327,8 +328,12 @@ impl EntryPointTracer for EVMEntrypointService {
                                         .any(|window| window == address_bytes)
                                     {
                                         retriggers.insert((
-                                            Bytes::from(address.as_slice()),
-                                            Bytes::from(slot.as_slice()),
+                                            tycho_common::Bytes::from(address.as_ref() as &[u8]),
+                                            // TODO: add offset here
+                                            AddressStorageLocation::new(
+                                                tycho_common::Bytes::from(slot.as_ref() as &[u8]),
+                                                0,
+                                            ),
                                         ));
                                     }
                                 }
@@ -414,11 +419,11 @@ mod tests {
                         HashSet::from([
                         (
                             Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap().into(),
                         ),
                         (
                             Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap().into(),
                         ),
                     ]),
                     HashMap::from([
@@ -444,11 +449,11 @@ mod tests {
                         HashSet::from([
                             (
                             Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap().into(),
                         ),
                         (
                             Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap().into(),
                         ),
                     ]),
                     HashMap::from([
@@ -568,11 +573,11 @@ mod tests {
             HashSet::from([
                     (
                         Bytes::from_str("0xffa98a091331df4600f87c9164cd27e8a5cd2405").unwrap(),
-                        Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000007").unwrap(),
+                        Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000007").unwrap().into(),
                     ),
                     (
                         Bytes::from_str("0xffa98a091331df4600f87c9164cd27e8a5cd2405").unwrap(),
-                        Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000006").unwrap(),
+                        Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000006").unwrap().into(),
                     ),
                 ]),
             // Accessed slots

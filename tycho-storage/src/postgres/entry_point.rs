@@ -726,7 +726,10 @@ mod test {
     use tycho_common::{
         keccak256,
         models::{
-            blockchain::{RPCTracerParams, TracedEntryPoint, TracingParams, TracingResult},
+            blockchain::{
+                AddressStorageLocation, RPCTracerParams, TracedEntryPoint, TracingParams,
+                TracingResult,
+            },
             FinancialType, ImplementationType, StoreKey,
         },
         Bytes,
@@ -879,7 +882,8 @@ mod test {
                     StoreKey::from_str(
                         "0x0000000000000000000000000000000000000000000000000000000000000001",
                     )
-                    .unwrap(),
+                    .unwrap()
+                    .into(),
                 )]
                 .into_iter()
                 .collect(),
@@ -1176,29 +1180,31 @@ mod test {
         // Insert initial tracing result into database (with Contract A)
         let contract_a_address =
             Bytes::from_str("0xa0b86a33e6e3a8f0c8a77c5b6a4c8d8e8f8a8b8c").unwrap();
-        let initial_traced_entry_point = TracedEntryPoint::new(
-            EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
-            Bytes::from_str("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
-                .unwrap(),
-            TracingResult::new(
-                vec![(
+        let initial_traced_entry_point =
+            TracedEntryPoint::new(
+                EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
+                Bytes::from_str("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
+                    .unwrap(),
+                TracingResult::new(
+                    vec![(
                     contract_a_address.clone(),
-                    StoreKey::from_str(
+                    AddressStorageLocation::new(StoreKey::from_str(
                         "0x0000000000000000000000000000000000000000000000000000000000000001",
                     )
                     .unwrap(),
+                                                0)
                 )]
-                .into_iter()
-                .collect(),
-                HashMap::from([(
-                    contract_a_address.clone(),
-                    HashSet::from([Bytes::from_str(
-                        "0x0000000000000000000000000000000000000000000000000000000000000001",
-                    )
-                    .unwrap()]),
-                )]),
-            ),
-        );
+                    .into_iter()
+                    .collect(),
+                    HashMap::from([(
+                        contract_a_address.clone(),
+                        HashSet::from([Bytes::from_str(
+                            "0x0000000000000000000000000000000000000000000000000000000000000001",
+                        )
+                        .unwrap()]),
+                    )]),
+                ),
+            );
 
         gw.upsert_traced_entry_points(slice::from_ref(&initial_traced_entry_point), &mut conn)
             .await
@@ -1212,29 +1218,31 @@ mod test {
         let contract_c_address =
             Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap();
 
-        let second_traced_entry_point = TracedEntryPoint::new(
-            EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
-            Bytes::from_str("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
-                .unwrap(),
-            TracingResult::new(
-                vec![(
-                    contract_b_address.clone(),
-                    StoreKey::from_str(
-                        "0x0000000000000000000000000000000000000000000000000000000000000002",
-                    )
+        let second_traced_entry_point =
+            TracedEntryPoint::new(
+                EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
+                Bytes::from_str("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
                     .unwrap(),
-                )]
-                .into_iter()
-                .collect(),
-                HashMap::from([(
+                TracingResult::new(
+                    vec![(
                     contract_b_address.clone(),
-                    HashSet::from([Bytes::from_str(
+                    AddressStorageLocation::new(StoreKey::from_str(
                         "0x0000000000000000000000000000000000000000000000000000000000000002",
                     )
-                    .unwrap()]),
-                )]),
-            ),
-        );
+                    .unwrap()
+                    ,0),
+                )]
+                    .into_iter()
+                    .collect(),
+                    HashMap::from([(
+                        contract_b_address.clone(),
+                        HashSet::from([Bytes::from_str(
+                            "0x0000000000000000000000000000000000000000000000000000000000000002",
+                        )
+                        .unwrap()]),
+                    )]),
+                ),
+            );
 
         let third_traced_entry_point = TracedEntryPoint::new(
             EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
@@ -1244,17 +1252,17 @@ mod test {
                 vec![
                     (
                         contract_c_address.clone(),
-                        StoreKey::from_str(
+                        AddressStorageLocation::new(StoreKey::from_str(
                             "0x0000000000000000000000000000000000000000000000000000000000000003",
                         )
-                        .unwrap(),
+                        .unwrap(), 0),
                     ),
                     (
                         contract_a_address.clone(),
-                        StoreKey::from_str(
+                        AddressStorageLocation::new(StoreKey::from_str(
                             "0x0000000000000000000000000000000000000000000000000000000000000003",
                         )
-                        .unwrap(),
+                        .unwrap(), 0),
                     ),
                 ]
                 .into_iter()
@@ -1278,29 +1286,30 @@ mod test {
             ),
         );
 
-        let fourth_traced_entry_point = TracedEntryPoint::new(
-            EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
-            Bytes::from_str("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
-                .unwrap(),
-            TracingResult::new(
-                vec![(
-                    contract_c_address.clone(),
-                    StoreKey::from_str(
-                        "0x0000000000000000000000000000000000000000000000000000000000000004",
-                    )
+        let fourth_traced_entry_point =
+            TracedEntryPoint::new(
+                EntryPointWithTracingParams::new(rpc_tracer_entry_point(0), tracing_params(0)),
+                Bytes::from_str("88e96d4537bea4d9c05d12549907b32561d3bf31f45aae734cdc119f13406cb6")
                     .unwrap(),
-                )]
-                .into_iter()
-                .collect(),
-                HashMap::from([(
+                TracingResult::new(
+                    vec![(
                     contract_c_address.clone(),
-                    HashSet::from([Bytes::from_str(
+                    AddressStorageLocation::new(StoreKey::from_str(
                         "0x0000000000000000000000000000000000000000000000000000000000000004",
                     )
-                    .unwrap()]),
-                )]),
-            ),
-        );
+                    .unwrap(), 0),
+                )]
+                    .into_iter()
+                    .collect(),
+                    HashMap::from([(
+                        contract_c_address.clone(),
+                        HashSet::from([Bytes::from_str(
+                            "0x0000000000000000000000000000000000000000000000000000000000000004",
+                        )
+                        .unwrap()]),
+                    )]),
+                ),
+            );
 
         // This single call tests merging:
         // 1. Merge third_traced_entry_point and fourth_traced_entry_point (same contract, same
@@ -1335,38 +1344,53 @@ mod test {
         assert_eq!(merged_result.retriggers.len(), 5);
         assert!(merged_result.retriggers.contains(&(
             contract_a_address.clone(),
-            StoreKey::from_str(
-                "0x0000000000000000000000000000000000000000000000000000000000000001"
-            )
-            .unwrap(),
+            AddressStorageLocation::new(
+                StoreKey::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000001"
+                )
+                .unwrap(),
+                0
+            ),
         )));
         assert!(merged_result.retriggers.contains(&(
             contract_a_address.clone(),
-            StoreKey::from_str(
-                "0x0000000000000000000000000000000000000000000000000000000000000003"
-            )
-            .unwrap(),
+            AddressStorageLocation::new(
+                StoreKey::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000003"
+                )
+                .unwrap(),
+                0
+            ),
         )));
         assert!(merged_result.retriggers.contains(&(
             contract_b_address.clone(),
-            StoreKey::from_str(
-                "0x0000000000000000000000000000000000000000000000000000000000000002"
-            )
-            .unwrap(),
+            AddressStorageLocation::new(
+                StoreKey::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000002"
+                )
+                .unwrap(),
+                0
+            ),
         )));
         assert!(merged_result.retriggers.contains(&(
             contract_c_address.clone(),
-            StoreKey::from_str(
-                "0x0000000000000000000000000000000000000000000000000000000000000003"
-            )
-            .unwrap(),
+            AddressStorageLocation::new(
+                StoreKey::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000003"
+                )
+                .unwrap(),
+                0
+            ),
         )));
         assert!(merged_result.retriggers.contains(&(
             contract_c_address.clone(),
-            StoreKey::from_str(
-                "0x0000000000000000000000000000000000000000000000000000000000000004"
-            )
-            .unwrap(),
+            AddressStorageLocation::new(
+                StoreKey::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000004"
+                )
+                .unwrap(),
+                0
+            ),
         )));
 
         // Should contain accessed_slots for all three different contracts

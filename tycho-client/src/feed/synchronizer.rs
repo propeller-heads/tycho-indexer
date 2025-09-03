@@ -1037,7 +1037,7 @@ mod test {
                     TracingResult {
                         retriggers: HashSet::from([(
                             Bytes::from("0x0badc0ffee"),
-                            Bytes::from("0x0badc0ffee"),
+                            Bytes::from("0x0badc0ffee").into(),
                         )]),
                         accessed_slots: HashMap::from([(
                             Bytes::from("0x0badc0ffee"),
@@ -1100,7 +1100,7 @@ mod test {
                             TracingResult {
                                 retriggers: HashSet::from([(
                                     Bytes::from("0x0badc0ffee"),
-                                    Bytes::from("0x0badc0ffee"),
+                                    Bytes::from("0x0badc0ffee").into(),
                                 )]),
                                 accessed_slots: HashMap::from([(
                                     Bytes::from("0x0badc0ffee"),
@@ -1361,7 +1361,7 @@ mod test {
                         TracingResult {
                             retriggers: HashSet::from([(
                                 Bytes::from("0x0badc0ffee"),
-                                Bytes::from("0x0badc0ffee"),
+                                Bytes::from("0x0badc0ffee").into(),
                             )]),
                             accessed_slots: HashMap::from([(
                                 Bytes::from("0x0badc0ffee"),
