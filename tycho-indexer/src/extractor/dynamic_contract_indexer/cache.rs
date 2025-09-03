@@ -194,7 +194,7 @@ where
         Ok(layer.data.entry(k.clone()))
     }
 
-    /// Retrieves a value for a key, checking latest pending block first, then permanent.
+    /// Retrieves a single value for a key, checking latest pending block first, then permanent.
     pub(super) fn get(&self, k: &K) -> Option<&V> {
         for layer in self.pending.iter().rev() {
             if let Some(v) = layer.data.get(k) {
@@ -202,6 +202,27 @@ where
             }
         }
         self.permanent.get(k)
+    }
+
+    /// Retrieves all values for a key from all layers, starting from the latest pending layer.
+    /// Returns a vector of all values for the key, starting from the latest pending layer.
+    /// If the key is not found in any layer, returns None.
+    pub(super) fn get_all(&self, k: &K) -> Option<Vec<&V>> {
+        let mut res = Vec::new();
+        for layer in self.pending.iter().rev() {
+            if let Some(v) = layer.data.get(k) {
+                res.push(v);
+            }
+        }
+        if let Some(v) = self.permanent.get(k) {
+            res.push(v);
+        }
+
+        if res.is_empty() {
+            None
+        } else {
+            Some(res)
+        }
     }
 
     /// Checks if the given key exists in either the pending or permanent layer.
@@ -806,5 +827,110 @@ mod tests {
         assert_eq!(cache.get(&"key2".to_string()), Some(&21)); // block1
         assert_eq!(cache.get(&"key3".to_string()), Some(&3)); // block2
         assert_eq!(cache.get(&"key4".to_string()), Some(&40)); // block2
+    }
+
+    #[test]
+    fn test_versioned_cache_get_all() {
+        let mut cache: VersionedCache<String, u32> = VersionedCache::new();
+        let block1 = create_test_block(1, "0x01", "0x00");
+        let block2 = create_test_block(2, "0x02", "0x01");
+        let block3 = create_test_block(3, "0x03", "0x02");
+
+        cache
+            .validate_and_ensure_block_layer(&block1)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer(&block2)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer(&block3)
+            .unwrap();
+
+        // Test 1: Key not found in any layer
+        assert_eq!(cache.get_all(&"nonexistent".to_string()), None);
+
+        // Test 2: Key only in permanent layer
+        cache.insert_permanent("perm_only".to_string(), 100);
+        let result = cache
+            .get_all(&"perm_only".to_string())
+            .unwrap();
+        assert_eq!(result, vec![&100]);
+
+        // Test 3: Key only in one pending layer
+        cache
+            .insert_pending(block2.clone(), "pending_only".to_string(), 200)
+            .unwrap();
+        let result = cache
+            .get_all(&"pending_only".to_string())
+            .unwrap();
+        assert_eq!(result, vec![&200]);
+
+        // Test 4: Key in permanent and one pending layer
+        cache.insert_permanent("mixed".to_string(), 300);
+        cache
+            .insert_pending(block1.clone(), "mixed".to_string(), 301)
+            .unwrap();
+        let result = cache
+            .get_all(&"mixed".to_string())
+            .unwrap();
+        assert_eq!(result, vec![&301, &300]); // Latest pending first, then permanent
+
+        // Test 5: Key in multiple pending layers and permanent
+        cache.insert_permanent("multi".to_string(), 400);
+        cache
+            .insert_pending(block1.clone(), "multi".to_string(), 401)
+            .unwrap();
+        cache
+            .insert_pending(block2.clone(), "multi".to_string(), 402)
+            .unwrap();
+        cache
+            .insert_pending(block3.clone(), "multi".to_string(), 403)
+            .unwrap();
+        let result = cache
+            .get_all(&"multi".to_string())
+            .unwrap();
+        assert_eq!(result, vec![&403, &402, &401, &400]); // Latest to oldest
+
+        // Test 6: Key in some but not all pending layers
+        cache.insert_permanent("sparse".to_string(), 500);
+        cache
+            .insert_pending(block1.clone(), "sparse".to_string(), 501)
+            .unwrap();
+        cache
+            .insert_pending(block3.clone(), "sparse".to_string(), 503)
+            .unwrap();
+        let result = cache
+            .get_all(&"sparse".to_string())
+            .unwrap();
+        assert_eq!(result, vec![&503, &501, &500]); // Skips block2, includes others
+
+        // Test 7: Key only in multiple pending layers (no permanent)
+        cache
+            .insert_pending(block1.clone(), "pending_multi".to_string(), 601)
+            .unwrap();
+        cache
+            .insert_pending(block3.clone(), "pending_multi".to_string(), 603)
+            .unwrap();
+        let result = cache
+            .get_all(&"pending_multi".to_string())
+            .unwrap();
+        assert_eq!(result, vec![&603, &601]); // Latest to oldest pending only
+
+        // Test 8: After revert, get_all should reflect the new state
+        cache.revert_to(&block2.hash).unwrap();
+        let result = cache
+            .get_all(&"multi".to_string())
+            .unwrap();
+        assert_eq!(result, vec![&402, &401, &400]); // Block3 data removed after revert
+
+        // Test 9: After finality, get_all should include finalized data in permanent
+        cache
+            .handle_finality(block2.number)
+            .unwrap();
+        let result = cache
+            .get_all(&"multi".to_string())
+            .unwrap();
+        assert_eq!(result, vec![&402, &401]); // Block1 data moved to permanent, block2 stays
+                                              // pending
     }
 }
