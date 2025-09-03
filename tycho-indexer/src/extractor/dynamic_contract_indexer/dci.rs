@@ -12,7 +12,7 @@ use tycho_common::{
             Block, EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingParams,
             TracingResult, Transaction, TxWithChanges,
         },
-        contract::AccountDelta,
+        contract::{AccountDelta, ContractStorageChange},
         protocol::QualityRange,
         Address, BlockHash, Chain, ChangeType, ContractStoreDeltas, EntryPointId, StoreKey, TxHash,
     },
@@ -824,7 +824,7 @@ where
 
                 let mut slot_updates = contract_store
                     .iter()
-                    .map(|(slot, value)| {
+                    .map(|(slot, ContractStorageChange { value, .. })| {
                         if value.is_zero() {
                             (slot.clone(), None)
                         } else {
@@ -972,18 +972,30 @@ mod tests {
                             (
                                 Bytes::from("0x02"),
                                 HashMap::from([
-                                    (Bytes::from("0x01"), Bytes::from("0x01")),
-                                    (Bytes::from("0x22"), Bytes::from("0x22")),
+                                    (
+                                        Bytes::from("0x01"),
+                                        ContractStorageChange::initial(Bytes::from("0x01")),
+                                    ),
+                                    (
+                                        Bytes::from("0x22"),
+                                        ContractStorageChange::initial(Bytes::from("0x22")),
+                                    ),
                                 ]),
                             ),
                             (
                                 Bytes::from("0x22"),
-                                HashMap::from([(Bytes::from("0x22"), Bytes::from("0x01"))]),
+                                HashMap::from([(
+                                    Bytes::from("0x22"),
+                                    ContractStorageChange::initial(Bytes::from("0x01")),
+                                )]),
                             ),
                             // These should be ignored because they are not tracked
                             (
                                 Bytes::from("0x9999"),
-                                HashMap::from([(Bytes::from("0x01"), Bytes::from("0x01"))]),
+                                HashMap::from([(
+                                    Bytes::from("0x01"),
+                                    ContractStorageChange::initial(Bytes::from("0x01")),
+                                )]),
                             ),
                         ]),
                     }],
@@ -1006,7 +1018,10 @@ mod tests {
                             // This should trigger the retrigger
                             (
                                 Bytes::from("0x01"),
-                                HashMap::from([(Bytes::from("0x01"), Bytes::from("0xabcd"))]),
+                                HashMap::from([(
+                                    Bytes::from("0x01"),
+                                    ContractStorageChange::initial(Bytes::from("0xabcd")),
+                                )]),
                             ),
                         ]),
                     }],
@@ -1859,16 +1874,32 @@ mod tests {
                     (
                         token_address.clone(),
                         HashMap::from([
-                            (Bytes::from(0x01_u8).lpad(32, 0), Bytes::from(0x100_u16).lpad(32, 0)), /* Should be kept */
-                            (Bytes::from(0x03_u8).lpad(32, 0), Bytes::from(0x300_u16).lpad(32, 0)), /* Should be filtered out */
+                            /* Should be kept */
+                            (
+                                Bytes::from(0x01_u8).lpad(32, 0),
+                                ContractStorageChange::initial(Bytes::from(0x100_u16).lpad(32, 0)),
+                            ),
+                            /* Should be filtered out */
+                            (
+                                Bytes::from(0x03_u8).lpad(32, 0),
+                                ContractStorageChange::initial(Bytes::from(0x300_u16).lpad(32, 0)),
+                            ),
                         ]),
                     ),
                     // Normal address - should not have slots filtered
                     (
                         normal_address.clone(),
                         HashMap::from([
-                            (Bytes::from(0x01_u8).lpad(32, 0), Bytes::from(0x100_u16).lpad(32, 0)), /* Should be kept */
-                            (Bytes::from(0x03_u8).lpad(32, 0), Bytes::from(0x300_u16).lpad(32, 0)), /* Should be kept */
+                            /* Should be kept */
+                            (
+                                Bytes::from(0x01_u8).lpad(32, 0),
+                                ContractStorageChange::initial(Bytes::from(0x100_u16).lpad(32, 0)),
+                            ),
+                            /* Should be kept */
+                            (
+                                Bytes::from(0x03_u8).lpad(32, 0),
+                                ContractStorageChange::initial(Bytes::from(0x300_u16).lpad(32, 0)),
+                            ),
                         ]),
                     ),
                 ]),
