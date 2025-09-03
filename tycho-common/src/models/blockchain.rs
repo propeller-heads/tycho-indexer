@@ -601,12 +601,6 @@ impl AddressStorageLocation {
     }
 }
 
-impl From<StoreKey> for AddressStorageLocation {
-    fn from(value: StoreKey) -> Self {
-        AddressStorageLocation::new(value, 0)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct TracingResult {
     /// A set of (address, storage slot) pairs representing state that contain a called address.
@@ -939,7 +933,10 @@ pub mod fixtures {
         let store_key2 = StoreKey::from(vec![5, 6, 7, 8]);
 
         let mut result1 = TracingResult::new(
-            HashSet::from([(address1.clone(), store_key1.clone().into())]),
+            HashSet::from([(
+                address1.clone(),
+                AddressStorageLocation::new(store_key1.clone(), 12),
+            )]),
             HashMap::from([
                 (address2.clone(), HashSet::from([store_key1.clone()])),
                 (address3.clone(), HashSet::from([store_key2.clone()])),
@@ -947,7 +944,10 @@ pub mod fixtures {
         );
 
         let result2 = TracingResult::new(
-            HashSet::from([(address3.clone(), store_key2.clone().into())]),
+            HashSet::from([(
+                address3.clone(),
+                AddressStorageLocation::new(store_key2.clone(), 12),
+            )]),
             HashMap::from([
                 (address1.clone(), HashSet::from([store_key1.clone()])),
                 (address2.clone(), HashSet::from([store_key2.clone()])),
@@ -960,10 +960,10 @@ pub mod fixtures {
         assert_eq!(result1.retriggers.len(), 2);
         assert!(result1
             .retriggers
-            .contains(&(address1.clone(), store_key1.clone().into())));
+            .contains(&(address1.clone(), AddressStorageLocation::new(store_key1.clone(), 12))));
         assert!(result1
             .retriggers
-            .contains(&(address3.clone(), store_key2.clone().into())));
+            .contains(&(address3.clone(), AddressStorageLocation::new(store_key2.clone(), 12))));
 
         // Verify accessed slots were merged
         assert_eq!(result1.accessed_slots.len(), 3);
