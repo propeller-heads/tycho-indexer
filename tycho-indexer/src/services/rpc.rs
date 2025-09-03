@@ -1003,6 +1003,9 @@ where
             .tracer
             .trace(request.block_hash.clone(), entry_points_with_params)
             .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>() //TODO: Ideally we would want to return each error separately and not just a single
+            // error for the whole batch
             .map_err(|e| RpcError::Unknown(format!("Error while tracing entry points: {e:?}")))?;
         Ok(trace_results)
     }
@@ -2035,7 +2038,13 @@ mod tests {
                     .map(EntryPointWithTracingParams::from)
                     .collect::<Vec<_>>()),
             )
-            .return_once(move |_, _| Ok(tracing_results.clone()));
+            .return_once(move |_, _| {
+                tracing_results
+                    .clone()
+                    .into_iter()
+                    .map(Ok)
+                    .collect()
+            });
 
         let gw = mock_gateway_add_entry_points(
             expected_inserted_entry_points,

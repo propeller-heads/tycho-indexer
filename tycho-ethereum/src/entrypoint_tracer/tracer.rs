@@ -229,7 +229,7 @@ impl EVMEntrypointService {
             .body(batch_params.get().to_string())
             .send()
             .await
-            .map_err(|e| RPCError::UnknownError(format!("HTTP request failed: {}", e)))?;
+            .map_err(|e| RPCError::RequestError(e.to_string()))?;
 
         let batch_response: Vec<Value> = response.json().await.map_err(|e| {
             RPCError::UnknownError(format!("Failed to parse batch response: {}", e))
@@ -248,7 +248,10 @@ impl EVMEntrypointService {
         let access_list_data = access_list_result
             .get("result")
             .ok_or_else(|| {
-                RPCError::UnknownError("Missing result in access list response".to_string())
+                RPCError::UnknownError(format!(
+                    "Missing result in access list response: {:?}",
+                    access_list_result
+                ))
             })?;
 
         let access_list: AccessListResult = serde_json::from_value(access_list_data.clone())
@@ -267,13 +270,16 @@ impl EVMEntrypointService {
         // Parse trace response
         let trace_result = &batch_response[1];
         if let Some(error) = trace_result.get("error") {
-            return Err(RPCError::UnknownError(format!("debug_traceCall failed: {}", error)));
+            return Err(RPCError::TracingFailure(format!("debug_traceCall failed: {}", error)));
         }
 
         let trace_data = trace_result
             .get("result")
             .ok_or_else(|| {
-                RPCError::UnknownError("Missing result in trace response".to_string())
+                RPCError::UnknownError(format!(
+                    "Missing result in trace response: {:?}",
+                    trace_result
+                ))
             })?;
 
         let pre_state_trace: GethTrace = serde_json::from_value(trace_data.clone())
@@ -291,22 +297,28 @@ impl EntryPointTracer for EVMEntrypointService {
         &self,
         block_hash: BlockHash,
         entry_points: Vec<EntryPointWithTracingParams>,
-    ) -> Result<Vec<TracedEntryPoint>, Self::Error> {
+    ) -> Vec<Result<TracedEntryPoint, Self::Error>> {
         let mut results = Vec::new();
         for entry_point in &entry_points {
-            match &entry_point.params {
+            let result = match &entry_point.params {
                 TracingParams::RPCTracer(ref rpc_entry_point) => {
                     // Use batched RPC call for both access list and trace
-                    let (accessed_slots, pre_state_trace) = self
+                    let (accessed_slots, pre_state_trace) = match self
                         .batch_trace_and_access_list(
                             &entry_point.entry_point.target,
                             rpc_entry_point,
                             &block_hash,
                         )
-                        .await?;
+                        .await
+                    {
+                        Ok(trace) => trace,
+                        Err(e) => {
+                            results.push(Err(e));
+                            continue;
+                        }
+                    };
 
                     let called_addresses: Vec<Address> = accessed_slots.keys().cloned().collect();
-
                     // Provides a very simplistic way of finding retriggers. A better way would
                     // involve using the structure of callframes. So basically iterate the call
                     // tree in a parent child manner then search the
@@ -336,19 +348,22 @@ impl EntryPointTracer for EVMEntrypointService {
                         }
                         retriggers
                     } else {
-                        return Err(RPCError::UnknownError(
+                        results.push(Err(RPCError::UnknownError(
                             "invalid trace result for PreStateTracer".to_string(),
-                        ));
+                        )));
+                        continue;
                     };
-                    results.push(TracedEntryPoint::new(
+
+                    Ok(TracedEntryPoint::new(
                         entry_point.clone(),
                         block_hash.clone(),
                         TracingResult::new(retriggers, accessed_slots),
-                    ));
+                    ))
                 }
-            }
+            };
+            results.push(result);
         }
-        Ok(results)
+        results
     }
 }
 
@@ -402,6 +417,8 @@ mod tests {
                 entry_points.clone(),
             )
             .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
             .unwrap();
 
         assert_eq!(
@@ -555,6 +572,8 @@ mod tests {
                 entry_points.clone(),
             )
             .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
             .unwrap();
 
         assert_eq!(
@@ -638,9 +657,75 @@ mod tests {
                 entry_points.clone(),
             )
             .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
             .unwrap();
 
         assert_eq!(traced_entry_points, vec![]);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires a RPC connection"]
+    async fn test_trace_failing_call() {
+        let url = env::var("RPC_URL").expect("RPC_URL is not set");
+        let tracer = EVMEntrypointService::try_from_url(&url).unwrap();
+        let entry_points = vec![EntryPointWithTracingParams::new(
+            EntryPoint::new(
+                "1a8f81c256aee9c640e14bb0453ce247ea0dfe6f:unknown()".to_string(),
+                Bytes::from_str("1a8f81c256aee9c640e14bb0453ce247ea0dfe6f").unwrap(),
+                "unknown()".to_string(),
+            ),
+            TracingParams::RPCTracer(RPCTracerParams::new(
+                None,
+                Bytes::from(&keccak256("unknown()").to_vec()[0..4]),
+            )),
+        )];
+        let traced_entry_points = tracer
+            .trace(
+                // Block 22589134 hash
+                Bytes::from_str(
+                    "0xf5e2c5bc64ba61e1230e34b2d5d8906416633100919b477d17a7c6fd69cde31d",
+                )
+                .unwrap(),
+                entry_points.clone(),
+            )
+            .await;
+
+        assert_eq!(traced_entry_points.len(), 1);
+        dbg!(&traced_entry_points[0]);
+        assert!(matches!(traced_entry_points[0], Err(RPCError::TracingFailure(_))));
+    }
+
+    #[tokio::test]
+    #[ignore = "requires a RPC connection"]
+    async fn test_trace_failing_rpc() {
+        let url = "https://fake_rpc.com/eth";
+        let tracer = EVMEntrypointService::try_from_url(url).unwrap();
+        let entry_points = vec![EntryPointWithTracingParams::new(
+            EntryPoint::new(
+                "1a8f81c256aee9c640e14bb0453ce247ea0dfe6f:unknown()".to_string(),
+                Bytes::from_str("1a8f81c256aee9c640e14bb0453ce247ea0dfe6f").unwrap(),
+                "unknown()".to_string(),
+            ),
+            TracingParams::RPCTracer(RPCTracerParams::new(
+                None,
+                Bytes::from(&keccak256("unknown()").to_vec()[0..4]),
+            )),
+        )];
+        let traced_entry_points = tracer
+            .trace(
+                // Block 22589134 hash
+                Bytes::from_str(
+                    "0xf5e2c5bc64ba61e1230e34b2d5d8906416633100919b477d17a7c6fd69cde31d",
+                )
+                .unwrap(),
+                entry_points.clone(),
+            )
+            .await;
+
+        assert_eq!(traced_entry_points.len(), 1);
+        dbg!(&traced_entry_points[0]);
+        assert!(matches!(traced_entry_points[0], Err(RPCError::RequestError(_))));
     }
 
     #[tokio::test]
@@ -687,6 +772,8 @@ mod tests {
                 entry_points.clone(),
             )
             .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
             .unwrap();
 
         assert!(traced_entry_points[0]
