@@ -163,8 +163,10 @@ impl MetadataResponseParser for EulerMetadataResponseParser {
                     ));
                 }
 
-                let token_0 = &component.tokens[0];
-                let token_1 = &component.tokens[1];
+                let mut sorted_tokens = component.tokens.clone();
+                sorted_tokens.sort_unstable();
+                let token_0 = &sorted_tokens[0];
+                let token_1 = &sorted_tokens[1];
 
                 let res_string = serde_json::from_value::<String>(response.clone()).unwrap();
                 let res_str = res_string
@@ -560,15 +562,14 @@ mod tests {
             protocol_type_name: "swap".to_string(),
             chain: Chain::Ethereum,
             tokens: vec![
-                Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
                 Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"),
+                Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"),
             ],
             contract_addresses: vec![],
-            static_attributes: HashMap::from([
-                ("hooks".to_string(), Bytes::from("0xc88b618c2c670c2e2a42e06b466b6f0e82a6e8a8")),
-                ("token_0".to_string(), Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")),
-                ("token_1".to_string(), Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")),
-            ]),
+            static_attributes: HashMap::from([(
+                "hooks".to_string(),
+                Bytes::from("0xc88b618c2c670c2e2a42e06b466b6f0e82a6e8a8"),
+            )]),
             change: ChangeType::Creation,
             creation_tx: Bytes::from(
                 "0x316209797c061712713d61cfa30c200dbe0211bec67d8ef3ddfef38c733bb1c0",
