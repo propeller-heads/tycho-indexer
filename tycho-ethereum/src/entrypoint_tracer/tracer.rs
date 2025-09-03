@@ -1,21 +1,23 @@
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     str::FromStr,
+    sync::Arc,
 };
 
-use alloy::rpc::client::{ClientBuilder, RpcClient};
-use async_trait::async_trait;
-use ethers::{
-    prelude::{spoof, Middleware},
-    providers::{Http, Provider},
-    types::{
-        Address as EthersAddress, BlockId, Bytes as EthersBytes, GethDebugBuiltInTracerType,
-        GethDebugTracerType, GethDebugTracingCallOptions, GethDebugTracingOptions, GethTrace,
-        GethTraceFrame, NameOrAddress, PreStateFrame, PreStateMode, TransactionRequest, H160, H256,
-        U256,
+use alloy::{
+    primitives::{
+        map::FbBuildHasher, Address as AlloyAddress, BlockHash as AlloyBlockHash,
+        Bytes as AlloyBytes, FixedBytes, U256,
     },
+    providers::{Provider, ProviderBuilder},
+    rpc::types::{state::AccountOverride, BlockId, TransactionInput, TransactionRequest},
 };
-use serde_json::{json, Value};
+use alloy_rpc_types_trace::geth::{
+    GethDebugBuiltInTracerType, GethDebugTracerConfig, GethDebugTracerType,
+    GethDebugTracingOptions, GethDefaultTracingOptions, GethTrace, PreStateFrame, PreStateMode,
+};
+use async_trait::async_trait;
+use serde_json::{json, value::to_raw_value, Value};
 use tycho_common::{
     keccak256,
     models::{
@@ -33,88 +35,24 @@ use super::{build_state_overrides, AccessListResult};
 use crate::{BytesCodec, RPCError};
 
 pub struct EVMEntrypointService {
-    provider: Provider<Http>,
-    alloy_client: RpcClient,
+    rpc_url: url::Url,
+    // TODO: add a setting to enable/disable batching. This could be needed because some RPCs don't
+    // support batching. More info: https://www.quicknode.com/guides/ethereum-development/transactions/how-to-make-batch-requests-on-ethereum
 }
 
 impl EVMEntrypointService {
     pub fn try_from_url(rpc_url: &str) -> Result<Self, RPCError> {
         let url = url::Url::parse(rpc_url)
             .map_err(|_| RPCError::SetupError("Invalid URL".to_string()))?;
-        Ok(Self {
-            provider: Provider::<Http>::try_from(rpc_url)
-                .map_err(|e| RPCError::SetupError(e.to_string()))?,
-            alloy_client: ClientBuilder::default().http(url),
-        })
+
+        Ok(Self { rpc_url: url })
     }
 
-    async fn trace_call(
-        &self,
+    fn create_access_list_params(
         target: &Address,
         params: &RPCTracerParams,
         block_hash: &BlockHash,
-        tracer_type: GethDebugBuiltInTracerType,
-    ) -> Result<GethTrace, RPCError> {
-        let caller = params
-            .caller
-            .as_ref()
-            .map(H160::from_bytes);
-        self.provider
-            .debug_trace_call(
-                TransactionRequest {
-                    to: Some(NameOrAddress::Address(H160::from_bytes(target))),
-                    from: caller,
-                    data: Some(EthersBytes::from(params.calldata.to_vec())),
-                    ..Default::default()
-                },
-                Some(BlockId::Hash(H256::from_bytes(block_hash))),
-                GethDebugTracingCallOptions {
-                    tracing_options: GethDebugTracingOptions {
-                        tracer: Some(GethDebugTracerType::BuiltInTracer(tracer_type)),
-                        enable_return_data: Some(true),
-                        ..Default::default()
-                    },
-                    state_overrides: params
-                        .state_overrides
-                        .as_ref()
-                        .map(|s| {
-                            let mut state = spoof::state();
-                            s.iter()
-                                .for_each(|(address, overrides)| {
-                                    let account = state.account(H160::from_slice(address.as_ref()));
-                                    account.storage = match overrides.slots.as_ref() {
-                                        Some(StorageOverride::Diff(slots)) => {
-                                            Some(spoof::Storage::Diff(convert_storage(slots)))
-                                        }
-                                        Some(StorageOverride::Replace(slots)) => {
-                                            Some(spoof::Storage::Replace(convert_storage(slots)))
-                                        }
-                                        _ => None,
-                                    };
-                                    account.balance = overrides
-                                        .native_balance
-                                        .as_ref()
-                                        .map(|b| U256::from_big_endian(b.as_ref()));
-                                    account.code = overrides
-                                        .code
-                                        .as_ref()
-                                        .map(|c| ethers::types::Bytes::from(c.to_vec()));
-                                });
-                            state
-                        }),
-                    ..Default::default()
-                },
-            )
-            .await
-            .map_err(RPCError::RequestError)
-    }
-
-    async fn get_access_list(
-        &self,
-        block_hash: &BlockHash,
-        target: &Address,
-        params: &RPCTracerParams,
-    ) -> Result<HashMap<Address, HashSet<Bytes>>, RPCError> {
+    ) -> Value {
         let mut tx_params = json!({
             "to": target.to_string(),
             "data": params.calldata.to_string()
@@ -124,7 +62,7 @@ impl EVMEntrypointService {
             tx_params["from"] = json!(caller.to_string());
         }
 
-        let rpc_params = if params.state_overrides.is_none() ||
+        if params.state_overrides.is_none() ||
             params
                 .state_overrides
                 .as_ref()
@@ -140,25 +78,209 @@ impl EVMEntrypointService {
                     .unwrap_or(&BTreeMap::new()),
             );
             json!([tx_params, block_hash.to_string(), Value::Object(state_overrides)])
+        }
+    }
+
+    fn create_trace_call_params(
+        target: &Address,
+        params: &RPCTracerParams,
+        block_hash: &BlockHash,
+    ) -> Value {
+        let caller = params
+            .caller
+            .as_ref()
+            .map(|addr| AlloyAddress::from_slice(addr.as_ref()));
+
+        let tx_request = TransactionRequest {
+            to: Some(AlloyAddress::from_slice(target.as_ref()).into()),
+            from: caller,
+            input: TransactionInput::new(AlloyBytes::from(params.calldata.to_vec())),
+            ..Default::default()
         };
 
-        let res: AccessListResult = self
-            .alloy_client
-            .request("eth_createAccessList", rpc_params)
+        let block_id = BlockId::Hash(AlloyBlockHash::from_slice(block_hash.as_ref()).into());
+
+        let state_overrides = params
+            .state_overrides
+            .as_ref()
+            .map(|overrides| {
+                let mut state_map = HashMap::new();
+
+                for (address, override_data) in overrides.iter() {
+                    let mut account_override = AccountOverride::default();
+
+                    // Handle storage overrides
+                    if let Some(storage_override) = &override_data.slots {
+                        let storage_map: HashMap<
+                            FixedBytes<32>,
+                            FixedBytes<32>,
+                            FbBuildHasher<32>,
+                        > = match storage_override {
+                            StorageOverride::Diff(slots) | StorageOverride::Replace(slots) => slots
+                                .iter()
+                                .map(|(k, v)| {
+                                    (
+                                        FixedBytes::from(
+                                            k.as_ref()
+                                                .try_into()
+                                                .unwrap_or([0u8; 32]),
+                                        ),
+                                        FixedBytes::from(
+                                            v.as_ref()
+                                                .try_into()
+                                                .unwrap_or([0u8; 32]),
+                                        ),
+                                    )
+                                })
+                                .collect(),
+                        };
+
+                        match storage_override {
+                            StorageOverride::Diff(_) => {
+                                account_override.state_diff = Some(storage_map);
+                            }
+                            StorageOverride::Replace(_) => {
+                                account_override.state = Some(storage_map);
+                            }
+                        }
+                    }
+
+                    // Handle balance override
+                    if let Some(balance) = &override_data.native_balance {
+                        account_override.balance = Some(U256::from_be_bytes(
+                            balance
+                                .as_ref()
+                                .try_into()
+                                .unwrap_or([0u8; 32]),
+                        ));
+                    }
+
+                    // Handle code override
+                    if let Some(code) = &override_data.code {
+                        account_override.code = Some(AlloyBytes::from(code.to_vec()));
+                    }
+
+                    state_map.insert(AlloyAddress::from_slice(address.as_ref()), account_override);
+                }
+
+                state_map
+            });
+
+        match state_overrides {
+            Some(overrides) => {
+                // Need to manually construct this because Alloy misses `stateOverrides` in their
+                // structs.
+                let mut tracing_with_overrides = json!({
+                    "enableReturnData": true,
+                    "tracer": "prestateTracer",
+                    "stateOverrides": overrides
+                });
+
+                json!([tx_request, block_id, tracing_with_overrides])
+            }
+            None => {
+                let tracing_options = GethDebugTracingOptions {
+                    config: GethDefaultTracingOptions::default().enable_return_data(),
+                    tracer: Some(GethDebugTracerType::BuiltInTracer(
+                        GethDebugBuiltInTracerType::PreStateTracer,
+                    )),
+                    tracer_config: GethDebugTracerConfig::default(),
+                    timeout: None,
+                };
+                json!([tx_request, block_id, tracing_options])
+            }
+        }
+    }
+
+    async fn batch_trace_and_access_list(
+        &self,
+        target: &Address,
+        params: &RPCTracerParams,
+        block_hash: &BlockHash,
+    ) -> Result<(HashMap<Address, HashSet<Bytes>>, GethTrace), RPCError> {
+        let access_list_params = Self::create_access_list_params(target, params, block_hash);
+        let trace_call_params = Self::create_trace_call_params(target, params, block_hash);
+
+        // Create batch request
+        let batch_request = json!([
+            {
+                "jsonrpc": "2.0",
+                "method": "eth_createAccessList",
+                "params": access_list_params,
+                "id": 1
+            },
+            {
+                "jsonrpc": "2.0",
+                "method": "debug_traceCall",
+                "params": trace_call_params,
+                "id": 2
+            }
+        ]);
+
+        let batch_params = to_raw_value(&batch_request).map_err(|e| {
+            RPCError::UnknownError(format!("Failed to serialize batch params: {}", e))
+        })?;
+
+        // Send batch request - using HTTP POST directly for batch requests
+        let client = reqwest::Client::new();
+        let response = client
+            .post(self.rpc_url.as_str())
+            .header("Content-Type", "application/json")
+            .body(batch_params.get().to_string())
+            .send()
             .await
-            .map_err(|e| {
-                RPCError::UnknownError(format!("eth_createAccessList call failed: {e}"))
+            .map_err(|e| RPCError::UnknownError(format!("HTTP request failed: {}", e)))?;
+
+        let batch_response: Vec<Value> = response.json().await.map_err(|e| {
+            RPCError::UnknownError(format!("Failed to parse batch response: {}", e))
+        })?;
+
+        if batch_response.len() != 2 {
+            return Err(RPCError::UnknownError("Invalid batch response length".to_string()));
+        }
+
+        // Parse access list response
+        let access_list_result = &batch_response[0];
+        if let Some(error) = access_list_result.get("error") {
+            return Err(RPCError::UnknownError(format!("eth_createAccessList failed: {}", error)));
+        }
+
+        let access_list_data = access_list_result
+            .get("result")
+            .ok_or_else(|| {
+                RPCError::UnknownError("Missing result in access list response".to_string())
             })?;
 
-        res.try_get_accessed_slots()
-    }
-}
+        let access_list: AccessListResult = serde_json::from_value(access_list_data.clone())
+            .map_err(|e| RPCError::UnknownError(format!("Failed to parse access list: {}", e)))?;
 
-fn convert_storage(slots: &BTreeMap<Bytes, Bytes>) -> HashMap<H256, H256> {
-    slots
-        .iter()
-        .map(|(k, v)| (H256::from_slice(k.as_ref()), H256::from_slice(v.as_ref())))
-        .collect()
+        let mut accessed_slots = access_list.try_get_accessed_slots()?;
+
+        // eth_createAccessList excludes the target address from the access list unless
+        // its state is accessed. This line ensures that the target
+        // address is included in the access list even if its state is not accessed.
+        // Source: https://github.com/ethereum/go-ethereum/blob/51342136fadf2972320cd70badb1336efe3259e1/internal/ethapi/api.go#L1180C2-L1180C87
+        if !accessed_slots.contains_key(target) {
+            accessed_slots.insert(target.clone(), HashSet::new());
+        }
+
+        // Parse trace response
+        let trace_result = &batch_response[1];
+        if let Some(error) = trace_result.get("error") {
+            return Err(RPCError::UnknownError(format!("debug_traceCall failed: {}", error)));
+        }
+
+        let trace_data = trace_result
+            .get("result")
+            .ok_or_else(|| {
+                RPCError::UnknownError("Missing result in trace response".to_string())
+            })?;
+
+        let pre_state_trace: GethTrace = serde_json::from_value(trace_data.clone())
+            .map_err(|e| RPCError::UnknownError(format!("Failed to parse trace: {}", e)))?;
+
+        Ok((accessed_slots, pre_state_trace))
+    }
 }
 
 #[async_trait]
@@ -174,62 +296,40 @@ impl EntryPointTracer for EVMEntrypointService {
         for entry_point in &entry_points {
             match &entry_point.params {
                 TracingParams::RPCTracer(ref rpc_entry_point) => {
-                    let mut accessed_slots = self
-                        .get_access_list(
-                            &block_hash,
-                            &entry_point.entry_point.target,
-                            rpc_entry_point,
-                        )
-                        .await?;
-
-                    // eth_createAccessList excludes the target address from the access list unless
-                    // its state is accessed. This line ensures that the target
-                    // address is included in the access list even if its state is not accessed.
-                    // Source: https://github.com/ethereum/go-ethereum/blob/51342136fadf2972320cd70badb1336efe3259e1/internal/ethapi/api.go#L1180C2-L1180C87
-                    if !accessed_slots.contains_key(&entry_point.entry_point.target) {
-                        accessed_slots
-                            .insert(entry_point.entry_point.target.clone(), HashSet::new());
-                    }
-
-                    let called_addresses: Vec<EthersAddress> = accessed_slots
-                        .keys()
-                        .map(|addr| H160::from_slice(addr.as_ref()))
-                        .collect();
-
-                    // Second call to get the retriggers
-                    let pre_state_trace = self
-                        .trace_call(
+                    // Use batched RPC call for both access list and trace
+                    let (accessed_slots, pre_state_trace) = self
+                        .batch_trace_and_access_list(
                             &entry_point.entry_point.target,
                             rpc_entry_point,
                             &block_hash,
-                            GethDebugBuiltInTracerType::PreStateTracer,
                         )
                         .await?;
+
+                    let called_addresses: Vec<Address> = accessed_slots.keys().cloned().collect();
 
                     // Provides a very simplistic way of finding retriggers. A better way would
                     // involve using the structure of callframes. So basically iterate the call
                     // tree in a parent child manner then search the
                     // childs address in the prestate of parent.
-                    let retriggers = if let GethTrace::Known(GethTraceFrame::PreStateTracer(
-                        PreStateFrame::Default(PreStateMode(frame)),
+                    let retriggers = if let GethTrace::PreStateTracer(PreStateFrame::Default(
+                        PreStateMode(frame),
                     )) = pre_state_trace
                     {
                         let mut retriggers = HashSet::new();
                         for (address, account) in frame.iter() {
-                            if let Some(storage) = &account.storage {
-                                for (slot, val) in storage.iter() {
-                                    for call_address in called_addresses.iter() {
-                                        let address_bytes = call_address.as_bytes();
-                                        let value_bytes = val.as_bytes();
-                                        if value_bytes
-                                            .windows(address_bytes.len())
-                                            .any(|window| window == address_bytes)
-                                        {
-                                            retriggers.insert((
-                                                (*address).to_bytes(),
-                                                (*slot).to_bytes(),
-                                            ));
-                                        }
+                            let storage = &account.storage;
+                            for (slot, val) in storage.iter() {
+                                for call_address in called_addresses.iter() {
+                                    let address_bytes = call_address.as_ref();
+                                    let value_bytes: &[u8] = val.as_ref();
+                                    if value_bytes
+                                        .windows(address_bytes.len())
+                                        .any(|window| window == address_bytes)
+                                    {
+                                        retriggers.insert((
+                                            Bytes::from(address.as_slice()),
+                                            Bytes::from(slot.as_slice()),
+                                        ));
                                     }
                                 }
                             }
