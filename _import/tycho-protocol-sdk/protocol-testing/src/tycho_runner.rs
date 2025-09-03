@@ -19,7 +19,7 @@ pub struct TychoRunner {
 }
 
 // TODO: Currently Tycho-Indexer cannot be run as a lib. We need to expose the entrypoints to allow
-// running it as a lib
+//  running it as a lib
 impl TychoRunner {
     pub fn new(db_url: String, initialized_accounts: Vec<String>, with_binary_logs: bool) -> Self {
         Self { db_url, initialized_accounts, with_binary_logs }

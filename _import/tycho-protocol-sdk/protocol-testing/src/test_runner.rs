@@ -36,7 +36,6 @@ use crate::{
 };
 
 pub struct TestRunner {
-    package: String,
     tycho_logs: bool,
     db_url: String,
     vm_traces: bool,
@@ -46,7 +45,7 @@ pub struct TestRunner {
 impl TestRunner {
     pub fn new(package: String, tycho_logs: bool, db_url: String, vm_traces: bool) -> Self {
         let substreams_path = PathBuf::from("../substreams").join(&package);
-        Self { package, tycho_logs, db_url, vm_traces, substreams_path }
+        Self { tycho_logs, db_url, vm_traces, substreams_path }
     }
 
     pub fn run_tests(&self) -> miette::Result<()> {
@@ -232,15 +231,9 @@ fn validate_state(
     for expected_component in expected_components {
         let component_id = expected_component.base.id.clone();
 
-        assert!(
-            components_by_id.contains_key(&component_id),
-            "Component {:?} was not found on Tycho",
-            component_id
-        );
-
         let component = components_by_id
             .get(&component_id)
-            .expect("Failed to get component from Tycho");
+            .ok_or_else(|| miette!("Component {:?} was not found on Tycho", component_id))?;
 
         let diff = expected_component
             .base
@@ -296,11 +289,13 @@ fn validate_state(
                     component_address,
                     start_block,
                 ));
-                assert_eq!(
-                    balance, node_balance,
-                    "Token balance mismatch for component {} and token {}",
-                    component.id, token
-                );
+                if balance != node_balance {
+                    return Err(miette!(
+                        "Token balance mismatch for component {} and token {}",
+                        component.id,
+                        token
+                    ))
+                }
                 info!(
                     "Token balance for component {} and token {} matches the expected value",
                     component.id, token
