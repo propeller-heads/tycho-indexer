@@ -40,7 +40,7 @@ pub(super) struct DCICache {
     /// changes.
     pub(super) retriggers: VersionedCache<StorageLocation, HashSet<EntryPointWithTracingParams>>,
     /// Stores tracked contract addresses and their associated storage keys.
-    pub(super) tracked_contracts: VersionedCache<Address, Option<HashSet<StoreKey>>>,
+    pub(super) tracked_contracts: VersionedCache<Address, HashSet<StoreKey>>,
     /// Stores addresses identified as ERC-20 tokens to skip full indexing.
     /// perf: implement a versioned wrapper around HashSet, similar to VersionedCache for HashMap
     pub(super) erc20_addresses: VersionedCache<Address, bool>,
@@ -117,17 +117,10 @@ impl DCICache {
         self.tracked_contracts.handle_finality(
             finalized_block_height,
             MergeStrategy::Custom(Box::new(
-                |existing: &Option<HashSet<StoreKey>>, new: Option<HashSet<StoreKey>>| match (
-                    existing, new,
-                ) {
-                    (None, None) => None,
-                    (None, Some(keys)) => Some(keys),
-                    (Some(existing_set), None) => Some(existing_set.clone()),
-                    (Some(existing_set), Some(new_set)) => {
-                        let mut merged = existing_set.clone();
-                        merged.extend(new_set);
-                        Some(merged)
-                    }
+                |existing: &HashSet<StoreKey>, new: HashSet<StoreKey>| {
+                    let mut merged = existing.clone();
+                    merged.extend(new);
+                    merged
                 },
             )),
         )?;

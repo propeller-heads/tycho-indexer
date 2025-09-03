@@ -232,23 +232,18 @@ where
                             .contains_key(account);
 
                         // Determine which slots are new (not previously tracked)
-                        let new_slots: HashSet<StoreKey> = if let Some(tracked_slots_opt) = self
+                        let new_slots: HashSet<StoreKey> = if let Some(tracked_slots) = self
                             .cache
                             .tracked_contracts
                             .get(account)
                         {
                             // Account is tracked
-                            if let Some(tracked_slots) = tracked_slots_opt {
-                                // Filter out already tracked slots
-                                slots
-                                    .iter()
-                                    .filter(|slot| !tracked_slots.contains(*slot))
-                                    .cloned()
-                                    .collect()
-                            } else {
-                                // None means all slots are tracked, so no new slots
-                                HashSet::new()
-                            }
+                            // Filter out already tracked slots
+                            slots
+                                .iter()
+                                .filter(|slot| !tracked_slots.contains(*slot))
+                                .cloned()
+                                .collect()
                         } else {
                             // Account is not tracked at all, all slots are new
                             slots.iter().cloned().collect()
@@ -534,18 +529,13 @@ where
                 }
 
                 for (address, slots) in result.accessed_slots.iter() {
-                    let slots_to_insert =
-                        if slots.is_empty() { None } else { Some(slots.iter().cloned().collect()) };
+                    let slots_to_insert = slots.iter().cloned().collect();
 
                     self.cache
                         .tracked_contracts
                         .permanent_entry(address)
                         .and_modify(|existing_slots| {
-                            if let Some(existing) = existing_slots {
-                                existing.extend(slots.iter().cloned());
-                            } else {
-                                *existing_slots = slots_to_insert.clone();
-                            }
+                            existing_slots.extend(slots.iter().cloned());
                         })
                         .or_insert(slots_to_insert);
                 }
@@ -752,18 +742,13 @@ where
                 .accessed_slots
                 .iter()
             {
-                let slots_to_insert =
-                    if slots.is_empty() { None } else { Some(slots.iter().cloned().collect()) };
+                let slots_to_insert = slots.iter().cloned().collect();
 
                 self.cache
                     .tracked_contracts
                     .pending_entry(block, address)?
                     .and_modify(|existing_slots| {
-                        if let Some(existing) = existing_slots {
-                            existing.extend(slots.iter().cloned());
-                        } else {
-                            *existing_slots = slots_to_insert.clone();
-                        }
+                        existing_slots.extend(slots.iter().cloned());
                     })
                     .or_insert(slots_to_insert);
             }
@@ -857,9 +842,7 @@ where
 
                 // Only filter slots if skipping full indexing
                 if self.should_skip_full_indexing(account) {
-                    if let Some(tracked_keys) = tracked_keys {
-                        slot_updates.retain(|slot, _| tracked_keys.contains(slot));
-                    }
+                    slot_updates.retain(|slot, _| tracked_keys.contains(slot));
                 }
 
                 if !slot_updates.is_empty() {
@@ -1189,10 +1172,10 @@ mod tests {
                 .tracked_contracts
                 .get_full_permanent_state(),
             &HashMap::from([
-                (Bytes::from("0x01"), Some(HashSet::from([Bytes::from("0x11")]))),
-                (Bytes::from("0x11"), Some(HashSet::from([Bytes::from("0x11")]))),
-                (Bytes::from("0x02"), Some(HashSet::from([Bytes::from("0x22")]))),
-                (Bytes::from("0x22"), Some(HashSet::from([Bytes::from("0x22")]))),
+                (Bytes::from("0x01"), HashSet::from([Bytes::from("0x11")])),
+                (Bytes::from("0x11"), HashSet::from([Bytes::from("0x11")])),
+                (Bytes::from("0x02"), HashSet::from([Bytes::from("0x22")])),
+                (Bytes::from("0x22"), HashSet::from([Bytes::from("0x22")])),
             ])
         );
     }
@@ -1846,10 +1829,10 @@ mod tests {
             HashSet::from([Bytes::from(0x01_u8).lpad(32, 0), Bytes::from(0x02_u8).lpad(32, 0)]);
         dci.cache
             .tracked_contracts
-            .insert_permanent(token_address.clone(), Some(tracked_slots.clone()));
+            .insert_permanent(token_address.clone(), tracked_slots.clone());
         dci.cache
             .tracked_contracts
-            .insert_permanent(normal_address.clone(), Some(tracked_slots.clone()));
+            .insert_permanent(normal_address.clone(), tracked_slots.clone());
 
         // Create block changes with storage updates
         let block_changes = BlockChanges::new(
@@ -2152,7 +2135,7 @@ mod tests {
             .insert_permanent(token_address.clone(), true);
         dci.cache
             .tracked_contracts
-            .insert_permanent(token_address.clone(), Some(HashSet::from([existing_slot.clone()])));
+            .insert_permanent(token_address.clone(), HashSet::from([existing_slot.clone()]));
 
         let mut block_changes = get_block_changes(2);
         dci.process_block_update(&mut block_changes)
@@ -2313,7 +2296,7 @@ mod tests {
             .insert_permanent(token_address.clone(), true);
         dci.cache
             .tracked_contracts
-            .insert_permanent(token_address.clone(), Some(HashSet::from([existing_slot.clone()])));
+            .insert_permanent(token_address.clone(), HashSet::from([existing_slot.clone()]));
 
         let mut block_changes = get_block_changes(2);
         dci.process_block_update(&mut block_changes)
