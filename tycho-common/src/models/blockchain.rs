@@ -434,6 +434,15 @@ impl EntryPointWithTracingParams {
     }
 }
 
+impl std::fmt::Display for EntryPointWithTracingParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let tracer_type = match &self.params {
+            TracingParams::RPCTracer(_) => "RPC",
+        };
+        write!(f, "{} [{}]", self.entry_point.external_id, tracer_type)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
 /// An entry point to trace. Different types of entry points tracing will be supported in the
 /// future. Like RPC debug tracing, symbolic execution, etc.
@@ -984,5 +993,26 @@ pub mod fixtures {
                 .unwrap(),
             &HashSet::from([store_key1.clone(), store_key2.clone()])
         );
+    }
+
+    #[test]
+    fn test_entry_point_with_tracing_params_display() {
+        use std::str::FromStr;
+
+        let entry_point = EntryPoint::new(
+            "uniswap_v3_pool_swap".to_string(),
+            Address::from_str("0x1234567890123456789012345678901234567890").unwrap(),
+            "swapExactETHForTokens(uint256,address[],address,uint256)".to_string(),
+        );
+
+        let tracing_params = TracingParams::RPCTracer(RPCTracerParams::new(
+            Some(Address::from_str("0x9876543210987654321098765432109876543210").unwrap()),
+            Bytes::from_str("0xabcdef").unwrap(),
+        ));
+
+        let entry_point_with_params = EntryPointWithTracingParams::new(entry_point, tracing_params);
+
+        let display_output = entry_point_with_params.to_string();
+        assert_eq!(display_output, "uniswap_v3_pool_swap [RPC]");
     }
 }
