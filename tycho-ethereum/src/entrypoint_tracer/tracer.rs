@@ -36,6 +36,8 @@ use crate::{BytesCodec, RPCError};
 
 pub struct EVMEntrypointService {
     rpc_url: url::Url,
+    // TODO: add a setting to enable/disable batching. This could be needed because some RPCs don't
+    // support batching. More info: https://www.quicknode.com/guides/ethereum-development/transactions/how-to-make-batch-requests-on-ethereum
 }
 
 impl EVMEntrypointService {
