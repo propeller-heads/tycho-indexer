@@ -16,6 +16,19 @@ use super::hook_dci::ComponentProcessingState;
 /// A unique identifier for a storage location, consisting of an address and a storage key.
 type StorageLocation = (Address, StoreKey);
 
+/// A function used for merging values when the same key exists in multiple layers during finality
+/// handling.
+type MergeFunction<V> = Box<dyn Fn(&V, V) -> V>;
+
+/// Strategy for merging values when the same key exists in multiple layers during finality
+/// handling.
+pub(super) enum MergeStrategy<V> {
+    /// Replace existing values with new ones (default behavior).
+    Replace,
+    /// Use a custom function to merge values.
+    Custom(MergeFunction<V>),
+}
+
 /// Central data cache used by the Dynamic Contract Indexer (DCI).
 #[derive(Debug)]
 pub(super) struct DCICache {
@@ -84,17 +97,45 @@ impl DCICache {
         finalized_block_height: u64,
     ) -> Result<(), DCICacheError> {
         self.ep_id_to_entrypoint
-            .handle_finality(finalized_block_height)?;
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
         self.entrypoint_results
-            .handle_finality(finalized_block_height)?;
-        self.retriggers
-            .handle_finality(finalized_block_height)?;
-        self.tracked_contracts
-            .handle_finality(finalized_block_height)?;
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
+        // Use custom merge function for retriggers to union HashSets
+        self.retriggers.handle_finality(
+            finalized_block_height,
+            MergeStrategy::Custom(Box::new(
+                |existing: &HashSet<EntryPointWithTracingParams>,
+                 new: HashSet<EntryPointWithTracingParams>| {
+                    let mut merged = existing.clone();
+                    merged.extend(new);
+                    merged
+                },
+            )),
+        )?;
+
+        // Use custom merge function for tracked_contracts to merge HashSets
+        self.tracked_contracts.handle_finality(
+            finalized_block_height,
+            MergeStrategy::Custom(Box::new(
+                |existing: &Option<HashSet<StoreKey>>, new: Option<HashSet<StoreKey>>| match (
+                    existing, new,
+                ) {
+                    (None, None) => None,
+                    (None, Some(keys)) => Some(keys),
+                    (Some(existing_set), None) => Some(existing_set.clone()),
+                    (Some(existing_set), Some(new_set)) => {
+                        let mut merged = existing_set.clone();
+                        merged.extend(new_set);
+                        Some(merged)
+                    }
+                },
+            )),
+        )?;
+
         self.erc20_addresses
-            .handle_finality(finalized_block_height)?;
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
         self.blacklisted_addresses
-            .handle_finality(finalized_block_height)?;
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
 
         Ok(())
     }
@@ -166,9 +207,9 @@ impl HooksDCICache {
         finalized_block_height: u64,
     ) -> Result<(), DCICacheError> {
         self.component_states
-            .handle_finality(finalized_block_height)?;
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
         self.protocol_components
-            .handle_finality(finalized_block_height)?;
+            .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
         Ok(())
     }
 
@@ -337,6 +378,9 @@ where
     ///
     /// # Arguments
     /// * `finalized_block_height` - The block number of the finalized block
+    /// * `strategy` - Strategy for resolving conflicts when the same key exists in multiple layers.
+    ///   `Replace` will use later values to replace earlier ones. `Custom(fn)` will use the
+    ///   provided function to merge values.
     ///
     /// # Returns
     /// * `Ok(())` - On successful processing
@@ -351,6 +395,7 @@ where
     pub(super) fn handle_finality(
         &mut self,
         finalized_block_height: u64,
+        strategy: MergeStrategy<V>,
     ) -> Result<(), DCICacheError> {
         if self.pending.is_empty() {
             return Ok(());
@@ -383,7 +428,24 @@ where
             .collect();
 
         for layer in finalized_layers {
-            self.permanent.extend(layer.data);
+            match &strategy {
+                MergeStrategy::Replace => {
+                    self.permanent.extend(layer.data);
+                }
+                MergeStrategy::Custom(merge_func) => {
+                    for (key, value) in layer.data {
+                        match self.permanent.entry(key) {
+                            Entry::Occupied(mut entry) => {
+                                let merged_value = merge_func(entry.get(), value);
+                                entry.insert(merged_value);
+                            }
+                            Entry::Vacant(entry) => {
+                                entry.insert(value);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -819,7 +881,7 @@ mod tests {
 
         // Handle finality of block2
         cache
-            .handle_finality(block2.number)
+            .handle_finality(block2.number, MergeStrategy::Replace)
             .unwrap();
 
         assert_eq!(cache.get_full_permanent_state(), &HashMap::from([("key1".to_string(), 1)]));
@@ -1046,5 +1108,78 @@ mod tests {
         assert_eq!(result.collect::<Vec<_>>(), vec![&402, &401]); // Block1 data moved to permanent,
                                                                   // block2 stays
                                                                   // pending
+    }
+
+    #[test]
+    fn test_versioned_cache_handle_finality_with_merge() {
+        let mut cache: VersionedCache<Address, Option<HashSet<StoreKey>>> = VersionedCache::new();
+        let block1 = create_test_block(1, "0x01", "0x00");
+        let block2 = create_test_block(2, "0x02", "0x01");
+        let block3 = create_test_block(3, "0x03", "0x02");
+
+        cache
+            .validate_and_ensure_block_layer_test(&block1)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer_test(&block2)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer_test(&block3)
+            .unwrap();
+
+        let address1 = Address::from("0x1111");
+        let address2 = Address::from("0x2222");
+        let key1 = StoreKey::from("0x01");
+        let key2 = StoreKey::from("0x02");
+        let key3 = StoreKey::from("0x03");
+
+        // Insert initial data in permanent storage
+        cache.insert_permanent(address1.clone(), Some(HashSet::from([key1.clone()])));
+
+        // Insert data in block1 - same address, different keys
+        cache
+            .insert_pending(block1.clone(), address1.clone(), Some(HashSet::from([key2.clone()])))
+            .unwrap();
+
+        // Insert data in block2 - same address, more keys
+        cache
+            .insert_pending(block2.clone(), address1.clone(), Some(HashSet::from([key3.clone()])))
+            .unwrap();
+
+        // Insert different address in block1
+        cache
+            .insert_pending(block1.clone(), address2.clone(), Some(HashSet::from([key1.clone()])))
+            .unwrap();
+
+        // Handle finality with merge function
+        cache
+            .handle_finality(
+                block2.number,
+                MergeStrategy::Custom(Box::new(
+                    |existing: &Option<HashSet<StoreKey>>, new: Option<HashSet<StoreKey>>| {
+                        match (existing, new) {
+                            (None, _) | (_, None) => None, /* If either is None (full tracking), */
+                            // result is None
+                            (Some(existing_set), Some(new_set)) => {
+                                let mut merged = existing_set.clone();
+                                merged.extend(new_set);
+                                Some(merged)
+                            }
+                        }
+                    },
+                )),
+            )
+            .unwrap();
+
+        // Verify merged results
+        let permanent_state = cache.get_full_permanent_state();
+
+        // address1 should have keys merged from permanent layer and block1 only
+        // (block2 remains in pending, so key3 is not included in permanent yet)
+        let expected_keys = HashSet::from([key1.clone(), key2.clone()]);
+        assert_eq!(permanent_state.get(&address1), Some(&Some(expected_keys)));
+
+        // address2 should have key1 from block1
+        assert_eq!(permanent_state.get(&address2), Some(&Some(HashSet::from([key1.clone()]))));
     }
 }
