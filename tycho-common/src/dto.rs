@@ -1788,15 +1788,15 @@ pub struct AddressStorageLocation {
     pub offset: u8,
 }
 
-impl From<models::blockchain::AddressStorageLocation> for AddressStorageLocation {
-    fn from(value: models::blockchain::AddressStorageLocation) -> Self {
-        Self { key: value.key, offset: value.offset }
+impl AddressStorageLocation {
+    pub fn new(key: StoreKey, offset: u8) -> Self {
+        Self { key, offset }
     }
 }
 
-impl From<Bytes> for AddressStorageLocation {
-    fn from(value: Bytes) -> Self {
-        Self { key: value, offset: 0 }
+impl From<models::blockchain::AddressStorageLocation> for AddressStorageLocation {
+    fn from(value: models::blockchain::AddressStorageLocation) -> Self {
+        Self { key: value.key, offset: value.offset }
     }
 }
 

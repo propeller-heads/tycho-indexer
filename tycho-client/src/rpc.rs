@@ -906,7 +906,7 @@ mod tests {
     // TODO: remove once deprecated ProtocolId struct is removed
     #[allow(deprecated)]
     use tycho_common::dto::ProtocolId;
-    use tycho_common::dto::TracingParams;
+    use tycho_common::dto::{AddressStorageLocation, TracingParams};
 
     use super::*;
 
@@ -1405,7 +1405,10 @@ mod tests {
             trace_result.retriggers,
             HashSet::from([(
                 Bytes::from("0x00000000000000000000000000000000000000aa"),
-                Bytes::from("0x0000000000000000000000000000000000000aaa").into()
+                AddressStorageLocation::new(
+                    Bytes::from("0x0000000000000000000000000000000000000aaa"),
+                    12
+                )
             )])
         );
         assert_eq!(trace_result.accessed_slots.len(), 1);
