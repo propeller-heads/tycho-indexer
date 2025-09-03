@@ -7,7 +7,7 @@ use std::{
 };
 
 use dotenv::dotenv;
-use miette::{miette, IntoDiagnostic, WrapErr};
+use miette::{IntoDiagnostic, WrapErr};
 use tracing::debug;
 
 use crate::config::ProtocolComponentWithTestConfig;
@@ -83,7 +83,7 @@ impl TychoRunner {
             .wait()
             .into_diagnostic()
             .wrap_err("Failed to wait on Tycho indexer process")?;
-        
+
         // Note: tycho-indexer may exit with non-zero status when stream ends normally
         // This is expected behavior and should not be treated as an error
         if !status.success() {

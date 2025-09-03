@@ -54,12 +54,7 @@ impl TestRunner {
             .substreams_path
             .join("integration_test.tycho.yaml");
 
-        let figment = Figment::new().merge(Yaml::file(&config_yaml_path));
-
-        let config = figment
-            .extract::<IntegrationTestsConfig>()
-            .into_diagnostic()
-            .wrap_err("Failed to load test configuration:")?;
+        let config = Self::parse_config(&config_yaml_path)?;
 
         info!("Running {} tests ...\n", config.tests.len());
         info!("--------------------------------\n");
@@ -98,6 +93,17 @@ impl TestRunner {
         info!("\n");
 
         Ok(())
+    }
+
+    fn parse_config(config_yaml_path: &PathBuf) -> miette::Result<IntegrationTestsConfig> {
+        info!("Config YAML: {}", config_yaml_path.display());
+        let yaml = Yaml::file(&config_yaml_path);
+        let figment = Figment::new().merge(yaml);
+        let config = figment
+            .extract::<IntegrationTestsConfig>()
+            .into_diagnostic()
+            .wrap_err("Failed to load test configuration:")?;
+        Ok(config)
     }
 
     fn run_test(
@@ -401,4 +407,57 @@ fn validate_state(
 
     info!("\n✅ Simulation validation passed.\n");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use glob::glob;
+
+    use super::*;
+
+    #[test]
+    fn test_parse_all_configs() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let curr_dir = PathBuf::from(manifest_dir);
+        let parent_dir = curr_dir.parent().unwrap();
+        env::set_current_dir(parent_dir).expect("Failed to set working directory");
+
+        let pattern = "./substreams/*/integration_test.tycho.yaml";
+        let mut results = Vec::new();
+
+        if glob(pattern).unwrap().count() == 0 {
+            panic!("No integration_test.tycho.yaml files found in substreams/*/");
+        }
+        for entry in glob(pattern).unwrap() {
+            match entry {
+                Ok(path) => {
+                    if !path.is_file() {
+                        results.push(Err(format!("Path is not a file: {}", path.display())));
+                    } else {
+                        let result = TestRunner::parse_config(&path);
+                        if let Err(e) = &result {
+                            results.push(Err(format!(
+                                "Failed to parse config at {}: {e:?}",
+                                path.display(),
+                            )));
+                        } else {
+                            results.push(Ok(()));
+                        }
+                    }
+                }
+                Err(e) => results.push(Err(format!("Glob error: {e:?}"))),
+            }
+        }
+
+        let errors: Vec<_> = results
+            .iter()
+            .filter_map(|r| r.as_ref().err())
+            .collect();
+        if !errors.is_empty() {
+            for error in errors {
+                println!("{error}");
+            }
+            panic!("One or more config files failed to parse.");
+        }
+    }
 }
