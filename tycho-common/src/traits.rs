@@ -23,6 +23,22 @@ pub struct StorageSnapshotRequest {
     pub slots: Option<Vec<StoreKey>>,
 }
 
+impl std::fmt::Display for StorageSnapshotRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let address_str = self.address.to_string();
+        let truncated_address = if address_str.len() >= 10 {
+            format!("{}...{}", &address_str[0..8], &address_str[address_str.len() - 4..])
+        } else {
+            address_str
+        };
+
+        match &self.slots {
+            Some(slots) => write!(f, "{truncated_address}[{} slots]", slots.len()),
+            None => write!(f, "{truncated_address}[all slots]"),
+        }
+    }
+}
+
 /// Trait for getting multiple account states from chain data.
 #[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
 #[async_trait]
@@ -145,4 +161,45 @@ pub trait EntryPointTracer: Sync {
         block_hash: BlockHash,
         entry_points: Vec<EntryPointWithTracingParams>,
     ) -> Vec<Result<TracedEntryPoint, Self::Error>>;
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn test_storage_snapshot_request_display() {
+        // Test with specific slots
+        let request_with_slots = StorageSnapshotRequest {
+            address: Address::from_str("0x1234567890123456789012345678901234567890").unwrap(),
+            slots: Some(vec![
+                StoreKey::from(vec![1, 2, 3, 4]),
+                StoreKey::from(vec![5, 6, 7, 8]),
+                StoreKey::from(vec![9, 10, 11, 12]),
+            ]),
+        };
+
+        let display_output = request_with_slots.to_string();
+        assert_eq!(display_output, "0x123456...7890[3 slots]");
+
+        // Test with all slots
+        let request_all_slots = StorageSnapshotRequest {
+            address: Address::from_str("0x9876543210987654321098765432109876543210").unwrap(),
+            slots: None,
+        };
+
+        let display_output = request_all_slots.to_string();
+        assert_eq!(display_output, "0x987654...3210[all slots]");
+
+        // Test with empty slots vector
+        let request_empty_slots = StorageSnapshotRequest {
+            address: Address::from_str("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd").unwrap(),
+            slots: Some(vec![]),
+        };
+
+        let display_output = request_empty_slots.to_string();
+        assert_eq!(display_output, "0xabcdef...abcd[0 slots]");
+    }
 }
