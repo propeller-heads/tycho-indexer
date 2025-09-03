@@ -1,3 +1,4 @@
+mod adapter_builder;
 mod config;
 mod rpc;
 mod test_runner;
