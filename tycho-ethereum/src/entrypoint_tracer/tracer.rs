@@ -542,11 +542,11 @@ mod tests {
                         HashSet::from([
                         (
                             Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap().into(),
+                            AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                         ),
                         (
                             Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap().into(),
+                            AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                         ),
                     ]),
                     HashMap::from([
@@ -572,11 +572,11 @@ mod tests {
                         HashSet::from([
                             (
                             Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap().into(),
+                            AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                         ),
                         (
                             Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap().into(),
+                            AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                         ),
                     ]),
                     HashMap::from([
@@ -698,11 +698,11 @@ mod tests {
             HashSet::from([
                     (
                         Bytes::from_str("0xffa98a091331df4600f87c9164cd27e8a5cd2405").unwrap(),
-                        Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000007").unwrap().into(),
+                        AddressStorageLocation::new(Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000007").unwrap(), 12),
                     ),
                     (
                         Bytes::from_str("0xffa98a091331df4600f87c9164cd27e8a5cd2405").unwrap(),
-                        Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000006").unwrap().into(),
+                        AddressStorageLocation::new(Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000006").unwrap(), 12),
                     ),
                 ]),
             // Accessed slots
