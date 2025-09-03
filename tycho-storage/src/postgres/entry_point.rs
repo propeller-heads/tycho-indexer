@@ -879,11 +879,13 @@ mod test {
             TracingResult::new(
                 vec![(
                     Bytes::from_str("0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
-                    StoreKey::from_str(
-                        "0x0000000000000000000000000000000000000000000000000000000000000001",
-                    )
-                    .unwrap()
-                    .into(),
+                    AddressStorageLocation::new(
+                        StoreKey::from_str(
+                            "0x0000000000000000000000000000000000000000000000000000000000000001",
+                        )
+                        .unwrap(),
+                        12,
+                    ),
                 )]
                 .into_iter()
                 .collect(),

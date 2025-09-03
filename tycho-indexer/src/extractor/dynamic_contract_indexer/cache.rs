@@ -492,8 +492,8 @@ mod tests {
     use tycho_common::{
         models::{
             blockchain::{
-                Block, EntryPoint, EntryPointWithTracingParams, RPCTracerParams, TracingParams,
-                TracingResult,
+                AddressStorageLocation, Block, EntryPoint, EntryPointWithTracingParams,
+                RPCTracerParams, TracingParams, TracingResult,
             },
             Address, BlockHash, Chain, StoreKey,
         },
@@ -526,7 +526,10 @@ mod tests {
 
     fn get_tracing_result(version: u8) -> TracingResult {
         TracingResult::new(
-            HashSet::from([(Bytes::from(version), Bytes::from(version).into())]),
+            HashSet::from([(
+                Bytes::from(version),
+                AddressStorageLocation::new(Bytes::from(version), 12),
+            )]),
             HashMap::from([
                 (Bytes::from(version), HashSet::from([Bytes::from(version + version * 16)])),
                 (

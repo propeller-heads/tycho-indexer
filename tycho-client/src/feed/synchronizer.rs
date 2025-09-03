@@ -733,12 +733,12 @@ mod test {
 
     use test_log::test;
     use tycho_common::dto::{
-        Block, Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse, DCIUpdate, EntryPoint,
-        PaginationResponse, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
-        ProtocolStateRequestBody, ProtocolStateRequestResponse, ProtocolSystemsRequestBody,
-        ProtocolSystemsRequestResponse, RPCTracerParams, StateRequestBody, StateRequestResponse,
-        TokensRequestBody, TokensRequestResponse, TracedEntryPointRequestBody,
-        TracedEntryPointRequestResponse, TracingParams,
+        AddressStorageLocation, Block, Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse,
+        DCIUpdate, EntryPoint, PaginationResponse, ProtocolComponentRequestResponse,
+        ProtocolComponentsRequestBody, ProtocolStateRequestBody, ProtocolStateRequestResponse,
+        ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, RPCTracerParams,
+        StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse,
+        TracedEntryPointRequestBody, TracedEntryPointRequestResponse, TracingParams,
     };
     use uuid::Uuid;
 
@@ -1037,7 +1037,7 @@ mod test {
                     TracingResult {
                         retriggers: HashSet::from([(
                             Bytes::from("0x0badc0ffee"),
-                            Bytes::from("0x0badc0ffee").into(),
+                            AddressStorageLocation::new(Bytes::from("0x0badc0ffee"), 12),
                         )]),
                         accessed_slots: HashMap::from([(
                             Bytes::from("0x0badc0ffee"),
@@ -1100,7 +1100,7 @@ mod test {
                             TracingResult {
                                 retriggers: HashSet::from([(
                                     Bytes::from("0x0badc0ffee"),
-                                    Bytes::from("0x0badc0ffee").into(),
+                                    AddressStorageLocation::new(Bytes::from("0x0badc0ffee"), 12),
                                 )]),
                                 accessed_slots: HashMap::from([(
                                     Bytes::from("0x0badc0ffee"),
@@ -1361,7 +1361,7 @@ mod test {
                         TracingResult {
                             retriggers: HashSet::from([(
                                 Bytes::from("0x0badc0ffee"),
-                                Bytes::from("0x0badc0ffee").into(),
+                                AddressStorageLocation::new(Bytes::from("0x0badc0ffee"), 12),
                             )]),
                             accessed_slots: HashMap::from([(
                                 Bytes::from("0x0badc0ffee"),
