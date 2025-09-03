@@ -1,9 +1,9 @@
 mod config;
 mod rpc;
 mod test_runner;
+mod tycho_rpc;
 mod tycho_runner;
 mod utils;
-mod tycho_rpc;
 
 use clap::Parser;
 use tracing_subscriber::EnvFilter;

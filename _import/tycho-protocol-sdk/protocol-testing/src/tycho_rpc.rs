@@ -1,17 +1,15 @@
-use tycho_client::rpc::RPCClient;
 use std::{collections::HashMap, error::Error as StdError, fmt};
 
 use tracing::info;
-use tycho_client::{HttpRPCClient};
+use tycho_client::{rpc::RPCClient, HttpRPCClient};
 use tycho_common::{
     dto::{
         Chain, PaginationParams, ProtocolComponent, ProtocolComponentsRequestBody, ResponseAccount,
-        ResponseProtocolState, StateRequestBody, VersionParam,
+        ResponseProtocolState, ResponseToken, StateRequestBody, VersionParam,
     },
+    models::token::Token,
     Bytes,
 };
-use tycho_common::dto::ResponseToken;
-use tycho_common::models::token::Token;
 
 /// Custom error type for RPC operations
 #[derive(Debug)]
@@ -146,7 +144,9 @@ impl TychoClient {
                 }
                 (
                     token_clone.address.clone(),
-                    token_clone.try_into().expect("Failed to convert token"),
+                    token_clone
+                        .try_into()
+                        .expect("Failed to convert token"),
                 )
             })
             .collect::<HashMap<_, Token>>();

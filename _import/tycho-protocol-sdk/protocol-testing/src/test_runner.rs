@@ -50,27 +50,52 @@ impl TestRunner {
     }
 
     pub fn run_tests(&self) -> miette::Result<()> {
-        info!("Running tests...");
         let config_yaml_path = self
             .substreams_path
             .join("integration_test.tycho.yaml");
 
-        info!("Config YAML: {}", config_yaml_path.display());
         let figment = Figment::new().merge(Yaml::file(&config_yaml_path));
 
         let config = figment
             .extract::<IntegrationTestsConfig>()
             .into_diagnostic()
             .wrap_err("Failed to load test configuration:")?;
-        info!("Loaded test configuration:");
-        info!("Protocol types: {:?}", config.protocol_type_names);
-        info!("Found {} tests to run", config.tests.len());
+
+        info!("Running {} tests ...\n", config.tests.len());
+        info!("--------------------------------\n");
+
+        let mut failed_tests: Vec<String> = Vec::new();
+        let mut count = 1;
 
         for test in &config.tests {
-            if let Err(e) = self.run_test(test, &config, config.skip_balance_check) {
-                eprintln!("Test '{}' failed: {e}", test.name);
+            info!("TEST {}: {}", count, test.name);
+
+            match self.run_test(test, &config, config.skip_balance_check) {
+                Ok(_) => {
+                    info!("\n✅ {} passed.\n", test.name);
+                }
+                Err(e) => {
+                    failed_tests.push(test.name.clone());
+                    info!("\n❗️ {} failed: {}\n", test.name, e);
+                }
+            }
+
+            info!("--------------------------------\n");
+            count += 1;
+        }
+
+        info!(
+            "\nTests finished! \nRESULTS: {}/{} passed.\n",
+            config.tests.len() - failed_tests.len(),
+            config.tests.len()
+        );
+        if !failed_tests.is_empty() {
+            info!("Failed tests:");
+            for failed_test in &failed_tests {
+                info!("- {}", failed_test);
             }
         }
+        info!("\n");
 
         Ok(())
     }
@@ -81,7 +106,6 @@ impl TestRunner {
         config: &IntegrationTestsConfig,
         skip_balance_check: bool,
     ) -> miette::Result<()> {
-        info!("Running test: {}", test.name);
         self.empty_database()
             .into_diagnostic()
             .wrap_err("Failed to empty the database")?;
@@ -89,7 +113,6 @@ impl TestRunner {
         let substreams_yaml_path = self
             .substreams_path
             .join(&config.substreams_yaml_path);
-        debug!("Building SPKG on {:?}", substreams_yaml_path);
 
         let mut initialized_accounts = config
             .initialized_accounts
@@ -128,8 +151,6 @@ impl TestRunner {
     }
 
     fn empty_database(&self) -> Result<(), Error> {
-        debug!("Emptying the database");
-
         // Remove db name from URL. This is required because we cannot drop a database that we are
         // currently connected to.
         let base_url = match self.db_url.rfind('/') {
@@ -357,11 +378,11 @@ fn validate_state(
     for (id, state) in block_msg.states.iter() {
         if let Some(tokens) = pairs.get(id) {
             let formatted_token_str = format!("{:}/{:}", &tokens[0].symbol, &tokens[1].symbol);
-            println!("Calculations for pool {:?} with tokens {:?}", id, formatted_token_str);
+            info!("Amount out for {}: calculating for tokens {:?}", id, formatted_token_str);
             state
                 .spot_price(&tokens[0], &tokens[1])
-                .map(|price| println!("Spot price {:?}: {:?}", formatted_token_str, price))
-                .map_err(|e| eprintln!("Error calculating spot price for Pool {:?}: {:?}", id, e))
+                .map(|price| info!("Spot price {:?}: {:?}", formatted_token_str, price))
+                .map_err(|e| info!("Error calculating spot price for Pool {:?}: {:?}", id, e))
                 .ok();
             // let amount_in =
             //     BigUint::from(1u32) * BigUint::from(10u32).pow(tokens[0].decimals as u32);
@@ -377,5 +398,7 @@ fn validate_state(
             // e))     .ok();
         }
     }
+
+    info!("\n✅ Simulation validation passed.\n");
     Ok(())
 }
