@@ -1528,8 +1528,8 @@ mod tests {
         models::{
             blockchain,
             blockchain::{
-                EntryPoint, EntryPointWithTracingParams, RPCTracerParams, TracingParams,
-                TracingResult,
+                AddressStorageLocation, EntryPoint, EntryPointWithTracingParams, RPCTracerParams,
+                TracingParams, TracingResult,
             },
             contract::Account,
             protocol::{ProtocolComponent, ProtocolComponentState},
@@ -1864,11 +1864,11 @@ mod tests {
                     HashSet::from([
                     (
                         Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(),
-                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap().into(),
+                        AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                     ),
                     (
                         Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap().into(),
+                        AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                     ),
                 ]),
                 HashMap::from([
@@ -1894,11 +1894,11 @@ mod tests {
                     HashSet::from([
                         (
                         Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(),
-                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap().into(),
+                        AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                     ),
                     (
                         Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap().into(),
+                        AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                     ),
                     ]),
                     HashMap::from([
@@ -2195,7 +2195,10 @@ mod tests {
         let trace_result_a = TracingResult {
             retriggers: HashSet::from([(
                 Bytes::from("0x00000000000000000000000000000000000000aa"),
-                Bytes::from("0x0000000000000000000000000000000000000aaa").into(),
+                AddressStorageLocation::new(
+                    Bytes::from("0x0000000000000000000000000000000000000aaa"),
+                    12,
+                ),
             )]),
             accessed_slots: HashMap::from([(
                 Bytes::from("0x0000000000000000000000000000000000aaaa"),
@@ -2205,7 +2208,10 @@ mod tests {
         let trace_result_b = TracingResult {
             retriggers: HashSet::from([(
                 Bytes::from("0x00000000000000000000000000000000000000bb"),
-                Bytes::from("0x0000000000000000000000000000000000000bbb").into(),
+                AddressStorageLocation::new(
+                    Bytes::from("0x0000000000000000000000000000000000000bbb"),
+                    12,
+                ),
             )]),
             accessed_slots: HashMap::from([(
                 Bytes::from("0x0000000000000000000000000000000000bbbb"),
