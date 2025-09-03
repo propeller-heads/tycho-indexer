@@ -1,4 +1,3 @@
-version: "3.1"
 services:
   db:
     build:
@@ -7,9 +6,8 @@ services:
     restart: "always"
     environment:
       POSTGRES_PASSWORD: mypassword
-      POSTGRES_DATABASE: tycho_indexer_0
-      POSTGRES_USERNAME: postgres
-      POSTGRESQL_SHARED_PRELOAD_LIBRARIES: pg_cron
+      POSTGRES_USER: postgres
+      POSTGRES_DB: tycho_indexer_0
     ports:
       - "5431:5432"
     shm_size: "1gb"
