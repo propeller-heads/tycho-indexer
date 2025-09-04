@@ -670,6 +670,18 @@ impl TracedEntryPoint {
     }
 }
 
+impl std::fmt::Display for TracedEntryPoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[{}: {} retriggers, {} accessed addresses]",
+            self.entry_point_id(),
+            self.tracing_result.retriggers.len(),
+            self.tracing_result.accessed_slots.len()
+        )
+    }
+}
+
 #[cfg(test)]
 pub mod fixtures {
     use std::str::FromStr;
@@ -1014,5 +1026,52 @@ pub mod fixtures {
 
         let display_output = entry_point_with_params.to_string();
         assert_eq!(display_output, "uniswap_v3_pool_swap [RPC]");
+    }
+
+    #[test]
+    fn test_traced_entry_point_display() {
+        use std::str::FromStr;
+
+        let entry_point = EntryPoint::new(
+            "uniswap_v3_pool_swap".to_string(),
+            Address::from_str("0x1234567890123456789012345678901234567890").unwrap(),
+            "swapExactETHForTokens(uint256,address[],address,uint256)".to_string(),
+        );
+
+        let tracing_params = TracingParams::RPCTracer(RPCTracerParams::new(
+            Some(Address::from_str("0x9876543210987654321098765432109876543210").unwrap()),
+            Bytes::from_str("0xabcdef").unwrap(),
+        ));
+
+        let entry_point_with_params = EntryPointWithTracingParams::new(entry_point, tracing_params);
+
+        // Create tracing result with 2 retriggers and 3 accessed addresses
+        let address1 = Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
+        let address2 = Address::from_str("0x2222222222222222222222222222222222222222").unwrap();
+        let address3 = Address::from_str("0x3333333333333333333333333333333333333333").unwrap();
+
+        let store_key1 = StoreKey::from(vec![1, 2, 3, 4]);
+        let store_key2 = StoreKey::from(vec![5, 6, 7, 8]);
+
+        let tracing_result = TracingResult::new(
+            HashSet::from([
+                (address1.clone(), AddressStorageLocation::new(store_key1.clone(), 0)),
+                (address2.clone(), AddressStorageLocation::new(store_key2.clone(), 12)),
+            ]),
+            HashMap::from([
+                (address1.clone(), HashSet::from([store_key1.clone()])),
+                (address2.clone(), HashSet::from([store_key2.clone()])),
+                (address3.clone(), HashSet::from([store_key1.clone()])),
+            ]),
+        );
+
+        let traced_entry_point = TracedEntryPoint::new(
+            entry_point_with_params,
+            Bytes::from_str("0xabcdef1234567890").unwrap(),
+            tracing_result,
+        );
+
+        let display_output = traced_entry_point.to_string();
+        assert_eq!(display_output, "uniswap_v3_pool_swap: 2 retriggers, 3 accessed addresses");
     }
 }
