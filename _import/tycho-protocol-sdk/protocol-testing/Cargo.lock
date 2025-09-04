@@ -5429,6 +5429,8 @@ dependencies = [
  "glob",
  "hex",
  "miette",
+ "num-bigint",
+ "num-traits",
  "postgres",
  "serde",
  "serde_json",

@@ -14,6 +14,8 @@ tycho-client = "0.82.0"
 tycho-simulation = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.156.0", features = ["evm"] }
 ## TODO: for local development
 #tycho-simulation = { path = "../../tycho-simulation" }
+num-bigint = "0.4"
+num-traits = "0.2"
 # EVM dependencies
 alloy = { version = "1.0.27", features = ["arbitrary", "json", "dyn-abi", "sol-types", "contract", "provider-http"] }
 tokio = { version = "1", features = ["full"] }
