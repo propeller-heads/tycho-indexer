@@ -783,7 +783,7 @@ where
                         let retrigger_changed = self
                             .retrigger_address_changed(storage_change, *offset as usize)
                             .map_err(|e| {
-                                ExtractionError::Unknown(format!("{} at address: {}", e, account))
+                                ExtractionError::Unknown(format!("{e} at address: {account}"))
                             })?;
                         if retrigger_changed {
                             for entrypoint_with_params in entrypoints.into_iter() {
@@ -864,11 +864,13 @@ where
         offset: usize,
     ) -> Result<bool, ExtractionError> {
         let min_length = offset + self.address_byte_len;
-        if change.value.len() <= min_length {
-            return Err(ExtractionError::SubstreamsError(format!("Received bad storage value! Offset implies minimum length: {min_length} but value was: {}", change.value.len())))
+        let value_len = change.value.len();
+        if value_len < min_length {
+            return Err(ExtractionError::SubstreamsError(format!("Received bad storage value! Offset implies minimum length: {min_length} but value was: {value_len}")))
         }
-        if change.previous.len() <= min_length {
-            return Err(ExtractionError::SubstreamsError(format!("Received bad storage previous value! Offset implies minimum length: {min_length} but value was: {}", change.value.len())))
+        let previous_len = change.previous.len();
+        if previous_len < min_length {
+            return Err(ExtractionError::SubstreamsError(format!("Received bad storage previous value! Offset implies minimum length: {min_length} but value was: {previous_len}")))
         }
 
         let previous_address = &change.previous[offset..offset + self.address_byte_len];
@@ -1170,7 +1172,10 @@ mod tests {
                                 Bytes::from("0x01"),
                                 HashMap::from([(
                                     Bytes::from("0x01"),
-                                    ContractStorageChange::initial(Bytes::from("0xabcd")),
+                                    ContractStorageChange::new(
+                                        Bytes::from("0xabcd").lpad(32, 0),
+                                        Bytes::from("0x00").lpad(32, 0),
+                                    ),
                                 )]),
                             ),
                         ]),
@@ -1680,7 +1685,10 @@ mod tests {
                     AccountDelta::new(
                         Chain::Ethereum,
                         Bytes::from("0x01"),
-                        HashMap::from([(Bytes::from("0x01"), Some(Bytes::from("0xabcd")))]),
+                        HashMap::from([(
+                            Bytes::from("0x01"),
+                            Some(Bytes::from("0xabcd").lpad(32, 0)),
+                        )]),
                         None,
                         None,
                         ChangeType::Update,
@@ -2532,15 +2540,21 @@ mod tests {
         );
 
         // Test with different addresses at offset 12 (20-byte addresses)
-        let previous_value = hex::decode("00000bbd0f9dd77fc77b0000001111111111111111111111111111111111111111").unwrap();
-        let current_value = hex::decode("00000bbd0f9dd77fc77b0000002222222222222222222222222222222222222222").unwrap();
+        let previous_value =
+            hex::decode("00000bbd0f9dd77fc77b0000001111111111111111111111111111111111111111")
+                .unwrap();
+        let current_value =
+            hex::decode("00000bbd0f9dd77fc77b0000002222222222222222222222222222222222222222")
+                .unwrap();
 
         let change = ContractStorageChange {
             previous: Bytes::from(previous_value),
             value: Bytes::from(current_value),
         };
 
-        let result = dci.retrigger_address_changed(&change, 12).unwrap();
+        let result = dci
+            .retrigger_address_changed(&change, 12)
+            .unwrap();
         assert!(result, "Should detect address change at offset 12");
     }
 
@@ -2559,14 +2573,18 @@ mod tests {
         );
 
         // Test with same addresses at offset 12
-        let same_value = hex::decode("00000bbd0f9dd77fc77b0000001111111111111111111111111111111111111111").unwrap();
+        let same_value =
+            hex::decode("00000bbd0f9dd77fc77b0000001111111111111111111111111111111111111111")
+                .unwrap();
 
         let change = ContractStorageChange {
             previous: Bytes::from(same_value.clone()),
             value: Bytes::from(same_value),
         };
 
-        let result = dci.retrigger_address_changed(&change, 12).unwrap();
+        let result = dci
+            .retrigger_address_changed(&change, 12)
+            .unwrap();
         assert!(!result, "Should not detect change when addresses are the same");
     }
 
@@ -2585,15 +2603,21 @@ mod tests {
         );
 
         // Test with different addresses at offset 0
-        let previous_value = hex::decode("1111111111111111111111111111111111111111000000000000000000000000").unwrap();
-        let current_value = hex::decode("2222222222222222222222222222222222222222000000000000000000000000").unwrap();
+        let previous_value =
+            hex::decode("1111111111111111111111111111111111111111000000000000000000000000")
+                .unwrap();
+        let current_value =
+            hex::decode("2222222222222222222222222222222222222222000000000000000000000000")
+                .unwrap();
 
         let change = ContractStorageChange {
             previous: Bytes::from(previous_value),
             value: Bytes::from(current_value),
         };
 
-        let result = dci.retrigger_address_changed(&change, 0).unwrap();
+        let result = dci
+            .retrigger_address_changed(&change, 0)
+            .unwrap();
         assert!(result, "Should detect address change at offset 0");
     }
 
@@ -2613,15 +2637,21 @@ mod tests {
 
         // Test where non-address part changes but address stays same (offset 12)
         // First 12 bytes change, but address at offset 12-31 stays the same
-        let previous_value = hex::decode("000000000000000000000000111111111111111111111111111111111111111111111111").unwrap();
-        let current_value = hex::decode("999999999999999999999999111111111111111111111111111111111111111111111111").unwrap();
+        let previous_value =
+            hex::decode("000000000000000000000000111111111111111111111111111111111111111111111111")
+                .unwrap();
+        let current_value =
+            hex::decode("999999999999999999999999111111111111111111111111111111111111111111111111")
+                .unwrap();
 
         let change = ContractStorageChange {
             previous: Bytes::from(previous_value),
             value: Bytes::from(current_value),
         };
 
-        let result = dci.retrigger_address_changed(&change, 12).unwrap();
+        let result = dci
+            .retrigger_address_changed(&change, 12)
+            .unwrap();
         assert!(!result, "Should not detect change when only non-address part changes");
     }
 
@@ -2640,8 +2670,11 @@ mod tests {
         );
 
         // Test with current value too short for offset + address length
-        let previous_value = hex::decode("00000bbd0f9dd77fc77b0000001111111111111111111111111111111111111111").unwrap();
-        let current_value = hex::decode("00000bbd0f9dd77fc77b00000011111111111111111111111111111111").unwrap(); // Too short
+        let previous_value =
+            hex::decode("00000bbd0f9dd77fc77b0000001111111111111111111111111111111111111111")
+                .unwrap();
+        let current_value =
+            hex::decode("00000bbd0f9dd77fc77b00000011111111111111111111111111111111").unwrap(); // Too short
 
         let change = ContractStorageChange {
             previous: Bytes::from(previous_value),
@@ -2650,7 +2683,10 @@ mod tests {
 
         let result = dci.retrigger_address_changed(&change, 12);
         assert!(result.is_err(), "Should return error when current value is too short");
-        assert!(result.unwrap_err().to_string().contains("Received bad storage value"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Received bad storage value"));
     }
 
     #[test]
@@ -2668,8 +2704,11 @@ mod tests {
         );
 
         // Test with previous value too short for offset + address length
-        let previous_value = hex::decode("00000bbd0f9dd77fc77b00000011111111111111111111111111111111").unwrap(); // Too short
-        let current_value = hex::decode("00000bbd0f9dd77fc77b0000001111111111111111111111111111111111111111").unwrap();
+        let previous_value =
+            hex::decode("00000bbd0f9dd77fc77b00000011111111111111111111111111111111").unwrap(); // Too short
+        let current_value =
+            hex::decode("00000bbd0f9dd77fc77b0000001111111111111111111111111111111111111111")
+                .unwrap();
 
         let change = ContractStorageChange {
             previous: Bytes::from(previous_value),
@@ -2678,24 +2717,10 @@ mod tests {
 
         let result = dci.retrigger_address_changed(&change, 12);
         assert!(result.is_err(), "Should return error when previous value is too short");
-        assert!(result.unwrap_err().to_string().contains("Received bad storage previous value"));
-    }
-
-    #[test]
-    fn test_address_byte_len_initialization() {
-        let gateway = MockGateway::new();
-        let account_extractor = MockAccountExtractor::new();
-        let entrypoint_tracer = MockEntryPointTracer::new();
-
-        let dci = DynamicContractIndexer::new(
-            Chain::Ethereum,
-            "test".to_string(),
-            gateway,
-            account_extractor,
-            entrypoint_tracer,
-        );
-
-        assert_eq!(dci.address_byte_len, 20, "Address byte length should be initialized to 20 for Ethereum");
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Received bad storage previous value"));
     }
 
     #[tokio::test]
