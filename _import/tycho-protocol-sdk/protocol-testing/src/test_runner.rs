@@ -254,58 +254,12 @@ fn validate_state(
     info!("All expected components were successfully found on Tycho and match the expected state");
 
     // Step 2: Validate Token Balances
-    // In this step, we validate that the token balances of the components match the values
-    // on-chain, extracted by querying the token balances using a node.
-    let rpc_url = env::var("RPC_URL")
-        .into_diagnostic()
-        .wrap_err("Missing ETH_RPC_URL in environment")?;
-    let rpc_provider = RPCProvider::new(rpc_url.to_string());
-
-    for (id, component) in components_by_id.iter() {
-        let component_state = protocol_states_by_id.get(id);
-
-        for token in &component.tokens {
-            let mut balance: U256 = U256::from(0);
-
-            if let Some(state) = component_state {
-                let bal = state.balances.get(token);
-                if let Some(bal) = bal {
-                    let bal = bal.clone().into();
-                    balance = bytes_to_u256(bal);
-                }
-            }
-
-            // TODO: Test if balance check works
-            if !skip_balance_check {
-                info!(
-                    "Validating token balance for component {} and token {}",
-                    component.id, token
-                );
-                let token_address = alloy::primitives::Address::from_slice(&token[..20]);
-                let component_address = alloy::primitives::Address::from_str(component.id.as_str())
-                    .expect("Failed to parse component address");
-                let node_balance = rt.block_on(rpc_provider.get_token_balance(
-                    token_address,
-                    component_address,
-                    start_block,
-                ));
-                if balance != node_balance {
-                    return Err(miette!(
-                        "Token balance mismatch for component {} and token {}",
-                        component.id,
-                        token
-                    ))
-                }
-                info!(
-                    "Token balance for component {} and token {} matches the expected value",
-                    component.id, token
-                );
-            }
-        }
-    }
     match skip_balance_check {
         true => info!("Skipping balance check"),
-        false => info!("All token balances match the values found onchain"),
+        false => {
+            validate_token_balances(&components_by_id, &protocol_states_by_id, start_block, &rt)?;
+            info!("All token balances match the values found onchain")
+        }
     }
 
     // Step 3: Run Tycho Simulation
@@ -404,9 +358,68 @@ fn validate_state(
     Ok(())
 }
 
+/// Validate that the token balances of the components match the values
+/// on-chain, extracted by querying the token balances using a node.
+fn validate_token_balances(
+    components_by_id: &HashMap<String, ProtocolComponent>,
+    protocol_states_by_id: &HashMap<String, ResponseProtocolState>,
+    start_block: u64,
+    rt: &Runtime,
+) -> miette::Result<()> {
+    let rpc_url = env::var("RPC_URL")
+        .into_diagnostic()
+        .wrap_err("Missing RPC_URL in environment")?;
+    let rpc_provider = RPCProvider::new(rpc_url.to_string());
+
+    for (id, component) in components_by_id.iter() {
+        let component_state = protocol_states_by_id.get(id);
+
+        for token in &component.tokens {
+            let mut balance: U256 = U256::from(0);
+
+            if let Some(state) = component_state {
+                let bal = state.balances.get(token);
+                if let Some(bal) = bal {
+                    let bal = bal.clone().into();
+                    balance = bytes_to_u256(bal);
+                }
+            }
+
+            info!("Validating token balance for component {} and token {}", component.id, token);
+            let token_address = alloy::primitives::Address::from_slice(&token[..20]);
+            let component_address = alloy::primitives::Address::from_str(component.id.as_str())
+                .expect("Failed to parse component address");
+            let node_balance = rt.block_on(rpc_provider.get_token_balance(
+                token_address,
+                component_address,
+                start_block,
+            ))?;
+            if balance != node_balance {
+                return Err(miette!(
+                    "Token balance mismatch for component {} and token {}",
+                    component.id,
+                    token
+                ));
+            }
+            info!(
+                "Token balance for component {} and token {} matches the expected value",
+                component.id, token
+            );
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
+    use dotenv::dotenv;
     use glob::glob;
+    use tycho_common::{
+        dto::{ProtocolComponent, ResponseProtocolState},
+        Bytes,
+    };
 
     use super::*;
 
@@ -454,5 +467,81 @@ mod tests {
             }
             panic!("One or more config files failed to parse.");
         }
+    }
+
+    #[test]
+    fn test_token_balance_validation() {
+        // Setup mock data
+        let block_number = 21998530;
+        let token_bytes = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+        let component_id = "0x787B8840100d9BaAdD7463f4a73b5BA73B00C6cA".to_string();
+
+        let component = ProtocolComponent {
+            id: component_id.clone(),
+            tokens: vec![token_bytes.clone()],
+            ..Default::default()
+        };
+
+        let mut balances = HashMap::new();
+        let balance_bytes = Bytes::from(
+            U256::from_str("1070041574684539264153")
+                .unwrap()
+                .to_be_bytes::<32>(),
+        );
+        balances.insert(token_bytes.clone(), balance_bytes.clone());
+        let protocol_state = ResponseProtocolState {
+            component_id: component_id.clone(),
+            balances,
+            ..Default::default()
+        };
+
+        let mut components_by_id = HashMap::new();
+        components_by_id.insert(component_id.clone(), component.clone());
+        let mut protocol_states_by_id = HashMap::new();
+        protocol_states_by_id.insert(component_id.clone(), protocol_state.clone());
+
+        let rt = Runtime::new().unwrap();
+        dotenv().ok();
+        let result =
+            validate_token_balances(&components_by_id, &protocol_states_by_id, block_number, &rt);
+        assert!(result.is_ok(), "Should pass when balance check is performed and balances match");
+    }
+
+    #[test]
+    fn test_token_balance_validation_fails_on_mismatch() {
+        // Setup mock data
+        let block_number = 21998530;
+        let token_bytes = Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap();
+        let component_id = "0x787B8840100d9BaAdD7463f4a73b5BA73B00C6cA".to_string();
+
+        let component = ProtocolComponent {
+            id: component_id.clone(),
+            tokens: vec![token_bytes.clone()],
+            ..Default::default()
+        };
+
+        // Set expected balance to zero
+        let mut balances = HashMap::new();
+        let balance_bytes = Bytes::from(U256::from(0).to_be_bytes::<32>());
+        balances.insert(token_bytes.clone(), balance_bytes.clone());
+        let protocol_state = ResponseProtocolState {
+            component_id: component_id.clone(),
+            balances,
+            ..Default::default()
+        };
+
+        let mut components_by_id = HashMap::new();
+        components_by_id.insert(component_id.clone(), component.clone());
+        let mut protocol_states_by_id = HashMap::new();
+        protocol_states_by_id.insert(component_id.clone(), protocol_state.clone());
+
+        let rt = Runtime::new().unwrap();
+        dotenv().ok();
+        let result =
+            validate_token_balances(&components_by_id, &protocol_states_by_id, block_number, &rt);
+        assert!(
+            result.is_err(),
+            "Should fail when balance check is performed and balances do not match"
+        );
     }
 }

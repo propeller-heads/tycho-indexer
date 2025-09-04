@@ -6,6 +6,7 @@ use alloy::{
     providers::{Provider, ProviderBuilder},
     transports::http::reqwest::Url,
 };
+use miette::{IntoDiagnostic, WrapErr};
 
 const NATIVE_ALIASES: &[Address] = &[
     address!("0x0000000000000000000000000000000000000000"),
@@ -24,13 +25,12 @@ impl RPCProvider {
         RPCProvider { url }
     }
 
-    // TODO: Return a Result instead of panicking
     pub async fn get_token_balance(
         &self,
         token_address: Address,
         wallet_address: Address,
         block_number: u64,
-    ) -> U256 {
+    ) -> miette::Result<U256> {
         let provider = ProviderBuilder::new().connect_http(self.url.clone());
         let block_id: BlockId = BlockId::from(block_number);
 
@@ -39,9 +39,12 @@ impl RPCProvider {
                 .get_balance(wallet_address)
                 .block_id(block_id)
                 .await
-                .expect("Failed to fetch token balance"),
+                .into_diagnostic()
+                .wrap_err("Failed to fetch token balance"),
             false => {
-                let abi = serde_json::from_str(ERC_20_ABI).expect("invalid ABI");
+                let abi = serde_json::from_str(ERC_20_ABI)
+                    .into_diagnostic()
+                    .wrap_err("invalid ABI")?;
 
                 let contract = ContractInstance::new(token_address, provider, Interface::new(abi));
 
@@ -53,14 +56,15 @@ impl RPCProvider {
                     .block(block_id)
                     .call()
                     .await
-                    .expect("Failed to fetch ERC-20 Balance");
+                    .into_diagnostic()
+                    .wrap_err("Failed to fetch ERC-20 Balance")?;
                 let result: U256 = result_value
                     .first()
-                    .unwrap()
+                    .ok_or_else(|| miette::miette!("No value returned from contract call"))?
                     .as_uint()
-                    .unwrap()
+                    .ok_or_else(|| miette::miette!("Returned value is not a uint"))?
                     .0;
-                result
+                Ok(result)
             }
         }
     }
@@ -93,7 +97,8 @@ mod tests {
 
         let balance = rpc_provider
             .get_token_balance(token_address, wallet_address, block_number)
-            .await;
+            .await
+            .unwrap();
 
         assert_eq!(
             balance,
@@ -112,7 +117,8 @@ mod tests {
 
         let balance = rpc_provider
             .get_token_balance(token_address, wallet_address, block_number)
-            .await;
+            .await
+            .unwrap();
 
         assert_eq!(balance, U256::from(717250938432_u64));
     }

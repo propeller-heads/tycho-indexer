@@ -1,3 +1,4 @@
+substreams_yaml_path: ./substreams.yaml
 adapter_contract: "EkuboSwapAdapter"
 adapter_build_signature: "constructor(address)"
 adapter_build_args: "0x16e186ecdc94083fff53ef2a41d46b92a54f61e2"
