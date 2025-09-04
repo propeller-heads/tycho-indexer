@@ -5,7 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use tracing::{debug, info, instrument, span, trace, warn, Instrument, Level};
+use tracing::{debug, info, instrument, span, warn, Instrument, Level};
 use tycho_common::{
     models::{
         blockchain::{
@@ -62,7 +62,7 @@ where
         chain = % self.chain,
         protocol = % self.protocol,
         block_number = % block_changes.block.number,
-        tx_count = block_changes.txs_with_update.len()
+        protocol_txs = block_changes.txs_with_update.len()
     ))]
     async fn process_block_update(
         &mut self,
@@ -130,11 +130,16 @@ where
         }
 
         if !new_entrypoints.is_empty() {
-            tracing::debug!(entrypoints = ?new_entrypoints, "DCI: Entrypoints");
+            debug!(entrypoints = ?new_entrypoints.keys().collect::<Vec<_>>(), "DCI: Entrypoints");
         }
 
         if !new_entrypoint_params.is_empty() {
-            tracing::debug!(entrypoints_params = ?new_entrypoint_params, "DCI: Entrypoints params");
+            debug!(entrypoints_params = ?new_entrypoint_params.iter().map(|(id, txs_and_params)| {
+                let (tx, params) = &txs_and_params[0];
+                match params {TracingParams::RPCTracer(p) => {
+                    format!("{id} [({0} {1}),..]({2})", tx.hash, p.calldata, txs_and_params.len())
+                }}
+            }), "DCI: Entrypoints params");
         }
 
         // Select for analysis the newly detected EntryPointsWithData that haven't been analyzed
@@ -192,10 +197,15 @@ where
         entrypoints_to_analyze.extend(retriggered_entrypoints);
 
         if !entrypoints_to_analyze.is_empty() {
-            debug!("DCI: Will analyze {:?} entrypoints", entrypoints_to_analyze.len());
-            // TODO: These two lines are too verbose
-            trace!("DCI: Entrypoints to analyze: {:?}", entrypoints_to_analyze);
-            tracing::debug!(entrypoints_to_analyze = ?entrypoints_to_analyze, "DCI: Entrypoints to analyze");
+            debug!(
+                entrypoints_to_analyze = entrypoints_to_analyze
+                    .keys()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", "),
+                "DCI: Will analyze {:?} entrypoints",
+                entrypoints_to_analyze.len()
+            );
 
             let tracing_results = self
                 .tracer
@@ -249,7 +259,14 @@ where
                 }
             }
 
-            tracing::debug!(traced_entry_points = ?traced_entry_points, "DCI: Traced entrypoints");
+            tracing::debug!(
+                traced_entry_points = traced_entry_points
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                "DCI: Traced entrypoints"
+            );
 
             let mut tx_to_traced_entry_point: HashMap<&Transaction, Vec<&TracedEntryPoint>> =
                 HashMap::new();
@@ -353,8 +370,14 @@ where
                 })
                 .collect::<Result<Vec<_>, ExtractionError>>()?;
 
-            // TODO: this is too verbose
-            debug!(storage_request = ?storage_request, "DCI: Storage request");
+            debug!(
+                storage_request = storage_request
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", "),
+                "DCI: Storage request"
+            );
 
             // TODO: this is a quickfix. Handle this properly.
             let max_retries = 3;
@@ -732,16 +755,12 @@ where
     /// A map of entrypoints that need to be re-traced and the transaction that first detected the
     /// retriggered entrypoint.
     #[instrument(skip(self, tx_with_changes), fields(
-        protocol = % self.protocol,
-        storage_changes_count = tx_with_changes.len()
+        dci_txs = tx_with_changes.len()
     ))]
     fn detect_retriggers<'a>(
         &self,
         tx_with_changes: &'a [TxWithStorageChanges],
     ) -> Result<HashMap<EntryPointWithTracingParams, &'a Transaction>, ExtractionError> {
-        let _span = span!(Level::INFO, "dci_retrigger_detection", tx_count = tx_with_changes.len())
-            .entered();
-
         // Create a map of storage locations that have been updated in the block and the transaction
         // that last detected the update.
         // Note: tracing results are block scoped, this means if the same storage location is
@@ -833,27 +852,14 @@ where
                     )
                 })
                 .collect();
-            tracing::info!(
-                "DCI: Retriggered locations and entrypoints: {:?}",
-                retriggered_locations_log
-            );
+            debug!("DCI: Retriggered locations and entrypoints: {:?}", retriggered_locations_log);
         }
 
-        span!(Level::INFO, "retrigger_scan_complete").in_scope(|| {
-            tracing::info!(
-                retriggered_count = retriggered_entrypoints.len(),
-                storage_locations_scanned = storage_locations_scanned,
-                "DCI: Retrigger detection completed"
-            );
-        });
-
-        if !retriggered_entrypoints.is_empty() {
-            let retrigger_log: Vec<String> = retriggered_entrypoints
-                .keys()
-                .map(|e| e.entry_point.external_id.clone())
-                .collect();
-            tracing::info!("DCI: Retriggered entrypoints: {:?}", retrigger_log);
-        }
+        info!(
+            retriggered_count = retriggered_entrypoints.len(),
+            storage_locations_scanned = storage_locations_scanned,
+            "DCI: Retrigger detection completed"
+        );
 
         Ok(retriggered_entrypoints)
     }
@@ -1375,7 +1381,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_process_block_update_no_changes() {
         let gateway = get_mock_gateway();
         let account_extractor = MockAccountExtractor::new();
@@ -1399,7 +1405,7 @@ mod tests {
         assert_eq!(block_changes, get_block_changes(1));
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_process_block_update_new_entrypoints() {
         let gateway = get_mock_gateway();
         let mut account_extractor = MockAccountExtractor::new();
@@ -1514,7 +1520,7 @@ mod tests {
         assert_eq!(block_changes, expected_block_changes);
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_process_block_update_old_entrypoints_updates() {
         let gateway = get_mock_gateway();
         let account_extractor = MockAccountExtractor::new();
@@ -1574,7 +1580,7 @@ mod tests {
         assert_eq!(block_changes, expected_block_changes);
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_process_block_update_retriggers() {
         let gateway = get_mock_gateway();
         let mut account_extractor = MockAccountExtractor::new();
