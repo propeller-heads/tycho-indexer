@@ -46,8 +46,7 @@ pub struct TestRunner {
 }
 
 impl TestRunner {
-    pub fn new(package: String, tycho_logs: bool, db_url: String, vm_traces: bool) -> Self {
-        let substreams_path = PathBuf::from("../substreams").join(&package);
+    pub fn new(substreams_path: PathBuf, tycho_logs: bool, db_url: String, vm_traces: bool) -> Self {
         let repo_root = env::current_dir().expect("Failed to get current directory");
         let evm_path = repo_root.join("../evm");
         let adapter_contract_builder =

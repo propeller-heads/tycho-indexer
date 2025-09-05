@@ -6,7 +6,10 @@ mod tycho_rpc;
 mod tycho_runner;
 mod utils;
 
+use std::path::{Path, PathBuf};
+
 use clap::Parser;
+use miette::miette;
 use tracing_subscriber::EnvFilter;
 
 use crate::test_runner::TestRunner;
@@ -15,8 +18,12 @@ use crate::test_runner::TestRunner;
 #[command(version, about = "Run indexer within a specified range of blocks")]
 struct Args {
     /// Name of the package to test
-    #[arg(long)]
-    package: String,
+    #[arg(long, required_unless_present = "package_path", conflicts_with = "package_path")]
+    package: Option<String>,
+
+    /// Path to the package to test
+    #[arg(long, required_unless_present = "package", conflicts_with = "package")]
+    package_path: Option<String>,
 
     /// Enable tycho logs
     #[arg(long, default_value_t = true)]
@@ -31,6 +38,16 @@ struct Args {
     vm_traces: bool,
 }
 
+impl Args {
+    fn package_path(&self) -> miette::Result<PathBuf> {
+        match (self.package_path.as_ref(), self.package.as_ref()) {
+            (Some(path), _) => Ok(Path::new(path).to_path_buf()),
+            (_, Some(package)) => Ok(Path::new("../substreams").join(package)),
+            _ => Err(miette!("Either package or package_path must be provided")),
+        }
+    }
+}
+
 fn main() -> miette::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -39,7 +56,8 @@ fn main() -> miette::Result<()> {
 
     let args = Args::parse();
 
-    let test_runner = TestRunner::new(args.package, args.tycho_logs, args.db_url, args.vm_traces);
+    let test_runner =
+        TestRunner::new(args.package_path()?, args.tycho_logs, args.db_url, args.vm_traces);
 
     test_runner.run_tests()
 }

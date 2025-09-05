@@ -14,5 +14,20 @@ services:
     shm_size: "1gb"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  test-runner:
+    build:
+      context: .
+      dockerfile: run.Dockerfile
+    depends_on:
+      - db
+    environment:
+      RUST_LOG: "info"
+      DATABASE_URL: postgres://postgres:mypassword@db:5432/tycho_indexer_0
+      RPC_URL: "${RPC_URL}"
+      SUBSTREAMS_API_TOKEN: "${SUBSTREAMS_API_TOKEN}"
+      AUTH_API_KEY: "${AUTH_API_KEY}"
+    entrypoint: ["/entrypoint.sh", "${PROTOCOLS}"]
+
 volumes:
   postgres_data:
