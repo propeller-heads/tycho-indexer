@@ -510,6 +510,7 @@ pub trait ProtocolGateway {
 
 /// Filters for entry points queries in the database.
 // Shalow but can be used to add more filters without breaking backwards compatibility in the future
+#[derive(Debug, Clone)]
 pub struct EntryPointFilter {
     pub protocol_system: ProtocolSystem,
     pub component_ids: Option<Vec<ComponentId>>,

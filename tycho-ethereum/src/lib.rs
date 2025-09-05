@@ -29,6 +29,12 @@ pub enum RPCError {
     UnknownError(String),
 }
 
+impl RPCError {
+    pub fn should_retry(&self) -> bool {
+        matches!(self, Self::RequestError(_))
+    }
+}
+
 pub struct BlockTagWrapper(BlockTag);
 
 impl From<BlockTagWrapper> for BlockNumber {
