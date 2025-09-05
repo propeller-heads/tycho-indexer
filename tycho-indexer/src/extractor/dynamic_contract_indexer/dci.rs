@@ -640,7 +640,11 @@ where
                     storage_locations_scanned += 1;
                     let location = (account.clone(), key.clone());
                     // Check if this storage location triggers any entrypoints
-                    if let Some(entrypoints) = self.cache.retriggers.get_all(location) {
+                    if let Some(entrypoints) = self
+                        .cache
+                        .retriggers
+                        .get_all(location.clone())
+                    {
                         for entrypoint_with_params in entrypoints.into_iter().flatten() {
                             // Only insert if we haven't seen this entrypoint before or if this tx
                             // is later
@@ -796,37 +800,14 @@ where
             .iter()
         {
             for (account, contract_store) in tx.storage_changes.iter() {
-                let tracked_keys: Option<HashSet<&StoreKey>> = match self
+                let tracked_keys: HashSet<&StoreKey> = match self
                     .cache
                     .tracked_contracts
                     .get_all(account.clone())
                 {
                     // Early skip if the contract is not tracked
                     None => continue,
-                    Some(keys) => {
-                        let mut result = HashSet::new();
-                        let mut whole_contract_tracked = false;
-
-                        for key in keys {
-                            match key {
-                                None => {
-                                    // None is winning over specific keys, it means the whole
-                                    // contract is tracked
-                                    whole_contract_tracked = true;
-                                    break;
-                                }
-                                Some(inner) => {
-                                    result.extend(inner.iter());
-                                }
-                            }
-                        }
-
-                        if whole_contract_tracked {
-                            None
-                        } else {
-                            Some(result)
-                        }
-                    }
+                    Some(keys) => keys.flatten().collect(),
                 };
 
                 let mut slot_updates = contract_store
