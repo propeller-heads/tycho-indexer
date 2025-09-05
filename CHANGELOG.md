@@ -1,3 +1,11 @@
+## [0.83.1](https://github.com/propeller-heads/tycho-indexer/compare/0.83.0...0.83.1) (2025-09-05)
+
+
+### Bug Fixes
+
+* correctly get all values from cache when needed. ([ebe6ff5](https://github.com/propeller-heads/tycho-indexer/commit/ebe6ff57504722c71c95db77a7b8b5e584c221b9))
+* correctly get all values from cache when needed. ([#673](https://github.com/propeller-heads/tycho-indexer/issues/673)) ([b8250fa](https://github.com/propeller-heads/tycho-indexer/commit/b8250fa9dcad90a4b2237c23753b3a158c0aba11))
+
 ## [0.83.0](https://github.com/propeller-heads/tycho-indexer/compare/0.82.0...0.83.0) (2025-08-30)
 
 
