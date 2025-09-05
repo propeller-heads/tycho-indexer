@@ -115,7 +115,7 @@ impl HookOrchestratorRegistry {
     }
 }
 
-pub struct DefaultUniswapV4HookOrchestrator<B> 
+pub struct DefaultUniswapV4HookOrchestrator<B>
 where
     B: BalanceSlotDetector,
 {
@@ -127,7 +127,10 @@ where
     B: BalanceSlotDetector,
 {
     pub fn new(
-        entrypoint_generator: UniswapV4DefaultHookEntrypointGenerator<DefaultSwapAmountEstimator, B>,
+        entrypoint_generator: UniswapV4DefaultHookEntrypointGenerator<
+            DefaultSwapAmountEstimator,
+            B,
+        >,
     ) -> Self {
         Self { entrypoint_generator }
     }
