@@ -336,11 +336,6 @@ fn validate_state(
         decoder_context,
     );
 
-    // NOTE: Once tycho-simulation is updated, you can use the new API like this:
-    // use tycho_simulation::protocol::models::DecoderContext;
-    // let context = DecoderContext::new().vm_adapter_path(adapter_contract_path_str);
-    // decoder.register_decoder_with_context::<EVMPoolState<PreCachedDB>>("test_protocol", context);
-
     // Mock a stream message, with only a Snapshot and no deltas
     let mut states: HashMap<String, ComponentWithState> = HashMap::new();
     for (id, component) in components_by_id {

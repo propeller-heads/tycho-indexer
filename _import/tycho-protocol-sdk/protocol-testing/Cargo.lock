@@ -7821,8 +7821,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.156.0"
-source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.156.0#1983a787440e8ae757626d808a6e619baffc52f2"
+version = "0.155.2"
 dependencies = [
  "alloy",
  "async-stream",
