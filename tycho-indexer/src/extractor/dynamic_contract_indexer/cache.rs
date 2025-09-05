@@ -14,6 +14,7 @@ use tycho_common::models::{
 type StorageLocation = (Address, StoreKey);
 
 /// Central data cache used by the Dynamic Contract Indexer (DCI).
+#[derive(Debug)]
 pub(super) struct DCICache {
     /// Maps entry point IDs to entry point definitions.
     pub(super) ep_id_to_entrypoint: VersionedCache<EntryPointId, EntryPoint>,
@@ -117,7 +118,7 @@ pub enum DCICacheError {
 /// A versioned data container scoped to a specific block.
 ///
 /// Stores key-value pairs for a block, used in the pending portion of a cache.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct BlockScopedMap<K, V> {
     /// Block metadata for this layer.
     block: Block,
@@ -130,6 +131,7 @@ struct BlockScopedMap<K, V> {
 /// It contains:
 /// - Permanent data that is not revertable.
 /// - Pending data organized in layers per block, supporting reverts.
+#[derive(Debug)]
 pub(super) struct VersionedCache<K, V> {
     /// Entries that are permanent and not affected by block reverts.
     permanent: HashMap<K, V>,
@@ -138,8 +140,8 @@ pub(super) struct VersionedCache<K, V> {
 }
 impl<K, V> VersionedCache<K, V>
 where
-    K: Eq + Hash + Clone,
-    V: Clone,
+    K: Eq + Hash + Clone + std::fmt::Debug,
+    V: Clone + std::fmt::Debug,
 {
     fn new() -> Self {
         Self { permanent: HashMap::new(), pending: VecDeque::new() }
@@ -194,7 +196,7 @@ where
         Ok(layer.data.entry(k.clone()))
     }
 
-    /// Retrieves a value for a key, checking latest pending block first, then permanent.
+    /// Retrieves a single value for a key, checking latest pending block first, then permanent.
     pub(super) fn get(&self, k: &K) -> Option<&V> {
         for layer in self.pending.iter().rev() {
             if let Some(v) = layer.data.get(k) {
@@ -202,6 +204,37 @@ where
             }
         }
         self.permanent.get(k)
+    }
+
+    /// Retrieves all values for a key from all layers, starting from the latest pending layer.
+    ///
+    /// # Arguments
+    /// * `k` - The key to get the values for.
+    ///
+    /// # Returns
+    /// * `Some(Iterator<Item = &V>)` - An iterator of all values for the key, starting from the
+    ///   latest pending layer.
+    /// * `None` - If the key is not found in any layer.
+    pub(super) fn get_all<'a>(&'a self, k: K) -> Option<impl Iterator<Item = &'a V> + 'a> {
+        if !self.contains_key(&k) {
+            return None;
+        }
+
+        let key_for_pending = k.clone();
+        let key_for_permanent = k;
+
+        let pending_iter = self
+            .pending
+            .iter()
+            .rev()
+            .filter_map(move |layer| layer.data.get(&key_for_pending));
+
+        let permanent_iter = self
+            .permanent
+            .get(&key_for_permanent)
+            .into_iter();
+
+        Some(pending_iter.chain(permanent_iter))
     }
 
     /// Checks if the given key exists in either the pending or permanent layer.
@@ -806,5 +839,113 @@ mod tests {
         assert_eq!(cache.get(&"key2".to_string()), Some(&21)); // block1
         assert_eq!(cache.get(&"key3".to_string()), Some(&3)); // block2
         assert_eq!(cache.get(&"key4".to_string()), Some(&40)); // block2
+    }
+
+    #[test]
+    fn test_versioned_cache_get_all() {
+        let mut cache: VersionedCache<String, u32> = VersionedCache::new();
+        let block1 = create_test_block(1, "0x01", "0x00");
+        let block2 = create_test_block(2, "0x02", "0x01");
+        let block3 = create_test_block(3, "0x03", "0x02");
+
+        cache
+            .validate_and_ensure_block_layer(&block1)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer(&block2)
+            .unwrap();
+        cache
+            .validate_and_ensure_block_layer(&block3)
+            .unwrap();
+
+        // Test 1: Key not found in any layer
+        assert!(cache
+            .get_all("nonexistent".to_string())
+            .is_none());
+
+        // Test 2: Key only in permanent layer
+        cache.insert_permanent("perm_only".to_string(), 100);
+        let result = cache
+            .get_all("perm_only".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&100]);
+
+        // Test 3: Key only in one pending layer
+        cache
+            .insert_pending(block2.clone(), "pending_only".to_string(), 200)
+            .unwrap();
+        let result = cache
+            .get_all("pending_only".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&200]);
+
+        // Test 4: Key in permanent and one pending layer
+        cache.insert_permanent("mixed".to_string(), 300);
+        cache
+            .insert_pending(block1.clone(), "mixed".to_string(), 301)
+            .unwrap();
+        let result = cache
+            .get_all("mixed".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&301, &300]); // Latest pending first, then permanent
+
+        // Test 5: Key in multiple pending layers and permanent
+        cache.insert_permanent("multi".to_string(), 400);
+        cache
+            .insert_pending(block1.clone(), "multi".to_string(), 401)
+            .unwrap();
+        cache
+            .insert_pending(block2.clone(), "multi".to_string(), 402)
+            .unwrap();
+        cache
+            .insert_pending(block3.clone(), "multi".to_string(), 403)
+            .unwrap();
+        let result = cache
+            .get_all("multi".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&403, &402, &401, &400]); // Latest to oldest
+
+        // Test 6: Key in some but not all pending layers
+        cache.insert_permanent("sparse".to_string(), 500);
+        cache
+            .insert_pending(block1.clone(), "sparse".to_string(), 501)
+            .unwrap();
+        cache
+            .insert_pending(block3.clone(), "sparse".to_string(), 503)
+            .unwrap();
+        let result = cache
+            .get_all("sparse".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&503, &501, &500]); // Skips block2, includes others
+
+        // Test 7: Key only in multiple pending layers (no permanent)
+        cache
+            .insert_pending(block1.clone(), "pending_multi".to_string(), 601)
+            .unwrap();
+        cache
+            .insert_pending(block3.clone(), "pending_multi".to_string(), 603)
+            .unwrap();
+        let result = cache
+            .get_all("pending_multi".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&603, &601]); // Latest to oldest pending only
+
+        // Test 8: After revert, get_all should reflect the new state
+        cache.revert_to(&block2.hash).unwrap();
+        let result = cache
+            .get_all("multi".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&402, &401, &400]); // Block3 data removed after revert
+
+        // Test 9: After finality, get_all should include finalized data in permanent
+        cache
+            .handle_finality(block2.number)
+            .unwrap();
+        let result = cache
+            .get_all("multi".to_string())
+            .unwrap();
+        assert_eq!(result.collect::<Vec<_>>(), vec![&402, &401]); // Block1 data moved to permanent,
+                                                                  // block2 stays
+                                                                  // pending
     }
 }

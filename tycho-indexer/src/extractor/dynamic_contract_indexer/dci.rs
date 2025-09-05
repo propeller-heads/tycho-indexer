@@ -489,8 +489,8 @@ where
                 for key in contract_store.keys() {
                     let location = (account.clone(), key.clone());
                     // Check if this storage location triggers any entrypoints
-                    if let Some(entrypoints) = self.cache.retriggers.get(&location) {
-                        for entrypoint in entrypoints {
+                    if let Some(entrypoints) = self.cache.retriggers.get_all(location) {
+                        for entrypoint in entrypoints.into_iter().flatten() {
                             // Only insert if we haven't seen this entrypoint before or if this tx
                             // is later
                             retriggered_entrypoints
@@ -604,13 +604,37 @@ where
             .iter()
         {
             for (account, contract_store) in tx.storage_changes.iter() {
-                let tracked_keys = match self
+                let tracked_keys: Option<HashSet<&StoreKey>> = match self
                     .cache
                     .tracked_contracts
-                    .get(account)
+                    .get_all(account.clone())
                 {
-                    None => continue, // Early skip if the contract is not tracked
-                    Some(keys) => keys,
+                    // Early skip if the contract is not tracked
+                    None => continue,
+                    Some(keys) => {
+                        let mut result = HashSet::new();
+                        let mut whole_contract_tracked = false;
+
+                        for key in keys {
+                            match key {
+                                None => {
+                                    // None is winning over specific keys, it means the whole
+                                    // contract is tracked
+                                    whole_contract_tracked = true;
+                                    break;
+                                }
+                                Some(inner) => {
+                                    result.extend(inner.iter());
+                                }
+                            }
+                        }
+
+                        if whole_contract_tracked {
+                            None
+                        } else {
+                            Some(result)
+                        }
+                    }
                 };
 
                 let mut slot_updates = contract_store
