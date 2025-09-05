@@ -33,8 +33,8 @@ alloy = { version = "1.0.24", default-features = true }
 alloy-rpc-types-trace = "1.0.24"
 
 # Optional dependencies
-contracts = { git = "https://github.com/cowprotocol/services", rev = "f3678428991e055ceb517f184d1b37244f2d8f51", optional = true }
-ethrpc = { git = "https://github.com/cowprotocol/services", rev = "f3678428991e055ceb517f184d1b37244f2d8f51", optional = true }
+contracts = { git = "https://github.com/cowprotocol/services", tag = "v2.325.1", optional = true }
+ethrpc = { git = "https://github.com/cowprotocol/services", tag = "v2.325.1", optional = true }
 ethcontract = { version = "0.25.4", default-features = false, features = [
     "aws-kms",
 ], optional = true }
