@@ -357,28 +357,28 @@ impl DefaultSwapAmountEstimator {
                             limit_amount_hex = %format!("{:#x}", &limit_amount),
                             "Processing limit for token pair"
                         );
-                        let ten_thousand = BigInt::from(10000);
+                        let hundred = BigInt::from(100);
                         let amounts = vec![
                             Bytes::from(
-                                ((&limit_amount * BigInt::from(5)) / &ten_thousand)
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 0.05%
-                            Bytes::from(
-                                ((&limit_amount * BigInt::from(10)) / &ten_thousand)
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 0.1%
-                            Bytes::from(
-                                ((&limit_amount * BigInt::from(50)) / &ten_thousand)
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 0.5%
-                            Bytes::from(
-                                (&limit_amount / BigInt::from(100))
+                                (&limit_amount / &hundred)
                                     .to_bytes_be()
                                     .1,
                             ), // 1%
+                            Bytes::from(
+                                ((&limit_amount * BigInt::from(10)) / &hundred)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 10%
+                            Bytes::from(
+                                ((&limit_amount * BigInt::from(50)) / &hundred)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 50%
+                            Bytes::from(
+                                ((&limit_amount * BigInt::from(95)) / &hundred)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 95%
                         ];
 
                         debug!(
@@ -435,28 +435,28 @@ impl DefaultSwapAmountEstimator {
                             balance_hex = %format!("{:#x}", &balance),
                             "Processing balance for token"
                         );
-                        let ten_thousand = BigInt::from(10000);
+                        let hundred = BigInt::from(100);
                         let amounts = vec![
                             Bytes::from(
-                                ((&balance * BigInt::from(5)) / &ten_thousand)
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 0.05%
-                            Bytes::from(
-                                ((&balance * BigInt::from(10)) / &ten_thousand)
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 0.1%
-                            Bytes::from(
-                                ((&balance * BigInt::from(50)) / &ten_thousand)
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 0.5%
-                            Bytes::from(
-                                (&balance / BigInt::from(100))
+                                (&balance / &hundred)
                                     .to_bytes_be()
                                     .1,
                             ), // 1%
+                            Bytes::from(
+                                ((&balance * BigInt::from(10)) / &hundred)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 10%
+                            Bytes::from(
+                                ((&balance * BigInt::from(50)) / &hundred)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 50%
+                            Bytes::from(
+                                ((&balance * BigInt::from(95)) / &hundred)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 95%
                         ];
                         // Create entries for each possible buy token
                         let mut pairs_created = 0;
@@ -1061,19 +1061,19 @@ mod tests {
             .get(&(tokens[0].clone(), tokens[1].clone()))
             .unwrap();
         assert_eq!(amounts01.len(), 4);
-        assert_eq!(amounts01[0], Bytes::from(BigInt::from(10u64).to_bytes_be().1)); // 0.05%
-        assert_eq!(amounts01[1], Bytes::from(BigInt::from(20u64).to_bytes_be().1)); // 0.1%
-        assert_eq!(amounts01[2], Bytes::from(BigInt::from(100u64).to_bytes_be().1)); // 0.5%
-        assert_eq!(amounts01[3], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 1%
+        assert_eq!(amounts01[0], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 1%
+        assert_eq!(amounts01[1], Bytes::from(BigInt::from(2000u64).to_bytes_be().1)); // 10%
+        assert_eq!(amounts01[2], Bytes::from(BigInt::from(10000u64).to_bytes_be().1)); // 50%
+        assert_eq!(amounts01[3], Bytes::from(BigInt::from(19000u64).to_bytes_be().1)); // 95%
 
         let amounts10 = result
             .get(&(tokens[1].clone(), tokens[0].clone()))
             .unwrap();
         assert_eq!(amounts10.len(), 4);
-        assert_eq!(amounts10[0], Bytes::from(BigInt::from(10u64).to_bytes_be().1)); // 0.05%
-        assert_eq!(amounts10[1], Bytes::from(BigInt::from(20u64).to_bytes_be().1)); // 0.1%
-        assert_eq!(amounts10[2], Bytes::from(BigInt::from(100u64).to_bytes_be().1)); // 0.5%
-        assert_eq!(amounts10[3], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 1%
+        assert_eq!(amounts10[0], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 1%
+        assert_eq!(amounts10[1], Bytes::from(BigInt::from(2000u64).to_bytes_be().1)); // 10%
+        assert_eq!(amounts10[2], Bytes::from(BigInt::from(10000u64).to_bytes_be().1)); // 50%
+        assert_eq!(amounts10[3], Bytes::from(BigInt::from(19000u64).to_bytes_be().1)); // 95%
     }
 
     #[tokio::test]
