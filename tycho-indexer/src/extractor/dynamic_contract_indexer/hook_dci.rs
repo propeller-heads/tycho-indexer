@@ -581,7 +581,7 @@ where
 }
 
 // Component state tracking
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ComponentProcessingState {
     pub status: ProcessingStatus,
     pub retry_count: u32,
@@ -596,7 +596,7 @@ pub enum ProcessingStatus {
 }
 
 // TODO: Use anyhow error
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ProcessingError {
     MetadataError(String), // Before entrypoint generation
     TracingError(String),  // During/after entrypoint generation
