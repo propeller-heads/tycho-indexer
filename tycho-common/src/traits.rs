@@ -167,7 +167,7 @@ pub trait EntryPointTracer: Sync {
 /// This is a generic trait that can be implemented for different blockchain architectures
 #[async_trait]
 pub trait BalanceSlotDetector: Send + Sync {
-    type Error;
+    type Error: Debug;
 
     /// Detect balance storage slots for multiple components in parallel
     ///
