@@ -31,23 +31,23 @@ use crate::TYCHO_SERVER_VERSION;
 pub enum RPCError {
     /// The passed tycho url failed to parse.
     #[error("Failed to parse URL: {0}. Error: {1}")]
-    UrlParsing(String, String),
+    UrlParsing(Box<str>, Box<str>),
 
     /// The request data is not correctly formed.
     #[error("Failed to format request: {0}")]
-    FormatRequest(String),
+    FormatRequest(Box<str>),
 
     /// Errors forwarded from the HTTP protocol.
     #[error("Unexpected HTTP client error: {0}")]
-    HttpClient(String),
+    HttpClient(Box<str>),
 
     /// The response from the server could not be parsed correctly.
     #[error("Failed to parse response: {0}")]
-    ParseResponse(String),
+    ParseResponse(Box<str>),
 
     /// Other fatal errors.
     #[error("Fatal error: {0}")]
-    Fatal(String),
+    Fatal(Box<str>),
 }
 
 #[cfg_attr(test, automock)]
@@ -88,7 +88,7 @@ pub trait RPCClient: Send + Sync {
                 let _permit = sem
                     .acquire()
                     .await
-                    .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
+                    .map_err(|_| RPCError::Fatal("Semaphore dropped".into()))?;
                 self.get_contract_state(body).await
             });
         }
@@ -152,7 +152,7 @@ pub trait RPCClient: Send + Sync {
                         let _permit = sem
                             .acquire()
                             .await
-                            .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
+                            .map_err(|_| RPCError::Fatal("Semaphore dropped".into()))?;
                         self.get_protocol_components(body).await
                     });
                 }
@@ -185,7 +185,7 @@ pub trait RPCClient: Send + Sync {
                 let first_response = self
                     .get_protocol_components(&initial_request)
                     .await
-                    .map_err(|err| RPCError::Fatal(err.to_string()))?;
+                    .map_err(|err| RPCError::Fatal(err.to_string().into()))?;
 
                 let total_items = first_response.pagination.total;
                 let total_pages = (total_items as f64 / chunk_size as f64).ceil() as i64;
@@ -223,9 +223,10 @@ pub trait RPCClient: Send + Sync {
                         .map(|body| {
                             let sem = semaphore.clone();
                             async move {
-                                let _permit = sem.acquire().await.map_err(|_| {
-                                    RPCError::Fatal("Semaphore dropped".to_string())
-                                })?;
+                                let _permit = sem
+                                    .acquire()
+                                    .await
+                                    .map_err(|_| RPCError::Fatal("Semaphore dropped".into()))?;
                                 self.get_protocol_components(body).await
                             }
                         })
@@ -308,7 +309,7 @@ pub trait RPCClient: Send + Sync {
                 let _permit = sem
                     .acquire()
                     .await
-                    .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
+                    .map_err(|_| RPCError::Fatal("Semaphore dropped".into()))?;
                 self.get_protocol_states(body).await
             });
         }
@@ -357,9 +358,7 @@ pub trait RPCClient: Send + Sync {
                     pagination: PaginationParams {
                         page: request_page,
                         page_size: chunk_size.try_into().map_err(|_| {
-                            RPCError::FormatRequest(
-                                "Failed to convert chunk_size into i64".to_string(),
-                            )
+                            RPCError::FormatRequest("Failed to convert chunk_size into i64".into())
                         })?,
                     },
                     chain,
@@ -419,7 +418,7 @@ pub trait RPCClient: Send + Sync {
                             let _permit = sem
                                 .acquire()
                                 .await
-                                .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
+                                .map_err(|_| RPCError::Fatal("Semaphore dropped".into()))?;
                             self.get_component_tvl(&req).await
                         }
                     })
@@ -480,9 +479,10 @@ pub trait RPCClient: Send + Sync {
                         .map(|req| {
                             let sem = semaphore.clone();
                             async move {
-                                let _permit = sem.acquire().await.map_err(|_| {
-                                    RPCError::Fatal("Semaphore dropped".to_string())
-                                })?;
+                                let _permit = sem
+                                    .acquire()
+                                    .await
+                                    .map_err(|_| RPCError::Fatal("Semaphore dropped".into()))?;
                                 self.get_component_tvl(&req).await
                             }
                         })
@@ -543,7 +543,7 @@ pub trait RPCClient: Send + Sync {
                 let _permit = sem
                     .acquire()
                     .await
-                    .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
+                    .map_err(|_| RPCError::Fatal("Semaphore dropped".into()))?;
                 self.get_traced_entry_points(body).await
             });
         }
@@ -578,7 +578,7 @@ impl HttpRPCClient {
     pub fn new(base_uri: &str, auth_key: Option<&str>) -> Result<Self, RPCError> {
         let uri = base_uri
             .parse::<Url>()
-            .map_err(|e| RPCError::UrlParsing(base_uri.to_string(), e.to_string()))?;
+            .map_err(|e| RPCError::UrlParsing(base_uri.into(), e.to_string().into()))?;
 
         // Add default headers
         let mut headers = header::HeaderMap::new();
@@ -586,14 +586,15 @@ impl HttpRPCClient {
         let user_agent = format!("tycho-client-{version}", version = env!("CARGO_PKG_VERSION"));
         headers.insert(
             header::USER_AGENT,
-            header::HeaderValue::from_str(&user_agent)
-                .map_err(|e| RPCError::FormatRequest(format!("Invalid user agent format: {e}")))?,
+            header::HeaderValue::from_str(&user_agent).map_err(|e| {
+                RPCError::FormatRequest(format!("Invalid user agent format: {e}").into())
+            })?,
         );
 
         // Add Authorization if one is given
         if let Some(key) = auth_key {
             let mut auth_value = header::HeaderValue::from_str(key).map_err(|e| {
-                RPCError::FormatRequest(format!("Invalid authorization key format: {e}"))
+                RPCError::FormatRequest(format!("Invalid authorization key format: {e}").into())
             })?;
             auth_value.set_sensitive(true);
             headers.insert(header::AUTHORIZATION, auth_value);
@@ -603,7 +604,7 @@ impl HttpRPCClient {
             .default_headers(headers)
             .http2_prior_knowledge()
             .build()
-            .map_err(|e| RPCError::HttpClient(e.to_string()))?;
+            .map_err(|e| RPCError::HttpClient(e.to_string().into()))?;
         Ok(Self { http_client: client, url: uri })
     }
 }
@@ -640,13 +641,13 @@ impl RPCClient for HttpRPCClient {
             .json(request)
             .send()
             .await
-            .map_err(|e| RPCError::HttpClient(e.to_string()))?;
+            .map_err(|e| RPCError::HttpClient(e.to_string().into()))?;
         trace!(?response, "Received response from Tycho server");
 
         let body = response
             .text()
             .await
-            .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
+            .map_err(|e| RPCError::ParseResponse(e.to_string().into()))?;
         if body.is_empty() {
             // Pure native protocols will return empty contract states
             return Ok(StateRequestResponse {
@@ -660,7 +661,7 @@ impl RPCClient for HttpRPCClient {
         }
 
         let accounts = serde_json::from_str::<StateRequestResponse>(&body)
-            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
+            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}").into()))?;
         trace!(?accounts, "Received contract_state response from Tycho server");
 
         Ok(accounts)
@@ -687,16 +688,16 @@ impl RPCClient for HttpRPCClient {
             .json(request)
             .send()
             .await
-            .map_err(|e| RPCError::HttpClient(e.to_string()))?;
+            .map_err(|e| RPCError::HttpClient(e.to_string().into()))?;
 
         trace!(?response, "Received response from Tycho server");
 
         let body = response
             .text()
             .await
-            .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
+            .map_err(|e| RPCError::ParseResponse(e.to_string().into()))?;
         let components = serde_json::from_str::<ProtocolComponentRequestResponse>(&body)
-            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
+            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}").into()))?;
         trace!(?components, "Received protocol_components response from Tycho server");
 
         Ok(components)
@@ -731,13 +732,13 @@ impl RPCClient for HttpRPCClient {
             .json(request)
             .send()
             .await
-            .map_err(|e| RPCError::HttpClient(e.to_string()))?;
+            .map_err(|e| RPCError::HttpClient(e.to_string().into()))?;
         trace!(?response, "Received response from Tycho server");
 
         let body = response
             .text()
             .await
-            .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
+            .map_err(|e| RPCError::ParseResponse(e.to_string().into()))?;
 
         if body.is_empty() {
             // Pure VM protocols will return empty states
@@ -752,7 +753,7 @@ impl RPCClient for HttpRPCClient {
         }
 
         let states = serde_json::from_str::<ProtocolStateRequestResponse>(&body)
-            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
+            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}").into()))?;
         trace!(?states, "Received protocol_states response from Tycho server");
 
         Ok(states)
@@ -777,14 +778,14 @@ impl RPCClient for HttpRPCClient {
             .json(request)
             .send()
             .await
-            .map_err(|e| RPCError::HttpClient(e.to_string()))?;
+            .map_err(|e| RPCError::HttpClient(e.to_string().into()))?;
 
         let body = response
             .text()
             .await
-            .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
+            .map_err(|e| RPCError::ParseResponse(e.to_string().into()))?;
         let tokens = serde_json::from_str::<TokensRequestResponse>(&body)
-            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
+            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}").into()))?;
 
         Ok(tokens)
     }
@@ -808,14 +809,14 @@ impl RPCClient for HttpRPCClient {
             .json(request)
             .send()
             .await
-            .map_err(|e| RPCError::HttpClient(e.to_string()))?;
+            .map_err(|e| RPCError::HttpClient(e.to_string().into()))?;
         trace!(?response, "Received response from Tycho server");
         let body = response
             .text()
             .await
-            .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
+            .map_err(|e| RPCError::ParseResponse(e.to_string().into()))?;
         let protocol_systems = serde_json::from_str::<ProtocolSystemsRequestResponse>(&body)
-            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
+            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}").into()))?;
         trace!(?protocol_systems, "Received protocol_systems response from Tycho server");
         Ok(protocol_systems)
     }
@@ -839,16 +840,16 @@ impl RPCClient for HttpRPCClient {
             .json(request)
             .send()
             .await
-            .map_err(|e| RPCError::HttpClient(e.to_string()))?;
+            .map_err(|e| RPCError::HttpClient(e.to_string().into()))?;
         trace!(?response, "Received response from Tycho server");
         let body = response
             .text()
             .await
-            .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
+            .map_err(|e| RPCError::ParseResponse(e.to_string().into()))?;
         let component_tvl =
             serde_json::from_str::<ComponentTvlRequestResponse>(&body).map_err(|err| {
                 error!("Failed to parse component_tvl response: {:?}", &body);
-                RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
+                RPCError::ParseResponse(format!("Error: {err}, Body: {body}").into())
             })?;
         trace!(?component_tvl, "Received component_tvl response from Tycho server");
         Ok(component_tvl)
@@ -873,17 +874,17 @@ impl RPCClient for HttpRPCClient {
             .json(request)
             .send()
             .await
-            .map_err(|e| RPCError::HttpClient(e.to_string()))?;
+            .map_err(|e| RPCError::HttpClient(e.to_string().into()))?;
         trace!(?response, "Received response from Tycho server");
 
         let body = response
             .text()
             .await
-            .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
+            .map_err(|e| RPCError::ParseResponse(e.to_string().into()))?;
         let entrypoints =
             serde_json::from_str::<TracedEntryPointRequestResponse>(&body).map_err(|err| {
                 error!("Failed to parse traced_entry_points response: {:?}", &body);
-                RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
+                RPCError::ParseResponse(format!("Error: {err}, Body: {body}").into())
             })?;
         trace!(?entrypoints, "Received traced_entry_points response from Tycho server");
         Ok(entrypoints)
