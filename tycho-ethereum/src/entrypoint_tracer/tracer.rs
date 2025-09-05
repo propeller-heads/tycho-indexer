@@ -18,6 +18,7 @@ use alloy_rpc_types_trace::geth::{
 };
 use async_trait::async_trait;
 use serde_json::{json, value::to_raw_value, Value};
+use tracing::error;
 use tycho_common::{
     keccak256,
     models::{
@@ -38,14 +39,24 @@ pub struct EVMEntrypointService {
     rpc_url: url::Url,
     // TODO: add a setting to enable/disable batching. This could be needed because some RPCs don't
     // support batching. More info: https://www.quicknode.com/guides/ethereum-development/transactions/how-to-make-batch-requests-on-ethereum
+    max_retries: u32,
+    retry_delay_ms: u64,
 }
 
 impl EVMEntrypointService {
     pub fn try_from_url(rpc_url: &str) -> Result<Self, RPCError> {
+        Self::try_from_url_with_config(rpc_url, 3, 200)
+    }
+
+    pub fn try_from_url_with_config(
+        rpc_url: &str,
+        max_retries: u32,
+        retry_delay_ms: u64,
+    ) -> Result<Self, RPCError> {
         let url = url::Url::parse(rpc_url)
             .map_err(|_| RPCError::SetupError("Invalid URL".to_string()))?;
 
-        Ok(Self { rpc_url: url })
+        Ok(Self { rpc_url: url, max_retries, retry_delay_ms })
     }
 
     fn create_access_list_params(
@@ -218,7 +229,10 @@ impl EVMEntrypointService {
         ]);
 
         let batch_params = to_raw_value(&batch_request).map_err(|e| {
-            RPCError::UnknownError(format!("Failed to serialize batch params: {}", e))
+            RPCError::UnknownError(format!(
+                "Failed to serialize batch params for {} (block: {}, params: {}): {}",
+                target, block_hash, params, e
+            ))
         })?;
 
         // Send batch request - using HTTP POST directly for batch requests
@@ -229,33 +243,55 @@ impl EVMEntrypointService {
             .body(batch_params.get().to_string())
             .send()
             .await
-            .map_err(|e| RPCError::RequestError(e.to_string()))?;
+            .map_err(|e| {
+                RPCError::RequestError(format!(
+                    "Failed to send request to {} (block: {}, params: {}): {}",
+                    target, block_hash, params, e
+                ))
+            })?;
 
         let batch_response: Vec<Value> = response.json().await.map_err(|e| {
-            RPCError::UnknownError(format!("Failed to parse batch response: {}", e))
+            RPCError::UnknownError(format!(
+                "Failed to parse batch response for {} (block: {}, params: {}): {}",
+                target, block_hash, params, e
+            ))
         })?;
 
         if batch_response.len() != 2 {
-            return Err(RPCError::UnknownError("Invalid batch response length".to_string()));
+            return Err(RPCError::UnknownError(format!(
+                "Invalid batch response length for {} (block: {}, params: {}): expected 2, got {}",
+                target,
+                block_hash,
+                params,
+                batch_response.len()
+            )));
         }
 
         // Parse access list response
         let access_list_result = &batch_response[0];
         if let Some(error) = access_list_result.get("error") {
-            return Err(RPCError::UnknownError(format!("eth_createAccessList failed: {}", error)));
+            return Err(RPCError::UnknownError(format!(
+                "eth_createAccessList failed for {} (block: {}, params: {}): {}",
+                target, block_hash, params, error
+            )));
         }
 
         let access_list_data = access_list_result
             .get("result")
             .ok_or_else(|| {
                 RPCError::UnknownError(format!(
-                    "Missing result in access list response: {:?}",
-                    access_list_result
+                    "Missing result in access list response for {} (block: {}, params: {}): {:?}",
+                    target, block_hash, params, access_list_result
                 ))
             })?;
 
         let access_list: AccessListResult = serde_json::from_value(access_list_data.clone())
-            .map_err(|e| RPCError::UnknownError(format!("Failed to parse access list: {}", e)))?;
+            .map_err(|e| {
+                RPCError::UnknownError(format!(
+                    "Failed to parse access list for {} (block: {}, params: {}): {}",
+                    target, block_hash, params, e
+                ))
+            })?;
 
         let mut accessed_slots = access_list.try_get_accessed_slots()?;
 
@@ -270,20 +306,28 @@ impl EVMEntrypointService {
         // Parse trace response
         let trace_result = &batch_response[1];
         if let Some(error) = trace_result.get("error") {
-            return Err(RPCError::TracingFailure(format!("debug_traceCall failed: {}", error)));
+            return Err(RPCError::TracingFailure(format!(
+                "debug_traceCall failed for {} (block: {}, params: {}): {}",
+                target, block_hash, params, error
+            )));
         }
 
         let trace_data = trace_result
             .get("result")
             .ok_or_else(|| {
                 RPCError::UnknownError(format!(
-                    "Missing result in trace response: {:?}",
-                    trace_result
+                    "Missing result in trace response for {} (block: {}, params: {}): {:?}",
+                    target, block_hash, params, trace_result
                 ))
             })?;
 
-        let pre_state_trace: GethTrace = serde_json::from_value(trace_data.clone())
-            .map_err(|e| RPCError::UnknownError(format!("Failed to parse trace: {}", e)))?;
+        let pre_state_trace: GethTrace =
+            serde_json::from_value(trace_data.clone()).map_err(|e| {
+                RPCError::UnknownError(format!(
+                    "Failed to parse trace for {} (block: {}, params: {}): {}",
+                    target, block_hash, params, e
+                ))
+            })?;
 
         Ok((accessed_slots, pre_state_trace))
     }
@@ -298,72 +342,123 @@ impl EntryPointTracer for EVMEntrypointService {
         block_hash: BlockHash,
         entry_points: Vec<EntryPointWithTracingParams>,
     ) -> Vec<Result<TracedEntryPoint, Self::Error>> {
-        let mut results = Vec::new();
-        for entry_point in &entry_points {
-            let result = match &entry_point.params {
-                TracingParams::RPCTracer(ref rpc_entry_point) => {
-                    // Use batched RPC call for both access list and trace
-                    let (accessed_slots, pre_state_trace) = match self
-                        .batch_trace_and_access_list(
-                            &entry_point.entry_point.target,
-                            rpc_entry_point,
-                            &block_hash,
-                        )
-                        .await
-                    {
-                        Ok(trace) => trace,
-                        Err(e) => {
-                            results.push(Err(e));
-                            continue;
-                        }
-                    };
+        let ep_count = entry_points.len();
+        let mut results_with_indices = Vec::with_capacity(ep_count);
+        let mut to_retry: Vec<(usize, EntryPointWithTracingParams)> = entry_points
+            .into_iter()
+            .enumerate()
+            .collect();
 
-                    let called_addresses: Vec<Address> = accessed_slots.keys().cloned().collect();
-                    // Provides a very simplistic way of finding retriggers. A better way would
-                    // involve using the structure of callframes. So basically iterate the call
-                    // tree in a parent child manner then search the
-                    // childs address in the prestate of parent.
-                    let retriggers = if let GethTrace::PreStateTracer(PreStateFrame::Default(
-                        PreStateMode(frame),
-                    )) = pre_state_trace
-                    {
-                        let mut retriggers = HashSet::new();
-                        for (address, account) in frame.iter() {
-                            let storage = &account.storage;
-                            for (slot, val) in storage.iter() {
-                                for call_address in called_addresses.iter() {
-                                    let address_bytes = call_address.as_ref();
-                                    let value_bytes: &[u8] = val.as_ref();
-                                    if value_bytes
-                                        .windows(address_bytes.len())
-                                        .any(|window| window == address_bytes)
-                                    {
-                                        retriggers.insert((
-                                            Bytes::from(address.as_slice()),
-                                            Bytes::from(slot.as_slice()),
-                                        ));
+        let mut retry_count = 0;
+        while !to_retry.is_empty() && retry_count <= self.max_retries {
+            if retry_count > 0 {
+                tracing::debug!(
+                    "EVMEntrypointService: Retry attempt {} for {} entrypoints",
+                    retry_count,
+                    to_retry.len()
+                );
+                tokio::time::sleep(tokio::time::Duration::from_millis(self.retry_delay_ms)).await;
+            }
+
+            let mut failed_retryable = Vec::new();
+
+            for (original_index, entry_point) in &to_retry {
+                let result = match &entry_point.params {
+                    TracingParams::RPCTracer(ref rpc_entry_point) => {
+                        // Use batched RPC call for both access list and trace
+                        let (accessed_slots, pre_state_trace) = match self
+                            .batch_trace_and_access_list(
+                                &entry_point.entry_point.target,
+                                rpc_entry_point,
+                                &block_hash,
+                            )
+                            .await
+                        {
+                            Ok(trace) => trace,
+                            Err(e) => {
+                                if e.should_retry() && retry_count < self.max_retries {
+                                    failed_retryable.push((*original_index, entry_point.clone()));
+                                } else {
+                                    results_with_indices.push((*original_index, Err(e)));
+                                }
+                                continue;
+                            }
+                        };
+
+                        let called_addresses: Vec<Address> =
+                            accessed_slots.keys().cloned().collect();
+                        // Provides a very simplistic way of finding retriggers. A better way would
+                        // involve using the structure of callframes. So basically iterate the call
+                        // tree in a parent child manner then search the
+                        // childs address in the prestate of parent.
+                        let retriggers = if let GethTrace::PreStateTracer(PreStateFrame::Default(
+                            PreStateMode(frame),
+                        )) = pre_state_trace
+                        {
+                            let mut retriggers = HashSet::new();
+                            for (address, account) in frame.iter() {
+                                let storage = &account.storage;
+                                for (slot, val) in storage.iter() {
+                                    for call_address in called_addresses.iter() {
+                                        let address_bytes = call_address.as_ref();
+                                        let value_bytes: &[u8] = val.as_ref();
+                                        if value_bytes
+                                            .windows(address_bytes.len())
+                                            .any(|window| window == address_bytes)
+                                        {
+                                            retriggers.insert((
+                                                Bytes::from(address.as_slice()),
+                                                Bytes::from(slot.as_slice()),
+                                            ));
+                                        }
                                     }
                                 }
                             }
-                        }
-                        retriggers
-                    } else {
-                        results.push(Err(RPCError::UnknownError(
-                            "invalid trace result for PreStateTracer".to_string(),
-                        )));
-                        continue;
-                    };
+                            retriggers
+                        } else {
+                            results_with_indices.push((
+                                *original_index,
+                                Err(RPCError::UnknownError(
+                                    "invalid trace result for PreStateTracer".to_string(),
+                                )),
+                            ));
+                            continue;
+                        };
 
-                    Ok(TracedEntryPoint::new(
-                        entry_point.clone(),
-                        block_hash.clone(),
-                        TracingResult::new(retriggers, accessed_slots),
-                    ))
-                }
-            };
-            results.push(result);
+                        Ok(TracedEntryPoint::new(
+                            entry_point.clone(),
+                            block_hash.clone(),
+                            TracingResult::new(retriggers, accessed_slots),
+                        ))
+                    }
+                };
+                results_with_indices.push((*original_index, result));
+            }
+
+            // Update retry list and increment counter
+            to_retry = failed_retryable;
+            retry_count += 1;
+
+            // If no retryable failures, break the loop
+            if to_retry.is_empty() {
+                break;
+            }
         }
-        results
+
+        // This should never happen, if it does, we log an error and return the results that we have
+        if !results_with_indices.len() == ep_count {
+            error!(
+                "Something went wrong with the tracing, expected {} results but got {}",
+                ep_count,
+                results_with_indices.len()
+            );
+        }
+
+        results_with_indices.sort_by_key(|(index, _)| *index);
+        results_with_indices
+            .into_iter()
+            .map(|(_, result)| result)
+            .collect()
     }
 }
 
@@ -780,5 +875,410 @@ mod tests {
             .tracing_result
             .accessed_slots
             .contains_key(&Bytes::from_str("0x0afbf798467f9b3b97f90d05bf7df592d89a6cf1").unwrap()));
+    }
+
+    #[tokio::test]
+    async fn test_retry_with_mock_rpc_server() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
+
+        // Create a mock RPC server that fails the first few requests
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let call_count_clone = call_count.clone();
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let call_count = call_count_clone.clone();
+                tokio::spawn(async move {
+                    let mut buffer = vec![0; 4096];
+                    if let Ok(n) = socket.read(&mut buffer).await {
+                        let _request = String::from_utf8_lossy(&buffer[..n]);
+                        let current_call = call_count.fetch_add(1, Ordering::SeqCst);
+
+                        let response = if current_call < 2 {
+                            // Fail first 2 requests with connection error
+                            return; // Just close connection to simulate network failure
+                        } else {
+                            // Success response with properly structured mock trace data matching
+                            // PreStateTracer format (based on actual RPC response)
+                            r#"[
+                                {
+                                    "jsonrpc": "2.0",
+                                    "id": 1,
+                                    "result": {
+                                        "accessList": [],
+                                        "gasUsed": "0x5dc0"
+                                    }
+                                },
+                                {
+                                    "jsonrpc": "2.0",
+                                    "id": 2,
+                                    "result": {
+                                        "0x0000000000000000000000000000000000000000": {
+                                            "balance": "0x2fda439328c1d25c3c5"
+                                        },
+                                        "0x0000000000000000000000000000000000000001": {
+                                            "balance": "0x31535e82bbce260fd"
+                                        },
+                                        "0x4838b106fce9647bdf1e7877bf73ce8b0bad5f97": {
+                                            "balance": "0x4ba0584a354bc705",
+                                            "nonce": 1735918
+                                        }
+                                    }
+                                }
+                            ]"#
+                        };
+
+                        let http_response = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                            response.len(),
+                            response
+                        );
+
+                        let _ = socket
+                            .write_all(http_response.as_bytes())
+                            .await;
+                    }
+                });
+            }
+        });
+
+        // Give the server a moment to start
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        // Create tracer with fast retries
+        let tracer = EVMEntrypointService::try_from_url_with_config(
+            &format!("http://127.0.0.1:{}", addr.port()),
+            3,  // max_retries
+            10, // retry_delay_ms
+        )
+        .unwrap();
+
+        // Create test entry points
+        let entry_points: Vec<EntryPointWithTracingParams> =
+            vec![EntryPointWithTracingParams::new(
+                EntryPoint::new(
+                    "first:func()".to_string(),
+                    Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+                    "func()".to_string(),
+                ),
+                TracingParams::RPCTracer(RPCTracerParams::new(
+                    None,
+                    Bytes::from(&keccak256("func()")[0..4]),
+                )),
+            )];
+
+        let block_hash =
+            Bytes::from_str("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+                .unwrap();
+
+        let results = tracer
+            .trace(block_hash, entry_points)
+            .await;
+
+        // Verify that the mock server was called exactly 3 times (2 failures + 1 success)
+        let total_calls = call_count.load(Ordering::SeqCst);
+        assert_eq!(
+            total_calls, 3,
+            "Expected exactly 3 RPC calls (2 failures + 1 success), but got {}",
+            total_calls
+        );
+
+        // Should return exactly one result
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_ordering_with_network_failures() {
+        // Test with completely unreachable server to ensure ordering is preserved
+        let tracer =
+            EVMEntrypointService::try_from_url_with_config("http://127.0.0.1:1", 1, 10).unwrap();
+
+        // Create entry points with distinguishable signatures for order verification
+        let entry_points: Vec<EntryPointWithTracingParams> = vec![
+            EntryPointWithTracingParams::new(
+                EntryPoint::new(
+                    "first:func()".to_string(),
+                    Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+                    "func()".to_string(),
+                ),
+                TracingParams::RPCTracer(RPCTracerParams::new(
+                    None,
+                    Bytes::from(&keccak256("func()")[0..4]),
+                )),
+            ),
+            EntryPointWithTracingParams::new(
+                EntryPoint::new(
+                    "second:func()".to_string(),
+                    Bytes::from_str("0x0000000000000000000000000000000000000002").unwrap(),
+                    "func()".to_string(),
+                ),
+                TracingParams::RPCTracer(RPCTracerParams::new(
+                    None,
+                    Bytes::from(&keccak256("func()")[0..4]),
+                )),
+            ),
+            EntryPointWithTracingParams::new(
+                EntryPoint::new(
+                    "third:func()".to_string(),
+                    Bytes::from_str("0x0000000000000000000000000000000000000003").unwrap(),
+                    "func()".to_string(),
+                ),
+                TracingParams::RPCTracer(RPCTracerParams::new(
+                    None,
+                    Bytes::from(&keccak256("func()")[0..4]),
+                )),
+            ),
+        ];
+
+        let block_hash =
+            Bytes::from_str("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+                .unwrap();
+        let results = tracer
+            .trace(block_hash, entry_points.clone())
+            .await;
+
+        // All should fail but order should be preserved
+        assert_eq!(results.len(), 3);
+
+        // Verify all results are RequestError
+        for result in &results {
+            assert!(matches!(result, Err(RPCError::RequestError(_))));
+        }
+
+        // Verify ordering is preserved by checking that error messages contain the expected target
+        // addresses
+        for (i, result) in results.iter().enumerate() {
+            if let Err(RPCError::RequestError(msg)) = result {
+                let expected_target = &entry_points[i].entry_point.target;
+                assert!(
+                    msg.contains(&expected_target.to_string()),
+                    "Error message '{}' should contain target address '{}' for entry point at index {}",
+                    msg,
+                    expected_target,
+                    i
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_ordering_with_partial_failures() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
+
+        // Create a mock RPC server that fails only the second request
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let call_count_clone = call_count.clone();
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let call_count = call_count_clone.clone();
+                tokio::spawn(async move {
+                    let mut buffer = vec![0; 4096];
+                    if let Ok(n) = socket.read(&mut buffer).await {
+                        let request = String::from_utf8_lossy(&buffer[..n]);
+                        let current_call = call_count.fetch_add(1, Ordering::SeqCst);
+
+                        // Determine which entry point this request is for by looking at the target
+                        // address
+                        let is_second_request =
+                            request.contains("0x0000000000000000000000000000000000000002");
+
+                        let response = if is_second_request {
+                            // Fail only the second entry point request
+                            return; // Close connection to simulate network failure
+                        } else {
+                            // Success response for first and third requests
+                            r#"[
+                                {
+                                    "jsonrpc": "2.0",
+                                    "id": 1,
+                                    "result": {
+                                        "accessList": [],
+                                        "gasUsed": "0x5dc0"
+                                    }
+                                },
+                                {
+                                    "jsonrpc": "2.0",
+                                    "id": 2,
+                                    "result": {
+                                        "0x0000000000000000000000000000000000000000": {
+                                            "balance": "0x2fda439328c1d25c3c5"
+                                        },
+                                        "0x0000000000000000000000000000000000000001": {
+                                            "balance": "0x31535e82bbce260fd"
+                                        }
+                                    }
+                                }
+                            ]"#
+                        };
+
+                        let http_response = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                            response.len(),
+                            response
+                        );
+
+                        let _ = socket
+                            .write_all(http_response.as_bytes())
+                            .await;
+                    }
+                });
+            }
+        });
+
+        // Give the server a moment to start
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        // Create tracer with no retries to make the test faster
+        let tracer = EVMEntrypointService::try_from_url_with_config(
+            &format!("http://127.0.0.1:{}", addr.port()),
+            0,  // no retries
+            10, // retry_delay_ms (not used since max_retries=0)
+        )
+        .unwrap();
+
+        // Create three test entry points - the middle one should fail
+        let entry_points: Vec<EntryPointWithTracingParams> = vec![
+            EntryPointWithTracingParams::new(
+                EntryPoint::new(
+                    "first:func()".to_string(),
+                    Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+                    "func()".to_string(),
+                ),
+                TracingParams::RPCTracer(RPCTracerParams::new(
+                    None,
+                    Bytes::from(&keccak256("func()")[0..4]),
+                )),
+            ),
+            EntryPointWithTracingParams::new(
+                EntryPoint::new(
+                    "second:func()".to_string(),
+                    Bytes::from_str("0x0000000000000000000000000000000000000002").unwrap(),
+                    "func()".to_string(),
+                ),
+                TracingParams::RPCTracer(RPCTracerParams::new(
+                    None,
+                    Bytes::from(&keccak256("func()")[0..4]),
+                )),
+            ),
+            EntryPointWithTracingParams::new(
+                EntryPoint::new(
+                    "third:func()".to_string(),
+                    Bytes::from_str("0x0000000000000000000000000000000000000003").unwrap(),
+                    "func()".to_string(),
+                ),
+                TracingParams::RPCTracer(RPCTracerParams::new(
+                    None,
+                    Bytes::from(&keccak256("func()")[0..4]),
+                )),
+            ),
+        ];
+
+        let block_hash =
+            Bytes::from_str("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+                .unwrap();
+
+        let results = tracer
+            .trace(block_hash, entry_points.clone())
+            .await;
+
+        // Should return exactly 3 results in the same order
+        assert_eq!(results.len(), 3);
+
+        // First result should be success
+        match &results[0] {
+            Ok(traced_entry_point) => {
+                assert_eq!(
+                    traced_entry_point
+                        .entry_point_with_params
+                        .entry_point
+                        .target,
+                    Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap()
+                );
+            }
+            Err(e) => {
+                panic!("Expected first request to succeed, but got error: {:?}", e);
+            }
+        }
+
+        // Second result should be a RequestError (network failure)
+        match &results[1] {
+            Ok(_) => {
+                panic!("Expected second request to fail, but it succeeded");
+            }
+            Err(RPCError::RequestError(msg)) => {
+                assert!(
+                    msg.contains("0x0000000000000000000000000000000000000002"),
+                    "Error message should contain the target address of the failed request"
+                );
+            }
+            Err(e) => {
+                panic!("Expected RequestError for second request, but got: {:?}", e);
+            }
+        }
+
+        // Third result should be success
+        match &results[2] {
+            Ok(traced_entry_point) => {
+                assert_eq!(
+                    traced_entry_point
+                        .entry_point_with_params
+                        .entry_point
+                        .target,
+                    Bytes::from_str("0x0000000000000000000000000000000000000003").unwrap()
+                );
+            }
+            Err(e) => {
+                panic!("Expected third request to succeed, but got error: {:?}", e);
+            }
+        }
+    }
+
+    #[test]
+    fn test_tracer_configuration() {
+        // Test default configuration
+        let tracer = EVMEntrypointService::try_from_url("http://localhost:8545").unwrap();
+        assert_eq!(tracer.max_retries, 3);
+        assert_eq!(tracer.retry_delay_ms, 200);
+
+        // Test custom configuration
+        let tracer =
+            EVMEntrypointService::try_from_url_with_config("http://localhost:8545", 5, 500)
+                .unwrap();
+        assert_eq!(tracer.max_retries, 5);
+        assert_eq!(tracer.retry_delay_ms, 500);
+
+        // Test invalid URL
+        assert!(matches!(
+            EVMEntrypointService::try_from_url("invalid-url"),
+            Err(RPCError::SetupError(_))
+        ));
     }
 }
