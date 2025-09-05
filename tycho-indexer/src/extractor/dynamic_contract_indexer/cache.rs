@@ -162,6 +162,7 @@ impl DCICache {
 }
 
 /// Central data cache used by the Hooks Dynamic Contract Indexer (HooksDCI).
+#[derive(Debug)]
 pub(super) struct HooksDCICache {
     /// Maps component IDs to their processing state.
     pub(super) component_states: VersionedCache<ComponentId, ComponentProcessingState>,
@@ -1005,13 +1006,13 @@ mod tests {
         let block3 = create_test_block(3, "0x03", "0x02");
 
         cache
-            .validate_and_ensure_block_layer(&block1)
+            .validate_and_ensure_block_layer_internal(&block1)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block2)
+            .validate_and_ensure_block_layer_internal(&block2)
             .unwrap();
         cache
-            .validate_and_ensure_block_layer(&block3)
+            .validate_and_ensure_block_layer_internal(&block3)
             .unwrap();
 
         // Test 1: Key not found in any layer
@@ -1095,7 +1096,7 @@ mod tests {
 
         // Test 9: After finality, get_all should include finalized data in permanent
         cache
-            .handle_finality(block2.number)
+            .handle_finality(block2.number, MergeStrategy::Replace)
             .unwrap();
         let result = cache
             .get_all("multi".to_string())
