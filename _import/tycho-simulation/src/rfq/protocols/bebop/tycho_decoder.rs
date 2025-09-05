@@ -5,7 +5,10 @@ use tycho_common::{models::token::Token, Bytes};
 
 use super::{models::BebopPriceData, state::BebopState};
 use crate::{
-    protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
+    protocol::{
+        errors::InvalidSnapshotError,
+        models::{TryFromWithBlock, VMAttributes},
+    },
     rfq::{
         constants::get_bebop_auth, models::TimestampHeader,
         protocols::bebop::client_builder::BebopClientBuilder,
@@ -20,7 +23,7 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
         timestamp_header: TimestampHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
-        _adapter_path: Option<&str>,
+        _vm_attributes: &VMAttributes,
     ) -> Result<Self, Self::Error> {
         let state_attrs = snapshot.state.attributes;
 
@@ -193,7 +196,7 @@ mod tests {
             TimestampHeader { timestamp: 1703097600u64 },
             &HashMap::new(),
             &tokens,
-            None,
+            &VMAttributes::new(None),
         )
         .await
         .expect("create state from snapshot");
@@ -220,7 +223,7 @@ mod tests {
             TimestampHeader::default(),
             &HashMap::new(),
             &tokens,
-            None,
+            &VMAttributes::new(None),
         )
         .await;
         assert!(result.is_err());
@@ -239,7 +242,7 @@ mod tests {
             TimestampHeader::default(),
             &HashMap::new(),
             &tokens,
-            None,
+            &VMAttributes::new(None),
         )
         .await
         .expect("create state from snapshot");
@@ -266,7 +269,7 @@ mod tests {
             TimestampHeader::default(),
             &HashMap::new(),
             &tokens,
-            None,
+            &VMAttributes::new(None),
         )
         .await;
         assert!(result.is_err());

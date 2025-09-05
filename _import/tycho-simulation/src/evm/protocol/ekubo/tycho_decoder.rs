@@ -21,7 +21,10 @@ use super::{
 };
 use crate::{
     evm::protocol::ekubo::pool::mev_resist::MevResistPool,
-    protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
+    protocol::{
+        errors::InvalidSnapshotError,
+        models::{TryFromWithBlock, VMAttributes},
+    },
 };
 
 enum EkuboExtension {
@@ -57,7 +60,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboState {
         _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
-        _adapter_path: Option<&str>,
+        _vm_attributes: &VMAttributes,
     ) -> Result<Self, Self::Error> {
         let static_attrs = snapshot.component.static_attributes;
         let state_attrs = snapshot.state.attributes;
@@ -214,7 +217,7 @@ mod tests {
             BlockHeader::default(),
             &HashMap::new(),
             &HashMap::new(),
-            None,
+            &VMAttributes::new(None),
         )
         .await
         .expect("reconstructing state");
@@ -250,7 +253,7 @@ mod tests {
                 BlockHeader::default(),
                 &HashMap::default(),
                 &HashMap::default(),
-                None,
+                &VMAttributes::new(None),
             )
             .await;
 

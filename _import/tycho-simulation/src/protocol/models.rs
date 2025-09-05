@@ -34,6 +34,18 @@ use tycho_common::{
     simulation::protocol_sim::ProtocolSim,
     Bytes,
 };
+
+/// Optional struct containing VM attributes for decoders
+#[derive(Debug, Clone)]
+pub struct VMAttributes {
+    pub adapter_path: Option<String>,
+}
+
+impl VMAttributes {
+    pub fn new(adapter_path: Option<String>) -> Self {
+        Self { adapter_path }
+    }
+}
 /// ProtocolComponent struct represents the properties of a trading pair
 ///
 /// # Fields
@@ -135,7 +147,7 @@ where
         block: H,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
-        adapter_path: Option<&str>,
+        vm_attributes: &VMAttributes,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send + Sync
     where
         Self: Sized;

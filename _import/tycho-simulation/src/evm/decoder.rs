@@ -39,7 +39,7 @@ use crate::{
     },
     protocol::{
         errors::InvalidSnapshotError,
-        models::{ProtocolComponent, TryFromWithBlock, Update},
+        models::{ProtocolComponent, TryFromWithBlock, Update, VMAttributes},
     },
 };
 
@@ -135,32 +135,30 @@ where
     /// the component data into the appropriate protocol simulation type based on the current
     /// blockchain state and the provided block header.
     /// For example, to register a decoder for the `uniswap_v2` exchange, you must call
-    /// this function with `register_decoder::<UniswapV2State>("uniswap_v2")`.
+    /// this function with `register_decoder::<UniswapV2State>("uniswap_v2", vm_attributes)`.
     /// This ensures that the exchange ID `uniswap_v2` is properly associated with the
     /// `UniswapV2State` decoder for use in the protocol stream.
-    pub fn register_decoder<T>(&mut self, exchange: &str, adapter_path: Option<&str>)
+    pub fn register_decoder<T>(&mut self, exchange: &str, vm_attributes: VMAttributes)
     where
         T: ProtocolSim
             + TryFromWithBlock<ComponentWithState, H, Error = InvalidSnapshotError>
             + Send
             + 'static,
     {
-        let adapter_path_owned = adapter_path.map(|s| s.to_string());
         let decoder = Box::new(
             move |component: ComponentWithState,
                   header: H,
                   account_balances: AccountBalances,
                   state: Arc<RwLock<DecoderState>>| {
-                let adapter_path_owned = adapter_path_owned.clone();
+                let vm_attributes = vm_attributes.clone();
                 Box::pin(async move {
-                    let adapter_path_ref = adapter_path_owned.as_deref();
                     let guard = state.read().await;
                     T::try_from_with_header(
                         component,
                         header,
                         &account_balances,
                         &guard.tokens,
-                        adapter_path_ref,
+                        &vm_attributes,
                     )
                     .await
                     .map(|c| Box::new(c) as Box<dyn ProtocolSim>)
@@ -921,7 +919,8 @@ mod tests {
 
     async fn setup_decoder(set_tokens: bool) -> TychoStreamDecoder<BlockHeader> {
         let mut decoder = TychoStreamDecoder::new();
-        decoder.register_decoder::<UniswapV2State>("uniswap_v2", None);
+        let vm_attributes = VMAttributes::new(None);
+        decoder.register_decoder::<UniswapV2State>("uniswap_v2", vm_attributes);
         if set_tokens {
             let tokens = [
                 Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").lpad(20, 0),

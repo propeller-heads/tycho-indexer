@@ -5,7 +5,10 @@ use tycho_common::{models::token::Token, Bytes};
 
 use crate::{
     evm::protocol::{cpmm::protocol::cpmm_try_from_with_header, uniswap_v2::state::UniswapV2State},
-    protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
+    protocol::{
+        errors::InvalidSnapshotError,
+        models::{TryFromWithBlock, VMAttributes},
+    },
 };
 
 impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV2State {
@@ -18,7 +21,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV2State {
         _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
-        _adapter_path: Option<&str>,
+        _vm_attributes: &VMAttributes,
     ) -> Result<Self, Self::Error> {
         let (reserve0, reserve1) = cpmm_try_from_with_header(snapshot)?;
         Ok(Self::new(reserve0, reserve1))
@@ -35,7 +38,10 @@ mod tests {
     use tycho_common::{dto::ResponseProtocolState, Bytes};
 
     use super::super::state::UniswapV2State;
-    use crate::protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock};
+    use crate::protocol::{
+        errors::InvalidSnapshotError,
+        models::{TryFromWithBlock, VMAttributes},
+    };
 
     fn header() -> BlockHeader {
         BlockHeader {
@@ -63,12 +69,13 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
+        let vm_attributes = VMAttributes::new(None);
         let result = UniswapV2State::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),
             &HashMap::new(),
-            None,
+            &vm_attributes,
         )
         .await;
 
@@ -98,12 +105,13 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
+        let vm_attributes = VMAttributes::new(None);
         let result = UniswapV2State::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),
             &HashMap::new(),
-            None,
+            &vm_attributes,
         )
         .await;
 

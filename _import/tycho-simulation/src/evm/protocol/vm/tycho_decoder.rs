@@ -14,7 +14,10 @@ use crate::{
         engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB},
         protocol::vm::constants::get_adapter_file,
     },
-    protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
+    protocol::{
+        errors::InvalidSnapshotError,
+        models::{TryFromWithBlock, VMAttributes},
+    },
 };
 
 impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCachedDB> {
@@ -30,7 +33,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
         block: BlockHeader,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
-        adapter_path: Option<&str>,
+        vm_attributes: &VMAttributes,
     ) -> Result<Self, Self::Error> {
         let id = snapshot.component.id.clone();
         let tokens = snapshot.component.tokens.clone();
@@ -121,7 +124,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
                     .as_str()
             });
         let adapter_bytecode;
-        if let Some(adapter_bytecode_path) = adapter_path {
+        if let Some(adapter_bytecode_path) = &vm_attributes.adapter_path {
             let bytecode_bytes = std::fs::read(adapter_bytecode_path).map_err(|e| {
                 SimulationError::FatalError(format!(
                     "Failed to read adapter bytecode from {adapter_bytecode_path}: {e}"
@@ -319,12 +322,13 @@ mod tests {
             ]),
         )]);
 
+        let vm_attributes = VMAttributes::new(None);
         let res = EVMPoolState::try_from_with_header(
             snapshot,
             header(),
             &account_balances,
             &tokens,
-            None,
+            &vm_attributes,
         )
         .await
         .unwrap();

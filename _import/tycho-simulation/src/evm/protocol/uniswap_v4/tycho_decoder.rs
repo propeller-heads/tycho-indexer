@@ -13,7 +13,10 @@ use crate::{
         },
         utils::uniswap::{i24_be_bytes_to_i32, tick_list::TickInfo},
     },
-    protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
+    protocol::{
+        errors::InvalidSnapshotError,
+        models::{TryFromWithBlock, VMAttributes},
+    },
 };
 
 impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
@@ -26,7 +29,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
         block: BlockHeader,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
-        _adapter_path: Option<&str>,
+        _vm_attributes: &VMAttributes,
     ) -> Result<Self, Self::Error> {
         let liq = snapshot
             .state
@@ -254,7 +257,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
-            None,
+            &VMAttributes::new(None),
         )
         .await
         .unwrap();
@@ -328,7 +331,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
-            None,
+            &VMAttributes::new(None),
         )
         .await;
 
