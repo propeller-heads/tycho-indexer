@@ -534,13 +534,13 @@ impl std::fmt::Display for RPCTracerParams {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let caller_str = match &self.caller {
             Some(addr) => format!("caller={}", addr),
-            None => "caller=default".to_string(),
+            None => String::new(),
         };
 
-        let calldata_str = if self.calldata.len() >= 4 {
+        let calldata_str = if self.calldata.len() >= 8 {
             format!(
                 "calldata=0x{}..({} bytes)",
-                hex::encode(&self.calldata[..4]),
+                hex::encode(&self.calldata[..8]),
                 self.calldata.len()
             )
         } else {
