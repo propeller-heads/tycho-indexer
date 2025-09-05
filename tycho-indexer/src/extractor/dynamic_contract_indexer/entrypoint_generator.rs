@@ -437,11 +437,7 @@ impl DefaultSwapAmountEstimator {
                         );
                         let hundred = BigInt::from(100);
                         let amounts = vec![
-                            Bytes::from(
-                                (&balance / &hundred)
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 1%
+                            Bytes::from((&balance / &hundred).to_bytes_be().1), // 1%
                             Bytes::from(
                                 ((&balance * BigInt::from(10)) / &hundred)
                                     .to_bytes_be()
@@ -800,7 +796,8 @@ where
 
                 // Always use ERC6909 overwrites for the router
                 let overwrites = ERC6909Overwrites::default();
-                let erc6909_balance_slot = overwrites.balance_slot(router_address.clone(), token_in.clone());
+                let erc6909_balance_slot =
+                    overwrites.balance_slot(router_address.clone(), token_in.clone());
 
                 debug!(
                     token_in = %token_in,
@@ -828,7 +825,7 @@ where
                 );
 
                 let mut storage_diff = BTreeMap::new();
-                
+
                 // Always set ERC6909 balance slot with amount_in
                 storage_diff.insert(
                     Bytes::from(
@@ -940,18 +937,18 @@ mod tests {
 
     impl MockBalanceSlotDetector {
         fn new() -> Self {
-            Self {
-                slots: HashMap::new(),
-            }
+            Self { slots: HashMap::new() }
         }
 
         fn with_slots(mut self, component_id: ComponentId, slots: HashMap<Address, Bytes>) -> Self {
-            self.slots.insert(component_id, Ok(slots));
+            self.slots
+                .insert(component_id, Ok(slots));
             self
         }
 
         fn with_error(mut self, component_id: ComponentId, error: String) -> Self {
-            self.slots.insert(component_id, Err(error));
+            self.slots
+                .insert(component_id, Err(error));
             self
         }
     }
@@ -1382,21 +1379,30 @@ mod tests {
         // Verify the entrypoint has storage overrides
         let entrypoint = &entrypoints[0];
         if let TracingParams::RPCTracer(rpc_params) = &entrypoint.params {
-            let state_overrides = rpc_params.state_overrides.as_ref().unwrap();
-            
+            let state_overrides = rpc_params
+                .state_overrides
+                .as_ref()
+                .unwrap();
+
             // Should have overrides for both router and pool manager
             assert_eq!(state_overrides.len(), 2);
 
             // Check pool manager has storage overrides
             let pool_manager = Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90"));
-            let pool_manager_overrides = state_overrides.get(&pool_manager).unwrap();
-            
+            let pool_manager_overrides = state_overrides
+                .get(&pool_manager)
+                .unwrap();
+
             if let Some(StorageOverride::Diff(storage_diff)) = &pool_manager_overrides.slots {
                 // Should have at least 2 slots: ERC6909 slot + detected slot for token0
                 assert!(storage_diff.len() >= 2);
 
                 // All slots should have the same amount_in value (1000)
-                let expected_amount = Bytes::from(U256::from(1000u64).to_be_bytes::<32>().as_slice());
+                let expected_amount = Bytes::from(
+                    U256::from(1000u64)
+                        .to_be_bytes::<32>()
+                        .as_slice(),
+                );
                 for (_slot, value) in storage_diff {
                     assert_eq!(value, &expected_amount);
                 }
@@ -1404,7 +1410,12 @@ mod tests {
                 // Verify that the detected slot for token0 is included
                 let detected_slot_key = Bytes::from([0x12; 32]);
                 assert!(storage_diff.contains_key(&detected_slot_key));
-                assert_eq!(storage_diff.get(&detected_slot_key).unwrap(), &expected_amount);
+                assert_eq!(
+                    storage_diff
+                        .get(&detected_slot_key)
+                        .unwrap(),
+                    &expected_amount
+                );
             } else {
                 panic!("Expected storage diff but found none");
             }
@@ -1462,7 +1473,7 @@ mod tests {
         );
 
         let estimator = MockEstimator { result: Ok(amounts) };
-        
+
         // No balance slot detector - should only use ERC6909 overwrites
         let generator = UniswapV4DefaultHookEntrypointGenerator::<_, MockBalanceSlotDetector>::new(
             estimator,
@@ -1484,21 +1495,30 @@ mod tests {
         // Verify the entrypoint has storage overrides
         let entrypoint = &entrypoints[0];
         if let TracingParams::RPCTracer(rpc_params) = &entrypoint.params {
-            let state_overrides = rpc_params.state_overrides.as_ref().unwrap();
-            
+            let state_overrides = rpc_params
+                .state_overrides
+                .as_ref()
+                .unwrap();
+
             // Should have overrides for both router and pool manager
             assert_eq!(state_overrides.len(), 2);
 
             // Check pool manager has storage overrides
             let pool_manager = Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90"));
-            let pool_manager_overrides = state_overrides.get(&pool_manager).unwrap();
-            
+            let pool_manager_overrides = state_overrides
+                .get(&pool_manager)
+                .unwrap();
+
             if let Some(StorageOverride::Diff(storage_diff)) = &pool_manager_overrides.slots {
                 // Should have exactly 1 slot: only ERC6909 slot
                 assert_eq!(storage_diff.len(), 1);
 
                 // The slot should have the amount_in value (500)
-                let expected_amount = Bytes::from(U256::from(500u64).to_be_bytes::<32>().as_slice());
+                let expected_amount = Bytes::from(
+                    U256::from(500u64)
+                        .to_be_bytes::<32>()
+                        .as_slice(),
+                );
                 for (_slot, value) in storage_diff {
                     assert_eq!(value, &expected_amount);
                 }
