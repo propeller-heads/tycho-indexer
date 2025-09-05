@@ -13,8 +13,9 @@ use tycho_common::{
             TracingResult, Transaction, TxWithChanges,
         },
         contract::AccountDelta,
-        protocol::QualityRange,
-        Address, BlockHash, Chain, ChangeType, ContractStoreDeltas, EntryPointId, StoreKey, TxHash,
+        protocol::{ProtocolComponentStateDelta, QualityRange},
+        Address, BlockHash, Chain, ChangeType, ComponentId, ContractStoreDeltas, EntryPointId,
+        StoreKey, TxHash,
     },
     storage::{EntryPointFilter, EntryPointGateway, ProtocolGateway, StorageError},
     traits::{AccountExtractor, EntryPointTracer, StorageSnapshotRequest},
@@ -78,6 +79,25 @@ where
                 .or_insert(true);
 
             debug!("Added new ERC-20 token to skip list: {}", address);
+        }
+
+        for (component_id, ep) in block_changes
+            .txs_with_update
+            .iter()
+            .flat_map(|tx| {
+                tx.entrypoints
+                    .iter()
+                    .flat_map(|(component_id, eps)| {
+                        eps.iter()
+                            .map(move |ep| (component_id.clone(), ep))
+                    })
+            })
+        {
+            self.cache
+                .ep_id_to_component_id
+                .pending_entry(&block_changes.block, &ep.external_id)?
+                .or_insert(HashSet::new())
+                .insert(component_id);
         }
 
         let new_entrypoints: HashMap<EntryPointId, EntryPoint> = block_changes
@@ -175,7 +195,7 @@ where
             trace!("DCI: Entrypoints to analyze: {:?}", entrypoints_to_analyze);
             tracing::debug!(entrypoints_to_analyze = ?entrypoints_to_analyze, "DCI: Entrypoints to analyze");
 
-            let traced_entry_points = self
+            let tracing_results = self
                 .tracer
                 .trace(
                     block_changes.block.hash.clone(),
@@ -190,11 +210,42 @@ where
                     entrypoint_count = entrypoints_to_analyze.len(),
                     block_hash = %block_changes.block.hash
                 ))
-                .await
-                .into_iter() // TODO: properly handle errors, should either retry or pause the related components
-                // depending on the error
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| ExtractionError::TracingError(format!("{e:?}")))?;
+                .await;
+
+            let mut traced_entry_points = vec![];
+            let mut failed_entrypoints = vec![];
+
+            // This is safe because tracer ensures order is preserved
+            for ((ep, tx), result) in entrypoints_to_analyze
+                .iter()
+                .zip(tracing_results)
+            {
+                match result {
+                    Ok(tracing_result) => traced_entry_points.push(tracing_result),
+                    Err(e) => {
+                        tracing::warn!("DCI: Failed to trace entrypoint {:?}: {:?}", ep, e);
+                        failed_entrypoints.push((ep.clone(), *tx));
+                    }
+                }
+            }
+
+            let ep_ids_to_pause = failed_entrypoints
+                .into_iter()
+                .map(|(ep, tx)| (ep.entry_point.external_id, tx))
+                .collect::<HashSet<_>>();
+
+            let mut component_ids_to_pause = HashMap::new();
+            for (ep_id, tx) in ep_ids_to_pause {
+                if let Some(component_ids) = self
+                    .cache
+                    .ep_id_to_component_id
+                    .get_all(ep_id)
+                {
+                    for component_id in component_ids.flatten() {
+                        component_ids_to_pause.insert(component_id, tx);
+                    }
+                }
+            }
 
             tracing::debug!(traced_entry_points = ?traced_entry_points, "DCI: Traced entrypoints");
 
@@ -373,6 +424,43 @@ where
                 }
             }
 
+            // Insert the "paused" component state for the components that are paused
+            for (component_id, tx) in component_ids_to_pause {
+                match block_changes
+                    .txs_with_update
+                    .iter_mut()
+                    .find(|tx_with_changes| tx_with_changes.tx.hash == tx.hash)
+                {
+                    Some(tx_with_changes) => {
+                        tx_with_changes.state_updates.insert(
+                            component_id.clone(),
+                            ProtocolComponentStateDelta::new(
+                                component_id,
+                                HashMap::from([("paused".to_string(), vec![1u8].into())]),
+                                HashSet::new(),
+                            ),
+                        );
+                    }
+                    None => {
+                        let tx_with_changes = TxWithChanges {
+                            tx: tx.clone(),
+                            state_updates: HashMap::from([(
+                                component_id.clone(),
+                                ProtocolComponentStateDelta::new(
+                                    component_id,
+                                    HashMap::from([("paused".to_string(), vec![1u8].into())]),
+                                    HashSet::new(),
+                                ),
+                            )]),
+                            ..Default::default()
+                        };
+                        block_changes
+                            .txs_with_update
+                            .push(tx_with_changes);
+                    }
+                }
+            }
+
             // Update the cache with new traced entrypoints
             let _span = span!(
                 Level::INFO,
@@ -477,10 +565,29 @@ where
         // gateway that returns both.
         let entrypoints_with_params = self
             .entrypoint_gw
-            .get_entry_points_tracing_params(entrypoint_filter, None)
+            .get_entry_points_tracing_params(entrypoint_filter.clone(), None)
             .await
             .map_err(ExtractionError::from)?
             .entity;
+
+        let ep_id_to_component_id: HashMap<EntryPointId, HashSet<ComponentId>> = self
+            .entrypoint_gw
+            .get_entry_points(entrypoint_filter, None)
+            .await
+            .map_err(ExtractionError::from)?
+            .entity
+            .into_iter()
+            .flat_map(|(component_id, entrypoint_set)| {
+                entrypoint_set
+                    .into_iter()
+                    .map(move |entrypoint| (entrypoint.external_id, component_id.clone()))
+            })
+            .fold(HashMap::new(), |mut acc, (entrypoint_id, component_id)| {
+                acc.entry(entrypoint_id)
+                    .or_insert_with(HashSet::new)
+                    .insert(component_id);
+                acc
+            });
 
         let entrypoint_results: HashMap<EntryPointId, HashMap<TracingParams, TracingResult>> = self
             .entrypoint_gw
@@ -495,6 +602,10 @@ where
             )
             .await
             .map_err(ExtractionError::from)?;
+
+        self.cache
+            .ep_id_to_component_id
+            .extend_permanent(ep_id_to_component_id);
 
         self.cache
             .ep_id_to_entrypoint
@@ -1057,6 +1168,21 @@ mod tests {
             .expect_get_entry_points_tracing_params()
             .return_once(move |_, _| {
                 Box::pin(async move { Ok(WithTotal { entity: entrypoints_map, total: None }) })
+            });
+
+        // Mock get_entry_points to return component_id -> entrypoint mappings
+        let entrypoints_component_map = HashMap::from([
+            ("component_1".to_string(), HashSet::from([get_entrypoint(1)])),
+            ("component_2".to_string(), HashSet::from([get_entrypoint(2)])),
+            ("component_4".to_string(), HashSet::from([get_entrypoint(4)])),
+        ]);
+
+        gateway
+            .expect_get_entry_points()
+            .return_once(move |_, _| {
+                Box::pin(
+                    async move { Ok(WithTotal { entity: entrypoints_component_map, total: None }) },
+                )
             });
 
         let tracing_results: HashMap<EntryPointId, HashMap<TracingParams, TracingResult>> =
@@ -2290,5 +2416,169 @@ mod tests {
             .txs_with_update
             .first()
             .is_none_or(|tx| tx.account_deltas.is_empty()));
+    }
+
+    #[tokio::test]
+    async fn test_process_block_update_component_pausing_on_tracing_failure() {
+        let gateway = get_mock_gateway();
+        let mut account_extractor = MockAccountExtractor::new();
+        let mut entrypoint_tracer = MockEntryPointTracer::new();
+
+        // Set up a tracing scenario where one entrypoint succeeds and another fails
+        entrypoint_tracer
+            .expect_trace()
+            .with(
+                eq(Bytes::from(2_u8).lpad(32, 0)),
+                predicate::function(|entrypoints: &Vec<EntryPointWithTracingParams>| {
+                    entrypoints.len() == 2 &&
+                        entrypoints
+                            .iter()
+                            .any(|ep| ep.entry_point.external_id == "entrypoint_9") &&
+                        entrypoints
+                            .iter()
+                            .any(|ep| ep.entry_point.external_id == "entrypoint_10")
+                }),
+            )
+            .return_once(move |_, _| {
+                vec![
+                    Ok(TracedEntryPoint::new(
+                        EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
+                        Bytes::zero(32),
+                        get_tracing_result(9),
+                    )),
+                    Err("Simulated tracing failure".to_string()),
+                ]
+            });
+
+        // Mock account extraction for the successful entrypoint
+        account_extractor
+            .expect_get_accounts_at_block()
+            .with(
+                eq(testing::block(2)),
+                predicate::function(|requests: &[StorageSnapshotRequest]| {
+                    requests.len() == 2 &&
+                        requests
+                            .iter()
+                            .any(|r| r.address == Bytes::from("0x09")) &&
+                        requests
+                            .iter()
+                            .any(|r| r.address == Bytes::from("0x99"))
+                }),
+            )
+            .return_once(move |_, _| {
+                Ok(HashMap::from([
+                    (
+                        Bytes::from("0x09"),
+                        AccountDelta::new(
+                            Chain::Ethereum,
+                            Bytes::from("0x09"),
+                            HashMap::new(),
+                            None,
+                            None,
+                            ChangeType::Update,
+                        ),
+                    ),
+                    (
+                        Bytes::from("0x99"),
+                        AccountDelta::new(
+                            Chain::Ethereum,
+                            Bytes::from("0x99"),
+                            HashMap::new(),
+                            None,
+                            None,
+                            ChangeType::Update,
+                        ),
+                    ),
+                ]))
+            });
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        dci.initialize().await.unwrap();
+
+        // Create block changes with two entrypoints: one will succeed, one will fail
+        let tx = get_transaction(2);
+        let mut block_changes = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            testing::block(2),
+            2,
+            false,
+            vec![TxWithChanges {
+                tx: tx.clone(),
+                entrypoints: HashMap::from([
+                    ("component_1".to_string(), HashSet::from([get_entrypoint(9)])),
+                    ("component_2".to_string(), HashSet::from([get_entrypoint(10)])),
+                ]),
+                entrypoint_params: HashMap::from([
+                    ("entrypoint_9".to_string(), HashSet::from([(get_tracing_params(9), None)])),
+                    ("entrypoint_10".to_string(), HashSet::from([(get_tracing_params(10), None)])),
+                ]),
+                ..Default::default()
+            }],
+            Vec::new(),
+        );
+
+        dci.process_block_update(&mut block_changes)
+            .await
+            .unwrap();
+
+        // Verify that component_2 (which uses the failed entrypoint_10) is paused
+        let paused_component_tx = block_changes
+            .txs_with_update
+            .iter()
+            .find(|tx_with_changes| {
+                tx_with_changes
+                    .state_updates
+                    .contains_key("component_2")
+            });
+
+        assert!(paused_component_tx.is_some(), "Component should be paused due to tracing failure");
+
+        let paused_state = &paused_component_tx
+            .unwrap()
+            .state_updates["component_2"];
+        assert_eq!(paused_state.component_id, "component_2");
+        assert!(paused_state
+            .updated_attributes
+            .contains_key("paused"));
+        assert_eq!(paused_state.updated_attributes["paused"], Bytes::from(vec![1u8]));
+
+        // Verify that component_1 (which uses the successful entrypoint_9) is not paused
+        let component_1_paused = block_changes
+            .txs_with_update
+            .iter()
+            .any(|tx_with_changes| {
+                tx_with_changes
+                    .state_updates
+                    .get("component_1")
+                    .map(|state| {
+                        state
+                            .updated_attributes
+                            .contains_key("paused")
+                    })
+                    .unwrap_or(false)
+            });
+
+        assert!(
+            !component_1_paused,
+            "Component_1 should not be paused since its entrypoint succeeded"
+        );
+
+        // Verify that the successful entrypoint still produces trace results
+        assert_eq!(block_changes.trace_results.len(), 1);
+        assert_eq!(
+            block_changes.trace_results[0]
+                .entry_point_with_params
+                .entry_point
+                .external_id,
+            "entrypoint_9"
+        );
     }
 }
