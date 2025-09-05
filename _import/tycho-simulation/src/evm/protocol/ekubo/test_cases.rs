@@ -465,26 +465,26 @@ pub fn twamm() -> TestCase {
             ("token1_sale_rate".to_string(), 0_u128.to_be_bytes().into()),
             ("last_execution_time".to_string(), 0_u64.to_be_bytes().into()),
             (
-                format!("orders/token0/{}", FIRST_ORDER_START_TIME),
+                format!("orders/token0/{FIRST_ORDER_START_TIME}"),
                 (TOKEN0_SALE_RATE as i128)
                     .to_be_bytes()
                     .into(),
             ),
             (
-                format!("orders/token1/{}", FIRST_ORDER_START_TIME),
+                format!("orders/token1/{FIRST_ORDER_START_TIME}"),
                 (TOKEN1_SALE_RATE as i128)
                     .to_be_bytes()
                     .into(),
             ),
             (
-                format!("orders/token0/{}", FIRST_ORDER_END_TIME),
+                format!("orders/token0/{FIRST_ORDER_END_TIME}"),
                 (TOKEN0_SALE_RATE as i128)
                     .neg()
                     .to_be_bytes()
                     .into(),
             ),
             (
-                format!("orders/token1/{}", FIRST_ORDER_END_TIME),
+                format!("orders/token1/{FIRST_ORDER_END_TIME}"),
                 (TOKEN1_SALE_RATE as i128)
                     .neg()
                     .to_be_bytes()

@@ -135,6 +135,7 @@ where
         block: H,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
+        adapter_path: Option<&str>,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send + Sync
     where
         Self: Sized;

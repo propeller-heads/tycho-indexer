@@ -20,6 +20,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV3State {
         _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
+        _adapter_path: Option<&str>,
     ) -> Result<Self, Self::Error> {
         let liq = snapshot
             .state
@@ -194,6 +195,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
+            None,
         )
         .await;
 
@@ -251,6 +253,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
+            None,
         )
         .await;
 
@@ -285,6 +288,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
+            None,
         )
         .await;
 

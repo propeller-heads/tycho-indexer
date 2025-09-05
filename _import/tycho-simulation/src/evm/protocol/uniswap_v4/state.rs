@@ -958,6 +958,7 @@ mod tests {
             block,
             &Default::default(),
             &Default::default(),
+            None,
         )
         .await
         .unwrap();
@@ -1039,6 +1040,7 @@ mod tests {
             block,
             &Default::default(),
             &Default::default(),
+            None,
         )
         .await
         .unwrap();

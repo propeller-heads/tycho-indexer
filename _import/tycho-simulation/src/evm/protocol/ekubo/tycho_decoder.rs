@@ -57,6 +57,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboState {
         _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
+        _adapter_path: Option<&str>,
     ) -> Result<Self, Self::Error> {
         let static_attrs = snapshot.component.static_attributes;
         let state_attrs = snapshot.state.attributes;
@@ -213,6 +214,7 @@ mod tests {
             BlockHeader::default(),
             &HashMap::new(),
             &HashMap::new(),
+            None,
         )
         .await
         .expect("reconstructing state");
@@ -248,6 +250,7 @@ mod tests {
                 BlockHeader::default(),
                 &HashMap::default(),
                 &HashMap::default(),
+                None,
             )
             .await;
 

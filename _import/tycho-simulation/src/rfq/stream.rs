@@ -50,7 +50,8 @@ impl RFQStreamBuilder {
             + 'static,
     {
         self.clients.push(provider);
-        self.decoder.register_decoder::<T>(name);
+        self.decoder
+            .register_decoder::<T>(name, None);
         self
     }
 
@@ -180,6 +181,7 @@ mod tests {
             _header: TimestampHeader,
             _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
             _all_tokens: &HashMap<Bytes, Token>,
+            _adapter_path: Option<&str>,
         ) -> Result<Self, Self::Error> {
             Ok(DummyProtocol)
         }

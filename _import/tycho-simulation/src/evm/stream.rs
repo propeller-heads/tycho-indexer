@@ -81,7 +81,8 @@ impl ProtocolStreamBuilder {
         self.stream_builder = self
             .stream_builder
             .exchange(name, filter);
-        self.decoder.register_decoder::<T>(name);
+        self.decoder
+            .register_decoder::<T>(name, None);
         if let Some(predicate) = filter_fn {
             self.decoder
                 .register_filter(name, predicate);
