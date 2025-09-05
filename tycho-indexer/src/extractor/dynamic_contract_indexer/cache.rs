@@ -49,6 +49,8 @@ pub(super) struct DCICache {
     /// Stores manually blacklisted addresses that should skip full indexing
     /// but are not tokens (e.g., UniswapV4 pool manager).
     pub(super) blacklisted_addresses: VersionedCache<Address, bool>,
+    /// Maps an entry point id to the component ids that use it.
+    pub(super) ep_id_to_component_id: VersionedCache<EntryPointId, HashSet<ComponentId>>,
 }
 
 impl DCICache {
@@ -60,6 +62,7 @@ impl DCICache {
             tracked_contracts: VersionedCache::new(),
             erc20_addresses: VersionedCache::new(),
             blacklisted_addresses: VersionedCache::new(),
+            ep_id_to_component_id: VersionedCache::new(),
         }
     }
 
@@ -85,6 +88,8 @@ impl DCICache {
             .revert_to(block)?;
         self.erc20_addresses.revert_to(block)?;
         self.blacklisted_addresses
+            .revert_to(block)?;
+        self.ep_id_to_component_id
             .revert_to(block)?;
 
         Ok(())
@@ -131,6 +136,17 @@ impl DCICache {
             .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
         self.blacklisted_addresses
             .handle_finality(finalized_block_height, MergeStrategy::Replace)?;
+        self.ep_id_to_component_id
+            .handle_finality(
+                finalized_block_height,
+                MergeStrategy::Custom(Box::new(
+                    |existing: &HashSet<ComponentId>, new: HashSet<ComponentId>| {
+                        let mut merged = existing.clone();
+                        merged.extend(new);
+                        merged
+                    },
+                )),
+            )?;
 
         Ok(())
     }
@@ -155,6 +171,8 @@ impl DCICache {
         self.retriggers
             .validate_and_ensure_block_layer_internal(block)?;
         self.tracked_contracts
+            .validate_and_ensure_block_layer_internal(block)?;
+        self.ep_id_to_component_id
             .validate_and_ensure_block_layer_internal(block)?;
 
         Ok(())

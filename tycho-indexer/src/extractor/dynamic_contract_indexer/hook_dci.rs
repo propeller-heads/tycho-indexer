@@ -1024,6 +1024,12 @@ mod tests {
             });
 
         gateway
+            .expect_get_entry_points()
+            .return_once(move |_, _| {
+                Box::pin(async move { Ok(WithTotal { entity: HashMap::new(), total: None }) })
+            });
+
+        gateway
             .expect_get_traced_entry_points()
             .return_once(move |_| Box::pin(async move { Ok(HashMap::new()) }));
 
@@ -1777,6 +1783,11 @@ mod tests {
                 });
 
             db_gateway
+                .expect_get_entry_points()
+                .return_once(move |_, _| {
+                    Box::pin(async move { Ok(WithTotal { entity: HashMap::new(), total: None }) })
+                });
+            db_gateway
                 .expect_get_traced_entry_points()
                 .return_once(move |_| Box::pin(async move { Ok(HashMap::new()) }));
 
@@ -1960,6 +1971,12 @@ mod tests {
             // Setup expectations for initialization
             db_gateway
                 .expect_get_entry_points_tracing_params()
+                .return_once(move |_, _| {
+                    Box::pin(async move { Ok(WithTotal { entity: HashMap::new(), total: None }) })
+                });
+
+            db_gateway
+                .expect_get_entry_points()
                 .return_once(move |_, _| {
                     Box::pin(async move { Ok(WithTotal { entity: HashMap::new(), total: None }) })
                 });
