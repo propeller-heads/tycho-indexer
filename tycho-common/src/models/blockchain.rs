@@ -530,6 +530,34 @@ impl RPCTracerParams {
     }
 }
 
+impl std::fmt::Display for RPCTracerParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let caller_str = match &self.caller {
+            Some(addr) => format!("caller={}", addr),
+            None => "caller=default".to_string(),
+        };
+
+        let calldata_str = if self.calldata.len() >= 4 {
+            format!(
+                "calldata=0x{}..({} bytes)",
+                hex::encode(&self.calldata[..4]),
+                self.calldata.len()
+            )
+        } else {
+            format!("calldata={}", self.calldata)
+        };
+
+        let overrides_str = match &self.state_overrides {
+            Some(overrides) if !overrides.is_empty() => {
+                format!(", {} state override(s)", overrides.len())
+            }
+            _ => String::new(),
+        };
+
+        write!(f, "{}, {}{}", caller_str, calldata_str, overrides_str)
+    }
+}
+
 // Ensure serialization order, required by the storage layer
 impl Serialize for RPCTracerParams {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
