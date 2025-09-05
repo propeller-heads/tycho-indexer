@@ -144,5 +144,5 @@ pub trait EntryPointTracer: Sync {
         &self,
         block_hash: BlockHash,
         entry_points: Vec<EntryPointWithTracingParams>,
-    ) -> Result<Vec<TracedEntryPoint>, Self::Error>;
+    ) -> Vec<Result<TracedEntryPoint, Self::Error>>;
 }
