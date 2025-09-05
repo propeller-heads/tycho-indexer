@@ -18,6 +18,8 @@ type StorageLocation = (Address, StoreKey);
 
 /// A function used for merging values when the same key exists in multiple layers during finality
 /// handling.
+// Perf: all the merge functions are defined at compile time, so we can avoid the overhead of
+// dynamic dispatch.
 type MergeFunction<V> = Box<dyn Fn(&V, V) -> V>;
 
 /// Strategy for merging values when the same key exists in multiple layers during finality
