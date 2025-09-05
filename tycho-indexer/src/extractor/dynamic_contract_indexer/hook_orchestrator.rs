@@ -10,6 +10,7 @@ use tycho_common::{
         protocol::{ComponentBalance, ProtocolComponent, ProtocolComponentStateDelta},
         Address, ComponentId, TxHash,
     },
+    traits::BalanceSlotDetector,
     Bytes,
 };
 
@@ -36,6 +37,7 @@ pub enum HookOrchestratorError {
 
 /// Trait for hook orchestration operations
 #[cfg_attr(test, automock)]
+#[async_trait::async_trait]
 pub trait HookOrchestrator: Send + Sync {
     /// Main Entrypoint for the orchestrator.
     ///
@@ -45,7 +47,7 @@ pub trait HookOrchestrator: Send + Sync {
     ///     - Inject Balances to the ProtocolComponents
     ///     - Inject the Limits to the ProtocolComponents (if they are RPC calls)
     ///     - Inject Entrypoints to the ProtocolComponents
-    fn update_components(
+    async fn update_components(
         &self,
         block_changes: &mut BlockChanges,
         components: &[ProtocolComponent],
@@ -113,13 +115,19 @@ impl HookOrchestratorRegistry {
     }
 }
 
-pub struct DefaultUniswapV4HookOrchestrator {
-    entrypoint_generator: UniswapV4DefaultHookEntrypointGenerator<DefaultSwapAmountEstimator>,
+pub struct DefaultUniswapV4HookOrchestrator<B> 
+where
+    B: BalanceSlotDetector,
+{
+    entrypoint_generator: UniswapV4DefaultHookEntrypointGenerator<DefaultSwapAmountEstimator, B>,
 }
 
-impl DefaultUniswapV4HookOrchestrator {
+impl<B> DefaultUniswapV4HookOrchestrator<B>
+where
+    B: BalanceSlotDetector,
+{
     pub fn new(
-        entrypoint_generator: UniswapV4DefaultHookEntrypointGenerator<DefaultSwapAmountEstimator>,
+        entrypoint_generator: UniswapV4DefaultHookEntrypointGenerator<DefaultSwapAmountEstimator, B>,
     ) -> Self {
         Self { entrypoint_generator }
     }
@@ -334,7 +342,7 @@ impl DefaultUniswapV4HookOrchestrator {
         component_count = components.len(),
         metadata_count = metadata.len()
     ))]
-    fn generate_entrypoint_params(
+    async fn generate_entrypoint_params(
         &self,
         block: &Block,
         components: &[ProtocolComponent],
@@ -377,6 +385,7 @@ impl DefaultUniswapV4HookOrchestrator {
                 let eps = self
                     .entrypoint_generator
                     .generate_entrypoints(&data, &context)
+                    .await
                     .map_err(|e| {
                         error!(
                             component_id = %component.id,
@@ -420,13 +429,17 @@ impl DefaultUniswapV4HookOrchestrator {
     }
 }
 
-impl HookOrchestrator for DefaultUniswapV4HookOrchestrator {
+#[async_trait::async_trait]
+impl<B> HookOrchestrator for DefaultUniswapV4HookOrchestrator<B>
+where
+    B: BalanceSlotDetector + Send + Sync,
+{
     #[instrument(skip(self, block_changes, components, metadata), fields(
         block_number = block_changes.block.number,
         component_count = components.len(),
         metadata_count = metadata.len(),
     ))]
-    fn update_components(
+    async fn update_components(
         &self,
         block_changes: &mut BlockChanges,
         components: &[ProtocolComponent],
@@ -436,7 +449,10 @@ impl HookOrchestrator for DefaultUniswapV4HookOrchestrator {
         info!("Starting component update process");
 
         let component_entrypoints = match generate_entrypoints {
-            true => self.generate_entrypoint_params(&block_changes.block, components, metadata)?,
+            true => {
+                self.generate_entrypoint_params(&block_changes.block, components, metadata)
+                    .await?
+            }
             false => HashMap::new(),
         };
 
