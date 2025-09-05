@@ -33,7 +33,7 @@ use tycho_common::{
 };
 
 use super::{build_state_overrides, AccessListResult};
-use crate::{BytesCodec, RPCError};
+use crate::{BytesCodec, RPCError, ReqwestError, SerdeJsonError};
 
 pub struct EVMEntrypointService {
     rpc_url: url::Url,
@@ -229,10 +229,13 @@ impl EVMEntrypointService {
         ]);
 
         let batch_params = to_raw_value(&batch_request).map_err(|e| {
-            RPCError::UnknownError(format!(
-                "Failed to serialize batch params for {} (block: {}, params: {}): {}",
-                target, block_hash, params, e
-            ))
+            RPCError::SerializeError(SerdeJsonError {
+                msg: format!(
+                    "Failed to serialize batch params for {} (block: {}, params: {})",
+                    target, block_hash, params
+                ),
+                source: e,
+            })
         })?;
 
         // Send batch request - using HTTP POST directly for batch requests
@@ -244,17 +247,23 @@ impl EVMEntrypointService {
             .send()
             .await
             .map_err(|e| {
-                RPCError::RequestError(format!(
-                    "Failed to send request to {} (block: {}, params: {}): {}",
-                    target, block_hash, params, e
-                ))
+                RPCError::ReqwestError(ReqwestError {
+                    msg: format!(
+                        "Failed to send request to {} (block: {}, params: {})",
+                        target, block_hash, params
+                    ),
+                    source: e,
+                })
             })?;
 
         let batch_response: Vec<Value> = response.json().await.map_err(|e| {
-            RPCError::UnknownError(format!(
-                "Failed to parse batch response for {} (block: {}, params: {}): {}",
-                target, block_hash, params, e
-            ))
+            RPCError::ReqwestError(ReqwestError {
+                msg: format!(
+                    "Failed to parse batch response for {} (block: {}, params: {})",
+                    target, block_hash, params
+                ),
+                source: e,
+            })
         })?;
 
         if batch_response.len() != 2 {
@@ -287,10 +296,13 @@ impl EVMEntrypointService {
 
         let access_list: AccessListResult = serde_json::from_value(access_list_data.clone())
             .map_err(|e| {
-                RPCError::UnknownError(format!(
-                    "Failed to parse access list for {} (block: {}, params: {}): {}",
-                    target, block_hash, params, e
-                ))
+                RPCError::SerializeError(SerdeJsonError {
+                    msg: format!(
+                        "Failed to parse access list for {} (block: {}, params: {})",
+                        target, block_hash, params
+                    ),
+                    source: e,
+                })
             })?;
 
         let mut accessed_slots = access_list.try_get_accessed_slots()?;
@@ -323,10 +335,13 @@ impl EVMEntrypointService {
 
         let pre_state_trace: GethTrace =
             serde_json::from_value(trace_data.clone()).map_err(|e| {
-                RPCError::UnknownError(format!(
-                    "Failed to parse trace for {} (block: {}, params: {}): {}",
-                    target, block_hash, params, e
-                ))
+                RPCError::SerializeError(SerdeJsonError {
+                    msg: format!(
+                        "Failed to parse trace for {} (block: {}, params: {})",
+                        target, block_hash, params
+                    ),
+                    source: e,
+                })
             })?;
 
         Ok((accessed_slots, pre_state_trace))
@@ -361,6 +376,7 @@ impl EntryPointTracer for EVMEntrypointService {
             }
 
             let mut failed_retryable = Vec::new();
+            let is_last_retry = retry_count == self.max_retries;
 
             for (original_index, entry_point) in &to_retry {
                 let result = match &entry_point.params {
@@ -376,7 +392,7 @@ impl EntryPointTracer for EVMEntrypointService {
                         {
                             Ok(trace) => trace,
                             Err(e) => {
-                                if e.should_retry() && retry_count < self.max_retries {
+                                if e.should_retry() && !is_last_retry {
                                     failed_retryable.push((*original_index, entry_point.clone()));
                                 } else {
                                     results_with_indices.push((*original_index, Err(e)));
@@ -385,8 +401,8 @@ impl EntryPointTracer for EVMEntrypointService {
                             }
                         };
 
-                        let called_addresses: Vec<Address> =
-                            accessed_slots.keys().cloned().collect();
+                        let called_addresses: Vec<_> = accessed_slots.keys().cloned().collect();
+
                         // Provides a very simplistic way of finding retriggers. A better way would
                         // involve using the structure of callframes. So basically iterate the call
                         // tree in a parent child manner then search the
@@ -438,11 +454,6 @@ impl EntryPointTracer for EVMEntrypointService {
             // Update retry list and increment counter
             to_retry = failed_retryable;
             retry_count += 1;
-
-            // If no retryable failures, break the loop
-            if to_retry.is_empty() {
-                break;
-            }
         }
 
         // This should never happen, if it does, we log an error and return the results that we have
@@ -1056,13 +1067,13 @@ mod tests {
 
         // Verify all results are RequestError
         for result in &results {
-            assert!(matches!(result, Err(RPCError::RequestError(_))));
+            assert!(matches!(result, Err(RPCError::ReqwestError(_))));
         }
 
         // Verify ordering is preserved by checking that error messages contain the expected target
         // addresses
         for (i, result) in results.iter().enumerate() {
-            if let Err(RPCError::RequestError(msg)) = result {
+            if let Err(RPCError::ReqwestError(ReqwestError { msg, source: _ })) = result {
                 let expected_target = &entry_points[i].entry_point.target;
                 assert!(
                     msg.contains(&expected_target.to_string()),
@@ -1233,7 +1244,7 @@ mod tests {
             Ok(_) => {
                 panic!("Expected second request to fail, but it succeeded");
             }
-            Err(RPCError::RequestError(msg)) => {
+            Err(RPCError::ReqwestError(ReqwestError { msg, source: _ })) => {
                 assert!(
                     msg.contains("0x0000000000000000000000000000000000000002"),
                     "Error message should contain the target address of the failed request"
