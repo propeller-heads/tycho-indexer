@@ -864,6 +864,12 @@ where
         Ok(retriggered_entrypoints)
     }
 
+    /// Checks whether the address segment within a storage change has changed.
+    ///
+    /// Compares the `previous` and `value` fields of a [`ContractStorageChange`],
+    /// slicing out the address at the given `offset` with `self.address_byte_len`.
+    /// Returns `Ok(true)` if the address differs, `Ok(false)` if unchanged, or an
+    /// [`ExtractionError`] if the data is too short.
     fn retrigger_address_changed(
         &self,
         change: &ContractStorageChange,
