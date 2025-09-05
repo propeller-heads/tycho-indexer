@@ -8,7 +8,7 @@ use crate::{
         blockchain::{Block, BlockTag, EntryPointWithTracingParams, TracedEntryPoint},
         contract::AccountDelta,
         token::{Token, TokenQuality, TransferCost, TransferTax},
-        Address, Balance, BlockHash, StoreKey,
+        Address, Balance, BlockHash, ComponentId, StoreKey,
     },
     Bytes,
 };
@@ -161,6 +161,35 @@ pub trait EntryPointTracer: Sync {
         block_hash: BlockHash,
         entry_points: Vec<EntryPointWithTracingParams>,
     ) -> Vec<Result<TracedEntryPoint, Self::Error>>;
+}
+
+/// Trait for detecting storage slots that contain ERC20 token balances
+/// This is a generic trait that can be implemented for different blockchain architectures
+#[async_trait]
+pub trait BalanceSlotDetector: Send + Sync {
+    type Error;
+
+    /// Detect balance storage slots for multiple components in parallel
+    ///
+    /// # Arguments
+    /// * `components` - List of (component_id, token_addresses) tuples
+    /// * `holder` - Address that holds the tokens (e.g., pool manager)
+    /// * `block_hash` - Block at which to detect slots
+    ///
+    /// # Returns
+    /// HashMap mapping component_id -> Result containing (token_address -> storage_slot) or error
+    async fn detect_slots_for_components(
+        &self,
+        components: Vec<(ComponentId, Vec<Address>)>,
+        holder: Address,
+        block_hash: BlockHash,
+    ) -> HashMap<ComponentId, Result<HashMap<Address, Bytes>, Self::Error>>;
+
+    /// Set the maximum number of components to process concurrently
+    fn set_max_concurrent(&mut self, max: usize);
+
+    /// Get the current max concurrent setting
+    fn max_concurrent(&self) -> usize;
 }
 
 /// Trait for calculating the memory weight/size of values for caching purposes
