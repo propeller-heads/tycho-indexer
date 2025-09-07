@@ -109,7 +109,7 @@ impl TestRunner {
                 }
                 Err(e) => {
                     failed_tests.push(test.name.clone());
-                    error!("❗️{} failed: {}\n", test.name, e);
+                    error!("❗️{} failed: {:?}\n", test.name, e);
                 }
             }
 
@@ -176,7 +176,7 @@ impl TestRunner {
             )
             .wrap_err("Failed to run Tycho")?;
 
-        let _ = tycho_runner.run_with_rpc_server(
+        tycho_runner.run_with_rpc_server(
             |expected_components, start_block, stop_block, skip_balance_check| {
                 validate_state(
                     expected_components,
@@ -191,9 +191,7 @@ impl TestRunner {
             test.start_block,
             test.stop_block,
             skip_balance_check,
-        )?;
-
-        Ok(())
+        )?
     }
 
     fn empty_database(&self) -> Result<(), Error> {
@@ -406,55 +404,54 @@ fn validate_state(
             state
                 .spot_price(&tokens[0], &tokens[1])
                 .map(|price| info!("Spot price {:?}: {:?}", formatted_token_str, price))
-                .map_err(|e| info!("Error calculating spot price for Pool {:?}: {:?}", id, e))
-                .ok();
+                .into_diagnostic()
+                .wrap_err(format!("Error calculating spot price for Pool {id:?}."))?;
 
             // Test get_amount_out with different percentages of limits. The reserves or limits are
             // relevant because we need to know how much to test with. We don’t know if a pool is
             // going to revert with 10 or 10 million USDC, for example, so by using the limits we
             // can use “safe values” where the sim shouldn’t break.
+            // We then retrieve the amount out for 0.1%, 1% and 10%.
             let percentages = [0.001, 0.01, 0.1];
+            // Get limits for this token pair
+            let (max_input, max_output) = state
+                .get_limits(tokens[0].address.clone(), tokens[1].address.clone())
+                .into_diagnostic()
+                .wrap_err(format!("Error getting limits for Pool {id:?}."))?;
+
+            info!("Retrieved limits for pool {id}. | Max input: {max_input} {} | Max output: {max_output} {}", tokens[0].symbol, tokens[1].symbol);
+
             for percentage in &percentages {
-                // Get limits for this token pair
-                let limits = state
-                    .get_limits(tokens[0].address.clone(), tokens[1].address.clone())
-                    .map_err(|e| info!("Error getting limits for Pool {:?}: {:?}", id, e))
-                    .ok();
+                // For precision, multiply by 1000 then divide by 1000
+                let percentage_biguint = BigUint::from((percentage * 1000.0) as u32);
+                let thousand = BigUint::from(1000u32);
+                let amount_in = (&max_input * &percentage_biguint) / &thousand;
 
-                if let Some((max_input, _max_output)) = limits {
-                    // Calculate test amount as percentage of max input
-                    let percentage_biguint = BigUint::from((percentage * 1000.0) as u32);
-                    let thousand = BigUint::from(1000u32);
-                    let amount_in = (&max_input * &percentage_biguint) / &thousand;
-
-                    // Skip if amount is zero
-                    if amount_in.is_zero() {
-                        continue;
-                    }
-
-                    state
-                        .get_amount_out(amount_in.clone(), &tokens[0], &tokens[1])
-                        .map(|result| {
-                            info!(
-                                "Amount out for trading {:.1}% of max ({} -> {}): {} {} (gas: {})",
-                                percentage * 100.0,
-                                &tokens[0].symbol,
-                                &tokens[1].symbol,
-                                result.amount,
-                                &tokens[1].symbol,
-                                result.gas
-                            )
-                        })
-                        .map_err(|e| {
-                            info!(
-                                "Error calculating amount out for Pool {:?} at {:.1}%: {:?}",
-                                id,
-                                percentage * 100.0,
-                                e
-                            )
-                        })
-                        .ok();
+                // Skip if amount is zero
+                if amount_in.is_zero() {
+                    info!("Amount in multiplied by percentage {percentage} is zero. Skipping pool {id}.");
+                    continue;
                 }
+
+                state
+                    .get_amount_out(amount_in.clone(), &tokens[0], &tokens[1])
+                    .map(|result| {
+                        info!(
+                            "Amount out for trading {:.1}% of max: ({} {} -> {} {}) (gas: {})",
+                            percentage * 100.0,
+                            amount_in,
+                            &tokens[0].symbol,
+                            result.amount,
+                            &tokens[1].symbol,
+                            result.gas
+                        )
+                    })
+                    .into_diagnostic()
+                    .wrap_err(format!(
+                        "Error calculating amount out for Pool {:?} at {:.1}%.",
+                        id,
+                        percentage * 100.0,
+                    ))?;
             }
         }
     }
