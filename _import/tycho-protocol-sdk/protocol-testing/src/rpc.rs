@@ -69,13 +69,17 @@ impl RPCProvider {
         }
     }
 
-    // TODO: Implement
-    // async fn get_block_header(&self, _block_number: u64) {
-    //     let provider = ProviderBuilder::new().on_http(self.url);
-    //     let block_id: BlockId = BlockId::from(block_number);
-    //
-    //     let block = provider.get_block(block_id)
-    // }
+    pub async fn get_block_header(&self, block_number: u64) -> miette::Result<Block> {
+        let provider = ProviderBuilder::new().connect_http(self.url.clone());
+        let block_id: BlockId = BlockId::from(block_number);
+
+        provider
+            .get_block(block_id)
+            .await
+            .into_diagnostic()
+            .wrap_err("Failed to fetch block header")
+            .and_then(|block_opt| block_opt.ok_or_else(|| miette::miette!("Block not found")))
+    }
 }
 
 #[cfg(test)]
@@ -121,5 +125,24 @@ mod tests {
             .unwrap();
 
         assert_eq!(balance, U256::from(717250938432_u64));
+    }
+
+    #[tokio::test]
+    async fn get_block_header_test() {
+        let eth_rpc_url = env::var("RPC_URL").expect("Missing RPC_URL in environment");
+
+        let rpc_provider = RPCProvider::new(eth_rpc_url);
+        let block_number = 21998530;
+
+        let block_header = rpc_provider
+            .get_block_header(block_number)
+            .await
+            .unwrap();
+
+        // Verify that we got a block with the correct number
+        assert_eq!(block_number, block_header.header.number);
+
+        // Verify that the timestamp is non-zero
+        assert!(block_header.header.timestamp > 0);
     }
 }
