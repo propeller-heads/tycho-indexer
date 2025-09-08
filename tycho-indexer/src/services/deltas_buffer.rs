@@ -845,7 +845,7 @@ mod test {
 
     #[test]
     fn test_get_new_components() {
-        let exp = vec![
+        let exp = [
             ProtocolComponent::new(
                 "component3",
                 "native_swap",
