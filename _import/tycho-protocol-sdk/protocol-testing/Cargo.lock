@@ -7758,9 +7758,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.83.0"
+version = "0.82.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68faa54caad8f18d764acc300564b3d468e32eb63c67219cea7429a21b71cac9"
+checksum = "19a7ed885ea7e01efc3c98135b1be5c0472e81ada6455517f61ca67313271587"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7785,9 +7785,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.83.0"
+version = "0.82.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e031808e0cc6fe9d6402a46277464dc224c174aee40eb07122ed38bbbe2a3c65"
+checksum = "096c87ebe011785fcd7ed59ec501ac12b465a64fbd2914b8c0c57125c253682b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7810,7 +7810,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.155.0"
+version = "0.155.2"
+source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.155.2#b1f5a6e2b7c70a2871a1dd9e19f53d48421be5c8"
 dependencies = [
  "alloy",
  "async-stream",
