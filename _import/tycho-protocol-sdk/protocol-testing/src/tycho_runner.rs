@@ -129,10 +129,12 @@ impl TychoRunner {
                     debug!("Received termination message, stopping RPC server...");
                     cmd.kill()
                         .expect("Failed to kill RPC server");
+                    let _ = cmd.wait();
                 }
                 Err(_) => {
                     // Channel closed, terminate anyway
                     let _ = cmd.kill();
+                    let _ = cmd.wait();
                 }
             }
         });
@@ -160,7 +162,7 @@ impl TychoRunner {
             thread::spawn(move || {
                 let reader = BufReader::new(stdout);
                 for line in reader.lines().map_while(Result::ok) {
-                    println!("{}", line);
+                    println!("{line}");
                 }
             });
         }
@@ -169,7 +171,7 @@ impl TychoRunner {
             thread::spawn(move || {
                 let reader = BufReader::new(stderr);
                 for line in reader.lines().map_while(Result::ok) {
-                    eprintln!("{}", line);
+                    eprintln!("{line}");
                 }
             });
         }

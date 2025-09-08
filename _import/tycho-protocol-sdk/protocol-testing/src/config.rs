@@ -48,8 +48,8 @@ impl ProtocolComponentExpectation {
             match other_value {
                 Some(other_value) => {
                     if value != other_value {
-                        let self_value = format!("{:?}", value);
-                        let other_value = format!("{:?}", other_value);
+                        let self_value = format!("{value:?}");
+                        let other_value = format!("{other_value:?}");
                         let diff = self.format_diff(
                             "static_attributes",
                             &self_value,

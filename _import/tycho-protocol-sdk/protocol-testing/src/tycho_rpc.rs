@@ -21,8 +21,8 @@ pub enum RpcError {
 impl fmt::Display for RpcError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RpcError::ClientError(msg) => write!(f, "RPC client error: {}", msg),
-            RpcError::ResponseError(msg) => write!(f, "RPC response error: {}", msg),
+            RpcError::ClientError(msg) => write!(f, "RPC client error: {msg}"),
+            RpcError::ResponseError(msg) => write!(f, "RPC response error: {msg}"),
         }
     }
 }

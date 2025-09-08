@@ -48,8 +48,7 @@ pub fn build_spkg(yaml_file_path: &PathBuf, initial_block: u64) -> miette::Resul
         .expect("Version not found on YAML");
 
     let package_version = binding.as_str().unwrap_or("");
-
-    let spkg_name = format!("{}/{}-{}.spkg", parent_dir, package_name, package_version);
+    let spkg_name = format!("{parent_dir}/{package_name}-{package_version}.spkg");
 
     // Write the modified YAML back to the file
     let yaml_string = serde_yaml::to_string(&data).into_diagnostic()?;
