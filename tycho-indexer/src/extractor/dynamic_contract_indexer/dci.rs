@@ -752,13 +752,25 @@ where
                 for key in contract_store.keys() {
                     storage_locations_scanned += 1;
                     let location = (account.clone(), key.clone());
+
                     // Check if this storage location triggers any entrypoints
                     if let Some((entrypoints, _offset)) = self
                         .cache
                         .retriggers
                         .get_all(location.clone())
+                        // reduce all entrypoints, offset tuples into a single one assuming offset
+                        // is the same for all of them
+                        .map(|it| {
+                            // the closure will execute at least once since else we would return
+                            // None
+                            it.fold((HashSet::new(), 0u8), |mut acc, e| {
+                                acc.0.extend(e.0.iter().cloned());
+                                acc.1 = e.1;
+                                acc
+                            })
+                        })
                     {
-                        for entrypoint_with_params in entrypoints.into_iter().flatten() {
+                        for entrypoint_with_params in entrypoints.into_iter() {
                             // Only insert if we haven't seen this entrypoint before or if this tx
                             // is later
                             retriggered_entrypoints

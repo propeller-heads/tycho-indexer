@@ -4,7 +4,7 @@ use std::{
 };
 
 use thiserror::Error;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 use tycho_common::models::{
     blockchain::{Block, EntryPoint, EntryPointWithTracingParams, TracingParams, TracingResult},
     protocol::ProtocolComponent,
@@ -112,11 +112,14 @@ impl DCICache {
         self.retriggers.handle_finality(
             finalized_block_height,
             MergeStrategy::Custom(Box::new(
-                |existing: &HashSet<EntryPointWithTracingParams>,
-                 new: HashSet<EntryPointWithTracingParams>| {
-                    let mut merged = existing.clone();
-                    merged.extend(new);
-                    merged
+                |existing: &(HashSet<EntryPointWithTracingParams>, u8),
+                 new: (HashSet<EntryPointWithTracingParams>, u8)| {
+                    let (mut merged, previous_offset) = existing.clone();
+                    merged.extend(new.0);
+                    if previous_offset != new.1 {
+                        warn!("Offset discrepancy detected: {previous_offset} != {}", new.1)
+                    }
+                    (merged, previous_offset)
                 },
             )),
         )?;
