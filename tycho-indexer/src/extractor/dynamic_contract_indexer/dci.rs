@@ -584,7 +584,7 @@ where
             })
             .fold(HashMap::new(), |mut acc, (entrypoint_id, component_id)| {
                 acc.entry(entrypoint_id)
-                    .or_insert_with(HashSet::new)
+                    .or_default()
                     .insert(component_id);
                 acc
             });
