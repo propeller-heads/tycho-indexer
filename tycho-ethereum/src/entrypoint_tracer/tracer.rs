@@ -426,7 +426,9 @@ impl EntryPointTracer for EVMEntrypointService {
                                                 Bytes::from(address.as_slice()),
                                                 // TODO: add offset here
                                                 AddressStorageLocation::new(
-                                                    tycho_common::Bytes::from(slot.as_ref() as &[u8]),
+                                                    tycho_common::Bytes::from(
+                                                        slot.as_ref() as &[u8]
+                                                    ),
                                                     0,
                                                 ),
                                             ));
