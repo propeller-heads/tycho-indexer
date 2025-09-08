@@ -1,3 +1,12 @@
+## [0.156.0](https://github.com/propeller-heads/tycho-simulation/compare/0.155.2...0.156.0) (2025-09-08)
+
+
+### Features
+
+* Take a struct of vm_attributes instead of just adapter path ([b83b621](https://github.com/propeller-heads/tycho-simulation/commit/b83b621be2baf4d844441f37579c38d1606fd38f))
+* **Testing SDK:** Pass adapter contract to decoder ([4cab8c4](https://github.com/propeller-heads/tycho-simulation/commit/4cab8c413a37102a187291714a9a85837a037ccd))
+* Use DecoderContext instead of VMAttributes ([06a2511](https://github.com/propeller-heads/tycho-simulation/commit/06a2511cd3c5095b50a50d6c2ca5c4a960809eca))
+
 ## [0.155.2](https://github.com/propeller-heads/tycho-simulation/compare/0.155.1...0.155.2) (2025-08-30)
 
 
