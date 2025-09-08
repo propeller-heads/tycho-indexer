@@ -5469,7 +5469,7 @@ version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "681030a937600a36906c185595136d26abfebb4aa9c65701cefcaf8578bb982b"
 dependencies = [
- "proc-macro-crate 2.0.0",
+ "proc-macro-crate 3.1.0",
  "proc-macro2",
  "quote",
  "syn 2.0.99",
@@ -8812,8 +8812,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-substreams"
-version = "0.4.0"
-source = "git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=61ad26c#61ad26c17a0585f7562fe2d5c1573ec2e7d1e946"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "828cbe6f7b984fefe39d8fdb4c40311e329f30ded0a70e477e8f2add4d60483d"
 dependencies = [
  "ethabi 18.0.0",
  "hex",
