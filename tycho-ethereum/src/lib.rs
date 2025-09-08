@@ -33,29 +33,18 @@ impl Display for SerdeJsonError {
 }
 
 #[derive(Error, Debug)]
-pub struct ReqwestError {
+pub struct RequestError {
     msg: String,
     #[source]
-    source: reqwest::Error,
-}
-
-impl Display for ReqwestError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.msg, self.source)
-    }
-}
-
-#[derive(Error, Debug)]
-pub enum RequestError {
-    Reqwest(ReqwestError),
-    Other(String),
+    source: Option<Box<dyn std::error::Error + Send + Sync>>,
 }
 
 impl Display for RequestError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RequestError::Reqwest(e) => write!(f, "{}: {}", e.msg, e.source),
-            RequestError::Other(e) => write!(f, "{}", e),
+        if let Some(source) = &self.source {
+            write!(f, "{}: {}", self.msg, source)
+        } else {
+            write!(f, "{}", self.msg)
         }
     }
 }

@@ -33,7 +33,7 @@ use tycho_common::{
 };
 
 use super::{build_state_overrides, AccessListResult};
-use crate::{BytesCodec, RPCError, RequestError, ReqwestError, SerdeJsonError};
+use crate::{BytesCodec, RPCError, RequestError, SerdeJsonError};
 
 pub struct EVMEntrypointService {
     rpc_url: url::Url,
@@ -247,23 +247,23 @@ impl EVMEntrypointService {
             .send()
             .await
             .map_err(|e| {
-                RPCError::RequestError(RequestError::Reqwest(ReqwestError {
+                RPCError::RequestError(RequestError {
                     msg: format!(
                         "Failed to send request to {} (block: {}, params: {})",
                         target, block_hash, params
                     ),
-                    source: e,
-                }))
+                    source: Some(Box::new(e)),
+                })
             })?;
 
         let batch_response: Vec<Value> = response.json().await.map_err(|e| {
-            RPCError::RequestError(RequestError::Reqwest(ReqwestError {
+            RPCError::RequestError(RequestError {
                 msg: format!(
                     "Failed to parse batch response for {} (block: {}, params: {})",
                     target, block_hash, params
                 ),
-                source: e,
-            }))
+                source: Some(Box::new(e)),
+            })
         })?;
 
         if batch_response.len() != 2 {
@@ -1068,17 +1068,13 @@ mod tests {
 
         // Verify all results are RequestError
         for result in &results {
-            assert!(matches!(result, Err(RPCError::RequestError(RequestError::Reqwest(_)))));
+            assert!(matches!(result, Err(RPCError::RequestError(RequestError { source: _, .. }))));
         }
 
         // Verify ordering is preserved by checking that error messages contain the expected target
         // addresses
         for (i, result) in results.iter().enumerate() {
-            if let Err(RPCError::RequestError(RequestError::Reqwest(ReqwestError {
-                msg,
-                source: _,
-            }))) = result
-            {
+            if let Err(RPCError::RequestError(RequestError { msg, source: _ })) = result {
                 let expected_target = &entry_points[i].entry_point.target;
                 assert!(
                     msg.contains(&expected_target.to_string()),
@@ -1249,7 +1245,7 @@ mod tests {
             Ok(_) => {
                 panic!("Expected second request to fail, but it succeeded");
             }
-            Err(RPCError::RequestError(RequestError::Reqwest(ReqwestError { msg, source: _ }))) => {
+            Err(RPCError::RequestError(RequestError { msg, source: _ })) => {
                 assert!(
                     msg.contains("0x0000000000000000000000000000000000000002"),
                     "Error message should contain the target address of the failed request"
