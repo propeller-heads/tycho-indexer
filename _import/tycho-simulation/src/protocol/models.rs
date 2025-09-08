@@ -34,6 +34,32 @@ use tycho_common::{
     simulation::protocol_sim::ProtocolSim,
     Bytes,
 };
+
+/// Context struct containing attributes for decoders
+///
+/// This struct can be extended to include additional attributes for other decoders in the future
+#[derive(Debug, Clone)]
+pub struct DecoderContext {
+    pub adapter_path: Option<String>,
+}
+
+impl DecoderContext {
+    pub fn new() -> Self {
+        Self { adapter_path: None }
+    }
+
+    pub fn vm_adapter_path<S: Into<String>>(mut self, path: S) -> Self {
+        self.adapter_path = Some(path.into());
+        self
+    }
+}
+
+impl Default for DecoderContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// ProtocolComponent struct represents the properties of a trading pair
 ///
 /// # Fields
@@ -135,6 +161,7 @@ where
         block: H,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
+        decoder_context: &DecoderContext,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send + Sync
     where
         Self: Sized;

@@ -7,7 +7,10 @@ use crate::{
     evm::protocol::{
         cpmm::protocol::cpmm_try_from_with_header, pancakeswap_v2::state::PancakeswapV2State,
     },
-    protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
+    protocol::{
+        errors::InvalidSnapshotError,
+        models::{DecoderContext, TryFromWithBlock},
+    },
 };
 
 impl TryFromWithBlock<ComponentWithState, BlockHeader> for PancakeswapV2State {
@@ -20,6 +23,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for PancakeswapV2State {
         _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
+        _decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
         let (reserve0, reserve1) = cpmm_try_from_with_header(snapshot)?;
         Ok(Self::new(reserve0, reserve1))
@@ -36,7 +40,10 @@ mod tests {
     use tycho_common::{dto::ResponseProtocolState, Bytes};
 
     use super::super::state::PancakeswapV2State;
-    use crate::protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock};
+    use crate::protocol::{
+        errors::InvalidSnapshotError,
+        models::{DecoderContext, TryFromWithBlock},
+    };
 
     fn header() -> BlockHeader {
         BlockHeader {
@@ -69,6 +76,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
+            &DecoderContext::new(),
         )
         .await;
 
@@ -103,6 +111,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
+            &DecoderContext::new(),
         )
         .await;
 

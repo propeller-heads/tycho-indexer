@@ -394,7 +394,7 @@ mod tests {
                 hex_to_bytes("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef");
             let params = params();
             let err = quote.validate(&params).unwrap_err();
-            assert!(format!("{:?}", err).contains("Base token mismatch"));
+            assert!(format!("{err:?}").contains("Base token mismatch"));
         }
 
         #[test]
@@ -404,7 +404,7 @@ mod tests {
                 hex_to_bytes("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef");
             let params = params();
             let err = quote.validate(&params).unwrap_err();
-            assert!(format!("{:?}", err).contains("Quote token mismatch"));
+            assert!(format!("{err:?}").contains("Quote token mismatch"));
         }
 
         #[test]
@@ -413,7 +413,7 @@ mod tests {
             quote.quote_data.trader = hex_to_bytes("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd");
             let params = params();
             let err = quote.validate(&params).unwrap_err();
-            assert!(format!("{:?}", err).contains("Trader address mismatch"));
+            assert!(format!("{err:?}").contains("Trader address mismatch"));
         }
 
         #[test]
@@ -422,7 +422,7 @@ mod tests {
             quote.quote_data.base_token_amount = "9999".to_string();
             let params = params();
             let err = quote.validate(&params).unwrap_err();
-            assert!(format!("{:?}", err).contains("Base token amount mismatch"));
+            assert!(format!("{err:?}").contains("Base token amount mismatch"));
         }
     }
 }

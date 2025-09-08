@@ -6,7 +6,7 @@ use std::{
 use alloy::primitives::{Address, U256};
 use revm::state::Bytecode;
 use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
-use tycho_common::{models::token::Token, Bytes};
+use tycho_common::{models::token::Token, simulation::errors::SimulationError, Bytes};
 
 use super::{state::EVMPoolState, state_builder::EVMPoolStateBuilder};
 use crate::{
@@ -14,7 +14,10 @@ use crate::{
         engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB},
         protocol::vm::constants::get_adapter_file,
     },
-    protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
+    protocol::{
+        errors::InvalidSnapshotError,
+        models::{DecoderContext, TryFromWithBlock},
+    },
 };
 
 impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCachedDB> {
@@ -30,6 +33,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
         block: BlockHeader,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
+        decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
         let id = snapshot.component.id.clone();
         let tokens = snapshot.component.tokens.clone();
@@ -119,7 +123,17 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
                     .protocol_system
                     .as_str()
             });
-        let adapter_bytecode = Bytecode::new_raw(get_adapter_file(protocol_name)?.into());
+        let adapter_bytecode;
+        if let Some(adapter_bytecode_path) = &decoder_context.adapter_path {
+            let bytecode_bytes = std::fs::read(adapter_bytecode_path).map_err(|e| {
+                SimulationError::FatalError(format!(
+                    "Failed to read adapter bytecode from {adapter_bytecode_path}: {e}"
+                ))
+            })?;
+            adapter_bytecode = Bytecode::new_raw(bytecode_bytes.into());
+        } else {
+            adapter_bytecode = Bytecode::new_raw(get_adapter_file(protocol_name)?.into());
+        }
         let adapter_contract_address = Address::from_str(&format!(
             "{hex_protocol_name:0>40}",
             hex_protocol_name = hex::encode(protocol_name)
@@ -308,10 +322,16 @@ mod tests {
             ]),
         )]);
 
-        let res =
-            EVMPoolState::try_from_with_header(snapshot, header(), &account_balances, &tokens)
-                .await
-                .unwrap();
+        let decoder_context = DecoderContext::new();
+        let res = EVMPoolState::try_from_with_header(
+            snapshot,
+            header(),
+            &account_balances,
+            &tokens,
+            &decoder_context,
+        )
+        .await
+        .unwrap();
 
         let res_pool = res;
 

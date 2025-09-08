@@ -39,7 +39,7 @@ use crate::{
     },
     protocol::{
         errors::InvalidSnapshotError,
-        models::{ProtocolComponent, TryFromWithBlock, Update},
+        models::{DecoderContext, ProtocolComponent, TryFromWithBlock, Update},
     },
 };
 
@@ -127,18 +127,19 @@ where
         self.skip_state_decode_failures = skip;
     }
 
-    /// Registers a decoder for a given exchange.
+    /// Registers a decoder for a given exchange with a decoder context.
     ///
     /// This method maps an exchange identifier to a specific protocol simulation type.
     /// The associated type must implement the `TryFromWithBlock` trait to enable decoding
     /// of state updates from `ComponentWithState` objects. This allows the decoder to transform
     /// the component data into the appropriate protocol simulation type based on the current
     /// blockchain state and the provided block header.
-    /// For example, to register a decoder for the `uniswap_v2` exchange, you must call
-    /// this function with `register_decoder::<UniswapV2State>("uniswap_v2")`.
+    /// For example, to register a decoder for the `uniswap_v2` exchange with an additional decoder
+    /// context, you must call this function with
+    /// `register_decoder_with_context::<UniswapV2State>("uniswap_v2", context)`.
     /// This ensures that the exchange ID `uniswap_v2` is properly associated with the
     /// `UniswapV2State` decoder for use in the protocol stream.
-    pub fn register_decoder<T>(&mut self, exchange: &str)
+    pub fn register_decoder_with_context<T>(&mut self, exchange: &str, context: DecoderContext)
     where
         T: ProtocolSim
             + TryFromWithBlock<ComponentWithState, H, Error = InvalidSnapshotError>
@@ -150,16 +151,45 @@ where
                   header: H,
                   account_balances: AccountBalances,
                   state: Arc<RwLock<DecoderState>>| {
+                let context = context.clone();
                 Box::pin(async move {
                     let guard = state.read().await;
-                    T::try_from_with_header(component, header, &account_balances, &guard.tokens)
-                        .await
-                        .map(|c| Box::new(c) as Box<dyn ProtocolSim>)
+                    T::try_from_with_header(
+                        component,
+                        header,
+                        &account_balances,
+                        &guard.tokens,
+                        &context,
+                    )
+                    .await
+                    .map(|c| Box::new(c) as Box<dyn ProtocolSim>)
                 }) as DecodeFut
             },
         );
         self.registry
             .insert(exchange.to_string(), decoder);
+    }
+
+    /// Registers a decoder for a given exchange.
+    ///
+    /// This method maps an exchange identifier to a specific protocol simulation type.
+    /// The associated type must implement the `TryFromWithBlock` trait to enable decoding
+    /// of state updates from `ComponentWithState` objects. This allows the decoder to transform
+    /// the component data into the appropriate protocol simulation type based on the current
+    /// blockchain state and the provided block header.
+    /// For example, to register a decoder for the `uniswap_v2` exchange, you must call
+    /// this function with `register_decoder::<UniswapV2State>("uniswap_v2", vm_attributes)`.
+    /// This ensures that the exchange ID `uniswap_v2` is properly associated with the
+    /// `UniswapV2State` decoder for use in the protocol stream.
+    pub fn register_decoder<T>(&mut self, exchange: &str)
+    where
+        T: ProtocolSim
+            + TryFromWithBlock<ComponentWithState, H, Error = InvalidSnapshotError>
+            + Send
+            + 'static,
+    {
+        let context = DecoderContext::new();
+        self.register_decoder_with_context::<T>(exchange, context);
     }
 
     /// Registers a client-side filter function for a given exchange.

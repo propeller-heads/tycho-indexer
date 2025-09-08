@@ -7,7 +7,10 @@ use tycho_common::{models::token::Token, Bytes};
 use super::{enums::FeeAmount, state::UniswapV3State};
 use crate::{
     evm::protocol::utils::uniswap::{i24_be_bytes_to_i32, tick_list::TickInfo},
-    protocol::{errors::InvalidSnapshotError, models::TryFromWithBlock},
+    protocol::{
+        errors::InvalidSnapshotError,
+        models::{DecoderContext, TryFromWithBlock},
+    },
 };
 
 impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV3State {
@@ -20,6 +23,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV3State {
         _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
+        _decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
         let liq = snapshot
             .state
@@ -194,6 +198,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
+            &DecoderContext::new(),
         )
         .await;
 
@@ -251,6 +256,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
+            &DecoderContext::new(),
         )
         .await;
 
@@ -285,6 +291,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
+            &DecoderContext::new(),
         )
         .await;
 
