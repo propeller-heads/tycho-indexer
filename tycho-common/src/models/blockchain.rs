@@ -1072,6 +1072,6 @@ pub mod fixtures {
         );
 
         let display_output = traced_entry_point.to_string();
-        assert_eq!(display_output, "uniswap_v3_pool_swap: 2 retriggers, 3 accessed addresses");
+        assert_eq!(display_output, "[uniswap_v3_pool_swap: 2 retriggers, 3 accessed addresses]");
     }
 }
