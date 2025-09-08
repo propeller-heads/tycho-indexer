@@ -424,13 +424,13 @@ impl EntryPointTracer for EVMEntrypointService {
                             }
                         };
 
-                    // Exclude ZERO_ADDRESS to avoid false positive retriggers on 0
-                    //  value slots or slots with small values
-                    let called_addresses: HashSet<Address> = accessed_slots
-                        .keys()
-                        .filter(|addr| addr.as_ref() != ZERO_ADDRESS)
-                        .cloned()
-                        .collect();
+                        // Exclude ZERO_ADDRESS to avoid false positive retriggers on 0
+                        //  value slots or slots with small values
+                        let called_addresses: HashSet<Address> = accessed_slots
+                            .keys()
+                            .filter(|addr| addr.as_ref() != ZERO_ADDRESS)
+                            .cloned()
+                            .collect();
 
                         // Provides a very simplistic way of finding retriggers. A better way would
                         // involve using the structure of callframes. So basically iterate the call
@@ -449,7 +449,8 @@ impl EntryPointTracer for EVMEntrypointService {
                                     if let Some(storage_location) =
                                         Self::detect_retrigger(&called_addresses, slot, val)
                                     {
-                                        retriggers.insert((address_bytes.clone(), storage_location));
+                                        retriggers
+                                            .insert((address_bytes.clone(), storage_location));
                                     }
                                 }
                             }
