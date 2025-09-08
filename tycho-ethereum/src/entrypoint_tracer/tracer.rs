@@ -7,7 +7,7 @@ use std::{
 use alloy::{
     primitives::{
         map::FbBuildHasher, Address as AlloyAddress, BlockHash as AlloyBlockHash,
-        Bytes as AlloyBytes, FixedBytes, U256,
+        Bytes as AlloyBytes, FixedBytes, B256, U256,
     },
     providers::{Provider, ProviderBuilder},
     rpc::types::{state::AccountOverride, BlockId, TransactionInput, TransactionRequest},
@@ -23,8 +23,8 @@ use tycho_common::{
     keccak256,
     models::{
         blockchain::{
-            EntryPointWithTracingParams, RPCTracerParams, StorageOverride, TracedEntryPoint,
-            TracingParams, TracingResult,
+            AddressStorageLocation, EntryPointWithTracingParams, RPCTracerParams, StorageOverride,
+            TracedEntryPoint, TracingParams, TracingResult,
         },
         Address, BlockHash,
     },
@@ -231,8 +231,7 @@ impl EVMEntrypointService {
         let batch_params = to_raw_value(&batch_request).map_err(|e| {
             RPCError::SerializeError(SerdeJsonError {
                 msg: format!(
-                    "Failed to serialize batch params for {} (block: {}, params: {})",
-                    target, block_hash, params
+                    "Failed to serialize batch params for {target} (block: {block_hash}, params: {params})",
                 ),
                 source: e,
             })
@@ -249,8 +248,7 @@ impl EVMEntrypointService {
             .map_err(|e| {
                 RPCError::RequestError(RequestError::Reqwest(ReqwestError {
                     msg: format!(
-                        "Failed to send request to {} (block: {}, params: {})",
-                        target, block_hash, params
+                        "Failed to send request to {target} (block: {block_hash}, params: {params})",
                     ),
                     source: e,
                 }))
@@ -259,8 +257,7 @@ impl EVMEntrypointService {
         let batch_response: Vec<Value> = response.json().await.map_err(|e| {
             RPCError::RequestError(RequestError::Reqwest(ReqwestError {
                 msg: format!(
-                    "Failed to parse batch response for {} (block: {}, params: {})",
-                    target, block_hash, params
+                    "Failed to parse batch response for {target} (block: {block_hash}, params: {params})",
                 ),
                 source: e,
             }))
@@ -280,8 +277,8 @@ impl EVMEntrypointService {
         let access_list_result = &batch_response[0];
         if let Some(error) = access_list_result.get("error") {
             return Err(RPCError::UnknownError(format!(
-                "eth_createAccessList failed for {} (block: {}, params: {}): {}",
-                target, block_hash, params, error
+                "eth_createAccessList failed for {target} (block: {block_hash}, params: {params}): {error}",
+
             )));
         }
 
@@ -289,8 +286,7 @@ impl EVMEntrypointService {
             .get("result")
             .ok_or_else(|| {
                 RPCError::UnknownError(format!(
-                    "Missing result in access list response for {} (block: {}, params: {}): {:?}",
-                    target, block_hash, params, access_list_result
+                    "Missing result in access list response for {target} (block: {block_hash}, params: {params}): {access_list_result:?}",
                 ))
             })?;
 
@@ -298,8 +294,7 @@ impl EVMEntrypointService {
             .map_err(|e| {
                 RPCError::SerializeError(SerdeJsonError {
                     msg: format!(
-                        "Failed to parse access list for {} (block: {}, params: {})",
-                        target, block_hash, params
+                        "Failed to parse access list for {target} (block: {block_hash}, params: {params})",
                     ),
                     source: e,
                 })
@@ -319,8 +314,7 @@ impl EVMEntrypointService {
         let trace_result = &batch_response[1];
         if let Some(error) = trace_result.get("error") {
             return Err(RPCError::TracingFailure(format!(
-                "debug_traceCall failed for {} (block: {}, params: {}): {}",
-                target, block_hash, params, error
+                "debug_traceCall failed for {target} (block: {block_hash}, params: {params}): {error}",
             )));
         }
 
@@ -328,8 +322,7 @@ impl EVMEntrypointService {
             .get("result")
             .ok_or_else(|| {
                 RPCError::UnknownError(format!(
-                    "Missing result in trace response for {} (block: {}, params: {}): {:?}",
-                    target, block_hash, params, trace_result
+                    "Missing result in trace response for {target} (block: {block_hash}, params: {params}): {trace_result:?}",
                 ))
             })?;
 
@@ -337,8 +330,7 @@ impl EVMEntrypointService {
             serde_json::from_value(trace_data.clone()).map_err(|e| {
                 RPCError::SerializeError(SerdeJsonError {
                     msg: format!(
-                        "Failed to parse trace for {} (block: {}, params: {})",
-                        target, block_hash, params
+                        "Failed to parse trace for {target} (block: {block_hash}, params: {params})",
                     ),
                     source: e,
                 })
@@ -346,7 +338,38 @@ impl EVMEntrypointService {
 
         Ok((accessed_slots, pre_state_trace))
     }
+
+    /// Detects if any called addresses are stored in a packed storage slot.
+    ///
+    /// On Ethereum, a storage slot is 32 bytes, and an address is 20 bytes. This means
+    /// a single address can be packed with up to 12 bytes of other data in one slot.
+    /// This function searches for any of the called addresses within the storage value
+    /// and returns the storage location with the correct offset if found.
+    fn detect_retrigger(
+        called_addresses: &HashSet<Address>,
+        slot: &B256,
+        val: &B256,
+    ) -> Option<AddressStorageLocation> {
+        let value_bytes: &[u8] = val.as_ref();
+
+        if let Some((offset, window)) = value_bytes
+            .windows(20)
+            .enumerate()
+            .find(|(_idx, window)| {
+                let address = Address::from(*window);
+                called_addresses.contains(&address)
+            })
+        {
+            return Some(AddressStorageLocation::new(
+                tycho_common::Bytes::from(slot.as_slice()),
+                // This is safe since indices into B256 will always fit into u8
+                offset as u8,
+            ))
+        }
+        None
+    }
 }
+const ZERO_ADDRESS: [u8; 20] = [0u8; 20];
 
 #[async_trait]
 impl EntryPointTracer for EVMEntrypointService {
@@ -401,7 +424,13 @@ impl EntryPointTracer for EVMEntrypointService {
                             }
                         };
 
-                        let called_addresses: Vec<_> = accessed_slots.keys().cloned().collect();
+                        // Exclude ZERO_ADDRESS to avoid false positive retriggers on 0
+                        //  value slots or slots with small values
+                        let called_addresses: HashSet<Address> = accessed_slots
+                            .keys()
+                            .filter(|addr| addr.as_ref() != ZERO_ADDRESS)
+                            .cloned()
+                            .collect();
 
                         // Provides a very simplistic way of finding retriggers. A better way would
                         // involve using the structure of callframes. So basically iterate the call
@@ -413,20 +442,15 @@ impl EntryPointTracer for EVMEntrypointService {
                         {
                             let mut retriggers = HashSet::new();
                             for (address, account) in frame.iter() {
+                                let address_bytes =
+                                    tycho_common::Bytes::from(address.as_ref() as &[u8]);
                                 let storage = &account.storage;
                                 for (slot, val) in storage.iter() {
-                                    for call_address in called_addresses.iter() {
-                                        let address_bytes = call_address.as_ref();
-                                        let value_bytes: &[u8] = val.as_ref();
-                                        if value_bytes
-                                            .windows(address_bytes.len())
-                                            .any(|window| window == address_bytes)
-                                        {
-                                            retriggers.insert((
-                                                Bytes::from(address.as_slice()),
-                                                Bytes::from(slot.as_slice()),
-                                            ));
-                                        }
+                                    if let Some(storage_location) =
+                                        Self::detect_retrigger(&called_addresses, slot, val)
+                                    {
+                                        retriggers
+                                            .insert((address_bytes.clone(), storage_location));
                                     }
                                 }
                             }
@@ -538,11 +562,11 @@ mod tests {
                         HashSet::from([
                         (
                             Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                         ),
                         (
                             Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                         ),
                     ]),
                     HashMap::from([
@@ -568,11 +592,11 @@ mod tests {
                         HashSet::from([
                             (
                             Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                         ),
                         (
                             Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                            Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                            AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                         ),
                     ]),
                     HashMap::from([
@@ -694,11 +718,11 @@ mod tests {
             HashSet::from([
                     (
                         Bytes::from_str("0xffa98a091331df4600f87c9164cd27e8a5cd2405").unwrap(),
-                        Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000007").unwrap(),
+                        AddressStorageLocation::new(Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000007").unwrap(), 12),
                     ),
                     (
                         Bytes::from_str("0xffa98a091331df4600f87c9164cd27e8a5cd2405").unwrap(),
-                        Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000006").unwrap(),
+                        AddressStorageLocation::new(Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000006").unwrap(), 12),
                     ),
                 ]),
             // Accessed slots
@@ -1082,10 +1106,7 @@ mod tests {
                 let expected_target = &entry_points[i].entry_point.target;
                 assert!(
                     msg.contains(&expected_target.to_string()),
-                    "Error message '{}' should contain target address '{}' for entry point at index {}",
-                    msg,
-                    expected_target,
-                    i
+                    "Error message '{msg}' should contain target address '{expected_target}' for entry point at index {i}",
                 );
             }
         }
@@ -1240,7 +1261,7 @@ mod tests {
                 );
             }
             Err(e) => {
-                panic!("Expected first request to succeed, but got error: {:?}", e);
+                panic!("Expected first request to succeed, but got error: {e:?}");
             }
         }
 
@@ -1256,7 +1277,7 @@ mod tests {
                 );
             }
             Err(e) => {
-                panic!("Expected RequestError for second request, but got: {:?}", e);
+                panic!("Expected RequestError for second request, but got: {e:?}");
             }
         }
 
@@ -1272,7 +1293,7 @@ mod tests {
                 );
             }
             Err(e) => {
-                panic!("Expected third request to succeed, but got error: {:?}", e);
+                panic!("Expected third request to succeed, but got error: {e:?}");
             }
         }
     }
@@ -1296,5 +1317,121 @@ mod tests {
             EVMEntrypointService::try_from_url("invalid-url"),
             Err(RPCError::SetupError(_))
         ));
+    }
+
+    #[test]
+    fn test_detect_retrigger_specific_example() {
+        use std::str::FromStr;
+
+        use alloy::primitives::B256;
+
+        // User's specific example:
+        // Called address: 0x001442309e82b3e69d9cf520e318c62a64fa190c
+        // Packed slot: 0x00000bbd0f9dd77fc77b0000001442309e82b3e69d9cf520e318c62a64fa190c
+        // Expected offset: 12
+
+        let called_address =
+            Address::from_str("0x001442309e82b3e69d9cf520e318c62a64fa190c").unwrap();
+        let mut called_addresses = HashSet::new();
+        called_addresses.insert(called_address);
+
+        let slot =
+            B256::from_str("0x0000000000000000000000000000000000000000000000000000000000000001")
+                .unwrap();
+        let packed_value =
+            B256::from_str("0x00000bbd0f9dd77fc77b0000001442309e82b3e69d9cf520e318c62a64fa190c")
+                .unwrap();
+
+        let result =
+            EVMEntrypointService::detect_retrigger(&called_addresses, &slot, &packed_value);
+
+        assert!(result.is_some());
+        let storage_location = result.unwrap();
+        assert_eq!(storage_location.offset, 12);
+        assert_eq!(storage_location.key, tycho_common::Bytes::from(slot.as_slice()));
+    }
+
+    #[test]
+    fn test_detect_retrigger_offset_zero() {
+        use std::str::FromStr;
+
+        use alloy::primitives::B256;
+
+        // Address at the beginning of the slot (offset 0)
+        let called_address =
+            Address::from_str("0x1234567890123456789012345678901234567890").unwrap();
+        let mut called_addresses = HashSet::new();
+        called_addresses.insert(called_address);
+
+        let slot =
+            B256::from_str("0x0000000000000000000000000000000000000000000000000000000000000001")
+                .unwrap();
+        // Address at offset 0, followed by 12 bytes of zeros
+        let packed_value =
+            B256::from_str("0x1234567890123456789012345678901234567890000000000000000000000000")
+                .unwrap();
+
+        let result =
+            EVMEntrypointService::detect_retrigger(&called_addresses, &slot, &packed_value);
+
+        assert!(result.is_some());
+        let storage_location = result.unwrap();
+        assert_eq!(storage_location.offset, 0);
+        assert_eq!(storage_location.key, tycho_common::Bytes::from(slot.as_slice()));
+    }
+
+    #[test]
+    fn test_detect_retrigger_offset_twelve() {
+        use std::str::FromStr;
+
+        use alloy::primitives::B256;
+
+        // Address at offset 12 (end of slot)
+        let called_address =
+            Address::from_str("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd").unwrap();
+        let mut called_addresses = HashSet::new();
+        called_addresses.insert(called_address);
+
+        let slot =
+            B256::from_str("0x0000000000000000000000000000000000000000000000000000000000000001")
+                .unwrap();
+        // 12 bytes of data, then address at offset 12
+        let packed_value =
+            B256::from_str("0x000102030405060708090a0babcdefabcdefabcdefabcdefabcdefabcdefabcd")
+                .unwrap();
+
+        let result =
+            EVMEntrypointService::detect_retrigger(&called_addresses, &slot, &packed_value);
+
+        assert!(result.is_some());
+        let storage_location = result.unwrap();
+        assert_eq!(storage_location.offset, 12);
+        assert_eq!(storage_location.key, tycho_common::Bytes::from(slot.as_slice()));
+    }
+
+    #[test]
+    fn test_detect_retrigger_no_match() {
+        use std::str::FromStr;
+
+        use alloy::primitives::B256;
+
+        // Address not present in the storage value
+        let called_address =
+            Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
+        let mut called_addresses = HashSet::new();
+        called_addresses.insert(called_address);
+
+        let slot =
+            B256::from_str("0x0000000000000000000000000000000000000000000000000000000000000001")
+                .unwrap();
+        // Storage value containing a different address
+        let packed_value =
+            B256::from_str("0x00000bbd0f9dd77fc77b00000022222222222222222222222222222222222222")
+                .unwrap();
+
+        let result =
+            EVMEntrypointService::detect_retrigger(&called_addresses, &slot, &packed_value);
+
+        assert!(result.is_none());
     }
 }

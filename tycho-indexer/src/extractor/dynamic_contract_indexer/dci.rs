@@ -5,14 +5,14 @@ use std::{
 };
 
 use async_trait::async_trait;
-use tracing::{debug, info, instrument, span, trace, warn, Instrument, Level};
+use tracing::{debug, info, instrument, span, warn, Instrument, Level};
 use tycho_common::{
     models::{
         blockchain::{
             Block, EntryPoint, EntryPointWithTracingParams, TracedEntryPoint, TracingParams,
             TracingResult, Transaction, TxWithChanges,
         },
-        contract::AccountDelta,
+        contract::{AccountDelta, ContractStorageChange},
         protocol::{ProtocolComponentStateDelta, QualityRange},
         Address, BlockHash, Chain, ChangeType, ComponentId, ContractStoreDeltas, EntryPointId,
         StoreKey, TxHash,
@@ -39,6 +39,7 @@ where
     storage_source: AE,
     tracer: T,
     cache: DCICache,
+    address_byte_len: usize,
 }
 
 static MANUAL_BLACKLIST: LazyLock<Vec<Address>> = LazyLock::new(|| {
@@ -61,7 +62,7 @@ where
         chain = % self.chain,
         protocol = % self.protocol,
         block_number = % block_changes.block.number,
-        tx_count = block_changes.txs_with_update.len()
+        protocol_txs = block_changes.txs_with_update.len()
     ))]
     async fn process_block_update(
         &mut self,
@@ -129,11 +130,16 @@ where
         }
 
         if !new_entrypoints.is_empty() {
-            tracing::debug!(entrypoints = ?new_entrypoints, "DCI: Entrypoints");
+            debug!(entrypoints = ?new_entrypoints.keys().collect::<Vec<_>>(), "DCI: Entrypoints");
         }
 
         if !new_entrypoint_params.is_empty() {
-            tracing::debug!(entrypoints_params = ?new_entrypoint_params, "DCI: Entrypoints params");
+            debug!(entrypoints_params = ?new_entrypoint_params.iter().map(|(id, txs_and_params)| {
+                let (tx, params) = &txs_and_params[0];
+                match params {TracingParams::RPCTracer(p) => {
+                    format!("{id} [({0} {1}),..]({2})", tx.hash, p.calldata, txs_and_params.len())
+                }}
+            }), "DCI: Entrypoints params");
         }
 
         // Select for analysis the newly detected EntryPointsWithData that haven't been analyzed
@@ -185,15 +191,21 @@ where
 
         // Use block storage changes to detect retriggered entrypoints
         let retriggered_entrypoints: HashMap<EntryPointWithTracingParams, &Transaction> =
-            self.detect_retriggers(&block_changes.block_storage_changes);
+            self.detect_retriggers(&block_changes.block_storage_changes)?;
 
         // Update the entrypoint results with the retriggered entrypoints
         entrypoints_to_analyze.extend(retriggered_entrypoints);
 
         if !entrypoints_to_analyze.is_empty() {
-            debug!("DCI: Will analyze {:?} entrypoints", entrypoints_to_analyze.len());
-            trace!("DCI: Entrypoints to analyze: {:?}", entrypoints_to_analyze);
-            tracing::debug!(entrypoints_to_analyze = ?entrypoints_to_analyze, "DCI: Entrypoints to analyze");
+            debug!(
+                entrypoints_to_analyze = entrypoints_to_analyze
+                    .keys()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", "),
+                "DCI: Will analyze {:?} entrypoints",
+                entrypoints_to_analyze.len()
+            );
 
             let tracing_results = self
                 .tracer
@@ -247,7 +259,14 @@ where
                 }
             }
 
-            tracing::debug!(traced_entry_points = ?traced_entry_points, "DCI: Traced entrypoints");
+            tracing::debug!(
+                traced_entry_points = traced_entry_points
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                "DCI: Traced entrypoints"
+            );
 
             let mut tx_to_traced_entry_point: HashMap<&Transaction, Vec<&TracedEntryPoint>> =
                 HashMap::new();
@@ -351,7 +370,14 @@ where
                 })
                 .collect::<Result<Vec<_>, ExtractionError>>()?;
 
-            debug!(storage_request = ?storage_request, "DCI: Storage request");
+            debug!(
+                storage_request = storage_request
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", "),
+                "DCI: Storage request"
+            );
 
             // TODO: this is a quickfix. Handle this properly.
             let max_retries = 3;
@@ -550,7 +576,15 @@ where
         storage_source: AE,
         tracer: T,
     ) -> Self {
-        Self { chain, protocol, entrypoint_gw, storage_source, tracer, cache: DCICache::new() }
+        Self {
+            chain,
+            protocol,
+            entrypoint_gw,
+            storage_source,
+            tracer,
+            cache: DCICache::new(),
+            address_byte_len: 20,
+        }
     }
 
     /// Initialize the DynamicContractIndexer. Loads all the entrypoints and their respective
@@ -584,7 +618,7 @@ where
             })
             .fold(HashMap::new(), |mut acc, (entrypoint_id, component_id)| {
                 acc.entry(entrypoint_id)
-                    .or_insert_with(HashSet::new)
+                    .or_default()
                     .insert(component_id);
                 acc
             });
@@ -632,10 +666,12 @@ where
                         param.clone(),
                     );
 
+                    let retrigger_key = (location.0.clone(), location.1.key.clone());
                     self.cache
                         .retriggers
-                        .permanent_entry(&location)
-                        .or_default()
+                        .permanent_entry(&retrigger_key)
+                        .or_insert_with(|| (HashSet::new(), location.1.offset))
+                        .0
                         .insert(entrypoint_with_params);
                 }
 
@@ -719,16 +755,12 @@ where
     /// A map of entrypoints that need to be re-traced and the transaction that first detected the
     /// retriggered entrypoint.
     #[instrument(skip(self, tx_with_changes), fields(
-        protocol = % self.protocol,
-        storage_changes_count = tx_with_changes.len()
+        dci_txs = tx_with_changes.len()
     ))]
     fn detect_retriggers<'a>(
         &self,
         tx_with_changes: &'a [TxWithStorageChanges],
-    ) -> HashMap<EntryPointWithTracingParams, &'a Transaction> {
-        let _span = span!(Level::INFO, "dci_retrigger_detection", tx_count = tx_with_changes.len())
-            .entered();
-
+    ) -> Result<HashMap<EntryPointWithTracingParams, &'a Transaction>, ExtractionError> {
         // Create a map of storage locations that have been updated in the block and the transaction
         // that last detected the update.
         // Note: tracing results are block scoped, this means if the same storage location is
@@ -747,37 +779,55 @@ where
 
         for tx_with_changes in tx_with_changes.iter() {
             for (account, contract_store) in tx_with_changes.storage_changes.iter() {
-                for key in contract_store.keys() {
+                for (storage_key, storage_change) in contract_store.iter() {
                     storage_locations_scanned += 1;
-                    let location = (account.clone(), key.clone());
+                    let location = (account.clone(), storage_key.clone());
                     // Check if this storage location triggers any entrypoints
-                    if let Some(entrypoints) = self
+                    if let Some((entrypoints, offset)) = self
                         .cache
                         .retriggers
                         .get_all(location.clone())
+                        // reduce all entrypoints, offset tuples into a single one assuming offset
+                        // is the same for all of them
+                        .map(|it| {
+                            // the closure will execute at least once since else we would return
+                            // None
+                            it.fold((HashSet::new(), 0u8), |mut acc, e| {
+                                acc.0.extend(e.0.iter().cloned());
+                                acc.1 = e.1;
+                                acc
+                            })
+                        })
                     {
-                        for entrypoint_with_params in entrypoints.into_iter().flatten() {
-                            // Only insert if we haven't seen this entrypoint before or if this tx
-                            // is later
-                            retriggered_entrypoints
-                                .entry(entrypoint_with_params.clone())
-                                .and_modify(|entry_tx| {
-                                    if entry_tx.index > tx_with_changes.tx.index {
-                                        *entry_tx = &tx_with_changes.tx;
-                                    }
-                                })
-                                .or_insert(&tx_with_changes.tx);
+                        let retrigger_changed = self
+                            .retrigger_address_changed(storage_change, offset as usize)
+                            .map_err(|e| {
+                                ExtractionError::Unknown(format!("{e} at address: {account}"))
+                            })?;
+                        if retrigger_changed {
+                            for entrypoint_with_params in entrypoints.into_iter() {
+                                // Only insert if we haven't seen this entrypoint before or if this
+                                // tx is later
+                                retriggered_entrypoints
+                                    .entry(entrypoint_with_params.clone())
+                                    .and_modify(|entry_tx| {
+                                        if entry_tx.index > tx_with_changes.tx.index {
+                                            *entry_tx = &tx_with_changes.tx;
+                                        }
+                                    })
+                                    .or_insert(&tx_with_changes.tx);
 
-                            // Collect the location and the entrypoint (not
-                            // EntryPointWithTracingParams)
-                            retriggered_locations
-                                .entry(location.clone())
-                                .or_default()
-                                .push(
-                                    entrypoint_with_params
-                                        .entry_point
-                                        .clone(),
-                                );
+                                // Collect the location and the entrypoint (not
+                                // EntryPointWithTracingParams)
+                                retriggered_locations
+                                    .entry(location.clone())
+                                    .or_default()
+                                    .push(
+                                        entrypoint_with_params
+                                            .entry_point
+                                            .clone(),
+                                    );
+                            }
                         }
                     }
                 }
@@ -801,29 +851,43 @@ where
                     )
                 })
                 .collect();
-            tracing::info!(
-                "DCI: Retriggered locations and entrypoints: {:?}",
-                retriggered_locations_log
-            );
+            debug!("DCI: Retriggered locations and entrypoints: {:?}", retriggered_locations_log);
         }
 
-        span!(Level::INFO, "retrigger_scan_complete").in_scope(|| {
-            tracing::info!(
-                retriggered_count = retriggered_entrypoints.len(),
-                storage_locations_scanned = storage_locations_scanned,
-                "DCI: Retrigger detection completed"
-            );
-        });
+        info!(
+            retriggered_count = retriggered_entrypoints.len(),
+            storage_locations_scanned = storage_locations_scanned,
+            "DCI: Retrigger detection completed"
+        );
 
-        if !retriggered_entrypoints.is_empty() {
-            let retrigger_log: Vec<String> = retriggered_entrypoints
-                .keys()
-                .map(|e| e.entry_point.external_id.clone())
-                .collect();
-            tracing::info!("DCI: Retriggered entrypoints: {:?}", retrigger_log);
+        Ok(retriggered_entrypoints)
+    }
+
+    /// Checks whether the address segment within a storage change has changed.
+    ///
+    /// Compares the `previous` and `value` fields of a [`ContractStorageChange`],
+    /// slicing out the address at the given `offset` with `self.address_byte_len`.
+    /// Returns `Ok(true)` if the address differs, `Ok(false)` if unchanged, or an
+    /// [`ExtractionError`] if the data is too short.
+    fn retrigger_address_changed(
+        &self,
+        change: &ContractStorageChange,
+        offset: usize,
+    ) -> Result<bool, ExtractionError> {
+        let min_length = offset + self.address_byte_len;
+        let value_len = change.value.len();
+        if value_len < min_length {
+            return Err(ExtractionError::SubstreamsError(format!("Received bad storage value! Offset implies minimum length: {min_length} but value was: {value_len}")))
+        }
+        let previous_len = change.previous.len();
+        if previous_len < min_length {
+            return Err(ExtractionError::SubstreamsError(format!("Received bad storage previous value! Offset implies minimum length: {min_length} but value was: {previous_len}")))
         }
 
-        retriggered_entrypoints
+        let previous_address = &change.previous[offset..offset + self.address_byte_len];
+        let current_address = &change.value[offset..offset + self.address_byte_len];
+
+        Ok(previous_address != current_address)
     }
 
     /// Update the DCI cache with the new entrypoints and tracing results
@@ -841,10 +905,12 @@ where
                 .retriggers
                 .iter()
             {
+                let retrigger_key = (location.0.clone(), location.1.key.clone());
                 self.cache
                     .retriggers
-                    .pending_entry(block, location)?
-                    .or_default()
+                    .pending_entry(block, &retrigger_key)?
+                    .or_insert_with(|| (HashSet::new(), location.1.offset))
+                    .0
                     .insert(
                         traced_entry_point
                             .entry_point_with_params
@@ -923,7 +989,7 @@ where
 
                 let mut slot_updates = contract_store
                     .iter()
-                    .map(|(slot, value)| {
+                    .map(|(slot, ContractStorageChange { value, .. })| {
                         if value.is_zero() {
                             (slot.clone(), None)
                         } else {
@@ -984,8 +1050,8 @@ mod tests {
     use tycho_common::{
         models::{
             blockchain::{
-                EntryPoint, EntryPointWithTracingParams, RPCTracerParams, TracingParams,
-                Transaction, TxWithChanges,
+                AddressStorageLocation, EntryPoint, EntryPointWithTracingParams, RPCTracerParams,
+                TracingParams, Transaction, TxWithChanges,
             },
             contract::AccountDelta,
             Chain, ChangeType, EntryPointId,
@@ -1069,18 +1135,30 @@ mod tests {
                             (
                                 Bytes::from("0x02"),
                                 HashMap::from([
-                                    (Bytes::from("0x01"), Bytes::from("0x01")),
-                                    (Bytes::from("0x22"), Bytes::from("0x22")),
+                                    (
+                                        Bytes::from("0x01"),
+                                        ContractStorageChange::initial(Bytes::from("0x01")),
+                                    ),
+                                    (
+                                        Bytes::from("0x22"),
+                                        ContractStorageChange::initial(Bytes::from("0x22")),
+                                    ),
                                 ]),
                             ),
                             (
                                 Bytes::from("0x22"),
-                                HashMap::from([(Bytes::from("0x22"), Bytes::from("0x01"))]),
+                                HashMap::from([(
+                                    Bytes::from("0x22"),
+                                    ContractStorageChange::initial(Bytes::from("0x01")),
+                                )]),
                             ),
                             // These should be ignored because they are not tracked
                             (
                                 Bytes::from("0x9999"),
-                                HashMap::from([(Bytes::from("0x01"), Bytes::from("0x01"))]),
+                                HashMap::from([(
+                                    Bytes::from("0x01"),
+                                    ContractStorageChange::initial(Bytes::from("0x01")),
+                                )]),
                             ),
                         ]),
                     }],
@@ -1103,7 +1181,13 @@ mod tests {
                             // This should trigger the retrigger
                             (
                                 Bytes::from("0x01"),
-                                HashMap::from([(Bytes::from("0x01"), Bytes::from("0xabcd"))]),
+                                HashMap::from([(
+                                    Bytes::from("0x01"),
+                                    ContractStorageChange::new(
+                                        Bytes::from("0xabcd").lpad(32, 0),
+                                        Bytes::from("0x00").lpad(32, 0),
+                                    ),
+                                )]),
                             ),
                         ]),
                     }],
@@ -1127,7 +1211,10 @@ mod tests {
 
     fn get_tracing_result(version: u8) -> TracingResult {
         TracingResult::new(
-            HashSet::from([(Bytes::from(version), Bytes::from(version))]),
+            HashSet::from([(
+                Bytes::from(version),
+                AddressStorageLocation::new(Bytes::from(version), 12),
+            )]),
             HashMap::from([
                 (Bytes::from(version), HashSet::from([Bytes::from(version + version * 16)])),
                 (
@@ -1260,17 +1347,29 @@ mod tests {
             &HashMap::from([
                 (
                     (Bytes::from(1_u8), Bytes::from(1_u8)),
-                    HashSet::from([
-                        EntryPointWithTracingParams::new(get_entrypoint(1), get_tracing_params(1)),
-                        EntryPointWithTracingParams::new(get_entrypoint(4), get_tracing_params(1)),
-                    ]),
+                    (
+                        HashSet::from([
+                            EntryPointWithTracingParams::new(
+                                get_entrypoint(1),
+                                get_tracing_params(1)
+                            ),
+                            EntryPointWithTracingParams::new(
+                                get_entrypoint(4),
+                                get_tracing_params(1)
+                            ),
+                        ]),
+                        12
+                    ),
                 ),
                 (
                     (Bytes::from(2_u8), Bytes::from(2_u8)),
-                    HashSet::from([EntryPointWithTracingParams::new(
-                        get_entrypoint(2),
-                        get_tracing_params(3)
-                    )])
+                    (
+                        HashSet::from([EntryPointWithTracingParams::new(
+                            get_entrypoint(2),
+                            get_tracing_params(3)
+                        )]),
+                        12
+                    )
                 )
             ])
         );
@@ -1287,7 +1386,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_process_block_update_no_changes() {
         let gateway = get_mock_gateway();
         let account_extractor = MockAccountExtractor::new();
@@ -1311,7 +1410,7 @@ mod tests {
         assert_eq!(block_changes, get_block_changes(1));
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_process_block_update_new_entrypoints() {
         let gateway = get_mock_gateway();
         let mut account_extractor = MockAccountExtractor::new();
@@ -1426,7 +1525,7 @@ mod tests {
         assert_eq!(block_changes, expected_block_changes);
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_process_block_update_old_entrypoints_updates() {
         let gateway = get_mock_gateway();
         let account_extractor = MockAccountExtractor::new();
@@ -1486,7 +1585,7 @@ mod tests {
         assert_eq!(block_changes, expected_block_changes);
     }
 
-    #[tokio::test]
+    #[test_log::test(tokio::test)]
     async fn test_process_block_update_retriggers() {
         let gateway = get_mock_gateway();
         let mut account_extractor = MockAccountExtractor::new();
@@ -1597,7 +1696,10 @@ mod tests {
                     AccountDelta::new(
                         Chain::Ethereum,
                         Bytes::from("0x01"),
-                        HashMap::from([(Bytes::from("0x01"), Some(Bytes::from("0xabcd")))]),
+                        HashMap::from([(
+                            Bytes::from("0x01"),
+                            Some(Bytes::from("0xabcd").lpad(32, 0)),
+                        )]),
                         None,
                         None,
                         ChangeType::Update,
@@ -1956,16 +2058,32 @@ mod tests {
                     (
                         token_address.clone(),
                         HashMap::from([
-                            (Bytes::from(0x01_u8).lpad(32, 0), Bytes::from(0x100_u16).lpad(32, 0)), /* Should be kept */
-                            (Bytes::from(0x03_u8).lpad(32, 0), Bytes::from(0x300_u16).lpad(32, 0)), /* Should be filtered out */
+                            /* Should be kept */
+                            (
+                                Bytes::from(0x01_u8).lpad(32, 0),
+                                ContractStorageChange::initial(Bytes::from(0x100_u16).lpad(32, 0)),
+                            ),
+                            /* Should be filtered out */
+                            (
+                                Bytes::from(0x03_u8).lpad(32, 0),
+                                ContractStorageChange::initial(Bytes::from(0x300_u16).lpad(32, 0)),
+                            ),
                         ]),
                     ),
                     // Normal address - should not have slots filtered
                     (
                         normal_address.clone(),
                         HashMap::from([
-                            (Bytes::from(0x01_u8).lpad(32, 0), Bytes::from(0x100_u16).lpad(32, 0)), /* Should be kept */
-                            (Bytes::from(0x03_u8).lpad(32, 0), Bytes::from(0x300_u16).lpad(32, 0)), /* Should be kept */
+                            /* Should be kept */
+                            (
+                                Bytes::from(0x01_u8).lpad(32, 0),
+                                ContractStorageChange::initial(Bytes::from(0x100_u16).lpad(32, 0)),
+                            ),
+                            /* Should be kept */
+                            (
+                                Bytes::from(0x03_u8).lpad(32, 0),
+                                ContractStorageChange::initial(Bytes::from(0x300_u16).lpad(32, 0)),
+                            ),
                         ]),
                     ),
                 ]),
@@ -2416,6 +2534,204 @@ mod tests {
             .txs_with_update
             .first()
             .is_none_or(|tx| tx.account_deltas.is_empty()));
+    }
+
+    #[test]
+    fn test_retrigger_address_changed_different_addresses() {
+        let gateway = MockGateway::new();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        // Test with different addresses at offset 12 (20-byte addresses)
+        let previous_value =
+            hex::decode("00000bbd0f9dd77fc77b0000001111111111111111111111111111111111111111")
+                .unwrap();
+        let current_value =
+            hex::decode("00000bbd0f9dd77fc77b0000002222222222222222222222222222222222222222")
+                .unwrap();
+
+        let change = ContractStorageChange {
+            previous: Bytes::from(previous_value),
+            value: Bytes::from(current_value),
+        };
+
+        let result = dci
+            .retrigger_address_changed(&change, 12)
+            .unwrap();
+        assert!(result, "Should detect address change at offset 12");
+    }
+
+    #[test]
+    fn test_retrigger_address_changed_same_addresses() {
+        let gateway = MockGateway::new();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        // Test with same addresses at offset 12
+        let same_value =
+            hex::decode("00000bbd0f9dd77fc77b0000001111111111111111111111111111111111111111")
+                .unwrap();
+
+        let change = ContractStorageChange {
+            previous: Bytes::from(same_value.clone()),
+            value: Bytes::from(same_value),
+        };
+
+        let result = dci
+            .retrigger_address_changed(&change, 12)
+            .unwrap();
+        assert!(!result, "Should not detect change when addresses are the same");
+    }
+
+    #[test]
+    fn test_retrigger_address_changed_offset_zero() {
+        let gateway = MockGateway::new();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        // Test with different addresses at offset 0
+        let previous_value =
+            hex::decode("1111111111111111111111111111111111111111000000000000000000000000")
+                .unwrap();
+        let current_value =
+            hex::decode("2222222222222222222222222222222222222222000000000000000000000000")
+                .unwrap();
+
+        let change = ContractStorageChange {
+            previous: Bytes::from(previous_value),
+            value: Bytes::from(current_value),
+        };
+
+        let result = dci
+            .retrigger_address_changed(&change, 0)
+            .unwrap();
+        assert!(result, "Should detect address change at offset 0");
+    }
+
+    #[test]
+    fn test_retrigger_address_changed_partial_change() {
+        let gateway = MockGateway::new();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        // Test where non-address part changes but address stays same (offset 12)
+        // First 12 bytes change, but address at offset 12-31 stays the same
+        let previous_value =
+            hex::decode("000000000000000000000000111111111111111111111111111111111111111111111111")
+                .unwrap();
+        let current_value =
+            hex::decode("999999999999999999999999111111111111111111111111111111111111111111111111")
+                .unwrap();
+
+        let change = ContractStorageChange {
+            previous: Bytes::from(previous_value),
+            value: Bytes::from(current_value),
+        };
+
+        let result = dci
+            .retrigger_address_changed(&change, 12)
+            .unwrap();
+        assert!(!result, "Should not detect change when only non-address part changes");
+    }
+
+    #[test]
+    fn test_retrigger_address_changed_insufficient_length_current() {
+        let gateway = MockGateway::new();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        // Test with current value too short for offset + address length
+        let previous_value =
+            hex::decode("00000bbd0f9dd77fc77b0000001111111111111111111111111111111111111111")
+                .unwrap();
+        let current_value =
+            hex::decode("00000bbd0f9dd77fc77b00000011111111111111111111111111111111").unwrap(); // Too short
+
+        let change = ContractStorageChange {
+            previous: Bytes::from(previous_value),
+            value: Bytes::from(current_value),
+        };
+
+        let result = dci.retrigger_address_changed(&change, 12);
+        assert!(result.is_err(), "Should return error when current value is too short");
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Received bad storage value"));
+    }
+
+    #[test]
+    fn test_retrigger_address_changed_insufficient_length_previous() {
+        let gateway = MockGateway::new();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        // Test with previous value too short for offset + address length
+        let previous_value =
+            hex::decode("00000bbd0f9dd77fc77b00000011111111111111111111111111111111").unwrap(); // Too short
+        let current_value =
+            hex::decode("00000bbd0f9dd77fc77b0000001111111111111111111111111111111111111111")
+                .unwrap();
+
+        let change = ContractStorageChange {
+            previous: Bytes::from(previous_value),
+            value: Bytes::from(current_value),
+        };
+
+        let result = dci.retrigger_address_changed(&change, 12);
+        assert!(result.is_err(), "Should return error when previous value is too short");
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Received bad storage previous value"));
     }
 
     #[tokio::test]

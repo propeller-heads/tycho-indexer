@@ -434,6 +434,15 @@ impl EntryPointWithTracingParams {
     }
 }
 
+impl std::fmt::Display for EntryPointWithTracingParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let tracer_type = match &self.params {
+            TracingParams::RPCTracer(_) => "RPC",
+        };
+        write!(f, "{} [{}]", self.entry_point.external_id, tracer_type)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
 /// An entry point to trace. Different types of entry points tracing will be supported in the
 /// future. Like RPC debug tracing, symbolic execution, etc.
@@ -533,7 +542,7 @@ impl RPCTracerParams {
 impl std::fmt::Display for RPCTracerParams {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let caller_str = match &self.caller {
-            Some(addr) => format!("caller={}", addr),
+            Some(addr) => format!("caller={addr}"),
             None => String::new(),
         };
 
@@ -554,7 +563,7 @@ impl std::fmt::Display for RPCTracerParams {
             _ => String::new(),
         };
 
-        write!(f, "{}, {}{}", caller_str, calldata_str, overrides_str)
+        write!(f, "{caller_str}, {calldata_str}{overrides_str}")
     }
 }
 
@@ -589,11 +598,23 @@ impl Serialize for RPCTracerParams {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct AddressStorageLocation {
+    pub key: StoreKey,
+    pub offset: u8,
+}
+
+impl AddressStorageLocation {
+    pub fn new(key: StoreKey, offset: u8) -> Self {
+        Self { key, offset }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct TracingResult {
     /// A set of (address, storage slot) pairs representing state that contain a called address.
     /// If any of these storage slots change, the execution path might change.
-    pub retriggers: HashSet<(Address, StoreKey)>,
+    pub retriggers: HashSet<(Address, AddressStorageLocation)>,
     /// A map of all addresses that were called during the trace with a list of storage slots that
     /// were accessed.
     pub accessed_slots: HashMap<Address, HashSet<StoreKey>>,
@@ -601,7 +622,7 @@ pub struct TracingResult {
 
 impl TracingResult {
     pub fn new(
-        retriggers: HashSet<(Address, StoreKey)>,
+        retriggers: HashSet<(Address, AddressStorageLocation)>,
         accessed_slots: HashMap<Address, HashSet<StoreKey>>,
     ) -> Self {
         Self { retriggers, accessed_slots }
@@ -646,6 +667,18 @@ impl TracedEntryPoint {
             .entry_point
             .external_id
             .clone()
+    }
+}
+
+impl std::fmt::Display for TracedEntryPoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[{}: {} retriggers, {} accessed addresses]",
+            self.entry_point_id(),
+            self.tracing_result.retriggers.len(),
+            self.tracing_result.accessed_slots.len()
+        )
     }
 }
 
@@ -921,7 +954,10 @@ pub mod fixtures {
         let store_key2 = StoreKey::from(vec![5, 6, 7, 8]);
 
         let mut result1 = TracingResult::new(
-            HashSet::from([(address1.clone(), store_key1.clone())]),
+            HashSet::from([(
+                address1.clone(),
+                AddressStorageLocation::new(store_key1.clone(), 12),
+            )]),
             HashMap::from([
                 (address2.clone(), HashSet::from([store_key1.clone()])),
                 (address3.clone(), HashSet::from([store_key2.clone()])),
@@ -929,7 +965,10 @@ pub mod fixtures {
         );
 
         let result2 = TracingResult::new(
-            HashSet::from([(address3.clone(), store_key2.clone())]),
+            HashSet::from([(
+                address3.clone(),
+                AddressStorageLocation::new(store_key2.clone(), 12),
+            )]),
             HashMap::from([
                 (address1.clone(), HashSet::from([store_key1.clone()])),
                 (address2.clone(), HashSet::from([store_key2.clone()])),
@@ -942,10 +981,10 @@ pub mod fixtures {
         assert_eq!(result1.retriggers.len(), 2);
         assert!(result1
             .retriggers
-            .contains(&(address1.clone(), store_key1.clone())));
+            .contains(&(address1.clone(), AddressStorageLocation::new(store_key1.clone(), 12))));
         assert!(result1
             .retriggers
-            .contains(&(address3.clone(), store_key2.clone())));
+            .contains(&(address3.clone(), AddressStorageLocation::new(store_key2.clone(), 12))));
 
         // Verify accessed slots were merged
         assert_eq!(result1.accessed_slots.len(), 3);
@@ -966,5 +1005,73 @@ pub mod fixtures {
                 .unwrap(),
             &HashSet::from([store_key1.clone(), store_key2.clone()])
         );
+    }
+
+    #[test]
+    fn test_entry_point_with_tracing_params_display() {
+        use std::str::FromStr;
+
+        let entry_point = EntryPoint::new(
+            "uniswap_v3_pool_swap".to_string(),
+            Address::from_str("0x1234567890123456789012345678901234567890").unwrap(),
+            "swapExactETHForTokens(uint256,address[],address,uint256)".to_string(),
+        );
+
+        let tracing_params = TracingParams::RPCTracer(RPCTracerParams::new(
+            Some(Address::from_str("0x9876543210987654321098765432109876543210").unwrap()),
+            Bytes::from_str("0xabcdef").unwrap(),
+        ));
+
+        let entry_point_with_params = EntryPointWithTracingParams::new(entry_point, tracing_params);
+
+        let display_output = entry_point_with_params.to_string();
+        assert_eq!(display_output, "uniswap_v3_pool_swap [RPC]");
+    }
+
+    #[test]
+    fn test_traced_entry_point_display() {
+        use std::str::FromStr;
+
+        let entry_point = EntryPoint::new(
+            "uniswap_v3_pool_swap".to_string(),
+            Address::from_str("0x1234567890123456789012345678901234567890").unwrap(),
+            "swapExactETHForTokens(uint256,address[],address,uint256)".to_string(),
+        );
+
+        let tracing_params = TracingParams::RPCTracer(RPCTracerParams::new(
+            Some(Address::from_str("0x9876543210987654321098765432109876543210").unwrap()),
+            Bytes::from_str("0xabcdef").unwrap(),
+        ));
+
+        let entry_point_with_params = EntryPointWithTracingParams::new(entry_point, tracing_params);
+
+        // Create tracing result with 2 retriggers and 3 accessed addresses
+        let address1 = Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
+        let address2 = Address::from_str("0x2222222222222222222222222222222222222222").unwrap();
+        let address3 = Address::from_str("0x3333333333333333333333333333333333333333").unwrap();
+
+        let store_key1 = StoreKey::from(vec![1, 2, 3, 4]);
+        let store_key2 = StoreKey::from(vec![5, 6, 7, 8]);
+
+        let tracing_result = TracingResult::new(
+            HashSet::from([
+                (address1.clone(), AddressStorageLocation::new(store_key1.clone(), 0)),
+                (address2.clone(), AddressStorageLocation::new(store_key2.clone(), 12)),
+            ]),
+            HashMap::from([
+                (address1.clone(), HashSet::from([store_key1.clone()])),
+                (address2.clone(), HashSet::from([store_key2.clone()])),
+                (address3.clone(), HashSet::from([store_key1.clone()])),
+            ]),
+        );
+
+        let traced_entry_point = TracedEntryPoint::new(
+            entry_point_with_params,
+            Bytes::from_str("0xabcdef1234567890").unwrap(),
+            tracing_result,
+        );
+
+        let display_output = traced_entry_point.to_string();
+        assert_eq!(display_output, "[uniswap_v3_pool_swap: 2 retriggers, 3 accessed addresses]");
     }
 }

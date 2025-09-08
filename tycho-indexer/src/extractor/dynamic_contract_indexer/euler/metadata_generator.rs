@@ -72,7 +72,7 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
         );
         requests.push(MetadataRequest::new(
             "euler".to_string(),
-            format!("euler_limits_{}_{}_to_{}", target, token_0, token_1),
+            format!("euler_limits_{target}_{token_0}_to_{token_1}"),
             component.id.clone(),
             // Euler swap only has pools with 2 tokens
             MetadataRequestType::Limits { token_pair: vec![(token_0.clone(), token_1.clone())] },
@@ -92,7 +92,7 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
         );
         requests.push(MetadataRequest::new(
             "euler".to_string(),
-            format!("euler_limits_{}_{}_to_{}", target, token_1, token_0),
+            format!("euler_limits_{target}_{token_1}_to_{token_0}"),
             component.id.clone(),
             // Euler swap only has pools with 2 tokens
             MetadataRequestType::Limits { token_pair: vec![(token_1, token_0)] },

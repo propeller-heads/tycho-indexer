@@ -55,7 +55,7 @@ impl Display for RequestError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RequestError::Reqwest(e) => write!(f, "{}: {}", e.msg, e.source),
-            RequestError::Other(e) => write!(f, "{}", e),
+            RequestError::Other(e) => write!(f, "{e}"),
         }
     }
 }

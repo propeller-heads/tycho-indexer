@@ -4,7 +4,7 @@ use std::{
 };
 
 use thiserror::Error;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 use tycho_common::models::{
     blockchain::{Block, EntryPoint, EntryPointWithTracingParams, TracingParams, TracingResult},
     protocol::ProtocolComponent,
@@ -39,8 +39,9 @@ pub(super) struct DCICache {
     /// Stores tracing results for entry points paired with specific tracing parameters.
     pub(super) entrypoint_results: VersionedCache<(EntryPointId, TracingParams), TracingResult>,
     /// Maps a storage location to entry points that should be retriggered when that location
-    /// changes.
-    pub(super) retriggers: VersionedCache<StorageLocation, HashSet<EntryPointWithTracingParams>>,
+    /// changes and the address storage offset for packed slots.
+    pub(super) retriggers:
+        VersionedCache<StorageLocation, (HashSet<EntryPointWithTracingParams>, u8)>,
     /// Stores tracked contract addresses and their associated storage keys.
     pub(super) tracked_contracts: VersionedCache<Address, HashSet<StoreKey>>,
     /// Stores addresses identified as ERC-20 tokens to skip full indexing.
@@ -111,11 +112,14 @@ impl DCICache {
         self.retriggers.handle_finality(
             finalized_block_height,
             MergeStrategy::Custom(Box::new(
-                |existing: &HashSet<EntryPointWithTracingParams>,
-                 new: HashSet<EntryPointWithTracingParams>| {
-                    let mut merged = existing.clone();
-                    merged.extend(new);
-                    merged
+                |existing: &(HashSet<EntryPointWithTracingParams>, u8),
+                 new: (HashSet<EntryPointWithTracingParams>, u8)| {
+                    let (mut merged, previous_offset) = existing.clone();
+                    merged.extend(new.0);
+                    if previous_offset != new.1 {
+                        warn!("Offset discrepancy detected: {previous_offset} != {}", new.1)
+                    }
+                    (merged, previous_offset)
                 },
             )),
         )?;
@@ -600,8 +604,8 @@ mod tests {
     use tycho_common::{
         models::{
             blockchain::{
-                Block, EntryPoint, EntryPointWithTracingParams, RPCTracerParams, TracingParams,
-                TracingResult,
+                AddressStorageLocation, Block, EntryPoint, EntryPointWithTracingParams,
+                RPCTracerParams, TracingParams, TracingResult,
             },
             Address, BlockHash, Chain, StoreKey,
         },
@@ -634,7 +638,10 @@ mod tests {
 
     fn get_tracing_result(version: u8) -> TracingResult {
         TracingResult::new(
-            HashSet::from([(Bytes::from(version), Bytes::from(version))]),
+            HashSet::from([(
+                Bytes::from(version),
+                AddressStorageLocation::new(Bytes::from(version), 12),
+            )]),
             HashMap::from([
                 (Bytes::from(version), HashSet::from([Bytes::from(version + version * 16)])),
                 (
@@ -804,7 +811,7 @@ mod tests {
             .insert_pending(
                 block1.clone(),
                 (address.clone(), store_key.clone()),
-                retrigger_set.clone(),
+                (retrigger_set.clone(), 0),
             )
             .unwrap();
 
