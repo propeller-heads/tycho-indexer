@@ -46,24 +46,37 @@ impl Display for ReqwestError {
 }
 
 #[derive(Error, Debug)]
+pub enum RequestError {
+    Reqwest(ReqwestError),
+    Other(String),
+}
+
+impl Display for RequestError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RequestError::Reqwest(e) => write!(f, "{}: {}", e.msg, e.source),
+            RequestError::Other(e) => write!(f, "{}", e),
+        }
+    }
+}
+
+#[derive(Error, Debug)]
 pub enum RPCError {
     #[error("RPC setup error: {0}")]
     SetupError(String),
-    #[error("RPC error: {0}")]
-    RequestError(String),
+    #[error("Request error: {0}")]
+    RequestError(RequestError),
     #[error("Tracing failure: {0}")]
     TracingFailure(String),
     #[error("Serialize error: {0}")]
     SerializeError(SerdeJsonError),
-    #[error("Reqwest error: {0}")]
-    ReqwestError(ReqwestError),
     #[error("Unknown error: {0}")]
     UnknownError(String),
 }
 
 impl RPCError {
     pub fn should_retry(&self) -> bool {
-        matches!(self, Self::RequestError(_) | Self::ReqwestError(_))
+        matches!(self, Self::RequestError(_))
     }
 }
 
