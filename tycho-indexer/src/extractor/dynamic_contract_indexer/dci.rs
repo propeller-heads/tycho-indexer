@@ -800,7 +800,7 @@ where
                         })
                     {
                         let retrigger_changed = self
-                            .retrigger_address_changed(storage_change, *offset as usize)
+                            .retrigger_address_changed(storage_change, offset as usize)
                             .map_err(|e| {
                                 ExtractionError::Unknown(format!("{e} at address: {account}"))
                             })?;
