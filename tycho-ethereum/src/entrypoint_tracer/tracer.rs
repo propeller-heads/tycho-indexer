@@ -231,8 +231,7 @@ impl EVMEntrypointService {
         let batch_params = to_raw_value(&batch_request).map_err(|e| {
             RPCError::SerializeError(SerdeJsonError {
                 msg: format!(
-                    "Failed to serialize batch params for {} (block: {}, params: {})",
-                    target, block_hash, params
+                    "Failed to serialize batch params for {target} (block: {block_hash}, params: {params})",
                 ),
                 source: e,
             })
@@ -249,8 +248,7 @@ impl EVMEntrypointService {
             .map_err(|e| {
                 RPCError::RequestError(RequestError::Reqwest(ReqwestError {
                     msg: format!(
-                        "Failed to send request to {} (block: {}, params: {})",
-                        target, block_hash, params
+                        "Failed to send request to {target} (block: {block_hash}, params: {params})",
                     ),
                     source: e,
                 }))
@@ -259,8 +257,7 @@ impl EVMEntrypointService {
         let batch_response: Vec<Value> = response.json().await.map_err(|e| {
             RPCError::RequestError(RequestError::Reqwest(ReqwestError {
                 msg: format!(
-                    "Failed to parse batch response for {} (block: {}, params: {})",
-                    target, block_hash, params
+                    "Failed to parse batch response for {target} (block: {block_hash}, params: {params})",
                 ),
                 source: e,
             }))
@@ -280,8 +277,8 @@ impl EVMEntrypointService {
         let access_list_result = &batch_response[0];
         if let Some(error) = access_list_result.get("error") {
             return Err(RPCError::UnknownError(format!(
-                "eth_createAccessList failed for {} (block: {}, params: {}): {}",
-                target, block_hash, params, error
+                "eth_createAccessList failed for {target} (block: {block_hash}, params: {params}): {error}",
+
             )));
         }
 
@@ -289,8 +286,7 @@ impl EVMEntrypointService {
             .get("result")
             .ok_or_else(|| {
                 RPCError::UnknownError(format!(
-                    "Missing result in access list response for {} (block: {}, params: {}): {:?}",
-                    target, block_hash, params, access_list_result
+                    "Missing result in access list response for {target} (block: {block_hash}, params: {params}): {access_list_result:?}",
                 ))
             })?;
 
@@ -298,8 +294,7 @@ impl EVMEntrypointService {
             .map_err(|e| {
                 RPCError::SerializeError(SerdeJsonError {
                     msg: format!(
-                        "Failed to parse access list for {} (block: {}, params: {})",
-                        target, block_hash, params
+                        "Failed to parse access list for {target} (block: {block_hash}, params: {params})",
                     ),
                     source: e,
                 })
@@ -319,8 +314,7 @@ impl EVMEntrypointService {
         let trace_result = &batch_response[1];
         if let Some(error) = trace_result.get("error") {
             return Err(RPCError::TracingFailure(format!(
-                "debug_traceCall failed for {} (block: {}, params: {}): {}",
-                target, block_hash, params, error
+                "debug_traceCall failed for {target} (block: {block_hash}, params: {params}): {error}",
             )));
         }
 
@@ -328,8 +322,7 @@ impl EVMEntrypointService {
             .get("result")
             .ok_or_else(|| {
                 RPCError::UnknownError(format!(
-                    "Missing result in trace response for {} (block: {}, params: {}): {:?}",
-                    target, block_hash, params, trace_result
+                    "Missing result in trace response for {target} (block: {block_hash}, params: {params}): {trace_result:?}",
                 ))
             })?;
 
@@ -337,8 +330,7 @@ impl EVMEntrypointService {
             serde_json::from_value(trace_data.clone()).map_err(|e| {
                 RPCError::SerializeError(SerdeJsonError {
                     msg: format!(
-                        "Failed to parse trace for {} (block: {}, params: {})",
-                        target, block_hash, params
+                        "Failed to parse trace for {target} (block: {block_hash}, params: {params})",
                     ),
                     source: e,
                 })
@@ -1088,10 +1080,7 @@ mod tests {
                 let expected_target = &entry_points[i].entry_point.target;
                 assert!(
                     msg.contains(&expected_target.to_string()),
-                    "Error message '{}' should contain target address '{}' for entry point at index {}",
-                    msg,
-                    expected_target,
-                    i
+                    "Error message '{msg}' should contain target address '{expected_target}' for entry point at index {i}",
                 );
             }
         }
@@ -1246,7 +1235,7 @@ mod tests {
                 );
             }
             Err(e) => {
-                panic!("Expected first request to succeed, but got error: {:?}", e);
+                panic!("Expected first request to succeed, but got error: {e:?}");
             }
         }
 
@@ -1262,7 +1251,7 @@ mod tests {
                 );
             }
             Err(e) => {
-                panic!("Expected RequestError for second request, but got: {:?}", e);
+                panic!("Expected RequestError for second request, but got: {e:?}");
             }
         }
 
@@ -1278,7 +1267,7 @@ mod tests {
                 );
             }
             Err(e) => {
-                panic!("Expected third request to succeed, but got error: {:?}", e);
+                panic!("Expected third request to succeed, but got error: {e:?}");
             }
         }
     }
