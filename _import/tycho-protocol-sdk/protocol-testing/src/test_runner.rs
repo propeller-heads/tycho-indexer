@@ -365,8 +365,9 @@ fn validate_state(
 
         let state = protocol_states_by_id
             .get(component_id)
-            .wrap_err("Failed to get state for component"
-            )?
+            .wrap_err(format!(
+                "Component {id} does not exist in protocol_states_by_id {protocol_states_by_id:?}"
+            ))?
             .clone();
 
         let component_with_state = ComponentWithState {
@@ -387,6 +388,15 @@ fn validate_state(
 
     let bytes = [0u8; 32];
 
+    // Get block header to extract the timestamp
+    let rpc_url = env::var("RPC_URL")
+        .into_diagnostic()
+        .wrap_err("Missing RPC_URL in environment")?;
+    let rpc_provider = RPCProvider::new(rpc_url);
+    let block_header = rt
+        .block_on(rpc_provider.get_block_header(stop_block))
+        .wrap_err("Failed to get block header")?;
+
     let state_msgs: HashMap<String, StateSyncMessage<BlockHeader>> = HashMap::from([(
         String::from("test_protocol"),
         StateSyncMessage {
@@ -395,7 +405,7 @@ fn validate_state(
                 number: stop_block,
                 parent_hash: Bytes::from(bytes),
                 revert: false,
-                timestamp: 0, // TODO
+                timestamp: block_header.header.timestamp,
             },
             snapshots: snapshot,
             deltas: None,
@@ -481,9 +491,9 @@ fn validate_state(
                     })
                     .into_diagnostic()
                     .wrap_err(format!(
-                        "Error calculating amount out for Pool {:?} at {:.1}%.",
-                        id,
+                        "Error calculating amount out for Pool {id:?} at {:.1}% with input of {amount_in} {}.",
                         percentage * 100.0,
+                        &tokens[0].symbol,
                     ))?;
             }
         }

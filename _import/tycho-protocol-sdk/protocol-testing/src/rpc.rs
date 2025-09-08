@@ -4,6 +4,7 @@ use alloy::{
     eips::eip1898::BlockId,
     primitives::{address, Address, U256},
     providers::{Provider, ProviderBuilder},
+    rpc::types::Block,
     transports::http::reqwest::Url,
 };
 use miette::{IntoDiagnostic, WrapErr};
