@@ -542,7 +542,7 @@ impl RPCTracerParams {
 impl std::fmt::Display for RPCTracerParams {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let caller_str = match &self.caller {
-            Some(addr) => format!("caller={}", addr),
+            Some(addr) => format!("caller={addr}"),
             None => String::new(),
         };
 
@@ -563,7 +563,7 @@ impl std::fmt::Display for RPCTracerParams {
             _ => String::new(),
         };
 
-        write!(f, "{}, {}{}", caller_str, calldata_str, overrides_str)
+        write!(f, "{caller_str}, {calldata_str}{overrides_str}")
     }
 }
 
