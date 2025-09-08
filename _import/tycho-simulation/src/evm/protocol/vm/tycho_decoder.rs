@@ -16,7 +16,7 @@ use crate::{
     },
     protocol::{
         errors::InvalidSnapshotError,
-        models::{TryFromWithBlock, VMAttributes},
+        models::{DecoderContext, TryFromWithBlock},
     },
 };
 
@@ -33,7 +33,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
         block: BlockHeader,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
-        vm_attributes: &VMAttributes,
+        decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
         let id = snapshot.component.id.clone();
         let tokens = snapshot.component.tokens.clone();
@@ -124,7 +124,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
                     .as_str()
             });
         let adapter_bytecode;
-        if let Some(adapter_bytecode_path) = &vm_attributes.adapter_path {
+        if let Some(adapter_bytecode_path) = &decoder_context.adapter_path {
             let bytecode_bytes = std::fs::read(adapter_bytecode_path).map_err(|e| {
                 SimulationError::FatalError(format!(
                     "Failed to read adapter bytecode from {adapter_bytecode_path}: {e}"
@@ -322,13 +322,13 @@ mod tests {
             ]),
         )]);
 
-        let vm_attributes = VMAttributes::new(None);
+        let decoder_context = DecoderContext::new();
         let res = EVMPoolState::try_from_with_header(
             snapshot,
             header(),
             &account_balances,
             &tokens,
-            &vm_attributes,
+            &decoder_context,
         )
         .await
         .unwrap();

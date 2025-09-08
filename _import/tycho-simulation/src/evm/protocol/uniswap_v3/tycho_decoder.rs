@@ -9,7 +9,7 @@ use crate::{
     evm::protocol::utils::uniswap::{i24_be_bytes_to_i32, tick_list::TickInfo},
     protocol::{
         errors::InvalidSnapshotError,
-        models::{TryFromWithBlock, VMAttributes},
+        models::{DecoderContext, TryFromWithBlock},
     },
 };
 
@@ -23,7 +23,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV3State {
         _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
-        _vm_attributes: &VMAttributes,
+        _decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
         let liq = snapshot
             .state
@@ -135,7 +135,6 @@ mod tests {
     use tycho_common::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
 
     use super::*;
-    use crate::protocol::models::VMAttributes;
 
     fn usv3_component() -> ProtocolComponent {
         let creation_time = DateTime::from_timestamp(1622526000, 0)
@@ -199,7 +198,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await;
 
@@ -257,7 +256,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await;
 
@@ -292,7 +291,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await;
 

@@ -15,7 +15,7 @@ use crate::{
     },
     protocol::{
         errors::InvalidSnapshotError,
-        models::{TryFromWithBlock, VMAttributes},
+        models::{DecoderContext, TryFromWithBlock},
     },
 };
 
@@ -29,7 +29,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
         block: BlockHeader,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
-        _vm_attributes: &VMAttributes,
+        _decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
         let liq = snapshot
             .state
@@ -257,7 +257,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await
         .unwrap();
@@ -331,7 +331,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await;
 

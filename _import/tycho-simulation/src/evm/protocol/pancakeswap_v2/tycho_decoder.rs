@@ -9,7 +9,7 @@ use crate::{
     },
     protocol::{
         errors::InvalidSnapshotError,
-        models::{TryFromWithBlock, VMAttributes},
+        models::{DecoderContext, TryFromWithBlock},
     },
 };
 
@@ -23,7 +23,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for PancakeswapV2State {
         _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
-        _vm_attributes: &VMAttributes,
+        _decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
         let (reserve0, reserve1) = cpmm_try_from_with_header(snapshot)?;
         Ok(Self::new(reserve0, reserve1))
@@ -42,7 +42,7 @@ mod tests {
     use super::super::state::PancakeswapV2State;
     use crate::protocol::{
         errors::InvalidSnapshotError,
-        models::{TryFromWithBlock, VMAttributes},
+        models::{DecoderContext, TryFromWithBlock},
     };
 
     fn header() -> BlockHeader {
@@ -76,7 +76,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await;
 
@@ -111,7 +111,7 @@ mod tests {
             header(),
             &HashMap::new(),
             &HashMap::new(),
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await;
 

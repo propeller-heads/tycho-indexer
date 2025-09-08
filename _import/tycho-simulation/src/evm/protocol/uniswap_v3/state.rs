@@ -481,7 +481,7 @@ mod tests {
     use tycho_common::{hex_bytes::Bytes, models::Chain};
 
     use super::*;
-    use crate::protocol::models::{TryFromWithBlock, VMAttributes};
+    use crate::protocol::models::{DecoderContext, TryFromWithBlock};
 
     #[test]
     fn test_get_amount_out_full_range_liquidity() {
@@ -772,7 +772,7 @@ mod tests {
             Default::default(),
             &Default::default(),
             &Default::default(),
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await
         .unwrap();
@@ -819,7 +819,7 @@ mod tests_forks {
     use tycho_common::models::Chain;
 
     use super::*;
-    use crate::protocol::models::{TryFromWithBlock, VMAttributes};
+    use crate::protocol::models::{DecoderContext, TryFromWithBlock};
 
     #[tokio::test]
     async fn test_pancakeswap_get_amount_out() {
@@ -837,7 +837,7 @@ mod tests_forks {
             Default::default(),
             &Default::default(),
             &Default::default(),
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await
         .unwrap();

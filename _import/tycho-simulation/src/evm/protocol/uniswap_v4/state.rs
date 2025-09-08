@@ -822,7 +822,7 @@ mod tests {
             },
             protocol::uniswap_v4::hooks::generic_vm_hook_handler::GenericVMHookHandler,
         },
-        protocol::models::{TryFromWithBlock, VMAttributes},
+        protocol::models::{DecoderContext, TryFromWithBlock},
     };
 
     // Helper methods to create commonly used tokens
@@ -958,7 +958,7 @@ mod tests {
             block,
             &Default::default(),
             &Default::default(),
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await
         .unwrap();
@@ -1040,7 +1040,7 @@ mod tests {
             block,
             &Default::default(),
             &Default::default(),
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await
         .unwrap();

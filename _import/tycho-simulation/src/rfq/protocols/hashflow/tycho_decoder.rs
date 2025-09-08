@@ -10,7 +10,7 @@ use super::{
 use crate::{
     protocol::{
         errors::InvalidSnapshotError,
-        models::{TryFromWithBlock, VMAttributes},
+        models::{DecoderContext, TryFromWithBlock},
     },
     rfq::{
         constants::get_hashflow_auth, models::TimestampHeader,
@@ -26,7 +26,7 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for HashflowState {
         _timestamp_header: TimestampHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
-        _vm_attributes: &VMAttributes,
+        _decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
         let state_attrs = snapshot.state.attributes;
 
@@ -231,7 +231,7 @@ mod tests {
             TimestampHeader { timestamp: 1703097600u64 },
             &HashMap::new(),
             &tokens,
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await
         .expect("create state from snapshot");
@@ -264,7 +264,7 @@ mod tests {
             TimestampHeader::default(),
             &HashMap::new(),
             &tokens,
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await
         .expect("create state with missing levels should default to empty levels");
@@ -289,7 +289,7 @@ mod tests {
             TimestampHeader::default(),
             &HashMap::new(),
             &tokens,
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await;
 
@@ -328,7 +328,7 @@ mod tests {
             TimestampHeader::default(),
             &HashMap::new(),
             &tokens,
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await;
 
@@ -357,7 +357,7 @@ mod tests {
             TimestampHeader::default(),
             &HashMap::new(),
             &tokens,
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await;
 
@@ -378,7 +378,7 @@ mod tests {
             TimestampHeader::default(),
             &HashMap::new(),
             &tokens,
-            &VMAttributes::new(None),
+            &DecoderContext::new(),
         )
         .await;
 

@@ -7,7 +7,7 @@ use crate::{
     evm::protocol::{cpmm::protocol::cpmm_try_from_with_header, uniswap_v2::state::UniswapV2State},
     protocol::{
         errors::InvalidSnapshotError,
-        models::{TryFromWithBlock, VMAttributes},
+        models::{DecoderContext, TryFromWithBlock},
     },
 };
 
@@ -21,7 +21,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV2State {
         _block: BlockHeader,
         _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         _all_tokens: &HashMap<Bytes, Token>,
-        _vm_attributes: &VMAttributes,
+        _decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
         let (reserve0, reserve1) = cpmm_try_from_with_header(snapshot)?;
         Ok(Self::new(reserve0, reserve1))
@@ -40,7 +40,7 @@ mod tests {
     use super::super::state::UniswapV2State;
     use crate::protocol::{
         errors::InvalidSnapshotError,
-        models::{TryFromWithBlock, VMAttributes},
+        models::{DecoderContext, TryFromWithBlock},
     };
 
     fn header() -> BlockHeader {
@@ -69,13 +69,13 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let vm_attributes = VMAttributes::new(None);
+        let decoder_context = DecoderContext::new();
         let result = UniswapV2State::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),
             &HashMap::new(),
-            &vm_attributes,
+            &decoder_context,
         )
         .await;
 
@@ -105,13 +105,13 @@ mod tests {
             entrypoints: Vec::new(),
         };
 
-        let vm_attributes = VMAttributes::new(None);
+        let decoder_context = DecoderContext::new();
         let result = UniswapV2State::try_from_with_header(
             snapshot,
             header(),
             &HashMap::new(),
             &HashMap::new(),
-            &vm_attributes,
+            &decoder_context,
         )
         .await;
 

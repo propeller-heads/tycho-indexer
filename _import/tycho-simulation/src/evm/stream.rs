@@ -17,7 +17,7 @@ use crate::{
     evm::decoder::{StreamDecodeError, TychoStreamDecoder},
     protocol::{
         errors::InvalidSnapshotError,
-        models::{TryFromWithBlock, Update, VMAttributes},
+        models::{TryFromWithBlock, Update},
     },
 };
 
@@ -81,9 +81,7 @@ impl ProtocolStreamBuilder {
         self.stream_builder = self
             .stream_builder
             .exchange(name, filter);
-        let vm_attributes = VMAttributes::new(None);
-        self.decoder
-            .register_decoder::<T>(name, vm_attributes);
+        self.decoder.register_decoder::<T>(name);
         if let Some(predicate) = filter_fn {
             self.decoder
                 .register_filter(name, predicate);
