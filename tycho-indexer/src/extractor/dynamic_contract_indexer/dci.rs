@@ -806,8 +806,8 @@ where
                             })?;
                         if retrigger_changed {
                             for entrypoint_with_params in entrypoints.into_iter() {
-                                // Only insert if we haven't seen this entrypoint before or if this tx
-                                // is later
+                                // Only insert if we haven't seen this entrypoint before or if this
+                                // tx is later
                                 retriggered_entrypoints
                                     .entry(entrypoint_with_params.clone())
                                     .and_modify(|entry_tx| {
@@ -817,17 +817,16 @@ where
                                     })
                                     .or_insert(&tx_with_changes.tx);
 
-                                    // Collect the location and the entrypoint (not
-                                    // EntryPointWithTracingParams)
-                                    retriggered_locations
-                                        .entry(location.clone())
-                                        .or_default()
-                                        .push(
-                                            entrypoint_with_params
-                                                .entry_point
-                                                .clone(),
-                                        );
-                                }
+                                // Collect the location and the entrypoint (not
+                                // EntryPointWithTracingParams)
+                                retriggered_locations
+                                    .entry(location.clone())
+                                    .or_default()
+                                    .push(
+                                        entrypoint_with_params
+                                            .entry_point
+                                            .clone(),
+                                    );
                             }
                         }
                     }
