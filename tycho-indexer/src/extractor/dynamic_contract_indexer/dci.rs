@@ -2439,15 +2439,26 @@ mod tests {
                             .any(|ep| ep.entry_point.external_id == "entrypoint_10")
                 }),
             )
-            .return_once(move |_, _| {
-                vec![
-                    Ok(TracedEntryPoint::new(
-                        EntryPointWithTracingParams::new(get_entrypoint(9), get_tracing_params(9)),
-                        Bytes::zero(32),
-                        get_tracing_result(9),
-                    )),
-                    Err("Simulated tracing failure".to_string()),
-                ]
+            .return_once(move |_, entrypoints| {
+                // Return results that match the specific entrypoints, not positional
+                entrypoints
+                    .iter()
+                    .map(|ep| {
+                        if ep.entry_point.external_id == "entrypoint_9" {
+                            // entrypoint_9 should succeed
+                            Ok(TracedEntryPoint::new(
+                                ep.clone(),
+                                Bytes::zero(32),
+                                get_tracing_result(9),
+                            ))
+                        } else if ep.entry_point.external_id == "entrypoint_10" {
+                            // entrypoint_10 should fail
+                            Err("Simulated tracing failure".to_string())
+                        } else {
+                            panic!("Unexpected entrypoint: {}", ep.entry_point.external_id)
+                        }
+                    })
+                    .collect()
             });
 
         // Mock account extraction for the successful entrypoint
