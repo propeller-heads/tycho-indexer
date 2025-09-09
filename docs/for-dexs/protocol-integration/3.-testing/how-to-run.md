@@ -229,7 +229,7 @@ If you want to run tests for `ethereum-balancer-v2`, use:
 export RPC_URL="https://ethereum-mainnet.core.chainstack.com/123123123123"
 export SUBSTREAMS_API_TOKEN=eyJhbGci...
 
-// Build BalancerV2's Substreams wasm
+// Build Substreams wasm for BalancerV2
 cd substreams
 cargo build --release --package ethereum-balancer-v2 --target wasm32-unknown-unknown
 cd ..
