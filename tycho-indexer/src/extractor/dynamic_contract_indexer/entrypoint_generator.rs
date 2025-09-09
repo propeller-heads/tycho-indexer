@@ -608,39 +608,37 @@ where
         {
             info!(
                 component_id = &data.component.id,
+                token_count = tokens.len(),
                 "Detecting balance slots for component tokens"
             );
-            let components_for_detection = vec![(data.component.id.clone(), tokens.clone())];
             let pool_manager = self.config.pool_manager.clone();
 
             let detection_results = balance_slot_detector
-                .detect_balance_slots(
-                    components_for_detection,
-                    pool_manager,
-                    context.block.hash.clone(),
-                )
+                .detect_balance_slots(&tokens, pool_manager, context.block.hash.clone())
                 .await;
 
-            match detection_results.get(&data.component.id) {
-                Some(Ok(slots)) => slots.clone(),
-                Some(Err(e)) => {
-                    let error_msg = format!("Balance slot detection failed: {:?}", e);
-                    error!(
-                        component_id = %data.component.id,
-                        error = %error_msg,
-                        "Balance slot detection failed"
-                    );
-                    return Err(EntrypointGenerationError::NoDataAvailable(error_msg));
-                }
-                None => {
-                    let error_msg = String::from("No balance slot detection result for component");
-                    error!(
-                        component_id = %data.component.id,
-                        "{}", &error_msg
-                    );
-                    return Err(EntrypointGenerationError::NoDataAvailable(error_msg));
+            // Convert token-based results to the expected format
+            let mut token_slots = HashMap::new();
+            for (token, result) in detection_results {
+                match result {
+                    Ok((_storage_addr, slot)) => {
+                        token_slots.insert(token, slot);
+                    }
+                    Err(e) => {
+                        let error_msg =
+                            format!("Balance slot detection failed for token {}: {:?}", token, e);
+                        error!(
+                            component_id = %data.component.id,
+                            token = %token,
+                            error = %error_msg,
+                            "Balance slot detection failed for token"
+                        );
+                        // Continue processing other tokens instead of failing completely
+                    }
                 }
             }
+
+            token_slots
         } else {
             info!("No balance slot detector available, skipping balance overwrites");
             HashMap::new()
@@ -959,23 +957,19 @@ mod tests {
 
         async fn detect_balance_slots(
             &self,
-            components: Vec<(ComponentId, Vec<Address>)>,
+            tokens: &[Address],
             _holder: Address,
             _block_hash: BlockHash,
-        ) -> HashMap<ComponentId, Result<HashMap<Address, Bytes>, Self::Error>> {
+        ) -> HashMap<Address, Result<(Address, Bytes), Self::Error>> {
+            // For the mock, return fake slots for all tokens
             let mut result = HashMap::new();
-            for (component_id, _tokens) in components {
-                if let Some(slots_result) = self.slots.get(&component_id) {
-                    result.insert(component_id, slots_result.clone());
-                }
+            for token in tokens {
+                // Create a fake storage slot result
+                let storage_addr = token.clone();
+                let slot_bytes = Bytes::from(vec![0u8; 32]); // Fake slot
+                result.insert(token.clone(), Ok((storage_addr, slot_bytes)));
             }
             result
-        }
-
-        fn set_max_concurrent(&mut self, _max: usize) {}
-
-        fn max_concurrent(&self) -> usize {
-            1
         }
     }
 
