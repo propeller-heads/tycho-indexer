@@ -92,11 +92,14 @@ impl Default for BalanceSlotDetectorConfig {
     }
 }
 
+/// Cache type for balance slot detection results
+type BalanceSlotCache = Arc<RwLock<HashMap<(Address, Address), (Address, Bytes)>>>;
+
 /// EVM-specific implementation of BalanceSlotDetector using debug_traceCall
 pub struct EVMBalanceSlotDetector {
     tracer: EVMEntrypointService,
     max_batch_size: usize,
-    cache: Arc<RwLock<HashMap<(Address, Address), (Address, Bytes)>>>,
+    cache: BalanceSlotCache,
     http_client: reqwest::Client,
     max_retries: usize,
     initial_backoff_ms: u64,
