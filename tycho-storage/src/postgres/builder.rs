@@ -50,7 +50,8 @@ impl GatewayBuilder {
         let (tx, rx) = mpsc::channel(10);
         let chain = self
             .chains
-            .get(0)
+            .as_slice()
+            .first()
             .expect("No chains provided"); //TODO: handle multichain?
         let write_executor = postgres::cache::DBCacheWriteExecutor::new(
             chain.to_string(),
@@ -85,7 +86,8 @@ impl GatewayBuilder {
 
         let chain = self
             .chains
-            .get(0)
+            .as_slice()
+            .first()
             .expect("No chains provided"); //TODO: handle multichain?
 
         let direct_gw = DirectGateway::new(pool.clone(), inner_gw.clone(), *chain);
@@ -146,9 +148,8 @@ async fn ensure_partitions_exist(pool: Pool<AsyncPgConnection>, retention_horizo
             "SELECT substring(pg_get_expr(c.relpartbound, c.oid) from 'FROM \\(''(.*?)''\\)')::timestamptz AS lower_bound \
              FROM pg_inherits i \
              JOIN pg_class c ON c.oid = i.inhrelid \
-             WHERE i.inhparent = '{}'::regclass \
-               AND pg_get_expr(c.relpartbound, c.oid) <> 'DEFAULT'",
-            parent
+             WHERE i.inhparent = '{parent}'::regclass \
+               AND pg_get_expr(c.relpartbound, c.oid) <> 'DEFAULT'"
         );
 
         let rows: Vec<PartitionBoundRow> = sql_query(sql)
@@ -171,8 +172,8 @@ async fn ensure_partitions_exist(pool: Pool<AsyncPgConnection>, retention_horizo
         }
 
         if !missing.is_empty() {
-            let first = missing.get(0).unwrap();
-            let last = missing.last().unwrap();
+            let first = missing.as_slice().first().unwrap();
+            let last = missing.as_slice().last().unwrap();
             let start_ts = NaiveDateTime::new(*first, NaiveTime::from_hms_opt(0, 0, 0).unwrap());
             let end_ts = NaiveDateTime::new(*last, NaiveTime::from_hms_opt(23, 59, 59).unwrap());
             panic!(
