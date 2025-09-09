@@ -177,3 +177,168 @@ async fn ensure_partitions_exist(pool: Pool<AsyncPgConnection>, retention_horizo
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use diesel::sql_query;
+    use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
+    use chrono::NaiveDate;
+
+    async fn setup_db() -> AsyncPgConnection {
+        let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let mut conn = AsyncPgConnection::establish(&db_url)
+            .await
+            .expect("Connection ok");
+        conn.begin_test_transaction().await.expect("test tx ok");
+        conn
+    }
+
+    #[tokio::test]
+    async fn test_parent_discovery_and_lower_bounds() {
+        let mut conn = setup_db().await;
+
+        // Create a temporary partitioned table in public schema with valid_to
+        sql_query("DROP TABLE IF EXISTS public.test_part_parent CASCADE;")
+            .execute(&mut conn)
+            .await
+            .expect("drop ok");
+
+        // Create parent and child partitions (split into separate statements)
+        sql_query(
+            r#"
+            CREATE TABLE public.test_part_parent (
+                id bigserial,
+                valid_to timestamptz NOT NULL
+            ) PARTITION BY RANGE (valid_to);
+            "#,
+        )
+        .execute(&mut conn)
+        .await
+        .expect("create parent ok");
+
+        sql_query(
+            r#"
+            CREATE TABLE public.test_part_parent_20250901 PARTITION OF public.test_part_parent
+            FOR VALUES FROM ('2025-09-01') TO ('2025-09-02');
+            "#,
+        )
+        .execute(&mut conn)
+        .await
+        .expect("create child 20250901 ok");
+
+        sql_query(
+            r#"
+            CREATE TABLE public.test_part_parent_20250902 PARTITION OF public.test_part_parent
+            FOR VALUES FROM ('2025-09-02') TO ('2025-09-03');
+            "#,
+        )
+        .execute(&mut conn)
+        .await
+        .expect("create child 20250902 ok");
+
+        // Discover parents in public schema with valid_to column
+        let parent_rows: Vec<ParentTableRow> = sql_query(
+            r#"
+            SELECT format('%I.%I', n.nspname, c.relname) AS parent_table
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.relkind = 'p'
+              AND n.nspname = 'public'
+              AND EXISTS (
+                SELECT 1
+                FROM information_schema.columns col
+                WHERE col.table_schema = n.nspname
+                  AND col.table_name = c.relname
+                  AND col.column_name = 'valid_to'
+              )
+            "#,
+        )
+        .load(&mut conn)
+        .await
+        .expect("discover parents ok");
+
+        let parents: Vec<String> = parent_rows.into_iter().map(|r| r.parent_table).collect();
+        assert!(parents.contains(&"public.test_part_parent".to_string()));
+
+        // Parse child lower bounds for our temp parent
+        let lb_rows: Vec<PartitionBoundRow> = sql_query(
+            "SELECT substring(pg_get_expr(c.relpartbound, c.oid) from 'FROM \\(''(.*?)''\\)')::timestamptz AS lower_bound \n             FROM pg_inherits i \n             JOIN pg_class c ON c.oid = i.inhrelid \n             WHERE i.inhparent = 'public.test_part_parent'::regclass \n               AND pg_get_expr(c.relpartbound, c.oid) <> 'DEFAULT'",
+        )
+        .load(&mut conn)
+        .await
+        .expect("list child lower bounds ok");
+
+        let mut days: Vec<NaiveDate> = lb_rows.into_iter().map(|r| r.lower_bound.date()).collect();
+        days.sort();
+
+        assert_eq!(
+            days,
+            vec![
+                NaiveDate::from_ymd_opt(2025, 9, 1).unwrap(),
+                NaiveDate::from_ymd_opt(2025, 9, 2).unwrap(),
+            ]
+        );
+
+        // Cleanup
+        sql_query("DROP TABLE IF EXISTS public.test_part_parent CASCADE;")
+            .execute(&mut conn)
+            .await
+            .expect("cleanup ok");
+    }
+
+    #[tokio::test]
+    async fn test_missing_partition_detected() {
+        // Note: This test creates/drops real tables; no test transaction.
+        let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let mut conn = AsyncPgConnection::establish(&db_url)
+            .await
+            .expect("Connection ok");
+
+        // Clean slate
+        sql_query("DROP TABLE IF EXISTS public.test_part_parent_missing CASCADE;")
+            .execute(&mut conn)
+            .await
+            .expect("drop ok");
+
+        // Create parent with only one day partition (2025-09-02), leaving 2025-09-01 missing
+        sql_query(
+            r#"
+            CREATE TABLE public.test_part_parent_missing (
+                id bigserial,
+                valid_to timestamptz NOT NULL
+            ) PARTITION BY RANGE (valid_to);
+            "#,
+        )
+        .execute(&mut conn)
+        .await
+        .expect("create parent missing ok");
+
+        sql_query(
+            r#"
+            CREATE TABLE public.test_part_parent_missing_20250902 PARTITION OF public.test_part_parent_missing
+            FOR VALUES FROM ('2025-09-02') TO ('2025-09-03');
+            "#,
+        )
+        .execute(&mut conn)
+        .await
+        .expect("create existing child ok");
+
+        // Build a pool and run the partition check; it should panic due to the missing day
+        let pool = crate::postgres::connect(&db_url).await.expect("pool ok");
+        let horizon = NaiveDate::from_ymd_opt(2025, 9, 1)
+            .unwrap()
+            .and_hms_opt(0, 0, 0)
+            .unwrap();
+
+        let handle = tokio::spawn(ensure_partitions_exist(pool.clone(), horizon));
+        let res = handle.await;
+        assert!(res.is_err() && res.unwrap_err().is_panic(), "expected panic on missing partitions");
+
+        // Cleanup
+        sql_query("DROP TABLE IF EXISTS public.test_part_parent_missing CASCADE;")
+            .execute(&mut conn)
+            .await
+            .expect("cleanup ok");
+    }
+}
