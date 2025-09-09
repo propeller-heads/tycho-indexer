@@ -2852,7 +2852,7 @@ mod tests {
         assert!(paused_state
             .updated_attributes
             .contains_key("paused"));
-        assert_eq!(paused_state.updated_attributes["paused"], Bytes::from(vec![1u8]));
+        assert_eq!(paused_state.updated_attributes["paused"], Bytes::from(vec![2u8]));
 
         // Verify that component_1 (which uses the successful entrypoint_9) is not paused
         let component_1_paused = block_changes
