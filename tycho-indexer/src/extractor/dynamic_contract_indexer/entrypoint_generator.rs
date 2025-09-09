@@ -102,6 +102,8 @@ pub struct HookEntrypointData {
     pub component: ProtocolComponent,
     /// Metadata for component tracing (balances, limits, etc.)
     pub component_metadata: ComponentTracingMetadata,
+    /// Whether to use balance slot overwrites for ERC20 tokens
+    pub use_balance_overwrites: bool,
 }
 
 /// Context for hook tracing
@@ -508,7 +510,7 @@ where
 {
     config: HookEntrypointConfig,
     estimator: E,
-    balance_slot_detector: Option<B>,
+    balance_slot_detector: B,
 }
 
 impl<E, B> UniswapV4DefaultHookEntrypointGenerator<E, B>
@@ -516,7 +518,7 @@ where
     E: SwapAmountEstimator,
     B: BalanceSlotDetector,
 {
-    pub fn new(estimator: E, pool_manager: Address, balance_slot_detector: Option<B>) -> Self {
+    pub fn new(estimator: E, pool_manager: Address, balance_slot_detector: B) -> Self {
         Self {
             config: HookEntrypointConfig {
                 max_sample_size: Some(4),
@@ -603,9 +605,7 @@ where
         // once. This way we can leverage the Slot Detector's parallelization and improve
         // speed. For now, this was included on the EntrypointGenerator for quick
         // integration and to reduce the number of interface changes.
-        let detected_balance_slots = if let Some(ref balance_slot_detector) =
-            self.balance_slot_detector
-        {
+        let detected_balance_slots = if data.use_balance_overwrites {
             info!(
                 component_id = &data.component.id,
                 token_count = tokens.len(),
@@ -613,7 +613,7 @@ where
             );
             let pool_manager = self.config.pool_manager.clone();
 
-            let detection_results = balance_slot_detector
+            let detection_results = self.balance_slot_detector
                 .detect_balance_slots(&tokens, pool_manager, context.block.hash.clone())
                 .await;
 
@@ -1083,6 +1083,7 @@ mod tests {
                     Bytes::from(U256::from(1000u64).to_be_bytes_vec()),
                 ),
             )]),
+            use_balance_overwrites: false,  // Default to false for tests
         }
     }
 
@@ -1127,11 +1128,12 @@ mod tests {
         );
 
         let estimator = MockEstimator { result: Ok(amounts) };
+        let mock_detector = MockBalanceSlotDetector::new();
         let mut generator =
             UniswapV4DefaultHookEntrypointGenerator::<_, MockBalanceSlotDetector>::new(
                 estimator,
                 Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90")),
-                None,
+                mock_detector,
             );
 
         let config = HookEntrypointConfig {
@@ -1172,10 +1174,11 @@ mod tests {
         let estimator = MockEstimator {
             result: Err(EntrypointGenerationError::NoDataAvailable("No data".to_string())),
         };
+        let mock_detector = MockBalanceSlotDetector::new();
         let generator = UniswapV4DefaultHookEntrypointGenerator::<_, MockBalanceSlotDetector>::new(
             estimator,
             Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90")),
-            None,
+            mock_detector,
         );
 
         let hook_data = create_test_hook_data();
@@ -1191,10 +1194,11 @@ mod tests {
     #[tokio::test]
     async fn test_hook_entrypoint_generator_empty_amounts() {
         let estimator = MockEstimator { result: Ok(HashMap::new()) };
+        let mock_detector = MockBalanceSlotDetector::new();
         let generator = UniswapV4DefaultHookEntrypointGenerator::<_, MockBalanceSlotDetector>::new(
             estimator,
             Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90")),
-            None,
+            mock_detector,
         );
 
         let hook_data = create_test_hook_data();
@@ -1230,16 +1234,18 @@ mod tests {
         );
 
         let estimator = MockEstimator { result: Ok(amounts) };
+        let mock_detector = MockBalanceSlotDetector::new();
         let generator = UniswapV4DefaultHookEntrypointGenerator::<_, MockBalanceSlotDetector>::new(
             estimator,
             Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90")),
-            None,
+            mock_detector,
         );
 
         let hook_data = HookEntrypointData {
             hook_address: Address::from([4u8; 20]),
             component,
             component_metadata: create_metadata_with_limits(vec![]),
+            use_balance_overwrites: false,  // Default to false for tests
         };
         let context = create_test_context();
 
@@ -1267,10 +1273,11 @@ mod tests {
         );
 
         let estimator = MockEstimator { result: Ok(amounts) };
+        let mock_detector = MockBalanceSlotDetector::new();
         let generator = UniswapV4DefaultHookEntrypointGenerator::<_, MockBalanceSlotDetector>::new(
             estimator,
             Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90")),
-            None,
+            mock_detector,
         );
 
         let mut component = create_test_component();
@@ -1280,6 +1287,7 @@ mod tests {
             hook_address: Address::from([4u8; 20]),
             component,
             component_metadata: create_metadata_with_limits(vec![]),
+            use_balance_overwrites: false,  // Default to false for tests
         };
         let context = create_test_context();
 
@@ -1335,10 +1343,11 @@ mod tests {
         let generator = UniswapV4DefaultHookEntrypointGenerator::new(
             estimator,
             Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90")),
-            Some(mock_detector),
+            mock_detector,
         );
 
-        let hook_data = create_test_hook_data();
+        let mut hook_data = create_test_hook_data();
+        hook_data.use_balance_overwrites = true;  // Enable balance overwrites for storage slot override test
         let context = create_test_context();
 
         let result = generator
@@ -1426,10 +1435,11 @@ mod tests {
         let generator = UniswapV4DefaultHookEntrypointGenerator::new(
             estimator,
             Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90")),
-            Some(mock_detector),
+            mock_detector,
         );
 
-        let hook_data = create_test_hook_data();
+        let mut hook_data = create_test_hook_data();
+        hook_data.use_balance_overwrites = true;  // Enable balance overwrites to test detection error
         let context = create_test_context();
 
         let result = generator
@@ -1456,10 +1466,11 @@ mod tests {
         let estimator = MockEstimator { result: Ok(amounts) };
 
         // No balance slot detector - should only use ERC6909 overwrites
+        let mock_detector = MockBalanceSlotDetector::new();
         let generator = UniswapV4DefaultHookEntrypointGenerator::<_, MockBalanceSlotDetector>::new(
             estimator,
             Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90")),
-            None,
+            mock_detector,
         );
 
         let hook_data = create_test_hook_data();
