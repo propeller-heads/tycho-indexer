@@ -1938,6 +1938,7 @@ mod test {
                 344101538937875300000000000.0,
             ),
             (Bytes::from("0x0000000000000000000000000000000000000002"), 2980881444.0),
+            (Bytes::from("0x0000000000000000000000000000000000000003"), 0.0),
         ])
     }
 
@@ -2123,7 +2124,7 @@ mod test {
 
         assert_eq!(res, exp);
     }
-
+    
     #[test_log::test(tokio::test)]
     async fn test_handle_tvl_changes() {
         let mut msg = BlockAggregatedChanges {
@@ -2156,6 +2157,36 @@ mod test {
                         },
                     )
                 ]),
+            ),
+            (
+                "comp2".to_string(),
+                HashMap::from([(
+                    Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap(),
+                    ComponentBalance {
+                        token: Bytes::from_str("0x0000000000000000000000000000000000000001")
+                            .unwrap(),
+                        balance: Bytes::from(
+                            "0x00000000000000000000000000000000000000000000003635c9adc5dea00000",
+                        ),
+                        balance_float: 11_304_207_639.4e18,
+                        modify_tx: Bytes::zero(32),
+                        component_id: "comp2".to_string(),
+                    },
+                ),
+                    (
+                        Bytes::from_str("0x0000000000000000000000000000000000000003").unwrap(),
+                        ComponentBalance {
+                            token: Bytes::from_str("0x0000000000000000000000000000000000000003")
+                                .unwrap(),
+                            balance: Bytes::from(
+                                "0x00000000000000000000000000000000000000000000003635c9adc5dea00000",
+                            ),
+                            balance_float: 100_000e6,
+                            modify_tx: Bytes::zero(32),
+                            component_id: "comp2".to_string(),
+                        },
+                    )
+                ]),
             )]),
             ..Default::default()
         };
@@ -2184,6 +2215,21 @@ mod test {
                 ChangeType::Creation,
                 Bytes::default(),
                 NaiveDateTime::default(),
+            ),
+            ProtocolComponent::new(
+                "comp2",
+                "system1",
+                "pt_1",
+                Chain::Ethereum,
+                vec![
+                    Bytes::from("0x0000000000000000000000000000000000000001"),
+                    Bytes::from("0x0000000000000000000000000000000000000003"),
+                ],
+                Vec::new(),
+                HashMap::new(),
+                ChangeType::Creation,
+                Bytes::default(),
+                NaiveDateTime::default(),
             )])
             .await
             .expect("adding components failed");
@@ -2201,6 +2247,15 @@ mod test {
                 Token::new(
                     &Bytes::from("0x0000000000000000000000000000000000000002"),
                     "USDC",
+                    6,
+                    0,
+                    &[],
+                    Chain::Ethereum,
+                    100,
+                ),
+                Token::new(
+                    &Bytes::from("0x0000000000000000000000000000000000000003"),
+                    "USDT",
                     6,
                     0,
                     &[],
@@ -2248,19 +2303,25 @@ mod test {
         .await
         .expect("extractor init failed");
 
-        let exp_tvl = 66.39849612683253;
+        let exp_tvl_comp1 = 66.39849612683253;
+        let exp_tvl_comp2 = 32.85137193600544;
 
         extractor
             .handle_tvl_changes(&mut msg)
             .await
             .expect("handle_tvl_call failed");
-        let res = msg
+        let res_comp1 = msg
             .component_tvl
             .get("comp1")
             .expect("comp1 tvl not present");
+        let res_comp2 = msg
+            .component_tvl
+            .get("comp2")
+            .expect("comp2 tvl not present");
 
-        assert_eq!(msg.component_tvl.len(), 1);
-        assert_float_eq!(*res, exp_tvl, rmax <= 0.000_001);
+        assert_eq!(msg.component_tvl.len(), 2);
+        assert_float_eq!(*res_comp1, exp_tvl_comp1, rmax <= 0.000_001);
+        assert_float_eq!(*res_comp2, exp_tvl_comp2, rmax <= 0.000_001);
     }
 }
 
