@@ -440,8 +440,6 @@ fn validate_state(
             .or_insert_with(|| comp.tokens.clone());
     }
 
-    // TODO: Since we don't have balances on the VM State, we could try to use Limits, otherwise ask
-    //  the user to specify a set of values on the YAML file.
     for (id, state) in block_msg.states.iter() {
         if let Some(tokens) = pairs.get(id) {
             let formatted_token_str = format!("{:}/{:}", &tokens[0].symbol, &tokens[1].symbol);
@@ -453,52 +451,61 @@ fn validate_state(
                 .wrap_err(format!("Error calculating spot price for Pool {id:?}."))?;
 
             // Test get_amount_out with different percentages of limits. The reserves or limits are
-            // relevant because we need to know how much to test with. We don’t know if a pool is
+            // relevant because we need to know how much to test with. We don't know if a pool is
             // going to revert with 10 or 10 million USDC, for example, so by using the limits we
-            // can use “safe values” where the sim shouldn’t break.
+            // can use "safe values" where the sim shouldn't break.
             // We then retrieve the amount out for 0.1%, 1% and 10%.
             let percentages = [0.001, 0.01, 0.1];
-            // Get limits for this token pair
-            // TODO do this again, but reverse the order of the tokens to get the opposite swap
-            // direction
-            let (max_input, max_output) = state
-                .get_limits(tokens[0].address.clone(), tokens[1].address.clone())
-                .into_diagnostic()
-                .wrap_err(format!("Error getting limits for Pool {id:?}."))?;
 
-            info!("Retrieved limits for pool {id}. | Max input: {max_input} {} | Max output: {max_output} {}", tokens[0].symbol, tokens[1].symbol);
+            // Test both swap directions
+            let swap_directions = [(&tokens[0], &tokens[1]), (&tokens[1], &tokens[0])];
 
-            for percentage in &percentages {
-                // For precision, multiply by 1000 then divide by 1000
-                let percentage_biguint = BigUint::from((percentage * 1000.0) as u32);
-                let thousand = BigUint::from(1000u32);
-                let amount_in = (&max_input * &percentage_biguint) / &thousand;
-
-                // Skip if amount is zero
-                if amount_in.is_zero() {
-                    info!("Amount in multiplied by percentage {percentage} is zero. Skipping pool {id}.");
-                    continue;
-                }
-
-                state
-                    .get_amount_out(amount_in.clone(), &tokens[0], &tokens[1])
-                    .map(|result| {
-                        info!(
-                            "Amount out for trading {:.1}% of max: ({} {} -> {} {}) (gas: {})",
-                            percentage * 100.0,
-                            amount_in,
-                            &tokens[0].symbol,
-                            result.amount,
-                            &tokens[1].symbol,
-                            result.gas
-                        )
-                    })
+            for (token_in, token_out) in &swap_directions {
+                let (max_input, max_output) = state
+                    .get_limits(token_in.address.clone(), token_out.address.clone())
                     .into_diagnostic()
                     .wrap_err(format!(
-                        "Error calculating amount out for Pool {id:?} at {:.1}% with input of {amount_in} {}.",
-                        percentage * 100.0,
-                        &tokens[0].symbol,
+                        "Error getting limits for Pool {id:?} for in token: {}, and out token: {}",
+                        token_in.address, token_out.address
                     ))?;
+
+                info!(
+                    "Retrieved limits. | Max input: {max_input} {} | Max output: {max_output} {}",
+                    token_in.symbol, token_out.symbol
+                );
+
+                for percentage in &percentages {
+                    // For precision, multiply by 1000 then divide by 1000
+                    let percentage_biguint = BigUint::from((percentage * 1000.0) as u32);
+                    let thousand = BigUint::from(1000u32);
+                    let amount_in = (&max_input * &percentage_biguint) / &thousand;
+
+                    // Skip if amount is zero
+                    if amount_in.is_zero() {
+                        info!("Amount in multiplied by percentage {percentage} is zero. Skipping pool {id}.");
+                        continue;
+                    }
+
+                    state
+                        .get_amount_out(amount_in.clone(), token_in, token_out)
+                        .map(|result| {
+                            info!(
+                                "Amount out for trading {:.1}% of max: ({} {} -> {} {}) (gas: {})",
+                                percentage * 100.0,
+                                amount_in,
+                                token_in.symbol,
+                                result.amount,
+                                token_out.symbol,
+                                result.gas
+                            )
+                        })
+                        .into_diagnostic()
+                        .wrap_err(format!(
+                            "Error calculating amount out for Pool {id:?} at {:.1}% with input of {amount_in} {}.",
+                            percentage * 100.0,
+                            token_in.symbol,
+                        ))?;
+                }
             }
         }
     }
