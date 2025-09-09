@@ -1,16 +1,15 @@
 #![allow(dead_code)] // TODO: Remove this once the setup is fully implemented
 
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use serde::Deserialize;
 use tycho_common::{
-    models::{Address, BlockHash, Chain, ComponentId},
+    models::{Address, Chain},
     storage::{EntryPointGateway, ProtocolGateway},
-    traits::{AccountExtractor, BalanceSlotDetector, EntryPointTracer},
-    Bytes,
+    traits::{AccountExtractor, EntryPointTracer},
 };
 use tycho_ethereum::entrypoint_tracer::balance_slot_detector::{
-    BalanceSlotDetectorConfig, BalanceSlotError, EVMBalanceSlotDetector,
+    BalanceSlotDetectorConfig, EVMBalanceSlotDetector,
 };
 
 use crate::extractor::dynamic_contract_indexer::{
@@ -70,8 +69,7 @@ pub fn setup_hook_orchestrator_registry(
 
     // Create EVM balance slot detector
     let balance_slot_detector: Option<EVMBalanceSlotDetector> = {
-        let config =
-            BalanceSlotDetectorConfig { rpc_url: rpc_url.clone(), max_batch_size: 5 };
+        let config = BalanceSlotDetectorConfig { rpc_url: rpc_url.clone(), max_batch_size: 5 };
 
         let detector =
             EVMBalanceSlotDetector::new(config).expect("Failed to create EVMBalanceSlotDetector");
