@@ -230,6 +230,15 @@ impl PreCachedDB {
             .as_ref()
             .map(|header| header.number)
     }
+
+    /// Clear all state from the database.
+    ///
+    /// This is useful for test isolation to ensure state doesn't leak between tests.
+    pub fn clear(&self) {
+        let mut write_guard = self.inner.write().unwrap();
+        write_guard.accounts.clear();
+        write_guard.block = None;
+    }
 }
 
 impl EngineDatabaseInterface for PreCachedDB {

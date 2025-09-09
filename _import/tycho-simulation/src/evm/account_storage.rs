@@ -36,6 +36,12 @@ impl AccountStorage {
         Self::default()
     }
 
+    /// Clear all accounts from the storage.
+    /// This is useful for test isolation to ensure state doesn't leak between tests.
+    pub fn clear(&mut self) {
+        self.accounts.clear();
+    }
+
     /// Inserts account data into the current instance.
     ///
     /// # Arguments
