@@ -23,6 +23,7 @@ use tycho_common::{
 
 use super::cache::DCICache;
 use crate::extractor::{
+    dynamic_contract_indexer::PausingReason,
     models::{insert_state_attribute_update, BlockChanges, TxWithStorageChanges},
     ExtractionError, ExtractorExtension,
 };
@@ -457,7 +458,7 @@ where
                     component_id,
                     tx,
                     &"paused".to_string(),
-                    &vec![2u8].into(),
+                    &vec![PausingReason::TracingError.get_reason_index()].into(),
                 )?;
             }
 
