@@ -164,6 +164,7 @@ pub trait EntryPointTracer: Sync {
 }
 
 /// Trait for detecting storage slots that contain ERC20 token balances
+#[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
 #[async_trait]
 pub trait BalanceSlotDetector: Send + Sync {
     type Error: Debug;

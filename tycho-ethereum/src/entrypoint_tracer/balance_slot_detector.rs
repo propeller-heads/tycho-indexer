@@ -1,10 +1,11 @@
 use std::{
     collections::{BTreeMap, HashMap},
     ops::Add,
-    sync::RwLock,
+    sync::Arc,
+    time::Duration,
 };
+use tokio::sync::RwLock;
 
-/// Data structure for validation operations
 struct ValidationData {
     token: Address,
     storage_addr: Address,
@@ -63,22 +64,43 @@ pub enum BalanceSlotError {
 
 /// Configuration for balance slot detection.
 /// Use max_batch_size to configure the behavior according to your node capacity.
-/// Please ensure your node supports batching RPC requests
+/// Please ensure your node supports batching RPC requests and debug_traceCall
 /// Read more: https://www.quicknode.com/guides/quicknode-products/apis/guide-to-efficient-rpc-requests
 #[derive(Clone, Debug)]
 pub struct BalanceSlotDetectorConfig {
-    /// Maximum batch size to send in a singe node request
+    /// Maximum batch size to send in a single node request
     pub max_batch_size: usize,
     /// RPC endpoint URL (RPC needs to support debug_traceCall method)
     pub rpc_url: String,
+    /// Maximum number of retry attempts for failed requests (default: 3)
+    pub max_retries: usize,
+    /// Initial backoff delay in milliseconds (default: 100ms)
+    pub initial_backoff_ms: u64,
+    /// Maximum backoff delay in milliseconds (default: 5000ms)
+    pub max_backoff_ms: u64,
+}
+
+impl Default for BalanceSlotDetectorConfig {
+    fn default() -> Self {
+        Self {
+            max_batch_size: 10,
+            rpc_url: String::new(),
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+        }
+    }
 }
 
 /// EVM-specific implementation of BalanceSlotDetector using debug_traceCall
-#[derive(Debug)]
 pub struct EVMBalanceSlotDetector {
     tracer: EVMEntrypointService,
     max_batch_size: usize,
-    cache: RwLock<HashMap<(Address, Address), (Address, Bytes)>>,
+    cache: Arc<RwLock<HashMap<(Address, Address), (Address, Bytes)>>>,
+    http_client: reqwest::Client,
+    max_retries: usize,
+    initial_backoff_ms: u64,
+    max_backoff_ms: u64,
 }
 
 impl EVMBalanceSlotDetector {
@@ -88,11 +110,29 @@ impl EVMBalanceSlotDetector {
             _ => BalanceSlotError::UnknownError(e.to_string()),
         })?;
 
+        // perf: Allow a client to be passed on the constructor, to use a shared client between
+        // other parts of the code that perform node RPC requests
+
+        // Create HTTP client with connection pooling and reasonable timeouts
+        let http_client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .connect_timeout(Duration::from_secs(10))
+            .pool_idle_timeout(Duration::from_secs(90))
+            .pool_max_idle_per_host(10)
+            // https://brooker.co.za/blog/2024/05/09/nagle.html
+            .tcp_nodelay(true)
+            .build()
+            .map_err(|e| BalanceSlotError::SetupError(format!("Failed to create HTTP client: {}", e)))?;
+
         Ok(Self {
             tracer,
             max_batch_size: config.max_batch_size,
             // perf: Add cache persistence to DB.
-            cache: RwLock::new(HashMap::new()),
+            cache: Arc::new(RwLock::new(HashMap::new())),
+            http_client,
+            max_retries: config.max_retries,
+            initial_backoff_ms: config.initial_backoff_ms,
+            max_backoff_ms: config.max_backoff_ms,
         })
     }
 
@@ -116,10 +156,7 @@ impl EVMBalanceSlotDetector {
 
         // Check cache for tokens
         {
-            let cache = self
-                .cache
-                .read()
-                .expect("Failed to acquire read lock");
+            let cache = self.cache.read().await;
             for token in tokens {
                 if let Some(slot) = cache.get(&(token.clone(), owner.clone())) {
                     cached_tokens.insert(token.clone(), Ok(slot.clone()));
@@ -130,17 +167,7 @@ impl EVMBalanceSlotDetector {
         }
 
         // Create batched request: 2 requests per token (debug_traceCall + eth_call)
-        let requests = match self.create_balance_requests(&request_tokens, owner, block_hash) {
-            Ok(requests) => requests,
-            Err(e) => {
-                for token in &request_tokens {
-                    // Failed to create the batched request - return with only the cached values.
-                    cached_tokens
-                        .insert(token.clone(), Err(BalanceSlotError::RequestError(e.to_string())));
-                }
-                return cached_tokens;
-            }
-        };
+        let requests = self.create_balance_requests(&request_tokens, owner, block_hash);
 
         // Send the batched request
         let responses = match self
@@ -169,7 +196,7 @@ impl EVMBalanceSlotDetector {
         // Update cache and prepare final results
         let mut final_results = cached_tokens;
         {
-            let mut cache = self.cache.write().unwrap();
+            let mut cache = self.cache.write().await;
             for (token, result) in validation_results {
                 match result {
                     Ok(((storage_addr, slot_bytes), _balance)) => {
@@ -191,7 +218,7 @@ impl EVMBalanceSlotDetector {
     }
 
     /// Create a batched JSON-RPC request for all tokens (2 requests per token).
-    /// We need to send a eth_call after the tracing to get the return value of the balanceOf
+    /// We need to send an eth_call after the tracing to get the return value of the balanceOf
     /// function. Currently, debug_traceCall does not support preStateTracer + returning the
     /// value in the same request.
     fn create_balance_requests(
@@ -199,7 +226,7 @@ impl EVMBalanceSlotDetector {
         tokens: &[Address],
         owner: &Address,
         block_hash: &BlockHash,
-    ) -> Result<Value, BalanceSlotError> {
+    ) -> Value {
         let mut batch = Vec::new();
         let mut id = 1u64;
 
@@ -238,7 +265,7 @@ impl EVMBalanceSlotDetector {
             id += 1;
         }
 
-        Ok(Value::Array(batch))
+        Value::Array(batch)
     }
 
     /// Send a batched JSON-RPC request and return the responses
@@ -246,27 +273,116 @@ impl EVMBalanceSlotDetector {
         &self,
         batch_request: Value,
     ) -> Result<Vec<Value>, BalanceSlotError> {
-        let client = reqwest::Client::new();
-        let response = client
+        self.send_batched_request_with_retry(batch_request).await
+    }
+
+    /// Send a batched JSON-RPC request with retry logic
+    async fn send_batched_request_with_retry(
+        &self,
+        batch_request: Value,
+    ) -> Result<Vec<Value>, BalanceSlotError> {
+        let mut attempt = 0;
+        let mut last_error = None;
+
+        while attempt < self.max_retries {
+            // Calculate backoff with jitter
+            if attempt > 0 {
+                let backoff_ms = self.calculate_backoff(attempt);
+                debug!(
+                    attempt = attempt,
+                    backoff_ms = backoff_ms,
+                    "Retrying RPC request after backoff"
+                );
+                tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+            }
+
+            match self.send_single_request(&batch_request).await {
+                Ok(response_json) => {
+                    // Check if we got a valid JSON-RPC batch response
+                    match response_json {
+                        Value::Array(responses) => {
+                            // Success - we got a properly formatted response
+                            // Even if individual calls have errors, we don't retry
+                            // because the node is working correctly
+                            trace!("RPC request successful on attempt {}", attempt + 1);
+                            return Ok(responses);
+                        }
+                        _ => {
+                            // Malformed response - this is retryable
+                            let error = BalanceSlotError::InvalidResponse(
+                                "Expected array response for batched request".into(),
+                            );
+                            warn!(
+                                attempt = attempt + 1,
+                                error = %error,
+                                actual_response = %serde_json::to_string(&response_json).unwrap_or_else(|_| "Unable to serialize response".to_string()),
+                                "Received malformed response, will retry"
+                            );
+                            last_error = Some(error);
+                        }
+                    }
+                }
+                Err(e) => {
+                    // Network/HTTP error - this is retryable
+                    warn!(
+                        attempt = attempt + 1,
+                        error = %e,
+                        "RPC request failed, will retry"
+                    );
+                    last_error = Some(e);
+                }
+            }
+
+            attempt += 1;
+        }
+
+        // All retries exhausted
+        error!(
+            "All {} retry attempts failed for RPC request",
+            self.max_retries
+        );
+        Err(last_error.unwrap_or_else(|| {
+            BalanceSlotError::RequestError("All retry attempts failed".into())
+        }))
+    }
+
+    /// Send a single request without retry
+    async fn send_single_request(
+        &self,
+        batch_request: &Value,
+    ) -> Result<Value, BalanceSlotError> {
+        let response = self
+            .http_client
             .post(self.tracer.rpc_url().as_str())
             .header("Content-Type", "application/json")
-            .body(serde_json::to_string(&batch_request).unwrap())
+            .body(serde_json::to_string(batch_request).unwrap())
             .send()
             .await
-            .map_err(|e| BalanceSlotError::RequestError(e.to_string()))?;
+            .map_err(|e| BalanceSlotError::RequestError(format!("HTTP request failed: {}", e)))?;
 
-        let response_json: serde_json::Value = response
+        let response_json = response
             .json()
             .await
-            .map_err(|e| BalanceSlotError::InvalidResponse(e.to_string()))?;
+            .map_err(|e| BalanceSlotError::InvalidResponse(format!("Failed to parse JSON: {}", e)))?;
 
-        // Handle batched response array
-        match response_json {
-            Value::Array(responses) => Ok(responses),
-            _ => Err(BalanceSlotError::InvalidResponse(
-                "Expected array response for batched request".into(),
-            )),
-        }
+        Ok(response_json)
+    }
+
+    /// Calculate exponential backoff with jitter.
+    /// Jitter prevents all clients from retrying simultaneously and crashing the recovering service
+    fn calculate_backoff(&self, attempt: usize) -> u64 {
+        use rand::Rng;
+        
+        // Calculate base exponential backoff: initial * 2^(attempt-1)
+        let base_backoff = self.initial_backoff_ms.saturating_mul(1 << (attempt - 1));
+        
+        // Cap at max_backoff_ms
+        let capped_backoff = base_backoff.min(self.max_backoff_ms);
+        
+        // Add jitter (0-25% of the backoff time)
+        let jitter = rand::thread_rng().gen_range(0..=capped_backoff / 4);
+        
+        capped_backoff + jitter
     }
 
     /// Process batched responses and extract storage slots for each token
@@ -811,7 +927,13 @@ mod tests {
     async fn test_detect_slots_integration() {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
         println!("Using RPC URL: {}", rpc_url);
-        let config = BalanceSlotDetectorConfig { max_batch_size: 5, rpc_url };
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 5,
+            rpc_url,
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+        };
 
         // Use real token addresses and block for testing (WETH, USDC)
         let weth_bytes = alloy::hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
@@ -883,7 +1005,13 @@ mod tests {
     #[ignore] // Requires real RPC connection
     async fn test_detect_slots_rebasing_token() {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
-        let config = BalanceSlotDetectorConfig { max_batch_size: 5, rpc_url };
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 5,
+            rpc_url,
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+        };
 
         // stETH contract address (Lido Staked Ether)
         let steth_bytes = alloy::hex::decode("ae7ab96520DE3A18E5e111B5EaAb095312D7fE84").unwrap();
