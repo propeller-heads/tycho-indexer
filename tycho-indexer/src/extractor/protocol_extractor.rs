@@ -322,7 +322,10 @@ where
                     .filter_map(|(addr, bal)| {
                         let price = *prices.get(addr)?;
                         let tvl = bal.balance_float / price;
-                        Some(tvl)
+                        Some(if tvl.is_finite() { tvl } else {
+                            warn!("Infinite tvl for component {cid} (token: {addr}, balance: {bal:?}, price: {price})! Token price may be 0.");
+                            0.0
+                        })
                     })
                     .sum();
                 (cid.clone(), component_tvl)
