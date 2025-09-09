@@ -69,7 +69,13 @@ pub fn setup_hook_orchestrator_registry(
 
     // Create EVM balance slot detector
     let balance_slot_detector: Option<EVMBalanceSlotDetector> = {
-        let config = BalanceSlotDetectorConfig { rpc_url: rpc_url.clone(), max_batch_size: 5 };
+        let config = BalanceSlotDetectorConfig {
+            rpc_url: rpc_url.clone(),
+            max_batch_size: 5,
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+        };
 
         let detector =
             EVMBalanceSlotDetector::new(config).expect("Failed to create EVMBalanceSlotDetector");

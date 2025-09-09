@@ -1796,12 +1796,7 @@ mod tests {
     mod integration_tests {
         use std::{collections::HashSet, str::FromStr, sync::Arc};
 
-        use async_trait::async_trait;
         use tracing::info;
-        use tycho_common::{
-            models::{BlockHash, ComponentId},
-            traits::BalanceSlotDetector,
-        };
         use tycho_ethereum::entrypoint_tracer::{
             balance_slot_detector::{BalanceSlotDetectorConfig, EVMBalanceSlotDetector},
             tracer::EVMEntrypointService,
@@ -1944,8 +1939,13 @@ mod tests {
                 pool_manager: pool_manager.clone(),
             };
 
-            let balance_slot_detector_config =
-                BalanceSlotDetectorConfig { max_batch_size: 5, rpc_url };
+            let balance_slot_detector_config = BalanceSlotDetectorConfig {
+                max_batch_size: 5,
+                rpc_url,
+                max_retries: 3,
+                initial_backoff_ms: 100,
+                max_backoff_ms: 5000,
+            };
             let balance_slot_detector = EVMBalanceSlotDetector::new(balance_slot_detector_config)
                 .expect("Failed to create EVMBalanceSlotDetector");
 

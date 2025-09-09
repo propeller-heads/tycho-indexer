@@ -64,7 +64,7 @@ impl EVMEntrypointService {
         &self.rpc_url
     }
 
-    pub fn create_access_list_params(
+    fn create_access_list_params(
         target: &Address,
         params: &RPCTracerParams,
         block_hash: &BlockHash,
@@ -97,7 +97,7 @@ impl EVMEntrypointService {
         }
     }
 
-    pub fn create_trace_call_params(
+    pub(crate) fn create_trace_call_params(
         target: &Address,
         params: &RPCTracerParams,
         block_hash: &BlockHash,
