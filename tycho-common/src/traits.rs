@@ -164,32 +164,27 @@ pub trait EntryPointTracer: Sync {
 }
 
 /// Trait for detecting storage slots that contain ERC20 token balances
-/// This is a generic trait that can be implemented for different blockchain architectures
 #[async_trait]
 pub trait BalanceSlotDetector: Send + Sync {
     type Error: Debug;
 
-    /// Detect balance storage slots for multiple components in parallel
+    /// Detect balance storage slots for multiple tokens from a single holder.
+    /// Useful to allow overriding balances.
     ///
     /// # Arguments
-    /// * `components` - List of (component_id, token_addresses) tuples
+    /// * `tokens` - Slice of ERC20 token addresses.
     /// * `holder` - Address that holds the tokens (e.g., pool manager)
     /// * `block_hash` - Block at which to detect slots
     ///
     /// # Returns
-    /// HashMap mapping component_id -> Result containing (token_address -> storage_slot) or error
-    async fn detect_slots_for_components(
+    /// HashMap mapping Token -> Result containing (contract_address -> storage_slot) or error.
+    /// The storage slot is the one that controls the token's holder balance.
+    async fn detect_balance_slots(
         &self,
-        components: Vec<(ComponentId, Vec<Address>)>,
+        tokens: &[Address],
         holder: Address,
         block_hash: BlockHash,
-    ) -> HashMap<ComponentId, Result<HashMap<Address, Bytes>, Self::Error>>;
-
-    /// Set the maximum number of components to process concurrently
-    fn set_max_concurrent(&mut self, max: usize);
-
-    /// Get the current max concurrent setting
-    fn max_concurrent(&self) -> usize;
+    ) -> HashMap<Address, Result<(Address, Bytes), Self::Error>>;
 }
 
 #[cfg(test)]
