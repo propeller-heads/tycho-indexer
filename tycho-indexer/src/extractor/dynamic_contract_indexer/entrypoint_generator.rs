@@ -638,6 +638,13 @@ where
                 }
             }
 
+            // If balance slot detector was provided but no slots were successfully detected, fail
+            if token_slots.is_empty() && !tokens.is_empty() {
+                return Err(EntrypointGenerationError::NoDataAvailable(
+                    "Balance slot detection failed for all tokens".to_string(),
+                ));
+            }
+
             token_slots
         } else {
             info!("No balance slot detector available, skipping balance overwrites");
@@ -922,56 +929,14 @@ mod tests {
     use std::collections::HashMap;
 
     use tycho_common::{
-        models::{protocol::ProtocolComponent, BlockHash, ComponentId, TxHash},
+        models::{protocol::ProtocolComponent, TxHash},
         Bytes,
     };
 
     use super::*;
 
-    // Mock implementation of BalanceSlotDetector for tests
-    struct MockBalanceSlotDetector {
-        slots: HashMap<ComponentId, Result<HashMap<Address, Bytes>, String>>,
-    }
-
-    impl MockBalanceSlotDetector {
-        fn new() -> Self {
-            Self { slots: HashMap::new() }
-        }
-
-        fn with_slots(mut self, component_id: ComponentId, slots: HashMap<Address, Bytes>) -> Self {
-            self.slots
-                .insert(component_id, Ok(slots));
-            self
-        }
-
-        fn with_error(mut self, component_id: ComponentId, error: String) -> Self {
-            self.slots
-                .insert(component_id, Err(error));
-            self
-        }
-    }
-
-    #[async_trait]
-    impl BalanceSlotDetector for MockBalanceSlotDetector {
-        type Error = String;
-
-        async fn detect_balance_slots(
-            &self,
-            tokens: &[Address],
-            _holder: Address,
-            _block_hash: BlockHash,
-        ) -> HashMap<Address, Result<(Address, Bytes), Self::Error>> {
-            // For the mock, return fake slots for all tokens
-            let mut result = HashMap::new();
-            for token in tokens {
-                // Create a fake storage slot result
-                let storage_addr = token.clone();
-                let slot_bytes = Bytes::from(vec![0u8; 32]); // Fake slot
-                result.insert(token.clone(), Ok((storage_addr, slot_bytes)));
-            }
-            result
-        }
-    }
+    // Use the auto-generated mock
+    use tycho_common::traits::MockBalanceSlotDetector;
 
     fn create_test_tokens() -> Vec<Address> {
         vec![Address::from([1u8; 20]), Address::from([2u8; 20])]
@@ -1334,7 +1299,6 @@ mod tests {
         // Create test tokens
         let token0 = Address::from([1u8; 20]);
         let token1 = Address::from([2u8; 20]);
-        let tokens = vec![token0.clone(), token1.clone()];
 
         // Create mock detected balance slots
         let mut detected_slots = HashMap::new();
@@ -1342,8 +1306,23 @@ mod tests {
         detected_slots.insert(token1.clone(), Bytes::from([0x34; 32])); // Mock detected slot for token1
 
         // Create mock balance slot detector with detected slots
-        let mock_detector = MockBalanceSlotDetector::new()
-            .with_slots("test_component".to_string(), detected_slots.clone());
+        let mut mock_detector = MockBalanceSlotDetector::new();
+        let token0_clone = token0.clone();
+        mock_detector
+            .expect_detect_balance_slots()
+            .returning(move |tokens, _holder, _block_hash| {
+                let mut result = HashMap::new();
+                for token in tokens {
+                    let storage_addr = token.clone();
+                    let slot_bytes = if *token == token0_clone {
+                        Bytes::from([0x12; 32]) // Mock detected slot for token0
+                    } else {
+                        Bytes::from([0x34; 32]) // Mock detected slot for token1
+                    };
+                    result.insert(token.clone(), Ok((storage_addr, slot_bytes)));
+                }
+                result
+            });
 
         // Create test swap amounts
         let mut amounts = HashMap::new();
@@ -1425,8 +1404,16 @@ mod tests {
         let token1 = Address::from([2u8; 20]);
 
         // Create mock balance slot detector that returns an error
-        let mock_detector = MockBalanceSlotDetector::new()
-            .with_error("test_component".to_string(), "Detection failed".to_string());
+        let mut mock_detector = MockBalanceSlotDetector::new();
+        mock_detector
+            .expect_detect_balance_slots()
+            .returning(|tokens, _holder, _block_hash| {
+                let mut result = HashMap::new();
+                for token in tokens {
+                    result.insert(token.clone(), Err("Detection failed".to_string()));
+                }
+                result
+            });
 
         // Create test swap amounts
         let mut amounts = HashMap::new();
