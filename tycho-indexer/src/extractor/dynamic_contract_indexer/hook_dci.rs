@@ -8,9 +8,12 @@ use tracing::{debug, error, info, instrument, span, warn, Level};
 #[cfg(test)]
 use tycho_common::models::Address;
 use tycho_common::{
-    models::{protocol::ProtocolComponent, BlockHash, Chain, ComponentId, TxHash},
+    models::{
+        blockchain::Transaction, protocol::ProtocolComponent, BlockHash, Chain, ComponentId, TxHash,
+    },
     storage::{EntryPointFilter, EntryPointGateway, ProtocolGateway},
     traits::{AccountExtractor, EntryPointTracer},
+    Bytes,
 };
 
 use crate::extractor::{
@@ -18,9 +21,9 @@ use crate::extractor::{
         cache::HooksDCICache, component_metadata::ComponentTracingMetadata,
         dci::DynamicContractIndexer, hook_orchestrator::HookOrchestratorRegistry,
         hook_permissions_detector::HookPermissionsDetector,
-        metadata_orchestrator::BlockMetadataOrchestrator,
+        metadata_orchestrator::BlockMetadataOrchestrator, PausingReason,
     },
-    models::BlockChanges,
+    models::{insert_state_attribute_update, BlockChanges},
     ExtractionError, ExtractorExtension,
 };
 
@@ -245,12 +248,13 @@ where
     }
 
     /// Handles component failures by updating the state and logging errors
-    #[instrument(skip(self, block), fields(component_id = %component_id, block_number = block.number))]
+    #[instrument(skip(self, block_changes), fields(component_id = %component_id, block_number = block_changes.block.number))]
     fn handle_component_failure(
         &mut self,
         component_id: ComponentId,
         error_msg: String,
-        block: &tycho_common::models::blockchain::Block,
+        tx: &Transaction,
+        block_changes: &mut BlockChanges,
     ) -> Result<(), ExtractionError> {
         error!(
             error_msg = %error_msg,
@@ -280,28 +284,65 @@ where
 
         self.cache
             .component_states
-            .insert_pending(block.clone(), component_id.clone(), new_state)
+            .insert_pending(block_changes.block.clone(), component_id.clone(), new_state)
             .map_err(|e| {
                 error!("Failed to update component state: {e}");
                 ExtractionError::Unknown(format!("Failed to update component state: {e}"))
             })?;
 
-        debug!("Component state updated to Failed");
+        // Mark component as paused by setting the "paused" attribute to [3]
+        // This indicates the component processing has been paused due to failures
+        insert_state_attribute_update(
+            &mut block_changes.txs_with_update,
+            &component_id,
+            tx,
+            &"paused".to_string(),
+            &vec![PausingReason::MetadataError.get_reason_index()].into(),
+        )?;
+
+        debug!("Component state updated to Failed with paused attribute");
         Ok(())
     }
 
+    /// Helper function to get transaction from tx_map or create a fallback transaction
+    fn get_transaction_or_fallback(
+        tx_map: &HashMap<TxHash, Transaction>,
+        tx_hash_opt: Option<&TxHash>,
+        block_hash: &BlockHash,
+        component_id: &ComponentId,
+    ) -> Transaction {
+        match tx_hash_opt {
+            Some(tx_hash) => tx_map
+                .get(tx_hash)
+                .cloned()
+                .unwrap_or_else(|| {
+                    error!("No transaction found for hash {tx_hash} for component {component_id}");
+                    Transaction::new(tx_hash.clone(), block_hash.clone(), Bytes::zero(20), None, 0)
+                }),
+            None => {
+                error!("No transactions available for component {component_id}");
+                Transaction::new(Bytes::zero(32), block_hash.clone(), Bytes::zero(20), None, 0)
+            }
+        }
+    }
+
     /// Checks ComponentTracingMetadata for errors and updates component states accordingly
-    #[instrument(skip(self, component_metadata, block), fields(
+    #[instrument(skip(self, component_metadata, block_changes), fields(
         component_count = component_metadata.len(),
-        block_number = block.number
+        block_number = block_changes.block.number
     ))]
     fn process_metadata_errors(
         &mut self,
         component_metadata: &[(ProtocolComponent, ComponentTracingMetadata)],
-        block: &tycho_common::models::blockchain::Block,
+        block_changes: &mut BlockChanges,
     ) -> Result<(), ExtractionError> {
         let mut failed_components = 0;
         let mut total_errors = 0;
+        let tx_map: HashMap<TxHash, Transaction> = block_changes
+            .txs_with_update
+            .iter()
+            .map(|tx_with_changes| (tx_with_changes.tx.hash.clone(), tx_with_changes.tx.clone()))
+            .collect();
 
         for (component, metadata) in component_metadata {
             let mut errors = Vec::new();
@@ -333,7 +374,14 @@ where
                     "Component has metadata errors"
                 );
 
-                self.handle_component_failure(component.id.clone(), error_msg, block)?;
+                let tx = Self::get_transaction_or_fallback(
+                    &tx_map,
+                    Some(&metadata.tx_hash),
+                    &block_changes.block.hash,
+                    &component.id,
+                );
+
+                self.handle_component_failure(component.id.clone(), error_msg, &tx, block_changes)?;
             }
         }
 
@@ -698,7 +746,7 @@ where
         info!(metadata_count = component_metadata.len(), "Collected component metadata");
 
         // 3a. Process metadata errors and update component states
-        self.process_metadata_errors(&component_metadata, &block_changes.block)?;
+        self.process_metadata_errors(&component_metadata, block_changes)?;
 
         // 4. Group components by hook address and separate by processing needs
         let (components_full_processing, components_balance_only, metadata_by_component_id) = {
@@ -744,6 +792,12 @@ where
             balance_only_components = components_balance_only.len(),
             "Processing components"
         );
+
+        let tx_map = block_changes
+            .txs_with_update
+            .iter()
+            .map(|tx_with_changes| (tx_with_changes.tx.hash.clone(), tx_with_changes.tx.clone()))
+            .collect::<HashMap<_, _>>();
 
         for component in &components_full_processing {
             let orchestrator_span = span!(
@@ -793,11 +847,48 @@ where
                             "Hook orchestrator failed (full processing)"
                         );
 
+                        // Get the tx that updated the component, default to a dummy tx if not
+                        // found.
+                        let tx_hash = component_metadata_map
+                            .get(&component.id)
+                            .map(|meta| meta.tx_hash.clone());
+
+                        let tx = match tx_hash {
+                            Some(tx_hash) => tx_map
+                                .get(&tx_hash)
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    error!("No tx hash found for component {}", component.id);
+                                    Transaction::new(
+                                        tx_hash.clone(),
+                                        block_changes.block.hash.clone(),
+                                        Bytes::zero(20),
+                                        None,
+                                        0,
+                                    )
+                                }),
+                            None => tx_map
+                                .values()
+                                .next()
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    error!("No tx hash found for component {}", component.id);
+                                    Transaction::new(
+                                        Bytes::zero(32),
+                                        block_changes.block.hash.clone(),
+                                        Bytes::zero(20),
+                                        None,
+                                        0,
+                                    )
+                                }),
+                        };
+
                         // Mark all components in this group as failed
                         self.handle_component_failure(
                             component.id.clone(),
                             format!("Hook orchestrator error: {e:?}"),
-                            &block_changes.block,
+                            &tx,
+                            block_changes,
                         )?;
                     }
                 }
@@ -807,11 +898,46 @@ where
                     "No hook orchestrator found for component"
                 );
 
+                let tx_hash = metadata_by_component_id
+                    .get(&component.id)
+                    .map(|meta| meta.tx_hash.clone());
+
+                let tx = match tx_hash {
+                    Some(tx_hash) => tx_map
+                        .get(&tx_hash)
+                        .cloned()
+                        .unwrap_or_else(|| {
+                            error!("No tx hash found for component {}", component.id);
+                            Transaction::new(
+                                tx_hash.clone(),
+                                block_changes.block.hash.clone(),
+                                Bytes::zero(20),
+                                None,
+                                0,
+                            )
+                        }),
+                    None => tx_map
+                        .values()
+                        .next()
+                        .cloned()
+                        .unwrap_or_else(|| {
+                            error!("No tx hash found for component {}", component.id);
+                            Transaction::new(
+                                Bytes::zero(32),
+                                block_changes.block.hash.clone(),
+                                Bytes::zero(20),
+                                None,
+                                0,
+                            )
+                        }),
+                };
+
                 // Mark components as failed since we can't process them
                 self.handle_component_failure(
                     component.id.clone(),
                     format!("No hook orchestrator available for component {}", component.id),
-                    &block_changes.block,
+                    &tx,
+                    block_changes,
                 )?;
             }
         }
@@ -871,11 +997,23 @@ where
                             "Hook orchestrator failed (balance-only)"
                         );
 
+                        let tx_hash = component_metadata_map
+                            .get(&component.id)
+                            .map(|meta| &meta.tx_hash);
+
+                        let tx = Self::get_transaction_or_fallback(
+                            &tx_map,
+                            tx_hash,
+                            &block_changes.block.hash,
+                            &component.id,
+                        );
+
                         // Mark all components in this group as failed
                         self.handle_component_failure(
                             component.id.clone(),
                             format!("Hook orchestrator balance update error: {e:?}"),
-                            &block_changes.block,
+                            &tx,
+                            block_changes,
                         )?;
                     }
                 }
@@ -885,11 +1023,23 @@ where
                     "No hook orchestrator found for component (balance-only processing)"
                 );
 
+                let tx_hash = metadata_by_component_id
+                    .get(&component.id)
+                    .map(|meta| &meta.tx_hash);
+
+                let tx = Self::get_transaction_or_fallback(
+                    &tx_map,
+                    tx_hash,
+                    &block_changes.block.hash,
+                    &component.id,
+                );
+
                 // Mark components as failed since we can't process them
                 self.handle_component_failure(
                     component.id.clone(),
                     format!("No hook orchestrator available for component {}", component.id),
-                    &block_changes.block,
+                    &tx,
+                    block_changes,
                 )?;
             }
         }
@@ -1566,6 +1716,112 @@ mod tests {
             .process_revert(&block_hash)
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_process_metadata_errors_pausing_on_tracing_failure() {
+        let gateway = MockGateway::new();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let inner_dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        let metadata_orchestrator = BlockMetadataOrchestrator::new(
+            MetadataGeneratorRegistry::new(),
+            MetadataResponseParserRegistry::new(),
+            ProviderRegistry::new(),
+        );
+
+        let hook_orchestrator_registry = HookOrchestratorRegistry::new();
+
+        let gateway2 = MockGateway::new();
+        let mut hook_dci = UniswapV4HookDCI::new(
+            inner_dci,
+            metadata_orchestrator,
+            hook_orchestrator_registry,
+            gateway2,
+            Chain::Ethereum,
+            2, // pause_after_retries
+            3, // max_retries
+        );
+
+        let block = get_test_block(1);
+        let tx = get_test_transaction(1);
+        let component_id = "test_component".to_string();
+        let hook_address = create_hook_address_with_swap_permissions();
+        let component = create_hook_component(&component_id, hook_address);
+
+        // Create block changes with transaction
+        let mut block_changes = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            block.clone(),
+            1,
+            false,
+            vec![TxWithChanges {
+                tx: tx.clone(),
+                protocol_components: HashMap::new(),
+                state_updates: HashMap::new(),
+                balance_changes: HashMap::new(),
+                ..Default::default()
+            }],
+            Vec::new(),
+        );
+
+        // Initialize the block layer in the cache first
+        hook_dci
+            .cache
+            .component_states
+            .validate_and_ensure_block_layer_test(&block)
+            .unwrap();
+
+        // Create component metadata with tracing errors
+        let tracing_metadata = ComponentTracingMetadata {
+            tx_hash: tx.hash.clone(),
+            balances: Some(Err(crate::extractor::dynamic_contract_indexer::component_metadata::MetadataError::RequestFailed("RPC timeout during tracing".to_string()))),
+            limits: Some(Err(crate::extractor::dynamic_contract_indexer::component_metadata::MetadataError::ProviderFailed("Simulation failed: insufficient gas".to_string()))),
+            tvl: None,
+        };
+
+        let component_metadata = vec![(component.clone(), tracing_metadata)];
+
+        // Process metadata errors - this should trigger pausing logic
+        let result = hook_dci.process_metadata_errors(&component_metadata, &mut block_changes);
+
+        assert!(result.is_ok(), "process_metadata_errors should succeed");
+
+        // Verify that the pausing attribute was added to block_changes
+        assert_eq!(block_changes.txs_with_update.len(), 1);
+        let tx_with_changes = &block_changes.txs_with_update[0];
+
+        // Check that the state update includes the "paused" attribute
+        assert!(
+            tx_with_changes
+                .state_updates
+                .contains_key(&component_id),
+            "State updates should contain the component"
+        );
+
+        let state_delta = &tx_with_changes.state_updates[&component_id];
+        assert!(
+            state_delta
+                .updated_attributes
+                .contains_key("paused"),
+            "State delta should contain 'paused' attribute"
+        );
+
+        let paused_value = &state_delta.updated_attributes["paused"];
+        assert_eq!(
+            paused_value,
+            &Bytes::from([3u8]),
+            "Paused attribute should have expected value"
+        );
     }
 
     #[cfg(test)]
