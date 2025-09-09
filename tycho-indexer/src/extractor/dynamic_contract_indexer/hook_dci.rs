@@ -1803,7 +1803,7 @@ mod tests {
             traits::BalanceSlotDetector,
         };
         use tycho_ethereum::entrypoint_tracer::{
-            evm_balance_slot_detector::{BalanceSlotDetectorConfig, EVMBalanceSlotDetector},
+            balance_slot_detector::{BalanceSlotDetectorConfig, EVMBalanceSlotDetector},
             tracer::EVMEntrypointService,
         };
 
@@ -1945,7 +1945,7 @@ mod tests {
             };
 
             let balance_slot_detector_config =
-                BalanceSlotDetectorConfig { max_concurrent_components: 5, rpc_url };
+                BalanceSlotDetectorConfig { max_batch_size: 5, rpc_url };
             let balance_slot_detector = EVMBalanceSlotDetector::new(balance_slot_detector_config)
                 .expect("Failed to create EVMBalanceSlotDetector");
 

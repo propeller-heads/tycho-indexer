@@ -614,7 +614,7 @@ where
             let pool_manager = self.config.pool_manager.clone();
 
             let detection_results = balance_slot_detector
-                .detect_slots_for_components(
+                .detect_balance_slots(
                     components_for_detection,
                     pool_manager,
                     context.block.hash.clone(),
@@ -957,7 +957,7 @@ mod tests {
     impl BalanceSlotDetector for MockBalanceSlotDetector {
         type Error = String;
 
-        async fn detect_slots_for_components(
+        async fn detect_balance_slots(
             &self,
             components: Vec<(ComponentId, Vec<Address>)>,
             _holder: Address,

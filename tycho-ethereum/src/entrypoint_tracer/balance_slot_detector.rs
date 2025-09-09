@@ -1,8 +1,12 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap},
+    ops::Add,
+};
 
 use alloy::primitives::{Address as AlloyAddress, U256};
 use alloy_rpc_types_trace::geth::{GethTrace, PreStateFrame, PreStateMode};
 use async_trait::async_trait;
+use ethers::types::spoof::balance;
 use futures::future::join_all;
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -36,11 +40,14 @@ pub enum BalanceSlotError {
     UnknownError(String),
 }
 
-/// Configuration for balance slot detection
+/// Configuration for balance slot detection.
+/// Use max_batch_size to configure the behavior according to your node capacity.
+/// Please ensure your node supports batching RPC requests
+/// Read more: https://www.quicknode.com/guides/quicknode-products/apis/guide-to-efficient-rpc-requests
 #[derive(Clone, Debug)]
 pub struct BalanceSlotDetectorConfig {
-    /// Maximum number of components to process concurrently
-    pub max_concurrent_components: usize,
+    /// Maximum batch size to send in a singe node request
+    pub max_batch_size: usize,
     /// RPC endpoint URL (RPC needs to support debug_traceCall method)
     pub rpc_url: String,
 }
@@ -49,7 +56,8 @@ pub struct BalanceSlotDetectorConfig {
 #[derive(Debug)]
 pub struct EVMBalanceSlotDetector {
     tracer: EVMEntrypointService,
-    max_concurrent_components: usize,
+    max_batch_size: usize,
+    cache: HashMap<(Address, Address), (Address, Bytes)>,
 }
 
 impl EVMBalanceSlotDetector {
@@ -59,45 +67,96 @@ impl EVMBalanceSlotDetector {
             _ => BalanceSlotError::UnknownError(e.to_string()),
         })?;
 
-        Ok(Self { tracer, max_concurrent_components: config.max_concurrent_components })
+        Ok(Self {
+            tracer,
+            max_batch_size: config.max_batch_size,
+            // perf: Add cache persistence to DB.
+            cache: HashMap::new(),
+        })
     }
 
     /// Detect slots for a single component using batched requests (debug_traceCall + eth_call per
     /// token)
     #[instrument(fields(
-        component_id = %component_id,
         token_count = tokens.len()
-    ))]
-    async fn detect_component_slots(
+    ), skip(self, tokens))]
+    async fn detect_token_slots(
         &self,
-        component_id: ComponentId,
-        tokens: Vec<Address>,
+        tokens: &[Address],
         owner: &Address,
         block_hash: &BlockHash,
-    ) -> Result<(ComponentId, HashMap<Address, Bytes>), BalanceSlotError> {
+    ) -> HashMap<Address, Result<(Address, Bytes), BalanceSlotError>> {
         if tokens.is_empty() {
-            return Ok((component_id, HashMap::new()));
+            return HashMap::new();
         }
 
+        let mut request_tokens: Vec<Address> = Vec::with_capacity(tokens.len());
+
+        // Filters out all the tokens that are in the cache
+        let mut cached_tokens: HashMap<Address, Result<(Address, Bytes), BalanceSlotError>> =
+            tokens
+                .iter()
+                .filter_map(|token| match self.cache.get(&(*token, *owner)) {
+                    Some(slot) => Some((*token, Ok(slot.clone()))),
+                    None => {
+                        request_tokens.push(*token);
+                        None
+                    }
+                })
+                .collect();
+
         // Create batched request: 2 requests per token (debug_traceCall + eth_call)
-        let batch_request = self.create_batched_request(&tokens, owner, block_hash)?;
+        let requests = match self.create_balance_requests(&request_tokens, owner, block_hash) {
+            Ok(requests) => requests,
+            Err(e) => {
+                for token in request_tokens.iter() {
+                    // Failed to create the batched request - return with only the cached values.
+                    cached_tokens
+                        .insert(token.clone(), Err(BalanceSlotError::RequestError(e.to_string())));
+                }
+                return cached_tokens;
+            }
+        };
 
         // Send the batched request
-        let responses = self
-            .send_batched_request(batch_request)
-            .await?;
+        let responses = match self
+            .send_batched_request(requests)
+            .await
+        {
+            Ok(responses) => responses,
+            Err(e) => {
+                for token in request_tokens.iter() {
+                    // Failed to send the batched request - return with only the cached values.
+                    cached_tokens
+                        .insert(*token, Err(BalanceSlotError::RequestError(e.to_string())));
+                }
+                return cached_tokens;
+            }
+        };
 
         // Process the batched response to extract slots
-        let token_slots = self.process_batched_response(tokens, responses)?;
+        let token_slots = self.process_batched_response(tokens, responses);
 
-        Ok((component_id, token_slots))
+        // TODO: Validate if the "best" storage slot actually changes by doing another eth_call
+        // with overwrites
+        let temp_token_slots: HashMap<Address, Result<(Address, Bytes), BalanceSlotError>> = token_slots
+            .into_iter()
+            .map(|(key, value)| {
+                let new_value = value.map(|((addr, bytes), _balance)| (addr, bytes));
+                (key, new_value)
+            })
+            .collect();
+
+        // TODO: Update the cache with the successful responses
+
+        temp_token_slots
     }
 
     /// Create a batched JSON-RPC request for all tokens (2 requests per token).
     /// We need to send a eth_call after the tracing to get the return value of the balanceOf
     /// function. Currently, debug_traceCall does not support preStateTracer + returning the
     /// value in the same request.
-    fn create_batched_request(
+    fn create_balance_requests(
         &self,
         tokens: &[Address],
         owner: &Address,
@@ -175,19 +234,9 @@ impl EVMBalanceSlotDetector {
     /// Process batched responses and extract storage slots for each token
     fn process_batched_response(
         &self,
-        tokens: Vec<Address>,
+        tokens: &[Address],
         responses: Vec<Value>,
-    ) -> Result<HashMap<Address, Bytes>, BalanceSlotError> {
-        // We expect 2 responses per token (debug_traceCall + eth_call)
-        if responses.len() != tokens.len() * 2 {
-            return Err(BalanceSlotError::InvalidResponse(format!(
-                "Expected {} responses for {} tokens, got {}",
-                tokens.len() * 2,
-                tokens.len(),
-                responses.len()
-            )));
-        }
-
+    ) -> HashMap<Address, Result<((Address, Bytes), U256), BalanceSlotError>> {
         // Create a map of response ID to response for out-of-order handling
         // (can't trust RPC return ordering)
         let mut id_to_response = HashMap::new();
@@ -212,34 +261,32 @@ impl EVMBalanceSlotDetector {
                 id_to_response.get(&debug_id),
                 id_to_response.get(&eth_call_id),
             ) {
-                Ok(Some(slot)) => {
+                Ok(slot) => {
                     debug!(
                         token = %token,
                         slot = ?slot,
                         "Found storage slot for token"
                     );
-                    token_slots.insert(token.clone(), slot);
-                }
-                Ok(None) => {
-                    debug!(token = %token, "No suitable slot found for token");
+                    token_slots.insert(token.clone(), Ok(slot));
                 }
                 Err(e) => {
                     error!(token = %token, error = %e, "Failed to extract slot for token");
-                    return Err(e);
+                    token_slots.insert(token.clone(), Err(e));
                 }
             }
         }
 
-        Ok(token_slots)
+        token_slots
     }
 
     /// Extract storage slot from paired debug_traceCall and eth_call responses
+    /// Returns A Tuple of Storage slot (Address and Slot) and the target Balance.
     fn extract_slot_from_paired_responses(
         &self,
         token: &Address,
         debug_response: Option<&Value>,
         eth_call_response: Option<&Value>,
-    ) -> Result<Option<Bytes>, BalanceSlotError> {
+    ) -> Result<((Address, Bytes), U256), BalanceSlotError> {
         let debug_resp = debug_response.ok_or_else(|| {
             BalanceSlotError::InvalidResponse("Missing debug_traceCall response".into())
         })?;
@@ -250,19 +297,19 @@ impl EVMBalanceSlotDetector {
         // Check for errors in responses
         if let Some(error) = debug_resp.get("error") {
             warn!("Debug trace failed for token {}: {}", token, error);
-            return Ok(None);
+            return Err(BalanceSlotError::RequestError(error.to_string()));
         }
 
         if let Some(error) = eth_call_resp.get("error") {
             warn!("Eth call failed for token {}: {}", token, error);
-            return Ok(None);
+            return Err(BalanceSlotError::RequestError(error.to_string()));
         }
 
         // Extract balance from eth_call response
         let balance = self.extract_balance_from_call_response(eth_call_resp)?;
 
         // Extract slot values from debug_traceCall response for better slot selection
-        let slot_values = self.extract_slot_values_from_trace_response(debug_resp, token)?;
+        let slot_values = self.extract_slot_values_from_trace_response(debug_resp)?;
 
         // Find the best slot by comparing values to the expected balance
         self.find_best_slot_by_value_comparison(slot_values, balance)
@@ -299,14 +346,13 @@ impl EVMBalanceSlotDetector {
     fn extract_slot_values_from_trace_response(
         &self,
         response: &Value,
-        token: &Address,
-    ) -> Result<Vec<(Bytes, U256)>, BalanceSlotError> {
+    ) -> Result<Vec<((Address, Bytes), U256)>, BalanceSlotError> {
         let result = response.get("result").ok_or_else(|| {
             BalanceSlotError::InvalidResponse("Missing result in debug_traceCall".into())
         })?;
 
         // The debug_traceCall with prestateTracer returns the result directly as a hashmap
-        let frame_map: std::collections::BTreeMap<String, serde_json::Value> =
+        let frame_map: std::collections::BTreeMap<Address, serde_json::Value> =
             match serde_json::from_value(result.clone()) {
                 Ok(map) => map,
                 Err(e) => {
@@ -319,46 +365,43 @@ impl EVMBalanceSlotDetector {
             };
 
         let mut slot_values = Vec::new();
-        let token_hex = format!("0x{}", alloy::hex::encode(token.as_ref()));
 
-        for (address_str, account_data) in frame_map {
-            if address_str.to_lowercase() == token_hex.to_lowercase() {
-                // Extract storage from the account data
-                if let Some(storage_obj) = account_data.get("storage") {
-                    if let Some(storage_map) = storage_obj.as_object() {
-                        for (slot_key, slot_value) in storage_map {
-                            // Decode slot key
-                            let slot_hex = slot_key
+        for (address, account_data) in frame_map {
+            // Extract storage from the account data
+            if let Some(storage_obj) = account_data.get("storage") {
+                if let Some(storage_map) = storage_obj.as_object() {
+                    for (slot_key, slot_value) in storage_map {
+                        // Decode slot key
+                        let slot_hex = slot_key
+                            .strip_prefix("0x")
+                            .unwrap_or(slot_key);
+                        let slot_bytes = match alloy::hex::decode(slot_hex) {
+                            Ok(bytes) => Bytes::from(bytes),
+                            Err(_) => {
+                                warn!("Failed to decode slot key: {}", slot_key);
+                                continue;
+                            }
+                        };
+
+                        // Decode slot value
+                        if let Some(value_str) = slot_value.as_str() {
+                            let value_hex = value_str
                                 .strip_prefix("0x")
-                                .unwrap_or(slot_key);
-                            let slot_bytes = match alloy::hex::decode(slot_hex) {
-                                Ok(bytes) => Bytes::from(bytes),
-                                Err(_) => {
-                                    warn!("Failed to decode slot key: {}", slot_key);
-                                    continue;
+                                .unwrap_or(value_str);
+                            match U256::from_str_radix(value_hex, 16) {
+                                Ok(value) => {
+                                    slot_values.push(((address.clone(), slot_bytes), value));
                                 }
-                            };
-
-                            // Decode slot value
-                            if let Some(value_str) = slot_value.as_str() {
-                                let value_hex = value_str
-                                    .strip_prefix("0x")
-                                    .unwrap_or(value_str);
-                                match U256::from_str_radix(value_hex, 16) {
-                                    Ok(value) => {
-                                        slot_values.push((slot_bytes, value));
-                                    }
-                                    Err(_) => {
-                                        warn!("Failed to decode slot value: {}", value_str);
-                                    }
+                                Err(_) => {
+                                    warn!("Failed to decode slot value: {}", value_str);
                                 }
                             }
                         }
-                        break;
                     }
-                } else {
-                    debug!("No storage field found for address {}", address_str);
+                    break;
                 }
+            } else {
+                debug!("No storage field found for address {}", address);
             }
         }
 
@@ -368,9 +411,9 @@ impl EVMBalanceSlotDetector {
     /// Find the best slot by comparing storage values to the expected balance
     fn find_best_slot_by_value_comparison(
         &self,
-        slot_values: Vec<(Bytes, U256)>,
+        slot_values: Vec<((Address, Bytes), U256)>,
         expected_balance: U256,
-    ) -> Result<Option<Bytes>, BalanceSlotError> {
+    ) -> Result<((Address, Bytes), U256), BalanceSlotError> {
         let slot_count = slot_values.len();
 
         match slot_count {
@@ -385,7 +428,7 @@ impl EVMBalanceSlotDetector {
                     .unwrap()
                     .0;
                 debug!("Single slot found, returning: {:?}", slot);
-                Ok(Some(slot))
+                Ok((slot, expected_balance))
             }
             _ => {
                 // Find the slot with minimum difference without allocating a new vector
@@ -399,16 +442,25 @@ impl EVMBalanceSlotDetector {
                     .unwrap(); // Safe because we know len > 0
 
                 debug!(
-                    "Found {} slots, selected best slot: 0x{} (value: {}, diff: {})",
+                    "Found {} slots, selected best slot: Address=0x{} Slot=0x{} (value: {}, diff: {})",
                     slot_count,
-                    alloy::hex::encode(best_slot.as_ref()),
+                    alloy::hex::encode(best_slot.0.as_ref()),
+                    alloy::hex::encode(best_slot.1.as_ref()),
                     best_value,
                     best_diff
                 );
 
-                Ok(Some(best_slot))
+                Ok((best_slot, expected_balance))
             }
         }
+    }
+
+    async fn validate_best_slot(
+        &self,
+        p0: (Address, Bytes),
+        p1: &Value,
+    ) -> Result<Option<Bytes>, BalanceSlotError> {
+        todo!()
     }
 }
 
@@ -417,26 +469,29 @@ impl EVMBalanceSlotDetector {
 impl BalanceSlotDetector for EVMBalanceSlotDetector {
     type Error = BalanceSlotError;
 
-    /// Detect balance storage slots for multiple components in parallel
-    async fn detect_slots_for_components(
+    /// Detect balance storage slots for multiple tokens using a combination of batched and async
+    /// concurrent requests.
+    async fn detect_balance_slots(
         &self,
-        components: Vec<(ComponentId, Vec<Address>)>,
+        tokens: &[Address],
         holder: Address,
         block_hash: BlockHash,
-    ) -> HashMap<ComponentId, Result<HashMap<Address, Bytes>, Self::Error>> {
-        info!("Starting balance slot detection for {} components", components.len());
+    ) -> HashMap<Address, Result<(Address, Bytes), Self::Error>> {
+        info!("Starting balance slot detection for {} tokens", tokens.len());
+
         let mut all_results = HashMap::new();
 
-        // Process components in chunks to optimize, while avoiding being rate limited
-        for (chunk_idx, chunk) in components
-            .chunks(self.max_concurrent_components)
+        // Batch tokens into  to optimize, while avoiding being rate limited. Each token spawns up
+        // to 2 requests in a single batch.
+        for (chunk_idx, chunk) in tokens
+            .chunks(self.max_batch_size)
             .enumerate()
         {
-            debug!("Processing chunk {} with {} components", chunk_idx, chunk.len());
+            debug!("Processing chunk {} with {} tokens", chunk_idx, chunk.len());
 
-            let futures = chunk.iter().map(|(comp_id, tokens)| {
-                self.detect_component_slots(comp_id.clone(), tokens.clone(), &holder, &block_hash)
-            });
+            let res = self
+                .detect_token_slots(chunk, &holder, &block_hash)
+                .await;
 
             // join_all guarantees that the results of the completed futures will be collected into
             // a Vec<T> in the same order as the input futures were provided.
@@ -474,16 +529,6 @@ impl BalanceSlotDetector for EVMBalanceSlotDetector {
             all_results.len()
         );
         all_results
-    }
-
-    /// Set the maximum number of components to process concurrently
-    fn set_max_concurrent(&mut self, max: usize) {
-        self.max_concurrent_components = max;
-    }
-
-    /// Get the current max concurrent setting
-    fn max_concurrent(&self) -> usize {
-        self.max_concurrent_components
     }
 }
 
@@ -533,7 +578,7 @@ mod tests {
     async fn test_detect_slots_integration() {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
         println!("Using RPC URL: {}", rpc_url);
-        let config = BalanceSlotDetectorConfig { max_concurrent_components: 5, rpc_url };
+        let config = BalanceSlotDetectorConfig { max_concurrent_requests: 5, rpc_url };
 
         let detector = EVMBalanceSlotDetector::new(config).unwrap();
 
@@ -561,7 +606,7 @@ mod tests {
         println!("Block hash: 0x{}", alloy::hex::encode(block_hash.as_ref()));
 
         let results = detector
-            .detect_slots_for_components(components, pool_manager, block_hash)
+            .detect_balance_slots(components, pool_manager, block_hash)
             .await;
 
         println!("Results: {:?}", results);
@@ -603,7 +648,7 @@ mod tests {
     #[ignore] // Requires real RPC connection
     async fn test_detect_slots_rebasing_token() {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
-        let config = BalanceSlotDetectorConfig { max_concurrent_components: 5, rpc_url };
+        let config = BalanceSlotDetectorConfig { max_concurrent_requests: 5, rpc_url };
 
         let detector = EVMBalanceSlotDetector::new(config).unwrap();
 
@@ -624,7 +669,7 @@ mod tests {
         let block_hash = BlockHash::from(block_hash_bytes);
 
         let results = detector
-            .detect_slots_for_components(components, balance_owner.clone(), block_hash.clone())
+            .detect_balance_slots(components, balance_owner.clone(), block_hash.clone())
             .await;
 
         dbg!(&results);
