@@ -1952,7 +1952,7 @@ mod tests {
             let mut entrypoint_generator = UniswapV4DefaultHookEntrypointGenerator::new(
                 DefaultSwapAmountEstimator::with_balances(),
                 pool_manager.clone(),
-                Some(balance_slot_detector),
+                balance_slot_detector,
             );
             entrypoint_generator.set_config(config);
 
