@@ -458,7 +458,7 @@ where
                     component_id,
                     tx,
                     &"paused".to_string(),
-                    &vec![PausingReason::TracingError.get_reason_index()].into(),
+                    &PausingReason::TracingError.into(),
                 )?;
             }
 
