@@ -1,8 +1,11 @@
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use diesel::{sql_query, sql_types::{Text, Timestamptz}};
+use diesel::{
+    sql_query,
+    sql_types::{Text, Timestamptz},
+};
 use diesel_async::{pooled_connection::deadpool::Pool, AsyncPgConnection, RunQueryDsl};
-use tracing::info;
 use tokio::{sync::mpsc, task::JoinHandle};
+use tracing::info;
 use tycho_common::{models::Chain, storage::StorageError};
 
 use crate::{
@@ -103,9 +106,11 @@ struct ParentTableRow {
 }
 
 async fn ensure_partitions_exist(pool: Pool<AsyncPgConnection>, retention_horizon: NaiveDateTime) {
-    // We require daily partitions from the retention horizon day up to today for all partitioned tables.
+    // We require daily partitions from the retention horizon day up to today for all partitioned
+    // tables.
     let mut conn = pool.get().await.expect("connection ok");
-    // Auto-discover parent partitioned tables in public schema that are partitioned and include a valid_to column
+    // Auto-discover parent partitioned tables in public schema that are partitioned and include a
+    // valid_to column
     let parent_rows: Vec<ParentTableRow> = sql_query(
         r#"
         SELECT format('%I.%I', n.nspname, c.relname) AS parent_table
@@ -120,12 +125,15 @@ async fn ensure_partitions_exist(pool: Pool<AsyncPgConnection>, retention_horizo
               AND col.table_name = c.relname
               AND col.column_name = 'valid_to'
           )
-        "#
+        "#,
     )
     .load(&mut conn)
     .await
     .expect("Failed to list parent partitioned tables");
-    let parents: Vec<String> = parent_rows.into_iter().map(|r| r.parent_table).collect();
+    let parents: Vec<String> = parent_rows
+        .into_iter()
+        .map(|r| r.parent_table)
+        .collect();
     info!("Verifying existence of daily partitions for: {} ...", parents.join(", "));
 
     // Compute day range [start_day, end_day]
@@ -180,17 +188,20 @@ async fn ensure_partitions_exist(pool: Pool<AsyncPgConnection>, retention_horizo
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use chrono::NaiveDate;
     use diesel::sql_query;
     use diesel_async::{AsyncConnection, AsyncPgConnection, RunQueryDsl};
-    use chrono::NaiveDate;
+
+    use super::*;
 
     async fn setup_db() -> AsyncPgConnection {
         let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
         let mut conn = AsyncPgConnection::establish(&db_url)
             .await
             .expect("Connection ok");
-        conn.begin_test_transaction().await.expect("test tx ok");
+        conn.begin_test_transaction()
+            .await
+            .expect("test tx ok");
         conn
     }
 
@@ -258,7 +269,10 @@ mod tests {
         .await
         .expect("discover parents ok");
 
-        let parents: Vec<String> = parent_rows.into_iter().map(|r| r.parent_table).collect();
+        let parents: Vec<String> = parent_rows
+            .into_iter()
+            .map(|r| r.parent_table)
+            .collect();
         assert!(parents.contains(&"public.test_part_parent".to_string()));
 
         // Parse child lower bounds for our temp parent
@@ -269,7 +283,10 @@ mod tests {
         .await
         .expect("list child lower bounds ok");
 
-        let mut days: Vec<NaiveDate> = lb_rows.into_iter().map(|r| r.lower_bound.date()).collect();
+        let mut days: Vec<NaiveDate> = lb_rows
+            .into_iter()
+            .map(|r| r.lower_bound.date())
+            .collect();
         days.sort();
 
         assert_eq!(
@@ -325,7 +342,9 @@ mod tests {
         .expect("create existing child ok");
 
         // Build a pool and run the partition check; it should panic due to the missing day
-        let pool = crate::postgres::connect(&db_url).await.expect("pool ok");
+        let pool = crate::postgres::connect(&db_url)
+            .await
+            .expect("pool ok");
         let horizon = NaiveDate::from_ymd_opt(2025, 9, 1)
             .unwrap()
             .and_hms_opt(0, 0, 0)
@@ -333,7 +352,10 @@ mod tests {
 
         let handle = tokio::spawn(ensure_partitions_exist(pool.clone(), horizon));
         let res = handle.await;
-        assert!(res.is_err() && res.unwrap_err().is_panic(), "expected panic on missing partitions");
+        assert!(
+            res.is_err() && res.unwrap_err().is_panic(),
+            "expected panic on missing partitions"
+        );
 
         // Cleanup
         sql_query("DROP TABLE IF EXISTS public.test_part_parent_missing CASCADE;")
