@@ -9,7 +9,7 @@ use tycho_common::{
     traits::{AccountExtractor, BalanceSlotDetector, EntryPointTracer},
     Bytes,
 };
-use tycho_ethereum::entrypoint_tracer::evm_balance_slot_detector::{
+use tycho_ethereum::entrypoint_tracer::balance_slot_detector::{
     BalanceSlotDetectorConfig, BalanceSlotError, EVMBalanceSlotDetector,
 };
 
@@ -71,7 +71,7 @@ pub fn setup_hook_orchestrator_registry(
     // Create EVM balance slot detector
     let balance_slot_detector: Option<EVMBalanceSlotDetector> = {
         let config =
-            BalanceSlotDetectorConfig { rpc_url: rpc_url.clone(), max_concurrent_components: 5 };
+            BalanceSlotDetectorConfig { rpc_url: rpc_url.clone(), max_batch_size: 5 };
 
         let detector =
             EVMBalanceSlotDetector::new(config).expect("Failed to create EVMBalanceSlotDetector");
