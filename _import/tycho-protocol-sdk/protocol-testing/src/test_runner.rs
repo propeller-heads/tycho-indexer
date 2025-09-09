@@ -329,6 +329,10 @@ fn validate_state(
     info!("Using adapter contract: {}", adapter_contract_path.display());
     let adapter_contract_path_str: &str = adapter_contract_path.to_str().unwrap();
 
+    // Clear the shared database state to ensure test isolation
+    // This prevents state from previous tests from affecting the current test
+    tycho_simulation::evm::engine_db::SHARED_TYCHO_DB.clear();
+
     let mut decoder = TychoStreamDecoder::new();
     let decoder_context = DecoderContext::new().vm_adapter_path(adapter_contract_path_str);
     decoder.register_decoder_with_context::<EVMPoolState<PreCachedDB>>(
