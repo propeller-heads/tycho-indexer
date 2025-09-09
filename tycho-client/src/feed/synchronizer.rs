@@ -456,7 +456,7 @@ where
     ///
     /// The returned `end_rx` (if any) should be reused for retry attempts since the close
     /// signal may still arrive and we want to remain cancellable across retries.
-    #[instrument(skip(self, block_tx), fields(extractor_id = %self.extractor_id))]
+    #[instrument(skip(self, block_tx, end_rx), fields(extractor_id = %self.extractor_id))]
     async fn state_sync(
         &mut self,
         block_tx: &mut Sender<StateSyncMessage<BlockHeader>>,
