@@ -1,7 +1,17 @@
 use std::{
     collections::{BTreeMap, HashMap},
     ops::Add,
+    sync::RwLock,
 };
+
+/// Data structure for validation operations
+struct ValidationData {
+    token: Address,
+    storage_addr: Address,
+    slot: Bytes,
+    original_balance: U256,
+    test_value: U256,
+}
 
 use alloy::primitives::{Address as AlloyAddress, U256};
 use alloy_rpc_types_trace::geth::{GethTrace, PreStateFrame, PreStateMode};
@@ -14,7 +24,7 @@ use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     models::{
         blockchain::{AccountOverrides, EntryPoint, RPCTracerParams, TracingParams},
-        Address, BlockHash, ComponentId,
+        Address, BlockHash,
     },
     traits::{BalanceSlotDetector, EntryPointTracer},
     Bytes,
@@ -22,7 +32,16 @@ use tycho_common::{
 
 use crate::{entrypoint_tracer::tracer::EVMEntrypointService, RPCError};
 
-#[derive(Debug, Error)]
+/// Type alias for slot detection results: (storage_address, slot_bytes) with balance
+type SlotDetectionResult = ((Address, Bytes), U256);
+
+/// Type alias for token slot detection results
+type TokenSlotResults = HashMap<Address, Result<SlotDetectionResult, BalanceSlotError>>;
+
+/// Type alias for slot values from trace: (address, slot_bytes) with value
+type SlotValues = Vec<((Address, Bytes), U256)>;
+
+#[derive(Clone, Debug, Error)]
 pub enum BalanceSlotError {
     #[error("Setup error: {0}")]
     SetupError(String),
@@ -38,6 +57,8 @@ pub enum BalanceSlotError {
     BalanceExtractionError(String),
     #[error("Unknown error: {0}")]
     UnknownError(String),
+    #[error("Wrong slot detected :{0}")]
+    WrongSlotError(String),
 }
 
 /// Configuration for balance slot detection.
@@ -57,7 +78,7 @@ pub struct BalanceSlotDetectorConfig {
 pub struct EVMBalanceSlotDetector {
     tracer: EVMEntrypointService,
     max_batch_size: usize,
-    cache: HashMap<(Address, Address), (Address, Bytes)>,
+    cache: RwLock<HashMap<(Address, Address), (Address, Bytes)>>,
 }
 
 impl EVMBalanceSlotDetector {
@@ -71,7 +92,7 @@ impl EVMBalanceSlotDetector {
             tracer,
             max_batch_size: config.max_batch_size,
             // perf: Add cache persistence to DB.
-            cache: HashMap::new(),
+            cache: RwLock::new(HashMap::new()),
         })
     }
 
@@ -90,26 +111,29 @@ impl EVMBalanceSlotDetector {
             return HashMap::new();
         }
 
-        let mut request_tokens: Vec<Address> = Vec::with_capacity(tokens.len());
+        let mut request_tokens = Vec::with_capacity(tokens.len());
+        let mut cached_tokens = HashMap::new();
 
-        // Filters out all the tokens that are in the cache
-        let mut cached_tokens: HashMap<Address, Result<(Address, Bytes), BalanceSlotError>> =
-            tokens
-                .iter()
-                .filter_map(|token| match self.cache.get(&(*token, *owner)) {
-                    Some(slot) => Some((*token, Ok(slot.clone()))),
-                    None => {
-                        request_tokens.push(*token);
-                        None
-                    }
-                })
-                .collect();
+        // Check cache for tokens
+        {
+            let cache = self
+                .cache
+                .read()
+                .expect("Failed to acquire read lock");
+            for token in tokens {
+                if let Some(slot) = cache.get(&(token.clone(), owner.clone())) {
+                    cached_tokens.insert(token.clone(), Ok(slot.clone()));
+                } else {
+                    request_tokens.push(token.clone());
+                }
+            }
+        }
 
         // Create batched request: 2 requests per token (debug_traceCall + eth_call)
         let requests = match self.create_balance_requests(&request_tokens, owner, block_hash) {
             Ok(requests) => requests,
             Err(e) => {
-                for token in request_tokens.iter() {
+                for token in &request_tokens {
                     // Failed to create the batched request - return with only the cached values.
                     cached_tokens
                         .insert(token.clone(), Err(BalanceSlotError::RequestError(e.to_string())));
@@ -125,31 +149,45 @@ impl EVMBalanceSlotDetector {
         {
             Ok(responses) => responses,
             Err(e) => {
-                for token in request_tokens.iter() {
+                for token in &request_tokens {
                     // Failed to send the batched request - return with only the cached values.
                     cached_tokens
-                        .insert(*token, Err(BalanceSlotError::RequestError(e.to_string())));
+                        .insert(token.clone(), Err(BalanceSlotError::RequestError(e.to_string())));
                 }
                 return cached_tokens;
             }
         };
 
         // Process the batched response to extract slots
-        let token_slots = self.process_batched_response(tokens, responses);
+        let token_slots = self.process_batched_response(&request_tokens, responses);
 
-        // TODO: Validate if the "best" storage slot actually changes by doing another eth_call
-        // with overwrites
-        let temp_token_slots: HashMap<Address, Result<(Address, Bytes), BalanceSlotError>> = token_slots
-            .into_iter()
-            .map(|(key, value)| {
-                let new_value = value.map(|((addr, bytes), _balance)| (addr, bytes));
-                (key, new_value)
-            })
-            .collect();
+        // Validates that the selected slot actually matches the expectation.
+        let validation_results = self
+            .validate_best_slots(token_slots, owner, block_hash)
+            .await;
 
-        // TODO: Update the cache with the successful responses
+        // Update cache and prepare final results
+        let mut final_results = cached_tokens;
+        {
+            let mut cache = self.cache.write().unwrap();
+            for (token, result) in validation_results {
+                match result {
+                    Ok(((storage_addr, slot_bytes), _balance)) => {
+                        // Update cache with successful detections
+                        cache.insert(
+                            (token.clone(), owner.clone()),
+                            (storage_addr.clone(), slot_bytes.clone()),
+                        );
+                        final_results.insert(token, Ok((storage_addr, slot_bytes)));
+                    }
+                    Err(e) => {
+                        final_results.insert(token, Err(e));
+                    }
+                }
+            }
+        }
 
-        temp_token_slots
+        final_results
     }
 
     /// Create a batched JSON-RPC request for all tokens (2 requests per token).
@@ -236,7 +274,7 @@ impl EVMBalanceSlotDetector {
         &self,
         tokens: &[Address],
         responses: Vec<Value>,
-    ) -> HashMap<Address, Result<((Address, Bytes), U256), BalanceSlotError>> {
+    ) -> TokenSlotResults {
         // Create a map of response ID to response for out-of-order handling
         // (can't trust RPC return ordering)
         let mut id_to_response = HashMap::new();
@@ -286,7 +324,7 @@ impl EVMBalanceSlotDetector {
         token: &Address,
         debug_response: Option<&Value>,
         eth_call_response: Option<&Value>,
-    ) -> Result<((Address, Bytes), U256), BalanceSlotError> {
+    ) -> Result<SlotDetectionResult, BalanceSlotError> {
         let debug_resp = debug_response.ok_or_else(|| {
             BalanceSlotError::InvalidResponse("Missing debug_traceCall response".into())
         })?;
@@ -332,7 +370,7 @@ impl EVMBalanceSlotDetector {
             .unwrap_or(result);
         if hex_str.len() != 64 {
             return Err(BalanceSlotError::BalanceExtractionError(format!(
-                "Invalid result length: {}",
+                "Invalid result length: {} (expected 64)",
                 hex_str.len()
             )));
         }
@@ -346,7 +384,7 @@ impl EVMBalanceSlotDetector {
     fn extract_slot_values_from_trace_response(
         &self,
         response: &Value,
-    ) -> Result<Vec<((Address, Bytes), U256)>, BalanceSlotError> {
+    ) -> Result<SlotValues, BalanceSlotError> {
         let result = response.get("result").ok_or_else(|| {
             BalanceSlotError::InvalidResponse("Missing result in debug_traceCall".into())
         })?;
@@ -411,9 +449,9 @@ impl EVMBalanceSlotDetector {
     /// Find the best slot by comparing storage values to the expected balance
     fn find_best_slot_by_value_comparison(
         &self,
-        slot_values: Vec<((Address, Bytes), U256)>,
+        slot_values: SlotValues,
         expected_balance: U256,
-    ) -> Result<((Address, Bytes), U256), BalanceSlotError> {
+    ) -> Result<SlotDetectionResult, BalanceSlotError> {
         let slot_count = slot_values.len();
 
         match slot_count {
@@ -431,7 +469,7 @@ impl EVMBalanceSlotDetector {
                 Ok((slot, expected_balance))
             }
             _ => {
-                // Find the slot with minimum difference without allocating a new vector
+                // Find the slot with minimum difference to the expected balance
                 let (best_slot, best_value, best_diff) = slot_values
                     .into_iter()
                     .map(|(slot, value)| {
@@ -439,7 +477,7 @@ impl EVMBalanceSlotDetector {
                         (slot, value, diff)
                     })
                     .min_by_key(|(_, _, diff)| *diff)
-                    .unwrap(); // Safe because we know len > 0
+                    .expect("slot_values is not empty (checked above)");
 
                 debug!(
                     "Found {} slots, selected best slot: Address=0x{} Slot=0x{} (value: {}, diff: {})",
@@ -455,12 +493,237 @@ impl EVMBalanceSlotDetector {
         }
     }
 
-    async fn validate_best_slot(
+    /// Validates if the detected storage slots are correct.
+    /// Sends batched eth_call requests with storage slot overrides to verify the slots work.
+    /// If the value changes with the override, the slot is correct.
+    /// If not, returns a WrongSlotError for that token.
+    async fn validate_best_slots(
         &self,
-        p0: (Address, Bytes),
-        p1: &Value,
-    ) -> Result<Option<Bytes>, BalanceSlotError> {
-        todo!()
+        token_slots: TokenSlotResults,
+        owner: &Address,
+        block_hash: &BlockHash,
+    ) -> TokenSlotResults {
+        // Separate successful detections from errors
+        let mut validated_results = HashMap::new();
+        let mut validation_data = Vec::new();
+
+        for (token, result) in token_slots {
+            match result {
+                Ok(((storage_addr, slot), original_balance)) => {
+                    validation_data.push(ValidationData {
+                        token,
+                        storage_addr,
+                        slot,
+                        original_balance,
+                        test_value: Self::generate_test_value(original_balance),
+                    });
+                }
+                Err(e) => {
+                    validated_results.insert(token, Err(e));
+                }
+            }
+        }
+
+        if validation_data.is_empty() {
+            return validated_results;
+        }
+
+        // Create validation requests with storage overrides
+        let requests = match self.create_validation_requests(&validation_data, owner, block_hash) {
+            Ok(requests) => requests,
+            Err(e) => {
+                // If we can't create requests, mark all as failed
+                for data in validation_data {
+                    validated_results.insert(
+                        data.token,
+                        Err(BalanceSlotError::RequestError(format!(
+                            "Failed to create validation request: {}",
+                            e
+                        ))),
+                    );
+                }
+                return validated_results;
+            }
+        };
+
+        // Send batched request
+        let responses = match self
+            .send_batched_request(requests)
+            .await
+        {
+            Ok(responses) => responses,
+            Err(e) => {
+                // If request fails, mark all as failed.
+                // TODO: Add retry mechanism
+                for data in validation_data {
+                    validated_results.insert(
+                        data.token,
+                        Err(BalanceSlotError::RequestError(format!(
+                            "Validation request failed: {}",
+                            e
+                        ))),
+                    );
+                }
+                return validated_results;
+            }
+        };
+
+        // Process validation responses
+        self.process_validation_responses(responses, validation_data, &mut validated_results);
+
+        validated_results
+    }
+
+    /// Generate a test value for validation that's different from the original
+    fn generate_test_value(original_balance: U256) -> U256 {
+        if !original_balance.is_zero() && original_balance != U256::MAX {
+            // Set to a different value (double the original) - this function caps to U256::MAX so
+            // no overflow can happen.
+            original_balance.saturating_mul(U256::from(2))
+        } else {
+            // If original is 0, set to a non-zero value (1 ETH in wei)
+            U256::from(1_000_000_000_000_000_000u64)
+        }
+    }
+
+    /// Create eth_call requests with storage overrides for validation
+    fn create_validation_requests(
+        &self,
+        validation_data: &[ValidationData],
+        owner: &Address,
+        block_hash: &BlockHash,
+    ) -> Result<Value, BalanceSlotError> {
+        let mut batch = Vec::new();
+
+        for (id, data) in validation_data.iter().enumerate() {
+            let calldata = encode_balance_of_calldata(owner);
+
+            // Format the override value as a 32-byte hex string
+            let test_value_hex = format!("0x{:064x}", data.test_value);
+            let slot_hex = format!("0x{}", alloy::hex::encode(data.slot.as_ref()));
+
+            // Create eth_call with state override
+            let request = json!({
+                "jsonrpc": "2.0",
+                "method": "eth_call",
+                "params": [
+                    {
+                        "to": format!("0x{}", alloy::hex::encode(data.token.as_ref())),
+                        "data": format!("0x{}", alloy::hex::encode(calldata.as_ref()))
+                    },
+                    format!("0x{}", alloy::hex::encode(block_hash.as_ref())),
+                    {
+                        format!("0x{}", alloy::hex::encode(data.storage_addr.as_ref())): {
+                            "stateDiff": {
+                                slot_hex: test_value_hex
+                            }
+                        }
+                    }
+                ],
+                "id": (id + 1) as u64
+            });
+
+            batch.push(request);
+        }
+
+        Ok(Value::Array(batch))
+    }
+
+    /// Process validation responses and update results
+    fn process_validation_responses(
+        &self,
+        responses: Vec<Value>,
+        validation_data: Vec<ValidationData>,
+        results: &mut TokenSlotResults,
+    ) {
+        // Create ID to response mapping
+        let mut id_to_response = HashMap::new();
+        for response in responses {
+            if let Some(id) = response
+                .get("id")
+                .and_then(|v| v.as_u64())
+            {
+                id_to_response.insert(id, response);
+            }
+        }
+
+        // Process each validation
+        for (idx, data) in validation_data.into_iter().enumerate() {
+            let response_id = (idx + 1) as u64;
+
+            match id_to_response.get(&response_id) {
+                Some(response) => {
+                    // Check for errors
+                    if let Some(error) = response.get("error") {
+                        results.insert(
+                            data.token,
+                            Err(BalanceSlotError::RequestError(format!(
+                                "Validation call failed: {error}",
+                            ))),
+                        );
+                        continue;
+                    }
+
+                    // Extract the balance from the response
+                    match self.extract_balance_from_call_response(response) {
+                        Ok(returned_balance) => {
+                            // Check if the override worked (balance should be different from
+                            // original_balance). We can't guarantee that it will match the override
+                            // value, as some tokens use shares systems, making it hard to control
+                            // the balance with a single override.
+                            if returned_balance != data.original_balance {
+                                // Validation successful - the slot works
+                                debug!(
+                                    token = %data.token,
+                                    storage = %data.storage_addr,
+                                    slot = %alloy::hex::encode(data.slot.as_ref()),
+                                    returned_balance = %returned_balance,
+                                    original_balance = %data.original_balance,
+                                    "Storage slot validated successfully"
+                                );
+                                results.insert(
+                                    data.token,
+                                    Ok(((data.storage_addr, data.slot), data.original_balance)),
+                                );
+                            } else {
+                                // The override didn't work - wrong slot detected
+                                warn!(
+                                    token = %data.token,
+                                    storage = %data.storage_addr,
+                                    slot = %alloy::hex::encode(data.slot.as_ref()),
+                                    expected = %data.test_value,
+                                    got = %returned_balance,
+                                    "Storage slot validation failed - value didn't change as expected"
+                                );
+                                results.insert(
+                                    data.token,
+                                    Err(BalanceSlotError::WrongSlotError(
+                                        "Slot override didn't change balance.".to_string(),
+                                    )),
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            results.insert(
+                                data.token,
+                                Err(BalanceSlotError::InvalidResponse(format!(
+                                    "Failed to extract balance from validation response: {}",
+                                    e
+                                ))),
+                            );
+                        }
+                    }
+                }
+                None => {
+                    results.insert(
+                        data.token,
+                        Err(BalanceSlotError::InvalidResponse(
+                            "Missing validation response".into(),
+                        )),
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -481,53 +744,23 @@ impl BalanceSlotDetector for EVMBalanceSlotDetector {
 
         let mut all_results = HashMap::new();
 
-        // Batch tokens into  to optimize, while avoiding being rate limited. Each token spawns up
-        // to 2 requests in a single batch.
+        // Batch tokens into chunks to optimize, while avoiding being rate limited. Each token
+        // spawns up to 2 requests in a single batch.
         for (chunk_idx, chunk) in tokens
             .chunks(self.max_batch_size)
             .enumerate()
         {
             debug!("Processing chunk {} with {} tokens", chunk_idx, chunk.len());
 
-            let res = self
+            let chunk_results = self
                 .detect_token_slots(chunk, &holder, &block_hash)
                 .await;
 
-            // join_all guarantees that the results of the completed futures will be collected into
-            // a Vec<T> in the same order as the input futures were provided.
-            let chunk_results = join_all(futures).await;
-
-            for (idx, result) in chunk_results.into_iter().enumerate() {
-                let component_id = chunk[idx].0.clone();
-                match result {
-                    Ok((comp_id, slots)) => {
-                        if !slots.is_empty() {
-                            debug!(
-                                component_id = %comp_id,
-                                slot_count = slots.len(),
-                                "Successfully detected slots for component"
-                            );
-                        } else {
-                            // Shouldn't happen - only if we ever got a component without tokens
-                            warn!(
-                                component_id = %comp_id,
-                                "No slots detected for component"
-                            );
-                        }
-                        all_results.insert(comp_id, Ok(slots));
-                    }
-                    Err(e) => {
-                        error!("Failed to detect slots for component: {}", e);
-                        all_results.insert(component_id, Err(e));
-                    }
-                }
-            }
+            // Merge chunk results into all_results
+            all_results.extend(chunk_results);
         }
 
-        info!(
-            "Balance slot detection completed. Found results for {} components",
-            all_results.len()
-        );
+        info!("Balance slot detection completed. Found results for {} tokens", all_results.len());
         all_results
     }
 }
@@ -578,9 +811,7 @@ mod tests {
     async fn test_detect_slots_integration() {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
         println!("Using RPC URL: {}", rpc_url);
-        let config = BalanceSlotDetectorConfig { max_concurrent_requests: 5, rpc_url };
-
-        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+        let config = BalanceSlotDetectorConfig { max_batch_size: 5, rpc_url };
 
         // Use real token addresses and block for testing (WETH, USDC)
         let weth_bytes = alloy::hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
@@ -596,7 +827,7 @@ mod tests {
         println!("USDC address: 0x{}", alloy::hex::encode(usdc.as_ref()));
         println!("Pool manager address: 0x{}", alloy::hex::encode(pool_manager.as_ref()));
 
-        let components = vec![("test_comp".to_string(), vec![weth.clone(), usdc.clone()])];
+        let tokens = vec![weth.clone(), usdc.clone()];
 
         // Use a recent block
         let block_hash_bytes =
@@ -605,42 +836,46 @@ mod tests {
         let block_hash = BlockHash::from(block_hash_bytes);
         println!("Block hash: 0x{}", alloy::hex::encode(block_hash.as_ref()));
 
+        let mut detector = EVMBalanceSlotDetector::new(config).unwrap();
         let results = detector
-            .detect_balance_slots(components, pool_manager, block_hash)
+            .detect_balance_slots(&tokens, pool_manager, block_hash)
             .await;
 
         println!("Results: {:?}", results);
-        println!("Number of components with results: {}", results.len());
+        println!("Number of tokens with results: {}", results.len());
 
-        // Check if we got any results at all
-        if results.is_empty() {
-            println!("WARNING: No results returned from detect_slots_for_components");
-        }
+        // We should get results for the tokens
+        assert!(!results.is_empty(), "Expected results for at least one token, but got none");
 
-        // We should get results for the component
-        assert!(!results.is_empty(), "Expected results for at least one component, but got none");
-
-        if let Some(result) = results.get("test_comp") {
-            let slots = result
-                .as_ref()
-                .expect("Expected successful result for test_comp");
-            println!("Detected slots for test_comp: {:?}", slots);
-            println!("Number of tokens with detected slots: {}", slots.len());
-
-            // Check individual tokens
-            if let Some(weth_slot) = slots.get(&weth) {
-                println!("WETH slot: 0x{}", alloy::hex::encode(weth_slot.as_ref()));
-            } else {
-                panic!("No slot detected for WETH");
-            }
-
-            if let Some(usdc_slot) = slots.get(&usdc) {
-                println!("USDC slot: 0x{}", alloy::hex::encode(usdc_slot.as_ref()));
-            } else {
-                panic!("No slot detected for USDC");
+        // Check individual tokens
+        if let Some(weth_result) = results.get(&weth) {
+            match weth_result {
+                Ok((storage_addr, slot)) => {
+                    println!(
+                        "WETH slot detected - Storage: 0x{}, Slot: 0x{}",
+                        alloy::hex::encode(storage_addr.as_ref()),
+                        alloy::hex::encode(slot.as_ref())
+                    );
+                }
+                Err(e) => panic!("Failed to detect WETH slot: {}", e),
             }
         } else {
-            panic!("Expected results for 'test_comp', but it was not in the results map");
+            panic!("No result for WETH token");
+        }
+
+        if let Some(usdc_result) = results.get(&usdc) {
+            match usdc_result {
+                Ok((storage_addr, slot)) => {
+                    println!(
+                        "USDC slot detected - Storage: 0x{}, Slot: 0x{}",
+                        alloy::hex::encode(storage_addr.as_ref()),
+                        alloy::hex::encode(slot.as_ref())
+                    );
+                }
+                Err(e) => panic!("Failed to detect USDC slot: {}", e),
+            }
+        } else {
+            panic!("No result for USDC token");
         }
     }
 
@@ -648,9 +883,7 @@ mod tests {
     #[ignore] // Requires real RPC connection
     async fn test_detect_slots_rebasing_token() {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
-        let config = BalanceSlotDetectorConfig { max_concurrent_requests: 5, rpc_url };
-
-        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+        let config = BalanceSlotDetectorConfig { max_batch_size: 5, rpc_url };
 
         // stETH contract address (Lido Staked Ether)
         let steth_bytes = alloy::hex::decode("ae7ab96520DE3A18E5e111B5EaAb095312D7fE84").unwrap();
@@ -660,7 +893,7 @@ mod tests {
         let owner_address = alloy::hex::decode("ef417FCE1883c6653E7dC6AF7c6F85CCDE84Aa09").unwrap();
         let balance_owner = Address::from(owner_address);
 
-        let components = vec![("steth_comp".to_string(), vec![steth.clone()])];
+        let tokens = vec![steth.clone()];
 
         // Use a recent block where stETH has activity
         let block_hash_bytes =
@@ -668,8 +901,9 @@ mod tests {
                 .unwrap();
         let block_hash = BlockHash::from(block_hash_bytes);
 
+        let mut detector = EVMBalanceSlotDetector::new(config).unwrap();
         let results = detector
-            .detect_balance_slots(components, balance_owner.clone(), block_hash.clone())
+            .detect_balance_slots(&tokens, balance_owner.clone(), block_hash.clone())
             .await;
 
         dbg!(&results);
@@ -679,15 +913,13 @@ mod tests {
         // 1. Read the shares mapping for the holder
         // 2. Read total shares value (stored at TOTAL_SHARES_POSITION)
         // 3. Read total pooled ether to calculate the rate
-        if let Some(result) = results.get("steth_comp") {
-            let slots = result
-                .as_ref()
-                .expect("Expected successful result for steth_comp");
-            if let Some(detected_slot) = slots.get(&steth) {
-                println!("Detected stETH storage slot: {:?}", detected_slot);
-
-                // For rebasing tokens, we should detect a storage slot
-                assert!(!detected_slot.is_empty());
+        if let Some(result) = results.get(&steth) {
+            if let Ok((storage_addr, detected_slot)) = result {
+                println!(
+                    "Detected stETH storage slot - Storage: 0x{}, Slot: 0x{}",
+                    alloy::hex::encode(storage_addr.as_ref()),
+                    alloy::hex::encode(detected_slot.as_ref())
+                );
 
                 // Convert to hex string for verification
                 let slot_hex = alloy::hex::encode(detected_slot.as_ref());
@@ -718,11 +950,10 @@ mod tests {
                 // Expected 6.064202 ETH
                 let expected_eth = U256::from(6064202338070893051u128);
 
-                assert!(
-                    verified_balance == expected_eth,
-                    "Verified balance ({}) should be == target balance ({})",
-                    verified_balance,
-                    expected_eth
+                assert_eq!(
+                    verified_balance, expected_eth,
+                    "Verified balance ({}) should be == expected balance ({})",
+                    verified_balance, expected_eth
                 );
 
                 println!("✓ Storage slot manipulation verified successfully!");
@@ -732,10 +963,12 @@ mod tests {
                     "28b290becf7be0019520d491d9cd869337f3d683be3e569e54f9044b94df94c0";
 
                 assert_eq!(slot_hex, expected_slot);
-            } else {
+            } else if let Err(e) = result {
                 // If no slot detected, print debug info
-                println!("No slots detected for stETH - this might indicate the balance owner has no stETH balance");
+                println!("Failed to detect slots for stETH: {} - this might indicate the balance owner has no stETH balance", e);
             }
+        } else {
+            panic!("No result for stETH token");
         }
     }
 
@@ -842,7 +1075,7 @@ mod tests {
             .unwrap_or(result);
         if hex_str.len() != 64 {
             return Err(BalanceSlotError::BalanceExtractionError(format!(
-                "Invalid result length: {}",
+                "Invalid result length: {} (expected 64)",
                 hex_str.len()
             )));
         }
