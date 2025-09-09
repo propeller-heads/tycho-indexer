@@ -8,7 +8,7 @@ use crate::{
         blockchain::{Block, BlockTag, EntryPointWithTracingParams, TracedEntryPoint},
         contract::AccountDelta,
         token::{Token, TokenQuality, TransferCost, TransferTax},
-        Address, Balance, BlockHash, ComponentId, StoreKey,
+        Address, Balance, BlockHash, StoreKey,
     },
     Bytes,
 };
