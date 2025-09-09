@@ -854,11 +854,13 @@ where
             debug!("DCI: Retriggered locations and entrypoints: {:?}", retriggered_locations_log);
         }
 
-        info!(
-            retriggered_count = retriggered_entrypoints.len(),
-            storage_locations_scanned = storage_locations_scanned,
-            "DCI: Retrigger detection completed"
-        );
+        if !retriggered_entrypoints.is_empty() {
+            info!(
+                retriggered_count = retriggered_entrypoints.len(),
+                storage_locations_scanned = storage_locations_scanned,
+                "DCI: Retrigger detection completed"
+            );
+        }
 
         Ok(retriggered_entrypoints)
     }
