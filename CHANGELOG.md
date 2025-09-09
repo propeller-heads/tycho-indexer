@@ -1,3 +1,11 @@
+## [0.83.2](https://github.com/propeller-heads/tycho-indexer/compare/0.83.1...0.83.2) (2025-09-09)
+
+
+### Bug Fixes
+
+* buffer overflow handling with force unsubscribe ([216ed42](https://github.com/propeller-heads/tycho-indexer/commit/216ed42a67ead3f36ce671e96cd6d7f01c4f018a))
+* handle buffer overflow in client ([#686](https://github.com/propeller-heads/tycho-indexer/issues/686)) ([a34668b](https://github.com/propeller-heads/tycho-indexer/commit/a34668b68c3dc7fac5e3892619ae4ab69f19762d))
+
 ## [0.83.1](https://github.com/propeller-heads/tycho-indexer/compare/0.83.0...0.83.1) (2025-09-05)
 
 
