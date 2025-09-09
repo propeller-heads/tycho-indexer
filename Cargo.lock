@@ -6112,7 +6112,7 @@ version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77e878c846a8abae00dd069496dbe8751b16ac1c3d6bd2a7283a938e8228f90d"
 dependencies = [
- "proc-macro-crate 3.1.0",
+ "proc-macro-crate",
  "proc-macro2",
  "quote",
  "syn 2.0.106",
@@ -9621,6 +9621,7 @@ dependencies = [
  "futures 0.3.31",
  "humantime",
  "pretty_assertions",
+ "rand 0.8.5",
  "reqwest 0.11.27",
  "serde",
  "serde_json",
