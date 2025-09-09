@@ -119,6 +119,10 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
     }
+
+    function testExportContract() public {
+        exportRuntimeBytecode(address(balancerV3Exposed), "BalancerV3");
+    }
 }
 
 contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {

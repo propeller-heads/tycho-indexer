@@ -46,7 +46,7 @@ contract CurveExecutorExposed is CurveExecutor {
     }
 }
 
-contract CurveExecutorTest is Test, Constants {
+contract CurveExecutorTest is Test, TestUtils, Constants {
     using SafeERC20 for IERC20;
 
     CurveExecutorExposed curveExecutorExposed;
@@ -392,6 +392,10 @@ contract CurveExecutorTest is Test, Constants {
         (int128 coinInIndex, int128 coinOutIndex,) =
             metaRegistry.get_coin_indices(pool, tokenIn, tokenOut);
         return (coinInIndex, coinOutIndex);
+    }
+
+    function testExportContract() public {
+        exportRuntimeBytecode(address(curveExecutorExposed), "Curve");
     }
 }
 

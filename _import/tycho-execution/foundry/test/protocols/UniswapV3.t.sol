@@ -39,7 +39,12 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
     }
 }
 
-contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
+contract UniswapV3ExecutorTest is
+    Test,
+    TestUtils,
+    Constants,
+    Permit2TestHelper
+{
     using SafeERC20 for IERC20;
 
     UniswapV3ExecutorExposed uniswapV3Exposed;
@@ -209,6 +214,10 @@ contract UniswapV3ExecutorTest is Test, Constants, Permit2TestHelper {
             zero2one,
             transferType
         );
+    }
+
+    function testExportContract() public {
+        exportRuntimeBytecode(address(uniswapV3Exposed), "UniswapV3");
     }
 }
 
