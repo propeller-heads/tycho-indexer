@@ -8,9 +8,8 @@ use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::info;
 use tycho_common::{models::Chain, storage::StorageError};
 
-use crate::{
-    postgres,
-    postgres::{cache::CachedGateway, direct::DirectGateway, PostgresGateway},
+use crate::postgres::{
+    self, cache::CachedGateway, db_fixtures, direct::DirectGateway, PostgresGateway,
 };
 
 #[derive(Default)]
@@ -23,7 +22,8 @@ pub struct GatewayBuilder {
 
 impl GatewayBuilder {
     pub fn new(database_url: &str) -> Self {
-        Self { database_url: database_url.to_string(), ..Default::default() }
+        let retention_horizon = db_fixtures::tomorrow_midnight();
+        Self { database_url: database_url.to_string(), retention_horizon, ..Default::default() }
     }
 
     pub fn set_chains(mut self, chains: &[Chain]) -> Self {

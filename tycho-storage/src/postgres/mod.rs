@@ -894,6 +894,14 @@ pub mod db_fixtures {
         )
     }
 
+    pub fn tomorrow_midnight() -> NaiveDateTime {
+        let ts = chrono::Local::now().naive_utc() + chrono::Duration::days(1);
+        NaiveDateTime::new(
+            NaiveDate::from_ymd_opt(ts.year(), ts.month(), ts.day()).unwrap(),
+            NaiveTime::from_hms_opt(0, 0, 0).unwrap(),
+        )
+    }
+
     /// Inserts two sequential blocks
     pub async fn insert_blocks(conn: &mut AsyncPgConnection, chain_id: i64) -> Vec<i64> {
         let block_records = vec![
