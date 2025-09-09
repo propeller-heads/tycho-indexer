@@ -23,6 +23,7 @@ chrono.workspace = true
 thiserror.workspace = true
 reqwest.workspace = true
 unicode-segmentation.workspace = true
+rand.workspace = true
 url = "2"
 futures = "0.3"
 
