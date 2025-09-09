@@ -68,7 +68,7 @@ pub fn setup_hook_orchestrator_registry(
     let mut hook_registry = HookOrchestratorRegistry::new();
 
     // Create EVM balance slot detector
-    let balance_slot_detector: Option<EVMBalanceSlotDetector> = {
+    let balance_slot_detector = {
         let config = BalanceSlotDetectorConfig {
             rpc_url: rpc_url.clone(),
             max_batch_size: 5,
@@ -77,9 +77,7 @@ pub fn setup_hook_orchestrator_registry(
             max_backoff_ms: 5000,
         };
 
-        let detector =
-            EVMBalanceSlotDetector::new(config).expect("Failed to create EVMBalanceSlotDetector");
-        Some(detector)
+        EVMBalanceSlotDetector::new(config).expect("Failed to create EVMBalanceSlotDetector")
     };
 
     // Create hook entrypoint configuration for Euler V1
