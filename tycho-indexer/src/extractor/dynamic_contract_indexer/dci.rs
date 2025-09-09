@@ -13,7 +13,7 @@ use tycho_common::{
             TracingResult, Transaction, TxWithChanges,
         },
         contract::{AccountDelta, ContractStorageChange},
-        protocol::{ProtocolComponentStateDelta, QualityRange},
+        protocol::QualityRange,
         Address, BlockHash, Chain, ChangeType, ComponentId, ContractStoreDeltas, EntryPointId,
         StoreKey, TxHash,
     },
@@ -23,7 +23,7 @@ use tycho_common::{
 
 use super::cache::DCICache;
 use crate::extractor::{
-    models::{BlockChanges, TxWithStorageChanges},
+    models::{insert_state_attribute_update, BlockChanges, TxWithStorageChanges},
     ExtractionError, ExtractorExtension,
 };
 
@@ -452,39 +452,13 @@ where
 
             // Insert the "paused" component state for the components that are paused
             for (component_id, tx) in component_ids_to_pause {
-                match block_changes
-                    .txs_with_update
-                    .iter_mut()
-                    .find(|tx_with_changes| tx_with_changes.tx.hash == tx.hash)
-                {
-                    Some(tx_with_changes) => {
-                        tx_with_changes.state_updates.insert(
-                            component_id.clone(),
-                            ProtocolComponentStateDelta::new(
-                                component_id,
-                                HashMap::from([("paused".to_string(), vec![1u8].into())]),
-                                HashSet::new(),
-                            ),
-                        );
-                    }
-                    None => {
-                        let tx_with_changes = TxWithChanges {
-                            tx: tx.clone(),
-                            state_updates: HashMap::from([(
-                                component_id.clone(),
-                                ProtocolComponentStateDelta::new(
-                                    component_id,
-                                    HashMap::from([("paused".to_string(), vec![1u8].into())]),
-                                    HashSet::new(),
-                                ),
-                            )]),
-                            ..Default::default()
-                        };
-                        block_changes
-                            .txs_with_update
-                            .push(tx_with_changes);
-                    }
-                }
+                insert_state_attribute_update(
+                    &mut block_changes.txs_with_update,
+                    component_id,
+                    tx,
+                    &"paused".to_string(),
+                    &vec![2u8].into(),
+                )?;
             }
 
             // Update the cache with new traced entrypoints
