@@ -2124,7 +2124,7 @@ mod test {
 
         assert_eq!(res, exp);
     }
-    
+
     #[test_log::test(tokio::test)]
     async fn test_handle_tvl_changes() {
         let mut msg = BlockAggregatedChanges {
@@ -2201,36 +2201,38 @@ mod test {
             Arc::new(protocol_gw),
         );
         protocol_cache
-            .add_components([ProtocolComponent::new(
-                "comp1",
-                "system1",
-                "pt_1",
-                Chain::Ethereum,
-                vec![
-                    Bytes::from("0x0000000000000000000000000000000000000001"),
-                    Bytes::from("0x0000000000000000000000000000000000000002"),
-                ],
-                Vec::new(),
-                HashMap::new(),
-                ChangeType::Creation,
-                Bytes::default(),
-                NaiveDateTime::default(),
-            ),
-            ProtocolComponent::new(
-                "comp2",
-                "system1",
-                "pt_1",
-                Chain::Ethereum,
-                vec![
-                    Bytes::from("0x0000000000000000000000000000000000000001"),
-                    Bytes::from("0x0000000000000000000000000000000000000003"),
-                ],
-                Vec::new(),
-                HashMap::new(),
-                ChangeType::Creation,
-                Bytes::default(),
-                NaiveDateTime::default(),
-            )])
+            .add_components([
+                ProtocolComponent::new(
+                    "comp1",
+                    "system1",
+                    "pt_1",
+                    Chain::Ethereum,
+                    vec![
+                        Bytes::from("0x0000000000000000000000000000000000000001"),
+                        Bytes::from("0x0000000000000000000000000000000000000002"),
+                    ],
+                    Vec::new(),
+                    HashMap::new(),
+                    ChangeType::Creation,
+                    Bytes::default(),
+                    NaiveDateTime::default(),
+                ),
+                ProtocolComponent::new(
+                    "comp2",
+                    "system1",
+                    "pt_1",
+                    Chain::Ethereum,
+                    vec![
+                        Bytes::from("0x0000000000000000000000000000000000000001"),
+                        Bytes::from("0x0000000000000000000000000000000000000003"),
+                    ],
+                    Vec::new(),
+                    HashMap::new(),
+                    ChangeType::Creation,
+                    Bytes::default(),
+                    NaiveDateTime::default(),
+                ),
+            ])
             .await
             .expect("adding components failed");
         protocol_cache
