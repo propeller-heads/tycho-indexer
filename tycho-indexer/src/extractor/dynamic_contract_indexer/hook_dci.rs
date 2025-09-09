@@ -13,7 +13,6 @@ use tycho_common::{
     },
     storage::{EntryPointFilter, EntryPointGateway, ProtocolGateway},
     traits::{AccountExtractor, EntryPointTracer},
-    Bytes,
 };
 
 use crate::extractor::{
@@ -248,7 +247,7 @@ where
     }
 
     /// Handles component failures by updating the state and logging errors
-    #[instrument(skip(self, block_changes), fields(component_id = %component_id, block_number = block_changes.block.number))]
+    #[instrument(skip(self, block_changes, tx), fields(component_id = %component_id, block_number = block_changes.block.number))]
     fn handle_component_failure(
         &mut self,
         component_id: ComponentId,
@@ -258,6 +257,8 @@ where
     ) -> Result<(), ExtractionError> {
         error!(
             error_msg = %error_msg,
+            component_id = %component_id,
+            tx_hash = %tx.hash,
             "Component failed processing"
         );
 
@@ -297,33 +298,10 @@ where
             &component_id,
             tx,
             &"paused".to_string(),
-            &vec![PausingReason::MetadataError.get_reason_index()].into(),
+            &PausingReason::MetadataError.into(),
         )?;
 
-        debug!("Component state updated to Failed with paused attribute");
         Ok(())
-    }
-
-    /// Helper function to get transaction from tx_map or create a fallback transaction
-    fn get_transaction_or_fallback(
-        tx_map: &HashMap<TxHash, Transaction>,
-        tx_hash_opt: Option<&TxHash>,
-        block_hash: &BlockHash,
-        component_id: &ComponentId,
-    ) -> Transaction {
-        match tx_hash_opt {
-            Some(tx_hash) => tx_map
-                .get(tx_hash)
-                .cloned()
-                .unwrap_or_else(|| {
-                    error!("No transaction found for hash {tx_hash} for component {component_id}");
-                    Transaction::new(tx_hash.clone(), block_hash.clone(), Bytes::zero(20), None, 0)
-                }),
-            None => {
-                error!("No transactions available for component {component_id}");
-                Transaction::new(Bytes::zero(32), block_hash.clone(), Bytes::zero(20), None, 0)
-            }
-        }
     }
 
     /// Checks ComponentTracingMetadata for errors and updates component states accordingly
@@ -334,6 +312,7 @@ where
     fn process_metadata_errors(
         &mut self,
         component_metadata: &[(ProtocolComponent, ComponentTracingMetadata)],
+        component_id_to_tx_map: &HashMap<ComponentId, Option<Transaction>>,
         block_changes: &mut BlockChanges,
     ) -> Result<(), ExtractionError> {
         let mut failed_components = 0;
@@ -374,14 +353,17 @@ where
                     "Component has metadata errors"
                 );
 
-                let tx = Self::get_transaction_or_fallback(
-                    &tx_map,
-                    Some(&metadata.tx_hash),
-                    &block_changes.block.hash,
-                    &component.id,
-                );
+                let tx = component_id_to_tx_map
+                    .get(&component.id)
+                    .and_then(|opt_tx| opt_tx.as_ref())
+                    .ok_or_else(|| {
+                        ExtractionError::Unknown(format!(
+                            "No tx found for component {}",
+                            component.id
+                        ))
+                    })?;
 
-                self.handle_component_failure(component.id.clone(), error_msg, &tx, block_changes)?;
+                self.handle_component_failure(component.id.clone(), error_msg, tx, block_changes)?;
             }
         }
 
@@ -745,8 +727,21 @@ where
 
         info!(metadata_count = component_metadata.len(), "Collected component metadata");
 
+        let tx_map = block_changes
+            .txs_with_update
+            .iter()
+            .map(|tx_with_changes| (tx_with_changes.tx.hash.clone(), tx_with_changes.tx.clone()))
+            .collect::<HashMap<_, _>>();
+
+        let component_id_to_tx_map = component_metadata
+            .iter()
+            .map(|(component, metadata)| {
+                (component.id.clone(), tx_map.get(&metadata.tx_hash).cloned())
+            })
+            .collect::<HashMap<_, _>>();
+
         // 3a. Process metadata errors and update component states
-        self.process_metadata_errors(&component_metadata, block_changes)?;
+        self.process_metadata_errors(&component_metadata, &component_id_to_tx_map, block_changes)?;
 
         // 4. Group components by hook address and separate by processing needs
         let (components_full_processing, components_balance_only, metadata_by_component_id) = {
@@ -793,12 +788,9 @@ where
             "Processing components"
         );
 
-        let tx_map = block_changes
-            .txs_with_update
-            .iter()
-            .map(|tx_with_changes| (tx_with_changes.tx.hash.clone(), tx_with_changes.tx.clone()))
-            .collect::<HashMap<_, _>>();
-
+        // TODO: this part needs a full redesign, we want to process batches of components.
+        // We need to be able to sort components by orchestrator and then process them in batches if
+        // they have the same orchestrator.
         for component in &components_full_processing {
             let orchestrator_span = span!(
                 Level::INFO,
@@ -816,12 +808,16 @@ where
                     "Found hook orchestrator, processing components needing full processing"
                 );
 
-                let component_metadata_map: HashMap<String, _> = [component]
+                // TODO: This map currently contains only one entry. This will change when we
+                // redesign this code (see TODO above)
+                let component_metadata_map: HashMap<String, _> = metadata_by_component_id
                     .iter()
-                    .filter_map(|comp| {
-                        metadata_by_component_id
-                            .get(&comp.id)
-                            .map(|meta| (comp.id.clone(), meta.clone()))
+                    .filter_map(|(component_id, metadata)| {
+                        if component_id == &component.id {
+                            Some((component_id.clone(), metadata.clone()))
+                        } else {
+                            None
+                        }
                     })
                     .collect();
 
@@ -847,47 +843,21 @@ where
                             "Hook orchestrator failed (full processing)"
                         );
 
-                        // Get the tx that updated the component, default to a dummy tx if not
-                        // found.
-                        let tx_hash = component_metadata_map
+                        let tx = component_id_to_tx_map
                             .get(&component.id)
-                            .map(|meta| meta.tx_hash.clone());
-
-                        let tx = match tx_hash {
-                            Some(tx_hash) => tx_map
-                                .get(&tx_hash)
-                                .cloned()
-                                .unwrap_or_else(|| {
-                                    error!("No tx hash found for component {}", component.id);
-                                    Transaction::new(
-                                        tx_hash.clone(),
-                                        block_changes.block.hash.clone(),
-                                        Bytes::zero(20),
-                                        None,
-                                        0,
-                                    )
-                                }),
-                            None => tx_map
-                                .values()
-                                .next()
-                                .cloned()
-                                .unwrap_or_else(|| {
-                                    error!("No tx hash found for component {}", component.id);
-                                    Transaction::new(
-                                        Bytes::zero(32),
-                                        block_changes.block.hash.clone(),
-                                        Bytes::zero(20),
-                                        None,
-                                        0,
-                                    )
-                                }),
-                        };
+                            .and_then(|opt_tx| opt_tx.as_ref())
+                            .ok_or_else(|| {
+                                ExtractionError::Unknown(format!(
+                                    "No tx found for component {}",
+                                    component.id
+                                ))
+                            })?;
 
                         // Mark all components in this group as failed
                         self.handle_component_failure(
                             component.id.clone(),
                             format!("Hook orchestrator error: {e:?}"),
-                            &tx,
+                            tx,
                             block_changes,
                         )?;
                     }
@@ -898,51 +868,31 @@ where
                     "No hook orchestrator found for component"
                 );
 
-                let tx_hash = metadata_by_component_id
+                let tx = component_id_to_tx_map
                     .get(&component.id)
-                    .map(|meta| meta.tx_hash.clone());
-
-                let tx = match tx_hash {
-                    Some(tx_hash) => tx_map
-                        .get(&tx_hash)
-                        .cloned()
-                        .unwrap_or_else(|| {
-                            error!("No tx hash found for component {}", component.id);
-                            Transaction::new(
-                                tx_hash.clone(),
-                                block_changes.block.hash.clone(),
-                                Bytes::zero(20),
-                                None,
-                                0,
-                            )
-                        }),
-                    None => tx_map
-                        .values()
-                        .next()
-                        .cloned()
-                        .unwrap_or_else(|| {
-                            error!("No tx hash found for component {}", component.id);
-                            Transaction::new(
-                                Bytes::zero(32),
-                                block_changes.block.hash.clone(),
-                                Bytes::zero(20),
-                                None,
-                                0,
-                            )
-                        }),
-                };
+                    .and_then(|opt_tx| opt_tx.as_ref())
+                    .ok_or_else(|| {
+                        ExtractionError::Unknown(format!(
+                            "No tx found for component {}",
+                            component.id
+                        ))
+                    })?;
 
                 // Mark components as failed since we can't process them
                 self.handle_component_failure(
                     component.id.clone(),
                     format!("No hook orchestrator available for component {}", component.id),
-                    &tx,
+                    tx,
                     block_changes,
                 )?;
             }
         }
 
         // 5b. Handle components that only need balance updates (no entrypoint generation)
+
+        // TODO: this part needs a full redesign, we want to process batches of components.
+        // We need to be able to sort components by orchestrator and then process them in batches if
+        // they have the same orchestrator.
         for component in &components_balance_only {
             let balance_span = span!(
                 Level::INFO,
@@ -960,10 +910,18 @@ where
                     "Found hook orchestrator, processing components needing balance-only updates"
                 );
 
+                // TODO: This map currently contains only one entry. This will change when we
+                // redesign this code (see TODO above)
                 let component_metadata_map: HashMap<String, _> = metadata_by_component_id
-                    .get(&component.id)
-                    .map(|meta| HashMap::from([(component.id.clone(), meta.clone())]))
-                    .unwrap_or_default();
+                    .iter()
+                    .filter_map(|(component_id, metadata)| {
+                        if component_id == &component.id {
+                            Some((component_id.clone(), metadata.clone()))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
 
                 debug!(
                     metadata_entries = component_metadata_map.len(),
@@ -997,22 +955,21 @@ where
                             "Hook orchestrator failed (balance-only)"
                         );
 
-                        let tx_hash = component_metadata_map
+                        let tx = component_id_to_tx_map
                             .get(&component.id)
-                            .map(|meta| &meta.tx_hash);
-
-                        let tx = Self::get_transaction_or_fallback(
-                            &tx_map,
-                            tx_hash,
-                            &block_changes.block.hash,
-                            &component.id,
-                        );
+                            .and_then(|opt_tx| opt_tx.as_ref())
+                            .ok_or_else(|| {
+                                ExtractionError::Unknown(format!(
+                                    "No tx found for component {}",
+                                    component.id
+                                ))
+                            })?;
 
                         // Mark all components in this group as failed
                         self.handle_component_failure(
                             component.id.clone(),
                             format!("Hook orchestrator balance update error: {e:?}"),
-                            &tx,
+                            tx,
                             block_changes,
                         )?;
                     }
@@ -1023,22 +980,21 @@ where
                     "No hook orchestrator found for component (balance-only processing)"
                 );
 
-                let tx_hash = metadata_by_component_id
+                let tx = component_id_to_tx_map
                     .get(&component.id)
-                    .map(|meta| &meta.tx_hash);
-
-                let tx = Self::get_transaction_or_fallback(
-                    &tx_map,
-                    tx_hash,
-                    &block_changes.block.hash,
-                    &component.id,
-                );
+                    .and_then(|opt_tx| opt_tx.as_ref())
+                    .ok_or_else(|| {
+                        ExtractionError::Unknown(format!(
+                            "No tx found for component {}",
+                            component.id
+                        ))
+                    })?;
 
                 // Mark components as failed since we can't process them
                 self.handle_component_failure(
                     component.id.clone(),
                     format!("No hook orchestrator available for component {}", component.id),
-                    &tx,
+                    tx,
                     block_changes,
                 )?;
             }
@@ -1791,8 +1747,14 @@ mod tests {
 
         let component_metadata = vec![(component.clone(), tracing_metadata)];
 
+        let component_id_to_tx_map = HashMap::from([(component_id.clone(), Some(tx.clone()))]);
+
         // Process metadata errors - this should trigger pausing logic
-        let result = hook_dci.process_metadata_errors(&component_metadata, &mut block_changes);
+        let result = hook_dci.process_metadata_errors(
+            &component_metadata,
+            &component_id_to_tx_map,
+            &mut block_changes,
+        );
 
         assert!(result.is_ok(), "process_metadata_errors should succeed");
 
