@@ -155,7 +155,16 @@ where
         &self,
         request: &dto::StateRequestBody,
     ) -> Result<dto::StateRequestResponse, RpcError> {
-        info!(?request, "Getting contract state.");
+        if let Some(ref contract_ids) = request.contract_ids {
+            info!(
+                n_contract_ids = contract_ids.len(),
+                first_contract_id = ?contract_ids.first(),
+                last_contract_id = ?contract_ids.last(),
+                "Getting contract state"
+            );
+        } else {
+            info!("Getting contract state (all contracts)");
+        }
         self.contract_storage_cache
             .get(request.clone(), |r| async {
                 self.get_contract_state_inner(r)
@@ -365,7 +374,16 @@ where
         &self,
         request: &dto::ProtocolStateRequestBody,
     ) -> Result<dto::ProtocolStateRequestResponse, RpcError> {
-        debug!(?request, "Getting protocol state.");
+        if let Some(ref component_ids) = request.protocol_ids {
+            info!(
+                n_component_ids = component_ids.len(),
+                first_component_id = ?component_ids.first(),
+                last_component_id = ?component_ids.last(),
+                "Getting protocol state"
+            );
+        } else {
+            info!("Getting protocol state (all protocols)");
+        }
         self.protocol_state_cache
             .get(request.clone(), |r| async {
                 self.get_protocol_state_inner(r)
@@ -519,7 +537,16 @@ where
         &self,
         request: &dto::ComponentTvlRequestBody,
     ) -> Result<dto::ComponentTvlRequestResponse, RpcError> {
-        info!(?request, "Getting protocol component tvl.");
+        if let Some(ref component_ids) = request.component_ids {
+            info!(
+                n_component_ids = component_ids.len(),
+                first_component_id = ?component_ids.first(),
+                last_component_id = ?component_ids.last(),
+                "Getting protocol component tvl"
+            );
+        } else {
+            info!("Getting protocol component tvl (all components)");
+        }
         let chain = request.chain.into();
         let pagination_params: PaginationParams = (&request.pagination).into();
         let ids_strs: Option<Vec<&str>> = request
@@ -640,7 +667,16 @@ where
         &self,
         request: &dto::ProtocolComponentsRequestBody,
     ) -> Result<dto::ProtocolComponentRequestResponse, RpcError> {
-        info!(?request, "Getting protocol components.");
+        if let Some(ref component_ids) = request.component_ids {
+            info!(
+                n_component_ids = component_ids.len(),
+                first_component_id = ?component_ids.first(),
+                last_component_id = ?component_ids.last(),
+                "Getting protocol components"
+            );
+        } else {
+            info!("Getting protocol components (all components)");
+        }
         self.component_cache
             .get(request.clone(), |r| async {
                 self.get_protocol_components_inner(r)
@@ -790,7 +826,16 @@ where
         &self,
         request: &dto::TracedEntryPointRequestBody,
     ) -> Result<dto::TracedEntryPointRequestResponse, RpcError> {
-        info!(?request, "Getting traced entry points.");
+        if let Some(ref component_ids) = request.component_ids {
+            info!(
+                n_component_ids = component_ids.len(),
+                first_component_id = ?component_ids.first(),
+                last_component_id = ?component_ids.last(),
+                "Getting traced entry points"
+            );
+        } else {
+            info!("Getting traced entry points (all components)");
+        }
 
         self.traced_entry_point_cache
             .get(request.clone(), |r| async {
