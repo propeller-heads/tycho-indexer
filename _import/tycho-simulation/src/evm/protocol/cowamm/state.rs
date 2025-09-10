@@ -302,19 +302,10 @@ impl ProtocolSim for CowAMMState {
                     ))
                 })?;
 
-            // Think of it from the pools perspective , when a user exits the pool, they get their tokens back and redeems the lp_token (lp token gets burnt)
-            // Update state
-            // The liquidity provision is double sided hence both reserves reduce by the proportional amounts for both tokens
-            // new_state.token_a.1 = safe_sub_u256(self.liquidity_a(), proportional_token_amount_a)?;
-            // new_state.token_b.1 = safe_sub_u256(self.liquidity_b(), proportional_token_amount_b)?;
-
-            // // When a user redeems LP tokens, those tokens are effectively burned, the internal lp_token_supply will decrease by the amount they redeem
-            // new_state.lp_token_supply = safe_sub_u256(self.lp_token_supply, amount_in)?;
             let _ = self.exit_pool(&mut new_state, amount_in, &[proportional_token_amount_a, proportional_token_amount_b], U256::from(self.fee));
 
             let (amount_to_swap, is_token_a_swap) = if token_out.address == *self.token_a_addr() {
-                //if we are redeeming lp_token for COW (out address is COW), (if the token we want to receive and get the other one swapped to) from the redemption is
-                (proportional_token_amount_b, false) // Swap token B for token A // then swap the proportional amount of wstETH we received for COW
+                (proportional_token_amount_b, false) // Swap token B for token A
             } else {
                 (proportional_token_amount_a, true) // Swap token A for token B
             };
@@ -405,14 +396,7 @@ impl ProtocolSim for CowAMMState {
                 new_state.token_b.1 = safe_sub_u256(new_state.liquidity_b(), amount_to_swap)?;
                 new_state.token_a.1 = safe_add_u256(new_state.liquidity_a(), amt_in)?;
             }
-            // The liquidity provision is double sided hence both reserves increase by the proportional amounts for both tokens
-            // new_state.token_a.1 =
-            //     safe_add_u256(new_state.liquidity_a(), proportional_token_amount_a)?;
-            // new_state.token_b.1 =
-            //     safe_add_u256(new_state.liquidity_b(), proportional_token_amount_b)?;
-
-            // // When a user joins the pool, the LP tokens are minted to the user , total lp_token supply increases
-            // new_state.lp_token_supply = safe_add_u256(new_state.lp_token_supply, amount_in)?;
+         
             let _ = self.join_pool(&mut new_state, amount_in, &[proportional_token_amount_a, proportional_token_amount_b]);
 
             return Ok(GetAmountOutResult {
