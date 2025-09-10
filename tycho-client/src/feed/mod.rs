@@ -60,7 +60,7 @@ impl BlockHeader {
             number: block.number,
             parent_hash: block.parent_hash.clone(),
             revert,
-            timestamp: block.ts.timestamp() as u64,
+            timestamp: block.ts.and_utc().timestamp() as u64,
         }
     }
 }

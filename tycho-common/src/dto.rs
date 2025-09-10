@@ -2151,7 +2151,7 @@ mod test {
                 models::Chain::Ethereum,
                 Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000003").unwrap(),
                 Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
-                NaiveDateTime::from_timestamp_opt(base_ts + 3000, 0).unwrap(),
+                chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
             ),
             finalized_block_height: 1,
             revert: true,
@@ -2179,7 +2179,7 @@ mod test {
                     static_attributes: HashMap::new(),
                     change: models::ChangeType::Creation,
                     creation_tx: Bytes::from_str("0x000000000000000000000000000000000000000000000000000000000000c351").unwrap(),
-                    created_at: NaiveDateTime::from_timestamp_opt(base_ts + 5000, 0).unwrap(),
+                    created_at: chrono::DateTime::from_timestamp(base_ts + 5000, 0).unwrap().naive_utc(),
                 }),
             ]),
             deleted_protocol_components: HashMap::from([
@@ -2196,7 +2196,7 @@ mod test {
                     static_attributes: HashMap::new(),
                     change: models::ChangeType::Deletion,
                     creation_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000009c41").unwrap(),
-                    created_at: NaiveDateTime::from_timestamp_opt(base_ts + 4000, 0).unwrap(),
+                    created_at: chrono::DateTime::from_timestamp(base_ts + 4000, 0).unwrap().naive_utc(),
                 }),
             ]),
             component_balances: HashMap::from([

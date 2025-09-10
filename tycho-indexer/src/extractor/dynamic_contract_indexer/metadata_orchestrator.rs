@@ -414,7 +414,7 @@ enum RequestMode {
 mod tests {
     use std::sync::Arc;
 
-    use chrono::NaiveDateTime;
+    use chrono::DateTime;
     use mockall::predicate::*;
     use serde_json::json;
     use tycho_common::{
@@ -436,7 +436,9 @@ mod tests {
             chain: Chain::Ethereum,
             hash: Bytes::from(vec![1, 2, 3, 4]),
             parent_hash: Bytes::from(vec![0, 0, 0, 0]),
-            ts: NaiveDateTime::from_timestamp_opt(1234567890, 0).unwrap(),
+            ts: DateTime::from_timestamp(1234567890, 0)
+                .unwrap()
+                .naive_utc(),
         }
     }
 
@@ -453,7 +455,9 @@ mod tests {
             static_attributes,
             change: ChangeType::Creation,
             creation_tx: TxHash::from([0u8; 32]),
-            created_at: NaiveDateTime::from_timestamp_opt(1234567890, 0).unwrap(),
+            created_at: DateTime::from_timestamp(1234567890, 0)
+                .unwrap()
+                .naive_utc(),
         }
     }
 
