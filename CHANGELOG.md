@@ -1,3 +1,11 @@
+## [0.83.3](https://github.com/propeller-heads/tycho-indexer/compare/0.83.2...0.83.3) (2025-09-10)
+
+
+### Bug Fixes
+
+* Add protocol_system to RunSpkgArgs ([7673d41](https://github.com/propeller-heads/tycho-indexer/commit/7673d41ea2982c8486712fb0ae0bf2a12d847235))
+* Add protocol_system to RunSpkgArgs ([#688](https://github.com/propeller-heads/tycho-indexer/issues/688)) ([6afbf17](https://github.com/propeller-heads/tycho-indexer/commit/6afbf17578801d3b14d7a67805c682d3cdd7d3dc))
+
 ## [0.83.2](https://github.com/propeller-heads/tycho-indexer/compare/0.83.1...0.83.2) (2025-09-09)
 
 
