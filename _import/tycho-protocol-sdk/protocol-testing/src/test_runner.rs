@@ -8,7 +8,7 @@ use figment::{
 use miette::{miette, IntoDiagnostic, WrapErr};
 use postgres::{Client, Error, NoTls};
 use tokio::runtime::Runtime;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 use tycho_client::feed::BlockHeader;
 use tycho_common::{
     dto::{Chain, ProtocolComponent, ResponseAccount, ResponseProtocolState},
@@ -43,15 +43,29 @@ pub struct TestRunner {
     vm_traces: bool,
     substreams_path: PathBuf,
     adapter_contract_builder: AdapterContractBuilder,
+    match_test: Option<String>,
 }
 
 impl TestRunner {
-    pub fn new(substreams_path: PathBuf, tycho_logs: bool, db_url: String, vm_traces: bool) -> Self {
+    pub fn new(
+        substreams_path: PathBuf,
+        match_test: Option<String>,
+        tycho_logs: bool,
+        db_url: String,
+        vm_traces: bool,
+    ) -> Self {
         let repo_root = env::current_dir().expect("Failed to get current directory");
         let evm_path = repo_root.join("../evm");
         let adapter_contract_builder =
             AdapterContractBuilder::new(evm_path.to_string_lossy().to_string());
-        Self { tycho_logs, db_url, vm_traces, substreams_path, adapter_contract_builder }
+        Self {
+            tycho_logs,
+            db_url,
+            vm_traces,
+            substreams_path,
+            adapter_contract_builder,
+            match_test,
+        }
     }
 
     pub fn run_tests(&self) -> miette::Result<()> {
@@ -60,42 +74,45 @@ impl TestRunner {
             .join("integration_test.tycho.yaml");
 
         let config = Self::parse_config(&config_yaml_path)?;
+        let terminal_width = termsize::get()
+            .map(|size| size.cols as usize - 35) // Remove length of log prefix
+            .unwrap_or(80);
 
         info!("Running {} tests ...\n", config.tests.len());
-        info!("--------------------------------\n");
+        info!("{}\n", "-".repeat(terminal_width));
 
         let mut failed_tests: Vec<String> = Vec::new();
         let mut count = 1;
 
         for test in &config.tests {
             info!("TEST {}: {}", count, test.name);
+            if let Some(match_test) = &self.match_test {
+                if !test.name.contains(match_test) {
+                    info!("Skipping test (does not match filter: {match_test})\n");
+                    count += 1;
+                    continue;
+                }
+            }
 
             match self.run_test(test, &config, config.skip_balance_check) {
                 Ok(_) => {
-                    info!("\n✅ {} passed.\n", test.name);
+                    info!("✅ {} passed\n", test.name);
                 }
                 Err(e) => {
                     failed_tests.push(test.name.clone());
-                    info!("\n❗️ {} failed: {}\n", test.name, e);
+                    error!("❗️{} failed: {}\n", test.name, e);
                 }
             }
 
-            info!("--------------------------------\n");
+            info!("{}\n", "-".repeat(terminal_width));
             count += 1;
         }
 
-        info!(
-            "\nTests finished! \nRESULTS: {}/{} passed.\n",
-            config.tests.len() - failed_tests.len(),
-            config.tests.len()
-        );
+        info!("Tests finished!");
+        info!("Passed {}/{}", config.tests.len() - failed_tests.len(), config.tests.len());
         if !failed_tests.is_empty() {
-            info!("Failed tests:");
-            for failed_test in &failed_tests {
-                info!("- {}", failed_test);
-            }
+            error!("Failed: {}", failed_tests.join(", "));
         }
-        info!("\n");
 
         Ok(())
     }
@@ -402,7 +419,7 @@ fn validate_state(
         }
     }
 
-    info!("\n✅ Simulation validation passed.\n");
+    info!("✅ Simulation validation passed");
     Ok(())
 }
 

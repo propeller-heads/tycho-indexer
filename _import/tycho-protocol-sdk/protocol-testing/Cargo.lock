@@ -5434,6 +5434,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "similar",
+ "termsize",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.19",
@@ -7207,6 +7208,16 @@ checksum = "45c6481c4829e4cc63825e62c49186a34538b7b2750b73b266581ffb612fb5ed"
 dependencies = [
  "rustix 1.0.1",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "termsize"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f11ff5c25c172608d5b85e2fb43ee9a6d683a7f4ab7f96ae07b3d8b590368fd"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]

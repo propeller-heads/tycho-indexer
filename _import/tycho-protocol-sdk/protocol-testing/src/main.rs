@@ -25,6 +25,10 @@ struct Args {
     #[arg(long, required_unless_present = "package", conflicts_with = "package")]
     package_path: Option<String>,
 
+    /// If provided, only run the tests with a matching name
+    #[arg(long)]
+    match_test: Option<String>,
+
     /// Enable tycho logs
     #[arg(long, default_value_t = true)]
     tycho_logs: bool,
@@ -56,8 +60,13 @@ fn main() -> miette::Result<()> {
 
     let args = Args::parse();
 
-    let test_runner =
-        TestRunner::new(args.package_path()?, args.tycho_logs, args.db_url, args.vm_traces);
+    let test_runner = TestRunner::new(
+        args.package_path()?,
+        args.match_test,
+        args.tycho_logs,
+        args.db_url,
+        args.vm_traces,
+    );
 
     test_runner.run_tests()
 }
