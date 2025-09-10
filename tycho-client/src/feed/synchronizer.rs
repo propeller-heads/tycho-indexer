@@ -1925,7 +1925,9 @@ mod test {
                         number: 1,
                         parent_hash: Bytes::from("0x0000"),
                         chain: Chain::Ethereum,
-                        ts: chrono::NaiveDateTime::from_timestamp_opt(1234567890, 0).unwrap(),
+                        ts: chrono::DateTime::from_timestamp(1234567890, 0)
+                            .unwrap()
+                            .naive_utc(),
                     },
                     revert: false,
                     // Add a new component to trigger snapshot request
@@ -2138,7 +2140,9 @@ mod test {
                         number: 1,
                         parent_hash: Bytes::from("0x0000"),
                         chain: Chain::Ethereum,
-                        ts: chrono::NaiveDateTime::from_timestamp_opt(1234567890, 0).unwrap(),
+                        ts: chrono::DateTime::from_timestamp(1234567890, 0)
+                            .unwrap()
+                            .naive_utc(),
                     },
                     revert: false,
                     ..Default::default()
