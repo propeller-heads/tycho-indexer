@@ -1110,7 +1110,9 @@ mod tests {
             static_attributes,
             change: ChangeType::Creation,
             creation_tx: TxHash::from([0u8; 32]),
-            created_at: chrono::NaiveDateTime::from_timestamp_opt(1234567890, 0).unwrap(),
+            created_at: chrono::DateTime::from_timestamp(1234567890, 0)
+                .unwrap()
+                .naive_utc(),
         }
     }
 
@@ -1900,11 +1902,9 @@ mod tests {
                 Chain::Ethereum,
                 Bytes::from(block_number).lpad(32, 0),
                 Bytes::from(block_number - 1).lpad(32, 0),
-                chrono::NaiveDateTime::from_timestamp_opt(
-                    1719849000 + (block_number * 12) as i64,
-                    0,
-                )
-                .unwrap(),
+                chrono::DateTime::from_timestamp(1719849000 + (block_number * 12) as i64, 0)
+                    .unwrap()
+                    .naive_utc(),
             )
         }
 
@@ -2145,7 +2145,9 @@ mod tests {
                     "0x97e6d877bd7e6587c29711ee80b873d4eac8c49fc616145e6326e07a5e41bf1810",
                 )
                 .unwrap(), // Real parent hash
-                chrono::NaiveDateTime::from_timestamp_opt(1724251307, 0).unwrap(), /* Real timestamp */
+                chrono::DateTime::from_timestamp(1724251307, 0)
+                    .unwrap()
+                    .naive_utc(), /* Real timestamp */
             );
             let tx = create_test_transaction(1);
 

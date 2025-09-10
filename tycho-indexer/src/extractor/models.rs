@@ -527,7 +527,7 @@ impl From<BlockEntityChanges> for BlockChanges {
 pub mod fixtures {
     use std::str::FromStr;
 
-    use chrono::NaiveDateTime;
+    use chrono::DateTime;
     use prost::Message;
     use tycho_common::models::{
         blockchain::Transaction, contract::AccountDelta, protocol::ProtocolComponentStateDelta,
@@ -638,7 +638,9 @@ pub mod fixtures {
             ]),
             change: ChangeType::Creation,
             creation_tx: tx_hash,
-            created_at: NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
+            created_at: DateTime::from_timestamp(1000, 0)
+                .unwrap()
+                .naive_utc(),
         }
     }
 
@@ -668,7 +670,7 @@ pub mod fixtures {
                 Chain::Ethereum,
                 Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000031323334").unwrap(),
                 Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000021222324").unwrap(),
-                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
+                DateTime::from_timestamp(1000, 0).unwrap().naive_utc(),
             ),
             0,
             false,

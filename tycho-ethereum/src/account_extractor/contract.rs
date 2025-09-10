@@ -6,7 +6,7 @@ use alloy::{
     rpc::client::{ClientBuilder, RpcClient},
 };
 use async_trait::async_trait;
-use chrono::NaiveDateTime;
+use chrono::DateTime;
 use ethers::{
     middleware::Middleware,
     prelude::{BlockId, Http, Provider, H160, H256, U256},
@@ -189,8 +189,9 @@ impl EVMAccountExtractor {
             hash: block.hash.unwrap().to_bytes(),
             parent_hash: block.parent_hash.to_bytes(),
             chain: Chain::Ethereum,
-            ts: NaiveDateTime::from_timestamp_opt(block.timestamp.as_u64() as i64, 0)
-                .expect("Failed to convert timestamp"),
+            ts: DateTime::from_timestamp(block.timestamp.as_u64() as i64, 0)
+                .expect("Failed to convert timestamp")
+                .naive_utc(),
         })
     }
 }
