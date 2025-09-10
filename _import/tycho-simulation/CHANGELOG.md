@@ -1,3 +1,10 @@
+## [0.157.1](https://github.com/propeller-heads/tycho-simulation/compare/0.157.0...0.157.1) (2025-09-10)
+
+
+### Bug Fixes
+
+* Re export tycho_execution ([8413d97](https://github.com/propeller-heads/tycho-simulation/commit/8413d97d67681f328c4e269e765e986b9edb642a))
+
 ## [0.157.0](https://github.com/propeller-heads/tycho-simulation/compare/0.156.1...0.157.0) (2025-09-10)
 
 
