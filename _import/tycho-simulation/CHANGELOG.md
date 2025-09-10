@@ -1,3 +1,10 @@
+## [0.157.0](https://github.com/propeller-heads/tycho-simulation/compare/0.156.1...0.157.0) (2025-09-10)
+
+
+### Features
+
+* Allow clearing PreCachedDB account storage ([5fc89be](https://github.com/propeller-heads/tycho-simulation/commit/5fc89be404fdadbed4c7c654fd10d786e6a2d965))
+
 ## [0.156.1](https://github.com/propeller-heads/tycho-simulation/compare/0.156.0...0.156.1) (2025-09-10)
 
 ## [0.156.0](https://github.com/propeller-heads/tycho-simulation/compare/0.155.2...0.156.0) (2025-09-08)
