@@ -2,79 +2,23 @@
 
 Rust-based integration testing framework for Tycho protocol implementations.
 
-## Prerequisites
+## How to Run
 
-1. **PostgreSQL Database**: Start the required PostgreSQL instance using Docker:
-   ```bash
-   docker-compose up -d
-   ```
-
-2. **Environment Variables**: Source the environment variables:
-   ```bash
-   source .env
-   ```
-   Or set them manually:
-   - `DATABASE_URL`: PostgreSQL connection string (default: `postgres://postgres:mypassword@localhost:5431/tycho_indexer_0`)
-   - `RPC_URL`: Ethereum RPC endpoint
-   - `SUBSTREAMS_API_TOKEN`: Authentication token for Substreams API
-   - `AUTH_API_KEY`: API key for authentication
-
-## Running Tests
-
-### Basic Usage
 ```bash
-cargo run -- --package <PACKAGE_NAME>
+# Export necessary env vars
+export RPC_URL=..
+export SUBSTREAMS_API_TOKEN=..
+export AUTH_API_KEY=..
+export PROTOCOLS="ethereum-balancer-v2=weighted_legacy_creation ethereum-ekubo-v2"
+
+# Start and show the test logs only
+docker compose up -d && docker compose logs test-runner --follow
+
+# Clean up
+docker compose down
 ```
 
-### Command Line Options
-
-- `--package <NAME>` (required): Name of the package to test
-- `--tycho-logs <BOOL>`: Enable tycho logs (default: true)
-- `--db-url <URL>`: Postgres database URL (default: postgres://postgres:mypassword@localhost:5431/tycho_indexer_0)
-- `--vm-traces <BOOL>`: Enable tracing during VM simulations (default: false)
-
-### Examples
-
-Run tests with default settings:
-```bash
-cargo run -- --package uniswap-v2
-```
-
-Run tests with VM tracing enabled:
-```bash
-cargo run -- --package uniswap-v2 --vm-traces true
-```
-
-Run tests with custom database URL:
-```bash
-cargo run -- --package uniswap-v2 --db-url postgres://user:pass@localhost:5432/custom_db
-```
-
-Run tests in silent mode (disable tycho logs):
-```bash
-cargo run -- --package uniswap-v2 --tycho-logs false
-```
-
-## Logging Configuration
-
-The application uses `tracing` for structured logging. Control log levels using the `RUST_LOG` environment variable:
-
-### Log Levels
-```bash
-# Show test results and progress (recommended)
-export RUST_LOG=info
-
-# Show all detailed logs including debug information
-export RUST_LOG=debug
-
-# Show only errors (silent mode)
-export RUST_LOG=error
-
-# Hide all logs (completely silent)
-export RUST_LOG=warn
-```
-
-### Test Output Formatting
+## Test Output Formatting
 
 The test runner outputs results similar to:
 
@@ -102,7 +46,7 @@ Tests finished!
 RESULTS: 2/2 passed.
 ```
 
-### Module-specific Logging
+## Module-specific Logging
 ```bash
 # Enable debug logs for specific modules
 export RUST_LOG=protocol_testing=debug,tycho_client=info
@@ -111,7 +55,7 @@ export RUST_LOG=protocol_testing=debug,tycho_client=info
 export RUST_LOG=info,hyper=warn,reqwest=warn
 ```
 
-### Running with Different Log Levels
+## Running with Different Log Levels
 ```bash
 # Standard test run with progress output
 RUST_LOG=info cargo run -- --package uniswap-v2
