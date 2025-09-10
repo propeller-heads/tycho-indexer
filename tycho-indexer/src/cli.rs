@@ -122,6 +122,10 @@ pub struct RunSpkgArgs {
     #[clap(long, value_delimiter = ',')]
     pub protocol_type_names: Vec<String>,
 
+    // Protocol system to index
+    #[clap(long)]
+    pub protocol_system: String,
+
     /// Substreams start block
     #[clap(long)]
     pub start_block: i64,
@@ -214,6 +218,8 @@ mod cli_tests {
             "17361664",
             "--protocol-type-names",
             "pt1,pt2",
+            "--protocol-system",
+            "test_protocol",
         ])
         .expect("parse errored");
 
@@ -232,6 +238,7 @@ mod cli_tests {
                 spkg: "package.spkg".to_string(),
                 module: "module_name".to_string(),
                 protocol_type_names: vec!["pt1".to_string(), "pt2".to_string()],
+                protocol_system: "test_protocol".to_string(),
                 start_block: 17361664,
                 stop_block: None,
                 substreams_args: SubstreamsArgs {
