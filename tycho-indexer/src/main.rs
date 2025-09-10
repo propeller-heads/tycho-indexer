@@ -268,9 +268,9 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
         })?;
 
     let config = ExtractorConfigs::new(HashMap::from([(
-        "test_protocol".to_string(),
+        run_args.protocol_system.clone(),
         ExtractorConfig::new(
-            "test_protocol".to_string(),
+            run_args.protocol_system.clone(),
             Chain::from_str(&run_args.chain).unwrap(),
             ImplementationType::Vm,
             1, /* TODO: if we want to increase this, we need to commit the cache when we reached
