@@ -129,7 +129,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_block_header_test() {
+    async fn get_block_header() {
         let eth_rpc_url = env::var("RPC_URL").expect("Missing RPC_URL in environment");
 
         let rpc_provider = RPCProvider::new(eth_rpc_url);
@@ -142,8 +142,6 @@ mod tests {
 
         // Verify that we got a block with the correct number
         assert_eq!(block_number, block_header.header.number);
-
-        // Verify that the timestamp is non-zero
-        assert!(block_header.header.timestamp > 0);
+        assert_eq!(block_header.header.timestamp, 1741393115);
     }
 }
