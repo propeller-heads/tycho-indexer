@@ -108,10 +108,10 @@ impl PreCachedDB {
 
                     // We expect the code to be present.
                     let code = Bytecode::new_raw(AlloyBytes::from(
-                        update
-                            .code
-                            .clone()
-                            .expect("account code"),
+                        update.code.clone().unwrap_or_else(|| {
+                            error!(%update.address, "MissingCode");
+                            Vec::new()
+                        }),
                     ));
                     // If the balance is not present, we set it to zero.
                     let balance = update.balance.unwrap_or(U256::ZERO);
