@@ -1055,7 +1055,7 @@ mod tests {
     }
 
     fn create_test_component() -> ProtocolComponent {
-        use chrono::NaiveDateTime;
+        use chrono::DateTime;
         use tycho_common::models::{Chain, ChangeType, TxHash};
 
         ProtocolComponent {
@@ -1073,7 +1073,9 @@ mod tests {
             .collect(),
             change: ChangeType::Creation,
             creation_tx: TxHash::from([0u8; 32]),
-            created_at: NaiveDateTime::from_timestamp_opt(1640995200, 0).unwrap(),
+            created_at: DateTime::from_timestamp(1640995200, 0)
+                .unwrap()
+                .naive_utc(),
         }
     }
 
@@ -1093,7 +1095,7 @@ mod tests {
     }
 
     fn create_test_context() -> HookTracerContext {
-        use chrono::NaiveDateTime;
+        use chrono::DateTime;
         use tycho_common::models::{blockchain::Block, BlockHash, Chain};
 
         HookTracerContext {
@@ -1102,7 +1104,9 @@ mod tests {
                 hash: BlockHash::from([0u8; 32]),
                 parent_hash: BlockHash::from([0u8; 32]),
                 chain: Chain::Ethereum,
-                ts: NaiveDateTime::from_timestamp_opt(1640995200, 0).unwrap(),
+                ts: DateTime::from_timestamp(1640995200, 0)
+                    .unwrap()
+                    .naive_utc(),
             },
         }
     }
@@ -1365,49 +1369,46 @@ mod tests {
 
         // Verify the entrypoint has storage overrides
         let entrypoint = &entrypoints[0];
-        if let TracingParams::RPCTracer(rpc_params) = &entrypoint.params {
-            let state_overrides = rpc_params
-                .state_overrides
-                .as_ref()
-                .unwrap();
+        let TracingParams::RPCTracer(rpc_params) = &entrypoint.params;
+        let state_overrides = rpc_params
+            .state_overrides
+            .as_ref()
+            .unwrap();
 
-            // Should have overrides for both router and pool manager
-            assert_eq!(state_overrides.len(), 2);
+        // Should have overrides for both router and pool manager
+        assert_eq!(state_overrides.len(), 2);
 
-            // Check pool manager has storage overrides
-            let pool_manager = Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90"));
-            let pool_manager_overrides = state_overrides
-                .get(&pool_manager)
-                .unwrap();
+        // Check pool manager has storage overrides
+        let pool_manager = Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90"));
+        let pool_manager_overrides = state_overrides
+            .get(&pool_manager)
+            .unwrap();
 
-            if let Some(StorageOverride::Diff(storage_diff)) = &pool_manager_overrides.slots {
-                // Should have at least 2 slots: ERC6909 slot + detected slot for token0
-                assert!(storage_diff.len() >= 2);
+        if let Some(StorageOverride::Diff(storage_diff)) = &pool_manager_overrides.slots {
+            // Should have at least 2 slots: ERC6909 slot + detected slot for token0
+            assert!(storage_diff.len() >= 2);
 
-                // All slots should have the same amount_in value (1000)
-                let expected_amount = Bytes::from(
-                    U256::from(1000u64)
-                        .to_be_bytes::<32>()
-                        .as_slice(),
-                );
-                for (_slot, value) in storage_diff {
-                    assert_eq!(value, &expected_amount);
-                }
-
-                // Verify that the detected slot for token0 is included
-                let detected_slot_key = Bytes::from([0x12; 32]);
-                assert!(storage_diff.contains_key(&detected_slot_key));
-                assert_eq!(
-                    storage_diff
-                        .get(&detected_slot_key)
-                        .unwrap(),
-                    &expected_amount
-                );
-            } else {
-                panic!("Expected storage diff but found none");
+            // All slots should have the same amount_in value (1000)
+            let expected_amount = Bytes::from(
+                U256::from(1000u64)
+                    .to_be_bytes::<32>()
+                    .as_slice(),
+            );
+            for value in storage_diff.values() {
+                assert_eq!(value, &expected_amount);
             }
+
+            // Verify that the detected slot for token0 is included
+            let detected_slot_key = Bytes::from([0x12; 32]);
+            assert!(storage_diff.contains_key(&detected_slot_key));
+            assert_eq!(
+                storage_diff
+                    .get(&detected_slot_key)
+                    .unwrap(),
+                &expected_amount
+            );
         } else {
-            panic!("Expected RPCTracer params but found different type");
+            panic!("Expected storage diff but found none");
         }
     }
 
@@ -1491,39 +1492,36 @@ mod tests {
 
         // Verify the entrypoint has storage overrides
         let entrypoint = &entrypoints[0];
-        if let TracingParams::RPCTracer(rpc_params) = &entrypoint.params {
-            let state_overrides = rpc_params
-                .state_overrides
-                .as_ref()
-                .unwrap();
+        let TracingParams::RPCTracer(rpc_params) = &entrypoint.params;
+        let state_overrides = rpc_params
+            .state_overrides
+            .as_ref()
+            .unwrap();
 
-            // Should have overrides for both router and pool manager
-            assert_eq!(state_overrides.len(), 2);
+        // Should have overrides for both router and pool manager
+        assert_eq!(state_overrides.len(), 2);
 
-            // Check pool manager has storage overrides
-            let pool_manager = Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90"));
-            let pool_manager_overrides = state_overrides
-                .get(&pool_manager)
-                .unwrap();
+        // Check pool manager has storage overrides
+        let pool_manager = Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90"));
+        let pool_manager_overrides = state_overrides
+            .get(&pool_manager)
+            .unwrap();
 
-            if let Some(StorageOverride::Diff(storage_diff)) = &pool_manager_overrides.slots {
-                // Should have exactly 1 slot: only ERC6909 slot
-                assert_eq!(storage_diff.len(), 1);
+        if let Some(StorageOverride::Diff(storage_diff)) = &pool_manager_overrides.slots {
+            // Should have exactly 1 slot: only ERC6909 slot
+            assert_eq!(storage_diff.len(), 1);
 
-                // The slot should have the amount_in value (500)
-                let expected_amount = Bytes::from(
-                    U256::from(500u64)
-                        .to_be_bytes::<32>()
-                        .as_slice(),
-                );
-                for (_slot, value) in storage_diff {
-                    assert_eq!(value, &expected_amount);
-                }
-            } else {
-                panic!("Expected storage diff but found none");
+            // The slot should have the amount_in value (500)
+            let expected_amount = Bytes::from(
+                U256::from(500u64)
+                    .to_be_bytes::<32>()
+                    .as_slice(),
+            );
+            for value in storage_diff.values() {
+                assert_eq!(value, &expected_amount);
             }
         } else {
-            panic!("Expected RPCTracer params but found different type");
+            panic!("Expected storage diff but found none");
         }
     }
 }

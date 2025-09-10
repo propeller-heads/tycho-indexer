@@ -489,7 +489,7 @@ pub type AccountToContractChange = HashMap<Address, HashMap<StoreKey, ContractSt
 mod test {
     use std::str::FromStr;
 
-    use chrono::NaiveDateTime;
+    use chrono::DateTime;
     use rstest::rstest;
 
     use super::*;
@@ -672,7 +672,9 @@ mod test {
             ]),
             change: ChangeType::Creation,
             creation_tx: tx_hash,
-            created_at: NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
+            created_at: DateTime::from_timestamp(1000, 0)
+                .unwrap()
+                .naive_utc(),
         }
     }
 
