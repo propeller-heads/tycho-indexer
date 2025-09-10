@@ -291,8 +291,8 @@ where
                 ExtractionError::Unknown(format!("Failed to update component state: {e}"))
             })?;
 
-        // Mark component as paused by setting the "paused" attribute to [3]
-        // This indicates the component processing has been paused due to failures
+        // Mark component as paused by setting the "paused" state attribute.
+        // This indicates the component processing has been paused due to metatdata failures.
         insert_state_attribute_update(
             &mut block_changes.txs_with_update,
             &component_id,
@@ -808,8 +808,8 @@ where
                     "Found hook orchestrator, processing components needing full processing"
                 );
 
-                // TODO: This map currently contains only one entry. This will change when we
-                // redesign this code (see TODO above)
+                // TODO: `component_metadata_map` currently contains only one entry. This will
+                // change when we redesign this code (see TODO above)
                 let component_metadata_map: HashMap<String, _> = metadata_by_component_id
                     .iter()
                     .filter_map(|(component_id, metadata)| {
@@ -910,8 +910,8 @@ where
                     "Found hook orchestrator, processing components needing balance-only updates"
                 );
 
-                // TODO: This map currently contains only one entry. This will change when we
-                // redesign this code (see TODO above)
+                // TODO: `component_metadata_map` currently contains only one entry. This will
+                // change when we redesign this code (see TODO above)
                 let component_metadata_map: HashMap<String, _> = metadata_by_component_id
                     .iter()
                     .filter_map(|(component_id, metadata)| {
