@@ -78,21 +78,27 @@ impl TestRunner {
             .map(|size| size.cols as usize - 35) // Remove length of log prefix
             .unwrap_or(80);
 
-        info!("Running {} tests ...\n", config.tests.len());
+        let tests = match &self.match_test {
+            Some(filter) => config
+                .tests
+                .iter()
+                .filter(|test| test.name.contains(filter))
+                .collect::<Vec<&IntegrationTest>>(),
+            None => config
+                .tests
+                .iter()
+                .collect::<Vec<&IntegrationTest>>(),
+        };
+        let tests_count = tests.len();
+
+        info!("Running {} tests ...\n", tests_count);
         info!("{}\n", "-".repeat(terminal_width));
 
         let mut failed_tests: Vec<String> = Vec::new();
         let mut count = 1;
 
-        for test in &config.tests {
+        for test in &tests {
             info!("TEST {}: {}", count, test.name);
-            if let Some(match_test) = &self.match_test {
-                if !test.name.contains(match_test) {
-                    info!("Skipping test (does not match filter: {match_test})\n");
-                    count += 1;
-                    continue;
-                }
-            }
 
             match self.run_test(test, &config, config.skip_balance_check) {
                 Ok(_) => {
@@ -109,7 +115,7 @@ impl TestRunner {
         }
 
         info!("Tests finished!");
-        info!("Passed {}/{}", config.tests.len() - failed_tests.len(), config.tests.len());
+        info!("Passed {}/{}", tests_count - failed_tests.len(), tests_count);
         if !failed_tests.is_empty() {
             error!("Failed: {}", failed_tests.join(", "));
         }

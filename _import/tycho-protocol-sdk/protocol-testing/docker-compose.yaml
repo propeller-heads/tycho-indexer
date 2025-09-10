@@ -27,6 +27,8 @@ services:
       RPC_URL: "${RPC_URL}"
       SUBSTREAMS_API_TOKEN: "${SUBSTREAMS_API_TOKEN}"
       AUTH_API_KEY: "${AUTH_API_KEY}"
+    # PROTOCOLS to test separated by space and with optional filter
+    # e.g. "ethereum-balancer-v2=weighted_legacy_creation ethereum-ekubo-v2"
     entrypoint: ["/entrypoint.sh", "${PROTOCOLS}"]
 
 volumes:

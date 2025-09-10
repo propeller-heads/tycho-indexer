@@ -2,11 +2,22 @@
 set -e
 
 if [ "$#" -lt 1 ]; then
-  echo "Usage: $0 test1 [test2 ...]"
-  exit 1
+	echo "Usage: $0 protocol1[=filter] [protocol2 ...] or \"$0 'protocol1[=filter] protocol2'\""
+	exit 1
 fi
 
-for test in "$@"; do
-  echo "Running test: /app/substreams/$test"
-  tycho-protocol-sdk --package-path "/app/substreams/$test" --db-url "$DATABASE_URL"
+if [ "$#" -eq 1 ] && [[ "$1" == *" "* ]]; then
+	IFS=' ' read -r -a args <<< "$1"
+else
+	args=("$@")
+fi
+
+for test in "${args[@]}"; do
+	protocol="${test%%=*}"
+	filter="${test#*=}"
+	if [[ "$test" == *"="* ]]; then
+		tycho-protocol-sdk --package-path "/app/substreams/$protocol" --db-url "$DATABASE_URL" --match-test "$filter"
+	else
+		tycho-protocol-sdk --package-path "/app/substreams/$protocol" --db-url "$DATABASE_URL"
+	fi
 done
