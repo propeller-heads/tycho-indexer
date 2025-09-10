@@ -36,6 +36,11 @@ impl AccountStorage {
         Self::default()
     }
 
+    /// Clear all accounts from the storage.
+    pub fn clear(&mut self) {
+        self.accounts.clear();
+    }
+
     /// Inserts account data into the current instance.
     ///
     /// # Arguments
