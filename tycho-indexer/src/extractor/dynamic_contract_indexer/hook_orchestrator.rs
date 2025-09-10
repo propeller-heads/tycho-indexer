@@ -381,7 +381,7 @@ where
                     component: component.clone(),
                     component_metadata: metadata.clone(),
                     hook_address: hook_address.clone(),
-                    use_balance_overwrites: true,  // Use balance overwrites
+                    use_balance_overwrites: true, // Use balance overwrites
                 };
 
                 let context = HookTracerContext::new(block.clone());
