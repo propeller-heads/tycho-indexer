@@ -45,6 +45,7 @@ tracing-test = "0.2.5"
 
 [dev-dependencies]
 pretty_assertions.workspace = true
+mockito.workspace = true
 
 [features]
 default = []

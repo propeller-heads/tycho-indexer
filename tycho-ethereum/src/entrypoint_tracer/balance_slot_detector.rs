@@ -889,6 +889,7 @@ pub fn encode_balance_of_calldata(address: &Address) -> Bytes {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mockito::Server;
 
     #[test]
     fn test_encode_balance_of_calldata() {
@@ -906,6 +907,580 @@ mod tests {
 
         // Verify address
         assert_eq!(&calldata[16..36], address.as_ref());
+    }
+
+    // Test helper to create mock trace response with storage slots
+    fn create_mock_trace_response(storage_slots: Vec<(&str, &str, &str)>) -> Value {
+        let mut storage_map = serde_json::Map::new();
+        
+        for (address, slot, value) in storage_slots {
+            let address_key = format!("0x{}", address.strip_prefix("0x").unwrap_or(address));
+            let slot_key = format!("0x{}", slot.strip_prefix("0x").unwrap_or(slot));
+            
+            if !storage_map.contains_key(&address_key) {
+                storage_map.insert(
+                    address_key.clone(),
+                    json!({
+                        "storage": {
+                            slot_key: value
+                        }
+                    })
+                );
+            } else if let Some(account) = storage_map.get_mut(&address_key) {
+                if let Some(storage) = account.get_mut("storage") {
+                    if let Some(storage_obj) = storage.as_object_mut() {
+                        storage_obj.insert(slot_key, json!(value));
+                    }
+                }
+            }
+        }
+        
+        json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": storage_map
+        })
+    }
+
+    // Test helper to create mock eth_call response
+    fn create_mock_call_response(balance: &str) -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": balance
+        })
+    }
+
+    // Test helper to create error response
+    fn create_error_response(id: u64, error_msg: &str) -> Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "error": {
+                "code": -32000,
+                "message": error_msg
+            }
+        })
+    }
+
+    #[test]
+    fn test_calculate_backoff() {
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: "http://localhost:8545".to_string(),
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+        };
+        
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+        
+        // Test exponential backoff
+        let backoff1 = detector.calculate_backoff(1);
+        assert!(backoff1 >= 100 && backoff1 <= 125); // 100ms + up to 25% jitter
+        
+        let backoff2 = detector.calculate_backoff(2);
+        assert!(backoff2 >= 200 && backoff2 <= 250); // 200ms + up to 25% jitter
+        
+        let backoff3 = detector.calculate_backoff(3);
+        assert!(backoff3 >= 400 && backoff3 <= 500); // 400ms + up to 25% jitter
+        
+        // Test max cap
+        let backoff_large = detector.calculate_backoff(10);
+        assert!(backoff_large <= 5000 + 1250); // Max 5000ms + 25% jitter
+    }
+
+    #[test]
+    fn test_generate_test_value() {
+        // Test non-zero, non-max value
+        let original = U256::from(1000u64);
+        let test_value = EVMBalanceSlotDetector::generate_test_value(original);
+        assert_eq!(test_value, U256::from(2000u64));
+        
+        // Test zero value
+        let zero = U256::ZERO;
+        let test_value = EVMBalanceSlotDetector::generate_test_value(zero);
+        assert_eq!(test_value, U256::from(1_000_000_000_000_000_000u64));
+        
+        // Test max value - falls into else branch since original_balance == U256::MAX
+        let max = U256::MAX;
+        let test_value = EVMBalanceSlotDetector::generate_test_value(max);
+        assert_eq!(test_value, U256::from(1_000_000_000_000_000_000u64)); // Returns 1 ETH for MAX
+    }
+
+    #[test]
+    fn test_extract_balance_from_call_response() {
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: "http://localhost:8545".to_string(),
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+        };
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+        
+        // Test valid response
+        let response = json!({
+            "result": "0x0000000000000000000000000000000000000000000000000de0b6b3a7640000"
+        });
+        let balance = detector.extract_balance_from_call_response(&response).unwrap();
+        assert_eq!(balance, U256::from(1_000_000_000_000_000_000u64)); // 1 ETH
+        
+        // Test missing result
+        let response = json!({});
+        let result = detector.extract_balance_from_call_response(&response);
+        assert!(matches!(result, Err(BalanceSlotError::InvalidResponse(_))));
+        
+        // Test invalid hex length
+        let response = json!({
+            "result": "0x1234"
+        });
+        let result = detector.extract_balance_from_call_response(&response);
+        assert!(matches!(result, Err(BalanceSlotError::BalanceExtractionError(_))));
+        
+        // Test invalid hex characters
+        let response = json!({
+            "result": "0xGGGG000000000000000000000000000000000000000000000000000000000000"
+        });
+        let result = detector.extract_balance_from_call_response(&response);
+        assert!(matches!(result, Err(BalanceSlotError::BalanceExtractionError(_))));
+    }
+
+    #[test]
+    fn test_extract_slot_values_from_trace_response() {
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: "http://localhost:8545".to_string(),
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+        };
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+        
+        // Test valid trace with storage
+        let response = json!({
+            "result": {
+                "0x1234567890123456789012345678901234567890": {
+                    "storage": {
+                        "0x0000000000000000000000000000000000000000000000000000000000000001": "0x0000000000000000000000000000000000000000000000000de0b6b3a7640000",
+                        "0x0000000000000000000000000000000000000000000000000000000000000002": "0x0000000000000000000000000000000000000000000000001bc16d674ec80000"
+                    }
+                }
+            }
+        });
+        
+        let slot_values = detector.extract_slot_values_from_trace_response(&response).unwrap();
+        assert_eq!(slot_values.len(), 2);
+        
+        // Verify first slot
+        let first_slot = &slot_values[0];
+        assert_eq!(first_slot.1, U256::from(1_000_000_000_000_000_000u64));
+        
+        // Verify second slot
+        let second_slot = &slot_values[1];
+        assert_eq!(second_slot.1, U256::from(2_000_000_000_000_000_000u64));
+        
+        // Test missing result
+        let response = json!({});
+        let result = detector.extract_slot_values_from_trace_response(&response);
+        assert!(matches!(result, Err(BalanceSlotError::InvalidResponse(_))));
+        
+        // Test malformed result
+        let response = json!({
+            "result": "not_an_object"
+        });
+        let result = detector.extract_slot_values_from_trace_response(&response);
+        assert!(matches!(result, Err(BalanceSlotError::ParseError(_))));
+    }
+
+    #[test]
+    fn test_find_best_slot_by_value_comparison() {
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: "http://localhost:8545".to_string(),
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+        };
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+        
+        let addr = Address::from([0x11u8; 20]);
+        let slot1 = Bytes::from(vec![0x01u8; 32]);
+        let slot2 = Bytes::from(vec![0x02u8; 32]);
+        let slot3 = Bytes::from(vec![0x03u8; 32]);
+        
+        // Test single slot - should return it regardless of value
+        let single_slot = vec![
+            ((addr.clone(), slot1.clone()), U256::from(500u64))
+        ];
+        let result = detector.find_best_slot_by_value_comparison(
+            single_slot,
+            U256::from(1000u64)
+        ).unwrap();
+        assert_eq!(result.0, (addr.clone(), slot1.clone()));
+        assert_eq!(result.1, U256::from(1000u64));
+        
+        // Test multiple slots - should return closest to expected
+        let multiple_slots = vec![
+            ((addr.clone(), slot1.clone()), U256::from(500u64)),
+            ((addr.clone(), slot2.clone()), U256::from(900u64)),
+            ((addr.clone(), slot3.clone()), U256::from(1500u64)),
+        ];
+        let result = detector.find_best_slot_by_value_comparison(
+            multiple_slots,
+            U256::from(1000u64)
+        ).unwrap();
+        assert_eq!(result.0, (addr.clone(), slot2)); // slot2 has value 900, closest to 1000
+        
+        // Test empty slots
+        let empty_slots = vec![];
+        let result = detector.find_best_slot_by_value_comparison(
+            empty_slots,
+            U256::from(1000u64)
+        );
+        assert!(matches!(result, Err(BalanceSlotError::TokenNotInTrace)));
+    }
+
+    #[test]
+    fn test_process_batched_response() {
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: "http://localhost:8545".to_string(),
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+        };
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+        
+        let token1 = Address::from([0x11u8; 20]);
+        let token2 = Address::from([0x22u8; 20]);
+        
+        // Create responses with proper IDs (out of order to test ID mapping)
+        let responses = vec![
+            json!({
+                "id": 2,
+                "result": "0x0000000000000000000000000000000000000000000000000de0b6b3a7640000"
+            }),
+            json!({
+                "id": 1,
+                "result": {
+                    "0x1111111111111111111111111111111111111111": {
+                        "storage": {
+                            "0x0000000000000000000000000000000000000000000000000000000000000001": "0x0000000000000000000000000000000000000000000000000de0b6b3a7640000"
+                        }
+                    }
+                }
+            }),
+            json!({
+                "id": 4,
+                "result": "0x0000000000000000000000000000000000000000000000001bc16d674ec80000"
+            }),
+            json!({
+                "id": 3,
+                "result": {
+                    "0x2222222222222222222222222222222222222222": {
+                        "storage": {
+                            "0x0000000000000000000000000000000000000000000000000000000000000002": "0x0000000000000000000000000000000000000000000000001bc16d674ec80000"
+                        }
+                    }
+                }
+            }),
+        ];
+        
+        let tokens = vec![token1.clone(), token2.clone()];
+        let result = detector.process_batched_response(&tokens, responses);
+        
+        assert_eq!(result.len(), 2);
+        assert!(result.contains_key(&token1));
+        assert!(result.contains_key(&token2));
+        
+        // Verify token1 result
+        let token1_result = result.get(&token1).unwrap();
+        assert!(token1_result.is_ok());
+        
+        // Verify token2 result
+        let token2_result = result.get(&token2).unwrap();
+        assert!(token2_result.is_ok());
+    }
+
+    #[test]
+    fn test_create_balance_requests() {
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: "http://localhost:8545".to_string(),
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+        };
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+        
+        let token1 = Address::from([0x11u8; 20]);
+        let token2 = Address::from([0x22u8; 20]);
+        let owner = Address::from([0x33u8; 20]);
+        let block_hash = BlockHash::from([0x44u8; 32]);
+        
+        let tokens = vec![token1, token2];
+        let requests = detector.create_balance_requests(&tokens, &owner, &block_hash);
+        
+        // Should create 2 requests per token (debug_traceCall + eth_call)
+        assert!(requests.is_array());
+        let array = requests.as_array().unwrap();
+        assert_eq!(array.len(), 4);
+        
+        // Verify first request (debug_traceCall for token1)
+        assert_eq!(array[0]["method"], "debug_traceCall");
+        assert_eq!(array[0]["id"], 1);
+        
+        // Verify second request (eth_call for token1)
+        assert_eq!(array[1]["method"], "eth_call");
+        assert_eq!(array[1]["id"], 2);
+        
+        // Verify third request (debug_traceCall for token2)
+        assert_eq!(array[2]["method"], "debug_traceCall");
+        assert_eq!(array[2]["id"], 3);
+        
+        // Verify fourth request (eth_call for token2)
+        assert_eq!(array[3]["method"], "eth_call");
+        assert_eq!(array[3]["id"], 4);
+    }
+
+    #[test]
+    fn test_create_validation_requests() {
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: "http://localhost:8545".to_string(),
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+        };
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+        
+        let validation_data = vec![
+            ValidationData {
+                token: Address::from([0x11u8; 20]),
+                storage_addr: Address::from([0x11u8; 20]),
+                slot: Bytes::from(vec![0x01u8; 32]),
+                original_balance: U256::from(1000u64),
+                test_value: U256::from(2000u64),
+            },
+            ValidationData {
+                token: Address::from([0x22u8; 20]),
+                storage_addr: Address::from([0x22u8; 20]),
+                slot: Bytes::from(vec![0x02u8; 32]),
+                original_balance: U256::from(3000u64),
+                test_value: U256::from(6000u64),
+            },
+        ];
+        
+        let owner = Address::from([0x33u8; 20]);
+        let block_hash = BlockHash::from([0x44u8; 32]);
+        
+        let requests = detector.create_validation_requests(&validation_data, &owner, &block_hash).unwrap();
+        
+        assert!(requests.is_array());
+        let array = requests.as_array().unwrap();
+        assert_eq!(array.len(), 2);
+        
+        // Verify first validation request
+        assert_eq!(array[0]["method"], "eth_call");
+        assert_eq!(array[0]["id"], 1);
+        
+        // Check state override is present
+        let params = array[0]["params"].as_array().unwrap();
+        assert_eq!(params.len(), 3);
+        assert!(params[2].is_object()); // State override object
+        
+        // Verify second validation request
+        assert_eq!(array[1]["method"], "eth_call");
+        assert_eq!(array[1]["id"], 2);
+    }
+
+    #[test]
+    fn test_process_validation_responses() {
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: "http://localhost:8545".to_string(),
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+        };
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+        
+        let validation_data = vec![
+            ValidationData {
+                token: Address::from([0x11u8; 20]),
+                storage_addr: Address::from([0x11u8; 20]),
+                slot: Bytes::from(vec![0x01u8; 32]),
+                original_balance: U256::from(1000u64),
+                test_value: U256::from(2000u64),
+            },
+            ValidationData {
+                token: Address::from([0x22u8; 20]),
+                storage_addr: Address::from([0x22u8; 20]),
+                slot: Bytes::from(vec![0x02u8; 32]),
+                original_balance: U256::from(3000u64),
+                test_value: U256::from(6000u64),
+            },
+        ];
+        
+        // Create responses - first one changes (valid), second doesn't (invalid)
+        let responses = vec![
+            json!({
+                "id": 1,
+                "result": "0x00000000000000000000000000000000000000000000000000000000000007d0" // 2000 (changed)
+            }),
+            json!({
+                "id": 2,
+                "result": "0x0000000000000000000000000000000000000000000000000000000000000bb8" // 3000 (unchanged)
+            }),
+        ];
+        
+        let mut results = HashMap::new();
+        detector.process_validation_responses(responses, validation_data, &mut results);
+        
+        assert_eq!(results.len(), 2);
+        
+        // First token should be valid (balance changed)
+        let token1 = Address::from([0x11u8; 20]);
+        assert!(results.get(&token1).unwrap().is_ok());
+        
+        // Second token should be invalid (balance didn't change)
+        let token2 = Address::from([0x22u8; 20]);
+        assert!(matches!(
+            results.get(&token2).unwrap(),
+            Err(BalanceSlotError::WrongSlotError(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_detect_token_slots_with_cache() {
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: "http://localhost:8545".to_string(),
+            max_retries: 1,
+            initial_backoff_ms: 10,
+            max_backoff_ms: 100,
+        };
+        
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+        
+        let token1 = Address::from([0x11u8; 20]);
+        let token2 = Address::from([0x22u8; 20]);
+        let owner = Address::from([0x33u8; 20]);
+        let block_hash = BlockHash::from([0x44u8; 32]);
+        
+        // Pre-populate cache for token1
+        {
+            let mut cache = detector.cache.write().await;
+            cache.insert(
+                (token1.clone(), owner.clone()),
+                (Address::from([0x11u8; 20]), Bytes::from(vec![0x01u8; 32]))
+            );
+        }
+        
+        // Mock server would be needed for token2, but since we can't make real requests,
+        // we'll test that token1 returns from cache
+        let tokens = vec![token1.clone()];
+        let results = detector.detect_token_slots(&tokens, &owner, &block_hash).await;
+        
+        // Token1 should return cached value
+        assert!(results.contains_key(&token1));
+        let token1_result = results.get(&token1).unwrap();
+        assert!(token1_result.is_ok());
+        
+        let (storage_addr, slot) = token1_result.as_ref().unwrap();
+        assert_eq!(*storage_addr, Address::from([0x11u8; 20]));
+        assert_eq!(*slot, Bytes::from(vec![0x01u8; 32]));
+    }
+
+    #[tokio::test]
+    async fn test_send_batched_request_retry_logic() {
+        let mut server = Server::new_async().await;
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: server.url(),
+            max_retries: 3,
+            initial_backoff_ms: 10,
+            max_backoff_ms: 100,
+        };
+        
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+        
+        // Create a simple batch request
+        let batch_request = json!([
+            {
+                "jsonrpc": "2.0",
+                "method": "eth_call",
+                "params": [],
+                "id": 1
+            }
+        ]);
+        
+        // First two attempts fail, third succeeds
+        let _m1 = server.mock("POST", "/")
+            .with_status(500)
+            .expect(1)
+            .create_async()
+            .await;
+            
+        let _m2 = server.mock("POST", "/")
+            .with_status(500)
+            .expect(1)
+            .create_async()
+            .await;
+            
+        let _m3 = server.mock("POST", "/")
+            .with_status(200)
+            .with_body(r#"[{"jsonrpc":"2.0","id":1,"result":"0x1234"}]"#)
+            .expect(1)
+            .create_async()
+            .await;
+        
+        let result = detector.send_batched_request(batch_request).await;
+        assert!(result.is_ok());
+        
+        let responses = result.unwrap();
+        assert_eq!(responses.len(), 1);
+        assert_eq!(responses[0]["result"], "0x1234");
+    }
+
+    #[tokio::test]
+    async fn test_send_batched_request_max_retries_exceeded() {
+        let mut server = Server::new_async().await;
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: server.url(),
+            max_retries: 2,
+            initial_backoff_ms: 10,
+            max_backoff_ms: 100,
+        };
+        
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+        
+        let batch_request = json!([
+            {
+                "jsonrpc": "2.0",
+                "method": "eth_call",
+                "params": [],
+                "id": 1
+            }
+        ]);
+        
+        // All attempts fail
+        let _m = server.mock("POST", "/")
+            .with_status(500)
+            .expect(2)
+            .create_async()
+            .await;
+        
+        let result = detector.send_batched_request(batch_request).await;
+        assert!(result.is_err());
+        // The error can be either RequestError (if the request itself fails) or 
+        // InvalidResponse (if the response body can't be parsed as JSON)
+        assert!(matches!(
+            result, 
+            Err(BalanceSlotError::RequestError(_)) | Err(BalanceSlotError::InvalidResponse(_))
+        ));
     }
 
     #[tokio::test]
