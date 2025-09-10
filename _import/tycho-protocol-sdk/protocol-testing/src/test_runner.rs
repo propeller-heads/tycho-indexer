@@ -5,6 +5,7 @@ use figment::{
     providers::{Format, Yaml},
     Figment,
 };
+use itertools::Itertools;
 use miette::{miette, IntoDiagnostic, WrapErr};
 use num_bigint::BigUint;
 use num_traits::Zero;
@@ -457,8 +458,12 @@ fn validate_state(
             // We then retrieve the amount out for 0.1%, 1% and 10%.
             let percentages = [0.001, 0.01, 0.1];
 
-            // Test both swap directions
-            let swap_directions = [(&tokens[0], &tokens[1]), (&tokens[1], &tokens[0])];
+            // Test all permutations of swap directions
+            let swap_directions: Vec<_> = tokens
+                .iter()
+                .permutations(2)
+                .map(|perm| (perm[0], perm[1]))
+                .collect();
 
             for (token_in, token_out) in &swap_directions {
                 let (max_input, max_output) = state
