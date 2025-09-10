@@ -613,7 +613,8 @@ where
             );
             let pool_manager = self.config.pool_manager.clone();
 
-            let detection_results = self.balance_slot_detector
+            let detection_results = self
+                .balance_slot_detector
                 .detect_balance_slots(&tokens, pool_manager, context.block.hash.clone())
                 .await;
 
@@ -928,15 +929,14 @@ where
 mod tests {
     use std::collections::HashMap;
 
+    // Use the auto-generated mock
+    use tycho_common::traits::MockBalanceSlotDetector;
     use tycho_common::{
         models::{protocol::ProtocolComponent, TxHash},
         Bytes,
     };
 
     use super::*;
-
-    // Use the auto-generated mock
-    use tycho_common::traits::MockBalanceSlotDetector;
 
     fn create_test_tokens() -> Vec<Address> {
         vec![Address::from([1u8; 20]), Address::from([2u8; 20])]
@@ -1083,7 +1083,7 @@ mod tests {
                     Bytes::from(U256::from(1000u64).to_be_bytes_vec()),
                 ),
             )]),
-            use_balance_overwrites: false,  // Default to false for tests
+            use_balance_overwrites: false, // Default to false for tests
         }
     }
 
@@ -1245,7 +1245,7 @@ mod tests {
             hook_address: Address::from([4u8; 20]),
             component,
             component_metadata: create_metadata_with_limits(vec![]),
-            use_balance_overwrites: false,  // Default to false for tests
+            use_balance_overwrites: false, // Default to false for tests
         };
         let context = create_test_context();
 
@@ -1287,7 +1287,7 @@ mod tests {
             hook_address: Address::from([4u8; 20]),
             component,
             component_metadata: create_metadata_with_limits(vec![]),
-            use_balance_overwrites: false,  // Default to false for tests
+            use_balance_overwrites: false, // Default to false for tests
         };
         let context = create_test_context();
 
@@ -1347,7 +1347,7 @@ mod tests {
         );
 
         let mut hook_data = create_test_hook_data();
-        hook_data.use_balance_overwrites = true;  // Enable balance overwrites for storage slot override test
+        hook_data.use_balance_overwrites = true; // Enable balance overwrites for storage slot override test
         let context = create_test_context();
 
         let result = generator
@@ -1439,7 +1439,7 @@ mod tests {
         );
 
         let mut hook_data = create_test_hook_data();
-        hook_data.use_balance_overwrites = true;  // Enable balance overwrites to test detection error
+        hook_data.use_balance_overwrites = true; // Enable balance overwrites to test detection error
         let context = create_test_context();
 
         let result = generator

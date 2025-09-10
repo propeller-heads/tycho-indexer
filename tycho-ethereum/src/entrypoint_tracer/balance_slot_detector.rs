@@ -4,6 +4,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+
 use tokio::sync::RwLock;
 
 struct ValidationData {
@@ -125,7 +126,9 @@ impl EVMBalanceSlotDetector {
             // https://brooker.co.za/blog/2024/05/09/nagle.html
             .tcp_nodelay(true)
             .build()
-            .map_err(|e| BalanceSlotError::SetupError(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| {
+                BalanceSlotError::SetupError(format!("Failed to create HTTP client: {}", e))
+            })?;
 
         Ok(Self {
             tracer,
@@ -276,7 +279,8 @@ impl EVMBalanceSlotDetector {
         &self,
         batch_request: Value,
     ) -> Result<Vec<Value>, BalanceSlotError> {
-        self.send_batched_request_with_retry(batch_request).await
+        self.send_batched_request_with_retry(batch_request)
+            .await
     }
 
     /// Send a batched JSON-RPC request with retry logic
@@ -299,7 +303,10 @@ impl EVMBalanceSlotDetector {
                 tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
             }
 
-            match self.send_single_request(&batch_request).await {
+            match self
+                .send_single_request(&batch_request)
+                .await
+            {
                 Ok(response_json) => {
                     // Check if we got a valid JSON-RPC batch response
                     match response_json {
@@ -340,20 +347,13 @@ impl EVMBalanceSlotDetector {
         }
 
         // All retries exhausted
-        error!(
-            "All {} retry attempts failed for RPC request",
-            self.max_retries
-        );
-        Err(last_error.unwrap_or_else(|| {
-            BalanceSlotError::RequestError("All retry attempts failed".into())
-        }))
+        error!("All {} retry attempts failed for RPC request", self.max_retries);
+        Err(last_error
+            .unwrap_or_else(|| BalanceSlotError::RequestError("All retry attempts failed".into())))
     }
 
     /// Send a single request without retry
-    async fn send_single_request(
-        &self,
-        batch_request: &Value,
-    ) -> Result<Value, BalanceSlotError> {
+    async fn send_single_request(&self, batch_request: &Value) -> Result<Value, BalanceSlotError> {
         let response = self
             .http_client
             .post(self.tracer.rpc_url().as_str())
@@ -363,10 +363,9 @@ impl EVMBalanceSlotDetector {
             .await
             .map_err(|e| BalanceSlotError::RequestError(format!("HTTP request failed: {}", e)))?;
 
-        let response_json = response
-            .json()
-            .await
-            .map_err(|e| BalanceSlotError::InvalidResponse(format!("Failed to parse JSON: {}", e)))?;
+        let response_json = response.json().await.map_err(|e| {
+            BalanceSlotError::InvalidResponse(format!("Failed to parse JSON: {}", e))
+        })?;
 
         Ok(response_json)
     }
@@ -375,16 +374,18 @@ impl EVMBalanceSlotDetector {
     /// Jitter prevents all clients from retrying simultaneously and crashing the recovering service
     fn calculate_backoff(&self, attempt: usize) -> u64 {
         use rand::Rng;
-        
+
         // Calculate base exponential backoff: initial * 2^(attempt-1)
-        let base_backoff = self.initial_backoff_ms.saturating_mul(1 << (attempt - 1));
-        
+        let base_backoff = self
+            .initial_backoff_ms
+            .saturating_mul(1 << (attempt - 1));
+
         // Cap at max_backoff_ms
         let capped_backoff = base_backoff.min(self.max_backoff_ms);
-        
+
         // Add jitter (0-25% of the backoff time)
         let jitter = rand::thread_rng().gen_range(0..=capped_backoff / 4);
-        
+
         capped_backoff + jitter
     }
 
