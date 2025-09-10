@@ -60,10 +60,6 @@ impl EVMEntrypointService {
         Ok(Self { rpc_url: url, max_retries, retry_delay_ms })
     }
 
-    pub fn rpc_url(&self) -> &url::Url {
-        &self.rpc_url
-    }
-
     fn create_access_list_params(
         target: &Address,
         params: &RPCTracerParams,
