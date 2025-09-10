@@ -600,7 +600,7 @@ where
 mod tests {
     use std::collections::HashSet;
 
-    use chrono::NaiveDateTime;
+    use chrono::DateTime;
     use tycho_common::{
         models::{
             blockchain::{
@@ -619,7 +619,9 @@ mod tests {
             number,
             hash: BlockHash::from(hash),
             parent_hash: BlockHash::from(parent_hash),
-            ts: NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+            ts: DateTime::from_timestamp(0, 0)
+                .unwrap()
+                .naive_utc(),
             chain: Chain::Ethereum,
         }
     }
