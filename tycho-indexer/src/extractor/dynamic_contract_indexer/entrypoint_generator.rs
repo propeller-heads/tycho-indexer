@@ -630,6 +630,7 @@ where
                             format!("Balance slot detection failed for token {}: {:?}", token, e);
                         error!(
                             component_id = %data.component.id,
+                            hook_address = %data.hook_address,
                             token = %token,
                             error = %error_msg,
                             "Balance slot detection failed for token"
@@ -648,7 +649,11 @@ where
 
             token_slots
         } else {
-            info!("No balance slot detector available, skipping balance overwrites");
+            info!(
+                component_id = %data.component.id,
+                hook_address = %data.hook_address,
+                "Skipping balance overwrites for component"
+            );
             HashMap::new()
         };
 

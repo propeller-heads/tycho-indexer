@@ -28,7 +28,7 @@ use tycho_common::{
         blockchain::{AccountOverrides, EntryPoint, RPCTracerParams, TracingParams},
         Address, BlockHash,
     },
-    traits::{BalanceSlotDetector, EntryPointTracer},
+    traits::{BalanceSlotDetector},
     Bytes,
 };
 
@@ -98,7 +98,7 @@ type BalanceSlotCache = Arc<RwLock<HashMap<(Address, Address), (Address, Bytes)>
 
 /// EVM-specific implementation of BalanceSlotDetector using debug_traceCall
 pub struct EVMBalanceSlotDetector {
-    tracer: EVMEntrypointService,
+    rpc_url: url::Url,
     max_batch_size: usize,
     cache: BalanceSlotCache,
     http_client: reqwest::Client,
@@ -109,10 +109,8 @@ pub struct EVMBalanceSlotDetector {
 
 impl EVMBalanceSlotDetector {
     pub fn new(config: BalanceSlotDetectorConfig) -> Result<Self, BalanceSlotError> {
-        let tracer = EVMEntrypointService::try_from_url(&config.rpc_url).map_err(|e| match e {
-            RPCError::SetupError(msg) => BalanceSlotError::SetupError(msg),
-            _ => BalanceSlotError::UnknownError(e.to_string()),
-        })?;
+        let rpc_url = url::Url::parse(&config.rpc_url)
+            .map_err(|_| BalanceSlotError::SetupError("Invalid URL".to_string()))?;
 
         // perf: Allow a client to be passed on the constructor, to use a shared client between
         // other parts of the code that perform node RPC requests
@@ -131,8 +129,8 @@ impl EVMBalanceSlotDetector {
             })?;
 
         Ok(Self {
-            tracer,
             max_batch_size: config.max_batch_size,
+            rpc_url,
             // perf: Add cache persistence to DB.
             cache: Arc::new(RwLock::new(HashMap::new())),
             http_client,
@@ -274,17 +272,8 @@ impl EVMBalanceSlotDetector {
         Value::Array(batch)
     }
 
-    /// Send a batched JSON-RPC request and return the responses
-    async fn send_batched_request(
-        &self,
-        batch_request: Value,
-    ) -> Result<Vec<Value>, BalanceSlotError> {
-        self.send_batched_request_with_retry(batch_request)
-            .await
-    }
-
     /// Send a batched JSON-RPC request with retry logic
-    async fn send_batched_request_with_retry(
+    async fn send_batched_request(
         &self,
         batch_request: Value,
     ) -> Result<Vec<Value>, BalanceSlotError> {
@@ -356,7 +345,7 @@ impl EVMBalanceSlotDetector {
     async fn send_single_request(&self, batch_request: &Value) -> Result<Value, BalanceSlotError> {
         let response = self
             .http_client
-            .post(self.tracer.rpc_url().as_str())
+            .post(self.rpc_url.as_str())
             .header("Content-Type", "application/json")
             .body(serde_json::to_string(batch_request).unwrap())
             .send()
@@ -566,7 +555,8 @@ impl EVMBalanceSlotDetector {
         Ok(slot_values)
     }
 
-    /// Find the best slot by comparing storage values to the expected balance
+    /// Find the best slot by comparing storage values to the expected balance. Select the value
+    /// that is closest to the expected balance.
     fn find_best_slot_by_value_comparison(
         &self,
         slot_values: SlotValues,
@@ -673,8 +663,7 @@ impl EVMBalanceSlotDetector {
         {
             Ok(responses) => responses,
             Err(e) => {
-                // If request fails, mark all as failed.
-                // TODO: Add retry mechanism
+                // If request fails, mark all as failed, since it has already exhausted retries.
                 for data in validation_data {
                     validated_results.insert(
                         data.token,
@@ -882,13 +871,6 @@ impl BalanceSlotDetector for EVMBalanceSlotDetector {
 
         info!("Balance slot detection completed. Found results for {} tokens", all_results.len());
         all_results
-    }
-}
-
-impl EVMBalanceSlotDetector {
-    /// Direct access to the underlying tracer for advanced use cases
-    pub fn tracer(&self) -> &EVMEntrypointService {
-        &self.tracer
     }
 }
 
@@ -1113,49 +1095,12 @@ mod tests {
         target_balance: U256,
         block_hash: &BlockHash,
     ) -> Result<U256, BalanceSlotError> {
-        // Create storage overrides using the existing tracer infrastructure
         let slot_hex = alloy::hex::encode(detected_slot.as_ref());
         let target_hex = format!("0x{:064x}", target_balance);
 
         println!("Setting storage slot 0x{} to value {}", slot_hex, target_hex);
 
         let calldata = encode_balance_of_calldata(balance_owner);
-
-        // Create storage overrides
-        let mut slot_overrides = BTreeMap::new();
-        slot_overrides.insert(
-            detected_slot.clone(),
-            Bytes::from(
-                target_balance
-                    .to_be_bytes::<32>()
-                    .to_vec(),
-            ),
-        );
-
-        let account_overrides = AccountOverrides {
-            slots: Some(tycho_common::models::blockchain::StorageOverride::Diff(slot_overrides)),
-            native_balance: None,
-            code: None,
-        };
-
-        let mut state_overrides = BTreeMap::new();
-        state_overrides.insert(token.clone(), account_overrides);
-
-        // Use the existing tracer with state overrides
-        let entry_point = EntryPoint::new(
-            format!("{}:balanceOf(address)", token),
-            token.clone(),
-            "balanceOf(address)".to_string(),
-        );
-
-        let tracer_params =
-            RPCTracerParams::new(None, calldata.clone()).with_state_overrides(state_overrides);
-
-        let entry_point_with_params =
-            tycho_common::models::blockchain::EntryPointWithTracingParams::new(
-                entry_point,
-                TracingParams::RPCTracer(tracer_params),
-            );
 
         // This would need to be enhanced to return the actual call result
         // For now, fall back to direct RPC call
@@ -1181,7 +1126,7 @@ mod tests {
 
         let client = reqwest::Client::new();
         let response = client
-            .post(detector.tracer.rpc_url().as_str())
+            .post(detector.rpc_url.as_str())
             .header("Content-Type", "application/json")
             .body(serde_json::to_string(&request).unwrap())
             .send()
