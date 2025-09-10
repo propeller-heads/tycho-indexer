@@ -11,7 +11,7 @@ tracing = "0.1.37"
 # Tycho dependencies
 tycho-common = "0.82.0"
 tycho-client = "0.82.0"
-tycho-simulation = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.156.0", features = ["evm"] }
+tycho-simulation = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.157.0", features = ["evm"] }
 ## TODO: for local development
 #tycho-simulation = { path = "../../tycho-simulation" }
 num-bigint = "0.4"
@@ -32,3 +32,4 @@ async-trait = "0.1.87"
 colored = "3.0.0"
 similar = "2.7.0"
 termsize = "0.1.9"
+itertools = "0.14.0"

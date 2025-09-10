@@ -5428,6 +5428,7 @@ dependencies = [
  "figment",
  "glob",
  "hex",
+ "itertools 0.14.0",
  "miette",
  "num-bigint",
  "num-traits",
@@ -7823,8 +7824,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.156.0"
-source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.156.0#1983a787440e8ae757626d808a6e619baffc52f2"
+version = "0.157.0"
+source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.157.0#99645b43b5187b92f56823564bf1701002fd43ca"
 dependencies = [
  "alloy",
  "async-stream",
