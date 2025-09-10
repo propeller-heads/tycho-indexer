@@ -766,7 +766,9 @@ pub mod fixtures {
         if version == 0 {
             panic!("Block version 0 doesn't exist. It starts at 1");
         }
-        let base_ts = yesterday_midnight().timestamp() as u64;
+        let base_ts = yesterday_midnight()
+            .and_utc()
+            .timestamp() as u64;
 
         Block {
             number: version,
@@ -1282,7 +1284,9 @@ pub mod fixtures {
                         .lpad(32, 0)
                         .to_vec(),
                     number: 1,
-                    ts: yesterday_midnight().timestamp() as u64,
+                    ts: yesterday_midnight()
+                        .and_utc()
+                        .timestamp() as u64,
                 }),
                 changes: vec![
                     TransactionEntityChanges {
@@ -2153,7 +2157,9 @@ pub mod fixtures {
                     hash: vec![0x0, 0x0, 0x0, 0x0],
                     parent_hash: vec![0x21, 0x22, 0x23, 0x24],
                     number: 1,
-                    ts: yesterday_midnight().timestamp() as u64,
+                    ts: yesterday_midnight()
+                        .and_utc()
+                        .timestamp() as u64,
                 }),
                 changes: vec![
                     TransactionChanges {

@@ -1,7 +1,7 @@
 #![allow(deprecated)]
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
-use chrono::NaiveDateTime;
+use chrono::{DateTime, NaiveDateTime};
 use tracing::warn;
 use tycho_common::{
     models::{
@@ -79,12 +79,14 @@ impl TryFromMessage for Block {
             number: msg.number,
             hash: msg.hash.into(),
             parent_hash: msg.parent_hash.into(),
-            ts: NaiveDateTime::from_timestamp_opt(msg.ts as i64, 0).ok_or_else(|| {
-                ExtractionError::DecodeError(format!(
-                    "Failed to convert timestamp {} to datetime!",
-                    msg.ts
-                ))
-            })?,
+            ts: DateTime::from_timestamp(msg.ts as i64, 0)
+                .ok_or_else(|| {
+                    ExtractionError::DecodeError(format!(
+                        "Failed to convert timestamp {} to datetime!",
+                        msg.ts
+                    ))
+                })?
+                .naive_utc(),
         })
     }
 }
