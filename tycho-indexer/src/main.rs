@@ -315,6 +315,8 @@ async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
 
     let direct_gw = GatewayBuilder::new(&global_args.database_url)
         .set_chains(&[Chain::Ethereum]) // TODO: handle multichain
+        .ensure_partitions_exist()
+        .await?
         .build_direct_gw()
         .await?;
 
@@ -362,6 +364,8 @@ async fn create_indexing_tasks(
         .set_chains(chains)
         .set_protocol_systems(&protocol_systems)
         .set_retention_horizon(retention_horizon)
+        .ensure_partitions_exist()
+        .await?
         .build()
         .await?;
     let token_processor = EthereumTokenPreProcessor::new_from_url(
@@ -603,6 +607,8 @@ async fn run_tycho_ethereum(
     create_tracing_subscriber();
     let (cached_gw, gw_writer_thread) = GatewayBuilder::new(&global_args.database_url)
         .set_chains(&[analyzer_args.chain])
+        .ensure_partitions_exist()
+        .await?
         .build()
         .await?;
     let cached_gw = Arc::new(cached_gw);
