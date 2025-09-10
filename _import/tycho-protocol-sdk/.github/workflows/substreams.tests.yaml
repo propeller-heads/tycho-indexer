@@ -1,0 +1,90 @@
+name: Substreams Tests
+
+env:
+  RPC_URL: ${{ secrets.RPC_URL }}
+  SUBSTREAMS_API_TOKEN: ${{ secrets.SUBSTREAMS_API_TOKEN }}
+  AUTH_API_KEY: ${{ secrets.AUTH_API_KEY }}
+  EXCLUDED_SUBSTREAMS: target|crates|ethereum-template-factory|ethereum-template-singleton
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'substreams/**'
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      protocol-testing-changed: ${{ steps.protocol-testing-files-changed.outputs.any_changed }}
+      substreams-changed: ${{ steps.substreams-files-changed.outputs.any_changed }}
+      all-substreams: ${{ steps.all_substreams.outputs.all_substreams }}
+      changed-substreams: ${{ steps.changes.outputs.changed_substreams }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if any files changed under protocol-testing
+        id: protocol-testing-files-changed
+        uses: tj-actions/changed-files@v35
+        with:
+          files: protocol-testing/**
+
+      - name: Check if any files changed under substreams
+        id: substreams-files-changed
+        uses: tj-actions/changed-files@v35
+        with:
+          files: substreams/**
+
+      - name: Get all substreams folders
+        id: all_substreams
+        run: |
+          FOLDERS=$(find substreams -mindepth 1 -maxdepth 1 -type d \
+            -exec basename {} \; | sort | \
+            grep -v -E "^(${EXCLUDED_SUBSTREAMS})$" | \
+            tr '\n' ' ')
+          if [ -z "$FOLDERS" ]; then
+            echo "No substreams folders found"
+          else
+            echo "Substreams folders: $FOLDERS"
+          fi
+          echo "all_substreams=$FOLDERS" >> $GITHUB_OUTPUT
+
+      - name: Fetch full git history
+        if: steps.substreams-files-changed.outputs.any_changed == 'true'
+        run: git fetch --unshallow || true
+
+      - name: Get changed substreams folders
+        id: changes
+        if: steps.substreams-files-changed.outputs.any_changed == 'true'
+        run: |
+          CHANGED=$(git diff --name-only origin/main ${{ github.sha }} | \
+            grep '^substreams/' | awk -F'/' '{print $2}' | sort -u | \
+            grep -v -E "^(${EXCLUDED_SUBSTREAMS})$")
+          if [ -z "$CHANGED" ]; then
+              echo "No changed substreams"
+          else
+              echo "Changed substreams: $CHANGED"
+          fi
+          echo "changed_substreams=$CHANGED" >> $GITHUB_OUTPUT
+
+  test-changed:
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.substreams-changed == 'true' && needs.detect-changes.outputs.changed-substreams != ''
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests for changed substreams
+        uses: ./.github/actions/substreams-docker
+        with:
+          protocols: ${{ needs.detect-changes.outputs.changed-substreams }}
+
+  test-all:
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run all protocol-testing tests
+        uses: ./.github/actions/substreams-docker
+        with:
+          protocols: ${{ needs.detect-changes.outputs.all-substreams }}

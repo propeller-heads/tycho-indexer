@@ -1,7 +1,13 @@
-# Install cargo-chef
-FROM rust:1.89-bookworm AS cargo-chef
-WORKDIR /app
-RUN cargo install cargo-chef
+# =========== Third Party ===========
+# Stage 1: Get substreams CLI
+FROM ghcr.io/streamingfast/substreams:v1.16.4 AS substreams-cli
+
+# Stage 2: Install Foundry (Forge)
+FROM debian:bookworm AS foundry-builder
+WORKDIR /build
+RUN apt-get update && apt-get install -y curl git
+RUN curl -L https://foundry.paradigm.xyz | bash
+RUN /root/.foundry/bin/foundryup
 
 # =========== Tycho Indexer ===========
 # Stage 1: Build tycho-indexer
@@ -21,21 +27,12 @@ WORKDIR /build/tycho-protocol-sdk/protocol-testing
 RUN cargo build --release
 
 WORKDIR /build/tycho-protocol-sdk/substreams
-COPY ./substreams/target/wasm32-unknown-unknown/release/*.wasm ./target/wasm32-unknown-unknown/release/
+RUN cargo build --target wasm32-unknown-unknown --release
 
 WORKDIR /build/tycho-protocol-sdk/evm
-COPY ./evm/out ./out
-
-# =========== Third Party ===========
-# Stage 1: Get substreams CLI
-FROM ghcr.io/streamingfast/substreams:v1.16.4 AS substreams-cli
-
-# Stage 2: Install Foundry (Forge)
-FROM debian:bookworm AS foundry-builder
-WORKDIR /build
-RUN apt-get update && apt-get install -y curl git
-RUN curl -L https://foundry.paradigm.xyz | bash
-RUN /root/.foundry/bin/foundryup
+COPY --from=foundry-builder /root/.foundry/bin/forge /usr/local/bin/forge
+RUN chmod +x /usr/local/bin/forge
+RUN forge build
 
 # =========== Final Image ===========
 FROM debian:bookworm
