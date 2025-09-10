@@ -142,6 +142,88 @@ impl CowAMMState {
 
         Ok((amounts_out[0], amounts_out[1]))
     }
+
+    //https://github.com/balancer/cow-amm/blob/main/src/contracts/BPool.sol#L174
+    /// joinPool
+    pub fn join_pool(
+        &self,
+        new_state: &mut CowAMMState,
+        pool_amount_out: U256,
+        max_amounts_in: &[U256],
+    ) -> Result<(), CowAMMError> {
+        let pool_total = self.lp_token_supply;
+        let ratio = bdiv(pool_amount_out, pool_total)?;
+
+        if ratio.is_zero() {
+            return Err(CowAMMError::InvalidPoolRatio);
+        }
+
+        let balances = vec![self.liquidity_a(), self.liquidity_b()];
+
+        for (i, bal) in balances.into_iter().enumerate() {
+            let token_amount_in = bmul(ratio, bal)?;
+            if token_amount_in.is_zero() {
+                return Err(CowAMMError::InvalidTokenAmountIn);
+            }
+            if token_amount_in > max_amounts_in[i] {
+                return Err(CowAMMError::TokenAmountInAboveMax);
+            }
+
+            // equivalent to _pullUnderlying
+            if i == 0 {
+                new_state.token_a.1 = badd(self.token_a.1, token_amount_in)?;
+            } else {
+                new_state.token_b.1 = badd(self.token_b.1, token_amount_in)?;
+            }
+        }
+
+        // mint LP shares
+        new_state.lp_token_supply = badd(self.lp_token_supply, pool_amount_out)?;
+        Ok(())
+    }
+
+    /// exitPool
+    pub fn exit_pool(
+        &self,
+        new_state: &mut CowAMMState,
+        pool_amount_in: U256,
+        min_amounts_out: &[U256],
+        exit_fee: U256,
+    ) -> Result<(), CowAMMError> {
+        let pool_total = self.lp_token_supply;
+
+        let fee = bmul(pool_amount_in, exit_fee)?;
+        let pai_after_fee = bsub(pool_amount_in, fee)?;
+        let ratio = bdiv(pai_after_fee, pool_total)?;
+
+        if ratio.is_zero() {
+            return Err(CowAMMError::InvalidPoolRatio);
+        }
+
+        // burn LP shares
+        new_state.lp_token_supply = bsub(self.lp_token_supply, pai_after_fee)?;
+
+        let balances = vec![self.liquidity_a(), self.liquidity_b()];
+
+        for (i, bal) in balances.into_iter().enumerate() {
+            let token_amount_out = bmul(ratio, bal)?;
+            if token_amount_out.is_zero() {
+                return Err(CowAMMError::InvalidTokenAmountOut);
+            }
+            if token_amount_out < min_amounts_out[i] {
+                return Err(CowAMMError::TokenAmountOutBelowMinAmountOut);
+            }
+            
+            //equivalent to _pushUnderlying
+            if i == 0 {
+                new_state.token_a.1 = bsub(self.token_a.1, token_amount_out)?;
+            } else {
+                new_state.token_b.1 = bsub(self.token_b.1, token_amount_out)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl ProtocolSim for CowAMMState {
@@ -219,14 +301,16 @@ impl ProtocolSim for CowAMMState {
                         "failed to calculate token proportions out error: {e:?}"
                     ))
                 })?;
+
             // Think of it from the pools perspective , when a user exits the pool, they get their tokens back and redeems the lp_token (lp token gets burnt)
             // Update state
             // The liquidity provision is double sided hence both reserves reduce by the proportional amounts for both tokens
-            new_state.token_a.1 = safe_sub_u256(self.liquidity_a(), proportional_token_amount_a)?;
-            new_state.token_b.1 = safe_sub_u256(self.liquidity_b(), proportional_token_amount_b)?;
+            // new_state.token_a.1 = safe_sub_u256(self.liquidity_a(), proportional_token_amount_a)?;
+            // new_state.token_b.1 = safe_sub_u256(self.liquidity_b(), proportional_token_amount_b)?;
 
-            // When a user redeems LP tokens, those tokens are effectively burned, the internal lp_token_supply will decrease by the amount they redeem
-            new_state.lp_token_supply = safe_sub_u256(self.lp_token_supply, amount_in)?;
+            // // When a user redeems LP tokens, those tokens are effectively burned, the internal lp_token_supply will decrease by the amount they redeem
+            // new_state.lp_token_supply = safe_sub_u256(self.lp_token_supply, amount_in)?;
+            let _ = self.exit_pool(&mut new_state, amount_in, &[proportional_token_amount_a, proportional_token_amount_b], U256::from(self.fee));
 
             let (amount_to_swap, is_token_a_swap) = if token_out.address == *self.token_a_addr() {
                 //if we are redeeming lp_token for COW (out address is COW), (if the token we want to receive and get the other one swapped to) from the redemption is
@@ -255,6 +339,7 @@ impl ProtocolSim for CowAMMState {
                 )
             }
             .map_err(|e| SimulationError::FatalError(format!("amount_out error: {e:?}")))?;
+
             // Update state for the swap
             if is_token_a_swap {
                 new_state.token_b.1 = safe_sub_u256(new_state.liquidity_b(), amount_to_swap)?;
@@ -321,13 +406,14 @@ impl ProtocolSim for CowAMMState {
                 new_state.token_a.1 = safe_add_u256(new_state.liquidity_a(), amt_in)?;
             }
             // The liquidity provision is double sided hence both reserves increase by the proportional amounts for both tokens
-            new_state.token_a.1 =
-                safe_add_u256(new_state.liquidity_a(), proportional_token_amount_a)?;
-            new_state.token_b.1 =
-                safe_add_u256(new_state.liquidity_b(), proportional_token_amount_b)?;
+            // new_state.token_a.1 =
+            //     safe_add_u256(new_state.liquidity_a(), proportional_token_amount_a)?;
+            // new_state.token_b.1 =
+            //     safe_add_u256(new_state.liquidity_b(), proportional_token_amount_b)?;
 
-            // When a user joins the pool, the LP tokens are minted to the user , total lp_token supply increases
-            new_state.lp_token_supply = safe_add_u256(new_state.lp_token_supply, amount_in)?;
+            // // When a user joins the pool, the LP tokens are minted to the user , total lp_token supply increases
+            // new_state.lp_token_supply = safe_add_u256(new_state.lp_token_supply, amount_in)?;
+            let _ = self.join_pool(&mut new_state, amount_in, &[proportional_token_amount_a, proportional_token_amount_b]);
 
             return Ok(GetAmountOutResult {
                 amount: u256_to_biguint(amt_in),

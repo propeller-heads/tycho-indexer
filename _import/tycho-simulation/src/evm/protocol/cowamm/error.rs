@@ -16,4 +16,14 @@ pub enum CowAMMError {
     SubUnderflow,
     #[error("Multiplication overflow")]
     MulOverflow,
+    #[error("Invalid pool ratio")]
+    InvalidPoolRatio,
+    #[error("Invalid token amount in")]
+    InvalidTokenAmountIn,
+    #[error("Token amount in above max")]
+    TokenAmountInAboveMax,
+    #[error("Invalid token amount out")]
+    InvalidTokenAmountOut,
+    #[error("Token amount out below min")]
+    TokenAmountOutBelowMinAmountOut,
 }
