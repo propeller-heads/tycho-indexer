@@ -69,14 +69,16 @@ impl TestRunner {
     }
 
     pub fn run_tests(&self) -> miette::Result<()> {
+        let terminal_width = termsize::get()
+            .map(|size| size.cols as usize - 35) // Remove length of log prefix (35)
+            .unwrap_or(80);
+        info!("{}\n", "-".repeat(terminal_width));
+
         let config_yaml_path = self
             .substreams_path
             .join("integration_test.tycho.yaml");
 
         let config = Self::parse_config(&config_yaml_path)?;
-        let terminal_width = termsize::get()
-            .map(|size| size.cols as usize - 35) // Remove length of log prefix
-            .unwrap_or(80);
 
         let tests = match &self.match_test {
             Some(filter) => config
@@ -92,7 +94,6 @@ impl TestRunner {
         let tests_count = tests.len();
 
         info!("Running {} tests ...\n", tests_count);
-        info!("{}\n", "-".repeat(terminal_width));
 
         let mut failed_tests: Vec<String> = Vec::new();
         let mut count = 1;
@@ -115,7 +116,7 @@ impl TestRunner {
         }
 
         info!("Tests finished!");
-        info!("Passed {}/{}", tests_count - failed_tests.len(), tests_count);
+        info!("Passed {}/{}\n", tests_count - failed_tests.len(), tests_count);
         if !failed_tests.is_empty() {
             error!("Failed: {}", failed_tests.join(", "));
         }
