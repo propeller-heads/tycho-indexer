@@ -32,6 +32,14 @@ RUN apt-get update && apt-get install -y curl
 RUN curl -L https://github.com/streamingfast/substreams/releases/download/v1.16.4/substreams_linux_arm64.tar.gz \
     | tar -zxf -
 
+# Stage 3: Install Foundry (Forge)
+FROM debian:bookworm AS foundry-builder
+
+WORKDIR /build
+RUN apt-get update && apt-get install -y curl git
+RUN curl -L https://foundry.paradigm.xyz | bash
+RUN /root/.foundry/bin/foundryup
+
 # Stage 4: Final image
 FROM debian:bookworm
 
@@ -44,7 +52,10 @@ COPY --from=tycho-indexer-builder /build/tycho-indexer/target/release/tycho-inde
 COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/protocol-testing/target/release/protocol-testing /usr/local/bin/tycho-protocol-sdk
 COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/substreams /app/substreams
 COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/proto /app/proto
+COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/evm /app/evm
 COPY --from=substreams-cli-builder /build/substreams /usr/local/bin/substreams
+COPY --from=foundry-builder /root/.foundry/bin/forge /usr/local/bin/forge
+COPY --from=foundry-builder /root/.foundry/bin/cast /usr/local/bin/cast
 
 # Entrypoint script to run tests
 COPY entrypoint.sh /entrypoint.sh

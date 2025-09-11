@@ -58,7 +58,7 @@ impl TestRunner {
         vm_traces: bool,
     ) -> Self {
         let repo_root = env::current_dir().expect("Failed to get current directory");
-        let evm_path = repo_root.join("../evm");
+        let evm_path = repo_root.join("evm");
         let adapter_contract_builder =
             AdapterContractBuilder::new(evm_path.to_string_lossy().to_string());
         Self {
