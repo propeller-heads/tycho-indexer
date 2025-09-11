@@ -120,10 +120,10 @@ impl TestRunner {
         info!("Tests finished!");
         info!("Passed {}/{}\n", tests_count - failed_tests.len(), tests_count);
         if !failed_tests.is_empty() {
-            error!("Failed: {}", failed_tests.join(", "));
+            Err(miette!("Failed tests: {}", failed_tests.join(", ")))
+        } else {
+            Ok(())
         }
-
-        Ok(())
     }
 
     fn parse_config(config_yaml_path: &PathBuf) -> miette::Result<IntegrationTestsConfig> {
