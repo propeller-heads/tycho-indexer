@@ -31,6 +31,7 @@ impl TychoRunner {
         start_block: u64,
         end_block: u64,
         protocol_type_names: &[String],
+        protocol_system: &str,
     ) -> miette::Result<()> {
         // Expects a .env present in the same folder as package root (where Cargo.toml is)
         dotenv().ok();
@@ -50,6 +51,8 @@ impl TychoRunner {
             "map_protocol_changes",
             "--protocol-type-names",
             &protocol_type_names.join(","),
+            "--protocol-system",
+            protocol_system,
             "--start-block",
             &start_block.to_string(),
             "--stop-block",

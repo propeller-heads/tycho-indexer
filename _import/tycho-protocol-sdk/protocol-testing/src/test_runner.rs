@@ -34,6 +34,7 @@ use tycho_simulation::{
 use crate::{
     adapter_builder::AdapterContractBuilder,
     config::{IntegrationTest, IntegrationTestsConfig, ProtocolComponentWithTestConfig},
+    encoding::encode_swap,
     rpc::RPCProvider,
     tycho_rpc::TychoClient,
     tycho_runner::TychoRunner,
@@ -173,6 +174,7 @@ impl TestRunner {
                 test.start_block,
                 test.stop_block,
                 &config.protocol_type_names,
+                &config.protocol_system,
             )
             .wrap_err("Failed to run Tycho")?;
 
@@ -226,7 +228,7 @@ fn validate_state(
         .wrap_err("Failed to create Tycho client")?;
 
     let chain = Chain::Ethereum;
-    let protocol_system = "test_protocol";
+    let protocol_system = &config.protocol_system;
 
     // Fetch data from Tycho RPC. We use block_on to avoid using async functions on the testing
     // module, in order to simplify debugging
@@ -336,7 +338,7 @@ fn validate_state(
     let mut decoder = TychoStreamDecoder::new();
     let decoder_context = DecoderContext::new().vm_adapter_path(adapter_contract_path_str);
     decoder.register_decoder_with_context::<EVMPoolState<PreCachedDB>>(
-        "test_protocol",
+        protocol_system,
         decoder_context,
     );
 
@@ -402,7 +404,7 @@ fn validate_state(
         .wrap_err("Failed to get block header")?;
 
     let state_msgs: HashMap<String, StateSyncMessage<BlockHeader>> = HashMap::from([(
-        String::from("test_protocol"),
+        String::from(protocol_system),
         StateSyncMessage {
             header: BlockHeader {
                 hash: Bytes::from(bytes),
@@ -490,25 +492,36 @@ fn validate_state(
                         continue;
                     }
 
-                    state
+                    let amount_out_result = state
                         .get_amount_out(amount_in.clone(), token_in, token_out)
-                        .map(|result| {
-                            info!(
-                                "Amount out for trading {:.1}% of max: ({} {} -> {} {}) (gas: {})",
-                                percentage * 100.0,
-                                amount_in,
-                                token_in.symbol,
-                                result.amount,
-                                token_out.symbol,
-                                result.gas
-                            )
-                        })
                         .into_diagnostic()
                         .wrap_err(format!(
                             "Error calculating amount out for Pool {id:?} at {:.1}% with input of {amount_in} {}.",
                             percentage * 100.0,
                             token_in.symbol,
                         ))?;
+
+                    info!(
+                        "Amount out for trading {:.1}% of max: ({} {} -> {} {}) (gas: {})",
+                        percentage * 100.0,
+                        amount_in,
+                        token_in.symbol,
+                        amount_out_result.amount,
+                        token_out.symbol,
+                        amount_out_result.gas
+                    );
+
+                    let protocol_component = block_msg.new_pairs.get(id);
+                    if let Some(pc) = protocol_component {
+                        let calldata = encode_swap(
+                            pc.clone(),
+                            token_in.address.clone(),
+                            token_out.address.clone(),
+                            amount_in,
+                            amount_out_result.amount,
+                        );
+                        info!("Encoded swap successfully");
+                    }
                 }
             }
         }

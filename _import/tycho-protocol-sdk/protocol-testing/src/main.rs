@@ -1,5 +1,6 @@
 mod adapter_builder;
 mod config;
+mod encoding;
 mod rpc;
 mod test_runner;
 mod tycho_rpc;

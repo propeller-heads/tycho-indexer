@@ -140,5 +140,6 @@ pub struct IntegrationTestsConfig {
     pub initialized_accounts: Option<Vec<String>>,
     pub skip_balance_check: bool,
     pub protocol_type_names: Vec<String>,
+    pub protocol_system: String,
     pub tests: Vec<IntegrationTest>,
 }
