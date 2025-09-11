@@ -1036,18 +1036,18 @@ mod tests {
             .unwrap();
         assert_eq!(amounts01.len(), 4);
         assert_eq!(amounts01[0], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 1%
-        assert_eq!(amounts01[1], Bytes::from(BigInt::from(2000u64).to_bytes_be().1)); // 10%
-        assert_eq!(amounts01[2], Bytes::from(BigInt::from(10000u64).to_bytes_be().1)); // 50%
-        assert_eq!(amounts01[3], Bytes::from(BigInt::from(19000u64).to_bytes_be().1)); // 95%
+        assert_eq!(amounts01[1], Bytes::from(BigInt::from(400u64).to_bytes_be().1)); // 2%
+        assert_eq!(amounts01[2], Bytes::from(BigInt::from(1000u64).to_bytes_be().1)); // 5%
+        assert_eq!(amounts01[3], Bytes::from(BigInt::from(2000u64).to_bytes_be().1)); // 10%
 
         let amounts10 = result
             .get(&(tokens[1].clone(), tokens[0].clone()))
             .unwrap();
         assert_eq!(amounts10.len(), 4);
         assert_eq!(amounts10[0], Bytes::from(BigInt::from(200u64).to_bytes_be().1)); // 1%
-        assert_eq!(amounts10[1], Bytes::from(BigInt::from(2000u64).to_bytes_be().1)); // 10%
-        assert_eq!(amounts10[2], Bytes::from(BigInt::from(10000u64).to_bytes_be().1)); // 50%
-        assert_eq!(amounts10[3], Bytes::from(BigInt::from(19000u64).to_bytes_be().1)); // 95%
+        assert_eq!(amounts10[1], Bytes::from(BigInt::from(400u64).to_bytes_be().1)); // 2%
+        assert_eq!(amounts10[2], Bytes::from(BigInt::from(1000u64).to_bytes_be().1)); // 5%
+        assert_eq!(amounts10[3], Bytes::from(BigInt::from(2000u64).to_bytes_be().1)); // 10%
     }
 
     #[tokio::test]
@@ -1388,8 +1388,8 @@ mod tests {
             .as_ref()
             .unwrap();
 
-        // Should have overrides for both router and pool manager
-        assert_eq!(state_overrides.len(), 2);
+        // Should have overrides for router, pool manager and token_in
+        assert_eq!(state_overrides.len(), 3);
 
         // Check pool manager has storage overrides
         let pool_manager = Address::from(hex!("000000000004444c5dc75cB358380D2e3dE08A90"));
@@ -1397,11 +1397,13 @@ mod tests {
             .get(&pool_manager)
             .unwrap();
 
+        let token_0_overrides = state_overrides.get(&token0).unwrap();
+
         if let Some(StorageOverride::Diff(storage_diff)) = &pool_manager_overrides.slots {
             // Should have at least 2 slots: ERC6909 slot + detected slot for token0
-            assert!(storage_diff.len() >= 2);
+            assert_eq!(storage_diff.len(), 1);
 
-            // All slots should have the same amount_in value (1000)
+            // Slot should have the same amount_in value (1000)
             let expected_amount = Bytes::from(
                 U256::from(1000u64)
                     .to_be_bytes::<32>()
@@ -1410,18 +1412,26 @@ mod tests {
             for value in storage_diff.values() {
                 assert_eq!(value, &expected_amount);
             }
+        } else {
+            panic!("Expected storage diff but found none");
+        }
 
+        if let Some(StorageOverride::Diff(storage_diff)) = &token_0_overrides.slots {
             // Verify that the detected slot for token0 is included
             let detected_slot_key = Bytes::from([0x12; 32]);
             assert!(storage_diff.contains_key(&detected_slot_key));
+            // Slot should have 2x amount_in value (1000)
+            let expected_amount = Bytes::from(
+                U256::from(2000u64)
+                    .to_be_bytes::<32>()
+                    .as_slice(),
+            );
             assert_eq!(
                 storage_diff
                     .get(&detected_slot_key)
                     .unwrap(),
                 &expected_amount
             );
-        } else {
-            panic!("Expected storage diff but found none");
         }
     }
 
