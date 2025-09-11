@@ -1,3 +1,10 @@
+## [0.124.0](https://github.com/propeller-heads/tycho-execution/compare/0.123.0...0.124.0) (2025-09-11)
+
+
+### Features
+
+* bump tycho-common version ([bbd732d](https://github.com/propeller-heads/tycho-execution/commit/bbd732d15a4405fc358eedbb3cbb3b98ec3f61b5))
+
 ## [0.123.0](https://github.com/propeller-heads/tycho-execution/compare/0.122.0...0.123.0) (2025-09-02)
 
 
