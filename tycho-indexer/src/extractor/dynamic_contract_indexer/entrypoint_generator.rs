@@ -835,10 +835,10 @@ where
                     },
                 );
 
-                let mut storage_diff = BTreeMap::new();
+                let mut pool_manager_storage_diff = BTreeMap::new();
 
                 // Always set ERC6909 balance slot with amount_in
-                storage_diff.insert(
+                pool_manager_storage_diff.insert(
                     Bytes::from(
                         erc6909_balance_slot
                             .to_be_bytes::<32>()
@@ -851,31 +851,42 @@ where
                     ),
                 );
 
-                // Additionally, if we have detected balance slots, also set those with amount_in
+                state_overrides.insert(
+                    pool_manager.clone(),
+                    AccountOverrides {
+                        slots: Some(StorageOverride::Diff(pool_manager_storage_diff)),
+                        native_balance: None,
+                        code: None,
+                    },
+                );
+
+                // Additionally, if we have detected balance slots, also set those with amount_in *
+                // 2 Capped to U256::MAX;
                 if let Some(detected_slot) = detected_balance_slots.get(token_in) {
                     debug!(
                         token_in = %token_in,
                         detected_slot = %hex::encode(detected_slot),
                         "Also setting detected balance slot"
                     );
-                    storage_diff.insert(
+                    let mut token_in_storage_diff = BTreeMap::new();
+
+                    token_in_storage_diff.insert(
                         detected_slot.clone(),
                         Bytes::from(
-                            U256::from(amount_in)
+                            U256::from(amount_in.saturating_mul(2_u128))
                                 .to_be_bytes::<32>()
                                 .as_slice(),
                         ),
                     );
+                    state_overrides.insert(
+                        token_in.clone(),
+                        AccountOverrides {
+                            slots: Some(StorageOverride::Diff(token_in_storage_diff)),
+                            native_balance: None,
+                            code: None,
+                        },
+                    );
                 }
-
-                state_overrides.insert(
-                    pool_manager.clone(),
-                    AccountOverrides {
-                        slots: Some(StorageOverride::Diff(storage_diff)),
-                        native_balance: None,
-                        code: None,
-                    },
-                );
 
                 let entry_point_id = format!("{hook_address}:execute(bytes)");
                 debug!(
