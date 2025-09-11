@@ -11,13 +11,23 @@ use crate::encoding::{evm::constants::GROUPABLE_PROTOCOLS, models::Swap};
 /// * `protocol_system`: String, the protocol system of the swaps
 /// * `swaps`: Vec<Swap>, the sequence of swaps to be executed as a group
 /// * `split`: f64, the split percentage of the first swap in the group
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 pub struct SwapGroup {
     pub token_in: Bytes,
     pub token_out: Bytes,
     pub protocol_system: String,
     pub swaps: Vec<Swap>,
     pub split: f64,
+}
+
+impl PartialEq for SwapGroup {
+    fn eq(&self, other: &Self) -> bool {
+        self.token_in == other.token_in &&
+            self.token_out == other.token_out &&
+            self.protocol_system == other.protocol_system &&
+            self.swaps == other.swaps &&
+            self.split == other.split
+    }
 }
 
 /// Group consecutive swaps which can be encoded into one swap execution for gas optimization.
@@ -77,7 +87,7 @@ mod tests {
     use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
-    use crate::encoding::models::Swap;
+    use crate::encoding::models::SwapBuilder;
 
     fn weth() -> Bytes {
         Bytes::from(hex!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").to_vec())
@@ -95,43 +105,28 @@ mod tests {
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-        let swap_weth_wbtc = Swap {
-            component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
-                ..Default::default()
-            },
-            token_in: weth.clone(),
-            token_out: wbtc.clone(),
-            // This represents the remaining 50%, but to avoid any rounding errors we set this to
-            // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
-            split: 0f64,
-            user_data: None,
-        };
-        let swap_wbtc_usdc = Swap {
-            component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
-                ..Default::default()
-            },
-            token_in: wbtc.clone(),
-            token_out: usdc.clone(),
-            split: 0f64,
-            user_data: None,
-        };
-        let swap_usdc_dai = Swap {
-            component: ProtocolComponent {
-                protocol_system: "uniswap_v2".to_string(),
-                ..Default::default()
-            },
-            token_in: usdc.clone(),
-            token_out: dai.clone(),
-            split: 0f64,
-            user_data: None,
-        };
-        let grouped_swaps = group_swaps(&vec![
-            swap_weth_wbtc.clone(),
-            swap_wbtc_usdc.clone(),
-            swap_usdc_dai.clone(),
-        ]);
+        let swap_weth_wbtc = SwapBuilder::new(
+            ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
+            weth.clone(),
+            wbtc.clone(),
+        )
+        .build();
+
+        let swap_wbtc_usdc = SwapBuilder::new(
+            ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
+            wbtc.clone(),
+            usdc.clone(),
+        )
+        .build();
+
+        let swap_usdc_dai = SwapBuilder::new(
+            ProtocolComponent { protocol_system: "uniswap_v2".to_string(), ..Default::default() },
+            usdc.clone(),
+            dai.clone(),
+        )
+        .build();
+        let swaps = vec![swap_weth_wbtc.clone(), swap_wbtc_usdc.clone(), swap_usdc_dai.clone()];
+        let grouped_swaps = group_swaps(&swaps);
 
         assert_eq!(
             grouped_swaps,
@@ -169,54 +164,41 @@ mod tests {
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-        let swap_wbtc_weth = Swap {
-            component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
-                ..Default::default()
-            },
-            token_in: wbtc.clone(),
-            token_out: weth.clone(),
-            split: 0f64,
-            user_data: None,
-        };
-        let swap_weth_usdc = Swap {
-            component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
-                ..Default::default()
-            },
-            token_in: weth.clone(),
-            token_out: usdc.clone(),
-            split: 0.5f64,
-            user_data: None,
-        };
-        let swap_weth_dai = Swap {
-            component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
-                ..Default::default()
-            },
-            token_in: weth.clone(),
-            token_out: dai.clone(),
-            // This represents the remaining 50%, but to avoid any rounding errors we set this to
-            // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
-            split: 0f64,
-            user_data: None,
-        };
-        let swap_dai_usdc = Swap {
-            component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
-                ..Default::default()
-            },
-            token_in: dai.clone(),
-            token_out: usdc.clone(),
-            split: 0f64,
-            user_data: None,
-        };
-        let grouped_swaps = group_swaps(&vec![
+        let swap_wbtc_weth = SwapBuilder::new(
+            ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
+            wbtc.clone(),
+            weth.clone(),
+        )
+        .build();
+        let swap_weth_usdc = SwapBuilder::new(
+            ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
+            weth.clone(),
+            usdc.clone(),
+        )
+        .split(0.5f64)
+        .build();
+        let swap_weth_dai = SwapBuilder::new(
+            ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
+            weth.clone(),
+            dai.clone(),
+        )
+        .build();
+        // Split 0 represents the remaining 50%, but to avoid any rounding errors we set this to
+        // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
+
+        let swap_dai_usdc = SwapBuilder::new(
+            ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
+            dai.clone(),
+            usdc.clone(),
+        )
+        .build();
+        let swaps = vec![
             swap_wbtc_weth.clone(),
             swap_weth_usdc.clone(),
             swap_weth_dai.clone(),
             swap_dai_usdc.clone(),
-        ]);
+        ];
+        let grouped_swaps = group_swaps(&swaps);
 
         assert_eq!(
             grouped_swaps,
@@ -260,55 +242,46 @@ mod tests {
         let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
         let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-        let swap_weth_wbtc = Swap {
-            component: ProtocolComponent {
+        let swap_weth_wbtc = SwapBuilder::new(
+            ProtocolComponent {
                 protocol_system: "vm:balancer_v3".to_string(),
                 ..Default::default()
             },
-            token_in: weth.clone(),
-            token_out: wbtc.clone(),
-            split: 0.5f64,
-            user_data: None,
-        };
-        let swap_wbtc_usdc = Swap {
-            component: ProtocolComponent {
-                protocol_system: "vm:balancer_v3".to_string(),
-                ..Default::default()
-            },
-            token_in: wbtc.clone(),
-            token_out: usdc.clone(),
-            split: 0f64,
-            user_data: None,
-        };
-        let swap_weth_dai = Swap {
-            component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
-                ..Default::default()
-            },
-            token_in: weth.clone(),
-            token_out: dai.clone(),
-            // This represents the remaining 50%, but to avoid any rounding errors we set this to
-            // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
-            split: 0f64,
-            user_data: None,
-        };
-        let swap_dai_usdc = Swap {
-            component: ProtocolComponent {
-                protocol_system: "uniswap_v4".to_string(),
-                ..Default::default()
-            },
-            token_in: dai.clone(),
-            token_out: usdc.clone(),
-            split: 0f64,
-            user_data: None,
-        };
+            weth.clone(),
+            wbtc.clone(),
+        )
+        .split(0.5f64)
+        .build();
 
-        let grouped_swaps = group_swaps(&vec![
+        let swap_wbtc_usdc = SwapBuilder::new(
+            ProtocolComponent {
+                protocol_system: "vm:balancer_v3".to_string(),
+                ..Default::default()
+            },
+            wbtc.clone(),
+            usdc.clone(),
+        )
+        .build();
+        let swap_weth_dai = SwapBuilder::new(
+            ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
+            weth.clone(),
+            dai.clone(),
+        )
+        .build();
+        let swap_dai_usdc = SwapBuilder::new(
+            ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
+            dai.clone(),
+            usdc.clone(),
+        )
+        .build();
+
+        let swaps = vec![
             swap_weth_wbtc.clone(),
             swap_wbtc_usdc.clone(),
             swap_weth_dai.clone(),
             swap_dai_usdc.clone(),
-        ]);
+        ];
+        let grouped_swaps = group_swaps(&swaps);
 
         assert_eq!(
             grouped_swaps,

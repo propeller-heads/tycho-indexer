@@ -23,10 +23,6 @@ use crate::encoding::{
 pub struct ProtocolApprovalsManager {
     client: EVMProvider,
     runtime_handle: Handle,
-    // Store the runtime to prevent it from being dropped before use.
-    // This is required since tycho-execution does not have a pre-existing runtime.
-    // However, if the library is used in a context where a runtime already exists, it is not
-    // necessary to store it.
     #[allow(dead_code)]
     runtime: Option<Arc<Runtime>>,
 }

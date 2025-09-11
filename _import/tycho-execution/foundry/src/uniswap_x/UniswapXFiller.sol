@@ -60,10 +60,9 @@ contract UniswapXFiller is AccessControl, IReactorCallback {
         ResolvedOrder[] calldata resolvedOrders,
         bytes calldata callbackData
     ) external onlyRole(REACTOR_ROLE) {
-        require(
-            resolvedOrders.length == 1,
-            UniswapXFiller__BatchExecutionNotSupported()
-        );
+        if (resolvedOrders.length != 1) {
+            revert UniswapXFiller__BatchExecutionNotSupported();
+        }
 
         ResolvedOrder memory order = resolvedOrders[0];
 

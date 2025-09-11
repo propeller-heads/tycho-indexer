@@ -1,15 +1,19 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use alloy::hex::encode;
 use num_bigint::{BigInt, BigUint};
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 use tycho_execution::encoding::{
-    evm::utils::write_calldata_to_file,
-    models::{Solution, Swap, UserTransferType},
+    evm::{
+        testing_utils::MockRFQState,
+        utils::{biguint_to_u256, write_calldata_to_file},
+    },
+    models::{Solution, Swap, SwapBuilder, UserTransferType},
 };
 
 use crate::common::{
-    encoding::encode_tycho_router_call, eth, eth_chain, get_signer, get_tycho_router_encoder, weth,
+    alice_address, bob_address, encoding::encode_tycho_router_call, eth, eth_chain, get_signer,
+    get_tycho_router_encoder, usdc, wbtc, weth,
 };
 
 mod common;
@@ -48,6 +52,8 @@ fn test_uniswap_v3_uniswap_v2() {
         token_out: wbtc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
     let swap_wbtc_usdc = Swap {
         component: ProtocolComponent {
@@ -59,6 +65,8 @@ fn test_uniswap_v3_uniswap_v2() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -127,6 +135,8 @@ fn test_uniswap_v3_uniswap_v3() {
         token_out: wbtc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
     let swap_wbtc_usdc = Swap {
         component: ProtocolComponent {
@@ -146,6 +156,8 @@ fn test_uniswap_v3_uniswap_v3() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -213,6 +225,8 @@ fn test_uniswap_v3_curve() {
         token_out: wbtc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
 
     let swap_wbtc_usdt = Swap {
@@ -242,6 +256,8 @@ fn test_uniswap_v3_curve() {
         token_out: usdt.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -301,6 +317,8 @@ fn test_balancer_v2_uniswap_v2() {
         token_out: wbtc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
 
     let swap_wbtc_usdc = Swap {
@@ -313,6 +331,8 @@ fn test_balancer_v2_uniswap_v2() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -375,6 +395,8 @@ fn test_multi_protocol() {
         token_out: weth.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
 
     let balancer_swap_weth_wbtc = Swap {
@@ -387,6 +409,8 @@ fn test_multi_protocol() {
         token_out: wbtc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
 
     let curve_swap_wbtc_usdt = Swap {
@@ -416,6 +440,8 @@ fn test_multi_protocol() {
         token_out: usdt.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
 
     // Ekubo
@@ -438,6 +464,8 @@ fn test_multi_protocol() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
 
     // USV4
@@ -461,6 +489,8 @@ fn test_multi_protocol() {
         token_out: eth.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
 
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFromPermit2);
@@ -533,6 +563,8 @@ fn test_uniswap_v3_balancer_v3() {
         token_out: wbtc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
     let swap_wbtc_qnt = Swap {
         component: ProtocolComponent {
@@ -544,6 +576,8 @@ fn test_uniswap_v3_balancer_v3() {
         token_out: qnt.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
@@ -577,4 +611,228 @@ fn test_uniswap_v3_balancer_v3() {
 
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_uniswap_v3_balancer_v3", hex_calldata.as_str());
+}
+
+#[test]
+fn test_uniswap_v3_bebop() {
+    // Note: This test does not assert anything. It is only used to obtain
+    // integration test data for our router solidity test.
+    //
+    // Performs a sequential swap from WETH to WBTC through USDC using USV3 and
+    // Bebop RFQ
+    //
+    //   WETH ───(USV3)──> USDC ───(Bebop RFQ)──> WBTC
+
+    let weth = weth();
+    let usdc = usdc();
+    let wbtc = wbtc();
+
+    // First swap: WETH -> USDC via UniswapV3
+    let swap_weth_usdc = SwapBuilder::new(
+        ProtocolComponent {
+            id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* WETH-USDC USV3 Pool
+                                                                           * 0.05% */
+            protocol_system: "uniswap_v3".to_string(),
+            static_attributes: {
+                let mut attrs = HashMap::new();
+                attrs
+                    .insert("fee".to_string(), Bytes::from(BigInt::from(500).to_signed_bytes_be()));
+                attrs
+            },
+            ..Default::default()
+        },
+        weth.clone(),
+        usdc.clone(),
+    )
+    .build();
+
+    // Second swap: USDC -> WBTC via Bebop RFQ using real order data
+    let bebop_calldata = Bytes::from_str("0x4dcebcba00000000000000000000000000000000000000000000000000000000689dcb3c0000000000000000000000003ede3eca2a72b3aecc820e955b36f38437d01395000000000000000000000000bee3211ab312a8d065c4fef0247448e17a8da0000000000000000000000000000000000000000000000000002901f2d62bc91b77000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000002260fac5e5542a773aa44fbcfedf7c193bc2c599000000000000000000000000000000000000000000000000000000007881786100000000000000000000000000000000000000000000000000000000001984730000000000000000000000001d96f2f6bef1202e4ce1ff6dad0c2cb002861d3e0000000000000000000000000000000000000000000000000000000000000000a02bc8495ad1c76c31d466ce719f80400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000041f3a03b07f390cd707402912278414c46190ca8ca362dd218b9a58956178cb6ee0e5755db7abe02fe15d498d092d4c6865a5eb18486b3e45e27d50d34b87bf1e21c00000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let partial_fill_offset = 12u64;
+    let quote_amount_out = BigUint::from_str("1672307").unwrap();
+
+    let bebop_state = MockRFQState {
+        quote_amount_out,
+        quote_data: HashMap::from([
+            ("calldata".to_string(), bebop_calldata),
+            (
+                "partial_fill_offset".to_string(),
+                Bytes::from(
+                    partial_fill_offset
+                        .to_be_bytes()
+                        .to_vec(),
+                ),
+            ),
+        ]),
+    };
+
+    let bebop_component = ProtocolComponent {
+        id: String::from("bebop-rfq"),
+        protocol_system: String::from("rfq:bebop"),
+        ..Default::default()
+    };
+
+    let swap_usdc_wbtc = SwapBuilder::new(bebop_component, usdc.clone(), wbtc.clone())
+        .estimated_amount_in(BigUint::from_str("2021750881").unwrap())
+        .protocol_state(Arc::new(bebop_state))
+        .build();
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: weth,
+        given_amount: BigUint::from_str("1000000000000000000").unwrap(), // 0.099 WETH
+        checked_token: wbtc,
+        checked_amount: BigUint::from_str("1672307").unwrap(),
+        sender: bob_address(),
+        receiver: bob_address(),
+        swaps: vec![swap_weth_usdc, swap_usdc_wbtc],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_uniswap_v3_bebop", hex_calldata.as_str());
+}
+
+#[test]
+#[ignore]
+fn test_uniswap_v3_hashflow() {
+    // Note: This test does not assert anything. It is only used to obtain
+    // integration test data for our router solidity test.
+    //
+    // Performs a sequential swap from WETH to WBTC through USDC using USV3 and
+    // Hashflow RFQ
+    //
+    //   WETH ───(USV3)──> USDC ───(Hashflow RFQ)──> WBTC
+
+    let weth = weth();
+    let usdc = usdc();
+    let wbtc = wbtc();
+
+    // First swap: WETH -> USDC via UniswapV3
+    let swap_weth_usdc = SwapBuilder::new(
+        ProtocolComponent {
+            id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* WETH-USDC USV3 Pool
+                                                                           * 0.05% */
+            protocol_system: "uniswap_v3".to_string(),
+            static_attributes: {
+                let mut attrs = HashMap::new();
+                attrs
+                    .insert("fee".to_string(), Bytes::from(BigInt::from(500).to_signed_bytes_be()));
+                attrs
+            },
+            ..Default::default()
+        },
+        weth.clone(),
+        usdc.clone(),
+    )
+    .build();
+
+    // Second swap: USDC -> WBTC via Hashflow RFQ using real order data
+    let quote_amount_out = BigUint::from_str("3714751").unwrap();
+
+    let hashflow_state = MockRFQState {
+        quote_amount_out,
+        quote_data: HashMap::from([
+            (
+                "pool".to_string(),
+                Bytes::from_str("0x478eca1b93865dca0b9f325935eb123c8a4af011").unwrap(),
+            ),
+            (
+                "external_account".to_string(),
+                Bytes::from_str("0xbee3211ab312a8d065c4fef0247448e17a8da000").unwrap(),
+            ),
+            (
+                "trader".to_string(),
+                Bytes::from_str("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2").unwrap(),
+            ),
+            (
+                "base_token".to_string(),
+                Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+            ),
+            (
+                "quote_token".to_string(),
+                Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap(),
+            ),
+            (
+                "base_token_amount".to_string(),
+                Bytes::from(biguint_to_u256(&BigUint::from(4308094737_u64)).to_be_bytes::<32>().to_vec()),
+            ),
+            (
+                "quote_token_amount".to_string(),
+                Bytes::from(biguint_to_u256(&BigUint::from(3714751_u64)).to_be_bytes::<32>().to_vec()),
+            ),
+            ("quote_expiry".to_string(), Bytes::from(biguint_to_u256(&BigUint::from(1755610328_u64)).to_be_bytes::<32>().to_vec())),
+            ("nonce".to_string(), Bytes::from(biguint_to_u256(&BigUint::from(1755610283723_u64)).to_be_bytes::<32>().to_vec())),
+            (
+                "tx_id".to_string(),
+                Bytes::from_str(
+                    "0x125000064000640000001747eb8c38ffffffffffffff0029642016edb36d0000",
+                )
+                    .unwrap(),
+            ),
+            ("signature".to_string(), Bytes::from_str("0x6ddb3b21fe8509e274ddf46c55209cdbf30360944abbca6569ed6b26740d052f419964dcb5a3bdb98b4ed1fb3642a2760b8312118599a962251f7a8f73fe4fbe1c").unwrap()),
+        ]),
+    };
+
+    let hashflow_component = ProtocolComponent {
+        id: String::from("hashflow-rfq"),
+        protocol_system: String::from("rfq:hashflow"),
+        ..Default::default()
+    };
+
+    let swap_usdc_wbtc = SwapBuilder::new(hashflow_component, usdc.clone(), wbtc.clone())
+        .estimated_amount_in(BigUint::from_str("4308094737").unwrap())
+        .protocol_state(Arc::new(hashflow_state))
+        .build();
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: weth,
+        given_amount: BigUint::from_str("1000000000000000000").unwrap(),
+        checked_token: wbtc,
+        checked_amount: BigUint::from_str("3714751").unwrap(),
+        sender: alice_address(),
+        receiver: alice_address(),
+        swaps: vec![swap_weth_usdc, swap_usdc_wbtc],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_uniswap_v3_hashflow", hex_calldata.as_str());
 }

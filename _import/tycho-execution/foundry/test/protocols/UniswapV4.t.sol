@@ -24,6 +24,8 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
             bool zeroForOne,
             RestrictTransferFrom.TransferType transferType,
             address receiver,
+            address hook,
+            bytes memory hookData,
             UniswapV4Pool[] memory pools
         )
     {
@@ -37,10 +39,12 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
     UniswapV4ExecutorExposed uniswapV4Exposed;
     IERC20 USDE = IERC20(USDE_ADDR);
     IERC20 USDT = IERC20(USDT_ADDR);
+    IERC20 USDC = IERC20(USDC_ADDR);
+
     address poolManager = 0x000000000004444c5dc75cB358380D2e3dE08A90;
 
     function setUp() public {
-        uint256 forkBlock = 21817316;
+        uint256 forkBlock = 22689128;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         uniswapV4Exposed = new UniswapV4ExecutorExposed(
             IPoolManager(poolManager), PERMIT2_ADDRESS
@@ -73,6 +77,8 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             zeroForOne,
             RestrictTransferFrom.TransferType.Transfer,
             ALICE,
+            address(0),
+            bytes(""),
             pools
         );
 
@@ -82,6 +88,8 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             bool zeroForOneDecoded,
             RestrictTransferFrom.TransferType transferType,
             address receiver,
+            address hook,
+            bytes memory hookData,
             UniswapV4Executor.UniswapV4Pool[] memory decodedPools
         ) = uniswapV4Exposed.decodeData(data);
 
@@ -93,6 +101,7 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             uint8(RestrictTransferFrom.TransferType.Transfer)
         );
         assertEq(receiver, ALICE);
+        assertEq(hook, address(0));
         assertEq(decodedPools.length, 2);
         assertEq(decodedPools[0].intermediaryToken, USDT_ADDR);
         assertEq(decodedPools[0].fee, pool1Fee);
@@ -123,6 +132,8 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             true,
             RestrictTransferFrom.TransferType.Transfer,
             ALICE,
+            address(0),
+            bytes(""),
             pools
         );
 
@@ -180,6 +191,8 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             true,
             RestrictTransferFrom.TransferType.Transfer,
             ALICE,
+            address(0),
+            bytes(""),
             pools
         );
 
@@ -211,6 +224,43 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         );
         assertTrue(IERC20(WBTC_ADDR).balanceOf(ALICE) == amountOut);
     }
+
+    function testSingleSwapEulerHook() public {
+        // Replicating tx: 0xb372306a81c6e840f4ec55f006da6b0b097f435802a2e6fd216998dd12fb4aca
+        address hook = address(0x69058613588536167BA0AA94F0CC1Fe420eF28a8);
+
+        uint256 amountIn = 7407000000;
+        deal(USDC_ADDR, address(uniswapV4Exposed), amountIn);
+        uint256 usdcBalanceBeforeSwapExecutor =
+            USDC.balanceOf(address(uniswapV4Exposed));
+
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+            new UniswapV4Executor.UniswapV4Pool[](1);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: WETH_ADDR,
+            fee: uint24(500),
+            tickSpacing: int24(1)
+        });
+
+        bytes memory data = UniswapV4Utils.encodeExactInput(
+            USDC_ADDR,
+            WETH_ADDR,
+            true,
+            RestrictTransferFrom.TransferType.Transfer,
+            ALICE,
+            hook,
+            bytes(""),
+            pools
+        );
+
+        uint256 amountOut = uniswapV4Exposed.swap(amountIn, data);
+        assertEq(amountOut, 2681115183499232721);
+        assertEq(
+            USDC.balanceOf(address(uniswapV4Exposed)),
+            usdcBalanceBeforeSwapExecutor - amountIn
+        );
+        assertTrue(IERC20(WETH_ADDR).balanceOf(ALICE) == amountOut);
+    }
 }
 
 contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
@@ -237,6 +287,8 @@ contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
             true,
             RestrictTransferFrom.TransferType.TransferFrom,
             ALICE,
+            address(0),
+            bytes(""),
             pools
         );
 
@@ -285,6 +337,8 @@ contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
             true,
             RestrictTransferFrom.TransferType.TransferFrom,
             ALICE,
+            address(0),
+            bytes(""),
             pools
         );
 

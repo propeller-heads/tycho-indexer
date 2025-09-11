@@ -1,7 +1,11 @@
+use std::sync::Arc;
+
 use clap::ValueEnum;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
-use tycho_common::{models::protocol::ProtocolComponent, Bytes};
+use tycho_common::{
+    models::protocol::ProtocolComponent, simulation::protocol_sim::ProtocolSim, Bytes,
+};
 
 use crate::encoding::serde_primitives::biguint_string;
 
@@ -71,7 +75,7 @@ pub enum NativeAction {
 }
 
 /// Represents a swap operation to be performed on a pool.
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Swap {
     /// Protocol component from tycho indexer
     pub component: ProtocolComponent,
@@ -84,6 +88,12 @@ pub struct Swap {
     pub split: f64,
     /// Optional user data to be passed to encoding.
     pub user_data: Option<Bytes>,
+    /// Optional protocol state used to perform the swap.
+    #[serde(skip)]
+    pub protocol_state: Option<Arc<dyn ProtocolSim>>,
+    /// Optional estimated amount in for this Swap. This is necessary for RFQ protocols. This value
+    /// is used to request the quote
+    pub estimated_amount_in: Option<BigUint>,
 }
 
 impl Swap {
@@ -93,8 +103,90 @@ impl Swap {
         token_out: Bytes,
         split: f64,
         user_data: Option<Bytes>,
+        protocol_state: Option<Arc<dyn ProtocolSim>>,
+        estimated_amount_in: Option<BigUint>,
     ) -> Self {
-        Self { component: component.into(), token_in, token_out, split, user_data }
+        Self {
+            component: component.into(),
+            token_in,
+            token_out,
+            split,
+            user_data,
+            protocol_state,
+            estimated_amount_in,
+        }
+    }
+}
+
+impl PartialEq for Swap {
+    fn eq(&self, other: &Self) -> bool {
+        self.component == other.component &&
+            self.token_in == other.token_in &&
+            self.token_out == other.token_out &&
+            self.split == other.split &&
+            self.user_data == other.user_data &&
+            self.estimated_amount_in == other.estimated_amount_in
+        // Skip protocol_state comparison since trait objects don't implement PartialEq
+    }
+}
+
+pub struct SwapBuilder {
+    component: ProtocolComponent,
+    token_in: Bytes,
+    token_out: Bytes,
+    split: f64,
+    user_data: Option<Bytes>,
+    protocol_state: Option<Arc<dyn ProtocolSim>>,
+    estimated_amount_in: Option<BigUint>,
+}
+
+impl SwapBuilder {
+    pub fn new<T: Into<ProtocolComponent>>(
+        component: T,
+        token_in: Bytes,
+        token_out: Bytes,
+    ) -> Self {
+        Self {
+            component: component.into(),
+            token_in,
+            token_out,
+            split: 0.0,
+            user_data: None,
+            protocol_state: None,
+            estimated_amount_in: None,
+        }
+    }
+
+    pub fn split(mut self, split: f64) -> Self {
+        self.split = split;
+        self
+    }
+
+    pub fn user_data(mut self, user_data: Bytes) -> Self {
+        self.user_data = Some(user_data);
+        self
+    }
+
+    pub fn protocol_state(mut self, protocol_state: Arc<dyn ProtocolSim>) -> Self {
+        self.protocol_state = Some(protocol_state);
+        self
+    }
+
+    pub fn estimated_amount_in(mut self, estimated_amount_in: BigUint) -> Self {
+        self.estimated_amount_in = Some(estimated_amount_in);
+        self
+    }
+
+    pub fn build(self) -> Swap {
+        Swap {
+            component: self.component,
+            token_in: self.token_in,
+            token_out: self.token_out,
+            split: self.split,
+            user_data: self.user_data,
+            protocol_state: self.protocol_state,
+            estimated_amount_in: self.estimated_amount_in,
+        }
     }
 }
 
@@ -238,8 +330,15 @@ mod tests {
             protocol_system: "uniswap_v2".to_string(),
         };
         let user_data = Some(Bytes::from("0x1234"));
-        let swap =
-            Swap::new(component, Bytes::from("0x12"), Bytes::from("34"), 0.5, user_data.clone());
+        let swap = Swap::new(
+            component,
+            Bytes::from("0x12"),
+            Bytes::from("34"),
+            0.5,
+            user_data.clone(),
+            None,
+            None,
+        );
         assert_eq!(swap.token_in, Bytes::from("0x12"));
         assert_eq!(swap.token_out, Bytes::from("0x34"));
         assert_eq!(swap.component.protocol_system, "uniswap_v2");

@@ -82,6 +82,7 @@ impl TransferOptimization {
         &self,
         solution_receiver: &Bytes,
         next_swap: Option<&SwapGroup>,
+        unwrap: bool,
     ) -> Result<(Bytes, bool), EncodingError> {
         if let Some(next) = next_swap {
             // if the protocol of the next swap supports transfer in optimization
@@ -104,7 +105,11 @@ impl TransferOptimization {
             }
         } else {
             // last swap - there is no next swap
-            Ok((solution_receiver.clone(), false))
+            if unwrap {
+                Ok((self.router_address.clone(), false))
+            } else {
+                Ok((solution_receiver.clone(), false))
+            }
         }
     }
 }
@@ -116,7 +121,7 @@ mod tests {
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
-    use crate::encoding::models::Swap;
+    use crate::encoding::models::SwapBuilder;
 
     fn weth() -> Bytes {
         Bytes::from(hex!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").to_vec())
@@ -169,17 +174,16 @@ mod tests {
         #[case] expected_transfer: TransferType,
     ) {
         // The swap token is the same as the given token, which is not the native token
-        let swaps = vec![Swap {
-            component: ProtocolComponent {
+        let swaps = vec![SwapBuilder::new(
+            ProtocolComponent {
                 protocol_system: "uniswap_v2".to_string(),
                 id: "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11".to_string(),
                 ..Default::default()
             },
-            token_in: swap_token_in.clone(),
-            token_out: dai(),
-            split: 0f64,
-            user_data: None,
-        }];
+            swap_token_in.clone(),
+            dai(),
+        )
+        .build()];
         let swap = SwapGroup {
             protocol_system: protocol,
             token_in: swap_token_in,
@@ -203,16 +207,19 @@ mod tests {
     }
 
     #[rstest]
-    // there is no next swap -> receiver is the solution receiver
-    #[case(None, receiver(), false)]
+    // there is no next swap but there is an unwrap -> receiver is the router
+    #[case(None, true, router_address(), false)]
+    // there is no next swap and no unwrap -> receiver is the solution receiver
+    #[case(None, false, receiver(), false)]
     // protocol of next swap supports transfer in optimization
-    #[case(Some("uniswap_v2"), component_id(), true)]
+    #[case(Some("uniswap_v2"), false, component_id(), true)]
     // protocol of next swap supports transfer in optimization but is callback constrained
-    #[case(Some("uniswap_v3"), router_address(), false)]
+    #[case(Some("uniswap_v3"), false, router_address(), false)]
     // protocol of next swap does not support transfer in optimization
-    #[case(Some("vm:curve"), router_address(), false)]
+    #[case(Some("vm:curve"), false, router_address(), false)]
     fn test_get_receiver(
         #[case] protocol: Option<&str>,
+        #[case] unwrap: bool,
         #[case] expected_receiver: Bytes,
         #[case] expected_optimization: bool,
     ) {
@@ -231,21 +238,20 @@ mod tests {
                 token_in: usdc(),
                 token_out: dai(),
                 split: 0f64,
-                swaps: vec![Swap {
-                    component: ProtocolComponent {
+                swaps: vec![SwapBuilder::new(
+                    ProtocolComponent {
                         protocol_system: protocol.unwrap().to_string(),
                         id: component_id().to_string(),
                         ..Default::default()
                     },
-                    token_in: usdc(),
-                    token_out: dai(),
-                    split: 0f64,
-                    user_data: None,
-                }],
+                    usdc(),
+                    dai(),
+                )
+                .build()],
             })
         };
 
-        let result = optimization.get_receiver(&receiver(), next_swap.as_ref());
+        let result = optimization.get_receiver(&receiver(), next_swap.as_ref(), unwrap);
 
         assert!(result.is_ok());
         let (actual_receiver, optimization_flag) = result.unwrap();

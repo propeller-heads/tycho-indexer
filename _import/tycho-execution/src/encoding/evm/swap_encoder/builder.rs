@@ -5,8 +5,9 @@ use tycho_common::models::Chain;
 use crate::encoding::{
     errors::EncodingError,
     evm::swap_encoder::swap_encoders::{
-        BalancerV2SwapEncoder, BalancerV3SwapEncoder, CurveSwapEncoder, EkuboSwapEncoder,
-        MaverickV2SwapEncoder, UniswapV2SwapEncoder, UniswapV3SwapEncoder, UniswapV4SwapEncoder,
+        BalancerV2SwapEncoder, BalancerV3SwapEncoder, BebopSwapEncoder, CurveSwapEncoder,
+        EkuboSwapEncoder, HashflowSwapEncoder, MaverickV2SwapEncoder, UniswapV2SwapEncoder,
+        UniswapV3SwapEncoder, UniswapV4SwapEncoder,
     },
     swap_encoder::SwapEncoder,
 };
@@ -71,6 +72,11 @@ impl SwapEncoderBuilder {
                 self.chain,
                 self.config,
             )?)),
+            "uniswap_v4_hooks" => Ok(Box::new(UniswapV4SwapEncoder::new(
+                self.executor_address,
+                self.chain,
+                self.config,
+            )?)),
             "ekubo_v2" => {
                 Ok(Box::new(EkuboSwapEncoder::new(self.executor_address, self.chain, self.config)?))
             }
@@ -83,6 +89,14 @@ impl SwapEncoderBuilder {
                 self.config,
             )?)),
             "vm:balancer_v3" => Ok(Box::new(BalancerV3SwapEncoder::new(
+                self.executor_address,
+                self.chain,
+                self.config,
+            )?)),
+            "rfq:bebop" => {
+                Ok(Box::new(BebopSwapEncoder::new(self.executor_address, self.chain, self.config)?))
+            }
+            "rfq:hashflow" => Ok(Box::new(HashflowSwapEncoder::new(
                 self.executor_address,
                 self.chain,
                 self.config,

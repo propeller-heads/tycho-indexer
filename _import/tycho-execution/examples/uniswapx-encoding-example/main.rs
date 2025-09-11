@@ -82,6 +82,8 @@ fn main() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
     let swap_usdc_usdt = Swap {
         component: ProtocolComponent {
@@ -99,6 +101,8 @@ fn main() {
         token_out: usdt.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
 
     // Then we create a solution object with the previous swap
@@ -165,7 +169,6 @@ fn main() {
     println!(" ====== Simple swap DAI -> USDT ======");
     println!(
         "The following callback data should be sent to the filler contract, along with the \
-        encoded order and signature: {:?}",
-        hex_calldata
+        encoded order and signature: {hex_calldata:?}"
     );
 }

@@ -1,3 +1,155 @@
+## [0.123.0](https://github.com/propeller-heads/tycho-execution/compare/0.122.0...0.123.0) (2025-09-02)
+
+
+### Features
+
+* pin tycho-common version ([b0783fb](https://github.com/propeller-heads/tycho-execution/commit/b0783fb2c1f9e89062ba3fbb269929249afd45c7))
+
+## [0.122.0](https://github.com/propeller-heads/tycho-execution/compare/0.121.0...0.122.0) (2025-08-28)
+
+
+### Features
+
+* Bump tycho-common version ([8101ff3](https://github.com/propeller-heads/tycho-execution/commit/8101ff31c8bc64e80a50cc907823ebb5dd8b2f1f))
+
+## [0.121.0](https://github.com/propeller-heads/tycho-execution/compare/0.120.0...0.121.0) (2025-08-28)
+
+
+### Features
+
+* rename "uniswap_v4" to "uniswap_v4_hooks" ([c1d88be](https://github.com/propeller-heads/tycho-execution/commit/c1d88be3295d9f9959a271795541e7ee4bbcfc4c))
+* Support hooks (without special calldata) ([a058177](https://github.com/propeller-heads/tycho-execution/commit/a0581773cd35fa2c34f8e305f62901e7b5f1cf71))
+* **univ4:** Pass user_data as hook_data in execution ([93678d9](https://github.com/propeller-heads/tycho-execution/commit/93678d9d1987eaa9fff8c19a6fe69e7771ed582c))
+* Update UniswapV4 executor addresses ([d7e377e](https://github.com/propeller-heads/tycho-execution/commit/d7e377e44323014661b21e79197eaf1ad7748587))
+
+
+### Bug Fixes
+
+* access hooks attr, not hook ([2c38cf8](https://github.com/propeller-heads/tycho-execution/commit/2c38cf84fcbfd195112a11b770e3f70328c1d1b2))
+* Add missing uniswap v4 hooks executor addresses ([0daccfe](https://github.com/propeller-heads/tycho-execution/commit/0daccfea9ab85fcf967c593f684a75fca7f0061e))
+* Add missing uniswap v4 hooks executor addresses ([5ab9e99](https://github.com/propeller-heads/tycho-execution/commit/5ab9e9925ab6855a05226bfac9fd5723c7ca1cea))
+* After rebase fixes ([1d952b1](https://github.com/propeller-heads/tycho-execution/commit/1d952b19be226475cd7451bad899f4bbe6a4c52e))
+* Recalculate calldata after merging main ([2adcb89](https://github.com/propeller-heads/tycho-execution/commit/2adcb89e6d3666bf76f223e55bb9d8e8b6db06ee))
+* revert hooks rename ([ea9a1a8](https://github.com/propeller-heads/tycho-execution/commit/ea9a1a88ca3dae3f9099dd0b84cff456d4ad5bfc))
+* Small safe wallet fixes ([c9d09e9](https://github.com/propeller-heads/tycho-execution/commit/c9d09e91098f0a76c96ad1cd157e1a461887f468))
+
+## [0.120.0](https://github.com/propeller-heads/tycho-execution/compare/0.119.0...0.120.0) (2025-08-27)
+
+
+### Features
+
+* Deploy new hashflow router ([eac45fa](https://github.com/propeller-heads/tycho-execution/commit/eac45faf5a56a50dacff374da7c3701e5a1d3f33))
+
+## [0.119.0](https://github.com/propeller-heads/tycho-execution/compare/0.118.0...0.119.0) (2025-08-21)
+
+
+### Features
+
+* Add BytecodeExporter to TestUtils ([cea964e](https://github.com/propeller-heads/tycho-execution/commit/cea964e0a54a75b1bd89007794daf467b812f021))
+
+## [0.118.0](https://github.com/propeller-heads/tycho-execution/compare/0.117.0...0.118.0) (2025-08-21)
+
+
+### Features
+
+* Use Arc instead of & for protocol_state in Swap ([a2a5319](https://github.com/propeller-heads/tycho-execution/commit/a2a53195edbc631bea8fbc758a3bf5ee33a87dda))
+
+
+### Bug Fixes
+
+* Updates to new datatype after merging main ([e9c1a39](https://github.com/propeller-heads/tycho-execution/commit/e9c1a39608bba786bbed2b53c4596e94ddcbe03c))
+
+## [0.117.0](https://github.com/propeller-heads/tycho-execution/compare/0.116.0...0.117.0) (2025-08-21)
+
+
+### Features
+
+* implement `SwapEncoder` for `Hashflow` ([93db953](https://github.com/propeller-heads/tycho-execution/commit/93db953c620f4d52e8852ff8148f2dfdbc580029))
+
+
+### Bug Fixes
+
+* in bebop's encode_swap, fail early if router address is not present ([c013bf7](https://github.com/propeller-heads/tycho-execution/commit/c013bf707225b171e76f3f3dac88624b6a3458dc))
+* in hashflow's encode_swap, fail early if router address is not present ([c506f2c](https://github.com/propeller-heads/tycho-execution/commit/c506f2c048a20d1ffd066d2903d2cc469fd167ed))
+* in HashflowExecutor, _balanceOf must use `trader` address instead of the executor's to get the balance ([a09d648](https://github.com/propeller-heads/tycho-execution/commit/a09d648f3c50f87b392c7c5eb14af07307c5ccea))
+
+## [0.116.0](https://github.com/propeller-heads/tycho-execution/compare/0.115.0...0.116.0) (2025-08-19)
+
+
+### Features
+
+* Bebop executor in base ([c974312](https://github.com/propeller-heads/tycho-execution/commit/c974312a377d950948e76dd1dbb3303421f9f5f8))
+* Support Bebop quote through IndicativelyPriced state ([2292061](https://github.com/propeller-heads/tycho-execution/commit/22920617ebca35199a8cc927245cfa7e6209ade8))
+* Update BebopExecutor deployed address ([72b60aa](https://github.com/propeller-heads/tycho-execution/commit/72b60aa324d136ab999ff04339433a83743aee5e))
+
+
+### Bug Fixes
+
+* Add bebop to protocol specific addresses ([6e68d19](https://github.com/propeller-heads/tycho-execution/commit/6e68d199c90395a9204329e462e5027e81e61171))
+* Implement From<SimulationError> for EncodingError ([987956e](https://github.com/propeller-heads/tycho-execution/commit/987956eb0bea2a46115d160ea05db395ce17077a))
+
+## [0.115.0](https://github.com/propeller-heads/tycho-execution/compare/0.114.0...0.115.0) (2025-08-14)
+
+
+### Features
+
+* Deploy BebopExecutor ([f9ef8e0](https://github.com/propeller-heads/tycho-execution/commit/f9ef8e0dbdfb73db132f4932911fb5a666f6fa25))
+* implement encoder and executor with single order support ([7e7e3f0](https://github.com/propeller-heads/tycho-execution/commit/7e7e3f0e0187adc2f7966fd108e9edcb5e05f20f))
+* support multi and aggregate orders ([ad0a999](https://github.com/propeller-heads/tycho-execution/commit/ad0a9991da57348a026bc43d3ca230898822614e))
+
+
+### Bug Fixes
+
+* After merge fixes with SwapBuilder ([d301dfc](https://github.com/propeller-heads/tycho-execution/commit/d301dfcc44575157997d95a571633ef4e659a197))
+* After merging main fixes ([003ab7c](https://github.com/propeller-heads/tycho-execution/commit/003ab7cea82fec67dbd54bb1248f75e8c7c74c50))
+* **Bebop:** Fix AggregateOrder tests ([7024da3](https://github.com/propeller-heads/tycho-execution/commit/7024da395d9d959fc9edecc398f8a161f76d4de1))
+* **Bebop:** Fix encoding and tests ([e793478](https://github.com/propeller-heads/tycho-execution/commit/e79347842f74e05b078d3b2da4f6fad099a6927d))
+* cargo and forge fmt ([17e5354](https://github.com/propeller-heads/tycho-execution/commit/17e535494b5f2f211eef889c768f05f00843dc5b))
+* Fix test imports ([210d4fa](https://github.com/propeller-heads/tycho-execution/commit/210d4fa604de7610ce01fd918e57970dd5498e6b))
+* Move Bebop tests according to new setup ([01ab5d2](https://github.com/propeller-heads/tycho-execution/commit/01ab5d22b182072a65221f620df7fade3ab6fe7a))
+* SafeCast => V4SafeCast to fix build issue ([946c439](https://github.com/propeller-heads/tycho-execution/commit/946c4391e825661126fc30e013ac95e87e904fdc))
+* Simplify the BebopExecutor and fix Single tests ([76a09d0](https://github.com/propeller-heads/tycho-execution/commit/76a09d0402f34563a121f0973589b523ffdf3a8f))
+
+## [0.114.0](https://github.com/propeller-heads/tycho-execution/compare/0.113.0...0.114.0) (2025-08-14)
+
+
+### Features
+
+* add hashflow executor ([e03ecf4](https://github.com/propeller-heads/tycho-execution/commit/e03ecf48d50f08b739a9d862b4746c3a055ea6e9))
+
+## [0.113.0](https://github.com/propeller-heads/tycho-execution/compare/0.112.2...0.113.0) (2025-08-14)
+
+
+### Features
+
+* Add estimated_amount_in to Swap. Add SwapBuilder ([5eb9973](https://github.com/propeller-heads/tycho-execution/commit/5eb9973dbd5ca4eb2f4d15c3f4803b4bc7dfa1ea))
+
+## [0.112.2](https://github.com/propeller-heads/tycho-execution/compare/0.112.1...0.112.2) (2025-08-07)
+
+
+### Bug Fixes
+
+* Encode sequential swaps with unwrapping WETH correctly ([c42a5da](https://github.com/propeller-heads/tycho-execution/commit/c42a5dae6a55d315360eaaa510d9dcaf7ef8e4c0))
+
+## [0.112.1](https://github.com/propeller-heads/tycho-execution/compare/0.112.0...0.112.1) (2025-07-31)
+
+
+### Bug Fixes
+
+* Rename mainnet to ethereum in txServiceUrls for Safe ([51d9484](https://github.com/propeller-heads/tycho-execution/commit/51d9484de0b4c75b78dc8ca839f4ec7df40f972e))
+
+## [0.112.0](https://github.com/propeller-heads/tycho-execution/compare/0.111.0...0.112.0) (2025-07-22)
+
+
+### Features
+
+* Add protocol state to Swap object ([c217702](https://github.com/propeller-heads/tycho-execution/commit/c21770256045b3fdaddb889effa09b839f59755e))
+
+
+### Bug Fixes
+
+* Replace smart pointer with regular pointer ([95c5124](https://github.com/propeller-heads/tycho-execution/commit/95c51247f73516f387e2169e63a22311b4343b8d))
+
 ## [0.111.0](https://github.com/propeller-heads/tycho-execution/compare/0.110.0...0.111.0) (2025-07-15)
 
 

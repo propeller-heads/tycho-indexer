@@ -492,4 +492,95 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         assertEq(balanceAfter - balanceBefore, 1949668893);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
+
+    function testSequentialSwapWithUnwrapIntegration() public {
+        // Performs a sequential swap from USDC to ETH through WBTC using USV2 pools and unwrapping in
+        // the end
+        deal(USDC_ADDR, ALICE, 3_000_000_000);
+        uint256 balanceBefore = ALICE.balance;
+
+        // Approve permit2
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
+        bytes memory callData =
+            loadCallDataFromFile("test_sequential_swap_strategy_encoder_unwrap");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = ALICE.balance;
+
+        assertTrue(success, "Call Failed");
+        assertEq(balanceAfter - balanceBefore, 1404194006633772805);
+    }
+}
+
+contract TychoRouterSequentialSwapTestForBebop is TychoRouterTestSetup {
+    function getForkBlock() public pure override returns (uint256) {
+        return 23139046;
+    }
+
+    function testUSV3BebopIntegration() public {
+        // Performs a sequential swap from WETH to WBTC through USDC using USV3 and Bebop RFQ
+        //
+        //   WETH ──(USV3)──> USDC ───(Bebop RFQ)──> WBTC
+
+        // The Bebop order expects:
+        // - 2021750881 USDC input -> 1672307 WBTC output
+
+        uint256 amountIn = 1 ether;
+        uint256 expectedAmountOut = 1672307;
+        deal(WETH_ADDR, BOB, amountIn);
+        uint256 balanceBefore = IERC20(WBTC_ADDR).balanceOf(BOB);
+
+        vm.startPrank(BOB);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
+        bytes memory callData = loadCallDataFromFile("test_uniswap_v3_bebop");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = IERC20(WBTC_ADDR).balanceOf(BOB);
+
+        assertTrue(success, "Call Failed");
+        assertEq(balanceAfter - balanceBefore, expectedAmountOut);
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+    }
+}
+
+contract TychoRouterSequentialSwapTestForHashflow is TychoRouterTestSetup {
+    function getForkBlock() public pure override returns (uint256) {
+        return 23175437;
+    }
+
+    function testUSV3HashflowIntegration() public {
+        // Performs a sequential swap from WETH to WBTC through USDC using USV3 and Hashflow RFQ
+        //
+        //   WETH ──(USV3)──> USDC ───(Hashflow RFQ)──> WBTC
+
+        // The Uniswap pool outputs:
+        // - 1 weth -> 4322430557 USDC
+        // The Hashflow tradeRFQT call expects:
+        // - 4308094737 USDC input -> 3714751 WBTC output
+        // The difference in USDC (14335820) will stay in the TychoRouter contract
+
+        uint256 amountIn = 1 ether;
+        uint256 expectedAmountOut = 3714751;
+        deal(WETH_ADDR, ALICE, amountIn);
+        uint256 balanceBefore = IERC20(WBTC_ADDR).balanceOf(ALICE);
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, type(uint256).max);
+        bytes memory callData = loadCallDataFromFile("test_uniswap_v3_hashflow");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = IERC20(WBTC_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertEq(balanceAfter - balanceBefore, expectedAmountOut);
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 14335820);
+    }
 }

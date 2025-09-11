@@ -51,6 +51,8 @@ fn test_sequential_swap_usx() {
         token_out: usdc.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
     let swap_usdc_usdt = Swap {
         component: ProtocolComponent {
@@ -68,6 +70,8 @@ fn test_sequential_swap_usx() {
         token_out: usdt.clone(),
         split: 0f64,
         user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
     };
     let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
 
