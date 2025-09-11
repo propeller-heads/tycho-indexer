@@ -16,8 +16,8 @@ for test in "${args[@]}"; do
 	protocol="${test%%=*}"
 	filter="${test#*=}"
 	if [[ "$test" == *"="* ]]; then
-		tycho-protocol-sdk --package-path "/app/substreams/$protocol" --db-url "$DATABASE_URL" --evm-path "/app/evm" --match-test "$filter"
+		tycho-protocol-sdk --package "$protocol" --db-url "$DATABASE_URL" --match-test "$filter"
 	else
-		tycho-protocol-sdk --package-path "/app/substreams/$protocol" --db-url "$DATABASE_URL" --evm-path "/app/evm"
+	  tycho-protocol-sdk --package "$protocol" --db-url "$DATABASE_URL"
 	fi
 done

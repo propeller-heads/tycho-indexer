@@ -9,11 +9,12 @@ use figment::{
     value::Value,
     Figment,
 };
-use miette::IntoDiagnostic;
-use tracing::error;
+use miette::{miette, IntoDiagnostic};
+use tracing::{error, info};
 
 /// Build a Substreams package with modifications to the YAML file.
 pub fn build_spkg(yaml_file_path: &PathBuf, initial_block: u64) -> miette::Result<String> {
+    info!("Building spkg from {:?}", yaml_file_path);
     // Create a backup file of the unmodified Substreams protocol YAML config file.
     let backup_file_path = yaml_file_path.with_extension("backup");
     fs::copy(yaml_file_path, &backup_file_path).into_diagnostic()?;
@@ -55,7 +56,13 @@ pub fn build_spkg(yaml_file_path: &PathBuf, initial_block: u64) -> miette::Resul
     fs::write(yaml_file_path, yaml_string).into_diagnostic()?;
 
     // Run the substreams pack command to create the spkg
-    // WARNING: Ensure substreams is in the PATH
+    if Command::new("substreams")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        return Err(miette!("Substreams CLI is not installed or not found in PATH"));
+    }
     match Command::new("substreams")
         .arg("pack")
         .arg(yaml_file_path)
@@ -71,10 +78,7 @@ pub fn build_spkg(yaml_file_path: &PathBuf, initial_block: u64) -> miette::Resul
         }
         Err(e) => {
             error!(
-                "Error running substreams pack command: {}. \
-            Ensure that the wasm target was built and that substreams CLI\
-             is installed and exported on PATH",
-                e
+                "Error running substreams pack command. Ensure that the wasm target was built. {e}",
             );
         }
     }

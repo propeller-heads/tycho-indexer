@@ -11,7 +11,7 @@ use num_bigint::BigUint;
 use num_traits::Zero;
 use postgres::{Client, Error, NoTls};
 use tokio::runtime::Runtime;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use tycho_client::feed::BlockHeader;
 use tycho_common::{
     dto::{Chain, ProtocolComponent, ResponseAccount, ResponseProtocolState},
@@ -52,13 +52,17 @@ pub struct TestRunner {
 
 impl TestRunner {
     pub fn new(
-        substreams_path: PathBuf,
-        evm_path: PathBuf,
+        root_path: PathBuf,
+        protocol: String,
         match_test: Option<String>,
         tycho_logs: bool,
         db_url: String,
         vm_traces: bool,
     ) -> Self {
+        let substreams_path = root_path
+            .join("substreams")
+            .join(protocol);
+        let evm_path = root_path.join("evm");
         let adapter_contract_builder =
             AdapterContractBuilder::new(evm_path.to_string_lossy().to_string());
         Self {
@@ -80,6 +84,22 @@ impl TestRunner {
         let config_yaml_path = self
             .substreams_path
             .join("integration_test.tycho.yaml");
+
+        // Skip if test files don't exist
+        if !config_yaml_path.exists() {
+            warn!(
+                "integration_test.tycho.yaml file not found at {}",
+                self.substreams_path.display()
+            );
+            return Ok(());
+        }
+        let substreams_yaml_path = self
+            .substreams_path
+            .join("substreams.yaml");
+        if !substreams_yaml_path.exists() {
+            warn!("substreams.yaml file not found at {}", self.substreams_path.display());
+            return Ok(());
+        }
 
         let config = Self::parse_config(&config_yaml_path)?;
 
@@ -128,7 +148,7 @@ impl TestRunner {
     }
 
     fn parse_config(config_yaml_path: &PathBuf) -> miette::Result<IntegrationTestsConfig> {
-        info!("Config YAML: {}", config_yaml_path.display());
+        info!("Parsing config YAML at {}", config_yaml_path.display());
         let yaml = Yaml::file(config_yaml_path);
         let figment = Figment::new().merge(yaml);
         let config = figment
