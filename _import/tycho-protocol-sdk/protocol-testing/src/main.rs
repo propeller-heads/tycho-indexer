@@ -25,6 +25,10 @@ struct Args {
     #[arg(long, required_unless_present = "package", conflicts_with = "package")]
     package_path: Option<String>,
 
+    /// Path to the evm directory. If not provided, it will look for it in `../evm`
+    #[arg(long)]
+    evm_path: Option<PathBuf>,
+
     /// If provided, only run the tests with a matching name
     #[arg(long)]
     match_test: Option<String>,
@@ -50,6 +54,24 @@ impl Args {
             _ => Err(miette!("Either package or package_path must be provided")),
         }
     }
+
+    fn evm_path(&self) -> miette::Result<PathBuf> {
+        match self.evm_path.as_ref() {
+            Some(path) => Ok(path.clone()),
+            None => {
+                let current_dir = std::env::current_dir()
+                    .map_err(|e| miette!("Failed to get current directory: {}", e))?;
+                let mut evm_dir = current_dir.join("../evm");
+                if !evm_dir.exists() {
+                    evm_dir = current_dir.join("evm");
+                    if !evm_dir.exists() {
+                        return Err(miette!("evm directory not found"));
+                    }
+                }
+                Ok(evm_dir)
+            }
+        }
+    }
 }
 
 fn main() -> miette::Result<()> {
@@ -62,6 +84,7 @@ fn main() -> miette::Result<()> {
 
     let test_runner = TestRunner::new(
         args.package_path()?,
+        args.evm_path()?,
         args.match_test,
         args.tycho_logs,
         args.db_url,

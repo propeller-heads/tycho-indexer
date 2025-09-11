@@ -52,13 +52,12 @@ pub struct TestRunner {
 impl TestRunner {
     pub fn new(
         substreams_path: PathBuf,
+        evm_path: PathBuf,
         match_test: Option<String>,
         tycho_logs: bool,
         db_url: String,
         vm_traces: bool,
     ) -> Self {
-        let repo_root = env::current_dir().expect("Failed to get current directory");
-        let evm_path = repo_root.join("evm");
         let adapter_contract_builder =
             AdapterContractBuilder::new(evm_path.to_string_lossy().to_string());
         Self {
