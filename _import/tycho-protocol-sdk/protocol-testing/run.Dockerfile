@@ -22,15 +22,8 @@ RUN cargo build --release
 WORKDIR /build/tycho-protocol-sdk/substreams
 RUN cargo build --target wasm32-unknown-unknown --release
 
-# Stage 3: Install substreams CLI
-FROM debian:bookworm AS substreams-cli-builder
-
-WORKDIR /build
-RUN apt-get update && apt-get install -y curl
-
-# Download and install Substreams CLI
-RUN curl -L https://github.com/streamingfast/substreams/releases/download/v1.16.4/substreams_linux_arm64.tar.gz \
-    | tar -zxf -
+# Stage 3: Get substreams CLI
+FROM ghcr.io/streamingfast/substreams:v1.16.4 AS substreams-cli
 
 # Stage 3: Install Foundry (Forge)
 FROM debian:bookworm AS foundry-builder
@@ -53,9 +46,13 @@ COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/protocol-testing/targ
 COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/substreams /app/substreams
 COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/proto /app/proto
 COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/evm /app/evm
-COPY --from=substreams-cli-builder /build/substreams /usr/local/bin/substreams
+COPY --from=substreams-cli /app/substreams /usr/local/bin/substreams
+RUN chmod +x /usr/local/bin/substreams
 COPY --from=foundry-builder /root/.foundry/bin/forge /usr/local/bin/forge
 COPY --from=foundry-builder /root/.foundry/bin/cast /usr/local/bin/cast
+
+# Verify binaries
+RUN tycho-indexer --version && tycho-protocol-sdk --version && substreams --version && forge --version && cast --version
 
 # Entrypoint script to run tests
 COPY entrypoint.sh /entrypoint.sh
