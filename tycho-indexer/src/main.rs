@@ -43,7 +43,7 @@ use tycho_indexer::{
         chain_state::ChainState,
         protocol_cache::ProtocolMemoryCache,
         runner::{
-            DCIType, ExtractorBuilder, ExtractorConfig, ExtractorHandle, HandleResult,
+            DCIType, ExtractorBuilder, ExtractorConfig, ExtractorHandle, ExtractorRunner,
             ProtocolTypeConfig,
         },
         token_analysis_cron::analyze_tokens,
@@ -371,7 +371,7 @@ async fn create_indexing_tasks(
             .expect("No chain provided"), //TODO: handle multichain?
     );
 
-    let (tasks, extractor_handles): (Vec<_>, Vec<_>) =
+    let (runners, extractor_handles): (Vec<_>, Vec<_>) =
         // TODO: accept substreams configuration from cli.
         build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url,global_args.s3_bucket.as_deref(), &cached_gw, &token_processor, &global_args.rpc_url.clone(), extraction_runtime)
             .await
@@ -395,7 +395,12 @@ async fn create_indexing_tasks(
     let shutdown_task =
         tokio::spawn(shutdown_handler(server_handle, extractor_handles, Some(gw_writer_handle)));
 
-    Ok((tasks, vec![server_task, shutdown_task]))
+    let extractor_tasks = runners
+        .into_iter()
+        .map(|runner| runner.run())
+        .collect::<Vec<_>>();
+
+    Ok((extractor_tasks, vec![server_task, shutdown_task]))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -409,7 +414,7 @@ async fn build_all_extractors(
     token_pre_processor: &EthereumTokenPreProcessor,
     rpc_url: &str,
     runtime: Option<&tokio::runtime::Handle>,
-) -> Result<Vec<HandleResult>, ExtractionError> {
+) -> Result<Vec<(ExtractorRunner, ExtractorHandle)>, ExtractionError> {
     let mut extractor_handles = Vec::new();
 
     info!("Building protocol cache");
@@ -438,16 +443,15 @@ async fn build_all_extractors(
             .cloned()
             .unwrap_or_else(|| tokio::runtime::Handle::current());
 
-        let (task, handle) = ExtractorBuilder::new(extractor_config, endpoint_url, s3_bucket)
+        let (runner, handle) = ExtractorBuilder::new(extractor_config, endpoint_url, s3_bucket)
             .rpc_url(rpc_url)
             .build(chain_state, cached_gw, token_pre_processor, &protocol_cache)
             .await?
             .set_runtime(runtime)
-            .run()
+            .into_runner()
             .await?;
 
-        info!("Extractor {} started!", handle.get_id());
-        extractor_handles.push((task, handle));
+        extractor_handles.push((runner, handle));
     }
 
     Ok(extractor_handles)

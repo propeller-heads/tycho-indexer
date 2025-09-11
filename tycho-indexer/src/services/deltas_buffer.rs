@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, Mutex},
+    sync::{mpsc::SyncSender, Arc, Mutex},
 };
 
 use futures03::{stream, StreamExt};
@@ -243,12 +243,18 @@ impl PendingDeltas {
     pub async fn run(
         self,
         extractors: impl IntoIterator<Item = Arc<dyn MessageSender + Send + Sync>>,
+        start_tx: SyncSender<()>,
     ) -> anyhow::Result<()> {
         let mut rxs = Vec::new();
         for extractor in extractors.into_iter() {
             let res = ReceiverStream::new(extractor.subscribe().await?);
             rxs.push(res);
         }
+
+        // Send the start signal to the startup task
+        start_tx
+            .send(())
+            .map_err(|_| anyhow::anyhow!("Failed to send PendingDeltas start signal"))?;
 
         let all_messages = stream::select_all(rxs);
 

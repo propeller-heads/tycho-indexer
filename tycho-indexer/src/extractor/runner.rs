@@ -139,6 +139,8 @@ impl ExtractorRunner {
     }
 
     pub fn run(mut self) -> JoinHandle<Result<(), ExtractionError>> {
+        info!("Extractor {} started!", self.extractor.get_id());
+
         let runtime = self
             .runtime_handle
             .clone()
@@ -385,8 +387,6 @@ pub struct ExtractorBuilder {
     rpc_url: Option<String>,
 }
 
-pub type HandleResult = (JoinHandle<Result<(), ExtractionError>>, ExtractorHandle);
-
 impl ExtractorBuilder {
     pub fn new(config: &ExtractorConfig, endpoint_url: &str, s3_bucket: Option<&str>) -> Self {
         Self {
@@ -579,8 +579,31 @@ impl ExtractorBuilder {
         Ok(self)
     }
 
-    #[instrument(name = "extractor_start", skip(self), fields(id))]
-    pub async fn run(self) -> Result<HandleResult, ExtractionError> {
+    /// Converts this builder into a ready-to-run ExtractorRunner and its associated handle.
+    ///
+    /// This method completes the extractor setup process by:
+    /// - Ensuring the Substreams package (.spkg) file is available, downloading from S3 if
+    ///   necessary
+    /// - Creating a Substreams endpoint connection with authentication
+    /// - Setting up the data stream with the configured module, block range, and cursor
+    /// - Initializing control channels for managing the extractor lifecycle
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing:
+    /// - `ExtractorRunner`: The main component that processes blockchain data from the stream
+    /// - `ExtractorHandle`: A control interface for stopping the extractor and subscribing to its
+    ///   output
+    ///
+    /// # Errors
+    ///
+    /// Returns `ExtractionError` if:
+    /// - The extractor was not properly configured
+    /// - The Substreams package file cannot be accessed or downloaded
+    /// - The Substreams endpoint connection cannot be established
+    /// - Package decoding fails due to corrupted or invalid data
+    #[instrument(name = "extractor_runner_build", skip(self), fields(extractor_id))]
+    pub async fn into_runner(self) -> Result<(ExtractorRunner, ExtractorHandle), ExtractionError> {
         let extractor = self
             .extractor
             .clone()
@@ -624,8 +647,7 @@ impl ExtractorBuilder {
             self.runtime_handle,
         );
 
-        let handle = runner.run();
-        Ok((handle, ExtractorHandle::new(extractor_id, ctrl_tx)))
+        Ok((runner, ExtractorHandle::new(extractor_id, ctrl_tx)))
     }
 }
 
@@ -702,10 +724,10 @@ mod test {
         .set_extractor(extractor);
 
         // Run the builder
-        let (task, _handle) = builder.run().await.unwrap();
+        let (runner, _handle) = builder.into_runner().await.unwrap();
 
         // Wait for the handle to complete
-        match task.await {
+        match runner.run().await {
             Ok(_) => {
                 info!("ExtractorRunnerBuilder completed successfully");
             }

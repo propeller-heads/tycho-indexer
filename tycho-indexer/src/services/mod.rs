@@ -1,7 +1,10 @@
 //! This module contains Tycho web services implementation
 // TODO: remove once deprecated ProtocolId struct is removed
 #![allow(deprecated)]
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{mpsc, Arc},
+};
 
 use actix_cors::Cors;
 use actix_web::{dev::ServerHandle, http, web, App, HttpServer};
@@ -193,12 +196,20 @@ where
             .clone()
             .into_values();
         let pending_deltas_clone = pending_deltas.clone();
+        let (start_tx, start_rx) = mpsc::sync_channel::<()>(1);
         let deltas_task = tokio::spawn(async move {
             pending_deltas_clone
-                .run(extractor_handles_clone)
+                .run(extractor_handles_clone, start_tx)
                 .await
                 .map_err(|err| ExtractionError::Unknown(err.to_string()))
         });
+
+        // Wait for the pending deltas task to start
+        start_rx.recv().map_err(|err| {
+            ExtractionError::ServiceError(format!(
+                "Failed to receive PendingDeltas start signal: {err}"
+            ))
+        })?;
         let ws_data = web::Data::new(ws::WsData::new(self.extractor_handles.clone()));
         let (server_handle, server_task) =
             self.start_server(Some(ws_data), openapi, Some(Arc::new(pending_deltas)))?;
