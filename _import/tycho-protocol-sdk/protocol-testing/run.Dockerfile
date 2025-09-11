@@ -8,7 +8,18 @@ RUN git clone --depth 1 --branch "0.82.0" https://github.com/propeller-heads/tyc
 WORKDIR /build/tycho-indexer
 RUN cargo build --release --bin tycho-indexer
 
-# Stage 2: Build protocol-testing and substreams
+# Stage 2: Get substreams CLI
+FROM ghcr.io/streamingfast/substreams:v1.16.4 AS substreams-cli
+
+# Stage 3: Install Foundry (Forge)
+FROM debian:bookworm AS foundry-builder
+
+WORKDIR /build
+RUN apt-get update && apt-get install -y curl git
+RUN curl -L https://foundry.paradigm.xyz | bash
+RUN /root/.foundry/bin/foundryup
+
+# Stage 4: Build protocol-testing and substreams
 FROM rust:1.89-bookworm AS protocol-sdk-builder
 
 WORKDIR /build
@@ -22,21 +33,14 @@ RUN cargo build --release
 WORKDIR /build/tycho-protocol-sdk/substreams
 RUN cargo build --target wasm32-unknown-unknown --release
 
-# Stage 3: Get substreams CLI
-FROM ghcr.io/streamingfast/substreams:v1.16.4 AS substreams-cli
+WORKDIR /build/tycho-protocol-sdk/evm
+COPY --from=foundry-builder /root/.foundry/bin/forge /usr/local/bin/forge
+RUN chmod +x /usr/local/bin/forge
+RUN forge install
+RUN forge build
 
-# Stage 3: Install Foundry (Forge)
-FROM debian:bookworm AS foundry-builder
-
-WORKDIR /build
-RUN apt-get update && apt-get install -y curl git
-RUN curl -L https://foundry.paradigm.xyz | bash
-RUN /root/.foundry/bin/foundryup
-
-# Stage 4: Final image
+# Stage 5: Final image
 FROM debian:bookworm
-
-WORKDIR /app
 
 RUN apt-get update && apt-get install -y ca-certificates libssl-dev libpq-dev
 
@@ -55,6 +59,7 @@ COPY --from=foundry-builder /root/.foundry/bin/cast /usr/local/bin/cast
 RUN tycho-indexer --version && tycho-protocol-sdk --version && substreams --version && forge --version && cast --version
 
 # Entrypoint script to run tests
+WORKDIR /app
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
