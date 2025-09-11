@@ -4,6 +4,11 @@ services:
       context: .
       dockerfile: postgres.Dockerfile
     restart: "always"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 1s
+      timeout: 5s
+      retries: 5
     environment:
       POSTGRES_PASSWORD: mypassword
       POSTGRES_USER: postgres
@@ -20,7 +25,8 @@ services:
       context: .
       dockerfile: run.Dockerfile
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       RUST_LOG: "info"
       DATABASE_URL: postgres://postgres:mypassword@db:5432/tycho_indexer_0
