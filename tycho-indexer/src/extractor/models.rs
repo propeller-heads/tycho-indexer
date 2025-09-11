@@ -1,5 +1,5 @@
 #![allow(deprecated)]
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use tycho_common::{
     models::{
@@ -8,9 +8,11 @@ use tycho_common::{
             Transaction, TxWithChanges,
         },
         contract::{AccountBalance, AccountChangesWithTx, AccountToContractChange},
-        protocol::{ComponentBalance, ProtocolChangesWithTx, ProtocolComponent},
+        protocol::{
+            ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
+        },
         token::Token,
-        Address, AttrStoreKey, Chain, ComponentId,
+        Address, AttrStoreKey, Chain, ComponentId, MergeError,
     },
     Bytes,
 };
@@ -256,6 +258,123 @@ impl BlockChanges {
             })
             .collect()
     }
+}
+
+/// Inserts or updates a state attribute for a protocol component within a specific transaction.
+///
+/// If a transaction with the same hash already exists, the state delta is merged with any
+/// existing deltas for the same component. Otherwise, a new transaction entry is created.
+///
+/// # Arguments
+///
+/// * `txs_with_update` - Mutable reference to the vector of transaction changes
+/// * `component_id` - The unique identifier of the protocol component
+/// * `tx` - The transaction in which the state change occurred
+/// * `attr` - The attribute key being updated
+/// * `val` - The new value for the attribute
+///
+/// # Returns
+///
+/// * `Ok(())` if the operation succeeds
+/// * `Err(MergeError)` if merging with existing deltas fails
+pub(crate) fn insert_state_attribute_update(
+    txs_with_update: &mut Vec<TxWithChanges>,
+    component_id: &ComponentId,
+    tx: &Transaction,
+    attr: &AttrStoreKey,
+    val: &ProtocolStateValueType,
+) -> Result<(), MergeError> {
+    let delta = ProtocolComponentStateDelta::new(
+        component_id,
+        HashMap::from([(attr.clone(), val.clone())]),
+        HashSet::new(),
+    );
+    match txs_with_update
+        .iter_mut()
+        .find(|tx_with_changes| tx_with_changes.tx.hash == tx.hash)
+    {
+        Some(tx_with_changes) => {
+            match tx_with_changes
+                .state_updates
+                .entry(component_id.clone())
+            {
+                Entry::Vacant(entry) => {
+                    entry.insert(delta);
+                }
+                Entry::Occupied(mut entry) => {
+                    let existing_delta = entry.get_mut();
+                    existing_delta.merge(delta)?;
+                }
+            }
+        }
+        None => {
+            let tx_with_changes = TxWithChanges {
+                tx: tx.clone(),
+                state_updates: HashMap::from([(component_id.clone(), delta)]),
+                ..Default::default()
+            };
+            txs_with_update.push(tx_with_changes);
+        }
+    }
+    Ok(())
+}
+
+/// Inserts a state attribute deletion for a protocol component within a specific transaction.
+///
+/// If a transaction with the same hash already exists, the state delta is merged with any
+/// existing deltas for the same component. Otherwise, a new transaction entry is created.
+///
+/// # Arguments
+///
+/// * `txs_with_update` - Mutable reference to the vector of transaction changes
+/// * `component_id` - The unique identifier of the protocol component
+/// * `tx` - The transaction in which the attribute deletion occurred
+/// * `attr` - The attribute key being deleted
+///
+/// # Returns
+///
+/// * `Ok(())` if the operation succeeds
+/// * `Err(MergeError)` if merging with existing deltas fails
+#[allow(dead_code)]
+pub(crate) fn insert_state_attribute_deletion(
+    txs_with_update: &mut Vec<TxWithChanges>,
+    component_id: &ComponentId,
+    tx: &Transaction,
+    attr: &AttrStoreKey,
+) -> Result<(), MergeError> {
+    let delta = ProtocolComponentStateDelta::new(
+        component_id,
+        HashMap::new(),
+        HashSet::from([attr.clone()]),
+    );
+    match txs_with_update
+        .iter_mut()
+        .find(|tx_with_changes| tx_with_changes.tx.hash == tx.hash)
+    {
+        Some(tx_with_changes) => {
+            match tx_with_changes
+                .state_updates
+                .entry(component_id.clone())
+            {
+                Entry::Vacant(entry) => {
+                    entry.insert(delta);
+                }
+                Entry::Occupied(mut entry) => {
+                    let existing_delta = entry.get_mut();
+                    existing_delta.merge(delta)?;
+                }
+            }
+        }
+        None => {
+            let tx_with_changes = TxWithChanges {
+                tx: tx.clone(),
+                state_updates: HashMap::from([(component_id.clone(), delta)]),
+                ..Default::default()
+            };
+            txs_with_update.push(tx_with_changes);
+        }
+    }
+    Ok(())
 }
 
 impl StateUpdateBufferEntry for BlockChanges {
@@ -792,6 +911,7 @@ pub mod fixtures {
 mod test {
     use std::str::FromStr;
 
+    use fixtures::create_transaction;
     use prost::Message;
 
     use super::*;
@@ -957,5 +1077,310 @@ mod test {
                 }
             )])
         )
+    }
+
+    #[test]
+    fn test_insert_state_attribute_update_new_transaction() {
+        use chrono::NaiveDateTime;
+
+        let mut block_changes = BlockChanges::new(
+            "test_extractor".to_string(),
+            Chain::Ethereum,
+            Block::new(
+                1,
+                Chain::Ethereum,
+                Bytes::zero(32),
+                Bytes::zero(32),
+                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
+            ),
+            0,
+            false,
+            vec![],
+            vec![],
+        );
+
+        let component_id = "test_component".to_string();
+        let tx = create_transaction(
+            "0x1111111111111111111111111111111111111111111111111111111111111111",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            0,
+        );
+        let attr = "reserve0".to_string();
+        let val = Bytes::from(1000u64).lpad(32, 0);
+
+        insert_state_attribute_update(
+            &mut block_changes.txs_with_update,
+            &component_id,
+            &tx,
+            &attr,
+            &val,
+        )
+        .unwrap();
+
+        assert_eq!(block_changes.txs_with_update.len(), 1);
+        let state_delta = &block_changes.txs_with_update[0].state_updates[&component_id];
+        assert_eq!(state_delta.updated_attributes[&attr], val);
+    }
+
+    #[test]
+    fn test_insert_state_attribute_update_existing_transaction_no_component() {
+        use chrono::NaiveDateTime;
+        use tycho_common::models::blockchain::TxWithChanges;
+
+        let tx = create_transaction(
+            "0x1111111111111111111111111111111111111111111111111111111111111111",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            0,
+        );
+        let existing_tx_with_changes =
+            TxWithChanges { tx: tx.clone(), state_updates: HashMap::new(), ..Default::default() };
+
+        let mut block_changes = BlockChanges::new(
+            "test_extractor".to_string(),
+            Chain::Ethereum,
+            Block::new(
+                1,
+                Chain::Ethereum,
+                Bytes::zero(32),
+                Bytes::zero(32),
+                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
+            ),
+            0,
+            false,
+            vec![existing_tx_with_changes],
+            vec![],
+        );
+
+        let component_id = "test_component".to_string();
+        let attr = "reserve0".to_string();
+        let val = Bytes::from(1000u64).lpad(32, 0);
+
+        insert_state_attribute_update(
+            &mut block_changes.txs_with_update,
+            &component_id,
+            &tx,
+            &attr,
+            &val,
+        )
+        .unwrap();
+
+        assert_eq!(block_changes.txs_with_update.len(), 1);
+        let state_delta = &block_changes.txs_with_update[0].state_updates[&component_id];
+        assert_eq!(state_delta.updated_attributes[&attr], val);
+    }
+
+    #[test]
+    fn test_insert_state_attribute_update_existing_transaction_with_component() {
+        use chrono::NaiveDateTime;
+        use tycho_common::models::blockchain::TxWithChanges;
+
+        let component_id = "test_component".to_string();
+        let tx = create_transaction(
+            "0x1111111111111111111111111111111111111111111111111111111111111111",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            0,
+        );
+
+        // Create existing delta for the component
+        let existing_delta = ProtocolComponentStateDelta::new(
+            &component_id,
+            HashMap::from([("existing_attr".to_string(), Bytes::from(500u64).lpad(32, 0))]),
+            HashSet::new(),
+        );
+
+        let existing_tx_with_changes = TxWithChanges {
+            tx: tx.clone(),
+            state_updates: HashMap::from([(component_id.clone(), existing_delta)]),
+            ..Default::default()
+        };
+
+        let mut block_changes = BlockChanges::new(
+            "test_extractor".to_string(),
+            Chain::Ethereum,
+            Block::new(
+                1,
+                Chain::Ethereum,
+                Bytes::zero(32),
+                Bytes::zero(32),
+                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
+            ),
+            0,
+            false,
+            vec![existing_tx_with_changes],
+            vec![],
+        );
+
+        let attr = "new_attr".to_string();
+        let val = Bytes::from(1000u64).lpad(32, 0);
+
+        insert_state_attribute_update(
+            &mut block_changes.txs_with_update,
+            &component_id,
+            &tx,
+            &attr,
+            &val,
+        )
+        .unwrap();
+
+        assert_eq!(block_changes.txs_with_update.len(), 1);
+        let state_delta = &block_changes.txs_with_update[0].state_updates[&component_id];
+        assert_eq!(state_delta.updated_attributes.len(), 2);
+        assert_eq!(state_delta.updated_attributes[&attr], val);
+        assert_eq!(
+            state_delta.updated_attributes["existing_attr"],
+            Bytes::from(500u64).lpad(32, 0)
+        );
+    }
+
+    #[test]
+    fn test_insert_state_attribute_deletion_new_transaction() {
+        use chrono::NaiveDateTime;
+
+        let mut block_changes = BlockChanges::new(
+            "test_extractor".to_string(),
+            Chain::Ethereum,
+            Block::new(
+                1,
+                Chain::Ethereum,
+                Bytes::zero(32),
+                Bytes::zero(32),
+                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
+            ),
+            0,
+            false,
+            vec![],
+            vec![],
+        );
+
+        let component_id = "test_component".to_string();
+        let tx = create_transaction(
+            "0x2222222222222222222222222222222222222222222222222222222222222222",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            0,
+        );
+        let attr = "deprecated_attr".to_string();
+
+        insert_state_attribute_deletion(
+            &mut block_changes.txs_with_update,
+            &component_id,
+            &tx,
+            &attr,
+        )
+        .unwrap();
+
+        assert_eq!(block_changes.txs_with_update.len(), 1);
+        let state_delta = &block_changes.txs_with_update[0].state_updates[&component_id];
+        assert!(state_delta
+            .deleted_attributes
+            .contains(&attr));
+    }
+
+    #[test]
+    fn test_insert_state_attribute_deletion_existing_transaction_no_component() {
+        use chrono::NaiveDateTime;
+        use tycho_common::models::blockchain::TxWithChanges;
+
+        let tx = create_transaction(
+            "0x2222222222222222222222222222222222222222222222222222222222222222",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            0,
+        );
+        let existing_tx_with_changes =
+            TxWithChanges { tx: tx.clone(), state_updates: HashMap::new(), ..Default::default() };
+
+        let mut block_changes = BlockChanges::new(
+            "test_extractor".to_string(),
+            Chain::Ethereum,
+            Block::new(
+                1,
+                Chain::Ethereum,
+                Bytes::zero(32),
+                Bytes::zero(32),
+                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
+            ),
+            0,
+            false,
+            vec![existing_tx_with_changes],
+            vec![],
+        );
+
+        let component_id = "test_component".to_string();
+        let attr = "deprecated_attr".to_string();
+
+        insert_state_attribute_deletion(
+            &mut block_changes.txs_with_update,
+            &component_id,
+            &tx,
+            &attr,
+        )
+        .unwrap();
+
+        assert_eq!(block_changes.txs_with_update.len(), 1);
+        let state_delta = &block_changes.txs_with_update[0].state_updates[&component_id];
+        assert!(state_delta
+            .deleted_attributes
+            .contains(&attr));
+    }
+
+    #[test]
+    fn test_insert_state_attribute_deletion_existing_transaction_with_component() {
+        use chrono::NaiveDateTime;
+        use tycho_common::models::blockchain::TxWithChanges;
+
+        let component_id = "test_component".to_string();
+        let tx = create_transaction(
+            "0x2222222222222222222222222222222222222222222222222222222222222222",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            0,
+        );
+
+        // Create existing delta for the component
+        let existing_delta = ProtocolComponentStateDelta::new(
+            &component_id,
+            HashMap::new(),
+            HashSet::from(["existing_deleted_attr".to_string()]),
+        );
+
+        let existing_tx_with_changes = TxWithChanges {
+            tx: tx.clone(),
+            state_updates: HashMap::from([(component_id.clone(), existing_delta)]),
+            ..Default::default()
+        };
+
+        let mut block_changes = BlockChanges::new(
+            "test_extractor".to_string(),
+            Chain::Ethereum,
+            Block::new(
+                1,
+                Chain::Ethereum,
+                Bytes::zero(32),
+                Bytes::zero(32),
+                NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
+            ),
+            0,
+            false,
+            vec![existing_tx_with_changes],
+            vec![],
+        );
+
+        let attr = "new_deleted_attr".to_string();
+
+        insert_state_attribute_deletion(
+            &mut block_changes.txs_with_update,
+            &component_id,
+            &tx,
+            &attr,
+        )
+        .unwrap();
+
+        assert_eq!(block_changes.txs_with_update.len(), 1);
+        let state_delta = &block_changes.txs_with_update[0].state_updates[&component_id];
+        assert_eq!(state_delta.deleted_attributes.len(), 2);
+        assert!(state_delta
+            .deleted_attributes
+            .contains(&attr));
+        assert!(state_delta
+            .deleted_attributes
+            .contains("existing_deleted_attr"));
     }
 }
