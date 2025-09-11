@@ -1,3 +1,11 @@
+## [0.83.4](https://github.com/propeller-heads/tycho-indexer/compare/0.83.3...0.83.4) (2025-09-11)
+
+
+### Bug Fixes
+
+* prevent race condition in extractors/server startup sequence ([5a1af8e](https://github.com/propeller-heads/tycho-indexer/commit/5a1af8ead6e9eca9906b914a8b81c4b5e13f0da7))
+* prevent race condition in extractors/server startup sequence ([#689](https://github.com/propeller-heads/tycho-indexer/issues/689)) ([90023a1](https://github.com/propeller-heads/tycho-indexer/commit/90023a13554a49e09c3e4e84be3c5d2424580506))
+
 ## [0.83.3](https://github.com/propeller-heads/tycho-indexer/compare/0.83.2...0.83.3) (2025-09-10)
 
 
