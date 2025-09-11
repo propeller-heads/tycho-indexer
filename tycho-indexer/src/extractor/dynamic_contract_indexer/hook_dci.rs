@@ -2000,7 +2000,7 @@ mod tests {
                 .try_init();
             // Test configuration - using realistic mainnet addresses
             let chain = Chain::Ethereum;
-            let router_address = Address::from("0x1234567890123456789012345678901234567890");
+            let router_address = Address::from("0x2e234dae75c793f67a35089c9d99245e1c58470b");
             let pool_manager = Address::from("0x000000000004444c5dc75cB358380D2e3dE08A90"); // Real Uniswap V4 pool manager
 
             // Create mock gateways
@@ -2008,8 +2008,9 @@ mod tests {
             let mut account_extractor = MockAccountExtractor::new();
 
             // Use real RPC-based tracer instead of mock
+            let trace_rpc_url = std::env::var("TRACE_RPC_URL").expect("RPC_URL must be set");
             let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
-            let entrypoint_tracer = EVMEntrypointService::try_from_url(&rpc_url)
+            let entrypoint_tracer = EVMEntrypointService::try_from_url(&trace_rpc_url)
                 .expect("Failed to create RPC entrypoint tracer");
 
             // Setup initial expectations for initialization

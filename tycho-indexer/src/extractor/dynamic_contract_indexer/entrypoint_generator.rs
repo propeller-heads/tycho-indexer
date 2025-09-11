@@ -438,23 +438,25 @@ impl DefaultSwapAmountEstimator {
                             "Processing balance for token"
                         );
                         let hundred = BigInt::from(100);
+                        // Currently, Euler hooks fail if we try to swap more than 12.5% of the
+                        // reserves
                         let amounts = vec![
                             Bytes::from((&balance / &hundred).to_bytes_be().1), // 1%
+                            Bytes::from(
+                                ((&balance * BigInt::from(2)) / &hundred)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 20%
+                            Bytes::from(
+                                ((&balance * BigInt::from(5)) / &hundred)
+                                    .to_bytes_be()
+                                    .1,
+                            ), // 5%
                             Bytes::from(
                                 ((&balance * BigInt::from(10)) / &hundred)
                                     .to_bytes_be()
                                     .1,
                             ), // 10%
-                            Bytes::from(
-                                ((&balance * BigInt::from(50)) / &hundred)
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 50%
-                            Bytes::from(
-                                ((&balance * BigInt::from(95)) / &hundred)
-                                    .to_bytes_be()
-                                    .1,
-                            ), // 95%
                         ];
                         // Create entries for each possible buy token
                         let mut pairs_created = 0;
