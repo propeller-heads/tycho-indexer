@@ -446,7 +446,7 @@ impl DefaultSwapAmountEstimator {
                                 ((&balance * BigInt::from(2)) / &hundred)
                                     .to_bytes_be()
                                     .1,
-                            ), // 20%
+                            ), // 2%
                             Bytes::from(
                                 ((&balance * BigInt::from(5)) / &hundred)
                                     .to_bytes_be()
