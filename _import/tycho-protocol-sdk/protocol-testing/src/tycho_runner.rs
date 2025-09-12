@@ -37,7 +37,7 @@ impl TychoRunner {
         dotenv().ok();
 
         let mut cmd = Command::new("tycho-indexer");
-        cmd.env("RUST_LOG", "tycho_indexer=info");
+        cmd.env("RUST_LOG", std::env::var("RUST_LOG").unwrap_or("tycho_indexer=info".to_string()));
 
         let all_accounts = self.initialized_accounts.clone();
 
@@ -113,13 +113,14 @@ impl TychoRunner {
 
         // Start the RPC server in a separate thread
         let rpc_thread = thread::spawn(move || {
-            let binary_path = "tycho-indexer";
-
-            let mut cmd = Command::new(binary_path)
+            let mut cmd = Command::new("tycho-indexer")
                 .args(["--database-url", db_url.as_str(), "rpc"])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
-                .env("RUST_LOG", "info")
+                .env(
+                    "RUST_LOG",
+                    std::env::var("RUST_LOG").unwrap_or("tycho_indexer=info".to_string()),
+                )
                 .spawn()
                 .expect("Failed to start RPC server");
 
