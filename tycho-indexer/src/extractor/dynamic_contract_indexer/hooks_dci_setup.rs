@@ -92,7 +92,7 @@ pub fn setup_hook_orchestrator_registry(
 
     // Create entrypoint generator with default swap amount estimator (preferring balances)
     let mut entrypoint_generator = UniswapV4DefaultHookEntrypointGenerator::new(
-        DefaultSwapAmountEstimator::with_balances(),
+        DefaultSwapAmountEstimator::with_limits(),
         pool_manager.clone(),
         balance_slot_detector,
     );
