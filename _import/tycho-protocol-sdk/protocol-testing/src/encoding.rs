@@ -41,13 +41,13 @@ pub fn encode_swap(
     let chain: tycho_common::models::Chain = Chain::Ethereum.into();
     let alice_address = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
         .into_diagnostic()
-        .wrap_err(miette!("Failed to parse Alice's address for Tycho router encoding"))?;
+        .wrap_err("Failed to parse Alice's address for Tycho router encoding")?;
     let encoder = TychoRouterEncoderBuilder::new()
         .chain(chain)
         .user_transfer_type(UserTransferType::TransferFrom)
         .build()
         .into_diagnostic()
-        .wrap_err(miette!("Failed to build encoder"))?;
+        .wrap_err("Failed to build encoder")?;
 
     let swap = SwapBuilder::new(component, token_in.clone(), token_out.clone()).build();
 
@@ -72,7 +72,7 @@ pub fn encode_swap(
     let encoded_solution = encoder
         .encode_solutions(vec![solution.clone()])
         .into_diagnostic()
-        .wrap_err(miette!("Failed to encode router calldata"))?[0]
+        .wrap_err("Failed to encode router calldata")?[0]
         .clone();
 
     encode_tycho_router_call(encoded_solution, &solution, &chain.wrapped_native_token().address)

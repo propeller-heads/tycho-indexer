@@ -64,7 +64,7 @@ impl AdapterContractBuilder {
         let output: Output = cmd
             .output()
             .into_diagnostic()
-            .wrap_err(miette!("Error running '{script_path}'"))?;
+            .wrap_err("Error running '{script_path}'")?;
 
         if !output.status.success() {
             return Err(miette!(

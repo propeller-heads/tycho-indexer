@@ -32,7 +32,7 @@ struct Args {
     match_test: Option<String>,
 
     /// Enable tycho logs
-    #[arg(long, default_value_t = true)]
+    #[arg(long, default_value_t = false)]
     tycho_logs: bool,
 
     /// Postgres database URL for the Tycho indexer
