@@ -733,12 +733,12 @@ mod test {
 
     use test_log::test;
     use tycho_common::dto::{
-        Block, Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse, DCIUpdate, EntryPoint,
-        PaginationResponse, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
-        ProtocolStateRequestBody, ProtocolStateRequestResponse, ProtocolSystemsRequestBody,
-        ProtocolSystemsRequestResponse, RPCTracerParams, StateRequestBody, StateRequestResponse,
-        TokensRequestBody, TokensRequestResponse, TracedEntryPointRequestBody,
-        TracedEntryPointRequestResponse, TracingParams,
+        AddressStorageLocation, Block, Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse,
+        DCIUpdate, EntryPoint, PaginationResponse, ProtocolComponentRequestResponse,
+        ProtocolComponentsRequestBody, ProtocolStateRequestBody, ProtocolStateRequestResponse,
+        ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, RPCTracerParams,
+        StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse,
+        TracedEntryPointRequestBody, TracedEntryPointRequestResponse, TracingParams,
     };
     use uuid::Uuid;
 
@@ -1030,12 +1030,14 @@ mod test {
                         params: TracingParams::RPCTracer(RPCTracerParams {
                             caller: Some(Bytes::from("0x0badc0ffee")),
                             calldata: Bytes::from("0x0badc0ffee"),
+                            state_overrides: None,
+                            prune_addresses: None,
                         }),
                     },
                     TracingResult {
                         retriggers: HashSet::from([(
                             Bytes::from("0x0badc0ffee"),
-                            Bytes::from("0x0badc0ffee"),
+                            AddressStorageLocation::new(Bytes::from("0x0badc0ffee"), 12),
                         )]),
                         accessed_slots: HashMap::from([(
                             Bytes::from("0x0badc0ffee"),
@@ -1091,12 +1093,14 @@ mod test {
                                 params: TracingParams::RPCTracer(RPCTracerParams {
                                     caller: Some(Bytes::from("0x0badc0ffee")),
                                     calldata: Bytes::from("0x0badc0ffee"),
+                                    state_overrides: None,
+                                    prune_addresses: None,
                                 }),
                             },
                             TracingResult {
                                 retriggers: HashSet::from([(
                                     Bytes::from("0x0badc0ffee"),
-                                    Bytes::from("0x0badc0ffee"),
+                                    AddressStorageLocation::new(Bytes::from("0x0badc0ffee"), 12),
                                 )]),
                                 accessed_slots: HashMap::from([(
                                     Bytes::from("0x0badc0ffee"),
@@ -1346,6 +1350,8 @@ mod test {
                             TracingParams::RPCTracer(RPCTracerParams {
                                 caller: Some(Bytes::from("0x0badc0ffee")),
                                 calldata: Bytes::from("0x0badc0ffee"),
+                                state_overrides: None,
+                                prune_addresses: None,
                             }),
                             Some("Component1".to_string()),
                         )]),
@@ -1355,7 +1361,7 @@ mod test {
                         TracingResult {
                             retriggers: HashSet::from([(
                                 Bytes::from("0x0badc0ffee"),
-                                Bytes::from("0x0badc0ffee"),
+                                AddressStorageLocation::new(Bytes::from("0x0badc0ffee"), 12),
                             )]),
                             accessed_slots: HashMap::from([(
                                 Bytes::from("0x0badc0ffee"),
@@ -1912,7 +1918,9 @@ mod test {
                         number: 1,
                         parent_hash: Bytes::from("0x0000"),
                         chain: Chain::Ethereum,
-                        ts: chrono::NaiveDateTime::from_timestamp_opt(1234567890, 0).unwrap(),
+                        ts: chrono::DateTime::from_timestamp(1234567890, 0)
+                            .unwrap()
+                            .naive_utc(),
                     },
                     revert: false,
                     // Add a new component to trigger snapshot request
@@ -2123,7 +2131,9 @@ mod test {
                         number: 1,
                         parent_hash: Bytes::from("0x0000"),
                         chain: Chain::Ethereum,
-                        ts: chrono::NaiveDateTime::from_timestamp_opt(1234567890, 0).unwrap(),
+                        ts: chrono::DateTime::from_timestamp(1234567890, 0)
+                            .unwrap()
+                            .naive_utc(),
                     },
                     revert: false,
                     ..Default::default()

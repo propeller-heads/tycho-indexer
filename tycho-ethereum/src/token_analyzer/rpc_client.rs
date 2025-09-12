@@ -1,6 +1,6 @@
 use ethers::providers::{Http, Middleware, Provider};
 
-use crate::RPCError;
+use crate::{RPCError, RequestError};
 
 pub struct EthereumRpcClient {
     ethers_client: ethers::providers::Provider<Http>,
@@ -19,6 +19,6 @@ impl EthereumRpcClient {
             .get_block_number()
             .await
             .map(|number| number.as_u64())
-            .map_err(RPCError::RequestError)
+            .map_err(|e| RPCError::RequestError(RequestError::Other(e.to_string())))
     }
 }

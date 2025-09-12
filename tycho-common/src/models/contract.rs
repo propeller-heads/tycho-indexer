@@ -9,7 +9,7 @@ use crate::{
         blockchain::Transaction,
         protocol::{ComponentBalance, ProtocolComponent},
         Address, Balance, Chain, ChangeType, Code, CodeHash, ComponentId, ContractId,
-        ContractStore, ContractStoreDeltas, MergeError, TxHash,
+        ContractStore, ContractStoreDeltas, MergeError, StoreKey, TxHash,
     },
     Bytes,
 };
@@ -466,11 +466,30 @@ impl From<&AccountChangesWithTx> for Vec<Account> {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct ContractStorageChange {
+    pub value: Bytes,
+    pub previous: Bytes,
+}
+
+impl ContractStorageChange {
+    pub fn new(value: impl Into<Bytes>, previous: impl Into<Bytes>) -> Self {
+        Self { value: value.into(), previous: previous.into() }
+    }
+
+    pub fn initial(value: impl Into<Bytes>) -> Self {
+        Self { value: value.into(), previous: Bytes::default() }
+    }
+}
+
+/// Multiple binary key-value stores grouped by account address.
+pub type AccountToContractChange = HashMap<Address, HashMap<StoreKey, ContractStorageChange>>;
+
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
 
-    use chrono::NaiveDateTime;
+    use chrono::DateTime;
     use rstest::rstest;
 
     use super::*;
@@ -653,7 +672,9 @@ mod test {
             ]),
             change: ChangeType::Creation,
             creation_tx: tx_hash,
-            created_at: NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
+            created_at: DateTime::from_timestamp(1000, 0)
+                .unwrap()
+                .naive_utc(),
         }
     }
 

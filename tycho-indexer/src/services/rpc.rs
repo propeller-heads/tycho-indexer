@@ -155,7 +155,16 @@ where
         &self,
         request: &dto::StateRequestBody,
     ) -> Result<dto::StateRequestResponse, RpcError> {
-        info!(?request, "Getting contract state.");
+        if let Some(ref contract_ids) = request.contract_ids {
+            info!(
+                n_contract_ids = contract_ids.len(),
+                first_contract_id = ?contract_ids.first(),
+                last_contract_id = ?contract_ids.last(),
+                "Getting contract state"
+            );
+        } else {
+            info!("Getting contract state (all contracts)");
+        }
         self.contract_storage_cache
             .get(request.clone(), |r| async {
                 self.get_contract_state_inner(r)
@@ -365,7 +374,16 @@ where
         &self,
         request: &dto::ProtocolStateRequestBody,
     ) -> Result<dto::ProtocolStateRequestResponse, RpcError> {
-        debug!(?request, "Getting protocol state.");
+        if let Some(ref component_ids) = request.protocol_ids {
+            info!(
+                n_component_ids = component_ids.len(),
+                first_component_id = ?component_ids.first(),
+                last_component_id = ?component_ids.last(),
+                "Getting protocol state"
+            );
+        } else {
+            info!("Getting protocol state (all protocols)");
+        }
         self.protocol_state_cache
             .get(request.clone(), |r| async {
                 self.get_protocol_state_inner(r)
@@ -520,7 +538,16 @@ where
         &self,
         request: &dto::ComponentTvlRequestBody,
     ) -> Result<dto::ComponentTvlRequestResponse, RpcError> {
-        info!(?request, "Getting protocol component tvl.");
+        if let Some(ref component_ids) = request.component_ids {
+            info!(
+                n_component_ids = component_ids.len(),
+                first_component_id = ?component_ids.first(),
+                last_component_id = ?component_ids.last(),
+                "Getting protocol component tvl"
+            );
+        } else {
+            info!("Getting protocol component tvl (all components)");
+        }
         let chain = request.chain.into();
         let pagination_params: PaginationParams = (&request.pagination).into();
         let ids_strs: Option<Vec<&str>> = request
@@ -641,7 +668,16 @@ where
         &self,
         request: &dto::ProtocolComponentsRequestBody,
     ) -> Result<dto::ProtocolComponentRequestResponse, RpcError> {
-        info!(?request, "Getting protocol components.");
+        if let Some(ref component_ids) = request.component_ids {
+            info!(
+                n_component_ids = component_ids.len(),
+                first_component_id = ?component_ids.first(),
+                last_component_id = ?component_ids.last(),
+                "Getting protocol components"
+            );
+        } else {
+            info!("Getting protocol components (all components)");
+        }
         self.component_cache
             .get(request.clone(), |r| async {
                 self.get_protocol_components_inner(r)
@@ -791,7 +827,16 @@ where
         &self,
         request: &dto::TracedEntryPointRequestBody,
     ) -> Result<dto::TracedEntryPointRequestResponse, RpcError> {
-        info!(?request, "Getting traced entry points.");
+        if let Some(ref component_ids) = request.component_ids {
+            info!(
+                n_component_ids = component_ids.len(),
+                first_component_id = ?component_ids.first(),
+                last_component_id = ?component_ids.last(),
+                "Getting traced entry points"
+            );
+        } else {
+            info!("Getting traced entry points (all components)");
+        }
 
         self.traced_entry_point_cache
             .get(request.clone(), |r| async {
@@ -1003,6 +1048,9 @@ where
             .tracer
             .trace(request.block_hash.clone(), entry_points_with_params)
             .await
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>() //TODO: Ideally we would want to return each error separately and not just a single
+            // error for the whole batch
             .map_err(|e| RpcError::Unknown(format!("Error while tracing entry points: {e:?}")))?;
         Ok(trace_results)
     }
@@ -1521,11 +1569,12 @@ mod tests {
     use chrono::NaiveDateTime;
     use mockall::{mock, predicate::eq};
     use tycho_common::{
-        keccak256,
+        dto, keccak256,
         models::{
+            blockchain,
             blockchain::{
-                EntryPoint, EntryPointWithTracingParams, RPCTracerParams, TracingParams,
-                TracingResult,
+                AddressStorageLocation, EntryPoint, EntryPointWithTracingParams, RPCTracerParams,
+                TracingParams, TracingResult,
             },
             contract::Account,
             protocol::{ProtocolComponent, ProtocolComponentState},
@@ -1773,7 +1822,7 @@ mod tests {
     #[allow(clippy::type_complexity)]
     fn normalize_tracing_result(
         result: &dto::TracingResult,
-    ) -> (Vec<(Bytes, Bytes)>, Vec<(Bytes, Vec<Bytes>)>) {
+    ) -> (Vec<(Bytes, dto::AddressStorageLocation)>, Vec<(Bytes, Vec<Bytes>)>) {
         let mut retriggers: Vec<_> = result
             .retriggers
             .iter()
@@ -1832,10 +1881,14 @@ mod tests {
             dto::TracingParams::RPCTracer(dto::RPCTracerParams {
                 caller: None,
                 calldata: Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
+                state_overrides: None,
+                prune_addresses: None,
             }),
             dto::TracingParams::RPCTracer(dto::RPCTracerParams {
                 caller: None,
                 calldata: Bytes::from(&keccak256("getRate()").to_vec()[0..4]),
+                state_overrides: None,
+                prune_addresses: None,
             }),
         ];
         let entry_points_with_tracing_params = vec![
@@ -1856,11 +1909,11 @@ mod tests {
                     HashSet::from([
                     (
                         Bytes::from_str("0x7bc3485026ac48b6cf9baf0a377477fff5703af8").unwrap(),
-                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                        AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                     ),
                     (
                         Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                        AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                     ),
                 ]),
                 HashMap::from([
@@ -1886,11 +1939,11 @@ mod tests {
                     HashSet::from([
                         (
                         Bytes::from_str("0xd4fa2d31b7968e448877f69a96de69f5de8cd23e").unwrap(),
-                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                        AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                     ),
                     (
                         Bytes::from_str("0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2").unwrap(),
-                        Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(),
+                        AddressStorageLocation::new(Bytes::from_str("0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc").unwrap(), 12),
                     ),
                     ]),
                     HashMap::from([
@@ -2031,7 +2084,13 @@ mod tests {
                     .map(EntryPointWithTracingParams::from)
                     .collect::<Vec<_>>()),
             )
-            .return_once(move |_, _| Ok(tracing_results.clone()));
+            .return_once(move |_, _| {
+                tracing_results
+                    .clone()
+                    .into_iter()
+                    .map(Ok)
+                    .collect()
+            });
 
         let gw = mock_gateway_add_entry_points(
             expected_inserted_entry_points,
@@ -2161,10 +2220,14 @@ mod tests {
         let tracing_params_a = TracingParams::RPCTracer(RPCTracerParams {
             caller: Some(Bytes::from("0x000000000000000000000000000000000000000a")),
             calldata: Bytes::from("0x000000000000000000000000000000000000000b"),
+            state_overrides: None,
+            prune_addresses: None,
         });
         let tracing_params_b = TracingParams::RPCTracer(RPCTracerParams {
             caller: Some(Bytes::from("0x000000000000000000000000000000000000000b")),
             calldata: Bytes::from("0x000000000000000000000000000000000000000c"),
+            state_overrides: None,
+            prune_addresses: None,
         });
         let entry_point_with_params_a = EntryPointWithTracingParams {
             entry_point: entry_point_a.clone(),
@@ -2177,7 +2240,10 @@ mod tests {
         let trace_result_a = TracingResult {
             retriggers: HashSet::from([(
                 Bytes::from("0x00000000000000000000000000000000000000aa"),
-                Bytes::from("0x0000000000000000000000000000000000000aaa"),
+                AddressStorageLocation::new(
+                    Bytes::from("0x0000000000000000000000000000000000000aaa"),
+                    12,
+                ),
             )]),
             accessed_slots: HashMap::from([(
                 Bytes::from("0x0000000000000000000000000000000000aaaa"),
@@ -2187,7 +2253,10 @@ mod tests {
         let trace_result_b = TracingResult {
             retriggers: HashSet::from([(
                 Bytes::from("0x00000000000000000000000000000000000000bb"),
-                Bytes::from("0x0000000000000000000000000000000000000bbb"),
+                AddressStorageLocation::new(
+                    Bytes::from("0x0000000000000000000000000000000000000bbb"),
+                    12,
+                ),
             )]),
             accessed_slots: HashMap::from([(
                 Bytes::from("0x0000000000000000000000000000000000bbbb"),
@@ -2360,10 +2429,14 @@ mod tests {
         let tracing_params_a = TracingParams::RPCTracer(RPCTracerParams {
             caller: Some(Bytes::from("0x000000000000000000000000000000000000000a")),
             calldata: Bytes::from("0x000000000000000000000000000000000000000b"),
+            state_overrides: None,
+            prune_addresses: None,
         });
         let tracing_params_b = TracingParams::RPCTracer(RPCTracerParams {
             caller: Some(Bytes::from("0x000000000000000000000000000000000000000b")),
             calldata: Bytes::from("0x000000000000000000000000000000000000000c"),
+            state_overrides: None,
+            prune_addresses: None,
         });
         let entry_point_with_params_a = EntryPointWithTracingParams {
             entry_point: entry_point_a.clone(),
@@ -2376,7 +2449,10 @@ mod tests {
         let trace_result_a = TracingResult {
             retriggers: HashSet::from([(
                 Bytes::from("0x00000000000000000000000000000000000000aa"),
-                Bytes::from("0x0000000000000000000000000000000000000aaa"),
+                blockchain::AddressStorageLocation::new(
+                    Bytes::from("0x0000000000000000000000000000000000000aaa"),
+                    0,
+                ),
             )]),
             accessed_slots: HashMap::from([(
                 Bytes::from("0x0000000000000000000000000000000000aaaa"),
