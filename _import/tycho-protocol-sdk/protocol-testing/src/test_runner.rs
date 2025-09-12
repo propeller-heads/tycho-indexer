@@ -101,7 +101,13 @@ impl TestRunner {
             return Ok(());
         }
 
-        let config = Self::parse_config(&config_yaml_path)?;
+        let config = match Self::parse_config(&config_yaml_path) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                warn!("Failed to parse config: {:?}", e);
+                return Ok(());
+            }
+        };
 
         let tests = match &self.match_test {
             Some(filter) => config

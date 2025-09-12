@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use alloy::{primitives::Keccak256, sol_types::SolValue};
-use miette::{miette, IntoDiagnostic, WrapErr};
+use miette::{IntoDiagnostic, WrapErr};
 use num_bigint::BigUint;
 use tycho_common::{dto::Chain, Bytes};
 use tycho_simulation::{
