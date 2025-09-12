@@ -1,8 +1,6 @@
 services:
   db:
-    build:
-      context: .
-      dockerfile: postgres.Dockerfile
+    image: protocol-testing-db:latest
     restart: "always"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
@@ -21,9 +19,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   test-runner:
-    build:
-      context: .
-      dockerfile: run.Dockerfile
+    image: protocol-testing-test-runner:latest
     depends_on:
       db:
         condition: service_healthy
