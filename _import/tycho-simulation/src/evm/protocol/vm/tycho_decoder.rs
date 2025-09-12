@@ -143,7 +143,10 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
                 "Error converting protocol name to address".to_string(),
             )
         })?;
-
+        let mut vm_traces = false;
+        if let Some(trace) = &decoder_context.vm_traces {
+            vm_traces = *trace;
+        }
         let mut pool_state_builder =
             EVMPoolStateBuilder::new(id.clone(), tokens.clone(), block, adapter_contract_address)
                 .balances(component_balances)
@@ -151,7 +154,8 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
                 .adapter_contract_bytecode(adapter_bytecode)
                 .involved_contracts(involved_contracts)
                 .stateless_contracts(stateless_contracts)
-                .manual_updates(manual_updates);
+                .manual_updates(manual_updates)
+                .trace(vm_traces);
 
         if let Some(balance_owner) = balance_owner {
             pool_state_builder = pool_state_builder.balance_owner(balance_owner)
