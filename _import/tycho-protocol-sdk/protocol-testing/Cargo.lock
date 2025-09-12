@@ -2809,7 +2809,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4590,7 +4590,7 @@ checksum = "e04d7f318608d35d4b61ddd75cbdaee86b023ebe2bd5a66ee0915f0bf93095a9"
 dependencies = [
  "hermit-abi 0.5.2",
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4650,7 +4650,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5891,7 +5891,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.99",
@@ -5904,7 +5904,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9120690fafc389a67ba3803df527d0ec9cbbc9cc45e4cc20b332996dfb672425"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.99",
@@ -6008,7 +6008,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.5.8",
+ "socket2 0.6.0",
  "thiserror 2.0.12",
  "tokio",
  "tracing",
@@ -6045,9 +6045,9 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.8",
+ "socket2 0.6.0",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -7343,7 +7343,7 @@ dependencies = [
  "derive_more",
  "dunce",
  "inturn",
- "itertools 0.10.5",
+ "itertools 0.14.0",
  "itoa",
  "match_cfg",
  "normalize-path",
@@ -7352,7 +7352,7 @@ dependencies = [
  "solar-config",
  "solar-data-structures",
  "solar-macros",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
  "tracing",
  "unicode-width 0.2.0",
 ]
@@ -7377,7 +7377,7 @@ dependencies = [
  "alloy-primitives",
  "bitflags 2.9.4",
  "bumpalo",
- "itertools 0.10.5",
+ "itertools 0.14.0",
  "memchr",
  "num-bigint",
  "num-rational",
@@ -7647,7 +7647,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
  "url",
  "zip",
 ]
@@ -8380,9 +8380,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.82.0"
+version = "0.83.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19a7ed885ea7e01efc3c98135b1be5c0472e81ada6455517f61ca67313271587"
+checksum = "3da113f5301ba1fb8e4441df405afa1e7b728a83017681b94851c5bc36d758dc"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8407,9 +8407,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.82.0"
+version = "0.83.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "096c87ebe011785fcd7ed59ec501ac12b465a64fbd2914b8c0c57125c253682b"
+checksum = "75ecbbf6f701a01569e351d19ee3a3e36418e8d1be539fd6ed925137eb84a2b2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8432,9 +8432,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.122.0"
+version = "0.124.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81e88fe8ee0d32032e0270804c8fd8d4b56fa5055daa6a64720cd4c39c3984e1"
+checksum = "9da3bca6f82da18f6e59a995ba1dfe416a070a0e0a1dc58ef5bc5a9f288de783"
 dependencies = [
  "alloy",
  "chrono",
@@ -8454,8 +8454,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.157.1"
-source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.157.1#02ef8fbdfde4cc0f65f08880e108f292643acb64"
+version = "0.158.0"
+source = "git+https://github.com/propeller-heads/tycho-simulation.git?tag=0.158.0#bf864f437c9eb3014449146b86628c2251adce61"
 dependencies = [
  "alloy",
  "async-stream",
@@ -9053,7 +9053,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]

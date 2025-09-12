@@ -533,13 +533,13 @@ fn validate_state(
 
                     let protocol_component = block_msg.new_pairs.get(id);
                     if let Some(pc) = protocol_component {
-                        let calldata = encode_swap(
+                        encode_swap(
                             pc.clone(),
                             token_in.address.clone(),
                             token_out.address.clone(),
                             amount_in,
                             amount_out_result.amount,
-                        );
+                        )?;
                         info!("Encoded swap successfully");
                     }
                 }
