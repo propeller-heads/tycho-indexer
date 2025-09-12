@@ -62,8 +62,8 @@ impl MetadataRequestGenerator for EulerMetadataGenerator {
 
         // Use a deterministic lens contract address for state override
         // The lens contract bytecode will be deployed via state override during the eth_call
-        // We set the hooks address to the slot 0 to allow identifying the desired hook address, while
-        // maintaining the same interface as the original getLimits.
+        // We set the hooks address to the slot 0 to allow identifying the desired hook address,
+        // while maintaining the same interface as the original getLimits.
         let lens_address = "0x0000000000000000000000000000000000001337";
         let target_str = target.to_string().split_off(2);
 
@@ -840,13 +840,15 @@ mod tests {
 
     #[test]
     fn test_entry_point_target_uses_hooks_address() {
-        let generator = EulerMetadataGenerator::new("https://eth-mainnet.alchemyapi.io/v2/test".to_string());
+        let generator =
+            EulerMetadataGenerator::new("https://eth-mainnet.alchemyapi.io/v2/test".to_string());
         let parser = EulerMetadataResponseParser;
-        
-        // Create a test component with different hooks and ID addresses to ensure we use the right one
+
+        // Create a test component with different hooks and ID addresses to ensure we use the right
+        // one
         let hooks_address = Bytes::from("0x55dcf9455eee8fd3f5eed17606291272cde428a8");
         let different_id = "0x1111111111111111111111111111111111111111".to_string();
-        
+
         let component = ProtocolComponent {
             id: different_id.clone(), // Different from hooks address
             protocol_system: "euler_swap".to_string(),
@@ -857,56 +859,73 @@ mod tests {
                 Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"),
             ],
             contract_addresses: vec![],
-            static_attributes: HashMap::from([
-                ("hooks".to_string(), hooks_address.clone()),
-            ]),
+            static_attributes: HashMap::from([("hooks".to_string(), hooks_address.clone())]),
             change: ChangeType::Creation,
-            creation_tx: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000000"),
-            created_at: NaiveDateTime::parse_from_str("2025-01-01T00:00:00", "%Y-%m-%dT%H:%M:%S").unwrap(),
+            creation_tx: Bytes::from(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            created_at: NaiveDateTime::parse_from_str("2025-01-01T00:00:00", "%Y-%m-%dT%H:%M:%S")
+                .unwrap(),
         };
 
         let block = Block {
             number: 23003136,
             chain: Chain::Ethereum,
             hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000000"),
-            parent_hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000000"),
+            parent_hash: Bytes::from(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            ),
             ts: NaiveDateTime::parse_from_str("2025-01-01T00:00:00", "%Y-%m-%dT%H:%M:%S").unwrap(),
         };
 
-        // Mock response data for limits call (doesn't matter for this test, just needs to be valid hex)
+        // Mock response data for limits call (doesn't matter for this test, just needs to be valid
+        // hex)
         let mock_response = serde_json::Value::String("0x0000000000000000000000000000000000000000000000000000000030598d130000000000000000000000000000000000000000000000000000000030598d13".to_string());
 
         // Generate requests and find the limits request
-        let requests = generator.generate_requests(&component, &block).unwrap();
-        let limits_request = requests.iter()
+        let requests = generator
+            .generate_requests(&component, &block)
+            .unwrap();
+        let limits_request = requests
+            .iter()
             .find(|r| matches!(r.request_type, MetadataRequestType::Limits { .. }))
             .expect("Should have limits request");
 
         // Parse the response to get the entry point
-        let parsed_result = parser.parse_response(&component, limits_request, &mock_response).unwrap();
-        
+        let parsed_result = parser
+            .parse_response(&component, limits_request, &mock_response)
+            .unwrap();
+
         if let MetadataValue::Limits(limits_data) = parsed_result {
             let (_, (_, _, entry_point_opt)) = &limits_data[0];
             if let Some(entry_point_with_params) = entry_point_opt {
-                // Verify that the target address in the entry point is the hooks address, NOT the lens address
-                let entry_point_target = entry_point_with_params.entry_point.target.clone();
+                // Verify that the target address in the entry point is the hooks address, NOT the
+                // lens address
+                let entry_point_target = entry_point_with_params
+                    .entry_point
+                    .target
+                    .clone();
                 assert_eq!(
-                    entry_point_target, 
+                    entry_point_target,
                     hooks_address,
                     "Entry point target should be the hooks address (0x55dcf9455eee8fd3f5eed17606291272cde428a8), not the lens address (0x0000000000000000000000000000000000001337)"
                 );
-                
+
                 // Also verify the external_id includes the hooks address
                 let expected_external_id = format!("{}:getLimits(address,address)", hooks_address);
                 assert_eq!(
-                    entry_point_with_params.entry_point.external_id,
+                    entry_point_with_params
+                        .entry_point
+                        .external_id,
                     expected_external_id,
                     "Entry point external_id should reference the hooks address"
                 );
-                
+
                 // Verify the signature is correct
                 assert_eq!(
-                    entry_point_with_params.entry_point.signature,
+                    entry_point_with_params
+                        .entry_point
+                        .signature,
                     "getLimits(address,address)",
                     "Entry point signature should be getLimits(address,address)"
                 );
