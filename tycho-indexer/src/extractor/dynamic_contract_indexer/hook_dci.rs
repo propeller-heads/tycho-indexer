@@ -826,12 +826,15 @@ where
                     "Prepared component metadata map for full processing"
                 );
 
-                match orchestrator.update_components(
-                    block_changes,
-                    slice::from_ref(component),
-                    &component_metadata_map,
-                    true,
-                ) {
+                match orchestrator
+                    .update_components(
+                        block_changes,
+                        slice::from_ref(component),
+                        &component_metadata_map,
+                        true,
+                    )
+                    .await
+                {
                     Ok(()) => {
                         // Update component states for successful processing
                         self.handle_component_success(component.id.clone(), &block_changes.block)?;
@@ -931,12 +934,15 @@ where
                 // For balance-only components, we just update their balances without generating new
                 // entrypoints The balance updates are already injected into
                 // block_changes by the metadata orchestrator
-                match orchestrator.update_components(
-                    block_changes,
-                    slice::from_ref(component),
-                    &component_metadata_map,
-                    false, // Skip entrypoint generation
-                ) {
+                match orchestrator
+                    .update_components(
+                        block_changes,
+                        slice::from_ref(component),
+                        &component_metadata_map,
+                        false, // Skip entrypoint generation
+                    )
+                    .await
+                {
                     Ok(()) => {
                         // Update component states for successful processing - they remain
                         // TracingComplete
@@ -1104,7 +1110,9 @@ mod tests {
             static_attributes,
             change: ChangeType::Creation,
             creation_tx: TxHash::from([0u8; 32]),
-            created_at: chrono::NaiveDateTime::from_timestamp_opt(1234567890, 0).unwrap(),
+            created_at: chrono::DateTime::from_timestamp(1234567890, 0)
+                .unwrap()
+                .naive_utc(),
         }
     }
 
@@ -1791,6 +1799,10 @@ mod tests {
         use std::{collections::HashSet, str::FromStr, sync::Arc};
 
         use tracing::info;
+        use tycho_ethereum::entrypoint_tracer::{
+            balance_slot_detector::{BalanceSlotDetectorConfig, EVMBalanceSlotDetector},
+            tracer::EVMEntrypointService,
+        };
 
         use super::*;
         use crate::extractor::dynamic_contract_indexer::{
@@ -1890,11 +1902,9 @@ mod tests {
                 Chain::Ethereum,
                 Bytes::from(block_number).lpad(32, 0),
                 Bytes::from(block_number - 1).lpad(32, 0),
-                chrono::NaiveDateTime::from_timestamp_opt(
-                    1719849000 + (block_number * 12) as i64,
-                    0,
-                )
-                .unwrap(),
+                chrono::DateTime::from_timestamp(1719849000 + (block_number * 12) as i64, 0)
+                    .unwrap()
+                    .naive_utc(),
             )
         }
 
@@ -1914,6 +1924,7 @@ mod tests {
         fn setup_test_hook_orchestrator_registry(
             router_address: Address,
             pool_manager: Address,
+            rpc_url: String,
         ) -> HookOrchestratorRegistry {
             let mut hook_registry = HookOrchestratorRegistry::new();
 
@@ -1928,9 +1939,20 @@ mod tests {
                 pool_manager: pool_manager.clone(),
             };
 
+            let balance_slot_detector_config = BalanceSlotDetectorConfig {
+                max_batch_size: 5,
+                rpc_url,
+                max_retries: 3,
+                initial_backoff_ms: 100,
+                max_backoff_ms: 5000,
+            };
+            let balance_slot_detector = EVMBalanceSlotDetector::new(balance_slot_detector_config)
+                .expect("Failed to create EVMBalanceSlotDetector");
+
             let mut entrypoint_generator = UniswapV4DefaultHookEntrypointGenerator::new(
                 DefaultSwapAmountEstimator::with_balances(),
                 pool_manager.clone(),
+                balance_slot_detector,
             );
             entrypoint_generator.set_config(config);
 
@@ -1978,7 +2000,7 @@ mod tests {
                 .try_init();
             // Test configuration - using realistic mainnet addresses
             let chain = Chain::Ethereum;
-            let router_address = Address::from("0x1234567890123456789012345678901234567890");
+            let router_address = Address::from("0x2e234dae75c793f67a35089c9d99245e1c58470b");
             let pool_manager = Address::from("0x000000000004444c5dc75cB358380D2e3dE08A90"); // Real Uniswap V4 pool manager
 
             // Create mock gateways
@@ -1986,11 +2008,9 @@ mod tests {
             let mut account_extractor = MockAccountExtractor::new();
 
             // Use real RPC-based tracer instead of mock
+            let trace_rpc_url = std::env::var("TRACE_RPC_URL").expect("RPC_URL must be set");
             let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
-            let entrypoint_tracer =
-                tycho_ethereum::entrypoint_tracer::tracer::EVMEntrypointService::try_from_url(
-                    &rpc_url,
-                )
+            let entrypoint_tracer = EVMEntrypointService::try_from_url(&trace_rpc_url)
                 .expect("Failed to create RPC entrypoint tracer");
 
             // Setup initial expectations for initialization
@@ -2041,8 +2061,11 @@ mod tests {
                 parser_registry,
                 provider_registry,
             );
-            let hook_orchestrator_registry =
-                setup_test_hook_orchestrator_registry(router_address, pool_manager.clone());
+            let hook_orchestrator_registry = setup_test_hook_orchestrator_registry(
+                router_address,
+                pool_manager.clone(),
+                rpc_url.clone(),
+            );
 
             // Create new mock gateway for Hook DCI (since we moved ownership of the first one)
             let mut db_gateway2 = MockGateway::new();
@@ -2123,7 +2146,9 @@ mod tests {
                     "0x97e6d877bd7e6587c29711ee80b873d4eac8c49fc616145e6326e07a5e41bf1810",
                 )
                 .unwrap(), // Real parent hash
-                chrono::NaiveDateTime::from_timestamp_opt(1724251307, 0).unwrap(), /* Real timestamp */
+                chrono::DateTime::from_timestamp(1724251307, 0)
+                    .unwrap()
+                    .naive_utc(), /* Real timestamp */
             );
             let tx = create_test_transaction(1);
 
@@ -2254,14 +2279,17 @@ mod tests {
 
             let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
             let (generator_registry, parser_registry, provider_registry) =
-                setup_test_metadata_registries(rpc_url);
+                setup_test_metadata_registries(rpc_url.clone());
             let metadata_orchestrator = BlockMetadataOrchestrator::new(
                 generator_registry,
                 parser_registry,
                 provider_registry,
             );
-            let hook_orchestrator_registry =
-                setup_test_hook_orchestrator_registry(router_address, pool_manager.clone());
+            let hook_orchestrator_registry = setup_test_hook_orchestrator_registry(
+                router_address,
+                pool_manager.clone(),
+                rpc_url,
+            );
 
             let db_gateway2 = MockGateway::new();
 

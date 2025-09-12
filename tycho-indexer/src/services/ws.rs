@@ -466,7 +466,7 @@ mod tests {
     use actix_web::App;
     use actix_web_opentelemetry::RequestTracing;
     use async_trait::async_trait;
-    use chrono::NaiveDateTime;
+    use chrono::DateTime;
     use futures03::SinkExt;
     use serde::Deserialize;
     use tokio::{
@@ -525,7 +525,9 @@ mod tests {
                                 Chain::Ethereum,
                                 Bytes::zero(32),
                                 Bytes::zero(32),
-                                NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+                                DateTime::from_timestamp(0, 0)
+                                    .unwrap()
+                                    .naive_utc(),
                             ),
                             finalized_block_height: 1,
                             revert: false,
@@ -886,7 +888,9 @@ mod tests {
                                 Chain::Ethereum,
                                 Bytes::zero(32),
                                 Bytes::zero(32),
-                                NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+                                DateTime::from_timestamp(0, 0)
+                                    .unwrap()
+                                    .naive_utc(),
                             ),
                             finalized_block_height: 1,
                             revert: false,

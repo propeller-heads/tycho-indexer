@@ -35,6 +35,7 @@ use tycho_common::{
 use super::{build_state_overrides, AccessListResult};
 use crate::{BytesCodec, RPCError, RequestError, ReqwestError, SerdeJsonError};
 
+#[derive(Debug)]
 pub struct EVMEntrypointService {
     rpc_url: url::Url,
     // TODO: add a setting to enable/disable batching. This could be needed because some RPCs don't
@@ -92,7 +93,7 @@ impl EVMEntrypointService {
         }
     }
 
-    fn create_trace_call_params(
+    pub(crate) fn create_trace_call_params(
         target: &Address,
         params: &RPCTracerParams,
         block_hash: &BlockHash,

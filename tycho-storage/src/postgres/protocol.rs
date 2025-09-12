@@ -3368,7 +3368,9 @@ mod test {
             HashMap::new(),
             ChangeType::Creation,
             Bytes::from("0x0000000000000000000000000000000000000000000000000000000011121314"),
-            NaiveDateTime::from_timestamp_opt(1000, 0).unwrap(),
+            chrono::DateTime::from_timestamp(1000, 0)
+                .unwrap()
+                .naive_utc(),
         )
     }
 

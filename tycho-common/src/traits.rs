@@ -163,6 +163,31 @@ pub trait EntryPointTracer: Sync {
     ) -> Vec<Result<TracedEntryPoint, Self::Error>>;
 }
 
+/// Trait for detecting storage slots that contain ERC20 token balances
+#[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
+#[async_trait]
+pub trait BalanceSlotDetector: Send + Sync {
+    type Error: Debug;
+
+    /// Detect balance storage slots for multiple tokens from a single holder.
+    /// Useful to allow overriding balances.
+    ///
+    /// # Arguments
+    /// * `tokens` - Slice of ERC20 token addresses.
+    /// * `holder` - Address that holds the tokens (e.g., pool manager)
+    /// * `block_hash` - Block at which to detect slots
+    ///
+    /// # Returns
+    /// HashMap mapping Token -> Result containing (contract_address -> storage_slot) or error.
+    /// The storage slot is the one that controls the token's holder balance.
+    async fn detect_balance_slots(
+        &self,
+        tokens: &[Address],
+        holder: Address,
+        block_hash: BlockHash,
+    ) -> HashMap<Address, Result<(Address, Bytes), Self::Error>>;
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;

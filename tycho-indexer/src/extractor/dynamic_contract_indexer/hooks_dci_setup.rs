@@ -8,6 +8,9 @@ use tycho_common::{
     storage::{EntryPointGateway, ProtocolGateway},
     traits::{AccountExtractor, EntryPointTracer},
 };
+use tycho_ethereum::entrypoint_tracer::balance_slot_detector::{
+    BalanceSlotDetectorConfig, EVMBalanceSlotDetector,
+};
 
 use crate::extractor::dynamic_contract_indexer::{
     component_metadata::{
@@ -60,8 +63,22 @@ pub fn setup_metadata_registries(
 pub fn setup_hook_orchestrator_registry(
     router_address: Address,
     pool_manager: Address,
+    rpc_url: String,
 ) -> HookOrchestratorRegistry {
     let mut hook_registry = HookOrchestratorRegistry::new();
+
+    // Create EVM balance slot detector
+    let balance_slot_detector = {
+        let config = BalanceSlotDetectorConfig {
+            rpc_url: rpc_url.clone(),
+            max_batch_size: 5,
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+        };
+
+        EVMBalanceSlotDetector::new(config).expect("Failed to create EVMBalanceSlotDetector")
+    };
 
     // Create hook entrypoint configuration for Euler V1
     let config = HookEntrypointConfig {
@@ -77,6 +94,7 @@ pub fn setup_hook_orchestrator_registry(
     let mut entrypoint_generator = UniswapV4DefaultHookEntrypointGenerator::new(
         DefaultSwapAmountEstimator::with_balances(),
         pool_manager.clone(),
+        balance_slot_detector,
     );
     entrypoint_generator.set_config(config);
 
@@ -106,10 +124,11 @@ where
 {
     // Setup metadata registries
     let (generator_registry, parser_registry, provider_registry) =
-        setup_metadata_registries(rpc_url);
+        setup_metadata_registries(rpc_url.clone());
 
     // Setup hook orchestrator registry
-    let hook_orchestrator_registry = setup_hook_orchestrator_registry(router_address, pool_manager);
+    let hook_orchestrator_registry =
+        setup_hook_orchestrator_registry(router_address, pool_manager, rpc_url);
 
     // Create metadata orchestrator
     let metadata_orchestrator =
