@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use futures::{Stream, StreamExt};
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::warn;
+use tracing::{debug, warn};
 use tycho_client::{
     feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState, BlockHeader},
     stream::{StreamError, TychoStreamBuilder},
@@ -153,7 +153,12 @@ impl ProtocolStreamBuilder {
             let decoder = decoder.clone(); // Clone the decoder for the closure
             move |msg| {
                 let decoder = decoder.clone(); // Clone again for the async block
-                async move { decoder.decode(msg).await }
+                async move {
+                    decoder.decode(&msg).await.map_err(|e| {
+                        debug!(msg=?msg, "Decode error: {}", e);
+                        e
+                    })
+                }
             }
         })))
     }

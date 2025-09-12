@@ -537,6 +537,7 @@ impl TychoDB {
 
         self_
             .inner
-            .update(account_updates, block);
+            .update(account_updates, block)
+            .unwrap();
     }
 }
