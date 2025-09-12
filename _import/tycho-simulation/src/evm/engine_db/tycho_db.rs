@@ -6,6 +6,7 @@ use std::{
 use alloy::primitives::{Address, Bytes as AlloyBytes, B256, U256};
 use revm::{
     context::DBErrorMarker,
+    primitives::KECCAK_EMPTY,
     state::{AccountInfo, Bytecode},
     DatabaseRef,
 };
@@ -39,6 +40,8 @@ pub enum PreCachedDBError {
     BlockNotSet(),
     #[error("Tycho Client error: {0}")]
     TychoClientError(#[from] TychoClientError),
+    #[error("{0}")]
+    Fatal(String),
 }
 
 impl DBErrorMarker for PreCachedDBError {}
@@ -105,10 +108,10 @@ impl PreCachedDB {
 
                     // We expect the code to be present.
                     let code = Bytecode::new_raw(AlloyBytes::from(
-                        update
-                            .code
-                            .clone()
-                            .expect("account code"),
+                        update.code.clone().unwrap_or_else(|| {
+                            error!(%update.address, "MissingCode");
+                            Vec::new()
+                        }),
                     ));
                     // If the balance is not present, we set it to zero.
                     let balance = update.balance.unwrap_or(U256::ZERO);
@@ -227,6 +230,13 @@ impl PreCachedDB {
             .as_ref()
             .map(|header| header.number)
     }
+
+    /// Clear all state from the database.
+    pub fn clear(&self) {
+        let mut write_guard = self.inner.write().unwrap();
+        write_guard.accounts.clear();
+        write_guard.block = None;
+    }
 }
 
 impl EngineDatabaseInterface for PreCachedDB {
@@ -249,6 +259,12 @@ impl EngineDatabaseInterface for PreCachedDB {
         permanent_storage: Option<HashMap<U256, U256>>,
         _mocked: bool,
     ) {
+        if account.code.is_none() && account.code_hash != KECCAK_EMPTY {
+            warn!("Code is None for account {address} but code hash is not KECCAK_EMPTY");
+        } else if account.code.is_some() && account.code_hash == KECCAK_EMPTY {
+            warn!("Code is Some for account {address} but code hash is KECCAK_EMPTY");
+        }
+
         self.inner
             .write()
             .unwrap()
@@ -286,8 +302,8 @@ impl DatabaseRef for PreCachedDB {
             .ok_or(PreCachedDBError::MissingAccount(address))
     }
 
-    fn code_by_hash_ref(&self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
-        panic!("Code by hash is not implemented")
+    fn code_by_hash_ref(&self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        Err(PreCachedDBError::Fatal(format!("Code by hash not supported: {code_hash}")))
     }
 
     /// Retrieves the storage value at the specified address and index.

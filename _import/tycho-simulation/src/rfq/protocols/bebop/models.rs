@@ -505,7 +505,7 @@ mod tests {
             }
             let params = params();
             let err = quote.validate(&params).unwrap_err();
-            assert!(format!("{:?}", err).contains("Base token mismatch"));
+            assert!(format!("{err:?}").contains("Base token mismatch"));
         }
 
         #[test]
@@ -516,7 +516,7 @@ mod tests {
             }
             let params = params();
             let err = quote.validate(&params).unwrap_err();
-            assert!(format!("{:?}", err).contains("Quote token mismatch"));
+            assert!(format!("{err:?}").contains("Quote token mismatch"));
         }
 
         #[test]
@@ -527,7 +527,7 @@ mod tests {
             }
             let params = params();
             let err = quote.validate(&params).unwrap_err();
-            assert!(format!("{:?}", err).contains("Taker address mismatch"));
+            assert!(format!("{err:?}").contains("Taker address mismatch"));
         }
 
         #[test]
@@ -538,7 +538,7 @@ mod tests {
             }
             let params = params();
             let err = quote.validate(&params).unwrap_err();
-            assert!(format!("{:?}", err).contains("Receiver address mismatch"));
+            assert!(format!("{err:?}").contains("Receiver address mismatch"));
         }
 
         #[test]
@@ -549,7 +549,7 @@ mod tests {
             }
             let params = params();
             let err = quote.validate(&params).unwrap_err();
-            assert!(format!("{:?}", err).contains("Base token amount mismatch"));
+            assert!(format!("{err:?}").contains("Base token amount mismatch"));
         }
 
         #[test]
@@ -567,7 +567,7 @@ mod tests {
             }
             let params = params();
             let err = quote.validate(&params).unwrap_err();
-            assert!(format!("{:?}", err).contains("Taker address mismatch"));
+            assert!(format!("{err:?}").contains("Taker address mismatch"));
         }
 
         #[test]
@@ -578,7 +578,7 @@ mod tests {
             }
             let params = params();
             let err = quote.validate(&params).unwrap_err();
-            assert!(format!("{:?}", err).contains("Receiver address mismatch"));
+            assert!(format!("{err:?}").contains("Receiver address mismatch"));
         }
     }
 }

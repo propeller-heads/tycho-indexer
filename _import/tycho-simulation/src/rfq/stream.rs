@@ -117,7 +117,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::rfq::errors::RFQError;
+    use crate::{protocol::models::DecoderContext, rfq::errors::RFQError};
 
     #[derive(Clone, Debug)]
     pub struct DummyProtocol;
@@ -180,6 +180,7 @@ mod tests {
             _header: TimestampHeader,
             _account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
             _all_tokens: &HashMap<Bytes, Token>,
+            _decoder_context: &DecoderContext,
         ) -> Result<Self, Self::Error> {
             Ok(DummyProtocol)
         }

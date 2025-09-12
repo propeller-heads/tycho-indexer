@@ -1,3 +1,49 @@
+## [0.158.0](https://github.com/propeller-heads/tycho-simulation/compare/0.157.1...0.158.0) (2025-09-11)
+
+
+### Features
+
+* bump tycho-common version ([b08d282](https://github.com/propeller-heads/tycho-simulation/commit/b08d2827c3e2904edafecf3b5b3cc32453bb2304))
+
+## [0.157.1](https://github.com/propeller-heads/tycho-simulation/compare/0.157.0...0.157.1) (2025-09-10)
+
+
+### Bug Fixes
+
+* Re export tycho_execution ([8413d97](https://github.com/propeller-heads/tycho-simulation/commit/8413d97d67681f328c4e269e765e986b9edb642a))
+
+## [0.157.0](https://github.com/propeller-heads/tycho-simulation/compare/0.156.1...0.157.0) (2025-09-10)
+
+
+### Features
+
+* Allow clearing PreCachedDB account storage ([5fc89be](https://github.com/propeller-heads/tycho-simulation/commit/5fc89be404fdadbed4c7c654fd10d786e6a2d965))
+
+## [0.156.1](https://github.com/propeller-heads/tycho-simulation/compare/0.156.0...0.156.1) (2025-09-10)
+
+## [0.156.0](https://github.com/propeller-heads/tycho-simulation/compare/0.155.2...0.156.0) (2025-09-08)
+
+
+### Features
+
+* Take a struct of vm_attributes instead of just adapter path ([b83b621](https://github.com/propeller-heads/tycho-simulation/commit/b83b621be2baf4d844441f37579c38d1606fd38f))
+* **Testing SDK:** Pass adapter contract to decoder ([4cab8c4](https://github.com/propeller-heads/tycho-simulation/commit/4cab8c413a37102a187291714a9a85837a037ccd))
+* Use DecoderContext instead of VMAttributes ([06a2511](https://github.com/propeller-heads/tycho-simulation/commit/06a2511cd3c5095b50a50d6c2ca5c4a960809eca))
+
+## [0.155.2](https://github.com/propeller-heads/tycho-simulation/compare/0.155.1...0.155.2) (2025-08-30)
+
+
+### Bug Fixes
+
+* correctly initialize external account hash ([ac682b6](https://github.com/propeller-heads/tycho-simulation/commit/ac682b6557863f94065700d9b6bbda661ff4aaf1))
+
+## [0.155.1](https://github.com/propeller-heads/tycho-simulation/compare/0.155.0...0.155.1) (2025-08-30)
+
+
+### Bug Fixes
+
+* return error instead of panic in code_by_hash_ref ([c5bd737](https://github.com/propeller-heads/tycho-simulation/commit/c5bd737e8e921a5fbcb9401a86a167b7f7c5e2ee))
+
 ## [0.155.0](https://github.com/propeller-heads/tycho-simulation/compare/0.154.1...0.155.0) (2025-08-28)
 
 
