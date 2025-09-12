@@ -1,3 +1,10 @@
+## [0.159.0](https://github.com/propeller-heads/tycho-simulation/compare/0.158.0...0.159.0) (2025-09-12)
+
+
+### Features
+
+* Add vm_trace to DecoderContext ([5d2e59e](https://github.com/propeller-heads/tycho-simulation/commit/5d2e59e6b7f0e52f7346f0a7c2e26e3869fdd3c9))
+
 ## [0.158.0](https://github.com/propeller-heads/tycho-simulation/compare/0.157.1...0.158.0) (2025-09-11)
 
 
