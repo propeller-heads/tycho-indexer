@@ -8,7 +8,6 @@ Rust-based integration testing framework for Tycho protocol implementations.
 # Export necessary env vars
 export RPC_URL=..
 export SUBSTREAMS_API_TOKEN=..
-export AUTH_API_KEY=..
 export PROTOCOLS="ethereum-balancer-v2=weighted_legacy_creation ethereum-ekubo-v2"
 
 # Start and show the test logs only

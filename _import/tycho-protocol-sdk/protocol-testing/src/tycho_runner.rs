@@ -37,7 +37,8 @@ impl TychoRunner {
         dotenv().ok();
 
         let mut cmd = Command::new("tycho-indexer");
-        cmd.env("RUST_LOG", std::env::var("RUST_LOG").unwrap_or("tycho_indexer=info".to_string()));
+        cmd.env("RUST_LOG", std::env::var("RUST_LOG").unwrap_or("tycho_indexer=info".to_string()))
+            .env("AUTH_API_KEY", "dummy");
 
         let all_accounts = self.initialized_accounts.clone();
 
@@ -121,6 +122,7 @@ impl TychoRunner {
                     "RUST_LOG",
                     std::env::var("RUST_LOG").unwrap_or("tycho_indexer=info".to_string()),
                 )
+                .env("AUTH_API_KEY", "dummy")
                 .spawn()
                 .expect("Failed to start RPC server");
 
