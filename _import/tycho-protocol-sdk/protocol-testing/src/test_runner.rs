@@ -213,6 +213,7 @@ impl TestRunner {
                     skip_balance_check,
                     config,
                     &self.adapter_contract_builder,
+                    self.vm_traces,
                 )
             },
             &test.expected_components,
@@ -245,6 +246,7 @@ fn validate_state(
     skip_balance_check: bool,
     config: &IntegrationTestsConfig,
     adapter_contract_builder: &AdapterContractBuilder,
+    vm_traces: bool,
 ) -> miette::Result<()> {
     let rt = Runtime::new().unwrap();
 
@@ -362,7 +364,9 @@ fn validate_state(
     tycho_simulation::evm::engine_db::SHARED_TYCHO_DB.clear();
 
     let mut decoder = TychoStreamDecoder::new();
-    let decoder_context = DecoderContext::new().vm_adapter_path(adapter_contract_path_str);
+    let decoder_context = DecoderContext::new()
+        .vm_adapter_path(adapter_contract_path_str)
+        .vm_trace(vm_traces);
     decoder.register_decoder_with_context::<EVMPoolState<PreCachedDB>>(
         protocol_system,
         decoder_context,
