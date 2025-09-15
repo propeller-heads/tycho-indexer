@@ -574,6 +574,8 @@ impl AccountUpdate {
 
 impl From<models::contract::AccountDelta> for AccountUpdate {
     fn from(value: models::contract::AccountDelta) -> Self {
+        let code = value.code().clone();
+        let change_type = value.change_type().into();
         AccountUpdate::new(
             value.address,
             value.chain.into(),
@@ -583,8 +585,8 @@ impl From<models::contract::AccountDelta> for AccountUpdate {
                 .map(|(k, v)| (k, v.unwrap_or_default()))
                 .collect(),
             value.balance,
-            value.code,
-            value.change.into(),
+            code,
+            change_type,
         )
     }
 }
