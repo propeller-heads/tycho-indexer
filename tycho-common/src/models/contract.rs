@@ -120,6 +120,9 @@ impl AccountDelta {
         code: Option<Code>,
         change: ChangeType,
     ) -> Self {
+        if code.is_none() && matches!(change, ChangeType::Creation) {
+            warn!(?address, "Instantiated AccountDelta marked as creation without code!")
+        }
         Self { chain, address, slots, balance, code, change }
     }
 
@@ -262,18 +265,18 @@ impl AccountDelta {
 
 impl From<Account> for AccountDelta {
     fn from(value: Account) -> Self {
-        Self {
-            chain: value.chain,
-            address: value.address,
-            slots: value
+        Self::new(
+            value.chain,
+            value.address,
+            value
                 .slots
                 .into_iter()
                 .map(|(k, v)| (k, Some(v)))
                 .collect(),
-            balance: Some(value.native_balance),
-            code: Some(value.code),
-            change: ChangeType::Creation,
-        }
+            Some(value.native_balance),
+            Some(value.code),
+            ChangeType::Creation,
+        )
     }
 }
 
