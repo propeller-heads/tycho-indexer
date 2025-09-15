@@ -107,14 +107,14 @@ impl AccountExtractor for EVMAccountExtractor {
 
             updates.insert(
                 Bytes::from(address.to_fixed_bytes()),
-                AccountDelta {
-                    address: address.to_bytes(),
-                    chain: self.chain,
+                AccountDelta::new(
+                    self.chain,
+                    address.to_bytes(),
                     slots,
-                    balance: balance.map(BytesCodec::to_bytes),
+                    balance.map(BytesCodec::to_bytes),
                     code,
-                    change: ChangeType::Creation,
-                },
+                    ChangeType::Creation,
+                ),
             );
         }
 
@@ -463,14 +463,14 @@ impl AccountExtractor for EVMBatchAccountExtractor {
                         ))
                     })?;
 
-                let account_delta = AccountDelta {
-                    address: address.clone(),
-                    chain: self.chain,
-                    slots: storage,
+                let account_delta = AccountDelta::new(
+                    self.chain,
+                    address.clone(),
+                    storage,
                     balance,
                     code,
-                    change: ChangeType::Creation,
-                };
+                    ChangeType::Creation,
+                );
 
                 updates.insert(address.clone(), account_delta);
             }
