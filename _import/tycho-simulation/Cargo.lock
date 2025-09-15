@@ -8411,9 +8411,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.83.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3da113f5301ba1fb8e4441df405afa1e7b728a83017681b94851c5bc36d758dc"
+version = "0.83.1"
+source = "git+https://github.com/propeller-heads/tycho-indexer?rev=c84e665502543935e276c032fdd61b9e11b20575#c84e665502543935e276c032fdd61b9e11b20575"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8432,7 +8431,31 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber 0.3.19",
- "tycho-common",
+ "tycho-common 0.83.1",
+ "uuid 1.17.0",
+]
+
+[[package]]
+name = "tycho-common"
+version = "0.83.1"
+source = "git+https://github.com/propeller-heads/tycho-indexer?rev=c84e665502543935e276c032fdd61b9e11b20575#c84e665502543935e276c032fdd61b9e11b20575"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bytes",
+ "chrono",
+ "hex",
+ "num-bigint",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "strum 0.25.0",
+ "strum_macros 0.25.3",
+ "thiserror 1.0.69",
+ "tiny-keccak",
+ "tracing",
+ "typetag",
+ "utoipa",
  "uuid 1.17.0",
 ]
 
@@ -8480,7 +8503,7 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
- "tycho-common",
+ "tycho-common 0.83.4",
 ]
 
 [[package]]
@@ -8532,7 +8555,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber 0.3.19",
  "tycho-client",
- "tycho-common",
+ "tycho-common 0.83.1",
  "tycho-execution",
  "unicode-width 0.1.14",
  "uuid 1.17.0",
