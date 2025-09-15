@@ -1404,9 +1404,10 @@ impl ExtractorGateway for ExtractorPgGateway {
                             .balance
                             .unwrap_or_default(),
                     );
-                    account_delta_creation.code = Some(
+                    account_delta_creation.set_code(
                         account_delta_creation
-                            .code
+                            .code()
+                            .clone()
                             .unwrap_or_default(),
                     );
                     account_changes.push((tx_update.tx.hash.clone(), account_delta_creation));
