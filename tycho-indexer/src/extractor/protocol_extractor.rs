@@ -998,13 +998,15 @@ where
                 .into_iter()
                 .fold(HashMap::new(), |mut acc, ((addr, key), value)| {
                     acc.entry(addr.clone())
-                        .or_insert_with(|| AccountDelta {
-                            address: addr,
-                            chain: self.chain,
-                            slots: HashMap::new(),
-                            balance: None, //TODO: handle balance changes
-                            code: None,    //TODO: handle code changes
-                            change: ChangeType::Update,
+                        .or_insert_with(|| {
+                            AccountDelta::new(
+                                self.chain,
+                                addr,
+                                HashMap::new(),
+                                None, //TODO: handle balance changes
+                                None, //TODO: handle code changes
+                                ChangeType::Update,
+                            )
                         })
                         .slots
                         .insert(key, Some(value));
@@ -3077,27 +3079,27 @@ mod test_serial_db {
                 finalized_block_height: 1,
                 revert: true,
                 account_deltas: HashMap::from([
-                    (account1.clone(), AccountDelta {
-                        address: account1.clone(),
-                        chain: Chain::Ethereum,
-                        slots: HashMap::from([
+                    (account1.clone(), AccountDelta::new(
+                        Chain::Ethereum,
+                        account1.clone(),
+                        HashMap::from([
                             (Bytes::from("0x03"), Some(Bytes::new())),
                             (Bytes::from("0x01"), Some(Bytes::from("0x01"))),
                         ]),
-                        balance: None,
-                        code: None,
-                        change: ChangeType::Update,
-                    }),
-                    (account2.clone(), AccountDelta {
-                        address: account2.clone(),
-                        chain: Chain::Ethereum,
-                        slots: HashMap::from([
+                        None,
+                        None,
+                        ChangeType::Update,
+                    )),
+                    (account2.clone(), AccountDelta::new(
+                        Chain::Ethereum,
+                        account2.clone(),
+                        HashMap::from([
                             (Bytes::from("0x01"), Some(Bytes::from("0x02"))),
                         ]),
-                        balance: None,
-                        code: None,
-                        change: ChangeType::Update,
-                    }),
+                        None,
+                        None,
+                        ChangeType::Update,
+                    )),
                 ]),
                 deleted_protocol_components: HashMap::from([
                     ("pc_3".to_string(), ProtocolComponent {
