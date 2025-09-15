@@ -665,7 +665,7 @@ mod tests {
             .expect("first address should exist");
         assert_eq!(first_delta.address, first_address);
         assert_eq!(first_delta.chain, Chain::Ethereum);
-        assert!(first_delta.code.is_some());
+        assert!(first_delta.code().is_some());
         assert!(first_delta.balance.is_some());
         println!("Balance: {:?}", first_delta.balance);
 
@@ -676,7 +676,7 @@ mod tests {
             .expect("second address should exist");
         assert_eq!(second_delta.address, second_address);
         assert_eq!(second_delta.chain, Chain::Ethereum);
-        assert!(second_delta.code.is_some());
+        assert!(second_delta.code().is_some());
         assert!(second_delta.balance.is_some());
         println!("Balance: {:?}", second_delta.balance);
 
@@ -842,7 +842,7 @@ mod tests {
 
         assert_eq!(delta.address, address);
         assert_eq!(delta.chain, Chain::Ethereum);
-        assert!(delta.code.is_some());
+        assert!(delta.code().is_some());
         assert!(delta.balance.is_some());
 
         // Check that storage slots match what we requested
@@ -894,7 +894,7 @@ mod tests {
 
         assert_eq!(delta.address, address);
         assert_eq!(delta.chain, Chain::Ethereum);
-        assert!(delta.code.is_some());
+        assert!(delta.code().is_some());
         assert!(delta.balance.is_some());
 
         // Check that storage slots match what we requested
@@ -954,14 +954,14 @@ mod tests {
 
             assert_eq!(delta.address, address);
             assert_eq!(delta.chain, Chain::Ethereum);
-            assert!(delta.code.is_some());
+            assert!(delta.code().is_some());
             assert!(delta.balance.is_some());
             assert_eq!(delta.slots.len(), 1);
 
             println!(
                 "Address: {}, Code size: {}, Has balance: {}",
                 addr_str,
-                delta.code.as_ref().unwrap().len(),
+                delta.code().as_ref().unwrap().len(),
                 delta.balance.is_some()
             );
         }
