@@ -7,10 +7,11 @@ mod tycho_rpc;
 mod tycho_runner;
 mod utils;
 
-use std::path::PathBuf;
+use std::{path::PathBuf, process::Command};
 
 use clap::Parser;
 use miette::{miette, IntoDiagnostic, WrapErr};
+use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 use crate::test_runner::TestRunner;
@@ -80,6 +81,9 @@ fn main() -> miette::Result<()> {
         .with_target(false)
         .init();
 
+    let version = Version::from_env()?;
+    info!("version: {}, hash: {}", version.version, version.hash);
+
     let args = Args::parse();
 
     let test_runner = TestRunner::new(
@@ -92,4 +96,25 @@ fn main() -> miette::Result<()> {
     );
 
     test_runner.run_tests()
+}
+
+struct Version {
+    version: String,
+    hash: String,
+}
+
+impl Version {
+    fn from_env() -> miette::Result<Self> {
+        let version = option_env!("CARGO_PKG_VERSION")
+            .unwrap_or("unknown")
+            .to_string();
+        let hash = {
+            let output = Command::new("git")
+                .args(["rev-parse", "HEAD"])
+                .output()
+                .into_diagnostic()?;
+            String::from_utf8(output.stdout).into_diagnostic()?
+        };
+        Ok(Self { version, hash })
+    }
 }
