@@ -15,6 +15,7 @@ fi
 for test in "${args[@]}"; do
 	protocol="${test%%=*}"
 	filter="${test#*=}"
+	echo "Running tests for protocol: $protocol with filter: $filter"
 	if [[ "$test" == *"="* ]]; then
 		tycho-protocol-sdk --package "$protocol" --db-url "$DATABASE_URL" --match-test "$filter"
 	else

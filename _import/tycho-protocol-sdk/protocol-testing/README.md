@@ -5,9 +5,9 @@ Rust-based integration testing framework for Tycho protocol implementations.
 ## How to Run
 
 ```bash
-# Build the images
-docker buildx build -f postgres.Dockerfile -t protocol-testing-db:latest --load .
-docker buildx build -f run.Dockerfile -t protocol-testing-test-runner:latest --load .
+# Build the images, from the project root dir
+docker buildx build -f protocol-testing/postgres.Dockerfile -t protocol-testing-db:latest --load .
+docker buildx build -f protocol-testing/run.Dockerfile -t protocol-testing-test-runner:latest --load .
 
 # Export necessary env vars
 export RPC_URL=..
