@@ -800,14 +800,14 @@ pub mod fixtures {
             )]),
             HashMap::from([(
                 contract_addr.clone(),
-                AccountDelta {
-                    slots: HashMap::from([(
-                        vec![0, 0, 0, 0].into(),
-                        Some(vec![0, 0, 0, 0].into()),
-                    )]),
-                    change: ChangeType::Update,
-                    ..account_delta
-                },
+                AccountDelta::new(
+                    Chain::Ethereum,
+                    contract_addr.clone(),
+                    HashMap::from([(vec![0, 0, 0, 0].into(), Some(vec![0, 0, 0, 0].into()))]),
+                    None,
+                    None,
+                    ChangeType::Update,
+                ),
             )]),
             HashMap::new(),
             HashMap::from([(
