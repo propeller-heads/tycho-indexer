@@ -1190,4 +1190,48 @@ mod tests {
         let generated_address = generate_proxy_token_address(idx);
         assert_eq!(generated_address, address!("00000000000000000000000000001e240badbabe"));
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_euler_hook_low_pool_manager_balance() {
+        let mut decoder = TychoStreamDecoder::new();
+
+        decoder.register_decoder_with_context::<crate::evm::protocol::uniswap_v4::state::UniswapV4State>(
+            "uniswap_v4_hooks", DecoderContext::new().vm_traces(true)
+        );
+
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let teth = Bytes::from_str("0xd11c452fc99cf405034ee446803b6f6c1f6d5ed8").unwrap();
+        let tokens = HashMap::from([
+            (
+                weth.clone(),
+                Token::new(&weth, "WETH", 18, 100, &[Some(100_000)], Chain::Ethereum, 100),
+            ),
+            (
+                teth.clone(),
+                Token::new(&teth, "tETH", 18, 100, &[Some(100_000)], Chain::Ethereum, 100),
+            ),
+        ]);
+
+        decoder.set_tokens(tokens.clone()).await;
+
+        let msg = load_test_msg("hook_state");
+        let res = decoder
+            .decode(&msg)
+            .await
+            .expect("decode failure");
+
+        let pool_state = res
+            .states
+            .get("0xc70d7fbd7fcccdf726e02fed78548b40dc52502b097c7a1ee7d995f4d4396134")
+            .expect("Couldn't find target pool");
+        let amount_out = pool_state
+            .get_amount_out(
+                BigUint::from_str("1000000000000000000").unwrap(),
+                &tokens.get(&teth).unwrap(),
+                &tokens.get(&weth).unwrap(),
+            )
+            .expect("Get amount out failed");
+
+        println!("amount: {:?}", amount_out);
+    }
 }

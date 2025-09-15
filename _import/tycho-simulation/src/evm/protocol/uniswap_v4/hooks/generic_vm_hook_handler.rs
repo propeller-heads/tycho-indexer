@@ -29,7 +29,10 @@ use crate::evm::{
             },
             state::UniswapV4State,
         },
-        vm::tycho_simulation_contract::TychoSimulationContract,
+        vm::{
+            erc20_token::TokenProxyOverwriteFactory,
+            tycho_simulation_contract::TychoSimulationContract,
+        },
     },
     simulation::SimulationEngine,
 };
@@ -105,6 +108,24 @@ where
         if let Some(input_params) = transient_storage {
             transient_storage_params.extend(input_params);
         }
+
+        let token_in = if params.swap_params.zero_for_one {
+            params.context.currency_0
+        } else {
+            params.context.currency_1
+        };
+        let mut token_overwrites = TokenProxyOverwriteFactory::new(token_in, None);
+        token_overwrites.set_balance(U256::MAX, self.pool_manager);
+        // token_overwrites.set_allowance(
+        //     U256::MAX,
+        //     Address::from_str("0xA28C23a459fF8773EB4dBe0e7250d93F79F1Fe2B").unwrap(),
+        //     self.address,
+        // );
+        let mut final_overwrites = token_overwrites.get_overwrites();
+        if let Some(input_overwrites) = overwrites {
+            final_overwrites.extend(input_overwrites)
+        }
+
         let args = (
             params.sender,
             (
@@ -128,7 +149,7 @@ where
         let res = self.contract.call(
             selector,
             args,
-            overwrites,
+            Some(final_overwrites),
             Some(self.pool_manager),
             U256::from(0u64),
             Some(transient_storage_params),
