@@ -790,7 +790,8 @@ mod tests {
                 false,
             );
         }
-        db.update(accounts, Some(block));
+        db.update(accounts, Some(block))
+            .unwrap();
 
         let tokens = vec![dai().address, bal().address];
         for token in &tokens {

@@ -7,7 +7,10 @@ use tycho_client::feed::BlockHeader;
 use tycho_common::simulation::errors::SimulationError;
 
 use crate::evm::{
-    engine_db::{engine_db_interface::EngineDatabaseInterface, tycho_db::PreCachedDB},
+    engine_db::{
+        engine_db_interface::EngineDatabaseInterface,
+        tycho_db::{PreCachedDB, PreCachedDBError},
+    },
     simulation::SimulationEngine,
     tycho_models::{AccountUpdate, ChangeType, ResponseAccount},
 };
@@ -70,7 +73,7 @@ pub async fn update_engine(
     block: Option<BlockHeader>,
     vm_storage: Option<HashMap<Address, ResponseAccount>>,
     account_updates: HashMap<Address, AccountUpdate>,
-) -> Vec<AccountUpdate> {
+) -> Result<Vec<AccountUpdate>, PreCachedDBError> {
     if let Some(block) = block {
         let mut vm_updates: Vec<AccountUpdate> = Vec::new();
 
@@ -93,11 +96,11 @@ pub async fn update_engine(
         }
 
         if !vm_updates.is_empty() {
-            db.update(vm_updates.clone(), Some(block));
+            db.update(vm_updates.clone(), Some(block))?;
         }
 
-        vm_updates
+        Ok(vm_updates)
     } else {
-        vec![]
+        Ok(vec![])
     }
 }

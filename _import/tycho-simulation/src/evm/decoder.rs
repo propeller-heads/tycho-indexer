@@ -214,7 +214,7 @@ where
 
     /// Decodes a `FeedMessage` into a `BlockUpdate` containing the updated states of protocol
     /// components
-    pub async fn decode(&self, msg: FeedMessage<H>) -> Result<Update, StreamDecodeError> {
+    pub async fn decode(&self, msg: &FeedMessage<H>) -> Result<Update, StreamDecodeError> {
         // stores all states updated in this tick/msg
         let mut updated_states = HashMap::new();
         let mut new_pairs = HashMap::new();
@@ -377,7 +377,8 @@ where
                     Some(storage_by_address),
                     token_proxy_accounts,
                 )
-                .await;
+                .await
+                .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
                 info!("Engine updated");
                 drop(state_guard);
             }
@@ -437,6 +438,8 @@ where
                                         continue 'outer;
                                     }
                                 };
+                                // TODO: Ok we deployed a proxy whenever we see a new token without
+                                // a implementation set.
                                 if !state_guard
                                     .proxy_token_addresses
                                     .contains_key(&token_address)
@@ -474,7 +477,8 @@ where
                             None,
                             new_tokens_accounts,
                         )
-                        .await;
+                        .await
+                        .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
                     }
 
                     // collect contracts:ids mapping for states that should update on contract
@@ -562,6 +566,9 @@ where
                     .map(|(key, value)| {
                         let mut update: AccountUpdate = value.clone().into();
 
+                        // TODO: Unify this different initialisation if we receive
+                        //  state updates for the token with the usual case. Also
+                        //  switch the if cases.
                         if state_guard.tokens.contains_key(key) {
                             // If the account is a token, we need to handle it with a proxy contract
 
@@ -599,6 +606,21 @@ where
                                     .unwrap()
                             };
 
+                            // TEMP PATCH (ENG-4993)
+                            //
+                            // The indexer emits deltas without code marked as creations,
+                            // which crashes TychoDB. Until fixed, treat them as updates
+                            // (since EVM code cannot be deleted).
+                            if update.code.is_none() &&
+                                matches!(update.change, ChangeType::Creation)
+                            {
+                                error!(
+                                    update = ?update,
+                                    "FaultyCreationDelta"
+                                );
+                                update.change = ChangeType::Update;
+                            }
+
                             // assign original token contract to new address
                             update.address = proxy_addr;
                         };
@@ -617,7 +639,8 @@ where
                     None,
                     token_proxy_accounts,
                 )
-                .await;
+                .await
+                .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
                 info!("Engine updated");
 
                 // Collect all pools related to the updated accounts
@@ -771,7 +794,7 @@ where
         // Send the tick with all updated states
         Ok(Update::new(header.block_number_or_timestamp(), updated_states, new_pairs)
             .set_removed_pairs(removed_pairs)
-            .set_sync_states(msg.sync_states))
+            .set_sync_states(msg.sync_states.clone()))
     }
 
     fn apply_update(
@@ -975,12 +998,12 @@ mod tests {
 
         let msg = load_test_msg("uniswap_v2_snapshot");
         let res1 = decoder
-            .decode(msg)
+            .decode(&msg)
             .await
             .expect("decode failure");
         let msg = load_test_msg("uniswap_v2_delta");
         let res2 = decoder
-            .decode(msg)
+            .decode(&msg)
             .await
             .expect("decode failure");
 
@@ -1007,7 +1030,7 @@ mod tests {
 
         let msg = load_test_msg("uniswap_v2_snapshot");
         let res1 = decoder
-            .decode(msg)
+            .decode(&msg)
             .await
             .expect("decode failure");
 
@@ -1023,7 +1046,7 @@ mod tests {
         decoder.skip_state_decode_failures = skip_failures;
 
         let msg = load_test_msg("uniswap_v2_snapshot_broken_id");
-        match decoder.decode(msg).await {
+        match decoder.decode(&msg).await {
             Err(StreamDecodeError::Fatal(msg)) => {
                 if !skip_failures {
                     assert_eq!(
@@ -1053,7 +1076,7 @@ mod tests {
         decoder.skip_state_decode_failures = skip_failures;
 
         let msg = load_test_msg("uniswap_v2_snapshot_broken_state");
-        match decoder.decode(msg).await {
+        match decoder.decode(&msg).await {
             Err(StreamDecodeError::Fatal(msg)) => {
                 if !skip_failures {
                     assert_eq!(msg, "Missing attributes reserve0");
@@ -1119,7 +1142,7 @@ mod tests {
 
         // Decode the message
         let _ = decoder
-            .decode(msg)
+            .decode(&msg)
             .await
             .expect("decode failure");
 

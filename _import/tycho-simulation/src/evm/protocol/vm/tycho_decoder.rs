@@ -311,7 +311,8 @@ mod tests {
                 false,
             );
         }
-        db.update(accounts, Some(block));
+        db.update(accounts, Some(block))
+            .unwrap();
         let account_balances = HashMap::from([(
             Bytes::from("0xBA12222222228d8Ba445958a75a0704d566BF2C8"),
             HashMap::from([
