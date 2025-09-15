@@ -1,3 +1,10 @@
+## [0.160.0](https://github.com/propeller-heads/tycho-simulation/compare/0.159.0...0.160.0) (2025-09-15)
+
+
+### Features
+
+* Propagate db update errors ([c4078a5](https://github.com/propeller-heads/tycho-simulation/commit/c4078a5b3f90cb4d0eb2560374b9470cc98aaf57))
+
 ## [0.159.0](https://github.com/propeller-heads/tycho-simulation/compare/0.158.0...0.159.0) (2025-09-12)
 
 
