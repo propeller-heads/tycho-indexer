@@ -14,6 +14,7 @@ use std::{
 use chrono::{NaiveDateTime, Utc};
 use serde::{de, Deserialize, Deserializer, Serialize};
 use strum_macros::{Display, EnumString};
+use thiserror::Error;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -144,12 +145,54 @@ pub enum Command {
     Unsubscribe { subscription_id: Uuid },
 }
 
+/// A easy serializable version of `models::error::WebsocketError`
+///
+/// This serves purely to transfer errors via websocket. It is meant to render
+/// similarly to the original struct but does not have server side debug information
+/// attached.
+///
+/// It should contain information needed to handle errors correctly on the client side.
+#[derive(Error, Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
+pub enum WebsocketError {
+    #[error("Extractor not found: {0}")]
+    ExtractorNotFound(ExtractorIdentity),
+
+    #[error("Subscription not found: {0}")]
+    SubscriptionNotFound(Uuid),
+
+    #[error("Failed to parse JSON: {1}, msg: {0}")]
+    ParseError(String, String),
+
+    #[error("Failed to subscribe to extractor: {0}")]
+    SubscribeError(ExtractorIdentity),
+}
+
+impl From<crate::models::error::WebsocketError> for WebsocketError {
+    fn from(value: crate::models::error::WebsocketError) -> Self {
+        match value {
+            crate::models::error::WebsocketError::ExtractorNotFound(eid) => {
+                Self::ExtractorNotFound(eid.into())
+            }
+            crate::models::error::WebsocketError::SubscriptionNotFound(sid) => {
+                Self::SubscriptionNotFound(sid)
+            }
+            crate::models::error::WebsocketError::ParseError(raw, error) => {
+                Self::ParseError(error.to_string(), raw)
+            }
+            crate::models::error::WebsocketError::SubscribeError(eid) => {
+                Self::SubscribeError(eid.into())
+            }
+        }
+    }
+}
+
 /// A response sent from the server to the client
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq, Clone)]
 #[serde(tag = "method", rename_all = "lowercase")]
 pub enum Response {
     NewSubscription { extractor_id: ExtractorIdentity, subscription_id: Uuid },
     SubscriptionEnded { subscription_id: Uuid },
+    Error(WebsocketError),
 }
 
 /// A message sent from the server to the client
@@ -2604,5 +2647,88 @@ mod test {
         };
 
         assert_eq!(res, expected_block_entity_changes_result);
+    }
+
+    #[test]
+    fn test_websocket_error_serialization() {
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "test_extractor");
+        let subscription_id = Uuid::new_v4();
+
+        // Test ExtractorNotFound serialization
+        let error = WebsocketError::ExtractorNotFound(extractor_id.clone());
+        let json = serde_json::to_string(&error).unwrap();
+        let deserialized: WebsocketError = serde_json::from_str(&json).unwrap();
+        assert_eq!(error, deserialized);
+
+        // Test SubscriptionNotFound serialization
+        let error = WebsocketError::SubscriptionNotFound(subscription_id);
+        let json = serde_json::to_string(&error).unwrap();
+        let deserialized: WebsocketError = serde_json::from_str(&json).unwrap();
+        assert_eq!(error, deserialized);
+
+        // Test ParseError serialization
+        let error = WebsocketError::ParseError("{asd".to_string(), "invalid json".to_string());
+        let json = serde_json::to_string(&error).unwrap();
+        let deserialized: WebsocketError = serde_json::from_str(&json).unwrap();
+        assert_eq!(error, deserialized);
+
+        // Test SubscribeError serialization
+        let error = WebsocketError::SubscribeError(extractor_id.clone());
+        let json = serde_json::to_string(&error).unwrap();
+        let deserialized: WebsocketError = serde_json::from_str(&json).unwrap();
+        assert_eq!(error, deserialized);
+    }
+
+    #[test]
+    fn test_websocket_message_with_error_response() {
+        let error =
+            WebsocketError::ParseError("}asdfas".to_string(), "malformed request".to_string());
+        let response = Response::Error(error.clone());
+        let message = WebSocketMessage::Response(response);
+
+        let json = serde_json::to_string(&message).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+
+        if let WebSocketMessage::Response(Response::Error(deserialized_error)) = deserialized {
+            assert_eq!(error, deserialized_error);
+        } else {
+            panic!("Expected WebSocketMessage::Response(Response::Error)");
+        }
+    }
+
+    #[test]
+    fn test_websocket_error_conversion_from_models() {
+        use crate::models::error::WebsocketError as ModelsError;
+
+        let extractor_id =
+            crate::models::ExtractorIdentity::new(crate::models::Chain::Ethereum, "test");
+        let subscription_id = Uuid::new_v4();
+
+        // Test ExtractorNotFound conversion
+        let models_error = ModelsError::ExtractorNotFound(extractor_id.clone());
+        let dto_error: WebsocketError = models_error.into();
+        assert_eq!(dto_error, WebsocketError::ExtractorNotFound(extractor_id.clone().into()));
+
+        // Test SubscriptionNotFound conversion
+        let models_error = ModelsError::SubscriptionNotFound(subscription_id);
+        let dto_error: WebsocketError = models_error.into();
+        assert_eq!(dto_error, WebsocketError::SubscriptionNotFound(subscription_id));
+
+        // Test ParseError conversion - create a real JSON parse error
+        let json_result: Result<serde_json::Value, _> = serde_json::from_str("{invalid json");
+        let json_error = json_result.unwrap_err();
+        let models_error = ModelsError::ParseError("{invalid json".to_string(), json_error);
+        let dto_error: WebsocketError = models_error.into();
+        if let WebsocketError::ParseError(msg, error) = dto_error {
+            // Just check that we have a non-empty error message
+            assert!(!error.is_empty(), "Error message should not be empty, got: '{}'", msg);
+        } else {
+            panic!("Expected ParseError variant");
+        }
+
+        // Test SubscribeError conversion
+        let models_error = ModelsError::SubscribeError(extractor_id.clone());
+        let dto_error: WebsocketError = models_error.into();
+        assert_eq!(dto_error, WebsocketError::SubscribeError(extractor_id.into()));
     }
 }

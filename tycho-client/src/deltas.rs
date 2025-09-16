@@ -58,7 +58,9 @@ use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
 };
 use tracing::{debug, error, info, instrument, trace, warn};
-use tycho_common::dto::{BlockChanges, Command, ExtractorIdentity, Response, WebSocketMessage};
+use tycho_common::dto::{
+    BlockChanges, Command, ExtractorIdentity, Response, WebSocketMessage, WebsocketError,
+};
 use uuid::Uuid;
 
 use crate::TYCHO_SERVER_VERSION;
@@ -72,6 +74,9 @@ pub enum DeltasError {
     /// The requested subscription is already pending and is awaiting confirmation from the server.
     #[error("The requested subscription is already pending")]
     SubscriptionAlreadyPending,
+
+    #[error("The server replied with an error: {0}")]
+    ServerError(String, #[source] WebsocketError),
 
     /// A message failed to send via an internal channel or through the websocket channel.
     /// This is typically a fatal error and might indicate a bug in the implementation.
@@ -192,7 +197,7 @@ type WebSocketSink =
 #[derive(Debug)]
 enum SubscriptionInfo {
     /// Subscription was requested we wait for server confirmation and uuid assignment.
-    RequestedSubscription(oneshot::Sender<(Uuid, Receiver<BlockChanges>)>),
+    RequestedSubscription(oneshot::Sender<Result<(Uuid, Receiver<BlockChanges>), DeltasError>>),
     /// Subscription is active.
     Active,
     /// Unsubscription was requested, we wait for server confirmation.
@@ -236,7 +241,7 @@ impl Inner {
     fn new_subscription(
         &mut self,
         id: &ExtractorIdentity,
-        ready_tx: oneshot::Sender<(Uuid, Receiver<BlockChanges>)>,
+        ready_tx: oneshot::Sender<Result<(Uuid, Receiver<BlockChanges>), DeltasError>>,
     ) -> Result<(), DeltasError> {
         if self.pending.contains_key(id) {
             return Err(DeltasError::SubscriptionAlreadyPending);
@@ -257,7 +262,7 @@ impl Inner {
                 self.subscriptions
                     .insert(subscription_id, SubscriptionInfo::Active);
                 let _ = ready_tx
-                    .send((subscription_id, rx))
+                    .send(Ok((subscription_id, rx)))
                     .map_err(|_| {
                         warn!(
                             ?extractor_id,
@@ -277,7 +282,7 @@ impl Inner {
             error!(
                 ?extractor_id,
                 ?subscription_id,
-                "Tried to mark an unkown subscription as active. Ignoring!"
+                "Tried to mark an unknown subscription as active. Ignoring!"
             );
         }
     }
@@ -311,7 +316,7 @@ impl Inner {
                 *info = SubscriptionInfo::RequestedUnsubscription(ready_tx);
             }
         } else {
-            // no big deal imo so only debug lvl..
+            // no big deal imo so only debug lvl...
             debug!(?subscription_id, "Tried unsubscribing from a non existent subscription");
         }
     }
@@ -344,12 +349,31 @@ impl Inner {
         } else {
             error!(
                 ?subscription_id,
-                "Received `SubscriptionEnded`, but was never subscribed 
-                to it. This is likely a bug!"
+                "Received `SubscriptionEnded`, but was never subscribed to it. This is likely a bug!"
             );
         }
 
         Ok(())
+    }
+
+    fn cancel_pending(&mut self, extractor_id: &ExtractorIdentity, error: &WebsocketError) {
+        if let Some(sub_info) = self.pending.remove(extractor_id) {
+            match sub_info {
+                SubscriptionInfo::RequestedSubscription(tx) => {
+                    let _ = tx
+                        .send(Err(DeltasError::ServerError(
+                            format!("Subscription failed: {error}"),
+                            error.clone(),
+                        )))
+                        .map_err(|_| debug!("Cancel pending failed: receiver deallocated!"));
+                }
+                _ => {
+                    error!(?extractor_id, "Pending subscription in wrong state")
+                }
+            }
+        } else {
+            debug!(?extractor_id, "Tried cancel on non-existent pending subscription!")
+        }
     }
 
     /// Sends a message through the websocket.
@@ -510,6 +534,35 @@ impl WsDeltasClient {
                                 .ok_or_else(|| DeltasError::NotConnected)?;
                             inner.remove_subscription(subscription_id)?;
                         }
+                        WebSocketMessage::Response(Response::Error(error)) => match &error {
+                            WebsocketError::ExtractorNotFound(extractor_id) => {
+                                let inner = guard
+                                    .as_mut()
+                                    .ok_or_else(|| DeltasError::NotConnected)?;
+                                inner.cancel_pending(extractor_id, &error);
+                            }
+                            WebsocketError::SubscriptionNotFound(subscription_id) => {
+                                debug!("Received subscription not found, removing subscription");
+                                let inner = guard
+                                    .as_mut()
+                                    .ok_or_else(|| DeltasError::NotConnected)?;
+                                inner.remove_subscription(*subscription_id)?;
+                            }
+                            WebsocketError::ParseError(raw, e) => {
+                                return Err(DeltasError::ServerError(
+                                    format!(
+                                        "Server failed to parse client message: {e}, msg: {raw}"
+                                    ),
+                                    error.clone(),
+                                ))
+                            }
+                            WebsocketError::SubscribeError(extractor_id) => {
+                                let inner = guard
+                                    .as_mut()
+                                    .ok_or_else(|| DeltasError::NotConnected)?;
+                                inner.cancel_pending(extractor_id, &error);
+                            }
+                        },
                     },
                     Err(e) => {
                         error!(
@@ -641,11 +694,11 @@ impl DeltasClient for WsDeltasClient {
                 .await?;
         }
         trace!("Waiting for subscription response");
-        let rx = ready_rx.await.map_err(|_| {
+        let res = ready_rx.await.map_err(|_| {
             DeltasError::TransportError("Subscription channel closed unexpectedly".to_string())
-        })?;
+        })??;
         trace!("Subscription successful");
-        Ok(rx)
+        Ok(res)
     }
 
     #[instrument(skip(self))]
@@ -1598,5 +1651,322 @@ mod tests {
 
         let _ = jh.await;
         let _ = server_thread.await;
+    }
+
+    #[tokio::test]
+    async fn test_server_error_handling() {
+        use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
+
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "test_extractor");
+
+        // Test ExtractorNotFound error
+        let error_response = WebSocketMessage::Response(Response::Error(
+            WebsocketError::ExtractorNotFound(extractor_id.clone()),
+        ));
+        let error_json = serde_json::to_string(&error_response).unwrap();
+
+        let exp_comm = [
+            ExpectedComm::Receive(
+                100,
+                tungstenite::protocol::Message::Text(
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true}"#.to_string()
+                ),
+            ),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
+        ];
+
+        let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
+
+        let client = WsDeltasClient::new(&format!("ws://{addr}"), None).unwrap();
+        let jh = client
+            .connect()
+            .await
+            .expect("connect failed");
+
+        let result = timeout(
+            Duration::from_millis(100),
+            client.subscribe(extractor_id, SubscriptionOptions::new()),
+        )
+        .await
+        .expect("subscription timed out");
+
+        // Verify that we get a ServerError
+        assert!(result.is_err());
+        if let Err(DeltasError::ServerError(msg, _)) = result {
+            assert!(msg.contains("Subscription failed"));
+            assert!(msg.contains("Extractor not found"));
+        } else {
+            panic!("Expected DeltasError::ServerError, got: {:?}", result);
+        }
+
+        timeout(Duration::from_millis(100), client.close())
+            .await
+            .expect("close timed out")
+            .expect("close failed");
+        jh.await
+            .expect("ws loop errored")
+            .unwrap();
+        server_thread.await.unwrap();
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_subscription_not_found_error() {
+        // Test scenario: Server restart causes subscription loss
+        use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
+
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "test_extractor");
+        let subscription_id = Uuid::new_v4();
+
+        let error_response = WebSocketMessage::Response(Response::Error(
+            WebsocketError::SubscriptionNotFound(subscription_id),
+        ));
+        let error_json = serde_json::to_string(&error_response).unwrap();
+
+        let exp_comm = [
+            // 1. Client subscribes successfully
+            ExpectedComm::Receive(
+                100,
+                tungstenite::protocol::Message::Text(
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true}"#.to_string()
+                ),
+            ),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(format!(
+                r#"{{"method":"newsubscription","extractor_id":{{"chain":"ethereum","name":"test_extractor"}},"subscription_id":"{}"}}"#,
+                subscription_id
+            ))),
+            // 2. Client tries to unsubscribe (server has "restarted" and lost subscription)
+            ExpectedComm::Receive(
+                100,
+                tungstenite::protocol::Message::Text(format!(
+                    r#"{{"method":"unsubscribe","subscription_id":"{}"}}"#,
+                    subscription_id
+                )),
+            ),
+            // 3. Server responds with SubscriptionNotFound (simulating server restart)
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
+        ];
+
+        let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
+
+        let client = WsDeltasClient::new(&format!("ws://{addr}"), None).unwrap();
+        let jh = client
+            .connect()
+            .await
+            .expect("connect failed");
+
+        // Subscribe successfully
+        let (received_sub_id, _rx) = timeout(
+            Duration::from_millis(100),
+            client.subscribe(extractor_id, SubscriptionOptions::new()),
+        )
+        .await
+        .expect("subscription timed out")
+        .expect("subscription failed");
+
+        assert_eq!(received_sub_id, subscription_id);
+
+        // Now try to unsubscribe - this should fail because server "restarted"
+        let unsubscribe_result =
+            timeout(Duration::from_millis(100), client.unsubscribe(subscription_id))
+                .await
+                .expect("unsubscribe timed out");
+
+        // The unsubscribe should handle the SubscriptionNotFound error gracefully
+        // In this case, the client should treat it as successful since the subscription
+        // is effectively gone (whether due to server restart or other reasons)
+        unsubscribe_result
+            .expect("Unsubscribe should succeed even if server says subscription not found");
+
+        timeout(Duration::from_millis(100), client.close())
+            .await
+            .expect("close timed out")
+            .expect("close failed");
+        jh.await
+            .expect("ws loop errored")
+            .unwrap();
+        server_thread.await.unwrap();
+    }
+
+    #[test_log::test(tokio::test)]
+    async fn test_parse_error_handling() {
+        use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
+
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "test_extractor");
+        let error_response = WebSocketMessage::Response(Response::Error(
+            WebsocketError::ParseError("}2sdf".to_string(), "malformed JSON".to_string()),
+        ));
+        let error_json = serde_json::to_string(&error_response).unwrap();
+
+        let exp_comm = [
+            // subscribe first so connect can finish successfully
+            ExpectedComm::Receive(
+                100,
+                tungstenite::protocol::Message::Text(
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true}"#.to_string()
+                ),
+            ),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json))
+        ];
+
+        let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
+
+        let client = WsDeltasClient::new(&format!("ws://{addr}"), None).unwrap();
+        let jh = client
+            .connect()
+            .await
+            .expect("connect failed");
+
+        // Subscribe successfully
+        let _ = timeout(
+            Duration::from_millis(100),
+            client.subscribe(extractor_id, SubscriptionOptions::new()),
+        )
+        .await
+        .expect("subscription timed out");
+
+        // The client should receive the parse error and close the connection
+        let result = jh
+            .await
+            .expect("ws loop should complete");
+        assert!(result.is_err());
+        if let Err(DeltasError::ServerError(message, _)) = result {
+            assert!(message.contains("Server failed to parse client message"));
+        } else {
+            panic!("Expected DeltasError::ServerError, got: {:?}", result);
+        }
+
+        server_thread.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_error_handling() {
+        use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
+
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "failing_extractor");
+
+        let error_response = WebSocketMessage::Response(Response::Error(
+            WebsocketError::SubscribeError(extractor_id.clone()),
+        ));
+        let error_json = serde_json::to_string(&error_response).unwrap();
+
+        let exp_comm = [
+            ExpectedComm::Receive(
+                100,
+                tungstenite::protocol::Message::Text(
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"failing_extractor"},"include_state":true}"#.to_string()
+                ),
+            ),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
+        ];
+
+        let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
+
+        let client = WsDeltasClient::new(&format!("ws://{addr}"), None).unwrap();
+        let jh = client
+            .connect()
+            .await
+            .expect("connect failed");
+
+        let result = timeout(
+            Duration::from_millis(100),
+            client.subscribe(extractor_id, SubscriptionOptions::new()),
+        )
+        .await
+        .expect("subscription timed out");
+
+        // Verify that we get a ServerError for subscribe failure
+        assert!(result.is_err());
+        if let Err(DeltasError::ServerError(msg, _)) = result {
+            assert!(msg.contains("Subscription failed"));
+            assert!(msg.contains("Failed to subscribe to extractor"));
+        } else {
+            panic!("Expected DeltasError::ServerError, got: {:?}", result);
+        }
+
+        timeout(Duration::from_millis(100), client.close())
+            .await
+            .expect("close timed out")
+            .expect("close failed");
+        jh.await
+            .expect("ws loop errored")
+            .unwrap();
+        server_thread.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_cancel_pending_subscription() {
+        // This test verifies that pending subscriptions are properly cancelled when errors occur
+        use tycho_common::dto::{Response, WebSocketMessage, WebsocketError};
+
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "test_extractor");
+
+        let error_response = WebSocketMessage::Response(Response::Error(
+            WebsocketError::ExtractorNotFound(extractor_id.clone()),
+        ));
+        let error_json = serde_json::to_string(&error_response).unwrap();
+
+        let exp_comm = [
+            ExpectedComm::Receive(
+                100,
+                tungstenite::protocol::Message::Text(
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"test_extractor"},"include_state":true}"#.to_string()
+                ),
+            ),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
+        ];
+
+        let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
+
+        let client = WsDeltasClient::new(&format!("ws://{addr}"), None).unwrap();
+        let jh = client
+            .connect()
+            .await
+            .expect("connect failed");
+
+        // Start two subscription attempts simultaneously
+        let client_clone = client.clone();
+        let extractor_id_clone = extractor_id.clone();
+
+        let subscription1 = tokio::spawn({
+            let client_for_spawn = client.clone();
+            async move {
+                client_for_spawn
+                    .subscribe(extractor_id, SubscriptionOptions::new())
+                    .await
+            }
+        });
+
+        let subscription2 = tokio::spawn(async move {
+            // This should fail because there's already a pending subscription
+            client_clone
+                .subscribe(extractor_id_clone, SubscriptionOptions::new())
+                .await
+        });
+
+        let (result1, result2) = tokio::join!(subscription1, subscription2);
+
+        let result1 = result1.unwrap();
+        let result2 = result2.unwrap();
+
+        // One should fail due to ExtractorNotFound error from server
+        // The other should fail due to SubscriptionAlreadyPending
+        assert!(result1.is_err() || result2.is_err());
+
+        if let Err(DeltasError::SubscriptionAlreadyPending) = result2 {
+            // This is expected for the second subscription
+        } else if let Err(DeltasError::ServerError(_, _)) = result1 {
+            // This is expected for the first subscription that gets the server error
+        } else {
+            panic!("Expected one SubscriptionAlreadyPending and one ServerError");
+        }
+
+        timeout(Duration::from_millis(100), client.close())
+            .await
+            .expect("close timed out")
+            .expect("close failed");
+        jh.await
+            .expect("ws loop errored")
+            .unwrap();
+        server_thread.await.unwrap();
     }
 }
