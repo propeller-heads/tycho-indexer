@@ -381,7 +381,7 @@ where
             );
 
             // TODO: this is a quickfix. Handle this properly.
-            let max_retries = 3;
+            let max_retries = 5;
             let retry_delay_ms = 1000;
             let mut retry_count = 0;
 
