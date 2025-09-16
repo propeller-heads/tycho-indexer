@@ -6,6 +6,7 @@ use std::{
 
 use reqwest::Client;
 use serde_json::{json, Value};
+use thiserror::Error;
 use tonic::async_trait;
 use tracing::{debug, error, warn};
 
@@ -28,6 +29,23 @@ impl Default for RPCRetryConfig {
     fn default() -> Self {
         Self { max_retries: 3, initial_backoff_ms: 100, max_backoff_ms: 5000 }
     }
+}
+
+/// Custom error type for RPC batch operations
+#[derive(Error, Debug)]
+pub enum BatchError {
+    #[error("Network error: {0}")]
+    Network(String),
+    #[error("HTTP client error (status {status}): {message}")]
+    HttpClient { status: u16, message: String },
+    #[error("HTTP server error (status {status}): {message}")]
+    HttpServer { status: u16, message: String },
+    #[error("JSON parse error: {0}")]
+    JsonParse(String),
+    #[error("Failed to read response text: {0}")]
+    ResponseRead(String),
+    #[error("Max retries exhausted after {attempts} attempts")]
+    MaxRetriesExhausted { attempts: usize },
 }
 
 pub struct RPCMetadataProvider {
@@ -117,42 +135,19 @@ impl RequestProvider for RPCMetadataProvider {
                 })
                 .collect();
 
-            let response = self
+            let response_json = match self
                 .send_batch_with_retry(&endpoint, &batch_json)
-                .await;
-
-            let response_json: Vec<Value> = match response {
-                Ok(text) => {
-                    // Try to parse as array first (batch response)
-                    match serde_json::from_str::<Vec<Value>>(&text) {
-                        Ok(data) => data,
-                        Err(_) => {
-                            // If array parsing fails, try parsing as single object
-                            match serde_json::from_str::<Value>(&text) {
-                                Ok(single_response) => vec![single_response],
-                                Err(e) => {
-                                    // Handle JSON decode failure by inserting errors for
-                                    // entire batch
-                                    for rpc in rpc_id_to_transport.values() {
-                                        results.insert(
-                                            rpc.deduplication_id(),
-                                            Err(MetadataError::ProviderFailed(format!(
-                                                "Failed to parse JSON response: {e}"
-                                            ))),
-                                        );
-                                    }
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    // HTTP request failed: insert errors for entire batch
+                .await
+            {
+                Ok(json) => json,
+                Err(batch_error) => {
+                    // Request failed after all retries: insert errors for entire batch
                     for rpc in rpc_id_to_transport.values() {
                         results.insert(
                             rpc.deduplication_id(),
-                            Err(MetadataError::ProviderFailed(format!("HTTP request failed: {e}"))),
+                            Err(MetadataError::ProviderFailed(format!(
+                                "Request failed: {batch_error}"
+                            ))),
                         );
                     }
                     continue;
@@ -222,14 +217,14 @@ impl RequestProvider for RPCMetadataProvider {
 
 impl RPCMetadataProvider {
     /// Send a batched JSON-RPC request with retry logic
-    /// Returns the response text as a string to allow for consistent parsing
+    /// Returns the parsed JSON responses
     async fn send_batch_with_retry(
         &self,
         endpoint: &str,
         batch_json: &[Value],
-    ) -> Result<String, reqwest::Error> {
+    ) -> Result<Vec<Value>, BatchError> {
         let mut attempt = 0;
-        let mut last_error = None;
+        let mut last_error: Option<BatchError> = None;
 
         while attempt <= self.retry_config.max_retries {
             // Calculate backoff with jitter
@@ -254,39 +249,79 @@ impl RPCMetadataProvider {
                 Ok(response) => {
                     // Check if the response status indicates success
                     if response.status().is_success() {
-                        // Parse response text to check for RPC errors
+                        // Parse response and check for RPC errors
                         match response.text().await {
                             Ok(response_text) => {
-                                // Try to parse as JSON to check for RPC errors
-                                if let Ok(response_json) =
-                                    serde_json::from_str::<Vec<Value>>(&response_text)
-                                {
-                                    // Check if any response has an RPC error
-                                    let has_rpc_errors = response_json
-                                        .iter()
-                                        .any(|r| r.get("error").is_some());
-
-                                    if has_rpc_errors && attempt < self.retry_config.max_retries {
-                                        // Log the RPC errors for debugging
-                                        let error_details: Vec<_> = response_json
-                                            .iter()
-                                            .filter_map(|r| r.get("error"))
-                                            .collect();
-                                        warn!(
-                                            attempt = attempt + 1,
-                                            endpoint = endpoint,
-                                            errors = ?error_details,
-                                            "RPC batch contains errors, will retry"
-                                        );
-                                        // Continue to retry loop without setting last_error
-                                        // (we'll use the RPC errors directly if retries are
-                                        // exhausted)
-                                        attempt += 1;
-                                        continue;
+                                // Parse the response JSON
+                                let response_json = match serde_json::from_str::<Vec<Value>>(
+                                    &response_text,
+                                ) {
+                                    Ok(json) => json,
+                                    Err(_) => {
+                                        // Try parsing as single object and wrap in array
+                                        match serde_json::from_str::<Value>(&response_text) {
+                                            Ok(single) => vec![single],
+                                            Err(e) => {
+                                                // Parse error - treat as retryable if we have
+                                                // retries left
+                                                let parse_error =
+                                                    BatchError::JsonParse(e.to_string());
+                                                if attempt < self.retry_config.max_retries {
+                                                    warn!(
+                                                        attempt = attempt + 1,
+                                                        error = %e,
+                                                        endpoint = endpoint,
+                                                        "Failed to parse JSON response, will retry"
+                                                    );
+                                                    last_error = Some(parse_error);
+                                                    attempt += 1;
+                                                    continue;
+                                                } else {
+                                                    // Max retries exhausted, cannot parse response
+                                                    error!(
+                                                        error = %e,
+                                                        endpoint = endpoint,
+                                                        "Failed to parse JSON response after all retries"
+                                                    );
+                                                    return Err(parse_error);
+                                                }
+                                            }
+                                        }
                                     }
+                                };
+
+                                // Check if ALL responses are errors (complete batch failure)
+                                let all_failed = response_json
+                                    .iter()
+                                    .all(|r| r.get("error").is_some());
+
+                                // Check if at least one error is retryable
+                                let has_retryable = response_json.iter().any(|r| {
+                                    r.get("error")
+                                        .is_some_and(Self::is_retryable_rpc_error)
+                                });
+
+                                // Only retry if ALL responses failed AND at least one is retryable
+                                if all_failed &&
+                                    has_retryable &&
+                                    attempt < self.retry_config.max_retries
+                                {
+                                    // Log the RPC errors for debugging
+                                    let error_details: Vec<_> = response_json
+                                        .iter()
+                                        .filter_map(|r| r.get("error"))
+                                        .collect();
+                                    warn!(
+                                        attempt = attempt + 1,
+                                        endpoint = endpoint,
+                                        errors = ?error_details,
+                                        "All requests in batch failed with at least one retryable error, will retry"
+                                    );
+                                    attempt += 1;
+                                    continue;
                                 }
 
-                                // Success - either no RPC errors or max retries exhausted
+                                // Success - return parsed responses
                                 if attempt > 0 {
                                     debug!(
                                         attempt = attempt + 1,
@@ -294,7 +329,7 @@ impl RPCMetadataProvider {
                                         "RPC batch request succeeded on retry"
                                     );
                                 }
-                                return Ok(response_text);
+                                return Ok(response_json);
                             }
                             Err(e) => {
                                 // Failed to read response text - treat as retryable error
@@ -304,7 +339,7 @@ impl RPCMetadataProvider {
                                     endpoint = endpoint,
                                     "Failed to read response text, will retry"
                                 );
-                                last_error = Some(e);
+                                last_error = Some(BatchError::ResponseRead(e.to_string()));
                             }
                         }
                     } else {
@@ -317,20 +352,23 @@ impl RPCMetadataProvider {
                                 endpoint = endpoint,
                                 "RPC batch request returned server error, will retry"
                             );
-                            // Create a synthetic error to represent server failure
-                            let synthetic_error = response
-                                .error_for_status_ref()
-                                .unwrap_err();
-                            last_error = Some(synthetic_error);
+                            // Create a server error
+                            last_error = Some(BatchError::HttpServer {
+                                status: status.as_u16(),
+                                message: format!("Server error {}", status),
+                            });
                         } else {
-                            // Client error (4xx) - not retryable, but still return the response
-                            // text
+                            // Client error (4xx) - not retryable
                             warn!(
                                 status = %status,
                                 endpoint = endpoint,
                                 "RPC batch request returned client error, not retrying"
                             );
-                            return response.text().await;
+                            // Return client error immediately (not retryable)
+                            return Err(BatchError::HttpClient {
+                                status: status.as_u16(),
+                                message: format!("Client error {}: unparseable response", status),
+                            });
                         }
                     }
                 }
@@ -342,7 +380,7 @@ impl RPCMetadataProvider {
                         endpoint = endpoint,
                         "RPC batch request failed, will retry"
                     );
-                    last_error = Some(e);
+                    last_error = Some(BatchError::Network(e.to_string()));
                 }
             }
 
@@ -356,30 +394,40 @@ impl RPCMetadataProvider {
             "All retry attempts failed for RPC batch request"
         );
 
-        // If we have a last_error (HTTP/network error), return it
-        // Otherwise, make one final attempt to get the current response with errors
-        if let Some(error) = last_error {
-            Err(error)
-        } else {
-            // No HTTP error recorded, but retries exhausted due to RPC errors
-            // Make one final request to get the current state with RPC errors
-            match self
-                .client
-                .post(endpoint)
-                .json(batch_json)
-                .send()
-                .await
-            {
-                Ok(response) if response.status().is_success() => {
-                    match response.text().await {
-                        Ok(text) => Ok(text), /* Return the text with RPC errors - caller will */
-                        // handle them
-                        Err(e) => Err(e),
-                    }
-                }
-                Ok(response) => response.text().await, // Return error response text
-                Err(e) => Err(e),                      // Network error
+        // Return the last error we encountered or a max retries exhausted error
+        match last_error {
+            Some(error) => Err(error),
+            None => {
+                Err(BatchError::MaxRetriesExhausted { attempts: self.retry_config.max_retries + 1 })
             }
+        }
+    }
+
+    /// Check if an RPC error should be retried based on its error code
+    /// Retryable errors are typically transient issues that may resolve on retry
+    fn is_retryable_rpc_error(error: &Value) -> bool {
+        if let Some(code) = error
+            .get("code")
+            .and_then(|c| c.as_i64())
+        {
+            match code {
+                // Retryable errors (transient issues)
+                -32000 => true, // "header not found" - block may not be available yet
+                -32005 => true, // "limit exceeded" - rate limiting, backoff and retry
+                -32603 => true, // "internal error" - temporary server issue
+
+                // Non-retryable errors (permanent issues)
+                -32600 => false, // "invalid request" - malformed request
+                -32601 => false, // "method not found" - method doesn't exist
+                -32602 => false, // "invalid params" - wrong parameters
+                -32604 => false, // "method not supported" - not supported by this node
+
+                // Default: retry unknown error codes (conservative approach)
+                _ => true,
+            }
+        } else {
+            // No error code found - retry to be safe
+            true
         }
     }
 
@@ -926,8 +974,17 @@ mod tests {
 
         assert!(result.is_ok(), "Request should succeed after retries");
 
-        let text = result.unwrap();
-        assert!(text.contains("0x15dac9b"), "Should contain expected result");
+        let json_responses = result.unwrap();
+        assert!(!json_responses.is_empty(), "Should have responses");
+
+        // Check that at least one response contains the expected result
+        let has_expected_result = json_responses.iter().any(|r| {
+            r.get("result").is_some_and(|v| {
+                v.as_str()
+                    .is_some_and(|s| s.contains("0x15dac9b"))
+            })
+        });
+        assert!(has_expected_result, "Should contain expected result");
     }
 
     #[tokio::test]
@@ -961,6 +1018,14 @@ mod tests {
             .await;
 
         assert!(result.is_err(), "Request should fail after exhausting retries");
+
+        // Verify it's the correct error type
+        match result.unwrap_err() {
+            BatchError::HttpServer { .. } => {
+                // Expected - server errors should be retried and then fail
+            }
+            other => panic!("Expected HttpServer error, got: {:?}", other),
+        }
     }
 
     #[tokio::test]
@@ -1135,7 +1200,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_mixed_batch_with_rpc_errors_retries() {
+    async fn test_mixed_batch_with_partial_errors_no_retry() {
+        // Test that when batch has mixed success/failure, we don't retry
+        // (Only retry when ALL requests fail)
         let retry_config = RPCRetryConfig {
             max_retries: 1,
             initial_backoff_ms: 10, // Fast for testing
@@ -1151,13 +1218,14 @@ mod tests {
             endpoint.clone(),
             "eth_getBlockByHash".to_string(),
             vec![
-                json!("0xabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd"), /* Random invalid block hash */
+                json!("0xabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd"), /* Random invalid block hash */
                 json!(true),
             ],
         );
 
-        // First call: both requests in batch, second request has RPC error
-        let first_response = vec![
+        // Mixed response: one success, one error
+        // Should NOT trigger retry since not all requests failed
+        let mixed_response = vec![
             json!({
                 "jsonrpc": "2.0",
                 "id": request1.id,
@@ -1173,53 +1241,35 @@ mod tests {
             }),
         ];
 
-        // Second call: both requests succeed (after retry)
-        let second_response = vec![
-            json!({
-                "jsonrpc": "2.0",
-                "id": request1.id,
-                "result": "0x1234568"
-            }),
-            json!({
-                "jsonrpc": "2.0",
-                "id": request2.id,
-                "result": {
-                    "number": "0x1234",
-                    "hash": "0xabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd"
-                }
-            }),
-        ];
-
         server
             .mock("POST", "/")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(&first_response).unwrap())
-            .expect(1)
-            .create_async()
-            .await;
-
-        server
-            .mock("POST", "/")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(serde_json::to_string(&second_response).unwrap())
-            .expect(1)
+            .with_body(serde_json::to_string(&mixed_response).unwrap())
+            .expect(1) // Should only be called once (no retry)
             .create_async()
             .await;
 
         let requests = vec![
-            Box::new(request1) as Box<dyn RequestTransport>,
-            Box::new(request2) as Box<dyn RequestTransport>,
+            Box::new(request1.clone()) as Box<dyn RequestTransport>,
+            Box::new(request2.clone()) as Box<dyn RequestTransport>,
         ];
         let results = provider.execute_batch(&requests).await;
 
         assert_eq!(results.len(), 2, "Should get two results");
 
-        // Both requests should succeed after retry
-        for (_, result) in &results {
-            assert!(result.is_ok(), "Both results should be successful after retry");
-        }
+        // Check results: first should succeed, second should fail
+        let results_map: std::collections::HashMap<_, _> = results.into_iter().collect();
+
+        let result1 = results_map
+            .get(&request1.deduplication_id())
+            .expect("Should have result for request1");
+        assert!(result1.is_ok(), "First request should succeed");
+
+        let result2 = results_map
+            .get(&request2.deduplication_id())
+            .expect("Should have result for request2");
+        assert!(result2.is_err(), "Second request should fail with RPC error");
 
         server.reset();
     }
