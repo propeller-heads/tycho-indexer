@@ -42,7 +42,6 @@ use crate::{
 };
 
 pub struct TestRunner {
-    tycho_logs: bool,
     db_url: String,
     vm_traces: bool,
     substreams_path: PathBuf,
@@ -55,7 +54,6 @@ impl TestRunner {
         root_path: PathBuf,
         protocol: String,
         match_test: Option<String>,
-        tycho_logs: bool,
         db_url: String,
         vm_traces: bool,
     ) -> Self {
@@ -65,14 +63,7 @@ impl TestRunner {
         let evm_path = root_path.join("evm");
         let adapter_contract_builder =
             AdapterContractBuilder::new(evm_path.to_string_lossy().to_string());
-        Self {
-            tycho_logs,
-            db_url,
-            vm_traces,
-            substreams_path,
-            adapter_contract_builder,
-            match_test,
-        }
+        Self { db_url, vm_traces, substreams_path, adapter_contract_builder, match_test }
     }
 
     pub fn run_tests(&self) -> miette::Result<()> {
@@ -191,8 +182,7 @@ impl TestRunner {
         let spkg_path =
             build_spkg(&substreams_yaml_path, test.start_block).wrap_err("Failed to build spkg")?;
 
-        let tycho_runner =
-            TychoRunner::new(self.db_url.clone(), initialized_accounts, self.tycho_logs);
+        let tycho_runner = TychoRunner::new(self.db_url.clone(), initialized_accounts);
 
         tycho_runner
             .run_tycho(

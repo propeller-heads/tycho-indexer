@@ -6,23 +6,21 @@ use std::{
     time::Duration,
 };
 
-use dotenv::dotenv;
 use miette::{IntoDiagnostic, WrapErr};
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::config::ProtocolComponentWithTestConfig;
 
 pub struct TychoRunner {
     db_url: String,
     initialized_accounts: Vec<String>,
-    with_binary_logs: bool,
 }
 
 // TODO: Currently Tycho-Indexer cannot be run as a lib. We need to expose the entrypoints to allow
 //  running it as a lib
 impl TychoRunner {
-    pub fn new(db_url: String, initialized_accounts: Vec<String>, with_binary_logs: bool) -> Self {
-        Self { db_url, initialized_accounts, with_binary_logs }
+    pub fn new(db_url: String, initialized_accounts: Vec<String>) -> Self {
+        Self { db_url, initialized_accounts }
     }
 
     pub fn run_tycho(
@@ -33,8 +31,7 @@ impl TychoRunner {
         protocol_type_names: &[String],
         protocol_system: &str,
     ) -> miette::Result<()> {
-        // Expects a .env present in the same folder as package root (where Cargo.toml is)
-        dotenv().ok();
+        info!("Running Tycho indexer from block {start_block} to {end_block}...");
 
         let mut cmd = Command::new("tycho-indexer");
         cmd.env("RUST_LOG", std::env::var("RUST_LOG").unwrap_or("tycho_indexer=info".to_string()))
@@ -79,9 +76,7 @@ impl TychoRunner {
             .into_diagnostic()
             .wrap_err("Error running Tycho indexer")?;
 
-        if self.with_binary_logs {
-            Self::handle_process_output(&mut process);
-        }
+        Self::handle_process_output(&mut process);
 
         let status = process
             .wait()
@@ -110,7 +105,6 @@ impl TychoRunner {
     {
         let (tx, rx): (Sender<bool>, Receiver<bool>) = mpsc::channel();
         let db_url = self.db_url.clone();
-        let with_binary_logs = self.with_binary_logs;
 
         // Start the RPC server in a separate thread
         let rpc_thread = thread::spawn(move || {
@@ -126,9 +120,7 @@ impl TychoRunner {
                 .spawn()
                 .expect("Failed to start RPC server");
 
-            if with_binary_logs {
-                Self::handle_process_output(&mut cmd);
-            }
+            Self::handle_process_output(&mut cmd);
 
             match rx.recv() {
                 Ok(_) => {

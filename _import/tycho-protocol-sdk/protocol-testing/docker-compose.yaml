@@ -24,7 +24,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      RUST_LOG: "protocol_testing=info"
+      RUST_LOG: "${RUST_LOG:-protocol_testing=info}"
       DATABASE_URL: postgres://postgres:mypassword@db:5432/tycho_indexer_0
       RPC_URL: "${RPC_URL}"
       SUBSTREAMS_API_TOKEN: "${SUBSTREAMS_API_TOKEN}"

@@ -32,10 +32,6 @@ struct Args {
     #[arg(long)]
     match_test: Option<String>,
 
-    /// Enable tycho logs
-    #[arg(long, default_value_t = false)]
-    tycho_logs: bool,
-
     /// Postgres database URL for the Tycho indexer
     #[arg(long, default_value = "postgres://postgres:mypassword@localhost:5431/tycho_indexer_0")]
     db_url: String,
@@ -94,7 +90,6 @@ fn main() -> miette::Result<()> {
         args.root_path()?,
         args.package,
         args.match_test,
-        args.tycho_logs,
         args.db_url,
         args.vm_traces,
     );
