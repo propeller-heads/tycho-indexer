@@ -22,7 +22,6 @@ RUN cargo build --release
 
 WORKDIR /build/tycho-protocol-sdk/substreams
 COPY ./substreams/target/wasm32-unknown-unknown/release/*.wasm ./target/wasm32-unknown-unknown/release/
-COPY ./substreams/target/wasm32-unknown-unknown/release/*.d ./target/wasm32-unknown-unknown/release/
 
 WORKDIR /build/tycho-protocol-sdk/evm
 COPY ./evm/out ./out

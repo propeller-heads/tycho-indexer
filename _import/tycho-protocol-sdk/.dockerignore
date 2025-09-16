@@ -5,6 +5,5 @@
 protocol-testing/*.Dockerfile
 protocol-testing/docker-compose.yaml
 !substreams/target/wasm32-unknown-unknown/release/*.wasm
-!substreams/target/wasm32-unknown-unknown/release/*.d
 !evm/out
 !evm/cache
