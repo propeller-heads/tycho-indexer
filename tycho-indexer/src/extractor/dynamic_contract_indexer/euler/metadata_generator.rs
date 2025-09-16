@@ -368,12 +368,24 @@ mod tests {
             "euler_limits_0x000000000000000000000000000000000000beef_0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48_to_0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".to_string()
         );
         assert_eq!(requests[1].transport.routing_key(), "rpc_default".to_string());
-        // Note: The deduplication_id will now include the state override parameter
-        // We just check that it starts with the expected prefix
+
+        // The deduplication_id will now include the state & code override parameters
         assert!(requests[1]
             .transport
             .deduplication_id()
             .starts_with("eth_call_"));
+
+        dbg!(&requests[1].transport.deduplication_id());
+
+        assert!(requests[1]
+            .transport
+            .deduplication_id()
+            .contains("code"));
+
+        assert!(requests[1]
+            .transport
+            .deduplication_id()
+            .contains("state"));
 
         // Limits request 1 to 0
         assert_eq!(requests[2].component_id, component.id);
@@ -388,12 +400,22 @@ mod tests {
             "euler_limits_0x000000000000000000000000000000000000beef_0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2_to_0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string()
         );
         assert_eq!(requests[2].transport.routing_key(), "rpc_default".to_string());
-        // Note: The deduplication_id will now include the state override parameter
-        // We just check that it starts with the expected prefix
+
+        // The deduplication_id will now include the state & code override parameters
         assert!(requests[2]
             .transport
             .deduplication_id()
             .starts_with("eth_call_"));
+
+        assert!(requests[2]
+            .transport
+            .deduplication_id()
+            .contains("code"));
+
+        assert!(requests[2]
+            .transport
+            .deduplication_id()
+            .contains("state"));
     }
 
     #[test]
