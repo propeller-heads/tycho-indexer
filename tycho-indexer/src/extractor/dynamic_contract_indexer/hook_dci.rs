@@ -1950,7 +1950,7 @@ mod tests {
                 .expect("Failed to create EVMBalanceSlotDetector");
 
             let mut entrypoint_generator = UniswapV4DefaultHookEntrypointGenerator::new(
-                DefaultSwapAmountEstimator::with_balances(),
+                DefaultSwapAmountEstimator::with_limits(),
                 pool_manager.clone(),
                 balance_slot_detector,
             );
