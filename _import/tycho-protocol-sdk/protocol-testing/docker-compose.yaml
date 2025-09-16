@@ -2,8 +2,6 @@ services:
   db:
     image: protocol-testing-db:latest
     restart: "always"
-    logging:
-      driver: "none"
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 1s
