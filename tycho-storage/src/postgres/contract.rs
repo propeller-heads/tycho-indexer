@@ -1175,7 +1175,7 @@ impl PostgresGateway {
                 balance_data.push(WithOrdinal::new(new, (account_id, ts, index)));
             }
 
-            if let Some(new_code) = delta.code.as_ref() {
+            if let Some(new_code) = delta.code() {
                 let hash = keccak256(new_code.clone());
                 let new = orm::NewContractCode {
                     code: new_code,

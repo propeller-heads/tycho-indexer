@@ -98,8 +98,8 @@ pub struct AccountDelta {
     pub address: Address,
     pub slots: ContractStoreDeltas,
     pub balance: Option<Balance>,
-    pub code: Option<Code>,
-    pub change: ChangeType,
+    code: Option<Code>,
+    change: ChangeType,
 }
 
 impl AccountDelta {
@@ -120,6 +120,9 @@ impl AccountDelta {
         code: Option<Code>,
         change: ChangeType,
     ) -> Self {
+        if code.is_none() && matches!(change, ChangeType::Creation) {
+            warn!(?address, "Instantiated AccountDelta without code marked as creation!")
+        }
         Self { chain, address, slots, balance, code, change }
     }
 
@@ -248,6 +251,10 @@ impl AccountDelta {
         }
         self.code = other.code.or(self.code.take());
 
+        if self.code.is_none() && matches!(self.change, ChangeType::Creation) {
+            warn!(address=?self.address, "AccountDelta without code marked as creation after merge!")
+        }
+
         Ok(())
     }
 
@@ -258,22 +265,34 @@ impl AccountDelta {
     pub fn is_creation(&self) -> bool {
         self.change == ChangeType::Creation
     }
+
+    pub fn change_type(&self) -> ChangeType {
+        self.change
+    }
+
+    pub fn code(&self) -> &Option<Code> {
+        &self.code
+    }
+
+    pub fn set_code(&mut self, code: Bytes) {
+        self.code = Some(code)
+    }
 }
 
 impl From<Account> for AccountDelta {
     fn from(value: Account) -> Self {
-        Self {
-            chain: value.chain,
-            address: value.address,
-            slots: value
+        Self::new(
+            value.chain,
+            value.address,
+            value
                 .slots
                 .into_iter()
                 .map(|(k, v)| (k, Some(v)))
                 .collect(),
-            balance: Some(value.native_balance),
-            code: Some(value.code),
-            change: ChangeType::Creation,
-        }
+            Some(value.native_balance),
+            Some(value.code),
+            ChangeType::Creation,
+        )
     }
 }
 
