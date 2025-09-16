@@ -5,7 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use tracing::{debug, info, instrument, span, warn, Instrument, Level};
+use tracing::{debug, info, instrument, span, trace, warn, Instrument, Level};
 use tycho_common::{
     models::{
         blockchain::{
@@ -69,6 +69,7 @@ where
         &mut self,
         block_changes: &mut BlockChanges,
     ) -> Result<(), ExtractionError> {
+        trace!("Processing block update: {:?}", block_changes.block.number);
         self.cache
             .try_insert_block_layer(&block_changes.block)?;
 
