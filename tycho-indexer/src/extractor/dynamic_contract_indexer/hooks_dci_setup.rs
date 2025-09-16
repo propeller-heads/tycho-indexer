@@ -25,7 +25,7 @@ use crate::extractor::dynamic_contract_indexer::{
     hook_dci::UniswapV4HookDCI,
     hook_orchestrator::{DefaultUniswapV4HookOrchestrator, HookOrchestratorRegistry},
     metadata_orchestrator::BlockMetadataOrchestrator,
-    rpc_metadata_provider::RPCMetadataProvider,
+    rpc_metadata_provider::{RPCMetadataProvider, RPCRetryConfig},
 };
 
 #[derive(Deserialize)]
@@ -50,10 +50,15 @@ pub fn setup_metadata_registries(
     // Register Euler response parser
     parser_registry.register_parser("euler".to_string(), Box::new(EulerMetadataResponseParser));
 
-    // Register RPC provider with default routing key
+    // Register RPC provider with default routing key and retry configuration
+    let retry_config = RPCRetryConfig {
+        max_retries: 3,
+        initial_backoff_ms: 100,
+        max_backoff_ms: 5000,
+    };
     provider_registry.register_provider(
         "rpc_default".to_string(),
-        Arc::new(RPCMetadataProvider::new(50)), // batch size limit
+        Arc::new(RPCMetadataProvider::new_with_retry_config(50, retry_config)), // batch size limit with retry config
     );
 
     (generator_registry, parser_registry, provider_registry)
