@@ -372,8 +372,8 @@ impl RPCMetadataProvider {
             {
                 Ok(response) if response.status().is_success() => {
                     match response.text().await {
-                        Ok(text) => Ok(text), /* Return the text with RPC errors - caller will
-                                                * handle them */
+                        Ok(text) => Ok(text), /* Return the text with RPC errors - caller will */
+                        // handle them
                         Err(e) => Err(e),
                     }
                 }
