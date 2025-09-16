@@ -7,7 +7,7 @@ mod tycho_rpc;
 mod tycho_runner;
 mod utils;
 
-use std::{path::PathBuf, process::Command};
+use std::{fmt::Display, path::PathBuf};
 
 use clap::Parser;
 use miette::{miette, IntoDiagnostic, WrapErr};
@@ -82,7 +82,11 @@ fn main() -> miette::Result<()> {
         .init();
 
     let version = Version::from_env()?;
-    info!("version: {}, hash: {}", version.version, version.hash);
+    if std::env::args().any(|arg| arg == "--version") {
+        println!("{version}");
+        return Ok(());
+    }
+    info!("{version}");
 
     let args = Args::parse();
 
@@ -108,13 +112,16 @@ impl Version {
         let version = option_env!("CARGO_PKG_VERSION")
             .unwrap_or("unknown")
             .to_string();
-        let hash = {
-            let output = Command::new("git")
-                .args(["rev-parse", "HEAD"])
-                .output()
-                .into_diagnostic()?;
-            String::from_utf8(output.stdout).into_diagnostic()?
-        };
+        let hash = option_env!("GIT_HASH")
+            .unwrap_or("unknown")
+            .to_string();
         Ok(Self { version, hash })
+    }
+}
+
+impl Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let bin_name = option_env!("CARGO_PKG_NAME").unwrap_or_default();
+        write!(f, "{bin_name} version: {}, hash: {}", self.version, self.hash)
     }
 }

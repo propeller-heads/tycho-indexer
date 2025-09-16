@@ -366,7 +366,7 @@ fn validate_state(
     let mut decoder = TychoStreamDecoder::new();
     let decoder_context = DecoderContext::new()
         .vm_adapter_path(adapter_contract_path_str)
-        .vm_trace(vm_traces);
+        .vm_traces(vm_traces);
     decoder.register_decoder_with_context::<EVMPoolState<PreCachedDB>>(
         protocol_system,
         decoder_context,
