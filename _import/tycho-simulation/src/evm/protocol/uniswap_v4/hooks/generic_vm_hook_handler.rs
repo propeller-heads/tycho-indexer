@@ -115,12 +115,13 @@ where
             params.context.currency_1
         };
         let mut token_overwrites = TokenProxyOverwriteFactory::new(token_in, None);
+        // Overwrite pool manager's balance of token in. This is relevant when the pool manager does
+        // not have a lot of these tokens and the hook assumes that the token in is transferred
+        // before before_swap
         token_overwrites.set_balance(U256::MAX, self.pool_manager);
-        // token_overwrites.set_allowance(
-        //     U256::MAX,
-        //     Address::from_str("0xA28C23a459fF8773EB4dBe0e7250d93F79F1Fe2B").unwrap(),
-        //     self.address,
-        // );
+        // This is only to set the custom allowance flag to true, so we can fall in this condition
+        // https://github.com/propeller-heads/tycho-simulation/blob/23c3b1fbacdf4cccec62b633c109e668c6d5f12a/token-proxy/src/TokenProxy.sol#L342
+        token_overwrites.set_allowance(U256::MAX, Address::ZERO, self.address);
         let mut final_overwrites = token_overwrites.get_overwrites();
         if let Some(input_overwrites) = overwrites {
             final_overwrites.extend(input_overwrites)

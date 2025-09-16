@@ -1214,7 +1214,7 @@ mod tests {
 
         decoder.set_tokens(tokens.clone()).await;
 
-        let msg = load_test_msg("hook_state");
+        let msg = load_test_msg("euler_hook_snapshot");
         let res = decoder
             .decode(&msg)
             .await
@@ -1227,11 +1227,11 @@ mod tests {
         let amount_out = pool_state
             .get_amount_out(
                 BigUint::from_str("1000000000000000000").unwrap(),
-                &tokens.get(&teth).unwrap(),
-                &tokens.get(&weth).unwrap(),
+                tokens.get(&teth).unwrap(),
+                tokens.get(&weth).unwrap(),
             )
             .expect("Get amount out failed");
 
-        println!("amount: {:?}", amount_out);
+        assert_eq!(amount_out.amount, BigUint::from_str("1216190190361759119").unwrap());
     }
 }

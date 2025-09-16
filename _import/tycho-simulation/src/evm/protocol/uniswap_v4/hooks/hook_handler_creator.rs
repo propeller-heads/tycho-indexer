@@ -37,6 +37,7 @@ pub struct HookCreationParams<'a> {
 }
 
 impl<'a> HookCreationParams<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         hook_address: Address,
         account_balances: &'a HashMap<Bytes, HashMap<Bytes, Bytes>>,
