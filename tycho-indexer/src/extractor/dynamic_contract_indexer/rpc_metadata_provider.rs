@@ -26,11 +26,7 @@ pub struct RPCRetryConfig {
 
 impl Default for RPCRetryConfig {
     fn default() -> Self {
-        Self {
-            max_retries: 3,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 5000,
-        }
+        Self { max_retries: 3, initial_backoff_ms: 100, max_backoff_ms: 5000 }
     }
 }
 
@@ -47,11 +43,7 @@ impl RPCMetadataProvider {
     }
 
     pub fn new_with_retry_config(batch_size_limit: usize, retry_config: RPCRetryConfig) -> Self {
-        Self {
-            client: Arc::new(Client::new()),
-            batch_size_limit,
-            retry_config,
-        }
+        Self { client: Arc::new(Client::new()), batch_size_limit, retry_config }
     }
 }
 
@@ -266,13 +258,18 @@ impl RPCMetadataProvider {
                         match response.text().await {
                             Ok(response_text) => {
                                 // Try to parse as JSON to check for RPC errors
-                                if let Ok(response_json) = serde_json::from_str::<Vec<Value>>(&response_text) {
+                                if let Ok(response_json) =
+                                    serde_json::from_str::<Vec<Value>>(&response_text)
+                                {
                                     // Check if any response has an RPC error
-                                    let has_rpc_errors = response_json.iter().any(|r| r.get("error").is_some());
+                                    let has_rpc_errors = response_json
+                                        .iter()
+                                        .any(|r| r.get("error").is_some());
 
                                     if has_rpc_errors && attempt < self.retry_config.max_retries {
                                         // Log the RPC errors for debugging
-                                        let error_details: Vec<_> = response_json.iter()
+                                        let error_details: Vec<_> = response_json
+                                            .iter()
                                             .filter_map(|r| r.get("error"))
                                             .collect();
                                         warn!(
@@ -282,7 +279,8 @@ impl RPCMetadataProvider {
                                             "RPC batch contains errors, will retry"
                                         );
                                         // Continue to retry loop without setting last_error
-                                        // (we'll use the RPC errors directly if retries are exhausted)
+                                        // (we'll use the RPC errors directly if retries are
+                                        // exhausted)
                                         attempt += 1;
                                         continue;
                                     }
@@ -320,10 +318,13 @@ impl RPCMetadataProvider {
                                 "RPC batch request returned server error, will retry"
                             );
                             // Create a synthetic error to represent server failure
-                            let synthetic_error = response.error_for_status_ref().unwrap_err();
+                            let synthetic_error = response
+                                .error_for_status_ref()
+                                .unwrap_err();
                             last_error = Some(synthetic_error);
                         } else {
-                            // Client error (4xx) - not retryable, but still return the response text
+                            // Client error (4xx) - not retryable, but still return the response
+                            // text
                             warn!(
                                 status = %status,
                                 endpoint = endpoint,
@@ -362,15 +363,22 @@ impl RPCMetadataProvider {
         } else {
             // No HTTP error recorded, but retries exhausted due to RPC errors
             // Make one final request to get the current state with RPC errors
-            match self.client.post(endpoint).json(batch_json).send().await {
+            match self
+                .client
+                .post(endpoint)
+                .json(batch_json)
+                .send()
+                .await
+            {
                 Ok(response) if response.status().is_success() => {
                     match response.text().await {
-                        Ok(text) => Ok(text), // Return the text with RPC errors - caller will handle them
+                        Ok(text) => Ok(text), /* Return the text with RPC errors - caller will
+                                                * handle them */
                         Err(e) => Err(e),
                     }
                 }
                 Ok(response) => response.text().await, // Return error response text
-                Err(e) => Err(e), // Network error
+                Err(e) => Err(e),                      // Network error
             }
         }
     }
@@ -852,11 +860,8 @@ mod tests {
 
     #[test]
     fn test_calculate_backoff() {
-        let retry_config = RPCRetryConfig {
-            max_retries: 3,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 5000,
-        };
+        let retry_config =
+            RPCRetryConfig { max_retries: 3, initial_backoff_ms: 100, max_backoff_ms: 5000 };
         let provider = RPCMetadataProvider::new_with_retry_config(10, retry_config);
 
         // Test exponential backoff
@@ -969,11 +974,8 @@ mod tests {
         let mut server = Server::new_async().await;
         let endpoint = server.url();
 
-        let transport = RpcTransport::new(
-            endpoint.to_string(),
-            "eth_blockNumber".to_string(),
-            vec![],
-        );
+        let transport =
+            RpcTransport::new(endpoint.to_string(), "eth_blockNumber".to_string(), vec![]);
 
         // First attempt fails, second succeeds
         let _m1 = server
@@ -984,7 +986,8 @@ mod tests {
             .await;
 
         let transport_id = transport.id;
-        let success_response = format!(r#"[{{"jsonrpc":"2.0","id":{},"result":"0x15dac9b"}}]"#, transport_id);
+        let success_response =
+            format!(r#"[{{"jsonrpc":"2.0","id":{},"result":"0x15dac9b"}}]"#, transport_id);
 
         let _m2 = server
             .mock("POST", "/")
@@ -1017,7 +1020,7 @@ mod tests {
             endpoint.clone(),
             "eth_getBlockByHash".to_string(),
             vec![
-                json!("0x1234567890123456789012345678901234567890123456789012345678901234"), // Random invalid block hash
+                json!("0x1234567890123456789012345678901234567890123456789012345678901234"), /* Random invalid block hash */
                 json!(true),
             ],
         );
@@ -1084,7 +1087,7 @@ mod tests {
             endpoint.clone(),
             "eth_getBlockByHash".to_string(),
             vec![
-                json!("0x9999999999999999999999999999999999999999999999999999999999999999"), // Another random invalid block hash
+                json!("0x9999999999999999999999999999999999999999999999999999999999999999"), /* Another random invalid block hash */
                 json!(true),
             ],
         );
@@ -1123,7 +1126,8 @@ mod tests {
         let error_msg = format!("{:?}", result);
         assert!(
             error_msg.contains("header not found") || error_msg.contains("-32000"),
-            "Error should contain RPC error details: {}", error_msg
+            "Error should contain RPC error details: {}",
+            error_msg
         );
 
         // Verify all expected calls were made
@@ -1141,17 +1145,13 @@ mod tests {
         let mut server = Server::new_async().await;
         let endpoint = server.url();
 
-        let request1 = RpcTransport::new(
-            endpoint.clone(),
-            "eth_blockNumber".to_string(),
-            vec![],
-        );
+        let request1 = RpcTransport::new(endpoint.clone(), "eth_blockNumber".to_string(), vec![]);
 
         let request2 = RpcTransport::new(
             endpoint.clone(),
             "eth_getBlockByHash".to_string(),
             vec![
-                json!("0xabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd"), // Random invalid block hash
+                json!("0xabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd"), /* Random invalid block hash */
                 json!(true),
             ],
         );
@@ -1170,7 +1170,7 @@ mod tests {
                     "code": -32000,
                     "message": "header not found"
                 }
-            })
+            }),
         ];
 
         // Second call: both requests succeed (after retry)
@@ -1187,7 +1187,7 @@ mod tests {
                     "number": "0x1234",
                     "hash": "0xabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd"
                 }
-            })
+            }),
         ];
 
         server
@@ -1229,23 +1229,18 @@ mod tests {
     async fn test_real_rpc_retry_on_header_not_found() {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
 
-        let retry_config = RPCRetryConfig {
-            max_retries: 2,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 1000,
-        };
+        let retry_config =
+            RPCRetryConfig { max_retries: 2, initial_backoff_ms: 100, max_backoff_ms: 1000 };
         let provider = RPCMetadataProvider::new_with_retry_config(10, retry_config);
 
         // Use a completely random block hash that definitely doesn't exist
-        let random_block_hash = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        let random_block_hash =
+            "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
         let request = RpcTransport::new(
             rpc_url,
             "eth_getBlockByHash".to_string(),
-            vec![
-                json!(random_block_hash),
-                json!(true),
-            ],
+            vec![json!(random_block_hash), json!(true)],
         );
 
         let requests = vec![Box::new(request) as Box<dyn RequestTransport>];
@@ -1262,10 +1257,12 @@ mod tests {
             let error_msg = format!("{:?}", result);
             assert!(
                 error_msg.contains("header not found") || error_msg.contains("-32000"),
-                "Error should be about header not found, got: {}", error_msg
+                "Error should be about header not found, got: {}",
+                error_msg
             );
         } else {
-            // If the result is Ok, print it and check if it contains null (which is also valid for non-existent blocks)
+            // If the result is Ok, print it and check if it contains null (which is also valid for
+            // non-existent blocks)
             println!("Unexpected success result: {:?}", result);
 
             // Some RPC implementations return null instead of error for non-existent blocks
