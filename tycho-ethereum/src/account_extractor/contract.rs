@@ -307,8 +307,8 @@ impl EVMBatchAccountExtractor {
                                 )
                                 .map_err(|e| {
                                     RPCError::RequestError(RequestError::Other(format!(
-                                        "Failed to get storage: {e}, address: {}, block: {}",
-                                        request.address, block.number,
+                                        "Failed to get storage: {e}, address: {}, block: {}, slot: {}",
+                                        request.address, block.number, slot,
                                     )))
                                 })?
                                 .map_resp(|res: Bytes| res.to_vec()),
@@ -369,7 +369,10 @@ impl EVMBatchAccountExtractor {
         let mut start_key = H256::zero();
         loop {
             trace!("Requesting storage range for {:?}, block: {:?}", address.clone(), block);
-            let result: StorageRange = self
+
+            // We request as a generic Value to see the raw response
+            // This allows us to see the raw response and debug deserialization errors
+            let raw_result: serde_json::Value = self
                 .provider
                 .request(
                     "debug_storageRangeAt",
@@ -388,6 +391,23 @@ impl EVMBatchAccountExtractor {
                         block.number,
                     )))
                 })?;
+
+            // This is settable because cloning the value is expensive
+            let should_debug = std::env::var("TYCHO_DEBUG_ACCOUNT_EXTRACTOR_RESPONSE").is_ok();
+            let result = if should_debug {
+                let value_string = raw_result.to_string();
+                let result: StorageRange =
+                    serde_json::from_value(raw_result.clone()).map_err(|e| {
+                        RPCError::RequestError(RequestError::Other(format!("Failed to deserialize storage response: {e}, address: {address}, block: {}, raw_json: {}", block.number, value_string)))
+                    })?;
+                result
+            } else {
+                let result: StorageRange =
+                    serde_json::from_value(raw_result.clone()).map_err(|e| {
+                        RPCError::RequestError(RequestError::Other(format!("Failed to deserialize storage response: {e}, address: {address}, block: {block:?}")))
+                    })?;
+                result
+            };
 
             for (_, entry) in result.storage {
                 all_slots
