@@ -28,8 +28,8 @@ impl ProtocolComponentExpectation {
     pub fn compare(&self, other: &ProtocolComponent, colorize_output: bool) -> Option<String> {
         let mut diffs = Vec::new();
 
-        // Compare id
-        if self.id != other.id {
+        // Compare id (case-insensitive)
+        if self.id.to_lowercase() != other.id.to_lowercase() {
             let diff = self.format_diff("id", &self.id, &other.id, colorize_output);
             diffs.push(format!("Field 'id' mismatch for {}:\n{}", self.id, diff));
         }

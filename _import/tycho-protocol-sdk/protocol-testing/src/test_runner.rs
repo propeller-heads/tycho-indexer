@@ -257,7 +257,7 @@ fn validate_state(
 
     let expected_ids = expected_components
         .iter()
-        .map(|c| c.base.id.clone())
+        .map(|c| c.base.id.to_lowercase())
         .collect::<Vec<String>>();
 
     let protocol_states = rt
@@ -274,12 +274,12 @@ fn validate_state(
     let components_by_id: HashMap<String, ProtocolComponent> = protocol_components
         .clone()
         .into_iter()
-        .map(|c| (c.id.clone(), c))
+        .map(|c| (c.id.to_lowercase(), c))
         .collect();
 
     let protocol_states_by_id: HashMap<String, ResponseProtocolState> = protocol_states
         .into_iter()
-        .map(|s| (s.component_id.clone(), s))
+        .map(|s| (s.component_id.to_lowercase(), s))
         .collect();
 
     info!("Found {} protocol components", components_by_id.len());
@@ -290,7 +290,7 @@ fn validate_state(
     // Step 1: Validate that all expected components are present on Tycho after indexing
     debug!("Validating {:?} expected components", expected_components.len());
     for expected_component in expected_components {
-        let component_id = expected_component.base.id.clone();
+        let component_id = expected_component.base.id.to_lowercase();
 
         let component = components_by_id
             .get(&component_id)
@@ -366,7 +366,7 @@ fn validate_state(
     let simulation_component_ids: std::collections::HashSet<String> = expected_components
         .iter()
         .filter(|c| !c.skip_simulation)
-        .map(|c| c.base.id.clone())
+        .map(|c| c.base.id.to_lowercase())
         .collect();
 
     info!("Components to simulate: {}", simulation_component_ids.len());

@@ -68,8 +68,8 @@ tests:
     expected_components:
       - id: "0xf91c11BA4220b7a72E1dc5E92f2b48D3fdF62726"
         tokens:
-          - "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
           - "0x440017A1b021006d556d7fc06A54c32E42Eb745B"
+          - "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
         static_attributes:
           pool_type: "0x5765696768746564506f6f6c466163746f7279"
           manual_updates: "0x01"
