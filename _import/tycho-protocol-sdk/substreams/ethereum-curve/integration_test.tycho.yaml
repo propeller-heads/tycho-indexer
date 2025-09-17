@@ -1,4 +1,5 @@
 substreams_yaml_path: ./substreams.yaml
+protocol_system: "vm:curve"
 protocol_type_names:
   - "curve_pool"
 adapter_contract: "CurveAdapter"
