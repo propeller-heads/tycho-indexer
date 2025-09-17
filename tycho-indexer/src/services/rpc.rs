@@ -942,8 +942,8 @@ where
                         ));
                     } else {
                         warn!(
-                            ?entry_point_id,
-                            ?tracing_param,
+                            %entry_point_id,
+                            %tracing_param,
                             "No tracing results found for entry point with params."
                         );
                     }
