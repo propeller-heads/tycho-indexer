@@ -1,4 +1,5 @@
 substreams_yaml_path: ./substreams.yaml
+protocol_system: "vm:balancer_v3"
 protocol_type_names:
   - "balancer_v3_pool"
 adapter_contract: "BalancerV3SwapAdapter"

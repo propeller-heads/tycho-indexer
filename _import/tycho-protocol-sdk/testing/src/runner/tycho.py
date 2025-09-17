@@ -59,6 +59,7 @@ class TychoRunner:
         end_block: int,
         protocol_type_names: list,
         initialized_accounts: list,
+        protocol_system: str = "test_protocol",
     ) -> None:
         """Run the Tycho indexer with the specified SPKG and block range."""
 
@@ -80,6 +81,8 @@ class TychoRunner:
                     "map_protocol_changes",
                     "--protocol-type-names",
                     ",".join(protocol_type_names),
+                    "--protocol-system",
+                    protocol_system,
                     "--start-block",
                     str(start_block),
                     "--stop-block",
