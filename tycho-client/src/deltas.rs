@@ -160,7 +160,9 @@ pub struct WsDeltasClient {
     /// Authorization key for the websocket connection.
     auth_key: Option<String>,
     /// Maximum amount of reconnects to try before giving up.
-    max_reconnects: u32,
+    max_reconnects: u64,
+    /// Duration to wait before attempting to reconnect
+    retry_cooldown: Duration,
     /// The client will buffer this many messages incoming from the websocket
     /// before starting to drop them.
     ws_buffer_size: usize,
@@ -171,7 +173,7 @@ pub struct WsDeltasClient {
     conn_notify: Arc<Notify>,
     /// Shared client instance state.
     inner: Arc<Mutex<Option<Inner>>>,
-    /// If set the client has exhausted it's reconnection attemtpts
+    /// If set the client has exhausted its reconnection attempts
     dead: Arc<AtomicBool>,
 }
 
@@ -376,6 +378,7 @@ impl WsDeltasClient {
             subscription_buffer_size: 128,
             conn_notify: Arc::new(Notify::new()),
             max_reconnects: 5,
+            retry_cooldown: Duration::from_millis(500),
             dead: Arc::new(AtomicBool::new(false)),
         })
     }
@@ -384,8 +387,9 @@ impl WsDeltasClient {
     #[allow(clippy::result_large_err)]
     pub fn new_with_reconnects(
         ws_uri: &str,
-        max_reconnects: u32,
         auth_key: Option<&str>,
+        max_reconnects: u64,
+        retry_cooldown: Duration,
     ) -> Result<Self, DeltasError> {
         let uri = ws_uri
             .parse::<Uri>()
@@ -399,6 +403,7 @@ impl WsDeltasClient {
             subscription_buffer_size: 128,
             conn_notify: Arc::new(Notify::new()),
             max_reconnects,
+            retry_cooldown,
             dead: Arc::new(AtomicBool::new(false)),
         })
     }
@@ -423,6 +428,7 @@ impl WsDeltasClient {
             subscription_buffer_size,
             conn_notify: Arc::new(Notify::new()),
             max_reconnects: 5,
+            retry_cooldown: Duration::from_millis(0),
             dead: Arc::new(AtomicBool::new(false)),
         })
     }
@@ -687,6 +693,9 @@ impl DeltasClient for WsDeltasClient {
 
             'retry: while retry_count < this.max_reconnects {
                 info!(?ws_uri, retry_count, "Connecting to WebSocket server");
+                if retry_count > 0 {
+                    sleep(this.retry_cooldown).await;
+                }
 
                 // Create a WebSocket request
                 let mut request_builder = Request::builder()
@@ -729,8 +738,6 @@ impl DeltasClient for WsDeltasClient {
                             e = e.to_string(),
                             "Failed to connect to WebSocket server; Reconnecting"
                         );
-                        sleep(Duration::from_millis(500)).await;
-
                         continue 'retry;
                     }
                 };
@@ -751,7 +758,13 @@ impl DeltasClient for WsDeltasClient {
                     let res = tokio::select! {
                         msg = msg_rx.next() => match msg {
                             Some(msg) => this.handle_msg(msg).await,
-                            None => { break 'retry } // ws connection silently closed
+                            None => {
+                                // This code should not be reachable since the stream
+                                // should return ConnectionClosed in the case above
+                                // before it returns None here.
+                                warn!("Websocket connection silently closed, giving up!");
+                                break 'retry
+                            }
                         },
                         _ = cmd_rx.recv() => {break 'retry},
                     };
@@ -1372,7 +1385,13 @@ mod tests {
     #[test(tokio::test)]
     async fn test_subscribe_dead_client_after_max_attempts() {
         let (addr, _) = mock_bad_connection_tycho_ws(true).await;
-        let client = WsDeltasClient::new_with_reconnects(&format!("ws://{addr}"), 3, None).unwrap();
+        let client = WsDeltasClient::new_with_reconnects(
+            &format!("ws://{addr}"),
+            None,
+            3,
+            Duration::from_secs(0),
+        )
+        .unwrap();
 
         let join_handle = client.connect().await.unwrap();
         let handle_res = join_handle.await.unwrap();
@@ -1389,6 +1408,38 @@ mod tests {
         .await
         .unwrap();
         assert!(subscription_res.is_err());
+    }
+
+    #[test(tokio::test)]
+    async fn test_ws_client_retry_cooldown() {
+        let start = std::time::Instant::now();
+        let (addr, _) = mock_bad_connection_tycho_ws(false).await;
+
+        // Use the mock server that immediately drops connections
+        let client = WsDeltasClient::new_with_reconnects(
+            &format!("ws://{addr}"),
+            None,
+            3,                         // 3 attempts total (so 2 retries with cooldowns)
+            Duration::from_millis(50), // 50ms cooldown
+        )
+        .unwrap();
+
+        // Try to connect - this should fail after retries but still measure the time
+        let connect_result = client.connect().await;
+        let elapsed = start.elapsed();
+
+        // Connection should fail after exhausting retries
+        assert!(connect_result.is_err(), "Expected connection to fail after retries");
+
+        // Should have waited at least 100ms total (2 retries × 50ms cooldown each)
+        assert!(
+            elapsed >= Duration::from_millis(100),
+            "Expected at least 100ms elapsed, got {:?}",
+            elapsed
+        );
+
+        // Should not take too long (max ~300ms for 3 attempts with some tolerance)
+        assert!(elapsed < Duration::from_millis(500), "Took too long: {:?}", elapsed);
     }
 
     #[test_log::test(tokio::test)]

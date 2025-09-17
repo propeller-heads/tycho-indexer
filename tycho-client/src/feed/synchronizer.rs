@@ -10,7 +10,7 @@ use tokio::{
         oneshot,
     },
     task::JoinHandle,
-    time::timeout,
+    time::{sleep, timeout},
 };
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
@@ -82,6 +82,7 @@ pub struct ProtocolStateSynchronizer<R: RPCClient, D: DeltasClient> {
     rpc_client: R,
     deltas_client: D,
     max_retries: u64,
+    retry_cooldown: Duration,
     include_snapshots: bool,
     component_tracker: ComponentTracker<R>,
     last_synced_block: Option<BlockHeader>,
@@ -221,6 +222,7 @@ where
         retrieve_balances: bool,
         component_filter: ComponentFilter,
         max_retries: u64,
+        retry_cooldown: Duration,
         include_snapshots: bool,
         include_tvl: bool,
         rpc_client: R,
@@ -240,6 +242,7 @@ where
                 rpc_client,
             ),
             max_retries,
+            retry_cooldown,
             last_synced_block: None,
             timeout,
             include_tvl,
@@ -698,6 +701,7 @@ where
                         }
                     }
                 }
+                sleep(self.retry_cooldown).await;
                 retry_count += 1;
             }
             warn!(extractor_id=%&self.extractor_id, retry_count, "Max retries exceeded");
@@ -873,6 +877,7 @@ mod test {
             native,
             ComponentFilter::with_tvl_range(50.0, 50.0),
             1,
+            Duration::from_secs(0),
             true,
             include_tvl,
             rpc_client,
@@ -1666,6 +1671,7 @@ mod test {
             true,
             ComponentFilter::with_tvl_range(remove_tvl_threshold, add_tvl_threshold),
             1,
+            Duration::from_secs(0),
             true,
             true,
             ArcRPCClient(Arc::new(rpc_client)),
@@ -1841,6 +1847,7 @@ mod test {
             true,
             ComponentFilter::with_tvl_range(0.0, 0.0),
             5, // Enough retries
+            Duration::from_secs(0),
             true,
             false,
             ArcRPCClient(Arc::new(rpc_client)),
@@ -1957,6 +1964,7 @@ mod test {
             true,
             ComponentFilter::with_tvl_range(0.0, 1000.0), // Include the component
             1,
+            Duration::from_secs(0),
             true,
             false,
             ArcRPCClient(Arc::new(rpc_client)),
@@ -2024,6 +2032,7 @@ mod test {
             true,
             ComponentFilter::with_tvl_range(0.0, 0.0),
             1,
+            Duration::from_secs(0),
             true,
             false,
             ArcRPCClient(Arc::new(rpc_client)),
@@ -2148,6 +2157,7 @@ mod test {
             true,
             ComponentFilter::with_tvl_range(0.0, 1000.0),
             1,
+            Duration::from_secs(0),
             true,
             false,
             ArcRPCClient(Arc::new(rpc_client)),
