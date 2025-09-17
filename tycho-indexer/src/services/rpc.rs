@@ -407,7 +407,6 @@ where
 
         // Get the protocol IDs from the request
         let protocol_ids = request.protocol_ids.clone();
-        debug!(?protocol_ids, "Getting protocol states.");
         let ids = protocol_ids.as_deref();
 
         // Apply pagination to the protocol ids. This is done so that we can determine which ids
