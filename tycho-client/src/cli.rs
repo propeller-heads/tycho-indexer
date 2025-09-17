@@ -194,6 +194,7 @@ pub async fn run_cli() -> Result<(), String> {
 }
 
 async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<(), String> {
+    info!("Running with version: {}", option_env!("CARGO_PKG_VERSION").unwrap_or("unknown"));
     //TODO: remove "or args.auth_key.is_none()" when our internal client use the no_tls flag
     let (tycho_ws_url, tycho_rpc_url) = if args.no_tls || args.auth_key.is_none() {
         info!("Using non-secure connection: ws:// and http://");
