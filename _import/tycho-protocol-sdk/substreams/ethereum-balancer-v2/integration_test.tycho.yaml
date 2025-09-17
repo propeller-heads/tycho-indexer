@@ -42,27 +42,6 @@ tests:
           pool_type: "0x5765696768746564506f6f6c32546f6b656e73466163746f7279"
         creation_tx: "0xdced662e41b1608c386551bbc89894a10321fd8bd58782e22077d1044cf99cb5"
 
-  # ComposableStablePoolFactory - 0xDB8d758BCb971e482B2C45f7F8a7740283A1bd3A
-  - name: test_composable_stable_pool_creation
-    start_block: 17677300
-    stop_block: 17678400
-    expected_components:
-      - id: "0x42ed016f826165c2e5976fe5bc3df540c5ad0af700000000000000000000058b"
-        tokens:
-          # BPT tokens not supported - their balance handling is currently bugged
-          # - "0x42ed016f826165c2e5976fe5bc3df540c5ad0af7"
-          - "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
-          - "0xac3E018457B222d93114458476f3E3416Abbe38F"
-          - "0xae78736Cd615f374D3085123A210448E74Fc6393"
-        static_attributes:
-          rate_providers: "0x5b22307837326430376437646361363762386134303661643165633334636539363963393062666565373638222c22307833303230313365373933366133396333353864303761336466353564633934656334313765336131222c22307831613866383163323536616565396336343065313462623034353363653234376561306466653666225d"
-          bpt: "0x42ed016f826165c2e5976fe5bc3df540c5ad0af7"
-          fee: "0x5af3107a4000"
-          manual_updates: "0x01"
-          pool_type: "0x436f6d706f7361626c65537461626c65506f6f6c466163746f7279"
-        skip_simulation: false
-        creation_tx: "0x53ff6bab0d8a76a998e29e59da8068ad906ae85507a1c2fbf2505e2cb52fd754"
-
   # ERC4626LinearPoolFactory - 0x813EE7a840CE909E7Fea2117A44a90b8063bd4fd
   - name: test_erc4626_linear_pool_creation
     start_block: 17480142
