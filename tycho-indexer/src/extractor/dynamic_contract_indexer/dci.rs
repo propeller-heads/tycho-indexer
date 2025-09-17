@@ -1013,7 +1013,7 @@ where
         }
 
         if !tracked_updates.is_empty() {
-            tracing::trace!("DCI: Tracked updates: {:?}", tracked_updates);
+            trace!("DCI: Tracked updates: {:?}", tracked_updates);
         }
 
         Ok(tracked_updates)

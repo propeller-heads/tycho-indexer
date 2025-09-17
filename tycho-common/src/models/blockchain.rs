@@ -451,6 +451,14 @@ pub enum TracingParams {
     RPCTracer(RPCTracerParams),
 }
 
+impl std::fmt::Display for TracingParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TracingParams::RPCTracer(params) => write!(f, "RPC: {}", params),
+        }
+    }
+}
+
 impl From<dto::TracingParams> for TracingParams {
     fn from(value: dto::TracingParams) -> Self {
         match value {
