@@ -10,6 +10,7 @@ use std::{
 };
 
 use actix_web::{dev::ServerHandle, web, App, HttpResponse, HttpServer, Responder};
+use anyhow::anyhow;
 use chrono::{NaiveDateTime, Utc};
 use clap::Parser;
 use futures03::future::select_all;
@@ -82,21 +83,24 @@ impl ExtractorConfigs {
 type ExtractionTasks = Vec<JoinHandle<Result<(), ExtractionError>>>;
 type ServerTasks = Vec<JoinHandle<Result<(), ExtractionError>>>; //TODO: introduce an error type for it
 
-#[tokio::main]
-async fn main() -> Result<(), anyhow::Error> {
+fn main() -> Result<(), anyhow::Error> {
     let cli: Cli = Cli::parse();
     let global_args = cli.args();
-
     match cli.command() {
-        Command::Run(run_args) => run_spkg(global_args, run_args).await.map_err(|e| e.into()),
         Command::Index(indexer_args) => {
-            run_indexer(global_args, indexer_args).map_err(|e| e.into())
+            run_indexer(global_args, indexer_args).map_err(|e| anyhow!(e))?;
+        }
+        Command::Run(run_args) => {
+            run_spkg(global_args, run_args).map_err(|e| anyhow!(e))?;
         }
         Command::AnalyzeTokens(analyze_args) => {
-            run_tycho_ethereum(global_args, analyze_args).await
+            run_tycho_ethereum(global_args, analyze_args).map_err(|e| anyhow!(e))?;
         }
-        Command::Rpc => run_rpc(global_args).await.map_err(|e| e.into()),
-    }
+        Command::Rpc => {
+            run_rpc(global_args).map_err(|e| anyhow!(e))?;
+        }
+    };
+    Ok(())
 }
 
 fn create_tracing_subscriber() {
@@ -256,6 +260,7 @@ fn run_indexer(global_args: GlobalArgs, index_args: IndexArgs) -> Result<(), Ext
     res.expect("A thread panicked. Shutting down Tycho.")
 }
 
+#[tokio::main]
 async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), ExtractionError> {
     create_tracing_subscriber();
     info!("Starting Tycho");
@@ -310,6 +315,7 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
     res.expect("Extractor- nor ServiceTasks should panic!")
 }
 
+#[tokio::main]
 async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
     create_tracing_subscriber();
 
@@ -599,6 +605,7 @@ async fn shutdown_handler(
     Ok(())
 }
 
+#[tokio::main]
 async fn run_tycho_ethereum(
     global_args: GlobalArgs,
     analyzer_args: AnalyzeTokenArgs,

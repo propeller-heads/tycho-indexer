@@ -403,7 +403,6 @@ where
                 ids.iter()
                     .skip(pagination_params.offset() as usize)
                     .take(pagination_params.page_size as usize)
-                    .cloned()
                     .map(|s| s.to_string())
                     .collect(),
                 ids.len() as i64,
