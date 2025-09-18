@@ -1,4 +1,5 @@
 use std::{
+    cmp::max,
     collections::{HashMap, HashSet},
     env,
     time::Duration,
@@ -31,6 +32,24 @@ pub enum StreamError {
     BlockSynchronizerError(String),
 }
 
+#[non_exhaustive]
+#[derive(Clone, Debug)]
+pub enum RetryConfiguration {
+    Constant(ConstantRetryConfiguration),
+}
+
+impl RetryConfiguration {
+    pub fn constant(max_attempts: u64, cooldown: Duration) -> Self {
+        RetryConfiguration::Constant(ConstantRetryConfiguration { max_attempts, cooldown })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ConstantRetryConfiguration {
+    max_attempts: u64,
+    cooldown: Duration,
+}
+
 pub struct TychoStreamBuilder {
     tycho_url: String,
     chain: Chain,
@@ -38,6 +57,8 @@ pub struct TychoStreamBuilder {
     block_time: u64,
     timeout: u64,
     max_missed_blocks: u64,
+    state_sync_retry_config: RetryConfiguration,
+    websockets_retry_config: RetryConfiguration,
     no_state: bool,
     auth_key: Option<String>,
     no_tls: bool,
@@ -56,6 +77,14 @@ impl TychoStreamBuilder {
             block_time,
             timeout,
             max_missed_blocks,
+            state_sync_retry_config: RetryConfiguration::constant(
+                32,
+                Duration::from_secs(max(block_time / 2, 2)),
+            ),
+            websockets_retry_config: RetryConfiguration::constant(
+                128,
+                Duration::from_secs(max(block_time / 4, 1)),
+            ),
             no_state: false,
             auth_key: None,
             no_tls: true,
@@ -98,6 +127,30 @@ impl TychoStreamBuilder {
     pub fn max_missed_blocks(mut self, max_missed_blocks: u64) -> Self {
         self.max_missed_blocks = max_missed_blocks;
         self
+    }
+
+    pub fn websockets_retry_config(mut self, retry_config: &RetryConfiguration) -> Self {
+        self.websockets_retry_config = retry_config.clone();
+        self.warn_on_potential_timing_issues();
+        self
+    }
+
+    pub fn state_synchronizer_retry_config(mut self, retry_config: &RetryConfiguration) -> Self {
+        self.state_sync_retry_config = retry_config.clone();
+        self.warn_on_potential_timing_issues();
+        self
+    }
+
+    fn warn_on_potential_timing_issues(&self) {
+        let (RetryConfiguration::Constant(state_config), RetryConfiguration::Constant(ws_config)) =
+            (&self.state_sync_retry_config, &self.websockets_retry_config);
+
+        if ws_config.cooldown >= state_config.cooldown {
+            warn!(
+                "Websocket cooldown should be < than state syncronizer cooldown \
+                to avoid spending retries due to disconnected websocket."
+            )
+        }
     }
 
     /// Configures the client to exclude state updates from the stream.
@@ -161,8 +214,21 @@ impl TychoStreamBuilder {
         };
 
         // Initialize the WebSocket client
-        let ws_client = WsDeltasClient::new(&tycho_ws_url, auth_key.as_deref())
-            .map_err(|e| StreamError::SetUpError(e.to_string()))?;
+        #[allow(unreachable_patterns)]
+        let ws_client = match &self.websockets_retry_config {
+            RetryConfiguration::Constant(config) => WsDeltasClient::new_with_reconnects(
+                &tycho_ws_url,
+                auth_key.as_deref(),
+                config.max_attempts,
+                config.cooldown,
+            ),
+            _ => {
+                return Err(StreamError::SetUpError(
+                    "Unknown websocket configuration variant!".to_string(),
+                ));
+            }
+        }
+        .map_err(|e| StreamError::SetUpError(e.to_string()))?;
         let rpc_client = HttpRPCClient::new(&tycho_rpc_url, auth_key.as_deref())
             .map_err(|e| StreamError::SetUpError(e.to_string()))?;
         let ws_jh = ws_client
@@ -184,17 +250,26 @@ impl TychoStreamBuilder {
         for (name, filter) in self.exchanges {
             info!("Registering exchange: {}", name);
             let id = ExtractorIdentity { chain: self.chain, name: name.clone() };
-            let sync = ProtocolStateSynchronizer::new(
-                id.clone(),
-                true,
-                filter,
-                3,
-                !self.no_state,
-                self.include_tvl,
-                rpc_client.clone(),
-                ws_client.clone(),
-                self.block_time + self.timeout,
-            );
+            #[allow(unreachable_patterns)]
+            let sync = match &self.state_sync_retry_config {
+                RetryConfiguration::Constant(retry_config) => ProtocolStateSynchronizer::new(
+                    id.clone(),
+                    true,
+                    filter,
+                    retry_config.max_attempts,
+                    retry_config.cooldown,
+                    !self.no_state,
+                    self.include_tvl,
+                    rpc_client.clone(),
+                    ws_client.clone(),
+                    self.block_time + self.timeout,
+                ),
+                _ => {
+                    return Err(StreamError::SetUpError(
+                        "Unknown state synchronizer configuration variant!".to_string(),
+                    ));
+                }
+            };
             block_sync = block_sync.register_synchronizer(id, sync);
         }
 
@@ -267,6 +342,38 @@ impl TychoStreamBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_retry_configuration_constant() {
+        let config = RetryConfiguration::constant(5, Duration::from_secs(10));
+        match config {
+            RetryConfiguration::Constant(c) => {
+                assert_eq!(c.max_attempts, 5);
+                assert_eq!(c.cooldown, Duration::from_secs(10));
+            }
+        }
+    }
+
+    #[test]
+    fn test_stream_builder_retry_configs() {
+        let mut builder = TychoStreamBuilder::new("localhost:4242", Chain::Ethereum);
+        let ws_config = RetryConfiguration::constant(10, Duration::from_secs(2));
+        let state_config = RetryConfiguration::constant(20, Duration::from_secs(5));
+
+        builder = builder
+            .websockets_retry_config(&ws_config)
+            .state_synchronizer_retry_config(&state_config);
+
+        // Verify configs are stored correctly by checking they match expected values
+        match (&builder.websockets_retry_config, &builder.state_sync_retry_config) {
+            (RetryConfiguration::Constant(ws), RetryConfiguration::Constant(state)) => {
+                assert_eq!(ws.max_attempts, 10);
+                assert_eq!(ws.cooldown, Duration::from_secs(2));
+                assert_eq!(state.max_attempts, 20);
+                assert_eq!(state.cooldown, Duration::from_secs(5));
+            }
+        }
+    }
 
     #[tokio::test]
     async fn test_no_exchanges() {
