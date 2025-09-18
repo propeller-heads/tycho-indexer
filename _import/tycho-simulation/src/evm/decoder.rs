@@ -10,7 +10,7 @@ use alloy::primitives::{Address, U256};
 use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{debug, error, info, warn};
-use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage, HeaderLike};
+use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader, FeedMessage, HeaderLike};
 use tycho_common::{
     dto::{ChangeType, ProtocolStateDelta},
     models::{token::Token, Chain},
@@ -228,6 +228,11 @@ where
             .ok_or_else(|| StreamDecodeError::Fatal("Missing block!".into()))?
             .header
             .clone();
+
+        let block_number_or_timestamp = header
+            .clone()
+            .block_number_or_timestamp();
+        let current_block = header.clone().block();
 
         for (protocol, protocol_msg) in msg.state_msgs.iter() {
             // Add any new tokens
@@ -698,9 +703,11 @@ where
 
                 // update states with protocol state deltas (attribute changes etc.)
                 for (id, update) in deltas.state_updates {
+                    let update_with_block =
+                        Self::add_block_info_to_delta(update, current_block.clone());
                     match Self::apply_update(
                         &id,
-                        update,
+                        update_with_block,
                         &mut updated_states,
                         &state_guard,
                         &all_balances,
@@ -733,9 +740,13 @@ where
 
                 // update remaining pools linked to updated contracts/updated balances
                 for pool in pools_to_update {
+                    let default_delta_with_block = Self::add_block_info_to_delta(
+                        ProtocolStateDelta::default(),
+                        current_block.clone(),
+                    );
                     match Self::apply_update(
                         &pool,
-                        ProtocolStateDelta::default(),
+                        default_delta_with_block,
                         &mut updated_states,
                         &state_guard,
                         &all_balances,
@@ -792,9 +803,29 @@ where
         }
 
         // Send the tick with all updated states
-        Ok(Update::new(header.block_number_or_timestamp(), updated_states, new_pairs)
+        Ok(Update::new(block_number_or_timestamp, updated_states, new_pairs)
             .set_removed_pairs(removed_pairs)
             .set_sync_states(msg.sync_states.clone()))
+    }
+
+    /// Add block information (number and timestamp) to a ProtocolStateDelta
+    fn add_block_info_to_delta(
+        mut delta: ProtocolStateDelta,
+        block_header_opt: Option<BlockHeader>,
+    ) -> ProtocolStateDelta {
+        if let Some(header) = block_header_opt {
+            // Add block_number and block_timestamp attributes to ensure pool states
+            // receive current block information during delta_transition
+            delta.updated_attributes.insert(
+                "block_number".to_string(),
+                Bytes::from(header.number.to_be_bytes().to_vec()),
+            );
+            delta.updated_attributes.insert(
+                "block_timestamp".to_string(),
+                Bytes::from(header.timestamp.to_be_bytes().to_vec()),
+            );
+        }
+        delta
     }
 
     fn apply_update(
