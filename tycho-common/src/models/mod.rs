@@ -1,5 +1,6 @@
 pub mod blockchain;
 pub mod contract;
+pub mod error;
 pub mod protocol;
 pub mod token;
 

@@ -1,7 +1,6 @@
 //! This module contains Tycho Websocket implementation
 use std::{
     collections::HashMap,
-    fmt::Debug,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -12,12 +11,10 @@ use actix::{
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use metrics::{counter, gauge};
-use serde::Serialize;
-use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     dto::{BlockChanges, Command, Response, WebSocketMessage},
-    models::ExtractorIdentity,
+    models::{error::WebsocketError, ExtractorIdentity},
 };
 use uuid::Uuid;
 
@@ -27,42 +24,6 @@ use crate::extractor::runner::MessageSender;
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 /// How long before lack of client response causes a timeout
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
-
-#[derive(Error, Debug)]
-pub enum WebsocketError {
-    #[error("Extractor not found: {0}")]
-    ExtractorNotFound(ExtractorIdentity),
-
-    #[error("Subscription not found: {0}")]
-    SubscriptionNotFound(Uuid),
-
-    #[error("Failed to parse JSON: {0}")]
-    ParseError(#[from] serde_json::Error),
-
-    #[error("Failed to subscribe to extractor: {0}")]
-    SubscribeError(ExtractorIdentity),
-}
-
-impl Serialize for WebsocketError {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            WebsocketError::ExtractorNotFound(extractor_id) => {
-                serializer.serialize_str(&format!("Extractor not found: {extractor_id:?}"))
-            }
-            WebsocketError::SubscriptionNotFound(subscription_id) => {
-                serializer.serialize_str(&format!("Subscription not found: {subscription_id:?}"))
-            }
-            WebsocketError::ParseError(e) => {
-                serializer.serialize_str(&format!("Failed to parse JSON: {e:?}"))
-            }
-            WebsocketError::SubscribeError(extractor_id) => serializer
-                .serialize_str(&format!("Failed to subscribe to extractor: {extractor_id:?}")),
-        }
-    }
-}
 
 pub type MessageSenderMap = HashMap<ExtractorIdentity, Arc<dyn MessageSender + Send + Sync>>;
 
@@ -234,7 +195,12 @@ impl WsActor {
                 let error = WebsocketError::ExtractorNotFound(extractor_id.clone());
                 error!(%error, available_extractors = ?available, "Extractor not found in hashmap");
 
-                ctx.text(serde_json::to_string(&error).unwrap());
+                ctx.text(
+                    serde_json::to_string(&WebSocketMessage::Response(Response::Error(
+                        error.into(),
+                    )))
+                    .expect("WebsocketMessage serialize infallible"),
+                );
                 return;
             }
         };
@@ -316,7 +282,12 @@ impl WsActor {
                 }
                 None => {
                     let error = WebsocketError::SubscribeError(extractor_id_for_error);
-                    ctx.text(serde_json::to_string(&error).unwrap());
+                    ctx.text(
+                        serde_json::to_string(&WebSocketMessage::Response(Response::Error(
+                            error.into(),
+                        )))
+                            .expect("WebsocketMessage serialize infallible"),
+                    );
                 }
             }
         }));
@@ -342,7 +313,10 @@ impl WsActor {
             error!(%subscription_id, "Subscription ID not found");
 
             let error = WebsocketError::SubscriptionNotFound(subscription_id);
-            ctx.text(serde_json::to_string(&error).unwrap());
+            ctx.text(
+                serde_json::to_string(&WebSocketMessage::Response(Response::Error(error.into())))
+                    .expect("WebsocketMessage serialize infallible"),
+            );
         }
     }
 }
@@ -435,8 +409,13 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsActor {
                     Err(e) => {
                         error!(error = %e, "Failed to parse message");
 
-                        let error = WebsocketError::ParseError(e);
-                        ctx.text(serde_json::to_string(&error).unwrap());
+                        let error = WebsocketError::ParseError(text.to_string(), e);
+                        ctx.text(
+                            serde_json::to_string(&WebSocketMessage::Response(Response::Error(
+                                error.into(),
+                            )))
+                            .expect("WebsocketMessage serialize infallible"),
+                        );
                     }
                 }
             }
@@ -1009,5 +988,266 @@ mod tests {
 
         // For the test to be meaningful, we expect at least some clients to fail with original code
         // This test demonstrates the issue that needs to be fixed
+    }
+
+    #[test_log::test(actix_rt::test)]
+    async fn test_extractor_not_found_error_response() {
+        // Create app state with no extractors to trigger ExtractorNotFound
+        let app_state = web::Data::new(WsData::new(HashMap::new()));
+        let server = start(move || {
+            App::new()
+                .wrap(RequestTracing::new())
+                .app_data(app_state.clone())
+                .service(web::resource("/ws/").route(web::get().to(WsActor::ws_index)))
+        });
+
+        let url = server
+            .url("/ws/")
+            .to_string()
+            .replacen("http://", "ws://", 1);
+
+        let (mut connection, _response) = tokio_tungstenite::connect_async(url)
+            .await
+            .expect("Failed to connect");
+
+        // Send subscribe request for non-existent extractor
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "non_existent");
+        let action =
+            Command::Subscribe { extractor_id: extractor_id.clone().into(), include_state: true };
+        connection
+            .send(Message::Text(serde_json::to_string(&action).unwrap()))
+            .await
+            .expect("Failed to send subscribe message");
+
+        // Wait for error response
+        let response_msg = timeout(Duration::from_secs(1), connection.next())
+            .await
+            .expect("Failed to receive message")
+            .unwrap()
+            .unwrap();
+
+        if let Message::Text(text) = response_msg {
+            let websocket_message: WebSocketMessage =
+                serde_json::from_str(&text).expect("Failed to parse WebSocketMessage");
+
+            if let WebSocketMessage::Response(Response::Error(error)) = websocket_message {
+                match error {
+                    tycho_common::dto::WebsocketError::ExtractorNotFound(reported_id) => {
+                        assert_eq!(reported_id, extractor_id.into());
+                    }
+                    _ => panic!("Expected ExtractorNotFound error, got: {:?}", error),
+                }
+            } else {
+                panic!("Expected error response, got: {:?}", websocket_message);
+            }
+        } else {
+            panic!("Expected text message, got: {:?}", response_msg);
+        }
+
+        connection
+            .send(Message::Close(Some(CloseFrame { code: CloseCode::Normal, reason: "".into() })))
+            .await
+            .expect("Failed to send close message");
+    }
+
+    #[test_log::test(actix_rt::test)]
+    async fn test_subscription_not_found_error_response() {
+        let app_state = web::Data::new(WsData::new(HashMap::new()));
+        let server = start(move || {
+            App::new()
+                .wrap(RequestTracing::new())
+                .app_data(app_state.clone())
+                .service(web::resource("/ws/").route(web::get().to(WsActor::ws_index)))
+        });
+
+        let url = server
+            .url("/ws/")
+            .to_string()
+            .replacen("http://", "ws://", 1);
+
+        let (mut connection, _response) = tokio_tungstenite::connect_async(url)
+            .await
+            .expect("Failed to connect");
+
+        // Send unsubscribe request for non-existent subscription
+        let fake_subscription_id = Uuid::new_v4();
+        let action = Command::Unsubscribe { subscription_id: fake_subscription_id };
+        connection
+            .send(Message::Text(serde_json::to_string(&action).unwrap()))
+            .await
+            .expect("Failed to send unsubscribe message");
+
+        // Wait for error response
+        let response_msg = timeout(Duration::from_secs(1), connection.next())
+            .await
+            .expect("Failed to receive message")
+            .unwrap()
+            .unwrap();
+
+        if let Message::Text(text) = response_msg {
+            let websocket_message: WebSocketMessage =
+                serde_json::from_str(&text).expect("Failed to parse WebSocketMessage");
+
+            if let WebSocketMessage::Response(Response::Error(error)) = websocket_message {
+                match error {
+                    tycho_common::dto::WebsocketError::SubscriptionNotFound(reported_id) => {
+                        assert_eq!(reported_id, fake_subscription_id);
+                    }
+                    _ => panic!("Expected SubscriptionNotFound error, got: {:?}", error),
+                }
+            } else {
+                panic!("Expected error response, got: {:?}", websocket_message);
+            }
+        } else {
+            panic!("Expected text message, got: {:?}", response_msg);
+        }
+
+        connection
+            .send(Message::Close(Some(CloseFrame { code: CloseCode::Normal, reason: "".into() })))
+            .await
+            .expect("Failed to send close message");
+    }
+
+    #[test_log::test(actix_rt::test)]
+    async fn test_parse_error_response() {
+        let app_state = web::Data::new(WsData::new(HashMap::new()));
+        let server = start(move || {
+            App::new()
+                .wrap(RequestTracing::new())
+                .app_data(app_state.clone())
+                .service(web::resource("/ws/").route(web::get().to(WsActor::ws_index)))
+        });
+
+        let url = server
+            .url("/ws/")
+            .to_string()
+            .replacen("http://", "ws://", 1);
+
+        let (mut connection, _response) = tokio_tungstenite::connect_async(url)
+            .await
+            .expect("Failed to connect");
+
+        // Send malformed JSON
+        let malformed_json = r#"{"method":"subscribe","invalid_json"#;
+        connection
+            .send(Message::Text(malformed_json.to_string()))
+            .await
+            .expect("Failed to send malformed message");
+
+        // Wait for error response
+        let response_msg = timeout(Duration::from_secs(1), connection.next())
+            .await
+            .expect("Failed to receive message")
+            .unwrap()
+            .unwrap();
+
+        if let Message::Text(text) = response_msg {
+            let websocket_message: WebSocketMessage =
+                serde_json::from_str(&text).expect("Failed to parse WebSocketMessage");
+
+            if let WebSocketMessage::Response(Response::Error(error)) = websocket_message {
+                match error {
+                    tycho_common::dto::WebsocketError::ParseError(error, msg) => {
+                        dbg!(&msg, &error);
+                        assert!(error.contains("EOF while parsing"));
+                        assert_eq!(msg, malformed_json)
+                    }
+                    _ => panic!("Expected ParseError, got: {:?}", error),
+                }
+            } else {
+                panic!("Expected error response, got: {:?}", websocket_message);
+            }
+        } else {
+            panic!("Expected text message, got: {:?}", response_msg);
+        }
+
+        connection
+            .send(Message::Close(Some(CloseFrame { code: CloseCode::Normal, reason: "".into() })))
+            .await
+            .expect("Failed to send close message");
+    }
+
+    pub struct FailingMessageSender {
+        _extractor_id: ExtractorIdentity,
+    }
+
+    impl FailingMessageSender {
+        pub fn new(extractor_id: ExtractorIdentity) -> Self {
+            Self { _extractor_id: extractor_id }
+        }
+    }
+
+    #[async_trait]
+    impl MessageSender for FailingMessageSender {
+        async fn subscribe(&self) -> Result<Receiver<ExtractorMsg>, SendError<ControlMessage>> {
+            // Always return an error to simulate subscription failure
+            Err(SendError(ControlMessage::Stop))
+        }
+    }
+
+    #[test_log::test(actix_rt::test)]
+    async fn test_subscribe_error_response() {
+        // Tests a special path where the extractor fails the subscription
+        let extractor_id = ExtractorIdentity::new(Chain::Ethereum, "failing_extractor");
+        let message_sender = Arc::new(FailingMessageSender::new(extractor_id.clone()));
+
+        let mut subscribers_map = HashMap::new();
+        subscribers_map
+            .insert(extractor_id.clone(), message_sender as Arc<dyn MessageSender + Send + Sync>);
+
+        let app_state = web::Data::new(WsData::new(subscribers_map));
+        let server = start(move || {
+            App::new()
+                .wrap(RequestTracing::new())
+                .app_data(app_state.clone())
+                .service(web::resource("/ws/").route(web::get().to(WsActor::ws_index)))
+        });
+
+        let url = server
+            .url("/ws/")
+            .to_string()
+            .replacen("http://", "ws://", 1);
+
+        let (mut connection, _response) = tokio_tungstenite::connect_async(url)
+            .await
+            .expect("Failed to connect");
+
+        // Send subscribe request to failing extractor
+        let action =
+            Command::Subscribe { extractor_id: extractor_id.clone().into(), include_state: true };
+        connection
+            .send(Message::Text(serde_json::to_string(&action).unwrap()))
+            .await
+            .expect("Failed to send subscribe message");
+
+        // Wait for error response
+        let response_msg = timeout(Duration::from_secs(1), connection.next())
+            .await
+            .expect("Failed to receive message")
+            .unwrap()
+            .unwrap();
+
+        if let Message::Text(text) = response_msg {
+            let websocket_message: WebSocketMessage =
+                serde_json::from_str(&text).expect("Failed to parse WebSocketMessage");
+
+            if let WebSocketMessage::Response(Response::Error(error)) = websocket_message {
+                match error {
+                    tycho_common::dto::WebsocketError::SubscribeError(reported_id) => {
+                        assert_eq!(reported_id, extractor_id.into());
+                    }
+                    _ => panic!("Expected SubscribeError, got: {:?}", error),
+                }
+            } else {
+                panic!("Expected error response, got: {:?}", websocket_message);
+            }
+        } else {
+            panic!("Expected text message, got: {:?}", response_msg);
+        }
+
+        connection
+            .send(Message::Close(Some(CloseFrame { code: CloseCode::Normal, reason: "".into() })))
+            .await
+            .expect("Failed to send close message");
     }
 }
