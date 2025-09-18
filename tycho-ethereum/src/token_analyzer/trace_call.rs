@@ -4,8 +4,7 @@ use anyhow::{bail, ensure, Context, Result};
 use contracts::ERC20;
 use ethcontract::{dyns::DynTransport, transaction::TransactionBuilder, PrivateKey};
 use ethers::types::{H160, U256};
-use ethrpc::{http::HttpTransport, Web3, Web3Transport};
-use reqwest::Client;
+use ethrpc::Web3;
 use tycho_common::{
     models::{
         blockchain::BlockTag,
@@ -14,7 +13,6 @@ use tycho_common::{
     traits::{TokenAnalyzer, TokenOwnerFinding},
     Bytes,
 };
-use url::Url;
 use web3::{
     signing::keccak256,
     types::{BlockNumber, BlockTrace, CallRequest, Res},
@@ -66,11 +64,7 @@ enum TraceRequestType {
 impl TraceCallDetector {
     pub fn new(url: &str, finder: Arc<dyn TokenOwnerFinding>) -> Self {
         Self {
-            web3: Web3::new(Web3Transport::new(HttpTransport::new(
-                Client::new(),
-                Url::from_str(url).unwrap(),
-                "transport".to_owned(),
-            ))),
+            web3: Web3::new_from_url(url),
             finder,
             // middle contract used to check for fees, set to cowswap settlement
             settlement_contract: H160::from_str("0xc9f2e6ea1637E499406986ac50ddC92401ce1f58")
