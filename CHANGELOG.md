@@ -1,3 +1,11 @@
+## [0.84.0](https://github.com/propeller-heads/tycho-indexer/compare/0.83.4...0.84.0) (2025-09-18)
+
+
+### Features
+
+* communicate websocket server errors correctly ([e3b1d1e](https://github.com/propeller-heads/tycho-indexer/commit/e3b1d1e6e3042ce73fba9afbfc8957a5e9758746))
+* communicate websocket server errors correctly ([#694](https://github.com/propeller-heads/tycho-indexer/issues/694)) ([75a9a37](https://github.com/propeller-heads/tycho-indexer/commit/75a9a37e066debcb24c74ec6c886e10ceb4c2f79))
+
 ## [0.83.4](https://github.com/propeller-heads/tycho-indexer/compare/0.83.3...0.83.4) (2025-09-11)
 
 
