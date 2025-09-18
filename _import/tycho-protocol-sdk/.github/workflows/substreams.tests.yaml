@@ -59,7 +59,7 @@ jobs:
         run: |
           CHANGED=$(git diff --name-only origin/main ${{ github.sha }} | \
             grep '^substreams/' | awk -F'/' '{print $2}' | sort -u | \
-            grep -v -E "^(${EXCLUDED_SUBSTREAMS})$")
+            grep -v -E "^(${EXCLUDED_SUBSTREAMS})$" | tr '\n' ' ' | sed 's/ *$//')
           if [ -z "$CHANGED" ]; then
               echo "No changed substreams"
           else
