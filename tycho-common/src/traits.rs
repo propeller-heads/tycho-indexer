@@ -194,6 +194,33 @@ pub trait MemorySize {
     fn memory_size(&self) -> usize;
 }
 
+/// Trait for detecting storage slots that contain ERC20 token allowances
+#[cfg_attr(feature = "test-utils", mockall::automock(type Error = String;))]
+#[async_trait]
+pub trait AllowanceSlotDetector: Send + Sync {
+    type Error: Debug;
+
+    /// Detect allowance storage slots for multiple tokens for owner-spender pairs.
+    /// Useful to allow overriding allowances in simulations.
+    ///
+    /// # Arguments
+    /// * `tokens` - Slice of ERC20 token addresses.
+    /// * `owner` - Address that owns the tokens
+    /// * `spender` - Address that is allowed to spend the tokens
+    /// * `block_hash` - Block at which to detect slots
+    ///
+    /// # Returns
+    /// HashMap mapping Token -> Result containing (contract_address -> storage_slot) or error.
+    /// The storage slot is the one that controls the allowance from owner to spender.
+    async fn detect_allowance_slots(
+        &self,
+        tokens: &[Address],
+        owner: Address,
+        spender: Address,
+        block_hash: BlockHash,
+    ) -> HashMap<Address, Result<(Address, Bytes), Self::Error>>;
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;

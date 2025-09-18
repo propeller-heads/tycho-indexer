@@ -2,8 +2,7 @@ use std::{str::FromStr, sync::Arc};
 
 use async_trait::async_trait;
 use ethers::{abi::Abi, contract::Contract, prelude::Provider, providers::Http, types::H160};
-use ethrpc::{http::HttpTransport, Web3, Web3Transport};
-use reqwest::Client;
+use ethrpc::Web3;
 use serde_json::from_str;
 use tracing::{instrument, warn};
 use tycho_common::{
@@ -16,7 +15,6 @@ use tycho_common::{
     Bytes,
 };
 use unicode_segmentation::UnicodeSegmentation;
-use url::Url;
 
 use crate::{token_analyzer::trace_call::TraceCallDetector, BytesCodec};
 
@@ -46,12 +44,7 @@ impl EthereumTokenPreProcessor {
         let ethers_client: Provider<Http> =
             Provider::<Http>::try_from(rpc_url).expect("Error creating HTTP provider");
 
-        let transport = Web3Transport::new(HttpTransport::new(
-            Client::new(),
-            Url::from_str(rpc_url).unwrap(),
-            "transport".to_owned(),
-        ));
-        let web3_client = Web3::new(transport);
+        let web3_client = Web3::new_from_url(rpc_url);
         EthereumTokenPreProcessor {
             ethers_client: Arc::new(ethers_client),
             erc20_abi: abi,
@@ -162,12 +155,7 @@ mod tests {
         let client: Provider<Http> =
             Provider::<Http>::try_from(archive_rpc.clone()).expect("Error creating HTTP provider");
 
-        let transport = Web3Transport::new(HttpTransport::new(
-            Client::new(),
-            Url::from_str(archive_rpc.as_str()).unwrap(),
-            "transport".to_owned(),
-        ));
-        let w3 = Web3::new(transport);
+        let w3 = Web3::new_from_url(&archive_rpc);
 
         let processor = EthereumTokenPreProcessor::new(client, w3, Chain::Ethereum);
 
