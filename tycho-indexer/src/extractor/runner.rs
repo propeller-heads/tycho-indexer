@@ -231,6 +231,10 @@ impl ExtractorRunner {
                                         }
                                     }
                                 }
+                                Some(Ok(BlockResponse::Ended)) => {
+                                    tracing::Span::current().record("otel.status_code", "ok");
+                                    return Ok(false);
+                                }
                                 Some(Err(err)) => {
                                     error!(error = %err, "Stream terminated with error.");
                                     tracing::Span::current().record("otel.status_code", "error");
