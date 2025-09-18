@@ -1,3 +1,16 @@
+## [0.85.0](https://github.com/propeller-heads/tycho-indexer/compare/0.84.0...0.85.0) (2025-09-18)
+
+
+### Features
+
+* Expose retry configurations on TychoStreamBuilder ([e677e13](https://github.com/propeller-heads/tycho-indexer/commit/e677e13e9a15bce36925d05cf1c34fdf01122531))
+* Expose retry configurations on TychoStreamBuilder ([#695](https://github.com/propeller-heads/tycho-indexer/issues/695)) ([ccbc67d](https://github.com/propeller-heads/tycho-indexer/commit/ccbc67d32eba32c9c9de3ee97d684e20959dbf13))
+
+
+### Bug Fixes
+
+* reconnection test timing issues. ([780d967](https://github.com/propeller-heads/tycho-indexer/commit/780d967779f1fdab42c7c5f173fca251f058fb6f))
+
 ## [0.84.0](https://github.com/propeller-heads/tycho-indexer/compare/0.83.4...0.84.0) (2025-09-18)
 
 
