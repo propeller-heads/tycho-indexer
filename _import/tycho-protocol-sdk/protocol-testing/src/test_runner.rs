@@ -324,6 +324,22 @@ fn validate_state(
     }
 
     // Step 3: Run Tycho Simulation
+    // Filter out components that have skip_simulation = true
+    let simulation_component_ids: std::collections::HashSet<String> = expected_components
+        .iter()
+        .filter(|c| !c.skip_simulation)
+        .map(|c| c.base.id.to_lowercase())
+        .collect();
+
+    info!("Components to simulate: {}", simulation_component_ids.len());
+    for id in &simulation_component_ids {
+        info!("  Simulating component: {}", id);
+    }
+
+    if simulation_component_ids.is_empty() {
+        info!("No components to simulate, skipping simulation validation");
+        return Ok(());
+    }
 
     // Build/find the adapter contract
     let adapter_contract_path =
@@ -361,23 +377,6 @@ fn validate_state(
         protocol_system,
         decoder_context,
     );
-
-    // Filter out components that have skip_simulation = true (match Python behavior)
-    let simulation_component_ids: std::collections::HashSet<String> = expected_components
-        .iter()
-        .filter(|c| !c.skip_simulation)
-        .map(|c| c.base.id.to_lowercase())
-        .collect();
-
-    info!("Components to simulate: {}", simulation_component_ids.len());
-    for id in &simulation_component_ids {
-        info!("  Simulating component: {}", id);
-    }
-
-    if simulation_component_ids.is_empty() {
-        info!("No components to simulate, skipping simulation validation");
-        return Ok(());
-    }
 
     // Mock a stream message, with only a Snapshot and no deltas
     let mut states: HashMap<String, ComponentWithState> = HashMap::new();
