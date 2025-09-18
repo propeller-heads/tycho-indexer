@@ -870,7 +870,9 @@ mod tests {
         let jh = tokio::spawn(async move {
             info!("mock webserver started");
             for _ in 0..(reconnects + 1) {
+                info!("Awaiting client connections");
                 if let Ok((stream, _)) = server.accept().await {
+                    info!("Client connected");
                     let mut websocket = tokio_tungstenite::accept_async(stream)
                         .await
                         .unwrap();
@@ -898,11 +900,14 @@ mod tests {
                             }
                         };
                     }
+                    info!("Mock communication completed");
                     sleep(Duration::from_millis(100)).await;
                     // Close the WebSocket connection
                     let _ = websocket.close(None).await;
+                    info!("Mock server closed connection");
                 }
             }
+            info!("mock server ended");
         });
         (addr, jh)
     }
@@ -1322,15 +1327,24 @@ mod tests {
             ))
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 1).await;
-        let client = WsDeltasClient::new(&format!("ws://{addr}"), None).unwrap();
+        let client = WsDeltasClient::new_with_reconnects(
+            &format!("ws://{addr}"),
+            None,
+            3,
+            // server stays down for 100ms on connection drop
+            Duration::from_millis(110),
+        )
+        .unwrap();
+
         let jh: JoinHandle<Result<(), DeltasError>> = client
             .connect()
             .await
             .expect("connect failed");
 
         for _ in 0..2 {
+            dbg!("loop");
             let (_, mut rx) = timeout(
-                Duration::from_millis(100),
+                Duration::from_millis(200),
                 client.subscribe(
                     ExtractorIdentity::new(Chain::Ethereum, "vm:ambient"),
                     SubscriptionOptions::new(),
