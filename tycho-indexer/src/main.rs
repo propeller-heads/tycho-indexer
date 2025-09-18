@@ -81,19 +81,21 @@ impl ExtractorConfigs {
 
 type ExtractionTasks = Vec<JoinHandle<Result<(), ExtractionError>>>;
 type ServerTasks = Vec<JoinHandle<Result<(), ExtractionError>>>; //TODO: introduce an error type for it
-fn main() {
+
+#[tokio::main]
+async fn main() -> Result<(), anyhow::Error> {
     let cli: Cli = Cli::parse();
     let global_args = cli.args();
 
     match cli.command() {
-        Command::Run(run_args) => run_spkg(global_args, run_args).unwrap(),
+        Command::Run(run_args) => run_spkg(global_args, run_args).await.map_err(|e| e.into()),
         Command::Index(indexer_args) => {
-            run_indexer(global_args, indexer_args).unwrap();
+            run_indexer(global_args, indexer_args).map_err(|e| e.into())
         }
         Command::AnalyzeTokens(analyze_args) => {
-            run_tycho_ethereum(global_args, analyze_args).unwrap();
+            run_tycho_ethereum(global_args, analyze_args).await
         }
-        Command::Rpc => run_rpc(global_args).unwrap(),
+        Command::Rpc => run_rpc(global_args).await.map_err(|e| e.into()),
     }
 }
 
@@ -254,7 +256,6 @@ fn run_indexer(global_args: GlobalArgs, index_args: IndexArgs) -> Result<(), Ext
     res.expect("A thread panicked. Shutting down Tycho.")
 }
 
-#[tokio::main]
 async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), ExtractionError> {
     create_tracing_subscriber();
     info!("Starting Tycho");
@@ -309,7 +310,6 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
     res.expect("Extractor- nor ServiceTasks should panic!")
 }
 
-#[tokio::main]
 async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
     create_tracing_subscriber();
 
@@ -599,7 +599,6 @@ async fn shutdown_handler(
     Ok(())
 }
 
-#[tokio::main]
 async fn run_tycho_ethereum(
     global_args: GlobalArgs,
     analyzer_args: AnalyzeTokenArgs,
