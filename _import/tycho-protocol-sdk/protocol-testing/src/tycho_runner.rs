@@ -39,6 +39,12 @@ impl TychoRunner {
 
         let all_accounts = self.initialized_accounts.clone();
 
+        // Determine the correct module name based on protocol system
+        let module_name = match protocol_system {
+            "uniswap_v2" => "map_pool_events",
+            _ => "map_protocol_changes",
+        };
+
         cmd.args([
             "--database-url",
             self.db_url.as_str(),
@@ -46,7 +52,7 @@ impl TychoRunner {
             "--spkg",
             spkg_path,
             "--module",
-            "map_protocol_changes",
+            module_name,
             "--protocol-type-names",
             &protocol_type_names.join(","),
             "--protocol-system",

@@ -22,7 +22,10 @@ use tycho_simulation::{
     evm::{
         decoder::TychoStreamDecoder,
         engine_db::tycho_db::PreCachedDB,
-        protocol::{u256_num::bytes_to_u256, vm::state::EVMPoolState},
+        protocol::{
+            u256_num::bytes_to_u256, uniswap_v2::state::UniswapV2State,
+            uniswap_v3::state::UniswapV3State, vm::state::EVMPoolState,
+        },
     },
     protocol::models::DecoderContext,
     tycho_client::feed::{
@@ -84,13 +87,6 @@ impl TestRunner {
             );
             return Ok(());
         }
-        let substreams_yaml_path = self
-            .substreams_path
-            .join("substreams.yaml");
-        if !substreams_yaml_path.exists() {
-            warn!("substreams.yaml file not found at {}", self.substreams_path.display());
-            return Ok(());
-        }
 
         let config = match Self::parse_config(&config_yaml_path) {
             Ok(cfg) => cfg,
@@ -99,6 +95,14 @@ impl TestRunner {
                 return Ok(());
             }
         };
+
+        let substreams_yaml_path = self
+            .substreams_path
+            .join(&config.substreams_yaml_path);
+        if !substreams_yaml_path.exists() {
+            warn!("substreams.yaml file not found at {}", substreams_yaml_path.display());
+            return Ok(());
+        }
 
         let tests = match &self.match_test {
             Some(filter) => config
@@ -340,9 +344,15 @@ fn validate_state(
         return Ok(());
     }
 
-    // Build/find the adapter contract
-    let adapter_contract_path =
-        match adapter_contract_builder.find_contract(&config.adapter_contract) {
+    let adapter_contract_path;
+    let mut adapter_contract_path_str: Option<&str> = None;
+
+    // Adapter contract will only be configured for VM protocols, not natively implemented
+    // protocols.
+    if let Some(adapter_contract_name) = &config.adapter_contract {
+        // Build/find the adapter contract
+        adapter_contract_path = match adapter_contract_builder.find_contract(adapter_contract_name)
+        {
             Ok(path) => {
                 info!("Found adapter contract at: {}", path.display());
                 path
@@ -351,7 +361,7 @@ fn validate_state(
                 info!("Adapter contract not found, building it...");
                 adapter_contract_builder
                     .build_target(
-                        &config.adapter_contract,
+                        adapter_contract_name,
                         config
                             .adapter_build_signature
                             .as_deref(),
@@ -361,21 +371,36 @@ fn validate_state(
             }
         };
 
-    info!("Using adapter contract: {}", adapter_contract_path.display());
-    let adapter_contract_path_str: &str = adapter_contract_path.to_str().unwrap();
+        info!("Using adapter contract: {}", adapter_contract_path.display());
+        adapter_contract_path_str = Some(adapter_contract_path.to_str().unwrap());
+    }
 
     // Clear the shared database state to ensure test isolation
     // This prevents state from previous tests from affecting the current test
     tycho_simulation::evm::engine_db::SHARED_TYCHO_DB.clear();
 
     let mut decoder = TychoStreamDecoder::new();
-    let decoder_context = DecoderContext::new()
-        .vm_adapter_path(adapter_contract_path_str)
-        .vm_traces(vm_traces);
-    decoder.register_decoder_with_context::<EVMPoolState<PreCachedDB>>(
-        protocol_system,
-        decoder_context,
-    );
+    let mut decoder_context = DecoderContext::new().vm_traces(vm_traces);
+
+    if let Some(vm_adapter_path) = adapter_contract_path_str {
+        decoder_context = decoder_context.vm_adapter_path(vm_adapter_path);
+    }
+    match protocol_system.as_str() {
+        "uniswap_v2" | "sushiswap_v2" => {
+            decoder
+                .register_decoder_with_context::<UniswapV2State>(protocol_system, decoder_context);
+        }
+        "uniswap_v3" | "pancakeswap_v3" => {
+            decoder
+                .register_decoder_with_context::<UniswapV3State>(protocol_system, decoder_context);
+        }
+        _ => {
+            decoder.register_decoder_with_context::<EVMPoolState<PreCachedDB>>(
+                protocol_system,
+                decoder_context,
+            );
+        }
+    }
 
     // Mock a stream message, with only a Snapshot and no deltas
     let mut states: HashMap<String, ComponentWithState> = HashMap::new();
@@ -398,8 +423,8 @@ fn validate_state(
             state,
             component: component.clone(),
             component_tvl: None,
-            entrypoints: vec![],
-        }; // TODO
+            entrypoints: vec![], // UniswapV4 is not supported for SDK testing at the moment
+        };
         states.insert(component_id.clone(), component_with_state);
     }
     // Convert vm_storages to a HashMap - match Python behavior exactly
