@@ -1,0 +1,20 @@
+substreams_yaml_path: ./ethereum-uniswap-v3.yaml
+protocol_system: "uniswap_v3"
+protocol_type_names:
+  - "uniswap_v3_pool"
+module_name: "map_pool_events"
+skip_balance_check: true
+initialized_accounts:
+tests:
+  - name: test_weth_now_pool
+    start_block: 22182832
+    stop_block: 22182834
+    expected_components:
+      - id: "0x545b7db6632ab230fd84897488291def7912319c"
+        tokens:
+          - "0xe9a95d175a5f4c9369f3b74222402eb1b837693b"
+          - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        static_attributes:
+          fee: "0x0bb8"
+        creation_tx: "0x6d22d1823e4d68e3123f326a34d26d5f17943c446c74608da2834092918cd4bb"
+        skip_simulation: false
