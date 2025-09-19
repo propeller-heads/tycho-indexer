@@ -1908,7 +1908,7 @@ mod test {
         rpc_client
             .expect_get_protocol_states()
             .returning(|_| {
-                Err(RPCError::HttpClient("Test error during snapshot retrieval".to_string()))
+                Err(RPCError::ParseResponse("Test error during snapshot retrieval".to_string()))
             });
 
         // Set up deltas client to send one message that will trigger snapshot retrieval
