@@ -30,6 +30,7 @@ impl TychoRunner {
         end_block: u64,
         protocol_type_names: &[String],
         protocol_system: &str,
+        module_name: &str,
     ) -> miette::Result<()> {
         info!("Running Tycho indexer from block {start_block} to {end_block}...");
 
@@ -38,14 +39,6 @@ impl TychoRunner {
             .env("AUTH_API_KEY", "dummy");
 
         let all_accounts = self.initialized_accounts.clone();
-
-        // Determine the correct module name based on protocol system
-        let module_name = match protocol_system {
-            "uniswap_v2" => "map_pool_events",
-            "pancakeswap_v2" => "map_pool_events",
-            "sushiswap_v2" => "map_pool_events",
-            _ => "map_protocol_changes",
-        };
 
         cmd.args([
             "--database-url",

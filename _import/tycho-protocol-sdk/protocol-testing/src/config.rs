@@ -143,5 +143,6 @@ pub struct IntegrationTestsConfig {
     pub skip_balance_check: bool,
     pub protocol_type_names: Vec<String>,
     pub protocol_system: String,
+    pub module_name: String,
     pub tests: Vec<IntegrationTest>,
 }

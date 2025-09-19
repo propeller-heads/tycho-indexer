@@ -2,6 +2,7 @@ substreams_yaml_path: ./ethereum-uniswap-v2.yaml
 protocol_system: "uniswap_v2"
 protocol_type_names:
   - "uniswap_v2_pool"
+module_name: "map_pool_events"
 skip_balance_check: true
 initialized_accounts:
 tests:

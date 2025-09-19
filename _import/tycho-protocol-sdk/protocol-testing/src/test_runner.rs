@@ -225,6 +225,7 @@ impl TestRunner {
                 test.stop_block,
                 &config.protocol_type_names,
                 &config.protocol_system,
+                &config.module_name,
             )
             .wrap_err("Failed to run Tycho")?;
 
