@@ -454,7 +454,7 @@ pub enum TracingParams {
 impl std::fmt::Display for TracingParams {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TracingParams::RPCTracer(params) => write!(f, "RPC: {}", params),
+            TracingParams::RPCTracer(params) => write!(f, "RPC: {params}"),
         }
     }
 }

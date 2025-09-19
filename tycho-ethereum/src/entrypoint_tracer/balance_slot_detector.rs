@@ -125,7 +125,7 @@ impl EVMBalanceSlotDetector {
             .tcp_nodelay(true)
             .build()
             .map_err(|e| {
-                BalanceSlotError::SetupError(format!("Failed to create HTTP client: {}", e))
+                BalanceSlotError::SetupError(format!("Failed to create HTTP client: {e}"))
             })?;
 
         Ok(Self {
@@ -354,11 +354,12 @@ impl EVMBalanceSlotDetector {
             .body(serde_json::to_string(batch_request).unwrap())
             .send()
             .await
-            .map_err(|e| BalanceSlotError::RequestError(format!("HTTP request failed: {}", e)))?;
+            .map_err(|e| BalanceSlotError::RequestError(format!("HTTP request failed: {e}")))?;
 
-        let response_json = response.json().await.map_err(|e| {
-            BalanceSlotError::InvalidResponse(format!("Failed to parse JSON: {}", e))
-        })?;
+        let response_json = response
+            .json()
+            .await
+            .map_err(|e| BalanceSlotError::InvalidResponse(format!("Failed to parse JSON: {e}")))?;
 
         Ok(response_json)
     }
@@ -509,8 +510,7 @@ impl EVMBalanceSlotDetector {
                 Err(e) => {
                     error!("Failed to parse trace result as hashmap: {}", e);
                     return Err(BalanceSlotError::ParseError(format!(
-                        "Failed to parse trace result: {}",
-                        e
+                        "Failed to parse trace result: {e}"
                     )));
                 }
             };
@@ -651,8 +651,7 @@ impl EVMBalanceSlotDetector {
                     validated_results.insert(
                         data.token,
                         Err(BalanceSlotError::RequestError(format!(
-                            "Failed to create validation request: {}",
-                            e
+                            "Failed to create validation request: {e}"
                         ))),
                     );
                 }
@@ -672,8 +671,7 @@ impl EVMBalanceSlotDetector {
                     validated_results.insert(
                         data.token,
                         Err(BalanceSlotError::RequestError(format!(
-                            "Validation request failed: {}",
-                            e
+                            "Validation request failed: {e}"
                         ))),
                     );
                 }
@@ -820,8 +818,7 @@ impl EVMBalanceSlotDetector {
                             results.insert(
                                 data.token,
                                 Err(BalanceSlotError::InvalidResponse(format!(
-                                    "Failed to extract balance from validation response: {}",
-                                    e
+                                    "Failed to extract balance from validation response: {e}"
                                 ))),
                             );
                         }
