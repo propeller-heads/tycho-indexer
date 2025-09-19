@@ -1,3 +1,11 @@
+## [0.160.1](https://github.com/propeller-heads/tycho-simulation/compare/0.160.0...0.160.1) (2025-09-19)
+
+
+### Bug Fixes
+
+* error if block info not passed during delta transition ([e929d61](https://github.com/propeller-heads/tycho-simulation/commit/e929d6169131387baa0f5e1adcb298aabc426254))
+* Update block in UniswapV4State and EVMPoolState ([0e9a3c3](https://github.com/propeller-heads/tycho-simulation/commit/0e9a3c3253cf1c138755b54cc5730f5f15866ec6))
+
 ## [0.160.0](https://github.com/propeller-heads/tycho-simulation/compare/0.159.0...0.160.0) (2025-09-15)
 
 
