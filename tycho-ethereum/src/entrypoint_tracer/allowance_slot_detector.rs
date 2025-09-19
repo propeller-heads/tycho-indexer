@@ -325,7 +325,6 @@ impl EVMAllowanceSlotDetector {
         }))
     }
 
-    /// Send a single request without retry
     async fn send_single_request(
         &self,
         batch_request: &Value,
@@ -441,7 +440,6 @@ impl EVMAllowanceSlotDetector {
         self.find_best_slot_by_value_comparison(slot_values, allowance)
     }
 
-    /// Extract allowance from eth_call response
     fn extract_allowance_from_call_response(
         &self,
         response: &Value,
@@ -467,7 +465,6 @@ impl EVMAllowanceSlotDetector {
             .map_err(|e| AllowanceSlotError::AllowanceExtractionError(e.to_string()))
     }
 
-    /// Extract accessed slots with their values from debug_traceCall response
     fn extract_slot_values_from_trace_response(
         &self,
         response: &Value,
@@ -526,7 +523,6 @@ impl EVMAllowanceSlotDetector {
         Ok(slot_values)
     }
 
-    /// Find the best slot by comparing storage values to the expected allowance
     fn find_best_slot_by_value_comparison(
         &self,
         slot_values: SlotValues,
@@ -572,7 +568,6 @@ impl EVMAllowanceSlotDetector {
         }
     }
 
-    /// Validates if the detected storage slots are correct.
     async fn validate_best_slots(
         &self,
         token_slots: TokenSlotResults,
@@ -694,7 +689,6 @@ impl EVMAllowanceSlotDetector {
         Ok(Value::Array(batch))
     }
 
-    /// Process validation responses and update results
     fn process_validation_responses(
         &self,
         responses: Vec<Value>,
