@@ -712,6 +712,39 @@ impl ProtocolSim for UniswapV4State {
             }
         }
 
+        // Update block information if provided in the delta attributes
+        let block_number_bytes = delta
+            .updated_attributes
+            .get("block_number")
+            .ok_or_else(|| {
+                SimulationError::FatalError("block_number not found in updated attributes".into())
+            })?;
+
+        self.block.number = u64::from_be_bytes(
+            block_number_bytes[block_number_bytes.len() - 8..]
+                .try_into()
+                .map_err(|_| {
+                    TransitionError::DecodeError("Invalid block_number bytes".to_string())
+                })?,
+        );
+
+        let block_timestamp_bytes = delta
+            .updated_attributes
+            .get("block_timestamp")
+            .ok_or_else(|| {
+                SimulationError::FatalError(
+                    "block_timestamp not found in updated attributes".into(),
+                )
+            })?;
+
+        self.block.timestamp = u64::from_be_bytes(
+            block_timestamp_bytes[block_timestamp_bytes.len() - 8..]
+                .try_into()
+                .map_err(|_| {
+                    TransitionError::DecodeError("Invalid block_timestamp bytes".to_string())
+                })?,
+        );
+
         // Apply attribute changes
         if let Some(liquidity) = delta
             .updated_attributes
@@ -863,6 +896,46 @@ mod tests {
     }
 
     #[test]
+    fn test_delta_transition_missing_block_update() {
+        let block = BlockHeader {
+            number: 1000,
+            hash: Bytes::from_str(
+                "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
+            )
+            .expect("Invalid block hash"),
+            parent_hash: Bytes::from(vec![0; 32]),
+            revert: false,
+            timestamp: 1758201863,
+        };
+        let mut pool = UniswapV4State::new(
+            1000,
+            U256::from_str("1000").unwrap(),
+            UniswapV4Fees { zero_for_one: 100, one_for_zero: 90, lp_fee: 700 },
+            100,
+            60,
+            vec![TickInfo::new(120, 10000), TickInfo::new(180, -10000)],
+            block,
+        );
+
+        assert_eq!(pool.block.number, 1000);
+        assert_eq!(pool.block.timestamp, 1758201863);
+
+        let attributes: HashMap<String, Bytes> =
+            [("block_number".to_string(), Bytes::from(2000_u64.to_be_bytes().to_vec()))]
+                .into_iter()
+                .collect();
+
+        let delta = ProtocolStateDelta {
+            component_id: "State1".to_owned(),
+            updated_attributes: attributes,
+            deleted_attributes: HashSet::new(),
+        };
+
+        let result = pool.delta_transition(delta, &HashMap::new(), &Balances::default());
+        assert!(result.is_err())
+    }
+
+    #[test]
     fn test_delta_transition() {
         let block = BlockHeader {
             number: 7239119,
@@ -893,6 +966,8 @@ mod tests {
             ("fee".to_string(), Bytes::from(100_u32.to_be_bytes().to_vec())),
             ("ticks/-120/net_liquidity".to_string(), Bytes::from(10200_u64.to_be_bytes().to_vec())),
             ("ticks/120/net_liquidity".to_string(), Bytes::from(9800_u64.to_be_bytes().to_vec())),
+            ("block_number".to_string(), Bytes::from(2000_u64.to_be_bytes().to_vec())),
+            ("block_timestamp".to_string(), Bytes::from(1758201935_u64.to_be_bytes().to_vec())),
         ]
         .into_iter()
         .collect();
@@ -926,6 +1001,9 @@ mod tests {
                 .net_liquidity,
             9800
         );
+        // Verify block was updated
+        assert_eq!(pool.block.number, 2000);
+        assert_eq!(pool.block.timestamp, 1758201935);
     }
 
     #[tokio::test]
