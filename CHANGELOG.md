@@ -1,3 +1,15 @@
+## [0.86.0](https://github.com/propeller-heads/tycho-indexer/compare/0.85.0...0.86.0) (2025-09-19)
+
+
+### Features
+
+* handle end-of-stream as a valid state, instead of as an error ([3463428](https://github.com/propeller-heads/tycho-indexer/commit/34634287f6549168cf2c079b92f71ad099efb0dd))
+
+
+### Bug Fixes
+
+* create an async_main function so that run_indexer can create its own tokio runtime ([64c7720](https://github.com/propeller-heads/tycho-indexer/commit/64c77200f93d0607f5a62bd78fa7bbb4bfe2503d))
+
 ## [0.85.0](https://github.com/propeller-heads/tycho-indexer/compare/0.84.0...0.85.0) (2025-09-18)
 
 
