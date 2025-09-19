@@ -1,0 +1,19 @@
+substreams_yaml_path: ./ethereum-uniswap-v2.yaml
+protocol_system: "uniswap_v2"
+protocol_type_names:
+  - "uniswap_v2_pool"
+skip_balance_check: true
+initialized_accounts:
+tests:
+  - name: test_spx_weth_pool
+    start_block: 17924533
+    stop_block: 17924534
+    expected_components:
+      - id: "0x52c77b0CB827aFbAD022E6d6CAF2C44452eDbc39"
+        tokens:
+          - "0xe0f63a424a4439cbe457d80e4f4b51ad25b2c56c"
+          - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        static_attributes:
+          fee: "0x1e"
+        creation_tx: "0xf09ac8ad7e21d15ded627a176ec718903baae5e5a9ce671a611bd852691b24f9"
+        skip_simulation: false
