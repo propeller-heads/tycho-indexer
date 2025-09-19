@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::PathBuf, str::FromStr};
+use std::{collections::HashMap, env, path::PathBuf, str::FromStr, sync::LazyLock};
 
 use alloy::primitives::U256;
 use figment::{
@@ -23,8 +23,9 @@ use tycho_simulation::{
         decoder::TychoStreamDecoder,
         engine_db::tycho_db::PreCachedDB,
         protocol::{
-            u256_num::bytes_to_u256, uniswap_v2::state::UniswapV2State,
-            uniswap_v3::state::UniswapV3State, vm::state::EVMPoolState,
+            pancakeswap_v2::state::PancakeswapV2State, u256_num::bytes_to_u256,
+            uniswap_v2::state::UniswapV2State, uniswap_v3::state::UniswapV3State,
+            vm::state::EVMPoolState,
         },
     },
     protocol::models::DecoderContext,
@@ -44,12 +45,20 @@ use crate::{
     utils::build_spkg,
 };
 
+static CLONE_TO_BASE_PROTOCOL: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| {
+    HashMap::from([
+        ("ethereum-sushiswap-v2", "ethereum-uniswap-v2"),
+        ("ethereum-pancakeswap-v2", "ethereum-uniswap-v2"),
+    ])
+});
+
 pub struct TestRunner {
     db_url: String,
     vm_traces: bool,
     substreams_path: PathBuf,
     adapter_contract_builder: AdapterContractBuilder,
     match_test: Option<String>,
+    config_file_path: PathBuf,
 }
 
 impl TestRunner {
@@ -60,13 +69,39 @@ impl TestRunner {
         db_url: String,
         vm_traces: bool,
     ) -> Self {
+        let base_protocol = CLONE_TO_BASE_PROTOCOL
+            .get(protocol.as_str())
+            .unwrap_or(&protocol.as_str())
+            .to_string();
         let substreams_path = root_path
             .join("substreams")
-            .join(protocol);
+            .join(&base_protocol);
         let evm_path = root_path.join("evm");
         let adapter_contract_builder =
             AdapterContractBuilder::new(evm_path.to_string_lossy().to_string());
-        Self { db_url, vm_traces, substreams_path, adapter_contract_builder, match_test }
+
+        // Calculate config file path based on protocol. If the protocol is a clone of another
+        // protocol, we assume this protocol name will be appended to the integration test filename.
+        let config_file_name = if protocol != base_protocol {
+            format!(
+                "integration_test_{}.tycho.yaml",
+                protocol
+                    .replace("ethereum-", "")
+                    .replace('-', "_")
+            )
+        } else {
+            "integration_test.tycho.yaml".to_string()
+        };
+        let config_file_path = substreams_path.join(&config_file_name);
+
+        Self {
+            db_url,
+            vm_traces,
+            substreams_path,
+            adapter_contract_builder,
+            match_test,
+            config_file_path,
+        }
     }
 
     pub fn run_tests(&self) -> miette::Result<()> {
@@ -75,20 +110,16 @@ impl TestRunner {
             .unwrap_or(80);
         info!("{}\n", "-".repeat(terminal_width));
 
-        let config_yaml_path = self
-            .substreams_path
-            .join("integration_test.tycho.yaml");
-
         // Skip if test files don't exist
-        if !config_yaml_path.exists() {
+        if !self.config_file_path.exists() {
             warn!(
-                "integration_test.tycho.yaml file not found at {}",
-                self.substreams_path.display()
+                "Config file not found at {}.",
+                self.config_file_path.display()
             );
             return Ok(());
         }
 
-        let config = match Self::parse_config(&config_yaml_path) {
+        let config = match Self::parse_config(&self.config_file_path) {
             Ok(cfg) => cfg,
             Err(e) => {
                 warn!("Failed to parse config: {:?}", e);
@@ -389,6 +420,12 @@ fn validate_state(
         "uniswap_v2" | "sushiswap_v2" => {
             decoder
                 .register_decoder_with_context::<UniswapV2State>(protocol_system, decoder_context);
+        }
+        "pancakeswap_v2" => {
+            decoder.register_decoder_with_context::<PancakeswapV2State>(
+                protocol_system,
+                decoder_context,
+            );
         }
         "uniswap_v3" | "pancakeswap_v3" => {
             decoder

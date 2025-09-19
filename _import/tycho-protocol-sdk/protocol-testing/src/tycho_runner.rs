@@ -42,6 +42,8 @@ impl TychoRunner {
         // Determine the correct module name based on protocol system
         let module_name = match protocol_system {
             "uniswap_v2" => "map_pool_events",
+            "pancakeswap_v2" => "map_pool_events",
+            "sushiswap_v2" => "map_pool_events",
             _ => "map_protocol_changes",
         };
 

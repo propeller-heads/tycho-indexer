@@ -1,0 +1,19 @@
+substreams_yaml_path: ./ethereum-pancakeswap-v2.yaml
+protocol_system: "pancakeswap_v2"
+protocol_type_names:
+  - "pancakeswap_v2_pool"
+skip_balance_check: true
+initialized_accounts:
+tests:
+  - name: test_trump_weth_pool
+    start_block: 20303260
+    stop_block: 20303261
+    expected_components:
+      - id: "0x2f7D5e1cA605fEFFCEdfEB9FD861d8da25a95a1d"
+        tokens:
+          - "0x7349a598D40F4533bECd9C95470D81Cc89ba7777" # TRUMP
+          - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" # WETH
+        static_attributes:
+          fee: "0x1e"
+        creation_tx: "0x5cb93db6aa4e666f2086cdab31c87a55f244b13cc961b076fe6f171966d947d3"
+        skip_simulation: false
