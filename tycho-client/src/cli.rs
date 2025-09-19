@@ -257,8 +257,8 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
     for (name, address) in exchanges {
         debug!("Registering exchange: {}", name);
         let id = ExtractorIdentity { chain, name: name.clone() };
-        let filter = if address.is_some() {
-            ComponentFilter::Ids(vec![address.unwrap()])
+        let filter = if let Some(addr) = address {
+            ComponentFilter::Ids(vec![addr])
         } else if let (Some(remove_tvl), Some(add_tvl)) =
             (args.remove_tvl_threshold, args.add_tvl_threshold)
         {
