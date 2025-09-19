@@ -200,6 +200,8 @@ impl TychoStreamBuilder {
             .clone()
             .or_else(|| env::var("TYCHO_AUTH_TOKEN").ok());
 
+        info!("Running with version: {}", option_env!("CARGO_PKG_VERSION").unwrap_or("unknown"));
+
         // Determine the URLs based on the TLS setting
         let (tycho_ws_url, tycho_rpc_url) = if self.no_tls {
             info!("Using non-secure connection: ws:// and http://");

@@ -6,7 +6,7 @@
 //! Structs in here implement utoipa traits so they can be used to derive an OpenAPI schema.
 #![allow(deprecated)]
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fmt,
     hash::{Hash, Hasher},
 };
@@ -19,7 +19,10 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::{
-    models::{self, blockchain::BlockAggregatedChanges, Address, ComponentId, StoreKey, StoreVal},
+    models::{
+        self, blockchain::BlockAggregatedChanges, Address, Balance, Code, ComponentId, StoreKey,
+        StoreVal,
+    },
     serde_primitives::{
         hex_bytes, hex_bytes_option, hex_hashmap_key, hex_hashmap_key_value, hex_hashmap_value,
     },
@@ -571,6 +574,8 @@ impl AccountUpdate {
 
 impl From<models::contract::AccountDelta> for AccountUpdate {
     fn from(value: models::contract::AccountDelta) -> Self {
+        let code = value.code().clone();
+        let change_type = value.change_type().into();
         AccountUpdate::new(
             value.address,
             value.chain.into(),
@@ -580,8 +585,8 @@ impl From<models::contract::AccountDelta> for AccountUpdate {
                 .map(|(k, v)| (k, v.unwrap_or_default()))
                 .collect(),
             value.balance,
-            value.code,
-            value.change.into(),
+            code,
+            change_type,
         )
     }
 }
@@ -1608,6 +1613,54 @@ pub struct EntryPoint {
     pub signature: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, Eq, Hash)]
+pub enum StorageOverride {
+    /// Applies changes incrementally to the existing account storage.
+    /// Only modifies the specific storage slots provided in the map while
+    /// preserving all other storage slots.
+    Diff(BTreeMap<StoreKey, StoreVal>),
+
+    /// Completely replaces the account's storage state.
+    /// Only the storage slots provided in the map will exist after the operation,
+    /// and any existing storage slots not included will be cleared/zeroed.
+    Replace(BTreeMap<StoreKey, StoreVal>),
+}
+
+impl From<models::blockchain::StorageOverride> for StorageOverride {
+    fn from(value: models::blockchain::StorageOverride) -> Self {
+        match value {
+            models::blockchain::StorageOverride::Diff(diff) => StorageOverride::Diff(diff),
+            models::blockchain::StorageOverride::Replace(replace) => {
+                StorageOverride::Replace(replace)
+            }
+        }
+    }
+}
+
+/// State overrides for an account.
+///
+/// Used to modify account state. Commonly used for testing contract interactions with specific
+/// state conditions or simulating transactions with modified balances/code.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema, Eq, Hash)]
+pub struct AccountOverrides {
+    /// Storage slots to override
+    pub slots: Option<StorageOverride>,
+    /// Native token balance override
+    pub native_balance: Option<Balance>,
+    /// Contract code override
+    pub code: Option<Code>,
+}
+
+impl From<models::blockchain::AccountOverrides> for AccountOverrides {
+    fn from(value: models::blockchain::AccountOverrides) -> Self {
+        AccountOverrides {
+            slots: value.slots.map(|s| s.into()),
+            native_balance: value.native_balance,
+            code: value.code,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, ToSchema, Eq, Hash)]
 pub struct RPCTracerParams {
     /// The caller address of the transaction, if not provided tracing uses the default value
@@ -1619,11 +1672,28 @@ pub struct RPCTracerParams {
     #[schema(value_type=String, example="0x679aefce")]
     #[serde(with = "hex_bytes")]
     pub calldata: Bytes,
+    /// Optionally allow for state overrides so that the call works as expected
+    pub state_overrides: Option<BTreeMap<Address, AccountOverrides>>,
+    /// Addresses to prune from trace results. Useful for hooks that use mock
+    /// accounts/routers that shouldn't be tracked in the final DCI results.
+    #[schema(value_type=Option<Vec<String>>)]
+    #[serde(default)]
+    pub prune_addresses: Option<Vec<Address>>,
 }
 
 impl From<models::blockchain::RPCTracerParams> for RPCTracerParams {
     fn from(value: models::blockchain::RPCTracerParams) -> Self {
-        RPCTracerParams { caller: value.caller, calldata: value.calldata }
+        RPCTracerParams {
+            caller: value.caller,
+            calldata: value.calldata,
+            state_overrides: value.state_overrides.map(|overrides| {
+                overrides
+                    .into_iter()
+                    .map(|(address, account_overrides)| (address, account_overrides.into()))
+                    .collect()
+            }),
+            prune_addresses: value.prune_addresses,
+        }
     }
 }
 
@@ -1664,17 +1734,42 @@ impl From<models::blockchain::EntryPointWithTracingParams> for EntryPointWithTra
     }
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash, Serialize, Deserialize)]
+pub struct AddressStorageLocation {
+    pub key: StoreKey,
+    pub offset: u8,
+}
+
+impl AddressStorageLocation {
+    pub fn new(key: StoreKey, offset: u8) -> Self {
+        Self { key, offset }
+    }
+}
+
+impl From<models::blockchain::AddressStorageLocation> for AddressStorageLocation {
+    fn from(value: models::blockchain::AddressStorageLocation) -> Self {
+        Self { key: value.key, offset: value.offset }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Clone)]
 pub struct TracingResult {
     #[schema(value_type=HashSet<(String, String)>)]
-    pub retriggers: HashSet<(StoreKey, StoreVal)>,
+    pub retriggers: HashSet<(StoreKey, AddressStorageLocation)>,
     #[schema(value_type=HashMap<String,HashSet<String>>)]
     pub accessed_slots: HashMap<Address, HashSet<StoreKey>>,
 }
 
 impl From<models::blockchain::TracingResult> for TracingResult {
     fn from(value: models::blockchain::TracingResult) -> Self {
-        TracingResult { retriggers: value.retriggers, accessed_slots: value.accessed_slots }
+        TracingResult {
+            retriggers: value
+                .retriggers
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            accessed_slots: value.accessed_slots,
+        }
     }
 }
 
@@ -2058,7 +2153,7 @@ mod test {
                 models::Chain::Ethereum,
                 Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000003").unwrap(),
                 Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
-                NaiveDateTime::from_timestamp_opt(base_ts + 3000, 0).unwrap(),
+                chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
             ),
             finalized_block_height: 1,
             revert: true,
@@ -2086,7 +2181,7 @@ mod test {
                     static_attributes: HashMap::new(),
                     change: models::ChangeType::Creation,
                     creation_tx: Bytes::from_str("0x000000000000000000000000000000000000000000000000000000000000c351").unwrap(),
-                    created_at: NaiveDateTime::from_timestamp_opt(base_ts + 5000, 0).unwrap(),
+                    created_at: chrono::DateTime::from_timestamp(base_ts + 5000, 0).unwrap().naive_utc(),
                 }),
             ]),
             deleted_protocol_components: HashMap::from([
@@ -2103,7 +2198,7 @@ mod test {
                     static_attributes: HashMap::new(),
                     change: models::ChangeType::Deletion,
                     creation_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000009c41").unwrap(),
-                    created_at: NaiveDateTime::from_timestamp_opt(base_ts + 4000, 0).unwrap(),
+                    created_at: chrono::DateTime::from_timestamp(base_ts + 4000, 0).unwrap().naive_utc(),
                 }),
             ]),
             component_balances: HashMap::from([
@@ -2251,7 +2346,7 @@ mod test {
                 "trace_results": {
                     "0x01:sig()": {
                         "retriggers": [
-                            ["0x01", "0x02"]
+                            ["0x01", {"key": "0x02", "offset": 12}]
                         ],
                         "accessed_slots": {
                             "0x03": ["0x03", "0x04"]
@@ -2368,7 +2463,7 @@ mod test {
                     "trace_results": {
                         "0x01:sig()": {
                             "retriggers": [
-                                ["0x01", "0x02"]
+                                ["0x01", {"key": "0x02", "offset": 12}]
                             ],
                             "accessed_slots": {
                                 "0x03": ["0x03", "0x04"]

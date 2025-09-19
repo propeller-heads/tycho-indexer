@@ -1,14 +1,14 @@
 #![allow(deprecated)]
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 
-use chrono::NaiveDateTime;
+use chrono::{DateTime, NaiveDateTime};
 use tracing::warn;
 use tycho_common::{
     models::{
         blockchain::{
             Block, EntryPoint, RPCTracerParams, TracingParams, Transaction, TxWithChanges,
         },
-        contract::{AccountBalance, AccountChangesWithTx, AccountDelta},
+        contract::{AccountBalance, AccountChangesWithTx, AccountDelta, ContractStorageChange},
         protocol::{
             ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
         },
@@ -79,12 +79,14 @@ impl TryFromMessage for Block {
             number: msg.number,
             hash: msg.hash.into(),
             parent_hash: msg.parent_hash.into(),
-            ts: NaiveDateTime::from_timestamp_opt(msg.ts as i64, 0).ok_or_else(|| {
-                ExtractionError::DecodeError(format!(
-                    "Failed to convert timestamp {} to datetime!",
-                    msg.ts
-                ))
-            })?,
+            ts: DateTime::from_timestamp(msg.ts as i64, 0)
+                .ok_or_else(|| {
+                    ExtractionError::DecodeError(format!(
+                        "Failed to convert timestamp {} to datetime!",
+                        msg.ts
+                    ))
+                })?
+                .naive_utc(),
         })
     }
 }
@@ -638,7 +640,10 @@ impl TryFromMessage for TxWithStorageChanges {
             .for_each(|contract_changes| {
                 let mut storage_changes = HashMap::new();
                 for change in contract_changes.slots.into_iter() {
-                    storage_changes.insert(change.slot.into(), change.value.into());
+                    storage_changes.insert(
+                        change.slot.into(),
+                        ContractStorageChange::new(change.value, change.previous_value),
+                    );
                 }
                 all_storage_changes.insert(contract_changes.address.into(), storage_changes);
             });
@@ -741,15 +746,21 @@ mod test {
                 (
                     Bytes::from_str("0000000000000000000000000000000000000001").unwrap(),
                     HashMap::from([
-                        (Bytes::from_str("0x01").unwrap(), Bytes::from_str("0x01").unwrap()),
-                        (Bytes::from_str("0x02").unwrap(), Bytes::from_str("0x02").unwrap()),
+                        (
+                            Bytes::from_str("0x01").unwrap(),
+                            ContractStorageChange::initial(Bytes::from_str("0x01").unwrap()),
+                        ),
+                        (
+                            Bytes::from_str("0x02").unwrap(),
+                            ContractStorageChange::initial(Bytes::from_str("0x02").unwrap()),
+                        ),
                     ]),
                 ),
                 (
                     Bytes::from_str("0000000000000000000000000000000000000002").unwrap(),
                     HashMap::from([(
                         Bytes::from_str("0x03").unwrap(),
-                        Bytes::from_str("0x03").unwrap(),
+                        ContractStorageChange::initial(Bytes::from_str("0x03").unwrap()),
                     )]),
                 ),
             ]),
@@ -891,7 +902,7 @@ mod test {
     #[rstest]
     #[case::rpc_trace_data(
         substreams::entry_point_params::TraceData::Rpc(
-                substreams::RpcTraceData {
+            substreams::RpcTraceData{
                     caller: Some(Bytes::from_str("0x1234567890123456789012345678901234567890")
                         .unwrap()
                         .to_vec()),
@@ -899,13 +910,15 @@ mod test {
                         .unwrap()
                         .to_vec(),
                 },
-            ),
-            TracingParams::RPCTracer(
-                RPCTracerParams {
+        ),
+        TracingParams::RPCTracer(
+            RPCTracerParams{
                     caller: Some(Address::from_str("0x1234567890123456789012345678901234567890").unwrap()),
                     calldata: Bytes::from_str("0xabcdef").unwrap(),
+                    state_overrides: None,
+                    prune_addresses: None,
                 }
-            )
+        )
     )]
     fn test_parse_entrypoint_params(
         #[case] trace_data: substreams::entry_point_params::TraceData,
