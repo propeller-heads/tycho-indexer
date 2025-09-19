@@ -657,31 +657,37 @@ where
         balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
         // Update block information if provided in the delta attributes
-        if let Some(block_number_bytes) = delta
+        let block_number_bytes = delta
             .updated_attributes
             .get("block_number")
-        {
-            self.block.number = u64::from_be_bytes(
-                block_number_bytes[block_number_bytes.len() - 8..]
-                    .try_into()
-                    .map_err(|_| {
-                        TransitionError::DecodeError("Invalid block_number bytes".to_string())
-                    })?,
-            );
-        }
+            .ok_or_else(|| {
+                SimulationError::FatalError("block_number not found in updated attributes".into())
+            })?;
 
-        if let Some(block_timestamp_bytes) = delta
+        self.block.number = u64::from_be_bytes(
+            block_number_bytes[block_number_bytes.len() - 8..]
+                .try_into()
+                .map_err(|_| {
+                    TransitionError::DecodeError("Invalid block_number bytes".to_string())
+                })?,
+        );
+
+        let block_timestamp_bytes = delta
             .updated_attributes
             .get("block_timestamp")
-        {
-            self.block.timestamp = u64::from_be_bytes(
-                block_timestamp_bytes[block_timestamp_bytes.len() - 8..]
-                    .try_into()
-                    .map_err(|_| {
-                        TransitionError::DecodeError("Invalid block_timestamp bytes".to_string())
-                    })?,
-            );
-        }
+            .ok_or_else(|| {
+                SimulationError::FatalError(
+                    "block_timestamp not found in updated attributes".into(),
+                )
+            })?;
+
+        self.block.timestamp = u64::from_be_bytes(
+            block_timestamp_bytes[block_timestamp_bytes.len() - 8..]
+                .try_into()
+                .map_err(|_| {
+                    TransitionError::DecodeError("Invalid block_timestamp bytes".to_string())
+                })?,
+        );
 
         if self.manual_updates {
             // Directly check for "update_marker" in `updated_attributes`

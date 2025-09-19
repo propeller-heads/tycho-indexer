@@ -713,31 +713,37 @@ impl ProtocolSim for UniswapV4State {
         }
 
         // Update block information if provided in the delta attributes
-        if let Some(block_number_bytes) = delta
+        let block_number_bytes = delta
             .updated_attributes
             .get("block_number")
-        {
-            self.block.number = u64::from_be_bytes(
-                block_number_bytes[block_number_bytes.len() - 8..]
-                    .try_into()
-                    .map_err(|_| {
-                        TransitionError::DecodeError("Invalid block_number bytes".to_string())
-                    })?,
-            );
-        }
+            .ok_or_else(|| {
+                SimulationError::FatalError("block_number not found in updated attributes".into())
+            })?;
 
-        if let Some(block_timestamp_bytes) = delta
+        self.block.number = u64::from_be_bytes(
+            block_number_bytes[block_number_bytes.len() - 8..]
+                .try_into()
+                .map_err(|_| {
+                    TransitionError::DecodeError("Invalid block_number bytes".to_string())
+                })?,
+        );
+
+        let block_timestamp_bytes = delta
             .updated_attributes
             .get("block_timestamp")
-        {
-            self.block.timestamp = u64::from_be_bytes(
-                block_timestamp_bytes[block_timestamp_bytes.len() - 8..]
-                    .try_into()
-                    .map_err(|_| {
-                        TransitionError::DecodeError("Invalid block_timestamp bytes".to_string())
-                    })?,
-            );
-        }
+            .ok_or_else(|| {
+                SimulationError::FatalError(
+                    "block_timestamp not found in updated attributes".into(),
+                )
+            })?;
+
+        self.block.timestamp = u64::from_be_bytes(
+            block_timestamp_bytes[block_timestamp_bytes.len() - 8..]
+                .try_into()
+                .map_err(|_| {
+                    TransitionError::DecodeError("Invalid block_timestamp bytes".to_string())
+                })?,
+        );
 
         // Apply attribute changes
         if let Some(liquidity) = delta
@@ -890,7 +896,7 @@ mod tests {
     }
 
     #[test]
-    fn test_delta_transition_block_update() {
+    fn test_delta_transition_missing_block_update() {
         let block = BlockHeader {
             number: 1000,
             hash: Bytes::from_str(
@@ -914,12 +920,10 @@ mod tests {
         assert_eq!(pool.block.number, 1000);
         assert_eq!(pool.block.timestamp, 1758201863);
 
-        let attributes: HashMap<String, Bytes> = [
-            ("block_number".to_string(), Bytes::from(2000_u64.to_be_bytes().to_vec())),
-            ("block_timestamp".to_string(), Bytes::from(1758201935_u64.to_be_bytes().to_vec())),
-        ]
-        .into_iter()
-        .collect();
+        let attributes: HashMap<String, Bytes> =
+            [("block_number".to_string(), Bytes::from(2000_u64.to_be_bytes().to_vec()))]
+                .into_iter()
+                .collect();
 
         let delta = ProtocolStateDelta {
             component_id: "State1".to_owned(),
@@ -927,12 +931,8 @@ mod tests {
             deleted_attributes: HashSet::new(),
         };
 
-        pool.delta_transition(delta, &HashMap::new(), &Balances::default())
-            .unwrap();
-
-        // Verify block was updated
-        assert_eq!(pool.block.number, 2000);
-        assert_eq!(pool.block.timestamp, 1758201935);
+        let result = pool.delta_transition(delta, &HashMap::new(), &Balances::default());
+        assert!(result.is_err())
     }
 
     #[test]
@@ -966,6 +966,8 @@ mod tests {
             ("fee".to_string(), Bytes::from(100_u32.to_be_bytes().to_vec())),
             ("ticks/-120/net_liquidity".to_string(), Bytes::from(10200_u64.to_be_bytes().to_vec())),
             ("ticks/120/net_liquidity".to_string(), Bytes::from(9800_u64.to_be_bytes().to_vec())),
+            ("block_number".to_string(), Bytes::from(2000_u64.to_be_bytes().to_vec())),
+            ("block_timestamp".to_string(), Bytes::from(1758201935_u64.to_be_bytes().to_vec())),
         ]
         .into_iter()
         .collect();
@@ -999,6 +1001,9 @@ mod tests {
                 .net_liquidity,
             9800
         );
+        // Verify block was updated
+        assert_eq!(pool.block.number, 2000);
+        assert_eq!(pool.block.timestamp, 1758201935);
     }
 
     #[tokio::test]
