@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package uniswap.v3;
+package tycho.evm.uniswap.v3;
 
 message Pool {
   bytes address = 1;
