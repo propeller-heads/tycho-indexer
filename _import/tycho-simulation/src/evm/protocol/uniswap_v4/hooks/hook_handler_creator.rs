@@ -4,7 +4,6 @@ use std::{collections::HashMap, sync::RwLock};
 use alloy::primitives::{Address, U256};
 use lazy_static::lazy_static;
 use revm::{primitives::KECCAK_EMPTY, state::AccountInfo};
-use tycho_client::feed::BlockHeader;
 use tycho_common::{models::token::Token, simulation::errors::SimulationError, Bytes};
 
 use crate::{
@@ -23,7 +22,6 @@ use crate::{
 
 /// Parameters for creating a HookHandler.
 pub struct HookCreationParams<'a> {
-    block: BlockHeader,
     hook_address: Address,
     account_balances: &'a HashMap<Bytes, HashMap<Bytes, Bytes>>,
     all_tokens: &'a HashMap<Bytes, Token>,
@@ -38,7 +36,6 @@ pub struct HookCreationParams<'a> {
 
 impl<'a> HookCreationParams<'a> {
     pub fn new(
-        block: BlockHeader,
         hook_address: Address,
         account_balances: &'a HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &'a HashMap<Bytes, Token>,
@@ -46,7 +43,7 @@ impl<'a> HookCreationParams<'a> {
         attributes: &'a HashMap<String, Bytes>,
         balances: &'a HashMap<Bytes, Bytes>,
     ) -> Self {
-        Self { block, hook_address, account_balances, all_tokens, state, attributes, balances }
+        Self { hook_address, account_balances, all_tokens, state, attributes, balances }
     }
 }
 

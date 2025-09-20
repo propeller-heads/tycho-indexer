@@ -7,7 +7,6 @@ use alloy::{
     primitives::{Address, Bytes, Keccak256, U256},
     sol_types::SolValue,
 };
-use chrono::Utc;
 use itertools::Itertools;
 use revm::{
     primitives::KECCAK_EMPTY,
@@ -370,11 +369,6 @@ where
                 )
             })?;
 
-        let timestamp = Utc::now()
-            .naive_utc()
-            .and_utc()
-            .timestamp() as u64;
-
         let parsed_address: Address = to_address.parse().map_err(|_| {
             SimulationError::FatalError(format!(
                 "Failed to get address from call: Invalid address format: {to_address}"
@@ -384,8 +378,6 @@ where
         let sim_params = SimulationParameters {
             data: selector.to_vec(),
             to: parsed_address,
-            block_number: self.block.number,
-            timestamp,
             overrides: Some(HashMap::new()),
             caller: *EXTERNAL_ACCOUNT,
             value: U256::from(0u64),
