@@ -11,12 +11,14 @@ pub struct RpcCache<R, V> {
     cache: Arc<Cache<R, Arc<tokio::sync::Mutex<Option<V>>>>>,
 }
 
+type Weigher<R, V> =
+    Box<dyn Fn(&R, &Arc<tokio::sync::Mutex<Option<V>>>) -> u32 + Send + Sync + 'static>;
+
 pub struct RpcCacheBuilder<R, V> {
     name: String,
     capacity: u64,
     ttl: u64,
-    weigher:
-        Option<Box<dyn Fn(&R, &Arc<tokio::sync::Mutex<Option<V>>>) -> u32 + Send + Sync + 'static>>,
+    weigher: Option<Weigher<R, V>>,
 }
 
 impl<R, V> RpcCacheBuilder<R, V>
