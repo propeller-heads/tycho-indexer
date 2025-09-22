@@ -98,7 +98,7 @@ impl TychoStreamBuilder {
     /// blockchain network.
     fn default_timing(chain: &Chain) -> (u64, u64, u64) {
         match chain {
-            Chain::Ethereum => (12, 36, 10),
+            Chain::Ethereum => (12, 36, 50),
             Chain::Starknet => (2, 8, 50),
             Chain::ZkSync => (3, 12, 50),
             Chain::Arbitrum => (1, 2, 100), // Typically closer to 0.25s
