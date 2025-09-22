@@ -35,7 +35,7 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::TYCHO_SERVER_VERSION;
+use crate::{config::RetryConfiguration, TYCHO_SERVER_VERSION};
 
 #[derive(Error, Debug)]
 pub enum RPCError {
@@ -638,6 +638,27 @@ impl HttpRPCClient {
                 .build(),
             server_restart_duration: Duration::from_secs(120),
         })
+    }
+
+    pub fn new_with_retry(
+        base_uri: &str,
+        auth_key: Option<&str>,
+        retry_config: RetryConfiguration,
+    ) -> Result<Self, RPCError> {
+        let mut client = HttpRPCClient::new(base_uri, auth_key)?;
+        client.backoff_policy = match retry_config {
+            RetryConfiguration::Constant(_) => {
+                return Err(RPCError::Fatal("Constant backoff currently unsupported".to_string()))
+            }
+            RetryConfiguration::Exponential(config) => ExponentialBackoffBuilder::new()
+                .with_initial_interval(config.initial_interval())
+                .with_multiplier(config.multiplier())
+                .with_max_interval(config.max_interval())
+                .with_max_elapsed_time(config.max_elapsed_time())
+                .with_randomization_factor(config.randomization_factor())
+                .build(),
+        };
+        Ok(client)
     }
 
     #[cfg(test)]

@@ -11,6 +11,7 @@ use tracing::{info, warn};
 use tycho_common::dto::{Chain, ExtractorIdentity, PaginationParams, ProtocolSystemsRequestBody};
 
 use crate::{
+    config::RetryConfiguration,
     deltas::DeltasClient,
     feed::{
         component_tracker::ComponentFilter, synchronizer::ProtocolStateSynchronizer, BlockHeader,
@@ -32,24 +33,6 @@ pub enum StreamError {
     BlockSynchronizerError(String),
 }
 
-#[non_exhaustive]
-#[derive(Clone, Debug)]
-pub enum RetryConfiguration {
-    Constant(ConstantRetryConfiguration),
-}
-
-impl RetryConfiguration {
-    pub fn constant(max_attempts: u64, cooldown: Duration) -> Self {
-        RetryConfiguration::Constant(ConstantRetryConfiguration { max_attempts, cooldown })
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ConstantRetryConfiguration {
-    max_attempts: u64,
-    cooldown: Duration,
-}
-
 pub struct TychoStreamBuilder {
     tycho_url: String,
     chain: Chain,
@@ -64,6 +47,7 @@ pub struct TychoStreamBuilder {
     auth_key: Option<String>,
     no_tls: bool,
     include_tvl: bool,
+    rpc_retry_config: RetryConfiguration,
 }
 
 impl TychoStreamBuilder {
@@ -86,6 +70,13 @@ impl TychoStreamBuilder {
             websockets_retry_config: RetryConfiguration::constant(
                 128,
                 Duration::from_secs(max(block_time / 4, 1)),
+            ),
+            rpc_retry_config: RetryConfiguration::exponential(
+                Duration::from_millis(250),
+                0.5,
+                1.75,
+                Duration::from_secs(30),
+                None,
             ),
             no_state: false,
             auth_key: None,
@@ -136,27 +127,59 @@ impl TychoStreamBuilder {
         self
     }
 
-    pub fn websockets_retry_config(mut self, retry_config: &RetryConfiguration) -> Self {
-        self.websockets_retry_config = retry_config.clone();
-        self.warn_on_potential_timing_issues();
-        self
+    pub fn rpc_client_retry_config(
+        mut self,
+        retry_config: RetryConfiguration,
+    ) -> Result<Self, StreamError> {
+        if !matches!(retry_config, RetryConfiguration::Exponential(_)) {
+            return Err(StreamError::SetUpError(
+                "Only constant exponential configuration supported for rpc client".to_string(),
+            ))
+        }
+        self.rpc_retry_config = retry_config.clone();
+        Ok(self)
     }
 
-    pub fn state_synchronizer_retry_config(mut self, retry_config: &RetryConfiguration) -> Self {
+    pub fn websockets_retry_config(
+        mut self,
+        retry_config: &RetryConfiguration,
+    ) -> Result<Self, StreamError> {
+        if !matches!(retry_config, RetryConfiguration::Constant(_)) {
+            return Err(StreamError::SetUpError(
+                "Only constant retry configuration supported for websocket".to_string(),
+            ))
+        }
+        self.websockets_retry_config = retry_config.clone();
+        self.warn_on_potential_timing_issues();
+        Ok(self)
+    }
+
+    pub fn state_synchronizer_retry_config(
+        mut self,
+        retry_config: &RetryConfiguration,
+    ) -> Result<Self, StreamError> {
+        if !matches!(retry_config, RetryConfiguration::Constant(_)) {
+            return Err(StreamError::SetUpError(
+                "Only constant retry configuration supported for synchronizer".to_string(),
+            ))
+        }
         self.state_sync_retry_config = retry_config.clone();
         self.warn_on_potential_timing_issues();
-        self
+        Ok(self)
     }
 
     fn warn_on_potential_timing_issues(&self) {
-        let (RetryConfiguration::Constant(state_config), RetryConfiguration::Constant(ws_config)) =
-            (&self.state_sync_retry_config, &self.websockets_retry_config);
-
-        if ws_config.cooldown >= state_config.cooldown {
-            warn!(
-                "Websocket cooldown should be < than state syncronizer cooldown \
+        if let (
+            RetryConfiguration::Constant(state_config),
+            RetryConfiguration::Constant(ws_config),
+        ) = (&self.state_sync_retry_config, &self.websockets_retry_config)
+        {
+            if ws_config.cooldown() >= state_config.cooldown() {
+                warn!(
+                    "Websocket cooldown should be < than state syncronizer cooldown \
                 to avoid spending retries due to disconnected websocket."
-            )
+                )
+            }
         }
     }
 
@@ -228,18 +251,22 @@ impl TychoStreamBuilder {
             RetryConfiguration::Constant(config) => WsDeltasClient::new_with_reconnects(
                 &tycho_ws_url,
                 auth_key.as_deref(),
-                config.max_attempts,
-                config.cooldown,
+                config.max_attempts(),
+                config.cooldown(),
             ),
             _ => {
                 return Err(StreamError::SetUpError(
-                    "Unknown websocket configuration variant!".to_string(),
+                    "Unsupported websocket configuration variant!".to_string(),
                 ));
             }
         }
         .map_err(|e| StreamError::SetUpError(e.to_string()))?;
-        let rpc_client = HttpRPCClient::new(&tycho_rpc_url, auth_key.as_deref())
-            .map_err(|e| StreamError::SetUpError(e.to_string()))?;
+        let rpc_client = HttpRPCClient::new_with_retry(
+            &tycho_rpc_url,
+            auth_key.as_deref(),
+            self.rpc_retry_config.clone(),
+        )
+        .map_err(|e| StreamError::SetUpError(e.to_string()))?;
         let ws_jh = ws_client
             .connect()
             .await
@@ -265,8 +292,8 @@ impl TychoStreamBuilder {
                     id.clone(),
                     true,
                     filter,
-                    retry_config.max_attempts,
-                    retry_config.cooldown,
+                    retry_config.max_attempts(),
+                    retry_config.cooldown(),
                     !self.no_state,
                     self.include_tvl,
                     rpc_client.clone(),
@@ -275,7 +302,7 @@ impl TychoStreamBuilder {
                 ),
                 _ => {
                     return Err(StreamError::SetUpError(
-                        "Unknown state synchronizer configuration variant!".to_string(),
+                        "Unsupported state synchronizer configuration variant!".to_string(),
                     ));
                 }
             };
@@ -357,9 +384,10 @@ mod tests {
         let config = RetryConfiguration::constant(5, Duration::from_secs(10));
         match config {
             RetryConfiguration::Constant(c) => {
-                assert_eq!(c.max_attempts, 5);
-                assert_eq!(c.cooldown, Duration::from_secs(10));
+                assert_eq!(c.max_attempts(), 5);
+                assert_eq!(c.cooldown(), Duration::from_secs(10));
             }
+            _ => unreachable!(),
         }
     }
 
@@ -371,16 +399,19 @@ mod tests {
 
         builder = builder
             .websockets_retry_config(&ws_config)
-            .state_synchronizer_retry_config(&state_config);
+            .unwrap()
+            .state_synchronizer_retry_config(&state_config)
+            .unwrap();
 
         // Verify configs are stored correctly by checking they match expected values
         match (&builder.websockets_retry_config, &builder.state_sync_retry_config) {
             (RetryConfiguration::Constant(ws), RetryConfiguration::Constant(state)) => {
-                assert_eq!(ws.max_attempts, 10);
-                assert_eq!(ws.cooldown, Duration::from_secs(2));
-                assert_eq!(state.max_attempts, 20);
-                assert_eq!(state.cooldown, Duration::from_secs(5));
+                assert_eq!(ws.max_attempts(), 10);
+                assert_eq!(ws.cooldown(), Duration::from_secs(2));
+                assert_eq!(state.max_attempts(), 20);
+                assert_eq!(state.cooldown(), Duration::from_secs(5));
             }
+            _ => panic!(""),
         }
     }
 
