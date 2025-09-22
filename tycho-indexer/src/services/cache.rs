@@ -4,10 +4,62 @@ use futures03::Future;
 use metrics::counter;
 use mini_moka::sync::Cache;
 use tracing::{instrument, trace, Level};
+use tycho_common::traits::MemorySize;
 
 pub struct RpcCache<R, V> {
     name: String,
     cache: Arc<Cache<R, Arc<tokio::sync::Mutex<Option<V>>>>>,
+}
+
+pub struct RpcCacheBuilder<R, V> {
+    name: String,
+    capacity: u64,
+    ttl: u64,
+    weigher:
+        Option<Box<dyn Fn(&R, &Arc<tokio::sync::Mutex<Option<V>>>) -> u32 + Send + Sync + 'static>>,
+}
+
+impl<R, V> RpcCacheBuilder<R, V>
+where
+    R: Clone + Hash + Eq + Send + Sync + Debug + 'static,
+    V: Clone + Send + Sync + 'static,
+{
+    pub fn new(name: &str, capacity: u64, ttl: u64) -> Self {
+        Self { name: name.to_string(), capacity, ttl, weigher: None }
+    }
+
+    /// Convenience method for values that implement MemorySize
+    pub fn with_memory_size(mut self) -> Self
+    where
+        V: MemorySize,
+    {
+        self.weigher = Some(Box::new(|_key, value_wrapper| {
+            if let Ok(guard) = value_wrapper.try_lock() {
+                if let Some(value) = guard.as_ref() {
+                    return value
+                        .memory_size()
+                        .try_into()
+                        .unwrap_or(u32::MAX); // We stay conservative if it overflows u32
+                }
+            }
+            // Conservative size if we can't lock or there's no value
+            u32::MAX
+        }));
+        self
+    }
+
+    pub fn build(self) -> RpcCache<R, V> {
+        let mut cache_builder = Cache::builder()
+            .time_to_live(std::time::Duration::from_secs(self.ttl))
+            .max_capacity(self.capacity);
+
+        if let Some(weigher) = self.weigher {
+            cache_builder = cache_builder.weigher(weigher);
+        }
+
+        let cache = Arc::new(cache_builder.build());
+        RpcCache { name: self.name, cache }
+    }
 }
 
 impl<R, V> RpcCache<R, V>
@@ -23,6 +75,10 @@ where
                 .build(),
         );
         Self { name: name.to_string(), cache }
+    }
+
+    pub fn builder(name: &str, capacity: u64, ttl: u64) -> RpcCacheBuilder<R, V> {
+        RpcCacheBuilder::new(name, capacity, ttl)
     }
 
     #[instrument(

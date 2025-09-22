@@ -70,7 +70,11 @@ pub trait RPCClient: Send + Sync {
     ) -> Result<StateRequestResponse, RPCError> {
         let semaphore = Arc::new(Semaphore::new(concurrency));
 
-        let chunked_bodies = ids
+        // Sort the ids to maximize server-side cache hits
+        let mut sorted_ids = ids.to_vec();
+        sorted_ids.sort();
+
+        let chunked_bodies = sorted_ids
             .chunks(chunk_size)
             .map(|chunk| StateRequestBody {
                 contract_ids: Some(chunk.to_vec()),

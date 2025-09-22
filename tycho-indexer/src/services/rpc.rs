@@ -116,12 +116,15 @@ where
             7 * 60,
         );
 
+        // Create contract storage cache with a weigher to limit memory usage
         let contract_storage_cache =
-            RpcCache::<dto::StateRequestBody, dto::StateRequestResponse>::new(
+            RpcCache::<dto::StateRequestBody, dto::StateRequestResponse>::builder(
                 "contract_storage",
-                50,
+                2 * 1024 * 1024 * 1024, // 2 GiB capacity in bytes
                 7 * 60,
-            );
+            )
+            .with_memory_size()
+            .build();
 
         let protocol_state_cache = RpcCache::<
             dto::ProtocolStateRequestBody,
