@@ -23,6 +23,7 @@ pub struct TychoRouterEncoderBuilder {
     executors_file_path: Option<String>,
     router_address: Option<Bytes>,
     swapper_pk: Option<String>,
+    historical_trade: bool,
 }
 
 impl Default for TychoRouterEncoderBuilder {
@@ -39,6 +40,7 @@ impl TychoRouterEncoderBuilder {
             router_address: None,
             swapper_pk: None,
             user_transfer_type: None,
+            historical_trade: false,
         }
     }
     pub fn chain(mut self, chain: Chain) -> Self {
@@ -62,6 +64,15 @@ impl TychoRouterEncoderBuilder {
     /// If it's not set, the default router address will be used (config/router_addresses.json)
     pub fn router_address(mut self, router_address: Bytes) -> Self {
         self.router_address = Some(router_address);
+        self
+    }
+
+    /// Sets the `historical_trade` manually to true.
+    /// If set to true, it means that the encoded trade will be used in an historical block (as a
+    /// test) and not in the current one. This is relevant for checking token approvals in some
+    /// protocols (like Balancer v2).
+    pub fn historical_trade(mut self) -> Self {
+        self.historical_trade = true;
         self
     }
 
@@ -115,6 +126,7 @@ impl TychoRouterEncoderBuilder {
                 tycho_router_address,
                 user_transfer_type,
                 signer,
+                self.historical_trade,
             )?))
         } else {
             Err(EncodingError::FatalError(

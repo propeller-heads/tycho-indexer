@@ -54,6 +54,7 @@ impl TychoRouterEncoder {
         router_address: Bytes,
         user_transfer_type: UserTransferType,
         signer: Option<PrivateKeySigner>,
+        historical_trade: bool,
     ) -> Result<Self, EncodingError> {
         let permit2 = if user_transfer_type == UserTransferType::TransferFromPermit2 {
             Some(Permit2::new()?)
@@ -66,18 +67,21 @@ impl TychoRouterEncoder {
                 swap_encoder_registry.clone(),
                 user_transfer_type.clone(),
                 router_address.clone(),
+                historical_trade.clone(),
             )?,
             sequential_swap_strategy: SequentialSwapStrategyEncoder::new(
                 chain,
                 swap_encoder_registry.clone(),
                 user_transfer_type.clone(),
                 router_address.clone(),
+                historical_trade.clone(),
             )?,
             split_swap_strategy: SplitSwapStrategyEncoder::new(
                 chain,
                 swap_encoder_registry,
                 user_transfer_type.clone(),
                 router_address.clone(),
+                historical_trade,
             )?,
             router_address,
             permit2,
@@ -331,6 +335,7 @@ impl TychoExecutorEncoder {
             group_token_in: grouped_swap.token_in.clone(),
             group_token_out: grouped_swap.token_out.clone(),
             transfer_type: transfer,
+            historical_trade: false,
         };
         let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
         let mut initial_protocol_data: Vec<u8> = vec![];
@@ -498,6 +503,7 @@ mod tests {
             router_address(),
             user_transfer_type,
             None,
+            false,
         )
         .unwrap()
     }
