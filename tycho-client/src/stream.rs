@@ -56,6 +56,7 @@ pub struct TychoStreamBuilder {
     exchanges: HashMap<String, ComponentFilter>,
     block_time: u64,
     timeout: u64,
+    startup_timeout: Duration,
     max_missed_blocks: u64,
     state_sync_retry_config: RetryConfiguration,
     websockets_retry_config: RetryConfiguration,
@@ -76,6 +77,7 @@ impl TychoStreamBuilder {
             exchanges: HashMap::new(),
             block_time,
             timeout,
+            startup_timeout: Duration::from_secs(block_time * max_missed_blocks),
             max_missed_blocks,
             state_sync_retry_config: RetryConfiguration::constant(
                 32,
@@ -121,6 +123,11 @@ impl TychoStreamBuilder {
     /// Sets the timeout duration for network operations.
     pub fn timeout(mut self, timeout: u64) -> Self {
         self.timeout = timeout;
+        self
+    }
+
+    pub fn startup_timeout(mut self, timeout: Duration) -> Self {
+        self.startup_timeout = timeout;
         self
     }
 
