@@ -805,15 +805,17 @@ impl MemorySize for StateRequestResponse {
             }
 
             // Storage slots HashMap - this is likely the largest contributor
-            size += account.slots.capacity() * 64; // Rough HashMap overhead per slot
+            size += account.slots.capacity() * 64; // For the `Bytes` values in the HashMap (they are 4 usize fields, so 32 bytes each)
             for (key, value) in &account.slots {
-                size += key.len();
+                // Account for the `Bytes` heap allocation
+                size += key.len(); //
                 size += value.len();
             }
 
             // Token balances HashMap
-            size += account.token_balances.capacity() * 64; // HashMap overhead
+            size += account.token_balances.capacity() * 64; // For the `Bytes` values in the HashMap (they are 4 usize fields, so 32 bytes each)
             for (key, value) in &account.token_balances {
+                // Account for the `Bytes` heap allocation
                 size += key.len();
                 size += value.len();
             }
