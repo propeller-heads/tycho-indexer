@@ -1,3 +1,11 @@
+## [0.87.0](https://github.com/propeller-heads/tycho-indexer/compare/0.86.0...0.87.0) (2025-09-23)
+
+
+### Features
+
+* enhance RpcCache with memory size weighing ([d33e6aa](https://github.com/propeller-heads/tycho-indexer/commit/d33e6aa7d02b9ca290c879a87ae92cdc15f39c11))
+* enhance RpcCache with memory size weighing ([#700](https://github.com/propeller-heads/tycho-indexer/issues/700)) ([58d352a](https://github.com/propeller-heads/tycho-indexer/commit/58d352a3f56414b9e697d74163c4ba7e318efb40))
+
 ## [0.86.0](https://github.com/propeller-heads/tycho-indexer/compare/0.85.0...0.86.0) (2025-09-19)
 
 
