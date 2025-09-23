@@ -120,7 +120,7 @@ where
         let contract_storage_cache =
             RpcCache::<dto::StateRequestBody, dto::StateRequestResponse>::builder(
                 "contract_storage",
-                2 * 1024 * 1024 * 1024, // 2 GiB capacity in bytes
+                1024 * 1024 * 1024, // 1 GiB capacity in bytes
                 7 * 60,
             )
             .with_memory_size()
@@ -129,17 +129,17 @@ where
         let protocol_state_cache = RpcCache::<
             dto::ProtocolStateRequestBody,
             dto::ProtocolStateRequestResponse,
-        >::new("protocol_state", 50, 7 * 60);
+        >::new("protocol_state", 20, 7 * 60);
 
         let component_cache = RpcCache::<
             dto::ProtocolComponentsRequestBody,
             dto::ProtocolComponentRequestResponse,
-        >::new("protocol_components", 500, 7 * 60);
+        >::new("protocol_components", 100, 7 * 60);
 
         let traced_entry_point_cache = RpcCache::<
             dto::TracedEntryPointRequestBody,
             dto::TracedEntryPointRequestResponse,
-        >::new("traced_entry_points", 500, 7 * 60);
+        >::new("traced_entry_points", 100, 7 * 60);
 
         Self {
             db_gateway,

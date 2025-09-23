@@ -3,7 +3,7 @@ use std::{error::Error, fmt::Debug, hash::Hash, sync::Arc};
 use futures03::Future;
 use metrics::counter;
 use mini_moka::sync::Cache;
-use tracing::{instrument, trace, Level};
+use tracing::{debug, instrument, trace, Level};
 use tycho_common::traits::MemorySize;
 
 pub struct RpcCache<R, V> {
@@ -114,10 +114,14 @@ where
             }
         }
 
-        // the value has never been written
         tracing::Span::current().record("miss", true);
         trace!("CacheMiss");
         counter!("rpc_cache_misses", "cache" => self.name.clone()).increment(1);
+
+        // Log weighted size on cache miss
+        let weighted_size = self.cache.weighted_size();
+        tracing::Span::current().record("weighted_size", weighted_size);
+        debug!(weighted_size, name = self.name, "CacheWeightedSize");
 
         let lock = Arc::new(tokio::sync::Mutex::new(None));
         let mut guard = lock.lock().await;
