@@ -553,7 +553,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, str::FromStr};
+    use std::{collections::HashMap, fs, str::FromStr};
 
     use alloy::{hex::encode, primitives::hex};
     use num_bigint::{BigInt, BigUint};
@@ -573,9 +573,10 @@ mod tests {
     }
 
     fn get_swap_encoder_registry() -> SwapEncoderRegistry {
+        let executors_addresses =
+            fs::read_to_string("config/test_executor_addresses.json").unwrap();
         let eth_chain = eth_chain();
-        SwapEncoderRegistry::new(Some("config/test_executor_addresses.json".to_string()), eth_chain)
-            .unwrap()
+        SwapEncoderRegistry::new(Some(executors_addresses), eth_chain).unwrap()
     }
 
     fn router_address() -> Bytes {

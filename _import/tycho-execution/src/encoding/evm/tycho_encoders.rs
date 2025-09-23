@@ -67,14 +67,14 @@ impl TychoRouterEncoder {
                 swap_encoder_registry.clone(),
                 user_transfer_type.clone(),
                 router_address.clone(),
-                historical_trade.clone(),
+                historical_trade,
             )?,
             sequential_swap_strategy: SequentialSwapStrategyEncoder::new(
                 chain,
                 swap_encoder_registry.clone(),
                 user_transfer_type.clone(),
                 router_address.clone(),
-                historical_trade.clone(),
+                historical_trade,
             )?,
             split_swap_strategy: SplitSwapStrategyEncoder::new(
                 chain,
@@ -405,7 +405,7 @@ impl TychoEncoder for TychoExecutorEncoder {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, str::FromStr};
+    use std::{collections::HashMap, fs, str::FromStr};
 
     use num_bigint::{BigInt, BigUint};
     use tycho_common::models::{protocol::ProtocolComponent, Chain};
@@ -489,11 +489,9 @@ mod tests {
     }
 
     fn get_swap_encoder_registry() -> SwapEncoderRegistry {
-        SwapEncoderRegistry::new(
-            Some("config/test_executor_addresses.json".to_string()),
-            eth_chain(),
-        )
-        .unwrap()
+        let executors_addresses =
+            fs::read_to_string("config/test_executor_addresses.json").unwrap();
+        SwapEncoderRegistry::new(Some(executors_addresses), eth_chain()).unwrap()
     }
 
     fn get_tycho_router_encoder(user_transfer_type: UserTransferType) -> TychoRouterEncoder {
