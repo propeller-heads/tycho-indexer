@@ -23,7 +23,7 @@ use crate::extractor::runner::MessageSender;
 /// How often heartbeat pings are sent
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 /// How long before lack of client response causes a timeout
-const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
+const CLIENT_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub type MessageSenderMap = HashMap<ExtractorIdentity, Arc<dyn MessageSender + Send + Sync>>;
 
