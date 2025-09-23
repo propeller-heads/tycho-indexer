@@ -8412,7 +8412,8 @@ dependencies = [
 [[package]]
 name = "tycho-client"
 version = "0.83.4"
-source = "git+https://github.com/propeller-heads/tycho-indexer?rev=658205ad124edeeedc84dcf0874c582913ade88a#658205ad124edeeedc84dcf0874c582913ade88a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3da113f5301ba1fb8e4441df405afa1e7b728a83017681b94851c5bc36d758dc"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8431,7 +8432,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber 0.3.19",
- "tycho-common 0.83.4 (git+https://github.com/propeller-heads/tycho-indexer?rev=658205ad124edeeedc84dcf0874c582913ade88a)",
+ "tycho-common",
  "uuid 1.17.0",
 ]
 
@@ -8440,30 +8441,6 @@ name = "tycho-common"
 version = "0.83.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75ecbbf6f701a01569e351d19ee3a3e36418e8d1be539fd6ed925137eb84a2b2"
-dependencies = [
- "anyhow",
- "async-trait",
- "bytes",
- "chrono",
- "hex",
- "num-bigint",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "strum 0.25.0",
- "strum_macros 0.25.3",
- "thiserror 1.0.69",
- "tiny-keccak",
- "tracing",
- "typetag",
- "utoipa",
- "uuid 1.17.0",
-]
-
-[[package]]
-name = "tycho-common"
-version = "0.83.4"
-source = "git+https://github.com/propeller-heads/tycho-indexer?rev=658205ad124edeeedc84dcf0874c582913ade88a#658205ad124edeeedc84dcf0874c582913ade88a"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8503,12 +8480,12 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
- "tycho-common 0.83.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tycho-common",
 ]
 
 [[package]]
 name = "tycho-simulation"
-version = "0.161.0"
+version = "0.160.1"
 dependencies = [
  "alloy",
  "anyhow",
@@ -8555,7 +8532,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber 0.3.19",
  "tycho-client",
- "tycho-common 0.83.4 (git+https://github.com/propeller-heads/tycho-indexer?rev=658205ad124edeeedc84dcf0874c582913ade88a)",
+ "tycho-common",
  "tycho-execution",
  "unicode-width 0.1.14",
  "uuid 1.17.0",
