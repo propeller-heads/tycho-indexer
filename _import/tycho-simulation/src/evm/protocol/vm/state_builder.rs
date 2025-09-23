@@ -14,7 +14,6 @@ use revm::{
     DatabaseRef,
 };
 use tracing::warn;
-use tycho_client::feed::BlockHeader;
 use tycho_common::{simulation::errors::SimulationError, Bytes as TychoBytes};
 
 use super::{
@@ -46,27 +45,31 @@ use crate::evm::{
 /// use tycho_simulation::evm::engine_db::SHARED_TYCHO_DB;
 /// use tycho_simulation::evm::protocol::vm::state_builder::EVMPoolStateBuilder;
 /// use tycho_simulation::evm::protocol::vm::constants::BALANCER_V2;
-/// use tycho_client::feed::BlockHeader;
-/// use tycho_common::simulation::errors::SimulationError;
+/// /// use tycho_common::simulation::errors::SimulationError;
 /// use revm::state::Bytecode;
 ///
 /// #[tokio::main]
-/// async fn main() -> Result<(), SimulationError> {
-/// let pool_id: String = "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
+/// async fn main() -> Result<(), tycho_common::simulation::errors::SimulationError> {
+///     use tycho_client::feed::BlockHeader;
+///
+///     let pool_id: String = "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
 ///
 ///     let tokens = vec![
 ///         Bytes::from("0x6b175474e89094c44da98b954eedeac495271d0f"),
 ///         Bytes::from("0xba100000625a3754423978a60c9317c58a424e3d"),
 ///     ];
+///
+///     // Set up the block for the database
 ///     let block = BlockHeader {
 ///         number: 1,
 ///         hash: Default::default(),
 ///         timestamp: 1632456789,
 ///         ..Default::default()
 ///     };
+///     SHARED_TYCHO_DB.update(vec![], Some(block)).unwrap();
 ///
 ///     // Build the EVMPoolState
-///     let pool_state = EVMPoolStateBuilder::new(pool_id, tokens, block, Address::random())
+///     let pool_state = EVMPoolStateBuilder::new(pool_id, tokens, Address::random())
 ///         .adapter_contract_bytecode(Bytecode::new_raw(BALANCER_V2.into()))
 ///         .build(SHARED_TYCHO_DB.clone())
 ///         .await?;
@@ -80,7 +83,6 @@ where
 {
     id: String,
     tokens: Vec<TychoBytes>,
-    block: BlockHeader,
     balances: HashMap<Address, U256>,
     adapter_address: Address,
     balance_owner: Option<Address>,
@@ -101,17 +103,11 @@ where
     <D as DatabaseRef>::Error: Debug,
     <D as EngineDatabaseInterface>::Error: Debug,
 {
-    pub fn new(
-        id: String,
-        tokens: Vec<TychoBytes>,
-        block: BlockHeader,
-        adapter_address: Address,
-    ) -> Self {
+    pub fn new(id: String, tokens: Vec<TychoBytes>, adapter_address: Address) -> Self {
         Self {
             id,
             tokens,
             balances: HashMap::new(),
-            block,
             adapter_address,
             balance_owner: None,
             capabilities: None,
@@ -226,7 +222,6 @@ where
         Ok(EVMPoolState::new(
             self.id,
             self.tokens,
-            self.block,
             self.balances,
             self.balance_owner,
             self.contract_balances,
@@ -401,8 +396,6 @@ where
 mod tests {
     use std::str::FromStr;
 
-    use tycho_client::feed::BlockHeader;
-
     use super::*;
     use crate::evm::engine_db::{tycho_db::PreCachedDB, SHARED_TYCHO_DB};
 
@@ -412,11 +405,10 @@ mod tests {
         let tokens =
             vec![TychoBytes::from_str("0000000000000000000000000000000000000000").unwrap()];
         let balances = HashMap::new();
-        let block = BlockHeader { number: 1, timestamp: 234, ..Default::default() };
         let adapter_address =
             Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270").unwrap();
         let result = tokio_test::block_on(
-            EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, block, adapter_address)
+            EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, adapter_address)
                 .balances(balances)
                 .build(SHARED_TYCHO_DB.clone()),
         );
@@ -436,12 +428,11 @@ mod tests {
         let token2 = TychoBytes::from_str("0000000000000000000000000000000000000002").unwrap();
         let token3 = TychoBytes::from_str("0000000000000000000000000000000000000003").unwrap();
         let tokens = vec![token2.clone(), token3.clone()];
-        let block = BlockHeader { number: 1, timestamp: 234, ..Default::default() };
         let balances = HashMap::new();
         let adapter_address =
             Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270").unwrap();
-        let builder = EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, block, adapter_address)
-            .balances(balances);
+        let builder =
+            EVMPoolStateBuilder::<PreCachedDB>::new(id, tokens, adapter_address).balances(balances);
 
         let engine = tokio_test::block_on(builder.get_default_engine(SHARED_TYCHO_DB.clone()));
 

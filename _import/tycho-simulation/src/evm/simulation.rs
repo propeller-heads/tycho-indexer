@@ -623,7 +623,7 @@ mod tests {
             hash: tycho_common::Bytes::from_str(
                 "0x0000000000000000000000000000000000000000000000000000000000000000",
             )
-                .unwrap(),
+            .unwrap(),
             timestamp: 1758665355,
             ..Default::default()
         };
@@ -764,7 +764,7 @@ mod tests {
             hash: tycho_common::Bytes::from_str(
                 "0x0000000000000000000000000000000000000000000000000000000000000000",
             )
-                .unwrap(),
+            .unwrap(),
             timestamp: 1748397011,
             ..Default::default()
         };

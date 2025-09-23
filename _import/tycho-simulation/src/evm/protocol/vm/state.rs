@@ -10,7 +10,6 @@ use alloy::primitives::{Address, U256};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use revm::DatabaseRef;
-use tycho_client::feed::BlockHeader;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -45,8 +44,6 @@ where
     id: String,
     /// The pool's token's addresses
     pub tokens: Vec<Bytes>,
-    /// The current block, will be used to set vm context
-    block: BlockHeader,
     /// The pool's component balances.
     balances: HashMap<Address, U256>,
     /// The contract address for where protocol balances are stored (i.e. a vault contract).
@@ -87,7 +84,6 @@ where
     pub fn new(
         id: String,
         tokens: Vec<Bytes>,
-        block: BlockHeader,
         component_balances: HashMap<Address, U256>,
         balance_owner: Option<Address>,
         contract_balances: HashMap<Address, HashMap<Address, U256>>,
@@ -101,7 +97,6 @@ where
         Self {
             id,
             tokens,
-            block,
             balances: component_balances,
             balance_owner,
             spot_prices,
@@ -763,7 +758,7 @@ mod tests {
             hash: Bytes::from_str(
                 "0x4315fd1afc25cc2ebc72029c543293f9fd833eeb305e2e30159459c827733b1b",
             )
-                .unwrap(),
+            .unwrap(),
             timestamp: 1722875891,
             ..Default::default()
         };
@@ -811,7 +806,8 @@ mod tests {
             timestamp: 0,
             ..Default::default()
         };
-        db.update(vec!(), Some(block.clone())).unwrap();
+        db.update(vec![], Some(block.clone()))
+            .unwrap();
 
         let pool_id: String =
             "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
@@ -828,7 +824,7 @@ mod tests {
         let adapter_address =
             Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270").unwrap();
 
-        EVMPoolStateBuilder::new(pool_id, tokens, block, adapter_address)
+        EVMPoolStateBuilder::new(pool_id, tokens, adapter_address)
             .balances(balances)
             .balance_owner(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
             .adapter_contract_bytecode(Bytecode::new_raw(BALANCER_V2.into()))
