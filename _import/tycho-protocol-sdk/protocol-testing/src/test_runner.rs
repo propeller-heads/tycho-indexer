@@ -403,7 +403,7 @@ fn validate_state(
             }
         };
 
-        info!("Using adapter contract: {}", adapter_contract_path.display());
+        debug!("Using adapter contract: {}", adapter_contract_path.display());
         adapter_contract_path_str = Some(adapter_contract_path.to_str().unwrap());
     }
 
@@ -461,7 +461,8 @@ fn validate_state(
             state,
             component: component.clone(),
             component_tvl: None,
-            entrypoints: vec![], // UniswapV4 is not supported for SDK testing at the moment
+            // Neither UniswapV4 with hooks not certain balancer pools are currently supported for SDK testing
+            entrypoints: vec![],
         };
         states.insert(component_id.clone(), component_with_state);
     }
