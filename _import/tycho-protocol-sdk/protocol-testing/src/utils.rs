@@ -10,7 +10,7 @@ use figment::{
     Figment,
 };
 use miette::{miette, IntoDiagnostic};
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 /// Build a Substreams package with modifications to the YAML file.
 pub fn build_spkg(yaml_file_path: &PathBuf, initial_block: u64) -> miette::Result<String> {
@@ -86,7 +86,7 @@ pub fn build_spkg(yaml_file_path: &PathBuf, initial_block: u64) -> miette::Resul
     // Restore the original YAML from backup
     fs::copy(&backup_file_path, yaml_file_path).into_diagnostic()?;
     fs::remove_file(&backup_file_path).into_diagnostic()?;
-    info!("Spkg built successfully: {}", spkg_name);
+    debug!("Spkg built successfully: {}", spkg_name);
 
     Ok(spkg_name)
 }

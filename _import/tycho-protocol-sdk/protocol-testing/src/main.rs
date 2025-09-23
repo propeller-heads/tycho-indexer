@@ -1,8 +1,10 @@
 mod adapter_builder;
 mod config;
 mod encoding;
+mod execution;
 mod rpc;
 mod test_runner;
+mod traces;
 mod tycho_rpc;
 mod tycho_runner;
 mod utils;
@@ -38,7 +40,11 @@ struct Args {
 
     /// Enable tracing during vm simulations
     #[arg(long, default_value_t = false)]
-    vm_traces: bool,
+    vm_simulation_traces: bool,
+
+    /// Enable tracing during execution simulations
+    #[arg(long, default_value_t = false)]
+    execution_traces: bool,
 }
 
 impl Args {
@@ -91,7 +97,8 @@ fn main() -> miette::Result<()> {
         args.package,
         args.match_test,
         args.db_url,
-        args.vm_traces,
+        args.vm_simulation_traces,
+        args.execution_traces,
     );
 
     test_runner.run_tests()

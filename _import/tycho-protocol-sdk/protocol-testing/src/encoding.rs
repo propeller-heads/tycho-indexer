@@ -1,3 +1,9 @@
+//! Transaction encoding utilities for swap solutions.
+//!
+//! This module provides functions to encode swap parameters into executable transactions
+//! using the Tycho framework. It handles the conversion of high-level swap
+//! specifications into low-level transaction data that can be executed on-chain.
+
 use std::str::FromStr;
 
 use alloy::{primitives::Keccak256, sol_types::SolValue};
@@ -16,6 +22,51 @@ use tycho_simulation::{
     },
 };
 
+use crate::execution::EXECUTORS_JSON;
+
+/// Creates a Solution for the given swap parameters.
+///
+/// # Parameters
+/// - `component`: The protocol component to swap through
+/// - `token_in`: Input token address
+/// - `token_out`: Output token address
+/// - `amount_in`: Amount of input token to swap
+/// - `amount_out`: Expected amount of output token
+///
+/// # Returns
+/// A `Result<Solution, EncodingError>` containing the solution, or an error if creation fails.
+pub fn get_solution(
+    component: ProtocolComponent,
+    token_in: Bytes,
+    token_out: Bytes,
+    amount_in: BigUint,
+    amount_out: BigUint,
+) -> miette::Result<Solution> {
+    let alice_address = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
+        .into_diagnostic()
+        .wrap_err("Failed to parse Alice's address for Tycho router encoding")?;
+
+    let swap = SwapBuilder::new(component, token_in.clone(), token_out.clone()).build();
+
+    let slippage = 0.0025; // 0.25% slippage
+    let bps = BigUint::from(10_000u32);
+    let slippage_percent = BigUint::from((slippage * 10000.0) as u32);
+    let multiplier = &bps - slippage_percent;
+    let min_amount_out = (amount_out * &multiplier) / &bps;
+
+    Ok(Solution {
+        sender: alice_address.clone(),
+        receiver: alice_address.clone(),
+        given_token: token_in,
+        given_amount: amount_in,
+        checked_token: token_out,
+        exact_out: false,
+        checked_amount: min_amount_out,
+        swaps: vec![swap],
+        ..Default::default()
+    })
+}
+
 /// Encodes swap data for the Tycho router.
 ///
 /// Assumes a single swap solution and encodes the data ready to be used by the Tycho router
@@ -29,7 +80,7 @@ use tycho_simulation::{
 /// - `amount_out`: Expected amount of output token
 ///
 /// # Returns
-/// A `Result<Transaction>` containing the encoded transaction data for the Tycho
+/// A `Result<Transaction, EncodingError>` containing the encoded transaction data for the Tycho
 /// router, or an error if encoding fails.
 pub fn encode_swap(
     component: ProtocolComponent,
@@ -37,46 +88,34 @@ pub fn encode_swap(
     token_out: Bytes,
     amount_in: BigUint,
     amount_out: BigUint,
-) -> miette::Result<Transaction> {
+) -> miette::Result<(Transaction, Solution)> {
     let chain: tycho_common::models::Chain = Chain::Ethereum.into();
-    let alice_address = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2")
-        .into_diagnostic()
-        .wrap_err("Failed to parse Alice's address for Tycho router encoding")?;
+
     let encoder = TychoRouterEncoderBuilder::new()
         .chain(chain)
         .user_transfer_type(UserTransferType::TransferFrom)
+        .executors_addresses(EXECUTORS_JSON.to_string())
+        .historical_trade()
         .build()
         .into_diagnostic()
         .wrap_err("Failed to build encoder")?;
 
-    let swap = SwapBuilder::new(component, token_in.clone(), token_out.clone()).build();
-
-    let slippage = 0.0025; // 0.25% slippage
-    let bps = BigUint::from(10_000u32);
-    let slippage_percent = BigUint::from((slippage * 10000.0) as u32);
-    let multiplier = &bps - slippage_percent;
-    let min_amount_out = (amount_out * &multiplier) / &bps;
-
-    let solution = Solution {
-        sender: alice_address.clone(),
-        receiver: alice_address.clone(),
-        given_token: token_in,
-        given_amount: amount_in,
-        checked_token: token_out,
-        exact_out: false,
-        checked_amount: min_amount_out,
-        swaps: vec![swap],
-        ..Default::default()
-    };
+    let solution = get_solution(component, token_in, token_out, amount_in, amount_out)?;
 
     let encoded_solution = encoder
         .encode_solutions(vec![solution.clone()])
         .into_diagnostic()
-        .wrap_err("Failed to encode router calldata")?[0]
+        .wrap_err("Failed to encode solution")?[0]
         .clone();
 
-    encode_tycho_router_call(encoded_solution, &solution, &chain.wrapped_native_token().address)
-        .into_diagnostic()
+    let transaction = encode_tycho_router_call(
+        encoded_solution,
+        &solution,
+        &chain.wrapped_native_token().address,
+    )
+    .into_diagnostic()
+    .wrap_err("Failed to encode router calldata")?;
+    Ok((transaction, solution))
 }
 
 /// Encodes a transaction for the Tycho Router using `singleSwap` method and regular token

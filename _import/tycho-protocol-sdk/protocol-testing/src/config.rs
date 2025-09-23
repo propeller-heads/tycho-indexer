@@ -22,6 +22,8 @@ pub struct ProtocolComponentWithTestConfig {
     pub base: ProtocolComponentExpectation,
     #[serde(default = "default_false")]
     pub skip_simulation: bool,
+    #[serde(default = "default_false")]
+    pub skip_execution: bool,
 }
 
 impl ProtocolComponentExpectation {

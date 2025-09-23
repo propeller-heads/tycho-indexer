@@ -9,15 +9,18 @@ miette = { version = "7.6.0", features = ["fancy"] }
 # Logging & Tracing
 tracing = "0.1.37"
 # Tycho dependencies
-tycho-common = "0.83.4"
-tycho-client = "0.83.4"
-tycho-simulation = { git = "https://github.com/propeller-heads/tycho-simulation.git", tag = "0.159.0", features = ["evm"] }
+tycho-common = { git = "https://github.com/propeller-heads/tycho-indexer.git", rev = "28d013a906c497d95e27f01f48fc887fb22dbbbc" }
+tycho-client = { git = "https://github.com/propeller-heads/tycho-indexer.git", rev = "28d013a906c497d95e27f01f48fc887fb22dbbbc" }
+tycho-simulation = { git = "https://github.com/propeller-heads/tycho-simulation.git", rev = "6585823a859a29bd64600cc1d2fa7d502d48d3e6" }
 ## TODO: for local development
-#tycho-simulation = { path = "../../tycho-simulation" }
+#tycho-simulation = { path = "../../tycho-simulation", features = ["evm"] }
+tycho-ethereum = { git = "https://github.com/propeller-heads/tycho-indexer.git", rev = "28d013a906c497d95e27f01f48fc887fb22dbbbc", features = ["onchain_data"] }
 num-bigint = "0.4"
 num-traits = "0.2"
+num-rational = "0.4.2"
 # EVM dependencies
-alloy = { version = "1.0.27", features = ["arbitrary", "json", "dyn-abi", "sol-types", "contract", "provider-http"] }
+alloy = { version = "1.0.30", features = ["arbitrary", "json", "dyn-abi", "sol-types", "contract", "provider-http", "providers", "signer-local", "rpc-types-eth", "rpc-types-trace"] }
+reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 serde_json = "1.0.140"
 clap = "4.5.31"
@@ -33,3 +36,7 @@ colored = "3.0.0"
 similar = "2.7.0"
 termsize = "0.1.9"
 itertools = "0.14.0"
+# Foundry dependencies (same versions as tycho-simulation)
+foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "5a552bb0de7126fa35170fd84532bbd3d40cd348" }
+foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "5a552bb0de7126fa35170fd84532bbd3d40cd348" }
+revm = { version = "27.0.3", features = ["alloydb", "serde"] }

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, error::Error as StdError, fmt};
 
-use tracing::info;
+use tracing::debug;
 use tycho_client::{rpc::RPCClient, HttpRPCClient};
 use tycho_common::{
     dto::{
@@ -125,7 +125,7 @@ impl TychoClient {
         min_quality: Option<i32>,
         max_days_since_last_trade: Option<u64>,
     ) -> Result<HashMap<Bytes, Token>, RpcError> {
-        info!("Loading tokens from Tycho...");
+        debug!("Loading tokens from Tycho...");
 
         #[allow(clippy::mutable_key_type)]
         let res = self

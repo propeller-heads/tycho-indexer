@@ -26,6 +26,7 @@ tests:
           manual_updates: "0x01"
           pool_type: "0x5765696768746564506f6f6c466163746f72795634"
         creation_tx: "0xa63c671046ad2075ec8ea83ac21199cf3e3a5f433e72ec4c117cbabfb9b18de2"
+        skip_execution: false
 
   # WeightedPool2TokensFactory - 0xA5bf2ddF098bb0Ef6d120C98217dD6B141c74EE0
   - name: weighted_legacy_creation
@@ -42,6 +43,7 @@ tests:
           manual_updates: "0x01"
           pool_type: "0x5765696768746564506f6f6c32546f6b656e73466163746f7279"
         creation_tx: "0xdced662e41b1608c386551bbc89894a10321fd8bd58782e22077d1044cf99cb5"
+        skip_execution: true # the block is before the Shanghai upgrade and our router needs functionality introduced there
 
   # ERC4626LinearPoolFactory - 0x813EE7a840CE909E7Fea2117A44a90b8063bd4fd
   - name: test_erc4626_linear_pool_creation
@@ -80,6 +82,7 @@ tests:
           normalized_weights: "0x5b22307830326336386166306262313430303030222c22307830623161326263326563353030303030225d"
           pool_type: "0x5765696768746564506f6f6c466163746f72795631"
         skip_simulation: false
+        skip_execution: true # the block is before the Shanghai upgrade and our router needs functionality introduced there
         creation_tx: "0xc5c3b384644363aa15cf9a0c33dfebd22df351446bce92ee49ead7d5d896b4e9"
 
   # WeightedPoolFactoryV2 - 0xcC508a455F5b0073973107Db6a878DdBDab957bC
@@ -100,6 +103,7 @@ tests:
           pool_type: "0x5765696768746564506f6f6c466163746f72795632"
         skip_simulation: false
         creation_tx: "0x9a949a52e4179d0c57dcffd6884d5787febfb92f8f4b7e114ef8cfbda0292a79"
+        skip_execution: true # the block is before the Shanghai upgrade and our router needs functionality introduced there
 
   # WeightedPoolFactoryV3 - 0x5Dd94Da3644DDD055fcf6B3E1aa310Bb7801EB8b
   - name: test_weighted_pool_v3
@@ -118,6 +122,7 @@ tests:
           pool_type: "0x5765696768746564506f6f6c466163746f72795633"
         skip_simulation: false
         creation_tx: "0x628d8e5df9940f6c52844082b03160ef3fb7e06c17877a9a21c8188406e6a201"
+        skip_execution: true # the block is before the Shanghai upgrade and our router needs functionality introduced there
 
   # #########################################################################################################################
   # TEST BELOW ARE NOT RELEVANT BECAUSE THE FACTORIES ARE DISABLED AND NO ONE OF THE POOLS HAVE RELEVANT LIQUIDITY
