@@ -146,3 +146,9 @@ pub trait EntryPointTracer: Sync {
         entry_points: Vec<EntryPointWithTracingParams>,
     ) -> Result<Vec<TracedEntryPoint>, Self::Error>;
 }
+
+/// Trait for calculating the memory weight/size of values for caching purposes
+pub trait MemorySize {
+    /// Returns the approximate memory size in bytes
+    fn memory_size(&self) -> usize;
+}

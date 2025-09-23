@@ -23,6 +23,7 @@ use crate::{
     serde_primitives::{
         hex_bytes, hex_bytes_option, hex_hashmap_key, hex_hashmap_key_value, hex_hashmap_value,
     },
+    traits::MemorySize,
     Bytes,
 };
 
@@ -773,6 +774,55 @@ pub struct StateRequestResponse {
 impl StateRequestResponse {
     pub fn new(accounts: Vec<ResponseAccount>, pagination: PaginationResponse) -> Self {
         Self { accounts, pagination }
+    }
+}
+
+impl MemorySize for StateRequestResponse {
+    fn memory_size(&self) -> usize {
+        let mut size = 0usize;
+
+        // Base struct size: Vec pointer + capacity + len + pagination struct
+        size += std::mem::size_of::<Vec<ResponseAccount>>();
+        size += std::mem::size_of::<PaginationResponse>();
+
+        // Account data size
+        for account in &self.accounts {
+            // Base account struct overhead (rough estimate for all fixed fields)
+            size += 200; // Conservative estimate for struct overhead + enum + fixed Bytes
+
+            // Variable-length byte fields
+            size += account.address.len();
+            size += account.title.capacity(); // String allocates capacity, not just len
+            size += account.native_balance.len();
+            size += account.code.len();
+            size += account.code_hash.len();
+            size += account.balance_modify_tx.len();
+            size += account.code_modify_tx.len();
+
+            // Creation tx (optional)
+            if let Some(ref creation_tx) = account.creation_tx {
+                size += creation_tx.len();
+            }
+
+            // Storage slots HashMap - this is likely the largest contributor
+            size += account.slots.capacity() * 64; // For the `Bytes` values in the HashMap (they are 4 usize fields, so 32 bytes each)
+            for (key, value) in &account.slots {
+                // Account for the `Bytes` heap allocation
+                size += key.len(); //
+                size += value.len();
+            }
+
+            // Token balances HashMap
+            size += account.token_balances.capacity() * 64; // For the `Bytes` values in the HashMap (they are 4 usize fields, so 32 bytes each)
+            for (key, value) in &account.token_balances {
+                // Account for the `Bytes` heap allocation
+                size += key.len();
+                size += value.len();
+            }
+        }
+
+        // Ensure minimum reasonable size
+        size.max(128)
     }
 }
 
@@ -2730,5 +2780,80 @@ mod test {
         let models_error = ModelsError::SubscribeError(extractor_id.clone());
         let dto_error: WebsocketError = models_error.into();
         assert_eq!(dto_error, WebsocketError::SubscribeError(extractor_id.into()));
+    }
+}
+
+#[cfg(test)]
+mod memory_size_tests {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    #[test]
+    fn test_state_request_response_memory_size_empty() {
+        let response = StateRequestResponse {
+            accounts: vec![],
+            pagination: PaginationResponse::new(1, 10, 0),
+        };
+
+        let size = response.memory_size();
+
+        // Should at least include base struct sizes
+        assert!(size >= 128, "Empty response should have minimum size of 128 bytes, got {}", size);
+        assert!(size < 200, "Empty response should not be too large, got {}", size);
+    }
+
+    #[test]
+    fn test_state_request_response_memory_size_scales_with_slots() {
+        let create_response_with_slots = |slot_count: usize| {
+            let mut slots = HashMap::new();
+            for i in 0..slot_count {
+                let key = vec![i as u8; 32]; // 32-byte key
+                let value = vec![(i + 100) as u8; 32]; // 32-byte value
+                slots.insert(key.into(), value.into());
+            }
+
+            let account = ResponseAccount::new(
+                Chain::Ethereum,
+                vec![1; 20].into(),
+                "Pool".to_string(),
+                slots,
+                vec![1; 32].into(),
+                HashMap::new(),
+                vec![].into(), // empty code
+                vec![1; 32].into(),
+                vec![1; 32].into(),
+                vec![1; 32].into(),
+                None,
+            );
+
+            StateRequestResponse {
+                accounts: vec![account],
+                pagination: PaginationResponse::new(1, 10, 1),
+            }
+        };
+
+        let small_response = create_response_with_slots(10);
+        let large_response = create_response_with_slots(100);
+
+        let small_size = small_response.memory_size();
+        let large_size = large_response.memory_size();
+
+        // Large response should be significantly bigger
+        assert!(
+            large_size > small_size * 5,
+            "Large response ({} bytes) should be much larger than small response ({} bytes)",
+            large_size,
+            small_size
+        );
+
+        // Each slot should contribute at least 64 bytes (32 + 32 + overhead)
+        let size_diff = large_size - small_size;
+        let expected_min_diff = 90 * 64; // 90 additional slots * 64 bytes each
+        assert!(
+            size_diff > expected_min_diff,
+            "Size difference ({} bytes) should reflect the additional slot data",
+            size_diff
+        );
     }
 }
