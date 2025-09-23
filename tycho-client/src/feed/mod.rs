@@ -144,9 +144,15 @@ type BlockSyncResult<T> = Result<T, BlockSynchronizerError>;
 /// timeout. This is simpler but only works well on chains with fixed block times.
 pub struct BlockSynchronizer<S> {
     synchronizers: Option<HashMap<ExtractorIdentity, S>>,
+    /// Time to wait for a block usually
     block_time: std::time::Duration,
+    /// Added on top of block time to account for latency
     max_wait: std::time::Duration,
+    /// Time to wait for the full first message, including snapshot retrieval
+    startup_timeout: std::time::Duration,
+    /// Optionally, end the stream after emitting max messages
     max_messages: Option<usize>,
+    /// Amount of blocks a protocol can be delayed for, before it is considered stale
     max_missed_blocks: u64,
 }
 
@@ -456,11 +462,30 @@ where
         max_wait: std::time::Duration,
         max_missed_blocks: u64,
     ) -> Self {
-        Self { synchronizers: None, max_messages: None, block_time, max_wait, max_missed_blocks }
+        Self {
+            synchronizers: None,
+            max_messages: None,
+            block_time,
+            max_wait,
+            startup_timeout: block_time.mul_f64(max_missed_blocks as f64),
+            max_missed_blocks,
+        }
     }
 
+    /// Limits the stream to emit a maximum number of messages.
+    ///
+    /// After the stream emitted max messages it will end. This is only useful for
+    /// testing purposes or if you only want to process a fixed amount of messages
+    /// and then terminate cleanly.
     pub fn max_messages(&mut self, val: usize) {
         self.max_messages = Some(val);
+    }
+
+    /// Sets timeout for the first message of a protocol.
+    ///
+    /// Time to wait for the full first message, including snapshot retrieval.
+    pub fn startup_timeout(mut self, val: Duration) {
+        self.startup_timeout = val;
     }
 
     pub fn register_synchronizer(mut self, id: ExtractorIdentity, synchronizer: S) -> Self {
@@ -544,7 +569,7 @@ where
         let mut startup_futures = Vec::new();
         for (id, sh) in sync_streams.iter_mut() {
             let fut = async {
-                let res = timeout(self.block_time + self.max_wait, sh.rx.recv()).await;
+                let res = timeout(self.startup_timeout, sh.rx.recv()).await;
                 (id.clone(), res)
             };
             startup_futures.push(fut);
