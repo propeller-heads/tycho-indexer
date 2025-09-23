@@ -1,3 +1,10 @@
+## [0.161.0](https://github.com/propeller-heads/tycho-simulation/compare/0.160.1...0.161.0) (2025-09-23)
+
+
+### Features
+
+* Add 2, 3 and 4 BIPS fee tiers to uniswap v3 ([b192f10](https://github.com/propeller-heads/tycho-simulation/commit/b192f10fc6e96b4a1b23449867cef30055d084ff))
+
 ## [0.160.1](https://github.com/propeller-heads/tycho-simulation/compare/0.160.0...0.160.1) (2025-09-19)
 
 
