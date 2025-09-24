@@ -228,19 +228,14 @@ impl EVMBatchAccountExtractor {
     where
         Self: Sized,
     {
-        let url = url::Url::parse(node_url)
-            .map_err(|e| {
-                RPCError::SetupError(format!(
-                    "Invalid URL '{}': {}. Make sure the URL includes the scheme (http:// or https://)",
-                    node_url, e
-                ))
-            })?;
+        let url = url::Url::parse(node_url).map_err(|e| {
+            RPCError::SetupError(format!(
+                "Invalid URL '{}': {}. Make sure the URL includes the scheme (http:// or https://)",
+                node_url, e
+            ))
+        })?;
 
-        debug!(
-            scheme = url.scheme(),
-            host = url.host_str(),
-            "Parsed URL successfully"
-        );
+        debug!(scheme = url.scheme(), host = url.host_str(), "Parsed URL successfully");
 
         // Create the RPC client using ReqwestClient for proper HTTPS support
         debug!(url = %url, "Creating ReqwestClient for RPC with HTTPS support");
