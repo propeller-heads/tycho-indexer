@@ -22,6 +22,23 @@ use tycho_common::{
 
 use crate::{BytesCodec, RPCError, RequestError};
 
+/// Helper function to extract the full error chain including source errors
+fn extract_error_chain(error: &dyn Error) -> String {
+    let mut chain = vec![error.to_string()];
+    let mut source = error.source();
+
+    while let Some(err) = source {
+        chain.push(err.to_string());
+        source = err.source();
+    }
+
+    if chain.len() == 1 {
+        chain[0].clone()
+    } else {
+        format!("{} (caused by: {})", chain[0], chain[1..].join(" -> "))
+    }
+}
+
 /// `EVMAccountExtractor` is a struct that implements the `AccountExtractor` trait for Ethereum
 /// accounts. It is recommended for nodes that do not support batch requests.
 pub struct EVMAccountExtractor {
@@ -77,10 +94,12 @@ impl AccountExtractor for EVMAccountExtractor {
             tokio::join!(try_join_all(balance_futures), try_join_all(code_futures));
 
         let balances = result_balances.map_err(|e| {
-            RPCError::RequestError(RequestError::Other(format!("Failed to get balance: {e}")))
+            let error_chain = extract_error_chain(&e);
+            RPCError::RequestError(RequestError::Other(format!("Failed to get balance: {error_chain}")))
         })?;
         let codes = result_codes.map_err(|e| {
-            RPCError::RequestError(RequestError::Other(format!("Failed to get code: {e}")))
+            let error_chain = extract_error_chain(&e);
+            RPCError::RequestError(RequestError::Other(format!("Failed to get code: {error_chain}")))
         })?;
 
         // Process each address with its corresponding balance and code
@@ -154,8 +173,9 @@ impl EVMAccountExtractor {
                 .request("debug_storageRangeAt", params)
                 .await
                 .map_err(|e| {
+                    let error_chain = extract_error_chain(&e);
                     RPCError::RequestError(RequestError::Other(format!(
-                        "Failed to get storage: {e}"
+                        "Failed to get storage: {error_chain}"
                     )))
                 })?;
 
@@ -261,8 +281,10 @@ impl EVMBatchAccountExtractor {
 
         batch.send().await.map_err(|e| {
             let addresses: Vec<String> = chunk.iter().map(|r| r.address.to_string()).collect();
+            let error_chain = extract_error_chain(&e);
             RPCError::RequestError(RequestError::Other(format!(
-                "Failed to send batch request for code & balance: {e}. Block: {}, Addresses count: {}, Addresses: [{}]",
+                "Failed to send batch request for code & balance: {}. Block: {}, Addresses count: {}, Addresses: [{}]",
+                error_chain,
                 block.number,
                 chunk.len(),
                 addresses.join(", ")
@@ -343,8 +365,9 @@ impl EVMBatchAccountExtractor {
                         .send()
                         .await
                         .map_err(|e| {
+                            let error_chain = extract_error_chain(&e);
                             RPCError::RequestError(RequestError::Other(format!(
-                                "Failed to send storage batch request. Requested for {request_size} : {e}"
+                                "Failed to send storage batch request. Requested for {request_size} : {error_chain}"
                             )))
                         })?;
 
@@ -410,8 +433,9 @@ impl EVMBatchAccountExtractor {
                 )
                 .await
                 .map_err(|e| {
+                    let error_chain = extract_error_chain(&e);
                     RPCError::RequestError(RequestError::Other(format!(
-                        "Failed to get storage: {e}, address: {address}, block: {}",
+                        "Failed to get storage: {error_chain}, address: {address}, block: {}",
                         block.number,
                     )))
                 })?;
