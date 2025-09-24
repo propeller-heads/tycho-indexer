@@ -1824,7 +1824,7 @@ fn deserialize_retriggers_from_value(
                             let storage_key = StoreKey::deserialize(&pair[1]).map_err(|e| {
                                 format!("Failed to deserialize old format storage key: {}", e)
                             })?;
-                            AddressStorageLocation::new(storage_key, 0)
+                            AddressStorageLocation::new(storage_key, 12)
                         }
                         Value::Object(_) => {
                             // New format: AddressStorageLocation struct
@@ -2010,10 +2010,10 @@ mod test {
         assert_eq!(result.retriggers.len(), 2);
         let retriggers_vec: Vec<_> = result.retriggers.iter().collect();
         assert!(retriggers_vec.iter().any(|(k, v)| {
-            k == &Bytes::from("0x01") && v.key == Bytes::from("0x02") && v.offset == 0
+            k == &Bytes::from("0x01") && v.key == Bytes::from("0x02") && v.offset == 12
         }));
         assert!(retriggers_vec.iter().any(|(k, v)| {
-            k == &Bytes::from("0x03") && v.key == Bytes::from("0x04") && v.offset == 0
+            k == &Bytes::from("0x03") && v.key == Bytes::from("0x04") && v.offset == 12
         }));
 
         // Test new format (AddressStorageLocation objects)
