@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-
+use std::error::Error;
 use alloy::{
     eips::BlockNumberOrTag,
     primitives::Uint,
@@ -13,7 +13,7 @@ use ethers::{
 };
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
-use tracing::{trace, warn};
+use tracing::{debug, info, trace, warn};
 use tycho_common::{
     models::{blockchain::Block, contract::AccountDelta, Address, Chain, ChangeType},
     traits::{AccountExtractor, StorageSnapshotRequest},
@@ -213,6 +213,13 @@ impl EVMBatchAccountExtractor {
         max_batch_size: usize,
         chunk: &[StorageSnapshotRequest],
     ) -> Result<(HashMap<Bytes, Bytes>, HashMap<Bytes, Bytes>), RPCError> {
+        debug!(
+            chunk_size = chunk.len(),
+            max_batch_size,
+            block_number = block.number,
+            "Preparing batch request for account code and balance"
+        );
+
         let mut batch = self.provider.new_batch();
         let mut code_requests = Vec::with_capacity(max_batch_size);
         let mut balance_requests = Vec::with_capacity(max_batch_size);
@@ -246,11 +253,27 @@ impl EVMBatchAccountExtractor {
             ));
         }
 
+        debug!(
+            total_requests = chunk.len() * 2, // code + balance for each address
+            block_number = block.number,
+            "Sending batch request to RPC provider"
+        );
+
         batch.send().await.map_err(|e| {
+            let addresses: Vec<String> = chunk.iter().map(|r| r.address.to_string()).collect();
             RPCError::RequestError(RequestError::Other(format!(
-                "Failed to send batch request for code & balance: {e}"
+                "Failed to send batch request for code & balance: {e}. Block: {}, Addresses count: {}, Addresses: [{}]",
+                block.number,
+                chunk.len(),
+                addresses.join(", ")
             )))
         })?;
+
+        info!(
+            chunk_size = chunk.len(),
+            block_number = block.number,
+            "Successfully sent batch request for account code and balance"
+        );
 
         let mut codes: HashMap<Bytes, Bytes> = HashMap::with_capacity(max_batch_size);
         let mut balances: HashMap<Bytes, Bytes> = HashMap::with_capacity(max_batch_size);
@@ -448,9 +471,22 @@ impl AccountExtractor for EVMBatchAccountExtractor {
         // TODO: Make these configurable and optimize for preventing rate limiting.
         // TODO: Handle rate limiting / individual connection failures & retries
 
-        let max_batch_size = 100;
+        let max_batch_size = 50;
         let storage_max_batch_size = 10000;
+        info!(
+            total_requests = unique_requests.len(),
+            max_batch_size,
+            block_number = block.number,
+            "Starting batch account extraction"
+        );
+
         for chunk in unique_requests.chunks(max_batch_size) {
+            debug!(
+                chunk_size = chunk.len(),
+                block_number = block.number,
+                "Processing batch chunk for code and balance"
+            );
+
             // Batch request code and balances of all accounts on the chunk.
             // Worst case scenario = 2 * chunk_size requests
             let metadata_fut =
@@ -469,6 +505,14 @@ impl AccountExtractor for EVMBatchAccountExtractor {
             }
 
             let (codes, balances) = metadata_fut.await?;
+            debug!(
+                chunk_size = chunk.len(),
+                codes_count = codes.len(),
+                balances_count = balances.len(),
+                block_number = block.number,
+                "Successfully retrieved account code and balance data"
+            );
+
             let storage_results = try_join_all(storage_futures).await?;
 
             for (idx, request) in chunk.iter().enumerate() {
@@ -496,6 +540,12 @@ impl AccountExtractor for EVMBatchAccountExtractor {
                 updates.insert(address.clone(), account_delta);
             }
         }
+
+        info!(
+            total_accounts_processed = updates.len(),
+            block_number = block.number,
+            "Completed batch account extraction successfully"
+        );
 
         Ok(updates)
     }
