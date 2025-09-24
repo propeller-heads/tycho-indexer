@@ -4,7 +4,10 @@ use alloy::{
     primitives::{keccak256, Address, Signed, Uint, I128, U256},
     sol_types::SolType,
 };
-use revm::DatabaseRef;
+use revm::{
+    state::{AccountInfo, Bytecode},
+    DatabaseRef,
+};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -37,6 +40,8 @@ use crate::evm::{
     simulation::SimulationEngine,
 };
 
+const EULER_LENS_BYTECODE_BYTES: &[u8] = include_bytes!("assets/EulerLimitsLens.evm.runtime");
+
 #[derive(Debug, Clone)]
 pub(crate) struct GenericVMHookHandler<D: EngineDatabaseInterface + Clone + Debug>
 where
@@ -47,6 +52,7 @@ where
     address: Address,
     pool_manager: Address,
     limits_entrypoint: Option<String>,
+    is_euler: bool,
 }
 
 impl<D: EngineDatabaseInterface + Clone + Debug> PartialEq for GenericVMHookHandler<D>
@@ -73,12 +79,14 @@ where
         _all_tokens: HashMap<Bytes, Token>,
         _account_balances: HashMap<Bytes, HashMap<Bytes, Bytes>>,
         limits_entrypoint: Option<String>,
+        is_euler: bool,
     ) -> Result<Self, SimulationError> {
         Ok(GenericVMHookHandler {
             contract: TychoSimulationContract::new(address, engine)?,
             address,
             pool_manager,
             limits_entrypoint,
+            is_euler,
         })
     }
 
@@ -254,25 +262,57 @@ where
                     "Invalid limits_entrypoint format. Expected 'address:signature'".to_string(),
                 ));
             }
-
+            let function_signature = parts[1];
+            let token_in_addr = Address::from_slice(&token_in.0);
+            let token_out_addr = Address::from_slice(&token_out.0);
             let contract_address = Address::from_str(parts[0]).map_err(|e| {
                 SimulationError::FatalError(format!("Failed to parse contract address: {e:?}"))
             })?;
-
-            let function_signature = parts[1];
-
-            let token_in_addr = Address::from_slice(&token_in.0);
-            let token_out_addr = Address::from_slice(&token_out.0);
-
-            let limits_contract =
-                TychoSimulationContract::new(contract_address, self.contract.engine.clone())?;
-
             let args = (token_in_addr, token_out_addr);
+
+            // Use a deterministic lens contract address for state override
+            // The lens contract bytecode will be deployed via state override during the eth_call.
+            // This maintains the same interface as the original getLimits.
+            let limits_contract = if self.is_euler {
+                let lens_address = Address::from_str("0x0000000000000000000000000000000000001337")
+                    .map_err(|e| {
+                        SimulationError::FatalError(format!(
+                            "Failed to parse contract address: {e:?}"
+                        ))
+                    })?;
+                let info: AccountInfo = AccountInfo {
+                    nonce: Default::default(),
+                    balance: U256::from(0),
+                    code: Some(Bytecode::new_raw(EULER_LENS_BYTECODE_BYTES.into())),
+                    code_hash: keccak256(EULER_LENS_BYTECODE_BYTES),
+                };
+                let mut permanent_storage = HashMap::new();
+
+                // We set the hooks address to the slot 0 to allow identifying the desired hook
+                // address
+                let original_contract = format!("0x000000000000000000000000{:x}", contract_address);
+                let original_contract_u256 = U256::from_str(&original_contract).map_err(|e| {
+                    SimulationError::FatalError(format!(
+                        "Failed to convert hook contract to U256: {e:?}"
+                    ))
+                })?;
+                permanent_storage.insert(U256::from(0), original_contract_u256);
+
+                self.contract.engine.state.init_account(
+                    lens_address,
+                    info,
+                    Some(permanent_storage),
+                    true, // mocked
+                );
+                TychoSimulationContract::new(lens_address, self.contract.engine.clone())?
+            } else {
+                TychoSimulationContract::new(contract_address, self.contract.engine.clone())?
+            };
 
             let res = limits_contract.call(
                 function_signature,
                 args,
-                None,             // overwrites
+                None,             // overrides
                 None,             // caller
                 U256::from(0u64), // value
                 None,             // transient_storage
@@ -391,6 +431,7 @@ mod tests {
             HashMap::new(),
             HashMap::new(),
             None,
+            false, // Not Euler - this is a Bunni hook contract
         )
         .expect("Failed to create GenericVMHookHandler");
 
@@ -516,6 +557,7 @@ mod tests {
             HashMap::new(),
             HashMap::new(),
             None,
+            false, // Not euler contract
         )
         .expect("Failed to create GenericVMHookHandler");
 
@@ -581,6 +623,7 @@ mod tests {
             HashMap::new(),
             HashMap::new(),
             None,
+            false, // Not euler
         )
         .expect("Failed to create GenericVMHookHandler");
 
@@ -674,6 +717,7 @@ mod tests {
             HashMap::new(),
             HashMap::new(),
             Some(limits_entrypoint.to_string()),
+            true, // Euler contract
         )
         .expect("Failed to create GenericVMHookHandler");
 
@@ -719,6 +763,7 @@ mod tests {
             address: Address::ZERO,
             pool_manager: Address::ZERO,
             limits_entrypoint: None,
+            is_euler: true,
         };
 
         assert!(hook_handler.limits_entrypoint.is_none());

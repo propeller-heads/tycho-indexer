@@ -79,6 +79,13 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
             .get("limits_entrypoint")
             .and_then(|bytes| String::from_utf8(bytes.0.to_vec()).ok());
 
+        let is_euler;
+        if let Some(_hooks_data) = params.attributes.get("hook_identifier") {
+            is_euler = true;
+        } else {
+            is_euler = false;
+        }
+
         let mut trace = false;
         if let Some(vm_traces) = params.vm_traces {
             trace = vm_traces
@@ -108,6 +115,7 @@ impl HookHandlerCreator for GenericVMHookHandlerCreator {
             params.all_tokens.clone(),
             params.account_balances.clone(),
             limits_entrypoint,
+            is_euler,
         )
         .map_err(InvalidSnapshotError::VMError)?;
 
