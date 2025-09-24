@@ -1802,12 +1802,89 @@ impl From<models::blockchain::AddressStorageLocation> for AddressStorageLocation
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Clone)]
+fn deserialize_retriggers_from_value(
+    value: &serde_json::Value,
+) -> Result<HashSet<(StoreKey, AddressStorageLocation)>, String> {
+    use serde::Deserialize;
+    use serde_json::Value;
+
+    let mut result = HashSet::new();
+
+    if let Value::Array(items) = value {
+        for item in items {
+            if let Value::Array(pair) = item {
+                if pair.len() == 2 {
+                    let key = StoreKey::deserialize(&pair[0])
+                        .map_err(|e| format!("Failed to deserialize key: {}", e))?;
+
+                    // Handle both old format (string) and new format (AddressStorageLocation)
+                    let addr_storage = match &pair[1] {
+                        Value::String(_) => {
+                            // Old format: just a string key with offset defaulted to 0
+                            let storage_key = StoreKey::deserialize(&pair[1]).map_err(|e| {
+                                format!("Failed to deserialize old format storage key: {}", e)
+                            })?;
+                            AddressStorageLocation::new(storage_key, 12)
+                        }
+                        Value::Object(_) => {
+                            // New format: AddressStorageLocation struct
+                            AddressStorageLocation::deserialize(&pair[1]).map_err(|e| {
+                                format!("Failed to deserialize AddressStorageLocation: {}", e)
+                            })?
+                        }
+                        _ => return Err("Invalid retrigger format".to_string()),
+                    };
+
+                    result.insert((key, addr_storage));
+                }
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+#[derive(Serialize, Debug, Default, PartialEq, ToSchema, Eq, Clone)]
 pub struct TracingResult {
     #[schema(value_type=HashSet<(String, String)>)]
     pub retriggers: HashSet<(StoreKey, AddressStorageLocation)>,
     #[schema(value_type=HashMap<String,HashSet<String>>)]
     pub accessed_slots: HashMap<Address, HashSet<StoreKey>>,
+}
+
+/// Deserialize TracingResult with backward compatibility for retriggers
+/// TODO: remove this after offset detection is deployed in production
+impl<'de> Deserialize<'de> for TracingResult {
+    fn deserialize<D>(deserializer: D) -> Result<TracingResult, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::Error;
+        use serde_json::Value;
+
+        let value = Value::deserialize(deserializer)?;
+        let mut result = TracingResult::default();
+
+        if let Value::Object(map) = value {
+            // Deserialize retriggers using our custom deserializer
+            if let Some(retriggers_value) = map.get("retriggers") {
+                result.retriggers =
+                    deserialize_retriggers_from_value(retriggers_value).map_err(|e| {
+                        D::Error::custom(format!("Failed to deserialize retriggers: {}", e))
+                    })?;
+            }
+
+            // Deserialize accessed_slots normally
+            if let Some(accessed_slots_value) = map.get("accessed_slots") {
+                result.accessed_slots = serde_json::from_value(accessed_slots_value.clone())
+                    .map_err(|e| {
+                        D::Error::custom(format!("Failed to deserialize accessed_slots: {}", e))
+                    })?;
+            }
+        }
+
+        Ok(result)
+    }
 }
 
 impl From<models::blockchain::TracingResult> for TracingResult {
@@ -1911,6 +1988,57 @@ mod test {
     use rstest::rstest;
 
     use super::*;
+
+    #[test]
+    fn test_tracing_result_backward_compatibility() {
+        use serde_json::json;
+
+        // Test old format (string storage locations)
+        let old_format_json = json!({
+            "retriggers": [
+                ["0x01", "0x02"],
+                ["0x03", "0x04"]
+            ],
+            "accessed_slots": {
+                "0x05": ["0x06", "0x07"]
+            }
+        });
+
+        let result: TracingResult = serde_json::from_value(old_format_json).unwrap();
+
+        // Check that retriggers were deserialized correctly with offset 0
+        assert_eq!(result.retriggers.len(), 2);
+        let retriggers_vec: Vec<_> = result.retriggers.iter().collect();
+        assert!(retriggers_vec.iter().any(|(k, v)| {
+            k == &Bytes::from("0x01") && v.key == Bytes::from("0x02") && v.offset == 12
+        }));
+        assert!(retriggers_vec.iter().any(|(k, v)| {
+            k == &Bytes::from("0x03") && v.key == Bytes::from("0x04") && v.offset == 12
+        }));
+
+        // Test new format (AddressStorageLocation objects)
+        let new_format_json = json!({
+            "retriggers": [
+                ["0x01", {"key": "0x02", "offset": 12}],
+                ["0x03", {"key": "0x04", "offset": 5}]
+            ],
+            "accessed_slots": {
+                "0x05": ["0x06", "0x07"]
+            }
+        });
+
+        let result2: TracingResult = serde_json::from_value(new_format_json).unwrap();
+
+        // Check that new format retriggers were deserialized correctly with proper offsets
+        assert_eq!(result2.retriggers.len(), 2);
+        let retriggers_vec2: Vec<_> = result2.retriggers.iter().collect();
+        assert!(retriggers_vec2.iter().any(|(k, v)| {
+            k == &Bytes::from("0x01") && v.key == Bytes::from("0x02") && v.offset == 12
+        }));
+        assert!(retriggers_vec2.iter().any(|(k, v)| {
+            k == &Bytes::from("0x03") && v.key == Bytes::from("0x04") && v.offset == 5
+        }));
+    }
 
     #[test]
     fn test_protocol_components_equality() {
