@@ -301,8 +301,8 @@ impl RPCMetadataProvider {
                                         .is_some_and(Self::is_retryable_rpc_error)
                                 });
 
-                                // Only retry if ALL responses failed AND at least one is retryable
-                                if all_failed &&
+                                // Only retry if ALL responses failed OR at least one is retryable
+                                if all_failed ||
                                     has_retryable &&
                                     attempt < self.retry_config.max_retries
                                 {

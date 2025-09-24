@@ -307,7 +307,33 @@ impl EVMBalanceSlotDetector {
                             // Success - we got a properly formatted response
                             // Even if individual calls have errors, we don't retry
                             // because the node is working correctly
-                            trace!("RPC request successful on attempt {}", attempt + 1);
+                            trace!("RPC request returned a response on attempt {}", attempt + 1);
+
+                            let all_failed = responses
+                                .iter()
+                                .all(|r| r.get("error").is_some());
+
+                            let has_retryable = responses.iter().any(|r| {
+                                r.get("error")
+                                    .is_some_and(Self::is_retryable_rpc_error)
+                            });
+
+                            // Only retry if ALL responses failed AND at least one is retryable
+                            if all_failed || has_retryable {
+                                // Log the RPC errors for debugging
+                                let error_details: Vec<_> = responses
+                                    .iter()
+                                    .filter_map(|r| r.get("error"))
+                                    .collect();
+                                warn!(
+                                    attempt = attempt + 1,
+                                    errors = ?error_details,
+                                    "All requests in batch failed with at least one retryable error, will retry"
+                                );
+                                attempt += 1;
+                                continue;
+                            }
+
                             return Ok(responses);
                         }
                         _ => {
@@ -362,6 +388,34 @@ impl EVMBalanceSlotDetector {
             .map_err(|e| BalanceSlotError::InvalidResponse(format!("Failed to parse JSON: {e}")))?;
 
         Ok(response_json)
+    }
+
+    /// Check if an RPC error should be retried based on its error code
+    /// Retryable errors are typically transient issues that may resolve on retry
+    fn is_retryable_rpc_error(error: &Value) -> bool {
+        if let Some(code) = error
+            .get("code")
+            .and_then(|c| c.as_i64())
+        {
+            match code {
+                // Retryable errors (transient issues)
+                -32000 => true, // "header not found" - block may not be available yet
+                -32005 => true, // "limit exceeded" - rate limiting, backoff and retry
+                -32603 => true, // "internal error" - temporary server issue
+
+                // Non-retryable errors (permanent issues)
+                -32600 => false, // "invalid request" - malformed request
+                -32601 => false, // "method not found" - method doesn't exist
+                -32602 => false, // "invalid params" - wrong parameters
+                -32604 => false, // "method not supported" - not supported by this node
+
+                // Default: retry unknown error codes (conservative approach)
+                _ => true,
+            }
+        } else {
+            // No error code found - retry to be safe
+            true
+        }
     }
 
     /// Calculate exponential backoff with jitter.
