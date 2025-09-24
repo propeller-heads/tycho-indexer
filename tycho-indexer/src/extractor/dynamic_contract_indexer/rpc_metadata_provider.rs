@@ -302,8 +302,7 @@ impl RPCMetadataProvider {
                                 });
 
                                 // Only retry if ALL responses failed OR at least one is retryable
-                                if all_failed ||
-                                    has_retryable &&
+                                if (all_failed || has_retryable) &&
                                     attempt < self.retry_config.max_retries
                                 {
                                     // Log the RPC errors for debugging
