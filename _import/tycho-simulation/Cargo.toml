@@ -95,7 +95,7 @@ mockall = "0.13"
 
 # price_printer example
 clap = { version = "4.5.3", features = ["derive"] }
-anyhow = "1.0.79"
+anyhow = "1.0.76"
 ratatui = "0.29.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 unicode-width = "0.1.13"
