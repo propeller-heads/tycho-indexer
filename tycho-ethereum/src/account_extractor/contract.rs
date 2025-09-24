@@ -248,7 +248,7 @@ impl EVMBatchAccountExtractor {
 
         batch.send().await.map_err(|e| {
             RPCError::RequestError(RequestError::Other(format!(
-                "Failed to send batch request: {e}"
+                "Failed to send batch request for code & balance: {e}"
             )))
         })?;
 
@@ -315,12 +315,13 @@ impl EVMBatchAccountExtractor {
                         ));
                     }
 
+                    let request_size = slot_batch.len();
                     storage_batch
                         .send()
                         .await
                         .map_err(|e| {
                             RPCError::RequestError(RequestError::Other(format!(
-                                "Failed to send batch request: {e}"
+                                "Failed to send storage batch request. Requested for {request_size} : {e}"
                             )))
                         })?;
 
