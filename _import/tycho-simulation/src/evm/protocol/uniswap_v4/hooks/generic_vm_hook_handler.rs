@@ -629,23 +629,12 @@ mod tests {
                 "0x639d7e454339ba43da3b2288b45078405330afcc3cd7f10e6e852be9c70ac164",
             )
             .unwrap(),
-            timestamp: std::time::SystemTime::now()
-                // Unless we would like to overwrite the Euler contract storage,
-                // we must use the current timestamp, otherwise we will end up with an arithmetic
-                // underflow because of this line `uint256 deltaT = block.timestamp
-                // - vaultCache.lastInterestAccumulatorUpdate;` This is expected,
-                // since SimulationDB is incapable of simulating in the past
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs() +
-                10,
+            timestamp: 1754368727,
             ..Default::default()
         };
 
         let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
-        let mut engine = create_engine(db, true).expect("Failed to create simulation engine");
-
-        engine.state.set_block(Some(block));
+        let engine = create_engine(db, true).expect("Failed to create simulation engine");
 
         let hook_address = Address::from_str("0xC88b618C2c670c2e2a42e06B466B6F0e82A6E8A8")
             .expect("Invalid hook address");
