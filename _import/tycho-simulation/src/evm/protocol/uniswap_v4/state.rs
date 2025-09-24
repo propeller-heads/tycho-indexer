@@ -858,32 +858,6 @@ mod tests {
     }
 
     #[test]
-    fn test_delta_transition_missing_block_update() {
-        let mut pool = UniswapV4State::new(
-            1000,
-            U256::from_str("1000").unwrap(),
-            UniswapV4Fees { zero_for_one: 100, one_for_zero: 90, lp_fee: 700 },
-            100,
-            60,
-            vec![TickInfo::new(120, 10000), TickInfo::new(180, -10000)],
-        );
-
-        let attributes: HashMap<String, Bytes> =
-            [("block_number".to_string(), Bytes::from(2000_u64.to_be_bytes().to_vec()))]
-                .into_iter()
-                .collect();
-
-        let delta = ProtocolStateDelta {
-            component_id: "State1".to_owned(),
-            updated_attributes: attributes,
-            deleted_attributes: HashSet::new(),
-        };
-
-        let result = pool.delta_transition(delta, &HashMap::new(), &Balances::default());
-        assert!(result.is_ok())
-    }
-
-    #[test]
     fn test_delta_transition() {
         let mut pool = UniswapV4State::new(
             1000,
@@ -1512,16 +1486,6 @@ mod tests {
     #[case::medium_liquidity(10000000000000000000u128)] // Moderate liquidity: 10e18
     #[case::minimal_liquidity(1000u128)] // Very small liquidity
     fn test_find_max_amount(#[case] liquidity: u128) {
-        let _block = BlockHeader {
-            number: 22578103,
-            hash: Bytes::from_str(
-                "0x035c0e674c3bf3384a74b766908ab41c1968e989360aa26bea1dd64b1626f5f0",
-            )
-            .unwrap(),
-            timestamp: 1748397011,
-            ..Default::default()
-        };
-
         // Use fixed configuration for all test cases
         let fees = UniswapV4Fees { zero_for_one: 100, one_for_zero: 100, lp_fee: 100 };
         let tick_spacing = 60;
