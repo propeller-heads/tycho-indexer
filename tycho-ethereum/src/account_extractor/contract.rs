@@ -6,7 +6,7 @@ use std::{
 use alloy::{
     eips::BlockNumberOrTag,
     primitives::Uint,
-    rpc::client::{ClientBuilder, RpcClient},
+    rpc::client::{ClientBuilder, ReqwestClient},
 };
 use async_trait::async_trait;
 use chrono::DateTime;
@@ -53,7 +53,7 @@ pub struct EVMAccountExtractor {
 /// Ethereum accounts. It can only be used with nodes that support batch requests. If you are using
 /// a node that does not support batch requests, use `EVMAccountExtractor` instead.
 pub struct EVMBatchAccountExtractor {
-    provider: RpcClient,
+    provider: ReqwestClient,
     chain: Chain,
 }
 
@@ -229,8 +229,24 @@ impl EVMBatchAccountExtractor {
         Self: Sized,
     {
         let url = url::Url::parse(node_url)
-            .map_err(|_| RPCError::SetupError("Invalid URL".to_string()))?;
-        let provider = ClientBuilder::default().http(url);
+            .map_err(|e| {
+                RPCError::SetupError(format!(
+                    "Invalid URL '{}': {}. Make sure the URL includes the scheme (http:// or https://)",
+                    node_url, e
+                ))
+            })?;
+
+        debug!(
+            scheme = url.scheme(),
+            host = url.host_str(),
+            "Parsed URL successfully"
+        );
+
+        // Create the RPC client using ReqwestClient for proper HTTPS support
+        debug!(url = %url, "Creating ReqwestClient for RPC with HTTPS support");
+        let provider: ReqwestClient = ClientBuilder::default().http(url.clone());
+
+        info!(node_url, scheme = url.scheme(), "Successfully created RPC client");
         Ok(Self { provider, chain })
     }
 
@@ -284,6 +300,13 @@ impl EVMBatchAccountExtractor {
             total_requests = chunk.len() * 2, // code + balance for each address
             block_number = block.number,
             "Sending batch request to RPC provider"
+        );
+
+        // Add debugging to understand when the URL issue occurs
+        debug!(
+            "About to send batch with {} code requests and {} balance requests",
+            code_requests.len(),
+            balance_requests.len()
         );
 
         batch.send().await.map_err(|e| {

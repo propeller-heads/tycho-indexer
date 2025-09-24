@@ -30,7 +30,7 @@ futures = "0.3"
 # Required dependencies
 ethers = "^2.0.2"
 web3 = { version = "0.19", default-features = false }
-alloy = { version = "1.0.30", default-features = true }
+alloy = { version = "1.0.30", default-features = true, features = ["reqwest-default-tls"] }
 alloy-rpc-types-trace = "1.0.24"
 
 # Optional dependencies
