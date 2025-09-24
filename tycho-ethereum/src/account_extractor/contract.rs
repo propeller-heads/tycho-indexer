@@ -1,5 +1,8 @@
-use std::collections::{HashMap, HashSet};
-use std::error::Error;
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+};
+
 use alloy::{
     eips::BlockNumberOrTag,
     primitives::Uint,
@@ -95,11 +98,15 @@ impl AccountExtractor for EVMAccountExtractor {
 
         let balances = result_balances.map_err(|e| {
             let error_chain = extract_error_chain(&e);
-            RPCError::RequestError(RequestError::Other(format!("Failed to get balance: {error_chain}")))
+            RPCError::RequestError(RequestError::Other(format!(
+                "Failed to get balance: {error_chain}"
+            )))
         })?;
         let codes = result_codes.map_err(|e| {
             let error_chain = extract_error_chain(&e);
-            RPCError::RequestError(RequestError::Other(format!("Failed to get code: {error_chain}")))
+            RPCError::RequestError(RequestError::Other(format!(
+                "Failed to get code: {error_chain}"
+            )))
         })?;
 
         // Process each address with its corresponding balance and code
