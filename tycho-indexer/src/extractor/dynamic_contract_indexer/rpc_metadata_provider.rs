@@ -301,9 +301,8 @@ impl RPCMetadataProvider {
                                         .is_some_and(Self::is_retryable_rpc_error)
                                 });
 
-                                // Only retry if ALL responses failed AND at least one is retryable
-                                if all_failed &&
-                                    has_retryable &&
+                                // Only retry if ALL responses failed OR at least one is retryable
+                                if (all_failed || has_retryable) &&
                                     attempt < self.retry_config.max_retries
                                 {
                                     // Log the RPC errors for debugging
@@ -640,11 +639,15 @@ mod tests {
 
         let mut all_mocks = vec![];
         for (method, resp) in responses {
+            // eth_hashrate returns a non-retryable error (-32601) but gets retried anyway
+            // because it's a single-request batch and all_failed=true triggers safety retry
+            let expected_calls = if method == "eth_hashrate" { 4 } else { 1 }; // 1 + 3 retries
+
             let mock = server
                 .mock("POST", "/")
                 .match_body(Matcher::Regex(format!(r#""method"\s*:\s*"{method}""#)))
                 .with_body(resp.to_string())
-                .expect(1)
+                .expect(expected_calls)
                 .create_async()
                 .await;
             all_mocks.push(mock);

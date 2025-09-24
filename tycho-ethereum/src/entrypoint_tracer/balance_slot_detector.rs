@@ -307,7 +307,34 @@ impl EVMBalanceSlotDetector {
                             // Success - we got a properly formatted response
                             // Even if individual calls have errors, we don't retry
                             // because the node is working correctly
-                            trace!("RPC request successful on attempt {}", attempt + 1);
+                            trace!("RPC request returned a response on attempt {}", attempt + 1);
+
+                            let all_failed = responses
+                                .iter()
+                                .all(|r| r.get("error").is_some());
+
+                            let has_retryable = responses.iter().any(|r| {
+                                r.get("error")
+                                    .is_some_and(Self::is_retryable_rpc_error)
+                            });
+
+                            // Retry if ALL responses failed (safety measure) OR if there are
+                            // retryable errors
+                            if all_failed || has_retryable {
+                                // Log the RPC errors for debugging
+                                let error_details: Vec<_> = responses
+                                    .iter()
+                                    .filter_map(|r| r.get("error"))
+                                    .collect();
+                                warn!(
+                                    attempt = attempt + 1,
+                                    errors = ?error_details,
+                                    "Retrying batch request - all failed (safety) or has retryable errors"
+                                );
+                                attempt += 1;
+                                continue;
+                            }
+
                             return Ok(responses);
                         }
                         _ => {
@@ -362,6 +389,34 @@ impl EVMBalanceSlotDetector {
             .map_err(|e| BalanceSlotError::InvalidResponse(format!("Failed to parse JSON: {e}")))?;
 
         Ok(response_json)
+    }
+
+    /// Check if an RPC error should be retried based on its error code
+    /// Retryable errors are typically transient issues that may resolve on retry
+    fn is_retryable_rpc_error(error: &Value) -> bool {
+        if let Some(code) = error
+            .get("code")
+            .and_then(|c| c.as_i64())
+        {
+            match code {
+                // Retryable errors (transient issues)
+                -32000 => true, // "header not found" - block may not be available yet
+                -32005 => true, // "limit exceeded" - rate limiting, backoff and retry
+                -32603 => true, // "internal error" - temporary server issue
+
+                // Non-retryable errors (permanent issues)
+                -32600 => false, // "invalid request" - malformed request
+                -32601 => false, // "method not found" - method doesn't exist
+                -32602 => false, // "invalid params" - wrong parameters
+                -32604 => false, // "method not supported" - not supported by this node
+
+                // Default: retry unknown error codes (conservative approach)
+                _ => true,
+            }
+        } else {
+            // No error code found - retry to be safe
+            true
+        }
     }
 
     /// Calculate exponential backoff with jitter.
@@ -1747,5 +1802,426 @@ mod tests {
 
         U256::from_str_radix(hex_str, 16)
             .map_err(|e| BalanceSlotError::BalanceExtractionError(e.to_string()))
+    }
+
+    #[test]
+    fn test_is_retryable_rpc_error() {
+        // Test retryable error codes
+        assert!(EVMBalanceSlotDetector::is_retryable_rpc_error(&json!({
+            "code": -32000,
+            "message": "header not found"
+        })));
+
+        assert!(EVMBalanceSlotDetector::is_retryable_rpc_error(&json!({
+            "code": -32005,
+            "message": "limit exceeded"
+        })));
+
+        assert!(EVMBalanceSlotDetector::is_retryable_rpc_error(&json!({
+            "code": -32603,
+            "message": "internal error"
+        })));
+
+        // Test non-retryable error codes
+        assert!(!EVMBalanceSlotDetector::is_retryable_rpc_error(&json!({
+            "code": -32600,
+            "message": "invalid request"
+        })));
+
+        assert!(!EVMBalanceSlotDetector::is_retryable_rpc_error(&json!({
+            "code": -32601,
+            "message": "method not found"
+        })));
+
+        assert!(!EVMBalanceSlotDetector::is_retryable_rpc_error(&json!({
+            "code": -32602,
+            "message": "invalid params"
+        })));
+
+        assert!(!EVMBalanceSlotDetector::is_retryable_rpc_error(&json!({
+            "code": -32604,
+            "message": "method not supported"
+        })));
+
+        // Test unknown error code (should be retryable)
+        assert!(EVMBalanceSlotDetector::is_retryable_rpc_error(&json!({
+            "code": -99999,
+            "message": "unknown error"
+        })));
+
+        // Test missing error code (should be retryable)
+        assert!(EVMBalanceSlotDetector::is_retryable_rpc_error(&json!({
+            "message": "error without code"
+        })));
+
+        // Test invalid error format (should be retryable)
+        assert!(EVMBalanceSlotDetector::is_retryable_rpc_error(&json!({
+            "code": "not_a_number",
+            "message": "invalid code format"
+        })));
+    }
+
+    #[tokio::test]
+    async fn test_retry_on_all_failed_responses() {
+        let mut server = Server::new_async().await;
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: server.url(),
+            max_retries: 2,
+            initial_backoff_ms: 10,
+            max_backoff_ms: 100,
+        };
+
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+
+        let batch_request = json!([
+            {
+                "jsonrpc": "2.0",
+                "method": "eth_call",
+                "params": [],
+                "id": 1
+            },
+            {
+                "jsonrpc": "2.0",
+                "method": "debug_traceCall",
+                "params": [],
+                "id": 2
+            }
+        ]);
+
+        // First attempt: all errors
+        let _m1 = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(
+                r#"[
+                {"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"header not found"}},
+                {"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"header not found"}}
+            ]"#,
+            )
+            .expect(1)
+            .create_async()
+            .await;
+
+        // Second attempt: success
+        let _m2 = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(
+                r#"[
+                {"jsonrpc":"2.0","id":1,"result":"0x1234"},
+                {"jsonrpc":"2.0","id":2,"result":"0x5678"}
+            ]"#,
+            )
+            .expect(1)
+            .create_async()
+            .await;
+
+        let result = detector
+            .send_batched_request(batch_request)
+            .await;
+
+        assert!(result.is_ok());
+        let responses = result.unwrap();
+        assert_eq!(responses.len(), 2);
+        assert_eq!(responses[0]["result"], "0x1234");
+        assert_eq!(responses[1]["result"], "0x5678");
+    }
+
+    #[tokio::test]
+    async fn test_retry_on_retryable_errors_mixed_with_success() {
+        let mut server = Server::new_async().await;
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: server.url(),
+            max_retries: 2,
+            initial_backoff_ms: 10,
+            max_backoff_ms: 100,
+        };
+
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+
+        let batch_request = json!([
+            {
+                "jsonrpc": "2.0",
+                "method": "eth_call",
+                "params": [],
+                "id": 1
+            },
+            {
+                "jsonrpc": "2.0",
+                "method": "debug_traceCall",
+                "params": [],
+                "id": 2
+            }
+        ]);
+
+        // First attempt: one success, one retryable error
+        let _m1 = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(
+                r#"[
+                {"jsonrpc":"2.0","id":1,"result":"0x1234"},
+                {"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"header not found"}}
+            ]"#,
+            )
+            .expect(1)
+            .create_async()
+            .await;
+
+        // Second attempt: all success
+        let _m2 = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(
+                r#"[
+                {"jsonrpc":"2.0","id":1,"result":"0x1234"},
+                {"jsonrpc":"2.0","id":2,"result":"0x5678"}
+            ]"#,
+            )
+            .expect(1)
+            .create_async()
+            .await;
+
+        let result = detector
+            .send_batched_request(batch_request)
+            .await;
+
+        assert!(result.is_ok());
+        let responses = result.unwrap();
+        assert_eq!(responses.len(), 2);
+        assert_eq!(responses[0]["result"], "0x1234");
+        assert_eq!(responses[1]["result"], "0x5678");
+    }
+
+    #[tokio::test]
+    async fn test_retry_on_all_failed_non_retryable_errors_for_safety() {
+        let mut server = Server::new_async().await;
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: server.url(),
+            max_retries: 2,
+            initial_backoff_ms: 10,
+            max_backoff_ms: 100,
+        };
+
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+
+        let batch_request = json!([
+            {
+                "jsonrpc": "2.0",
+                "method": "eth_call",
+                "params": [],
+                "id": 1
+            }
+        ]);
+
+        // First attempt: non-retryable error (but all failed, so should retry for safety)
+        let _m1 = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(
+                r#"[
+                {"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"invalid params"}}
+            ]"#,
+            )
+            .expect(1)
+            .create_async()
+            .await;
+
+        // Second attempt: success (after retry for safety)
+        let _m2 = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(
+                r#"[
+                {"jsonrpc":"2.0","id":1,"result":"0x1234"}
+            ]"#,
+            )
+            .expect(1)
+            .create_async()
+            .await;
+
+        let result = detector
+            .send_batched_request(batch_request)
+            .await;
+
+        // Should succeed after retry (safety measure)
+        assert!(result.is_ok());
+        let responses = result.unwrap();
+        assert_eq!(responses.len(), 1);
+        assert_eq!(responses[0]["result"], "0x1234");
+    }
+
+    #[tokio::test]
+    async fn test_retry_exhaustion_with_retryable_errors() {
+        let mut server = Server::new_async().await;
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: server.url(),
+            max_retries: 2,
+            initial_backoff_ms: 10,
+            max_backoff_ms: 100,
+        };
+
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+
+        let batch_request = json!([
+            {
+                "jsonrpc": "2.0",
+                "method": "eth_call",
+                "params": [],
+                "id": 1
+            }
+        ]);
+
+        // All attempts return retryable errors
+        let _m = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(
+                r#"[
+                {"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"header not found"}}
+            ]"#,
+            )
+            .expect(2) // max_retries attempts
+            .create_async()
+            .await;
+
+        let result = detector
+            .send_batched_request(batch_request)
+            .await;
+
+        // Should return an error after exhausting all retries
+        assert!(result.is_err());
+        match result {
+            Err(BalanceSlotError::RequestError(msg)) => {
+                assert_eq!(msg, "All retry attempts failed");
+            }
+            other => panic!("Expected RequestError('All retry attempts failed'), got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_mixed_retryable_and_non_retryable_errors() {
+        let mut server = Server::new_async().await;
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: server.url(),
+            max_retries: 2,
+            initial_backoff_ms: 10,
+            max_backoff_ms: 100,
+        };
+
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+
+        let batch_request = json!([
+            {
+                "jsonrpc": "2.0",
+                "method": "eth_call",
+                "params": [],
+                "id": 1
+            },
+            {
+                "jsonrpc": "2.0",
+                "method": "debug_traceCall",
+                "params": [],
+                "id": 2
+            }
+        ]);
+
+        // First attempt: one retryable error, one non-retryable error
+        let _m1 = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(
+                r#"[
+                {"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"header not found"}},
+                {"jsonrpc":"2.0","id":2,"error":{"code":-32602,"message":"invalid params"}}
+            ]"#,
+            )
+            .expect(1)
+            .create_async()
+            .await;
+
+        // Second attempt: success for both
+        let _m2 = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(
+                r#"[
+                {"jsonrpc":"2.0","id":1,"result":"0x1234"},
+                {"jsonrpc":"2.0","id":2,"result":"0x5678"}
+            ]"#,
+            )
+            .expect(1)
+            .create_async()
+            .await;
+
+        let result = detector
+            .send_batched_request(batch_request)
+            .await;
+
+        // Should retry because there's at least one retryable error
+        assert!(result.is_ok());
+        let responses = result.unwrap();
+        assert_eq!(responses.len(), 2);
+        assert_eq!(responses[0]["result"], "0x1234");
+        assert_eq!(responses[1]["result"], "0x5678");
+    }
+
+    #[tokio::test]
+    async fn test_no_retry_on_mixed_success_and_non_retryable_errors() {
+        let mut server = Server::new_async().await;
+        let config = BalanceSlotDetectorConfig {
+            max_batch_size: 10,
+            rpc_url: server.url(),
+            max_retries: 2,
+            initial_backoff_ms: 10,
+            max_backoff_ms: 100,
+        };
+
+        let detector = EVMBalanceSlotDetector::new(config).unwrap();
+
+        let batch_request = json!([
+            {
+                "jsonrpc": "2.0",
+                "method": "eth_call",
+                "params": [],
+                "id": 1
+            },
+            {
+                "jsonrpc": "2.0",
+                "method": "debug_traceCall",
+                "params": [],
+                "id": 2
+            }
+        ]);
+
+        // Only one request should be made (no retry - mixed success/non-retryable error)
+        let _m = server
+            .mock("POST", "/")
+            .with_status(200)
+            .with_body(
+                r#"[
+                {"jsonrpc":"2.0","id":1,"result":"0x1234"},
+                {"jsonrpc":"2.0","id":2,"error":{"code":-32602,"message":"invalid params"}}
+            ]"#,
+            )
+            .expect(1)
+            .create_async()
+            .await;
+
+        let result = detector
+            .send_batched_request(batch_request)
+            .await;
+
+        // Should return mixed results without retrying (not all failed)
+        assert!(result.is_ok());
+        let responses = result.unwrap();
+        assert_eq!(responses.len(), 2);
+        assert_eq!(responses[0]["result"], "0x1234");
+        assert!(responses[1]["error"].is_object());
     }
 }
