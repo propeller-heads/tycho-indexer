@@ -46,7 +46,7 @@ class AdapterContractBuilder:
         try:
             # Running the bash script with the provided arguments
             result = subprocess.run(
-                [script_path, "-c", adapter_contract, "-s", signature, "-a", args],
+                cmd,
                 cwd=self.src_path,
                 capture_output=True,
                 text=True,
