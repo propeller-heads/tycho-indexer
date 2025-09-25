@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    fmt::{Display, Formatter},
     time::Duration,
 };
 
@@ -12,7 +13,6 @@ use futures03::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::{
-    select,
     sync::{
         mpsc::{self, Receiver},
         oneshot,
@@ -83,8 +83,8 @@ pub enum BlockSynchronizerError {
     #[error("Failed to process new block: {0}")]
     BlockHistoryError(#[from] BlockHistoryError),
 
-    #[error("Not a single synchronizer was ready")]
-    NoReadySynchronizers,
+    #[error("Not a single synchronizer was ready: {0}")]
+    NoReadySynchronizers(String),
 
     #[error("No synchronizers were set")]
     NoSynchronizers,
@@ -147,7 +147,7 @@ pub struct BlockSynchronizer<S> {
     /// Time to wait for a block usually
     block_time: std::time::Duration,
     /// Added on top of block time to account for latency
-    max_wait: std::time::Duration,
+    latency_buffer: std::time::Duration,
     /// Time to wait for the full first message, including snapshot retrieval
     startup_timeout: std::time::Duration,
     /// Optionally, end the stream after emitting max messages
@@ -159,39 +159,78 @@ pub struct BlockSynchronizer<S> {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "lowercase")]
 pub enum SynchronizerState {
+    /// Initial state, assigned before trying to receive any message
     Started,
+    /// The synchronizer emitted a message for the block as expected
     Ready(BlockHeader),
-    // no progress, we consider it stale at that point we should purge it.
-    Stale(BlockHeader),
+    /// The synchronizer is on a previous block compared to others and is expected to
+    /// catch up soon.
     Delayed(BlockHeader),
+    /// The synchronizer hasn't emitted messages for > `max_missed_blocks` or has
+    /// fallen far behind. At this point we do not wait for it anymore but it can
+    /// still eventually recover.
+    Stale(BlockHeader),
+    /// The synchronizer is on future not connected block.
     // For this to happen we must have a gap, and a gap usually means a new snapshot from the
-    // StateSynchronizer. This can only happen if we are processing too slow and one of the
-    // synchronizers restarts e.g. because Tycho ended the subscription.
+    // StateSynchronizer. This can only happen if we are processing too slow and one or all of the
+    // synchronizers restarts e.g. due to websocket connection drops.
     Advanced(BlockHeader),
-    Ended,
+    /// The synchronizer ended with an error.
+    Ended(String),
+}
+
+impl Display for SynchronizerState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SynchronizerState::Started => write!(f, "Started"),
+
+            SynchronizerState::Ready(b) => write!(f, "Started({})", b.number),
+            SynchronizerState::Delayed(b) => write!(f, "Delayed({})", b.number),
+            SynchronizerState::Stale(b) => write!(f, "Stale({})", b.number),
+            SynchronizerState::Advanced(b) => write!(f, "Advanced({})", b.number),
+            SynchronizerState::Ended(reason) => write!(f, "Ended({})", reason),
+        }
+    }
 }
 
 pub struct SynchronizerStream {
     extractor_id: ExtractorIdentity,
     state: SynchronizerState,
+    error: Option<SynchronizerError>,
     modify_ts: NaiveDateTime,
-    rx: Receiver<StateSyncMessage<BlockHeader>>,
+    rx: Receiver<SyncResult<StateSyncMessage<BlockHeader>>>,
 }
 
 impl SynchronizerStream {
+    fn new(
+        extractor_id: &ExtractorIdentity,
+        rx: Receiver<SyncResult<StateSyncMessage<BlockHeader>>>,
+    ) -> Self {
+        Self {
+            extractor_id: extractor_id.clone(),
+            state: SynchronizerState::Started,
+            error: None,
+            modify_ts: Local::now().naive_utc(),
+            rx,
+        }
+    }
     async fn try_advance(
         &mut self,
         block_history: &BlockHistory,
-        max_wait: std::time::Duration,
+        block_time: std::time::Duration,
+        latency_buffer: std::time::Duration,
         stale_threshold: std::time::Duration,
     ) -> BlockSyncResult<Option<StateSyncMessage<BlockHeader>>> {
         let extractor_id = self.extractor_id.clone();
         let latest_block = block_history.latest();
+
         match &self.state {
-            SynchronizerState::Started | SynchronizerState::Ended => {
+            SynchronizerState::Started | SynchronizerState::Ended(_) => {
                 warn!(state=?&self.state, "Advancing Synchronizer in this state not supported!");
                 Ok(None)
             }
+            // TODO: get rid of this entirely, if any synchronizer is advanced, it
+            //  becomes the latest block and we reset block history
             SynchronizerState::Advanced(b) => {
                 let future_block = b.clone();
                 // Transition to ready once we arrived at the expected height
@@ -201,15 +240,14 @@ impl SynchronizerStream {
             SynchronizerState::Ready(previous_block) => {
                 // Try to recv the next expected block, update state accordingly.
                 self.try_recv_next_expected(
-                    max_wait,
+                    block_time + latency_buffer,
                     block_history,
                     previous_block.clone(),
                     stale_threshold,
                 )
                 .await
-                // TODO: if we entered advanced state we need to buffer the message for a while.
             }
-            SynchronizerState::Delayed(old_block) | SynchronizerState::Stale(old_block) => {
+            SynchronizerState::Delayed(old_block) => {
                 // try to catch up all currently queued blocks until the expected block
                 debug!(
                     ?old_block,
@@ -217,7 +255,18 @@ impl SynchronizerStream {
                     %extractor_id,
                     "Trying to catch up to latest block"
                 );
-                self.try_catch_up(block_history, max_wait, stale_threshold)
+                self.try_catch_up(block_history, block_time + latency_buffer, stale_threshold)
+                    .await
+            }
+            SynchronizerState::Stale(old_block) => {
+                // try to catch up all currently queued blocks until the expected block
+                debug!(
+                    ?old_block,
+                    ?latest_block,
+                    %extractor_id,
+                    "Trying to catch up stale synchronizer to latest block"
+                );
+                self.try_catch_up(block_history, block_time, stale_threshold)
                     .await
             }
         }
@@ -236,24 +285,31 @@ impl SynchronizerStream {
     ) -> BlockSyncResult<Option<StateSyncMessage<BlockHeader>>> {
         let extractor_id = self.extractor_id.clone();
         match timeout(max_wait, self.rx.recv()).await {
-            Ok(Some(msg)) => {
+            Ok(Some(Ok(msg))) => {
                 self.transition(msg.header.clone(), block_history, stale_threshold)?;
                 Ok(Some(msg))
             }
+            Ok(Some(Err(e))) => {
+                // The underlying synchronizer exhausted its retries
+                self.mark_errored(e);
+                Ok(None)
+            }
             Ok(None) => {
-                error!(
+                // This case should not happen, as we shouldn't poll the synchronizer after we
+                // closed it or after it errored.
+                warn!(
                     %extractor_id,
-                    ?previous_block,
-                    "SynchronizerStream terminated: channel closed!"
+                    "Tried to poll from closed synchronizer.",
                 );
-                self.state = SynchronizerState::Ended;
-                self.modify_ts = Local::now().naive_utc();
+                self.mark_closed();
                 Ok(None)
             }
             Err(_) => {
                 // trying to advance a block timed out
                 debug!(%extractor_id, ?previous_block, "No block received within time limit.");
 
+                // TODO: as per prev condition check, the state will always be always ready here -
+                // simplify
                 match &self.state {
                     SynchronizerState::Ready(_) => {
                         // First timeout: always transition to Delayed
@@ -308,7 +364,7 @@ impl SynchronizerStream {
             )
             .await
             {
-                Ok(Some(msg)) => {
+                Ok(Some(Ok(msg))) => {
                     debug!(%extractor_id, block_num=?msg.header.number, "Received new message during catch-up");
                     let block_pos = block_history.determine_block_position(&msg.header)?;
                     results.push(msg);
@@ -316,10 +372,20 @@ impl SynchronizerStream {
                         break;
                     }
                 }
-                Ok(None) => {
-                    warn!(%extractor_id, "Channel closed during catch-up");
-                    self.state = SynchronizerState::Ended;
+                Ok(Some(Err(e))) => {
+                    // Synchronizer errored during catch up
+                    self.mark_errored(e);
                     return Ok(None);
+                }
+                Ok(None) => {
+                    // This case should not happen, as we shouldn't poll the synchronizer after we
+                    // closed it or after it errored.
+                    warn!(
+                        %extractor_id,
+                        "Tried to poll from closed synchronizer during catch up.",
+                    );
+                    self.mark_closed();
+                    return Ok(None)
                 }
                 Err(_) => {
                     debug!(%extractor_id, "Timed out waiting for catch-up");
@@ -430,6 +496,44 @@ impl SynchronizerStream {
         self.modify_ts = Local::now().naive_utc();
         Ok(())
     }
+
+    fn mark_errored(&mut self, error: SynchronizerError) {
+        self.state = SynchronizerState::Ended(error.to_string());
+        self.modify_ts = Local::now().naive_utc();
+        self.error = Some(error);
+    }
+
+    fn mark_closed(&mut self) {
+        if !matches!(self.state, SynchronizerState::Ended(_)) {
+            self.state = SynchronizerState::Ended("Closed".to_string());
+            self.modify_ts = Local::now().naive_utc();
+        }
+    }
+
+    fn mark_stale(&mut self, header: &BlockHeader) {
+        self.state = SynchronizerState::Stale(header.clone());
+        self.modify_ts = Local::now().naive_utc();
+    }
+
+    fn mark_ready(&mut self, header: &BlockHeader) {
+        self.state = SynchronizerState::Ready(header.clone());
+        self.modify_ts = Local::now().naive_utc();
+    }
+
+    fn has_ended(&self) -> bool {
+        matches!(self.state, SynchronizerState::Ended(_))
+    }
+
+    fn is_stale(&self) -> bool {
+        matches!(self.state, SynchronizerState::Stale(_))
+    }
+
+    fn get_current_header(&self) -> Option<&BlockHeader> {
+        match &self.state {
+            SynchronizerState::Ready(b) | SynchronizerState::Delayed(b) => Some(b),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
@@ -459,14 +563,14 @@ where
 {
     pub fn new(
         block_time: std::time::Duration,
-        max_wait: std::time::Duration,
+        latency_buffer: std::time::Duration,
         max_missed_blocks: u64,
     ) -> Self {
         Self {
             synchronizers: None,
             max_messages: None,
             block_time,
-            max_wait,
+            latency_buffer,
             startup_timeout: block_time.mul_f64(max_missed_blocks as f64),
             max_missed_blocks,
         }
@@ -503,7 +607,7 @@ where
     /// Cleanup function for shutting down remaining synchronizers when the nanny detects an error.
     /// Sends close signals to all remaining synchronizers and waits for them to complete.
     async fn cleanup_synchronizers(
-        mut state_sync_tasks: FuturesUnordered<JoinHandle<SyncResult<()>>>,
+        mut state_sync_tasks: FuturesUnordered<JoinHandle<()>>,
         sync_close_senders: Vec<oneshot::Sender<()>>,
     ) {
         // Send close signals to all remaining synchronizers
@@ -530,9 +634,10 @@ where
 
     pub async fn run(
         mut self,
-    ) -> BlockSyncResult<(JoinHandle<()>, Receiver<FeedMessage<BlockHeader>>)> {
+    ) -> BlockSyncResult<(JoinHandle<()>, Receiver<BlockSyncResult<FeedMessage<BlockHeader>>>)>
+    {
         trace!("Starting BlockSynchronizer...");
-        let mut state_sync_tasks = FuturesUnordered::new();
+        let state_sync_tasks = FuturesUnordered::new();
         let mut synchronizers = self
             .synchronizers
             .take()
@@ -547,20 +652,12 @@ where
         let mut sync_streams = HashMap::with_capacity(synchronizers.len());
         let mut sync_close_senders = Vec::new();
         for (extractor_id, synchronizer) in synchronizers.drain() {
-            let (handle, rx) = synchronizer.start().await?;
+            let (handle, rx) = synchronizer.start().await;
             let (join_handle, close_sender) = handle.split();
             state_sync_tasks.push(join_handle);
             sync_close_senders.push(close_sender);
 
-            sync_streams.insert(
-                extractor_id.clone(),
-                SynchronizerStream {
-                    extractor_id,
-                    state: SynchronizerState::Started,
-                    modify_ts: Local::now().naive_utc(),
-                    rx,
-                },
-            );
+            sync_streams.insert(extractor_id.clone(), SynchronizerStream::new(&extractor_id, rx));
         }
 
         // startup, schedule first set of futures and wait for them to return to initialise
@@ -583,24 +680,30 @@ where
                 .get_mut(&extractor_id)
                 .unwrap();
             match res {
-                Ok(Some(msg)) => {
+                Ok(Some(Ok(msg))) => {
                     debug!(%extractor_id, height=?&msg.header.number, "Synchronizer started successfully!");
                     // initially default all synchronizers to Ready
-                    synchronizer.state = SynchronizerState::Ready(msg.header.clone());
-                    synchronizer.modify_ts = Local::now().naive_utc();
+                    synchronizer.mark_ready(&msg.header);
                     ready_sync_msgs.insert(extractor_id.name.clone(), msg.clone());
                     Some(msg.header)
                 }
+                Ok(Some(Err(e))) => {
+                    synchronizer.mark_errored(e);
+                    None
+                }
                 Ok(None) => {
-                    warn!(%extractor_id, "Dead synchronizer at startup will be purged!");
-                    synchronizer.state = SynchronizerState::Ended;
-                    synchronizer.modify_ts = Local::now().naive_utc();
+                    // Synchronizer closed channel. This can only happen if the run
+                    // task ended, before this, the synchronizer should have sent
+                    // an error, so this case we likely don't have to handle that
+                    // explicitly
+                    warn!(%extractor_id, "Synchronizer closed during startup");
+                    synchronizer.mark_closed();
                     None
                 }
                 Err(_) => {
-                    warn!(%extractor_id, "Timed out waiting for first message: Stale synchronizer at startup will be purged!");
-                    synchronizer.state = SynchronizerState::Stale(BlockHeader::default());
-                    synchronizer.modify_ts = Local::now().naive_utc();
+                    // We got an error because the synchronizer timed out during startup
+                    warn!(%extractor_id, "Timed out waiting for first message");
+                    synchronizer.mark_stale(&BlockHeader::default());
                     None
                 }
             }
@@ -609,147 +712,202 @@ where
         .into_iter()
         .collect::<Vec<_>>();
 
+        // Ensures we have at least one ready stream
+        Self::check_streams(&sync_streams)?;
         let mut block_history = BlockHistory::new(initial_headers, 15)?;
-
         // Determine the starting header for synchronization
         let start_header = block_history
             .latest()
-            .ok_or(BlockSynchronizerError::NoReadySynchronizers)?;
+            .expect("Safe since we checked streams before");
         info!(
             start_block=?start_header,
             n_healthy=?ready_sync_msgs.len(),
+            n_total=?sync_streams.len(),
             "Block synchronization started successfully!"
         );
-
-        // Purge any stale synchronizers
-        // All synchronizers that did not timeout on start up are initialized as Ready, including
-        // those that are Delayed. Delayed synchronizers are identified and updated accordingly in
-        // the next step.
-        sync_streams.retain(|_, v| matches!(v.state, SynchronizerState::Ready(_)));
 
         // Determine correct state for each remaining synchronizer, based on their header vs the
         // latest one
         for (_, stream) in sync_streams.iter_mut() {
-            if let SynchronizerState::Ready(header) = &stream.state.clone() {
+            if let SynchronizerState::Ready(header) = stream.state.clone() {
                 if header.number < start_header.number {
-                    stream.state = SynchronizerState::Delayed(header.clone());
                     debug!(
                         extractor_id=%stream.extractor_id,
                         synchronizer_block=?header.number,
                         current_block=?start_header.number,
                         "Marking synchronizer as delayed during initialization"
                     );
+                    stream.state = SynchronizerState::Delayed(header);
                 }
             }
         }
 
         let (sync_tx, sync_rx) = mpsc::channel(30);
-        let main_loop_jh: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
+        let main_loop_jh = tokio::spawn(async move {
             let mut n_iter = 1;
             loop {
                 // Send retrieved data to receivers.
-                sync_tx
-                    .send(FeedMessage::new(
-                        std::mem::take(&mut ready_sync_msgs),
-                        sync_streams
-                            .iter()
-                            .map(|(a, b)| (a.name.to_string(), b.state.clone()))
-                            .collect(),
-                    ))
-                    .await?;
+                let msg = FeedMessage::new(
+                    std::mem::take(&mut ready_sync_msgs),
+                    sync_streams
+                        .iter()
+                        .map(|(a, b)| (a.name.to_string(), b.state.clone()))
+                        .collect(),
+                );
+                if sync_tx.send(Ok(msg)).await.is_err() {
+                    info!("Receiver closed, block synchronizer terminating..");
+                    return;
+                };
 
                 // Check if we have reached the max messages
                 if let Some(max_messages) = self.max_messages {
                     if n_iter >= max_messages {
                         info!(max_messages, "StreamEnd");
-                        return Ok(());
+                        return;
                     }
                 }
                 n_iter += 1;
 
-                // Here we simply wait block_time + max_wait. This will not work for chains with
-                // unknown block times but is simple enough for now.
-                // If we would like to support unknown block times we could: Instruct all handles to
-                // await the max block time, if a header arrives within that time transition as
-                // usual, but via a select statement get notified (using e.g. Notify) if any other
-                // handle finishes before the timeout. Then await again but this time only for
-                // max_wait and then proceed as usual. So basically each try_advance task would have
-                // a select statement that allows it to exit the first timeout preemptively if any
-                // other try_advance task finished earlier.
-                let mut recv_futures = Vec::new();
-                for (extractor_id, sh) in sync_streams.iter_mut() {
-                    recv_futures.push(async {
-                        let res = sh
-                            .try_advance(
-                                &block_history,
-                                self.block_time + self.max_wait,
-                                self.block_time
-                                    .mul_f64(self.max_missed_blocks as f64),
-                            )
-                            .await?;
-                        Ok::<_, BlockSynchronizerError>(
-                            res.map(|msg| (extractor_id.name.clone(), msg)),
-                        )
-                    });
-                }
-                ready_sync_msgs.extend(
-                    join_all(recv_futures)
-                        .await
-                        .into_iter()
-                        .collect::<Result<Vec<_>, _>>()?
-                        .into_iter()
-                        .flatten(),
-                );
+                let res = self
+                    .handle_next_message(
+                        &mut sync_streams,
+                        &mut ready_sync_msgs,
+                        &mut block_history,
+                    )
+                    .await;
 
-                // Purge any bad synchronizers, respective warnings have already been issued at
-                // transition time.
-                sync_streams.retain(|_, v| match v.state {
-                    SynchronizerState::Started | SynchronizerState::Ended => false,
-                    SynchronizerState::Stale(_) => false,
-                    SynchronizerState::Ready(_) => true,
-                    SynchronizerState::Delayed(_) => true,
-                    SynchronizerState::Advanced(_) => true,
-                });
-
-                // Check if we have any active synchronizers (Ready, Delayed, or Advanced)
-                // If all synchronizers have been purged (Stale/Ended), exit the main loop
-                if sync_streams.is_empty() {
-                    error!("No healthy SynchronizerStream remain");
-                    return Err(BlockSynchronizerError::NoReadySynchronizers.into());
-                }
-
-                // Find the latest connected block header to advance history
-                if let Some(header) = sync_streams
-                    .values()
-                    .filter_map(|v| match &v.state {
-                        SynchronizerState::Ready(b) | SynchronizerState::Delayed(b) => Some(b),
-                        _ => None,
-                    })
-                    .max_by_key(|b| b.number)
-                {
-                    block_history.push(header.clone())?;
-                } else {
-                    // No Ready or Delayed synchronizers, but we still have some synchronizers
-                    // we can probably recover here but since this is unlikely we error for now
-                    error!("Only advanced SynchronizerStreams remain");
-                    return Err(BlockSynchronizerError::NoReadySynchronizers.into());
+                if let Err(e) = res {
+                    // Communicate error to clients, then end the loop
+                    let _ = sync_tx.send(Err(e)).await;
+                    return;
                 }
             }
         });
 
+        // We await the main loop and log any panics (should be impossible). If the
+        // main loop exits, all synchronizers should be ended or stale. So we kill any
+        // remaining stale ones just in case. A final error is propagated through the
+        // channel to the user.
         let nanny_jh = tokio::spawn(async move {
-            select! {
-                error = state_sync_tasks.select_next_some() => {
-                    Self::cleanup_synchronizers(state_sync_tasks, sync_close_senders).await;
-                    error!(?error, "State synchronizer exited");
-                },
-                error = main_loop_jh => {
-                    Self::cleanup_synchronizers(state_sync_tasks, sync_close_senders).await;
-                    error!(?error, "Feed main loop exited");
+            // report any panics
+            let _ = main_loop_jh.await.map_err(|e| {
+                if e.is_panic() {
+                    error!("BlockSynchornizer main loop panicked: {e}")
                 }
-            }
+            });
+            Self::cleanup_synchronizers(state_sync_tasks, sync_close_senders).await;
         });
         Ok((nanny_jh, sync_rx))
+    }
+
+    async fn handle_next_message(
+        &self,
+        sync_streams: &mut HashMap<ExtractorIdentity, SynchronizerStream>,
+        ready_sync_msgs: &mut HashMap<String, StateSyncMessage<BlockHeader>>,
+        block_history: &mut BlockHistory,
+    ) -> BlockSyncResult<()> {
+        let mut recv_futures = Vec::new();
+        for (extractor_id, stream) in sync_streams.iter_mut() {
+            // If stream is in ended state, do not check for any messages (it's receiver
+            // is closed), but do check stale streams.
+            if stream.has_ended() {
+                continue
+            }
+            // Here we simply wait block_time + max_wait. This will not work for chains with
+            // unknown block times but is simple enough for now.
+            // If we would like to support unknown block times we could: Instruct all handles to
+            // await the max block time, if a header arrives within that time transition as
+            // usual, but via a select statement get notified (using e.g. Notify) if any other
+            // handle finishes before the timeout. Then await again but this time only for
+            // max_wait and then proceed as usual. So basically each try_advance task would have
+            // a select statement that allows it to exit the first timeout preemptively if any
+            // other try_advance task finished earlier.
+            recv_futures.push(async {
+                let res = stream
+                    .try_advance(
+                        block_history,
+                        self.block_time,
+                        self.latency_buffer,
+                        self.block_time
+                            .mul_f64(self.max_missed_blocks as f64),
+                    )
+                    .await?;
+                Ok::<_, BlockSynchronizerError>(res.map(|msg| (extractor_id.name.clone(), msg)))
+            });
+        }
+        ready_sync_msgs.extend(
+            join_all(recv_futures)
+                .await
+                .into_iter()
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .flatten(),
+        );
+
+        // Check if we have any active synchronizers (Ready, Delayed, or Advanced)
+        // If all synchronizers have been purged (Stale/Ended), exit the main loop
+        Self::check_streams(sync_streams)?;
+
+        // Find the latest connected block header to advance history
+        if let Some(header) = sync_streams
+            .values()
+            .filter_map(SynchronizerStream::get_current_header)
+            .max_by_key(|b| b.number)
+        {
+            block_history.push(header.clone())?;
+            Ok(())
+        } else {
+            // TODO: This happens if e.g. the ws connection was dropped and all
+            //  synchronizer restarted their stream at a later block, in this
+            //  case they are all marked as advanced. Need to decide if we
+            //  should handle this here or earlier.
+            Err(BlockSynchronizerError::NoReadySynchronizers(
+                "Only advanced SynchronizerStreams remain".to_string(),
+            ))
+        }
+    }
+
+    fn check_streams(
+        sync_streams: &HashMap<ExtractorIdentity, SynchronizerStream>,
+    ) -> BlockSyncResult<()> {
+        if sync_streams
+            .values()
+            .all(|stream| stream.has_ended() | stream.is_stale())
+        {
+            let mut reason = Vec::new();
+            if let Some((last_errored_id, last_errored_stream)) = sync_streams
+                .iter()
+                .filter(|(_, stream)| stream.has_ended() | stream.is_stale())
+                .max_by_key(|(_, stream)| stream.modify_ts)
+            {
+                if let Some(err) = &last_errored_stream.error {
+                    // All synchronizers were errored/stale and the last one errored
+                    reason.push(format!("Synchronizer for {last_errored_id} errored with: {err}"))
+                } else {
+                    // All synchronizer were errored/stale and the last one also becomae stale
+                    reason.push(format!(
+                        "Synchronizer for {last_errored_id} became: {}",
+                        last_errored_stream.state
+                    ))
+                }
+            } else {
+                reason.push(
+                    "Can't identify protocol that caused the stream to end! \
+                    This condition should be unreachable!"
+                        .to_string(),
+                )
+            }
+
+            sync_streams
+                .iter()
+                .for_each(|(id, stream)| {
+                    reason
+                        .push(format!("{id} reported as {} at {}", stream.state, stream.modify_ts))
+                });
+
+            return Err(BlockSynchronizerError::NoReadySynchronizers(reason.join(", ")));
+        }
+        Ok(())
     }
 }
 
@@ -768,15 +926,16 @@ mod tests {
     #[derive(Clone, Debug)]
     enum MockBehavior {
         Normal,          // Exit successfully when receiving close signal
-        FailOnExit,      // Exit with error when receiving close signal
         IgnoreClose,     // Ignore close signals and hang (for timeout testing)
         ExitImmediately, // Exit immediately after first message (for quick failure testing)
     }
 
+    type HeaderReceiver = Receiver<SyncResult<StateSyncMessage<BlockHeader>>>;
+
     #[derive(Clone)]
     struct MockStateSync {
-        header_tx: mpsc::Sender<StateSyncMessage<BlockHeader>>,
-        header_rx: Arc<Mutex<Option<Receiver<StateSyncMessage<BlockHeader>>>>>,
+        header_tx: mpsc::Sender<SyncResult<StateSyncMessage<BlockHeader>>>,
+        header_rx: Arc<Mutex<Option<HeaderReceiver>>>,
         close_received: Arc<Mutex<bool>>,
         behavior: MockBehavior,
         // For testing: store the close sender so tests can trigger close signals
@@ -805,7 +964,7 @@ mod tests {
 
         async fn send_header(&self, header: StateSyncMessage<BlockHeader>) -> Result<(), String> {
             self.header_tx
-                .send(header)
+                .send(Ok(header))
                 .await
                 .map_err(|e| format!("sending header failed: {e}"))
         }
@@ -826,7 +985,7 @@ mod tests {
 
         async fn start(
             mut self,
-        ) -> SyncResult<(SynchronizerTaskHandle, Receiver<StateSyncMessage<BlockHeader>>)> {
+        ) -> (SynchronizerTaskHandle, Receiver<SyncResult<StateSyncMessage<BlockHeader>>>) {
             let block_rx = {
                 let mut guard = self.header_rx.lock().await;
                 guard
@@ -845,8 +1004,8 @@ mod tests {
                 *guard = Some(close_tx_for_test);
             }
 
-            let close_received_clone = self.close_received.clone();
             let behavior = self.behavior.clone();
+            let tx = self.header_tx.clone();
 
             let jh = tokio::spawn(async move {
                 match behavior {
@@ -859,54 +1018,25 @@ mod tests {
                     }
                     MockBehavior::ExitImmediately => {
                         // Exit immediately with error to simulate immediate task failure
-                        SyncResult::Err(SynchronizerError::ConnectionError(
+                        tx.send(SyncResult::Err(SynchronizerError::ConnectionError(
                             "Simulated immediate task failure".to_string(),
-                        ))
+                        )))
+                        .await
+                        .unwrap();
                     }
-                    MockBehavior::Normal | MockBehavior::FailOnExit => {
+                    MockBehavior::Normal => {
                         // Wait for close signal from either handle or test, then respond based on
                         // behavior
-                        let result = tokio::select! {
+                        let _ = tokio::select! {
                             result = close_rx => result,
                             result = close_rx_for_test => result,
                         };
-
-                        match result {
-                            Ok(()) => {
-                                // Mark that close signal was received
-                                let mut guard = close_received_clone.lock().await;
-                                *guard = true;
-
-                                match behavior {
-                                    MockBehavior::Normal => SyncResult::Ok(()),
-                                    MockBehavior::FailOnExit => {
-                                        SyncResult::Err(SynchronizerError::ConnectionError(
-                                            "Simulated task failure on close".to_string(),
-                                        ))
-                                    }
-                                    _ => unreachable!(),
-                                }
-                            }
-                            Err(_) => {
-                                // Close signal sender was dropped
-                                match behavior {
-                                    MockBehavior::Normal => SyncResult::Ok(()),
-                                    MockBehavior::FailOnExit => {
-                                        SyncResult::Err(SynchronizerError::ConnectionError(
-                                            "Simulated task failure on close sender drop"
-                                                .to_string(),
-                                        ))
-                                    }
-                                    _ => unreachable!(),
-                                }
-                            }
-                        }
                     }
                 }
             });
 
             let handle = SynchronizerTaskHandle::new(jh, close_tx_for_handle);
-            Ok((handle, block_rx))
+            (handle, block_rx)
         }
     }
 
@@ -989,8 +1119,8 @@ mod tests {
             .into_iter()
             .collect(),
         };
-        assert_eq!(first_feed_msg, exp1);
-        assert_eq!(second_feed_msg, exp2);
+        assert_eq!(first_feed_msg.unwrap(), exp1);
+        assert_eq!(second_feed_msg.unwrap(), exp2);
     }
 
     #[test(tokio::test)]
@@ -1037,7 +1167,8 @@ mod tests {
         let first_feed_msg = rx
             .recv()
             .await
-            .expect("header channel was closed");
+            .expect("header channel was closed")
+            .expect("no error");
         assert_eq!(first_feed_msg.state_msgs.len(), 2);
         assert!(matches!(
             first_feed_msg
@@ -1074,7 +1205,8 @@ mod tests {
         let second_feed_msg = rx
             .recv()
             .await
-            .expect("header channel was closed");
+            .expect("header channel was closed")
+            .expect("no error");
         debug!("Consumed second message for v2");
 
         assert!(second_feed_msg
@@ -1123,7 +1255,8 @@ mod tests {
         let mut third_feed_msg = rx
             .recv()
             .await
-            .expect("header channel was closed");
+            .expect("header channel was closed")
+            .expect("no error");
 
         // If this message doesn't have both univ2, it's an intermediate message, so we get the next
         // one
@@ -1134,7 +1267,8 @@ mod tests {
             third_feed_msg = rx
                 .recv()
                 .await
-                .expect("header channel was closed");
+                .expect("header channel was closed")
+                .expect("no error");
         }
         assert!(third_feed_msg
             .state_msgs
@@ -1206,7 +1340,8 @@ mod tests {
         let first_feed_msg = rx
             .recv()
             .await
-            .expect("header channel was closed");
+            .expect("header channel was closed")
+            .expect("no error");
         assert!(matches!(
             first_feed_msg.sync_states.get("uniswap-v2").unwrap(),
             SynchronizerState::Delayed(header) if header.number == 1
@@ -1245,7 +1380,8 @@ mod tests {
         let second_feed_msg = rx
             .recv()
             .await
-            .expect("header channel was closed");
+            .expect("header channel was closed")
+            .expect("no error");
         assert_eq!(second_feed_msg.state_msgs.len(), 2);
         assert!(matches!(
             second_feed_msg.sync_states.get("uniswap-v2").unwrap(),
@@ -1258,10 +1394,7 @@ mod tests {
     }
 
     #[test(tokio::test)]
-    async fn test_synchronizer_task_failure_triggers_cleanup() {
-        // Test Case 1: Verify that when a synchronizer task fails,
-        // the nanny properly cleans up all other synchronizers
-
+    async fn test_synchronizer_fails_other_goes_stale() {
         let v2_sync = MockStateSync::with_behavior(MockBehavior::ExitImmediately);
         let v3_sync = MockStateSync::new(); // Normal behavior
 
@@ -1299,150 +1432,54 @@ mod tests {
         let first_msg = sync_rx
             .recv()
             .await
-            .expect("Should receive first message");
+            .expect("Should receive first message")
+            .expect("no error");
+        // TODO assert v2 is ok and v3 is ok, then v2 ended and v3 is **still ok**
         // v2_sync might have already failed, so we might only get v3_sync message
-        assert!(!first_msg.state_msgs.is_empty());
+        assert!(matches!(
+            first_msg
+                .sync_states
+                .get("uniswap-v2")
+                .unwrap(),
+            SynchronizerState::Ready(_)
+        ));
+        assert!(matches!(
+            first_msg
+                .sync_states
+                .get("uniswap-v3")
+                .unwrap(),
+            SynchronizerState::Ready(_)
+        ));
+
+        let mut error_reported = false;
+        for _ in 0..3 {
+            if let Some(msg) = sync_rx.recv().await {
+                match msg {
+                    Err(_) => error_reported = true,
+                    Ok(msg) => {
+                        assert!(matches!(
+                            msg.sync_states
+                                .get("uniswap-v3")
+                                .unwrap(),
+                            SynchronizerState::Delayed(_)
+                        ));
+                        assert!(matches!(
+                            msg.sync_states
+                                .get("uniswap-v2")
+                                .unwrap(),
+                            SynchronizerState::Ended(_)
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(error_reported, "BlockSynchronizer did not report final error");
 
         // Wait for nanny to detect task failure and execute cleanup
         let result = timeout(Duration::from_secs(2), nanny_handle).await;
         assert!(result.is_ok(), "Nanny should complete when synchronizer task exits");
 
-        // Give cleanup time to execute
-        tokio::time::sleep(Duration::from_millis(50)).await;
-
         // Verify that the remaining synchronizer received close signal during cleanup
-        assert!(
-            v3_sync.was_close_received().await,
-            "v3_sync should have received close signal during cleanup"
-        );
-    }
-
-    #[test(tokio::test)]
-    async fn test_synchronizer_task_exit_triggers_cleanup() {
-        // Test Case 2: StateSynchronizer task exits with error on close, triggering nanny cleanup
-        // This tests the first branch of the nanny's select statement
-
-        let v2_sync = MockStateSync::with_behavior(MockBehavior::FailOnExit);
-        let v3_sync = MockStateSync::new();
-
-        let block_sync = BlockSynchronizer::with_short_timeouts()
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-                v2_sync.clone(),
-            )
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-                v3_sync.clone(),
-            );
-
-        // Send initial messages
-        let start_msg = StateSyncMessage {
-            header: BlockHeader { number: 1, ..Default::default() },
-            ..Default::default()
-        };
-        v2_sync
-            .send_header(start_msg.clone())
-            .await
-            .expect("send_header failed");
-        v3_sync
-            .send_header(start_msg.clone())
-            .await
-            .expect("send_header failed");
-
-        // Start BlockSynchronizer
-        let (nanny_handle, mut sync_rx) = block_sync
-            .run()
-            .await
-            .expect("BlockSynchronizer failed to start");
-
-        // Consume first message
-        let first_msg = sync_rx
-            .recv()
-            .await
-            .expect("Should receive first message");
-        assert_eq!(first_msg.state_msgs.len(), 2);
-
-        // Send a close signal to v2_sync to make it exit with error (due to FailOnExit behavior)
-        // This should trigger the first branch of the nanny's select statement
-        v2_sync.trigger_close().await;
-
-        // Wait for nanny to detect synchronizer task exit and complete cleanup
-        let result = timeout(Duration::from_secs(2), nanny_handle).await;
-        assert!(result.is_ok(), "Nanny should complete when synchronizer task exits");
-
-        // Give cleanup time to execute
-        tokio::time::sleep(Duration::from_millis(50)).await;
-
-        // Verify cleanup was triggered - v3_sync should have received close signal
-        assert!(
-            v3_sync.was_close_received().await,
-            "v3_sync should have received close signal during cleanup"
-        );
-    }
-
-    #[test(tokio::test)]
-    async fn test_main_loop_timeout_triggers_cleanup() {
-        // Test Case 3: Main loop times out waiting for synchronizers
-        // This simulates synchronizers becoming unresponsive
-
-        let v2_sync = MockStateSync::new();
-        let v3_sync = MockStateSync::new();
-
-        let block_sync = BlockSynchronizer::with_short_timeouts()
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-                v2_sync.clone(),
-            )
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-                v3_sync.clone(),
-            );
-
-        // Send initial messages
-        let start_msg = StateSyncMessage {
-            header: BlockHeader { number: 1, ..Default::default() },
-            ..Default::default()
-        };
-        v2_sync
-            .send_header(start_msg.clone())
-            .await
-            .expect("send_header failed");
-        v3_sync
-            .send_header(start_msg.clone())
-            .await
-            .expect("send_header failed");
-
-        // Start BlockSynchronizer
-        let (nanny_handle, mut sync_rx) = block_sync
-            .run()
-            .await
-            .expect("BlockSynchronizer failed to start");
-
-        // Consume first message
-        let first_msg = sync_rx
-            .recv()
-            .await
-            .expect("Should receive first message");
-        assert_eq!(first_msg.state_msgs.len(), 2);
-
-        // Don't send any more messages - synchronizers will become stale and eventually cause
-        // main loop to error when no ready synchronizers remain
-
-        // Wait for main loop to error due to no ready synchronizers
-        let result = timeout(Duration::from_secs(3), nanny_handle).await;
-        assert!(
-            result.is_ok(),
-            "Nanny should complete when main loop errors due to no ready synchronizers"
-        );
-
-        // Give cleanup time to execute
-        tokio::time::sleep(Duration::from_millis(50)).await;
-
-        // Verify cleanup was triggered
-        assert!(
-            v2_sync.was_close_received().await,
-            "v2_sync should have received close signal during cleanup"
-        );
         assert!(
             v3_sync.was_close_received().await,
             "v3_sync should have received close signal during cleanup"
@@ -1556,7 +1593,8 @@ mod tests {
         let first_feed_msg = rx
             .recv()
             .await
-            .expect("Should receive first message");
+            .expect("Should receive first message")
+            .expect("no error");
         assert_eq!(first_feed_msg.state_msgs.len(), 2);
         assert!(matches!(
             first_feed_msg
@@ -1593,7 +1631,8 @@ mod tests {
         let second_feed_msg = rx
             .recv()
             .await
-            .expect("Should receive second message");
+            .expect("Should receive second message")
+            .expect("no error");
         assert!(second_feed_msg
             .state_msgs
             .contains_key("uniswap-v3"));
@@ -1639,41 +1678,17 @@ mod tests {
             .send_header(block3_msg.clone())
             .await;
 
-        // Wait more time for v2 to go stale
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(40)).await;
 
-        // Consume remaining messages until we see v2 is removed
-        let mut found_removed = false;
-
-        for _ in 0..3 {
-            if let Some(msg) = rx.recv().await {
-                if !msg
-                    .sync_states
-                    .contains_key("uniswap-v2")
-                {
-                    // v2 has been removed from sync_states
-                    found_removed = true;
+        let mut stale_found = false;
+        for _ in 0..2 {
+            if let Some(Ok(msg)) = rx.recv().await {
+                if let Some(SynchronizerState::Stale(_)) = msg.sync_states.get("uniswap-v2") {
+                    stale_found = true;
                 }
-
-                // v3 should still be working (can be Ready, Delayed, or Advanced)
-                if let Some(v3_state) = msg.sync_states.get("uniswap-v3") {
-                    assert!(
-                        !matches!(v3_state, SynchronizerState::Stale(_) | SynchronizerState::Ended),
-                        "v3 should not be stale or ended, but was: {v3_state:?}"
-                    );
-                }
-
-                if found_removed {
-                    break;
-                }
-            } else {
-                break;
             }
         }
-
-        // v2 should be removed (it may go stale briefly but get purged immediately)
-        assert!(found_removed, "v2 synchronizer should be removed after going stale");
-        // Note: found_stale might be false if the stale synchronizer is purged immediately
+        assert!(stale_found, "v2 synchronizer should be stale");
     }
 
     #[test(tokio::test)]
@@ -1729,7 +1744,8 @@ mod tests {
         let first_feed_msg = rx
             .recv()
             .await
-            .expect("Should receive first message");
+            .expect("Should receive first message")
+            .expect("no error");
         assert_eq!(first_feed_msg.state_msgs.len(), 2);
         assert!(matches!(
             first_feed_msg
@@ -1757,7 +1773,9 @@ mod tests {
         let timeout_duration = Duration::from_millis(500); // Generous timeout
         let start_time = tokio::time::Instant::now();
 
-        while let Ok(Some(msg)) = tokio::time::timeout(Duration::from_millis(50), rx.recv()).await {
+        while let Ok(Some(Ok(msg))) =
+            tokio::time::timeout(Duration::from_millis(50), rx.recv()).await
+        {
             // Track when synchronizers transition to delayed
             if !seen_delayed {
                 let v2_state = msg.sync_states.get("uniswap-v2");
@@ -1784,11 +1802,21 @@ mod tests {
         // Wait for the main loop to complete (all synchronizers should eventually go stale)
         tokio::time::sleep(Duration::from_millis(200)).await;
 
+        let mut error_reported = false;
         // Consume any remaining messages until channel closes
-        while rx.recv().await.is_some() {
-            // Just drain the channel
+        while let Some(msg) = rx.recv().await {
+            if let Err(e) = msg {
+                dbg!(&e);
+                assert!(e
+                    .to_string()
+                    .contains("became: Stale(1)"));
+                assert!(e
+                    .to_string()
+                    .contains("reported as Stale(1)"));
+                error_reported = true;
+            }
         }
-        // Channel is now closed
+        assert!(error_reported, "Expected the channel to report an error before closing");
 
         // The nanny should complete when the main loop exits due to no ready synchronizers
         let nanny_result = timeout(Duration::from_secs(2), nanny_handle).await;
@@ -1804,6 +1832,213 @@ mod tests {
 
         // Give cleanup time to execute
         tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Verify cleanup was triggered for both synchronizers
+        assert!(
+            v2_sync.was_close_received().await,
+            "v2_sync should have received close signal during cleanup"
+        );
+        assert!(
+            v3_sync.was_close_received().await,
+            "v3_sync should have received close signal during cleanup"
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_stale_synchronizer_recovers() {
+        // Test Case 2: All protocols go stale and main loop exits gracefully
+
+        let v2_sync = MockStateSync::new();
+        let v3_sync = MockStateSync::new();
+
+        // Use reasonable timeouts to observe proper state transitions
+        let mut block_sync = BlockSynchronizer::new(
+            Duration::from_millis(20), // block_time
+            Duration::from_millis(10), // max_wait
+            3,                         // max_missed_blocks (stale threshold = 20ms * 3 = 60ms)
+        );
+        block_sync.max_messages(10); // Allow enough messages to see the progression
+
+        let block_sync = block_sync
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+                v2_sync.clone(),
+            )
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+                v3_sync.clone(),
+            );
+
+        // Send initial messages to both synchronizers
+        let block1_msg = StateSyncMessage {
+            header: BlockHeader {
+                number: 1,
+                hash: Bytes::from(vec![1]),
+                parent_hash: Bytes::from(vec![0]),
+                revert: false,
+                timestamp: 1000,
+            },
+            ..Default::default()
+        };
+        let _ = v2_sync
+            .send_header(block1_msg.clone())
+            .await;
+        let _ = v3_sync
+            .send_header(block1_msg.clone())
+            .await;
+
+        // Start the block synchronizer
+        let (nanny_handle, mut rx) = block_sync
+            .run()
+            .await
+            .expect("BlockSynchronizer failed to start");
+
+        let first_feed_msg = rx
+            .recv()
+            .await
+            .expect("Should receive first message")
+            .expect("no error");
+        assert_eq!(first_feed_msg.state_msgs.len(), 2);
+        assert!(matches!(
+            first_feed_msg
+                .sync_states
+                .get("uniswap-v2")
+                .unwrap(),
+            SynchronizerState::Ready(_)
+        ));
+        assert!(matches!(
+            first_feed_msg
+                .sync_states
+                .get("uniswap-v3")
+                .unwrap(),
+            SynchronizerState::Ready(_)
+        ));
+
+        // Send second messages to v2 only, shortly before both would go stale
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let block2_msg = StateSyncMessage {
+            header: BlockHeader {
+                number: 2,
+                hash: Bytes::from(vec![2]),
+                parent_hash: Bytes::from(vec![1]),
+                revert: false,
+                timestamp: 1000,
+            },
+            ..Default::default()
+        };
+        let _ = v2_sync
+            .send_header(block2_msg.clone())
+            .await;
+
+        // we should get two messages here
+        for _ in 0..2 {
+            if let Some(msg) = rx.recv().await {
+                if let Ok(msg) = msg {
+                    if matches!(
+                        msg.sync_states
+                            .get("uniswap-v2")
+                            .unwrap(),
+                        SynchronizerState::Ready(_)
+                    ) {
+                        assert!(matches!(
+                            msg.sync_states
+                                .get("uniswap-v3")
+                                .unwrap(),
+                            SynchronizerState::Delayed(_)
+                        ));
+                        break;
+                    };
+                }
+            } else {
+                panic!("Channel closed unexpectedly")
+            }
+        }
+
+        // Now v3 should be stale
+        tokio::time::sleep(Duration::from_millis(15)).await;
+        let block3_msg = StateSyncMessage {
+            header: BlockHeader {
+                number: 3,
+                hash: Bytes::from(vec![3]),
+                parent_hash: Bytes::from(vec![2]),
+                revert: false,
+                timestamp: 1000,
+            },
+            ..Default::default()
+        };
+        let _ = v2_sync
+            .send_header(block3_msg.clone())
+            .await;
+        let third_msg = rx
+            .recv()
+            .await
+            .expect("Should receive first message")
+            .expect("no error");
+        dbg!(&third_msg);
+        assert!(matches!(
+            third_msg
+                .sync_states
+                .get("uniswap-v2")
+                .unwrap(),
+            SynchronizerState::Ready(_)
+        ));
+        assert!(matches!(
+            third_msg
+                .sync_states
+                .get("uniswap-v3")
+                .unwrap(),
+            SynchronizerState::Stale(_)
+        ));
+
+        let block4_msg = StateSyncMessage {
+            header: BlockHeader {
+                number: 3,
+                hash: Bytes::from(vec![4]),
+                parent_hash: Bytes::from(vec![3]),
+                revert: false,
+                timestamp: 1000,
+            },
+            ..Default::default()
+        };
+        let _ = v3_sync
+            .send_header(block2_msg.clone())
+            .await;
+        let _ = v3_sync
+            .send_header(block3_msg.clone())
+            .await;
+        let _ = v3_sync
+            .send_header(block4_msg.clone())
+            .await;
+        let _ = v2_sync
+            .send_header(block4_msg.clone())
+            .await;
+        let fourth_msg = rx
+            .recv()
+            .await
+            .expect("Should receive fourth message")
+            .expect("no error");
+        assert!(matches!(
+            fourth_msg
+                .sync_states
+                .get("uniswap-v2")
+                .unwrap(),
+            SynchronizerState::Ready(_)
+        ));
+        assert!(matches!(
+            fourth_msg
+                .sync_states
+                .get("uniswap-v3")
+                .unwrap(),
+            SynchronizerState::Ready(_)
+        ));
+
+        v3_sync.trigger_close().await;
+        v2_sync.trigger_close().await;
+
+        timeout(Duration::from_millis(100), nanny_handle)
+            .await
+            .expect("Nanny failed to exit within time")
+            .expect("Nanny panicked");
 
         // Verify cleanup was triggered for both synchronizers
         assert!(

@@ -14,7 +14,7 @@ use crate::{
     deltas::DeltasClient,
     feed::{
         component_tracker::ComponentFilter, synchronizer::ProtocolStateSynchronizer, BlockHeader,
-        BlockSynchronizer, FeedMessage,
+        BlockSynchronizer, BlockSynchronizerError, FeedMessage,
     },
     rpc::RPCClient,
     HttpRPCClient, WsDeltasClient,
@@ -194,7 +194,10 @@ impl TychoStreamBuilder {
     /// setting up the synchronization of exchange components.
     pub async fn build(
         self,
-    ) -> Result<(JoinHandle<()>, Receiver<FeedMessage<BlockHeader>>), StreamError> {
+    ) -> Result<
+        (JoinHandle<()>, Receiver<Result<FeedMessage<BlockHeader>, BlockSynchronizerError>>),
+        StreamError,
+    > {
         if self.exchanges.is_empty() {
             return Err(StreamError::SetUpError(
                 "At least one exchange must be registered.".to_string(),

@@ -38,8 +38,8 @@ pub enum SynchronizerError {
     #[error("RPC error: {0}")]
     RPCError(#[from] RPCError),
 
-    /// Failed to send channel message to the consumer.
-    #[error("Failed to send channel message: {0}")]
+    /// Issues with the main channel
+    #[error("{0}")]
     ChannelError(String),
 
     /// Timeout elapsed errors.
@@ -61,9 +61,9 @@ pub enum SynchronizerError {
 
 pub type SyncResult<T> = Result<T, SynchronizerError>;
 
-impl From<SendError<StateSyncMessage<BlockHeader>>> for SynchronizerError {
-    fn from(err: SendError<StateSyncMessage<BlockHeader>>) -> Self {
-        SynchronizerError::ChannelError(err.to_string())
+impl<T> From<SendError<T>> for SynchronizerError {
+    fn from(err: SendError<T>) -> Self {
+        SynchronizerError::ChannelError(format!("Failed to send message: {err}"))
     }
 }
 
@@ -171,7 +171,7 @@ where
 /// This handle provides methods to gracefully shut down the synchronizer
 /// and await its completion with a timeout.
 pub struct SynchronizerTaskHandle {
-    join_handle: JoinHandle<SyncResult<()>>,
+    join_handle: JoinHandle<()>,
     close_tx: oneshot::Sender<()>,
 }
 
@@ -184,7 +184,7 @@ pub struct SynchronizerTaskHandle {
 /// retrieving & emitting snapshots of components which the client has not seen yet and subsequently
 /// delivering delta messages for the components that have changed.
 impl SynchronizerTaskHandle {
-    pub fn new(join_handle: JoinHandle<SyncResult<()>>, close_tx: oneshot::Sender<()>) -> Self {
+    pub fn new(join_handle: JoinHandle<()>, close_tx: oneshot::Sender<()>) -> Self {
         Self { join_handle, close_tx }
     }
 
@@ -193,7 +193,7 @@ impl SynchronizerTaskHandle {
     /// This allows monitoring the task completion separately from controlling shutdown.
     /// The join handle can be used with FuturesUnordered for monitoring, while the
     /// close sender can be used to signal graceful shutdown.
-    pub fn split(self) -> (JoinHandle<SyncResult<()>>, oneshot::Sender<()>) {
+    pub fn split(self) -> (JoinHandle<()>, oneshot::Sender<()>) {
         (self.join_handle, self.close_tx)
     }
 }
@@ -205,7 +205,7 @@ pub trait StateSynchronizer: Send + Sync + 'static {
     /// Returns a handle for controlling the running task and a receiver for messages.
     async fn start(
         mut self,
-    ) -> SyncResult<(SynchronizerTaskHandle, Receiver<StateSyncMessage<BlockHeader>>)>;
+    ) -> (SynchronizerTaskHandle, Receiver<SyncResult<StateSyncMessage<BlockHeader>>>);
 }
 
 impl<R, D> ProtocolStateSynchronizer<R, D>
@@ -462,11 +462,10 @@ where
     #[instrument(skip(self, block_tx, end_rx), fields(extractor_id = %self.extractor_id))]
     async fn state_sync(
         &mut self,
-        block_tx: &mut Sender<StateSyncMessage<BlockHeader>>,
+        block_tx: &mut Sender<SyncResult<StateSyncMessage<BlockHeader>>>,
         mut end_rx: oneshot::Receiver<()>,
     ) -> Result<(), (SynchronizerError, Option<oneshot::Receiver<()>>)> {
         // initialisation
-
         let subscription_options = SubscriptionOptions::new().with_state(self.include_snapshots);
         let (subscription_id, mut msg_rx) = match self
             .deltas_client
@@ -523,7 +522,7 @@ where
             let n_snapshots = snapshot.snapshots.states.len();
             info!(n_components, n_snapshots, "Initial snapshot retrieved, starting delta message feed");
 
-            block_tx.send(snapshot).await?;
+            block_tx.send(Ok(snapshot)).await?;
             self.last_synced_block = Some(header.clone());
             loop {
                 select! {
@@ -578,7 +577,7 @@ where
                                 deltas: Some(deltas),
                                 removed_components,
                             };
-                            block_tx.send(next).await?;
+                            block_tx.send(Ok(next)).await?;
                             self.last_synced_block = Some(header.clone());
 
                             debug!(block_number=?header.number, n_changes, "Finished processing delta message");
@@ -655,13 +654,14 @@ where
 
     async fn start(
         mut self,
-    ) -> SyncResult<(SynchronizerTaskHandle, Receiver<StateSyncMessage<BlockHeader>>)> {
+    ) -> (SynchronizerTaskHandle, Receiver<SyncResult<StateSyncMessage<BlockHeader>>>) {
         let (mut tx, rx) = channel(15);
         let (end_tx, end_rx) = oneshot::channel::<()>();
 
         let jh = tokio::spawn(async move {
             let mut retry_count = 0;
             let mut current_end_rx = end_rx;
+            let mut final_error = None;
 
             while retry_count < self.max_retries {
                 info!(extractor_id=%&self.extractor_id, retry_count, "(Re)starting synchronization loop");
@@ -676,10 +676,10 @@ where
                             retry_count,
                             "State synchronization exited cleanly"
                         );
-                        return Ok(());
+                        return;
                     }
                     Err((e, maybe_end_rx)) => {
-                        error!(
+                        warn!(
                             extractor_id=%&self.extractor_id,
                             retry_count,
                             error=%e,
@@ -691,25 +691,34 @@ where
                             current_end_rx = recovered_end_rx;
 
                             if let SynchronizerError::ConnectionClosed = e {
-                                // break synchronization loop if connection is closed
-                                return Err(e);
+                                // break synchronization loop if websocket client is dead
+                                error!(
+                                    "Websocket connection closed. State synchronization exiting."
+                                );
+                                let _ = tx.send(Err(e)).await;
+                                return;
+                            } else {
+                                // Store error in case this is our last retry
+                                final_error = Some(e);
                             }
                         } else {
                             // Close signal was received, exit cleanly
-                            info!(extractor_id=%&self.extractor_id, "Received close signal, exiting");
-                            return Ok(());
+                            info!(extractor_id=%&self.extractor_id, "Received close signal, exiting.");
+                            return;
                         }
                     }
                 }
                 sleep(self.retry_cooldown).await;
                 retry_count += 1;
             }
-            warn!(extractor_id=%&self.extractor_id, retry_count, "Max retries exceeded");
-            Err(SynchronizerError::ConnectionError("Max connection retries exceeded".to_string()))
+            if let Some(e) = final_error {
+                warn!(extractor_id=%&self.extractor_id, retry_count, error=%e, "Max retries exceeded");
+                let _ = tx.send(Err(e)).await;
+            }
         });
 
         let handle = SynchronizerTaskHandle::new(jh, end_tx);
-        Ok((handle, rx))
+        (handle, rx)
     }
 }
 
@@ -1405,10 +1414,7 @@ mod test {
             .expect("Init failed");
 
         // Test starts here
-        let (handle, mut rx) = state_sync
-            .start()
-            .await
-            .expect("Failed to start state synchronizer");
+        let (handle, mut rx) = state_sync.start().await;
         let (jh, close_tx) = handle.split();
         tx.send(deltas[0].clone())
             .await
@@ -1425,8 +1431,7 @@ mod test {
             .expect("waiting for second state msg timed out!")
             .expect("state sync block sender closed!");
         let _ = close_tx.send(());
-        let exit = jh
-            .await
+        jh.await
             .expect("state sync task panicked!");
 
         // assertions
@@ -1540,9 +1545,8 @@ mod test {
             .into_iter()
             .collect(),
         };
-        assert_eq!(first_msg, exp1);
-        assert_eq!(second_msg, exp2);
-        assert!(exit.is_ok());
+        assert_eq!(first_msg.unwrap(), exp1);
+        assert_eq!(second_msg.unwrap(), exp2);
     }
 
     #[test(tokio::test)]
@@ -1726,10 +1730,7 @@ mod test {
             },
         ];
 
-        let (handle, mut rx) = state_sync
-            .start()
-            .await
-            .expect("Failed to start state synchronizer");
+        let (handle, mut rx) = state_sync.start().await;
         let (jh, close_tx) = handle.split();
 
         // Simulate sending delta messages
@@ -1750,11 +1751,11 @@ mod test {
         let second_msg = timeout(Duration::from_millis(100), rx.recv())
             .await
             .expect("waiting for second state msg timed out!")
-            .expect("state sync block sender closed!");
+            .expect("state sync block sender closed!")
+            .expect("no error");
 
         let _ = close_tx.send(());
-        let exit = jh
-            .await
+        jh.await
             .expect("state sync task panicked!");
 
         let expected_second_msg = StateSyncMessage {
@@ -1813,7 +1814,6 @@ mod test {
         };
 
         assert_eq!(second_msg, expected_second_msg);
-        assert!(exit.is_ok());
     }
 
     #[test(tokio::test)]
@@ -1867,10 +1867,7 @@ mod test {
             .expect("Init should succeed");
 
         // Start the synchronizer and test the new split-based close mechanism
-        let (handle, _rx) = state_sync
-            .start()
-            .await
-            .expect("Failed to start state synchronizer");
+        let (handle, _rx) = state_sync.start().await;
         let (jh, close_tx) = handle.split();
 
         // Give it time to start up and enter state_sync
@@ -1881,8 +1878,7 @@ mod test {
             .send(())
             .expect("Should be able to send close signal");
         // Task should stop cleanly
-        let task_result = jh.await.expect("Task should not panic");
-        assert!(task_result.is_ok(), "Task should exit cleanly after close: {task_result:?}");
+        jh.await.expect("Task should not panic");
     }
 
     #[test(tokio::test)]
@@ -2194,7 +2190,8 @@ mod test {
         let first_snapshot = block_rx
             .recv()
             .await
-            .expect("Should receive first snapshot");
+            .expect("Should receive first snapshot")
+            .expect("Synchronizer error");
         assert!(
             !first_snapshot
                 .snapshots
@@ -2213,6 +2210,82 @@ mod test {
             result.is_ok(),
             "state_sync should exit cleanly when closed after first message: {result:?}"
         );
-        println!("SUCCESS: Close signal handled correctly during main processing loop");
+    }
+
+    #[test(tokio::test)]
+    async fn test_max_retries_exceeded_error_propagation() {
+        // Test that when max_retries is exceeded, the final error is sent through the channel
+        // to the receiver and the synchronizer task exits cleanly
+
+        let mut rpc_client = MockRPCClient::new();
+        let mut deltas_client = MockDeltasClient::new();
+
+        // Mock the initial components call to succeed
+        rpc_client
+            .expect_get_protocol_components()
+            .returning(|_| {
+                Ok(ProtocolComponentRequestResponse {
+                    protocol_components: vec![],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 0 },
+                })
+            });
+
+        // Set up deltas client to consistently fail after subscription
+        // This will cause connection errors and trigger retries
+        deltas_client
+            .expect_subscribe()
+            .returning(|_, _| {
+                // Return a connection error to trigger retries
+                Err(DeltasError::NotConnected)
+            });
+
+        // Expect multiple unsubscribe calls during retries
+        deltas_client
+            .expect_unsubscribe()
+            .returning(|_| Ok(()))
+            .times(0..=5);
+
+        // Create synchronizer with only 2 retries and short cooldown
+        let mut state_sync = ProtocolStateSynchronizer::new(
+            ExtractorIdentity::new(Chain::Ethereum, "test-protocol"),
+            true,
+            ComponentFilter::with_tvl_range(0.0, 1000.0),
+            2,                         // max_retries = 2
+            Duration::from_millis(10), // short retry cooldown
+            true,
+            false,
+            ArcRPCClient(Arc::new(rpc_client)),
+            ArcDeltasClient(Arc::new(deltas_client)),
+            1000_u64,
+        );
+
+        state_sync
+            .initialize()
+            .await
+            .expect("Init should succeed");
+
+        // Start the synchronizer - it should fail to subscribe and retry
+        let (handle, mut rx) = state_sync.start().await;
+        let (jh, _close_tx) = handle.split();
+
+        let res = tokio::time::timeout(Duration::from_millis(100), rx.recv())
+            .await
+            .expect("responsds in time")
+            .expect("channel open");
+
+        // Verify the error is a ConnectionClosed error (converted from DeltasError::NotConnected)
+        if let Err(err) = res {
+            assert!(
+                matches!(err, SynchronizerError::ConnectionClosed),
+                "Expected ConnectionClosed error, got: {:?}",
+                err
+            );
+        } else {
+            panic!("Expected an error")
+        }
+
+        // The task should complete (not hang) after max retries
+        let task_result = tokio::time::timeout(Duration::from_secs(2), jh).await;
+        assert!(task_result.is_ok(), "Synchronizer task should complete after max retries");
     }
 }
