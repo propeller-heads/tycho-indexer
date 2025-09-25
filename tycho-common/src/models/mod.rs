@@ -46,9 +46,6 @@ pub type StoreVal = Bytes;
 /// A binary key-value store for an account.
 pub type ContractStore = HashMap<StoreKey, StoreVal>;
 pub type ContractStoreDeltas = HashMap<StoreKey, Option<StoreVal>>;
-
-/// Multiple binary key-value stores grouped by account address.
-pub type AccountToContractStore = HashMap<Address, ContractStore>;
 pub type AccountToContractStoreDeltas = HashMap<Address, ContractStoreDeltas>;
 
 /// Component id literal type to uniquely identify a component.

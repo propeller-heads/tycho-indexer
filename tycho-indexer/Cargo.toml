@@ -72,12 +72,16 @@ mini-moka = "0.10.3"
 num-bigint = "0.4.4"
 num-traits = "0.2.19"
 num_cpus = "1.16.0"
-tycho-substreams = "0.4.0"
+tycho-substreams = "0.5.0"
+rand.workspace = true
+alloy-sol-types = "1.2.1"
+alloy-primitives.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true
 tokio-tungstenite.workspace = true
 rstest.workspace = true
+mockito.workspace = true
 actix-rt = "2.9.0"
 actix-test = "0.1.2"
 test-log = { version = "0.2.14", features = ["trace"] }

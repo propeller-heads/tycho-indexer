@@ -1,27 +1,46 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
+};
 
 use alloy::{
     eips::BlockNumberOrTag,
     primitives::Uint,
-    rpc::client::{ClientBuilder, RpcClient},
+    rpc::client::{ClientBuilder, ReqwestClient},
 };
 use async_trait::async_trait;
-use chrono::NaiveDateTime;
+use chrono::DateTime;
 use ethers::{
     middleware::Middleware,
     prelude::{BlockId, Http, Provider, H160, H256, U256},
-    providers::ProviderError,
 };
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
-use tracing::{trace, warn};
+use tracing::{debug, info, trace, warn};
 use tycho_common::{
     models::{blockchain::Block, contract::AccountDelta, Address, Chain, ChangeType},
     traits::{AccountExtractor, StorageSnapshotRequest},
     Bytes,
 };
 
-use crate::{BytesCodec, RPCError};
+use crate::{BytesCodec, RPCError, RequestError};
+
+/// Helper function to extract the full error chain including source errors
+fn extract_error_chain(error: &dyn Error) -> String {
+    let mut chain = vec![error.to_string()];
+    let mut source = error.source();
+
+    while let Some(err) = source {
+        chain.push(err.to_string());
+        source = err.source();
+    }
+
+    if chain.len() == 1 {
+        chain[0].clone()
+    } else {
+        format!("{} (caused by: {})", chain[0], chain[1..].join(" -> "))
+    }
+}
 
 /// `EVMAccountExtractor` is a struct that implements the `AccountExtractor` trait for Ethereum
 /// accounts. It is recommended for nodes that do not support batch requests.
@@ -34,7 +53,7 @@ pub struct EVMAccountExtractor {
 /// Ethereum accounts. It can only be used with nodes that support batch requests. If you are using
 /// a node that does not support batch requests, use `EVMAccountExtractor` instead.
 pub struct EVMBatchAccountExtractor {
-    provider: RpcClient,
+    provider: ReqwestClient,
     chain: Chain,
 }
 
@@ -77,8 +96,18 @@ impl AccountExtractor for EVMAccountExtractor {
         let (result_balances, result_codes) =
             tokio::join!(try_join_all(balance_futures), try_join_all(code_futures));
 
-        let balances = result_balances?;
-        let codes = result_codes?;
+        let balances = result_balances.map_err(|e| {
+            let error_chain = extract_error_chain(&e);
+            RPCError::RequestError(RequestError::Other(format!(
+                "Failed to get balance: {error_chain}"
+            )))
+        })?;
+        let codes = result_codes.map_err(|e| {
+            let error_chain = extract_error_chain(&e);
+            RPCError::RequestError(RequestError::Other(format!(
+                "Failed to get code: {error_chain}"
+            )))
+        })?;
 
         // Process each address with its corresponding balance and code
         for (i, &address) in h160_addresses.iter().enumerate() {
@@ -104,14 +133,14 @@ impl AccountExtractor for EVMAccountExtractor {
 
             updates.insert(
                 Bytes::from(address.to_fixed_bytes()),
-                AccountDelta {
-                    address: address.to_bytes(),
-                    chain: self.chain,
+                AccountDelta::new(
+                    self.chain,
+                    address.to_bytes(),
                     slots,
-                    balance: balance.map(BytesCodec::to_bytes),
+                    balance.map(BytesCodec::to_bytes),
                     code,
-                    change: ChangeType::Creation,
-                },
+                    ChangeType::Creation,
+                ),
             );
         }
 
@@ -149,7 +178,13 @@ impl EVMAccountExtractor {
             let result: StorageRange = self
                 .provider
                 .request("debug_storageRangeAt", params)
-                .await?;
+                .await
+                .map_err(|e| {
+                    let error_chain = extract_error_chain(&e);
+                    RPCError::RequestError(RequestError::Other(format!(
+                        "Failed to get storage: {error_chain}"
+                    )))
+                })?;
 
             for (_, entry) in result.storage {
                 all_slots
@@ -170,7 +205,10 @@ impl EVMAccountExtractor {
         let block = self
             .provider
             .get_block(BlockId::from(u64::try_from(block_id).expect("Invalid block number")))
-            .await?
+            .await
+            .map_err(|e| {
+                RPCError::RequestError(RequestError::Other(format!("Failed to get block: {e}")))
+            })?
             .expect("Block not found");
 
         Ok(Block {
@@ -178,8 +216,9 @@ impl EVMAccountExtractor {
             hash: block.hash.unwrap().to_bytes(),
             parent_hash: block.parent_hash.to_bytes(),
             chain: Chain::Ethereum,
-            ts: NaiveDateTime::from_timestamp_opt(block.timestamp.as_u64() as i64, 0)
-                .expect("Failed to convert timestamp"),
+            ts: DateTime::from_timestamp(block.timestamp.as_u64() as i64, 0)
+                .expect("Failed to convert timestamp")
+                .naive_utc(),
         })
     }
 }
@@ -189,9 +228,20 @@ impl EVMBatchAccountExtractor {
     where
         Self: Sized,
     {
-        let url = url::Url::parse(node_url)
-            .map_err(|_| RPCError::SetupError("Invalid URL".to_string()))?;
-        let provider = ClientBuilder::default().http(url);
+        let url = url::Url::parse(node_url).map_err(|e| {
+            RPCError::SetupError(format!(
+                "Invalid URL '{}': {}. Make sure the URL includes the scheme (http:// or https://)",
+                node_url, e
+            ))
+        })?;
+
+        debug!(scheme = url.scheme(), host = url.host_str(), "Parsed URL successfully");
+
+        // Create the RPC client using ReqwestClient for proper HTTPS support
+        debug!(url = %url, "Creating ReqwestClient for RPC with HTTPS support");
+        let provider: ReqwestClient = ClientBuilder::default().http(url.clone());
+
+        info!(node_url, scheme = url.scheme(), "Successfully created RPC client");
         Ok(Self { provider, chain })
     }
 
@@ -201,6 +251,13 @@ impl EVMBatchAccountExtractor {
         max_batch_size: usize,
         chunk: &[StorageSnapshotRequest],
     ) -> Result<(HashMap<Bytes, Bytes>, HashMap<Bytes, Bytes>), RPCError> {
+        debug!(
+            chunk_size = chunk.len(),
+            max_batch_size,
+            block_number = block.number,
+            "Preparing batch request for account code and balance"
+        );
+
         let mut batch = self.provider.new_batch();
         let mut code_requests = Vec::with_capacity(max_batch_size);
         let mut balance_requests = Vec::with_capacity(max_batch_size);
@@ -213,8 +270,8 @@ impl EVMBatchAccountExtractor {
                         &(&request.address, BlockNumberOrTag::from(block.number)),
                     )
                     .map_err(|e| {
-                        RPCError::RequestError(ProviderError::CustomError(format!(
-                            "Failed to get code: {e}",
+                        RPCError::RequestError(RequestError::Other(format!(
+                            "Failed to get code: {e}"
                         )))
                     })?
                     .map_resp(|resp: Bytes| resp.to_vec()),
@@ -227,18 +284,43 @@ impl EVMBatchAccountExtractor {
                         &(&request.address, BlockNumberOrTag::from(block.number)),
                     )
                     .map_err(|e| {
-                        RPCError::RequestError(ProviderError::CustomError(format!(
-                            "Failed to get balance: {e}",
+                        RPCError::RequestError(RequestError::Other(format!(
+                            "Failed to get balance: {e}"
                         )))
                     })?,
             ));
         }
 
+        debug!(
+            total_requests = chunk.len() * 2, // code + balance for each address
+            block_number = block.number,
+            "Sending batch request to RPC provider"
+        );
+
+        // Add debugging to understand when the URL issue occurs
+        debug!(
+            "About to send batch with {} code requests and {} balance requests",
+            code_requests.len(),
+            balance_requests.len()
+        );
+
         batch.send().await.map_err(|e| {
-            RPCError::RequestError(ProviderError::CustomError(format!(
-                "Failed to send batch request: {e}",
+            let addresses: Vec<String> = chunk.iter().map(|r| r.address.to_string()).collect();
+            let error_chain = extract_error_chain(&e);
+            RPCError::RequestError(RequestError::Other(format!(
+                "Failed to send batch request for code & balance: {}. Block: {}, Addresses count: {}, Addresses: [{}]",
+                error_chain,
+                block.number,
+                chunk.len(),
+                addresses.join(", ")
             )))
         })?;
+
+        info!(
+            chunk_size = chunk.len(),
+            block_number = block.number,
+            "Successfully sent batch request for account code and balance"
+        );
 
         let mut codes: HashMap<Bytes, Bytes> = HashMap::with_capacity(max_batch_size);
         let mut balances: HashMap<Bytes, Bytes> = HashMap::with_capacity(max_batch_size);
@@ -250,8 +332,8 @@ impl EVMBatchAccountExtractor {
                 .as_mut()
                 .await
                 .map_err(|e| {
-                    RPCError::RequestError(ProviderError::CustomError(format!(
-                        "Failed to collect code request data: {e}",
+                    RPCError::RequestError(RequestError::Other(format!(
+                        "Failed to collect code request data: {e}"
                     )))
                 })?;
 
@@ -261,8 +343,8 @@ impl EVMBatchAccountExtractor {
                 .as_mut()
                 .await
                 .map_err(|e| {
-                    RPCError::RequestError(ProviderError::CustomError(format!(
-                        "Failed to collect balance request data: {e}",
+                    RPCError::RequestError(RequestError::Other(format!(
+                        "Failed to collect balance request data: {e}"
                     )))
                 })?;
 
@@ -294,21 +376,23 @@ impl EVMBatchAccountExtractor {
                                     &(&request.address, slot, BlockNumberOrTag::from(block.number)),
                                 )
                                 .map_err(|e| {
-                                    RPCError::RequestError(ProviderError::CustomError(format!(
-                                        "Failed to get storage: {e}, address: {}, block: {}",
-                                        request.address, block.number,
+                                    RPCError::RequestError(RequestError::Other(format!(
+                                        "Failed to get storage: {e}, address: {}, block: {}, slot: {}",
+                                        request.address, block.number, slot,
                                     )))
                                 })?
                                 .map_resp(|res: Bytes| res.to_vec()),
                         ));
                     }
 
+                    let request_size = slot_batch.len();
                     storage_batch
                         .send()
                         .await
                         .map_err(|e| {
-                            RPCError::RequestError(ProviderError::CustomError(format!(
-                                "Failed to send batch request: {e}",
+                            let error_chain = extract_error_chain(&e);
+                            RPCError::RequestError(RequestError::Other(format!(
+                                "Failed to send storage batch request. Requested for {request_size} : {error_chain}"
                             )))
                         })?;
 
@@ -317,8 +401,8 @@ impl EVMBatchAccountExtractor {
                             .as_mut()
                             .await
                             .map_err(|e| {
-                                RPCError::RequestError(ProviderError::CustomError(format!(
-                                    "Failed to collect storage request data: {e}",
+                                RPCError::RequestError(RequestError::Other(format!(
+                                    "Failed to collect storage request data: {e}"
                                 )))
                             })?;
 
@@ -357,7 +441,10 @@ impl EVMBatchAccountExtractor {
         let mut start_key = H256::zero();
         loop {
             trace!("Requesting storage range for {:?}, block: {:?}", address.clone(), block);
-            let result: StorageRange = self
+
+            // We request as a generic Value to see the raw response
+            // This allows us to see the raw response and debug deserialization errors
+            let raw_result: serde_json::Value = self
                 .provider
                 .request(
                     "debug_storageRangeAt",
@@ -371,11 +458,29 @@ impl EVMBatchAccountExtractor {
                 )
                 .await
                 .map_err(|e| {
-                    RPCError::RequestError(ProviderError::CustomError(format!(
-                        "Failed to get storage: {e}, address: {address}, block: {}",
+                    let error_chain = extract_error_chain(&e);
+                    RPCError::RequestError(RequestError::Other(format!(
+                        "Failed to get storage: {error_chain}, address: {address}, block: {}",
                         block.number,
                     )))
                 })?;
+
+            // This is settable because cloning the value is expensive
+            let should_debug = std::env::var("TYCHO_DEBUG_ACCOUNT_EXTRACTOR_RESPONSE").is_ok();
+            let result = if should_debug {
+                let value_string = raw_result.to_string();
+                let result: StorageRange =
+                    serde_json::from_value(raw_result.clone()).map_err(|e| {
+                        RPCError::RequestError(RequestError::Other(format!("Failed to deserialize storage response: {e}, address: {address}, block: {}, raw_json: {}", block.number, value_string)))
+                    })?;
+                result
+            } else {
+                let result: StorageRange =
+                    serde_json::from_value(raw_result.clone()).map_err(|e| {
+                        RPCError::RequestError(RequestError::Other(format!("Failed to deserialize storage response: {e}, address: {address}, block: {block:?}")))
+                    })?;
+                result
+            };
 
             for (_, entry) in result.storage {
                 all_slots
@@ -415,9 +520,22 @@ impl AccountExtractor for EVMBatchAccountExtractor {
         // TODO: Make these configurable and optimize for preventing rate limiting.
         // TODO: Handle rate limiting / individual connection failures & retries
 
-        let max_batch_size = 100;
+        let max_batch_size = 50;
         let storage_max_batch_size = 10000;
+        info!(
+            total_requests = unique_requests.len(),
+            max_batch_size,
+            block_number = block.number,
+            "Starting batch account extraction"
+        );
+
         for chunk in unique_requests.chunks(max_batch_size) {
+            debug!(
+                chunk_size = chunk.len(),
+                block_number = block.number,
+                "Processing batch chunk for code and balance"
+            );
+
             // Batch request code and balances of all accounts on the chunk.
             // Worst case scenario = 2 * chunk_size requests
             let metadata_fut =
@@ -436,6 +554,14 @@ impl AccountExtractor for EVMBatchAccountExtractor {
             }
 
             let (codes, balances) = metadata_fut.await?;
+            debug!(
+                chunk_size = chunk.len(),
+                codes_count = codes.len(),
+                balances_count = balances.len(),
+                block_number = block.number,
+                "Successfully retrieved account code and balance data"
+            );
+
             let storage_results = try_join_all(storage_futures).await?;
 
             for (idx, request) in chunk.iter().enumerate() {
@@ -451,18 +577,24 @@ impl AccountExtractor for EVMBatchAccountExtractor {
                         ))
                     })?;
 
-                let account_delta = AccountDelta {
-                    address: address.clone(),
-                    chain: self.chain,
-                    slots: storage,
+                let account_delta = AccountDelta::new(
+                    self.chain,
+                    address.clone(),
+                    storage,
                     balance,
                     code,
-                    change: ChangeType::Creation,
-                };
+                    ChangeType::Creation,
+                );
 
                 updates.insert(address.clone(), account_delta);
             }
         }
+
+        info!(
+            total_accounts_processed = updates.len(),
+            block_number = block.number,
+            "Completed batch account extraction successfully"
+        );
 
         Ok(updates)
     }
@@ -654,7 +786,7 @@ mod tests {
             .expect("first address should exist");
         assert_eq!(first_delta.address, first_address);
         assert_eq!(first_delta.chain, Chain::Ethereum);
-        assert!(first_delta.code.is_some());
+        assert!(first_delta.code().is_some());
         assert!(first_delta.balance.is_some());
         println!("Balance: {:?}", first_delta.balance);
 
@@ -665,7 +797,7 @@ mod tests {
             .expect("second address should exist");
         assert_eq!(second_delta.address, second_address);
         assert_eq!(second_delta.chain, Chain::Ethereum);
-        assert!(second_delta.code.is_some());
+        assert!(second_delta.code().is_some());
         assert!(second_delta.balance.is_some());
         println!("Balance: {:?}", second_delta.balance);
 
@@ -831,7 +963,7 @@ mod tests {
 
         assert_eq!(delta.address, address);
         assert_eq!(delta.chain, Chain::Ethereum);
-        assert!(delta.code.is_some());
+        assert!(delta.code().is_some());
         assert!(delta.balance.is_some());
 
         // Check that storage slots match what we requested
@@ -883,7 +1015,7 @@ mod tests {
 
         assert_eq!(delta.address, address);
         assert_eq!(delta.chain, Chain::Ethereum);
-        assert!(delta.code.is_some());
+        assert!(delta.code().is_some());
         assert!(delta.balance.is_some());
 
         // Check that storage slots match what we requested
@@ -943,14 +1075,14 @@ mod tests {
 
             assert_eq!(delta.address, address);
             assert_eq!(delta.chain, Chain::Ethereum);
-            assert!(delta.code.is_some());
+            assert!(delta.code().is_some());
             assert!(delta.balance.is_some());
             assert_eq!(delta.slots.len(), 1);
 
             println!(
                 "Address: {}, Code size: {}, Has balance: {}",
                 addr_str,
-                delta.code.as_ref().unwrap().len(),
+                delta.code().as_ref().unwrap().len(),
                 delta.balance.is_some()
             );
         }

@@ -697,7 +697,12 @@ where
             if let Some(post_process_f) = self.post_processor { post_process_f(msg) } else { msg };
 
         if let Some(last_processed_block) = self.get_last_processed_block().await {
-            if msg.block.ts.timestamp() == last_processed_block.ts.timestamp() {
+            if msg.block.ts.and_utc().timestamp() ==
+                last_processed_block
+                    .ts
+                    .and_utc()
+                    .timestamp()
+            {
                 debug!("Block with identical timestamp detected. Prev block ts: {:?} - New block ts: {:?}", last_processed_block.ts, msg.block.ts);
                 // Blockchains with fast block times (e.g., Arbitrum) may produce blocks with
                 // identical timestamps (measured in seconds). To ensure accurate ordering, we
@@ -993,13 +998,15 @@ where
                 .into_iter()
                 .fold(HashMap::new(), |mut acc, ((addr, key), value)| {
                     acc.entry(addr.clone())
-                        .or_insert_with(|| AccountDelta {
-                            address: addr,
-                            chain: self.chain,
-                            slots: HashMap::new(),
-                            balance: None, //TODO: handle balance changes
-                            code: None,    //TODO: handle code changes
-                            change: ChangeType::Update,
+                        .or_insert_with(|| {
+                            AccountDelta::new(
+                                self.chain,
+                                addr,
+                                HashMap::new(),
+                                None, //TODO: handle balance changes
+                                None, //TODO: handle code changes
+                                ChangeType::Update,
+                            )
                         })
                         .slots
                         .insert(key, Some(value));
@@ -1397,9 +1404,10 @@ impl ExtractorGateway for ExtractorPgGateway {
                             .balance
                             .unwrap_or_default(),
                     );
-                    account_delta_creation.code = Some(
+                    account_delta_creation.set_code(
                         account_delta_creation
-                            .code
+                            .code()
+                            .clone()
                             .unwrap_or_default(),
                     );
                     account_changes.push((tx_update.tx.hash.clone(), account_delta_creation));
@@ -1901,6 +1909,7 @@ mod test {
                 .await
                 .unwrap()
                 .ts
+                .and_utc()
                 .timestamp_subsec_micros(),
             1
         );
@@ -1923,6 +1932,7 @@ mod test {
                 .await
                 .unwrap()
                 .ts
+                .and_utc()
                 .timestamp_subsec_micros(),
             2
         );
@@ -2876,7 +2886,7 @@ mod test_serial_db {
                 .unwrap();
 
 
-            let base_ts = db_fixtures::yesterday_midnight().timestamp();
+            let base_ts = db_fixtures::yesterday_midnight().and_utc().timestamp();
             let block_entity_changes_result = BlockAggregatedChanges {
                 extractor: "native_name".to_string(),
                 chain: Chain::Ethereum,
@@ -2885,7 +2895,7 @@ mod test_serial_db {
                     Chain::Ethereum,
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000003").unwrap(),
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
-                    NaiveDateTime::from_timestamp_opt(base_ts + 3000, 0).unwrap(),
+                    chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
                 ),
                 finalized_block_height: 1,
                 revert: true,
@@ -2913,7 +2923,7 @@ mod test_serial_db {
                         static_attributes: HashMap::new(),
                         change: ChangeType::Creation,
                         creation_tx: Bytes::from_str("0x000000000000000000000000000000000000000000000000000000000000c351").unwrap(),
-                        created_at: NaiveDateTime::from_timestamp_opt(base_ts + 5000, 0).unwrap(),
+                        created_at: chrono::DateTime::from_timestamp(base_ts + 5000, 0).unwrap().naive_utc(),
                     }),
                 ]),
                 deleted_protocol_components: HashMap::from([
@@ -2930,7 +2940,7 @@ mod test_serial_db {
                         static_attributes: HashMap::new(),
                         change: ChangeType::Deletion,
                         creation_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000009c41").unwrap(),
-                        created_at: NaiveDateTime::from_timestamp_opt(base_ts + 4000, 0).unwrap(),
+                        created_at: chrono::DateTime::from_timestamp(base_ts + 4000, 0).unwrap().naive_utc(),
                     }),
                 ]),
                 component_balances: HashMap::from([
@@ -3054,7 +3064,7 @@ mod test_serial_db {
                 .unwrap();
 
 
-            let base_ts = db_fixtures::yesterday_midnight().timestamp();
+            let base_ts = db_fixtures::yesterday_midnight().and_utc().timestamp();
             let account1 = Bytes::from_str("0000000000000000000000000000000000000001").unwrap();
             let account2 = Bytes::from_str("0000000000000000000000000000000000000002").unwrap();
             let block_account_expected = BlockAggregatedChanges {
@@ -3065,32 +3075,32 @@ mod test_serial_db {
                     Chain::Ethereum,
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000003").unwrap(),
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
-                    NaiveDateTime::from_timestamp_opt(base_ts + 3000, 0).unwrap(),
+                    chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
                 ),
                 finalized_block_height: 1,
                 revert: true,
                 account_deltas: HashMap::from([
-                    (account1.clone(), AccountDelta {
-                        address: account1.clone(),
-                        chain: Chain::Ethereum,
-                        slots: HashMap::from([
+                    (account1.clone(), AccountDelta::new(
+                        Chain::Ethereum,
+                        account1.clone(),
+                        HashMap::from([
                             (Bytes::from("0x03"), Some(Bytes::new())),
                             (Bytes::from("0x01"), Some(Bytes::from("0x01"))),
                         ]),
-                        balance: None,
-                        code: None,
-                        change: ChangeType::Update,
-                    }),
-                    (account2.clone(), AccountDelta {
-                        address: account2.clone(),
-                        chain: Chain::Ethereum,
-                        slots: HashMap::from([
+                        None,
+                        None,
+                        ChangeType::Update,
+                    )),
+                    (account2.clone(), AccountDelta::new(
+                        Chain::Ethereum,
+                        account2.clone(),
+                        HashMap::from([
                             (Bytes::from("0x01"), Some(Bytes::from("0x02"))),
                         ]),
-                        balance: None,
-                        code: None,
-                        change: ChangeType::Update,
-                    }),
+                        None,
+                        None,
+                        ChangeType::Update,
+                    )),
                 ]),
                 deleted_protocol_components: HashMap::from([
                     ("pc_3".to_string(), ProtocolComponent {
@@ -3108,7 +3118,7 @@ mod test_serial_db {
                         static_attributes: HashMap::new(),
                         change: ChangeType::Deletion,
                         creation_tx: Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000009c41").unwrap(),
-                        created_at: NaiveDateTime::from_timestamp_opt(base_ts + 4000, 0).unwrap(),
+                        created_at: chrono::DateTime::from_timestamp(base_ts + 4000, 0).unwrap().naive_utc(),
                     }),
                 ]),
                 component_balances: HashMap::from([
@@ -3231,7 +3241,9 @@ mod test_serial_db {
             .expect("Failed to create extractor");
 
             // Send a sequence of block scoped data with the same timestamp.
-            let base_ts = db_fixtures::yesterday_midnight().timestamp() as u64;
+            let base_ts = db_fixtures::yesterday_midnight()
+                .and_utc()
+                .timestamp() as u64;
             let versions = [1, 2, 3, 4];
 
             let inp_sequence = versions
@@ -3312,6 +3324,7 @@ mod test_serial_db {
                     .await
                     .unwrap()
                     .ts
+                    .and_utc()
                     .timestamp_subsec_micros(),
                 3
             );
