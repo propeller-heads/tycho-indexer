@@ -58,11 +58,12 @@ use crate::encoding::{
 /// funds.
 ///
 /// # Parameters
+/// - `chain_id`: Chain ID
 /// - `encoded_solution`: The solution already encoded by Tycho.
 /// - `solution`: The high-level solution including tokens, amounts, and receiver info.
-/// - `token_in_already_in_router`: Whether the input token is already present in the router.
-/// - `router_address`: The address of the Tycho Router contract.
+/// - `user_transfer_type`: The desired transfer method.
 /// - `native_address`: The address used to represent the native token
+/// - `signer`: Optional signer for permit2
 ///
 /// # Returns
 /// A `Result<Transaction, EncodingError>` that either contains the full transaction data (to,

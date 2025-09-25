@@ -26,12 +26,15 @@ use crate::encoding::{
 /// * `function_signature`: String, the signature for the swap function in the router contract
 /// * `router_address`: Address of the router to be used to execute swaps
 /// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
+/// * `historical_trade`: Whether the swap is to be done in the current block or in an historical
+///   one. This is relevant for checking token approvals in some protocols (like Balancer v2).
 #[derive(Clone)]
 pub struct SingleSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
     function_signature: String,
     router_address: Bytes,
     transfer_optimization: TransferOptimization,
+    historical_trade: bool,
 }
 
 impl SingleSwapStrategyEncoder {
@@ -40,6 +43,7 @@ impl SingleSwapStrategyEncoder {
         swap_encoder_registry: SwapEncoderRegistry,
         user_transfer_type: UserTransferType,
         router_address: Bytes,
+        historical_trade: bool,
     ) -> Result<Self, EncodingError> {
         let function_signature = if user_transfer_type == UserTransferType::TransferFromPermit2 {
             "singleSwapPermit2(uint256,address,address,uint256,bool,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"
@@ -57,6 +61,7 @@ impl SingleSwapStrategyEncoder {
                 user_transfer_type,
                 router_address,
             ),
+            historical_trade,
         })
     }
 
@@ -119,6 +124,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
             group_token_in: grouped_swap.token_in.clone(),
             group_token_out: grouped_swap.token_out.clone(),
             transfer_type: transfer,
+            historical_trade: self.historical_trade,
         };
 
         let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
@@ -171,6 +177,8 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 /// * `sequential_swap_validator`: SequentialSwapValidator, responsible for checking validity of
 ///   sequential swap solutions
 /// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
+/// * `historical_trade`: Whether the swap is to be done in the current block or in an historical
+///   one. This is relevant for checking token approvals in some protocols (like Balancer v2).
 #[derive(Clone)]
 pub struct SequentialSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -180,6 +188,7 @@ pub struct SequentialSwapStrategyEncoder {
     wrapped_address: Bytes,
     sequential_swap_validator: SequentialSwapValidator,
     transfer_optimization: TransferOptimization,
+    historical_trade: bool,
 }
 
 impl SequentialSwapStrategyEncoder {
@@ -188,6 +197,7 @@ impl SequentialSwapStrategyEncoder {
         swap_encoder_registry: SwapEncoderRegistry,
         user_transfer_type: UserTransferType,
         router_address: Bytes,
+        historical_trade: bool,
     ) -> Result<Self, EncodingError> {
         let function_signature = if user_transfer_type == UserTransferType::TransferFromPermit2 {
             "sequentialSwapPermit2(uint256,address,address,uint256,bool,bool,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"
@@ -210,6 +220,7 @@ impl SequentialSwapStrategyEncoder {
                 user_transfer_type,
                 router_address,
             ),
+            historical_trade,
         })
     }
 
@@ -279,6 +290,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
                 transfer_type: transfer,
+                historical_trade: self.historical_trade,
             };
 
             let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
@@ -336,6 +348,8 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
 ///   solutions
 /// * `router_address`: Address of the router to be used to execute swaps
 /// * `transfer_optimization`: TransferOptimization, responsible for optimizing the token transfers
+/// * `historical_trade`: Whether the swap is to be done in the current block or in an historical
+///   one. This is relevant for checking token approvals in some protocols (like Balancer v2).
 #[derive(Clone)]
 pub struct SplitSwapStrategyEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
@@ -345,6 +359,7 @@ pub struct SplitSwapStrategyEncoder {
     split_swap_validator: SplitSwapValidator,
     router_address: Bytes,
     transfer_optimization: TransferOptimization,
+    historical_trade: bool,
 }
 
 impl SplitSwapStrategyEncoder {
@@ -353,6 +368,7 @@ impl SplitSwapStrategyEncoder {
         swap_encoder_registry: SwapEncoderRegistry,
         user_transfer_type: UserTransferType,
         router_address: Bytes,
+        historical_trade: bool,
     ) -> Result<Self, EncodingError> {
         let function_signature = if user_transfer_type == UserTransferType::TransferFromPermit2 {
            "splitSwapPermit2(uint256,address,address,uint256,bool,bool,uint256,address,((address,uint160,uint48,uint48),address,uint256),bytes,bytes)"
@@ -374,6 +390,7 @@ impl SplitSwapStrategyEncoder {
                 user_transfer_type,
                 router_address,
             ),
+            historical_trade,
         })
     }
 
@@ -479,6 +496,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
                 transfer_type: transfer,
+                historical_trade: self.historical_trade,
             };
 
             let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
@@ -535,7 +553,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, str::FromStr};
+    use std::{collections::HashMap, fs, str::FromStr};
 
     use alloy::{hex::encode, primitives::hex};
     use num_bigint::{BigInt, BigUint};
@@ -555,9 +573,10 @@ mod tests {
     }
 
     fn get_swap_encoder_registry() -> SwapEncoderRegistry {
+        let executors_addresses =
+            fs::read_to_string("config/test_executor_addresses.json").unwrap();
         let eth_chain = eth_chain();
-        SwapEncoderRegistry::new(Some("config/test_executor_addresses.json".to_string()), eth_chain)
-            .unwrap()
+        SwapEncoderRegistry::new(Some(executors_addresses), eth_chain).unwrap()
     }
 
     fn router_address() -> Bytes {
@@ -591,6 +610,7 @@ mod tests {
                 swap_encoder_registry,
                 UserTransferType::TransferFromPermit2,
                 router_address(),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -651,6 +671,7 @@ mod tests {
                 swap_encoder_registry,
                 UserTransferType::None,
                 router_address(),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -732,6 +753,7 @@ mod tests {
                 swap_encoder_registry,
                 UserTransferType::TransferFrom,
                 router_address(),
+                false,
             )
             .unwrap();
             let solution = Solution {
@@ -867,6 +889,7 @@ mod tests {
                 swap_encoder_registry,
                 UserTransferType::TransferFromPermit2,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
 
@@ -1015,6 +1038,7 @@ mod tests {
                 swap_encoder_registry,
                 UserTransferType::TransferFrom,
                 Bytes::from("0x3Ede3eCa2a72B3aeCC820E955B36f38437D01395"),
+                false,
             )
             .unwrap();
 

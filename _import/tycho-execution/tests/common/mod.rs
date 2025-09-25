@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 pub mod encoding;
 
-use std::str::FromStr;
+use std::{fs, str::FromStr};
 
 use alloy::{
     primitives::{B256, U256},
@@ -71,10 +71,11 @@ pub fn get_signer() -> PrivateKeySigner {
 }
 
 pub fn get_tycho_router_encoder(user_transfer_type: UserTransferType) -> Box<dyn TychoEncoder> {
+    let executors_addresses = fs::read_to_string("config/test_executor_addresses.json").unwrap();
     TychoRouterEncoderBuilder::new()
         .chain(Chain::Ethereum)
         .user_transfer_type(user_transfer_type)
-        .executors_file_path("config/test_executor_addresses.json".to_string())
+        .executors_addresses(executors_addresses)
         .router_address(router_address())
         .build()
         .expect("Failed to build encoder")

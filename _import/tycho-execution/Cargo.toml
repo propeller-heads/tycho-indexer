@@ -11,12 +11,12 @@ license = "MIT"
 categories = ["finance", "cryptography::cryptocurrencies"]
 readme = "README.md"
 exclude = [
-  "foundry/*",
-  "foundry",
-  "tests/*",
-  "tests/common",
-  ".github/*",
-  ".gitmodules",
+    "foundry/*",
+    "foundry",
+    "tests/*",
+    "tests/common",
+    ".github/*",
+    ".gitmodules",
 ]
 
 [[bin]]

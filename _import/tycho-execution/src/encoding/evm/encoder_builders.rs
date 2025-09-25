@@ -20,9 +20,10 @@ use crate::encoding::{
 pub struct TychoRouterEncoderBuilder {
     chain: Option<Chain>,
     user_transfer_type: Option<UserTransferType>,
-    executors_file_path: Option<String>,
+    executors_addresses: Option<String>,
     router_address: Option<Bytes>,
     swapper_pk: Option<String>,
+    historical_trade: bool,
 }
 
 impl Default for TychoRouterEncoderBuilder {
@@ -35,10 +36,11 @@ impl TychoRouterEncoderBuilder {
     pub fn new() -> Self {
         TychoRouterEncoderBuilder {
             chain: None,
-            executors_file_path: None,
+            executors_addresses: None,
             router_address: None,
             swapper_pk: None,
             user_transfer_type: None,
+            historical_trade: false,
         }
     }
     pub fn chain(mut self, chain: Chain) -> Self {
@@ -51,10 +53,10 @@ impl TychoRouterEncoderBuilder {
         self
     }
 
-    /// Sets the `executors_file_path` manually.
-    /// If it's not set, the default path will be used (config/executor_addresses.json)
-    pub fn executors_file_path(mut self, executors_file_path: String) -> Self {
-        self.executors_file_path = Some(executors_file_path);
+    /// Sets the `executors_addresses` manually.
+    /// If it's not set, the default value will be used (contents of config/executor_addresses.json)
+    pub fn executors_addresses(mut self, executors_addresses: String) -> Self {
+        self.executors_addresses = Some(executors_addresses);
         self
     }
 
@@ -62,6 +64,15 @@ impl TychoRouterEncoderBuilder {
     /// If it's not set, the default router address will be used (config/router_addresses.json)
     pub fn router_address(mut self, router_address: Bytes) -> Self {
         self.router_address = Some(router_address);
+        self
+    }
+
+    /// Sets the `historical_trade` manually to true.
+    /// If set to true, it means that the encoded trade will be used in an historical block (as a
+    /// test) and not in the current one. This is relevant for checking token approvals in some
+    /// protocols (like Balancer v2).
+    pub fn historical_trade(mut self) -> Self {
+        self.historical_trade = true;
         self
     }
 
@@ -96,7 +107,7 @@ impl TychoRouterEncoderBuilder {
             }
 
             let swap_encoder_registry =
-                SwapEncoderRegistry::new(self.executors_file_path.clone(), chain)?;
+                SwapEncoderRegistry::new(self.executors_addresses.clone(), chain)?;
 
             let signer = if let Some(pk) = self.swapper_pk {
                 let pk = B256::from_str(&pk).map_err(|_| {
@@ -115,6 +126,7 @@ impl TychoRouterEncoderBuilder {
                 tycho_router_address,
                 user_transfer_type,
                 signer,
+                self.historical_trade,
             )?))
         } else {
             Err(EncodingError::FatalError(
@@ -128,7 +140,7 @@ impl TychoRouterEncoderBuilder {
 /// Builder pattern for constructing a `TychoExecutorEncoder` with customizable options.
 pub struct TychoExecutorEncoderBuilder {
     chain: Option<Chain>,
-    executors_file_path: Option<String>,
+    executors_addresses: Option<String>,
 }
 
 impl Default for TychoExecutorEncoderBuilder {
@@ -139,17 +151,17 @@ impl Default for TychoExecutorEncoderBuilder {
 
 impl TychoExecutorEncoderBuilder {
     pub fn new() -> Self {
-        TychoExecutorEncoderBuilder { chain: None, executors_file_path: None }
+        TychoExecutorEncoderBuilder { chain: None, executors_addresses: None }
     }
     pub fn chain(mut self, chain: Chain) -> Self {
         self.chain = Some(chain);
         self
     }
 
-    /// Sets the `executors_file_path` manually.
+    /// Sets the `executors_addresses` manually.
     /// If it's not set, the default path will be used (config/executor_addresses.json)
-    pub fn executors_file_path(mut self, executors_file_path: String) -> Self {
-        self.executors_file_path = Some(executors_file_path);
+    pub fn executors_addresses(mut self, executors_addresses: String) -> Self {
+        self.executors_addresses = Some(executors_addresses);
         self
     }
 
@@ -158,7 +170,7 @@ impl TychoExecutorEncoderBuilder {
     pub fn build(self) -> Result<Box<dyn TychoEncoder>, EncodingError> {
         if let Some(chain) = self.chain {
             let swap_encoder_registry =
-                SwapEncoderRegistry::new(self.executors_file_path.clone(), chain)?;
+                SwapEncoderRegistry::new(self.executors_addresses.clone(), chain)?;
             Ok(Box::new(TychoExecutorEncoder::new(swap_encoder_registry)?))
         } else {
             Err(EncodingError::FatalError(

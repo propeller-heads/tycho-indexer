@@ -1,9 +1,13 @@
-use std::io::{self, Read};
+use std::{
+    fs,
+    io::{self, Read},
+};
 
 use alloy::sol_types::SolValue;
 use clap::{Parser, Subcommand};
 use tycho_common::{hex_bytes::Bytes, models::Chain};
 use tycho_execution::encoding::{
+    errors::EncodingError,
     evm::{
         approvals::permit2::PermitSingle,
         encoder_builders::{TychoExecutorEncoderBuilder, TychoRouterEncoderBuilder},
@@ -83,7 +87,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::TychoRouter => {
             let mut builder = TychoRouterEncoderBuilder::new().chain(chain);
             if let Some(config_path) = cli.executors_file_path {
-                builder = builder.executors_file_path(config_path);
+                let executors_addresses = fs::read_to_string(&config_path).map_err(|e| {
+                    EncodingError::FatalError(format!(
+                        "Error reading executors file from {config_path:?}: {e}",
+                    ))
+                })?;
+                builder = builder.executors_addresses(executors_addresses);
             }
             if let Some(router_address) = cli.router_address {
                 builder = builder.router_address(router_address);

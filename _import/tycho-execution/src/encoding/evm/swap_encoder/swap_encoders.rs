@@ -280,19 +280,20 @@ impl SwapEncoder for BalancerV2SwapEncoder {
     ) -> Result<Vec<u8>, EncodingError> {
         let token_approvals_manager = ProtocolApprovalsManager::new()?;
         let token = bytes_to_address(&swap.token_in)?;
-        let approval_needed: bool;
+        let mut approval_needed: bool = true;
 
         if let Some(router_address) = &encoding_context.router_address {
-            let tycho_router_address = bytes_to_address(router_address)?;
-            approval_needed = token_approvals_manager.approval_needed(
-                token,
-                tycho_router_address,
-                Address::from_str(&self.vault_address)
-                    .map_err(|_| EncodingError::FatalError("Invalid vault address".to_string()))?,
-            )?;
-        } else {
-            approval_needed = true;
-        }
+            if !encoding_context.historical_trade {
+                let tycho_router_address = bytes_to_address(router_address)?;
+                approval_needed = token_approvals_manager.approval_needed(
+                    token,
+                    tycho_router_address,
+                    Address::from_str(&self.vault_address).map_err(|_| {
+                        EncodingError::FatalError("Invalid vault address".to_string())
+                    })?,
+                )?;
+            }
+        };
 
         let component_id = AlloyBytes::from_str(&swap.component.id)
             .map_err(|_| EncodingError::FatalError("Invalid component ID".to_string()))?;
@@ -1026,6 +1027,7 @@ mod tests {
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
                 transfer_type: TransferType::Transfer,
+                historical_trade: false,
             };
             let encoder = UniswapV2SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -1081,6 +1083,7 @@ mod tests {
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
                 transfer_type: TransferType::Transfer,
+                historical_trade: false,
             };
             let encoder = UniswapV3SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -1138,6 +1141,7 @@ mod tests {
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
                 transfer_type: TransferType::None,
+                historical_trade: true,
             };
             let encoder = BalancerV2SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -1207,6 +1211,7 @@ mod tests {
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
                 transfer_type: TransferType::Transfer,
+                historical_trade: false,
             };
             let encoder = UniswapV4SwapEncoder::new(
                 String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
@@ -1275,6 +1280,7 @@ mod tests {
                 // Token out is the same as the group token out
                 group_token_out: token_out.clone(),
                 transfer_type: TransferType::Transfer,
+                historical_trade: false,
             };
 
             let encoder = UniswapV4SwapEncoder::new(
@@ -1318,6 +1324,7 @@ mod tests {
                 group_token_in: usde_address.clone(),
                 group_token_out: wbtc_address.clone(),
                 transfer_type: TransferType::Transfer,
+                historical_trade: false,
             };
 
             // Setup - First sequence: USDE -> USDT
@@ -1448,6 +1455,7 @@ mod tests {
                 exact_out: false,
                 router_address: Some(Bytes::default()),
                 transfer_type: TransferType::Transfer,
+                historical_trade: false,
             };
 
             let encoder = EkuboSwapEncoder::new(String::default(), Chain::Ethereum, None).unwrap();
@@ -1490,6 +1498,7 @@ mod tests {
                 exact_out: false,
                 router_address: Some(Bytes::default()),
                 transfer_type: TransferType::Transfer,
+                historical_trade: false,
             };
 
             let first_swap = SwapBuilder::new(
@@ -1687,6 +1696,7 @@ mod tests {
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
                 transfer_type: TransferType::None,
+                historical_trade: false,
             };
             let encoder = CurveSwapEncoder::new(
                 String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
@@ -1753,6 +1763,7 @@ mod tests {
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
                 transfer_type: TransferType::None,
+                historical_trade: false,
             };
             let encoder = CurveSwapEncoder::new(
                 String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
@@ -1820,6 +1831,7 @@ mod tests {
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
                 transfer_type: TransferType::None,
+                historical_trade: false,
             };
             let encoder = CurveSwapEncoder::new(
                 String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
@@ -1888,6 +1900,7 @@ mod tests {
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
                 transfer_type: TransferType::Transfer,
+                historical_trade: false,
             };
             let encoder = BalancerV3SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -1940,6 +1953,7 @@ mod tests {
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
                 transfer_type: TransferType::Transfer,
+                historical_trade: false,
             };
             let encoder = MaverickV2SwapEncoder::new(
                 String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
@@ -2033,6 +2047,7 @@ mod tests {
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
                 transfer_type: TransferType::Transfer,
+                historical_trade: false,
             };
 
             let encoder = BebopSwapEncoder::new(
@@ -2107,6 +2122,7 @@ mod tests {
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
                 transfer_type: TransferType::Transfer,
+                historical_trade: false,
             };
 
             let encoder = HashflowSwapEncoder::new(
@@ -2200,6 +2216,7 @@ mod tests {
                 group_token_in: token_in.clone(),
                 group_token_out: token_out.clone(),
                 transfer_type: TransferType::Transfer,
+                historical_trade: false,
             };
 
             let encoder = HashflowSwapEncoder::new(
