@@ -29,7 +29,10 @@ use crate::evm::{
             },
             state::UniswapV4State,
         },
-        vm::tycho_simulation_contract::TychoSimulationContract,
+        vm::{
+            erc20_token::TokenProxyOverwriteFactory,
+            tycho_simulation_contract::TychoSimulationContract,
+        },
     },
     simulation::SimulationEngine,
 };
@@ -105,6 +108,25 @@ where
         if let Some(input_params) = transient_storage {
             transient_storage_params.extend(input_params);
         }
+
+        let token_in = if params.swap_params.zero_for_one {
+            params.context.currency_0
+        } else {
+            params.context.currency_1
+        };
+        let mut token_overwrites = TokenProxyOverwriteFactory::new(token_in, None);
+        // Overwrite pool manager's balance of token in. This is relevant when the pool manager does
+        // not have a lot of these tokens and the hook assumes that the token in is transferred
+        // before before_swap
+        token_overwrites.set_balance(U256::MAX, self.pool_manager);
+        // This is only to set the custom allowance flag to true, so we can fall in this condition
+        // https://github.com/propeller-heads/tycho-simulation/blob/23c3b1fbacdf4cccec62b633c109e668c6d5f12a/token-proxy/src/TokenProxy.sol#L342
+        token_overwrites.set_allowance(U256::MAX, Address::ZERO, self.address);
+        let mut final_overwrites = token_overwrites.get_overwrites();
+        if let Some(input_overwrites) = overwrites {
+            final_overwrites.extend(input_overwrites)
+        }
+
         let args = (
             params.sender,
             (
@@ -128,7 +150,7 @@ where
         let res = self.contract.call(
             selector,
             args,
-            overwrites,
+            Some(final_overwrites),
             Some(self.pool_manager),
             U256::from(0u64),
             Some(transient_storage_params),

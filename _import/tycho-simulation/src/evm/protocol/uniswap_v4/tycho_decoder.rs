@@ -29,7 +29,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
         _block: BlockHeader,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
-        _decoder_context: &DecoderContext,
+        decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
         let liq = snapshot
             .state
@@ -160,6 +160,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for UniswapV4State {
                 state.clone(),
                 &merged_attributes,
                 &snapshot.state.balances,
+                decoder_context.vm_traces,
             );
 
             let hook_handler = instantiate_hook_handler(&hook_address, hook_params)?;
