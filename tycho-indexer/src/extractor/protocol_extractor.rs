@@ -1207,11 +1207,23 @@ where
             .block_update
             .finalized_block_height;
 
+        let db_committed_upto_block_height = reorg_buffer
+            .get_oldest_block()
+            .ok_or(ExtractionError::ReorgBufferError("Reorg buffer is empty after purge".into()))?
+            .number;
+
+        if db_committed_upto_block_height > finalized_block_height {
+            return Err(ExtractionError::ReorgBufferError(format!(
+                "Database committed block height {} is greater than finalized_block_height {}",
+                db_committed_upto_block_height, finalized_block_height
+            )));
+        }
+
         let revert_message = BlockAggregatedChanges {
             extractor: self.name.clone(),
             chain: self.chain,
             block: new_latest_block.clone(),
-            db_committed_upto_block_height: finalized_block_height,
+            db_committed_upto_block_height,
             finalized_block_height,
             revert: true,
             state_deltas,
