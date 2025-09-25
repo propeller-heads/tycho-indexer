@@ -1,3 +1,12 @@
+## [0.126.0](https://github.com/propeller-heads/tycho-execution/compare/0.125.0...0.126.0) (2025-09-25)
+
+
+### Features
+
+* Add historical_trade option to encoding ([c51c6f5](https://github.com/propeller-heads/tycho-execution/commit/c51c6f52a5c1a7e47caab3bfa721f7c373a8229e))
+* Pass the file contents instead of the file path for executors ([e78a362](https://github.com/propeller-heads/tycho-execution/commit/e78a362894955a8b0e676bbcb189195d00815aad))
+* Update tycho common to point to hooks feature branch ([a98e8d2](https://github.com/propeller-heads/tycho-execution/commit/a98e8d21ccd2eafeb42805acb6ce157b60374a0c))
+
 ## [0.125.0](https://github.com/propeller-heads/tycho-execution/compare/0.124.0...0.125.0) (2025-09-25)
 
 
