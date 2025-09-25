@@ -19,7 +19,7 @@ use tycho_common::{
 };
 
 use crate::extractor::{
-    reorg_buffer::{BlockNumberOrTimestamp, FinalityStatus, ReorgBuffer},
+    reorg_buffer::{BlockNumberOrTimestamp, CommitStatus, ReorgBuffer},
     runner::MessageSender,
 };
 
@@ -29,8 +29,8 @@ use crate::extractor::{
 /// - Inserting new blocks and deltas into the correct `ReorgBuffer`.
 /// - Managing and applying deltas to state data, which includes merging buffered changes with data
 ///   fetched from the database.
-/// - Retrieving finality status for blocks, which is used to determine whether to fetch data from
-///   the database and/or from the buffer.
+/// - Retrieving commit status for blocks, which is used to determine whether to fetch data from the
+///   database and/or from the buffer.
 #[derive(Default, Clone)]
 pub struct PendingDeltas {
     // Map with the protocol system name as key and a `ReorgBuffer` as value.
@@ -76,11 +76,11 @@ pub trait PendingDeltasBuffer {
         min_tvl: Option<f64>,
     ) -> Result<Vec<ProtocolComponent>>;
 
-    fn get_block_finality(
+    fn get_block_commit_status(
         &self,
         version: BlockNumberOrTimestamp,
         protocol_system: &str,
-    ) -> Result<Option<FinalityStatus>>;
+    ) -> Result<Option<CommitStatus>>;
 
     fn search_block(
         &self,
@@ -121,11 +121,12 @@ impl PendingDeltas {
                     trace!(
                         block_number = message.block.number,
                         finality = message.finalized_block_height,
+                        commit_upto = message.committed_upto_block_height,
                         extractor = message.extractor,
                         "DeltaBufferInsertion"
                     );
                     guard.insert_block((*message).clone())?;
-                    guard.drain_new_finalized_blocks(message.finalized_block_height)?;
+                    guard.drain_new_committed_blocks(message.committed_upto_block_height)?;
                 }
             }
             _ => return Err(PendingDeltasError::UnknownExtractor(message.extractor.clone())),
@@ -422,19 +423,17 @@ impl PendingDeltasBuffer for PendingDeltas {
         Ok(new_components)
     }
 
-    /// Returns finality for any extractor, can error if lock is poisened. Returns None if buffer is
-    /// empty.
+    /// Returns commit status for any extractor, can error if lock is poisened. Returns None
+    /// if buffer is empty.
     /// Returns an error if the provided protocol system isn't found in the buffer or the specified
     /// block version is unseen. If a timestamp version is provided, the latest block before that
     /// timestamp is used.
-    /// Note - if no protocol system is provided, we choose a random extractor to get the finality
-    /// status from. This is particularly risky when there is an extractor syncing.
     #[instrument(level = Level::TRACE, skip_all)]
-    fn get_block_finality(
+    fn get_block_commit_status(
         &self,
         version: BlockNumberOrTimestamp,
         protocol_system: &str,
-    ) -> Result<Option<FinalityStatus>> {
+    ) -> Result<Option<CommitStatus>> {
         let buffer = self
             .buffers
             .get(protocol_system)
@@ -446,7 +445,7 @@ impl PendingDeltasBuffer for PendingDeltas {
             PendingDeltasError::LockError(protocol_system.to_string(), e.to_string())
         })?;
 
-        Ok(guard.get_finality_status(version))
+        Ok(guard.get_commit_status(version))
     }
 
     fn search_block(
@@ -509,6 +508,7 @@ mod test {
         BlockAggregatedChanges {
             extractor: "vm:extractor".to_string(),
             block: block(1),
+            committed_upto_block_height: 1,
             finalized_block_height: 1,
             revert: false,
             account_deltas: HashMap::from([
@@ -639,6 +639,7 @@ mod test {
         BlockAggregatedChanges {
             extractor: "native:extractor".to_string(),
             block: block(1),
+            committed_upto_block_height: 1,
             finalized_block_height: 1,
             revert: false,
             state_deltas: HashMap::from([
@@ -938,7 +939,7 @@ mod test {
     #[case("vm:extractor".to_string(), None)]
     // bad input
     #[case("unknown_system".to_string(), Some(PendingDeltasError::UnknownExtractor("unknown_system".to_string())))]
-    fn test_get_block_finality(
+    fn test_get_block_commit_status(
         #[case] protocol_system: String,
         #[case] expected_error: Option<PendingDeltasError>,
     ) {
@@ -952,15 +953,15 @@ mod test {
 
         let version = BlockNumberOrTimestamp::Timestamp("2020-01-01T00:00:00".parse().unwrap());
 
-        let result = buffer.get_block_finality(version, &protocol_system);
+        let result = buffer.get_block_commit_status(version, &protocol_system);
 
         match expected_error {
             Some(expected_err) => {
                 assert!(matches!(result, Err(ref err) if err == &expected_err));
             }
             None => {
-                let finality_status = result.expect("Failed to get block finality");
-                assert!(finality_status.is_some());
+                let commit_status = result.expect("Failed to get block commit status");
+                assert!(commit_status.is_some());
             }
         }
     }

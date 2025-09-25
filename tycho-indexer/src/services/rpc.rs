@@ -29,7 +29,7 @@ use tycho_common::{
 };
 
 use crate::{
-    extractor::reorg_buffer::{BlockNumberOrTimestamp, FinalityStatus},
+    extractor::reorg_buffer::{BlockNumberOrTimestamp, CommitStatus},
     services::{
         cache::RpcCache,
         deltas_buffer::{PendingDeltasBuffer, PendingDeltasError},
@@ -257,12 +257,12 @@ where
     /// Calculates versions for state retrieval.
     ///
     /// This method will calculate:
-    /// - The finalized version to be retrieved from the database.
+    /// - The committed version to be retrieved from the database.
     /// - An "ordered" version to be retrieved from the pending deltas buffer.
     ///
     /// To calculate the finalized version, it queries the pending deltas buffer for the requested
-    /// version's finality. If the version is already finalized, it can be simply passed on to
-    /// the db, no deltas version is required. In case it is an unfinalized version, we downgrade
+    /// version's commit status. If the version is already committed, it can be simply passed on to
+    /// the db, no deltas version is required. In case it is an uncommitted version, we downgrade
     /// the db version to the latest available version and will later apply any pending
     /// changes from the buffer on top of the retrieved version. We also return a deltas
     /// version which must be either block number or timestamps based.
@@ -315,40 +315,40 @@ where
                     .number,
             ),
         };
-        let request_version_finality =
+        let request_version_commit_status =
             self.pending_deltas
                 .as_ref()
-                .map_or(FinalityStatus::Finalized, |pending| {
+                .map_or(CommitStatus::Committed, |pending| {
                     pending
-                        .get_block_finality(ordered_version, protocol_system)
+                        .get_block_commit_status(ordered_version, protocol_system)
                         .ok()
-                        .and_then(|finality| finality)
+                        .flatten()
                         .unwrap_or_else(|| {
                             warn!(
                                 ?ordered_version,
                                 ?protocol_system,
                                 "No finality found for version."
                             );
-                            FinalityStatus::Finalized
+                            CommitStatus::Committed
                         })
                 });
 
         debug!(
-            ?request_version_finality,
+            ?request_version_commit_status,
             ?request_version,
             ?ordered_version,
             "Version finality calculated!"
         );
 
-        match request_version_finality {
-            FinalityStatus::Finalized => {
+        match request_version_commit_status {
+            CommitStatus::Committed => {
                 Ok((Version(request_version.clone(), VersionKind::Last), None))
             }
-            FinalityStatus::Unfinalized => Ok((
+            CommitStatus::Uncommitted => Ok((
                 Version(BlockOrTimestamp::Block(BlockIdentifier::Latest(chain)), VersionKind::Last),
                 Some(ordered_version),
             )),
-            FinalityStatus::Unseen => {
+            CommitStatus::Unseen => {
                 match request_version {
                     BlockOrTimestamp::Timestamp(_) => {
                         // If the request is based on a timestamp, return the latest valid version
@@ -1620,11 +1620,11 @@ mod tests {
                 min_tvl: Option<f64>,
             ) -> Result<Vec<ProtocolComponent>, PendingDeltasError>;
 
-            fn get_block_finality<'a>(
+            fn get_block_commit_status<'a>(
                 &self,
                 version: BlockNumberOrTimestamp,
                 protocol_system: &'a str,
-            ) -> Result<Option<FinalityStatus>, PendingDeltasError>;
+            ) -> Result<Option<CommitStatus>, PendingDeltasError>;
 
             fn search_block<'a>(
                 &self,
@@ -1792,8 +1792,8 @@ mod tests {
                 }
             });
         mock_buffer
-            .expect_get_block_finality()
-            .return_once(|_, _| Ok(Some(FinalityStatus::Unfinalized)));
+            .expect_get_block_commit_status()
+            .return_once(|_, _| Ok(Some(CommitStatus::Uncommitted)));
 
         let req_handler =
             RpcHandler::new(gw, Some(Arc::new(mock_buffer)), MockEntryPointTracer::new());
@@ -2619,8 +2619,8 @@ mod tests {
                 }
             });
         mock_buffer
-            .expect_get_block_finality()
-            .return_once(|_, _| Ok(Some(FinalityStatus::Unfinalized)));
+            .expect_get_block_commit_status()
+            .return_once(|_, _| Ok(Some(CommitStatus::Uncommitted)));
 
         let req_handler =
             RpcHandler::new(gw, Some(Arc::new(mock_buffer)), MockEntryPointTracer::new());

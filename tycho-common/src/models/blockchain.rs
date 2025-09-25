@@ -77,6 +77,7 @@ pub struct BlockAggregatedChanges {
     pub chain: Chain,
     pub block: Block,
     pub finalized_block_height: u64,
+    pub committed_upto_block_height: u64,
     pub revert: bool,
     pub state_deltas: HashMap<String, ProtocolComponentStateDelta>,
     pub account_deltas: HashMap<Bytes, AccountDelta>,
@@ -95,6 +96,7 @@ impl BlockAggregatedChanges {
         extractor: &str,
         chain: Chain,
         block: Block,
+        committed_upto_block_height: u64,
         finalized_block_height: u64,
         revert: bool,
         state_deltas: HashMap<String, ProtocolComponentStateDelta>,
@@ -107,10 +109,15 @@ impl BlockAggregatedChanges {
         component_tvl: HashMap<String, f64>,
         dci_update: DCIUpdate,
     ) -> Self {
+        if committed_upto_block_height > finalized_block_height {
+            panic!("committed_upto_block_height cannot be greater than finalized_block_height");
+        }
+
         Self {
             extractor: extractor.to_string(),
             chain,
             block,
+            committed_upto_block_height,
             finalized_block_height,
             revert,
             state_deltas,
@@ -138,6 +145,7 @@ impl BlockAggregatedChanges {
             extractor: self.extractor.clone(),
             chain: self.chain,
             block: self.block.clone(),
+            committed_upto_block_height: self.committed_upto_block_height,
             finalized_block_height: self.finalized_block_height,
             revert: self.revert,
             account_deltas: HashMap::new(),

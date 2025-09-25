@@ -749,7 +749,7 @@ where
                 .map_err(ExtractionError::Storage)?;
 
             let mut msgs = reorg_buffer
-                .drain_new_finalized_blocks(inp.final_block_height)
+                .drain_new_committed_blocks(inp.final_block_height)
                 .map_err(ExtractionError::Storage)?
                 .into_iter()
                 .peekable();
@@ -1191,13 +1191,16 @@ where
             .get_most_recent_block()
             .expect("Couldn't find most recent block in buffer during revert");
 
+        let finalized_block_height = reverted_state[0]
+            .block_update
+            .finalized_block_height;
+
         let revert_message = BlockAggregatedChanges {
             extractor: self.name.clone(),
             chain: self.chain,
             block: new_latest_block.clone(),
-            finalized_block_height: reverted_state[0]
-                .block_update
-                .finalized_block_height,
+            committed_upto_block_height: finalized_block_height,
+            finalized_block_height,
             revert: true,
             state_deltas,
             account_deltas,
@@ -2897,6 +2900,7 @@ mod test_serial_db {
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
                     chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
                 ),
+                committed_upto_block_height: 1,
                 finalized_block_height: 1,
                 revert: true,
                 state_deltas: HashMap::from([
@@ -3077,6 +3081,7 @@ mod test_serial_db {
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
                     chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
                 ),
+                committed_upto_block_height: 1,
                 finalized_block_height: 1,
                 revert: true,
                 account_deltas: HashMap::from([
