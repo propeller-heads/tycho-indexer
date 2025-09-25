@@ -9,9 +9,10 @@ mod tycho_rpc;
 mod tycho_runner;
 mod utils;
 
-use std::{fmt::Display, path::PathBuf};
+use std::{env, fmt::Display, path::PathBuf};
 
 use clap::Parser;
+use dotenv::dotenv;
 use miette::{miette, IntoDiagnostic, WrapErr};
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -78,6 +79,9 @@ impl Args {
 }
 
 fn main() -> miette::Result<()> {
+    // Load .env file before setting up logging
+    dotenv().ok();
+    
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .with_target(false)
@@ -90,6 +94,10 @@ fn main() -> miette::Result<()> {
     }
     info!("{version}");
 
+    let rpc_url = env::var("RPC_URL")
+        .into_diagnostic()
+        .wrap_err("Missing RPC_URL in environment")?;
+
     let args = Args::parse();
 
     let test_runner = TestRunner::new(
@@ -99,7 +107,8 @@ fn main() -> miette::Result<()> {
         args.db_url,
         args.vm_simulation_traces,
         args.execution_traces,
-    );
+        rpc_url,
+    )?;
 
     test_runner.run_tests()
 }

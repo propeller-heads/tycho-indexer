@@ -9,15 +9,16 @@ use std::{
 use miette::{IntoDiagnostic, WrapErr};
 use tracing::{debug, info};
 
-use crate::config::ProtocolComponentWithTestConfig;
-
 pub struct TychoRunner {
     db_url: String,
     initialized_accounts: Vec<String>,
 }
 
-// TODO: Currently Tycho-Indexer cannot be run as a lib. We need to expose the entrypoints to allow
-//  running it as a lib
+pub struct TychoRpcServer {
+    sender: Sender<bool>,
+    thread_handle: thread::JoinHandle<()>,
+}
+
 impl TychoRunner {
     pub fn new(db_url: String, initialized_accounts: Vec<String>) -> Self {
         Self { db_url, initialized_accounts }
@@ -93,16 +94,7 @@ impl TychoRunner {
         Ok(())
     }
 
-    pub fn run_with_rpc_server<F, R>(
-        &self,
-        func: F,
-        expected_components: &Vec<ProtocolComponentWithTestConfig>,
-        start_block: u64,
-        stop_block: u64,
-    ) -> miette::Result<R>
-    where
-        F: FnOnce(&Vec<ProtocolComponentWithTestConfig>, u64, u64) -> R,
-    {
+    pub fn start_rpc_server(&self) -> miette::Result<TychoRpcServer> {
         let (tx, rx): (Sender<bool>, Receiver<bool>) = mpsc::channel();
         let db_url = self.db_url.clone();
 
@@ -140,18 +132,22 @@ impl TychoRunner {
         // Give the RPC server time to start
         thread::sleep(Duration::from_secs(3));
 
-        // Run the provided function
-        let result = func(expected_components, start_block, stop_block);
+        Ok(TychoRpcServer { sender: tx, thread_handle: rpc_thread })
+    }
 
-        tx.send(true)
-            .expect("Failed to send termination message");
+    pub fn stop_rpc_server(&self, server: TychoRpcServer) -> miette::Result<()> {
+        server
+            .sender
+            .send(true)
+            .into_diagnostic()
+            .wrap_err("Failed to send termination message")?;
 
         // Wait for the RPC thread to finish
-        if rpc_thread.join().is_err() {
+        if server.thread_handle.join().is_err() {
             eprintln!("Failed to join RPC thread");
         }
 
-        Ok(result)
+        Ok(())
     }
 
     // Helper method to handle process output in separate threads

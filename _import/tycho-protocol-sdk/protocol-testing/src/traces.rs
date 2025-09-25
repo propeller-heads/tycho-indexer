@@ -5,8 +5,8 @@
 
 use alloy::dyn_abi::{DynSolType, DynSolValue};
 use colored::Colorize;
-use foundry_evm::traces::identifier::SignaturesIdentifier;
 use serde_json::Value;
+use tycho_simulation::foundry_evm::traces::identifier::SignaturesIdentifier;
 
 /// Decode method selectors and return function info
 pub async fn decode_method_selector_with_info(input: &str) -> Option<(String, Vec<DynSolType>)> {
@@ -84,18 +84,16 @@ pub async fn decode_function_with_params(input: &str) -> Option<String> {
         if input.len() > 10 {
             let calldata_hex = &input[10..]; // Skip the 4-byte selector
             if let Ok(calldata) = hex::decode(calldata_hex) {
-                if let Ok(decoded_values) =
+                if let Ok(DynSolValue::Tuple(values)) =
                     DynSolType::Tuple(param_types.clone()).abi_decode(&calldata)
                 {
-                    if let DynSolValue::Tuple(values) = decoded_values {
-                        let formatted_params: Vec<String> = values
-                            .iter()
-                            .zip(param_types.iter())
-                            .map(|(value, ty)| format_parameter_value(value, ty))
-                            .collect();
+                    let formatted_params: Vec<String> = values
+                        .iter()
+                        .zip(param_types.iter())
+                        .map(|(value, ty)| format_parameter_value(value, ty))
+                        .collect();
 
-                        return Some(format!("{}({})", name, formatted_params.join(", ")));
-                    }
+                    return Some(format!("{}({})", name, formatted_params.join(", ")));
                 }
             }
         }
@@ -255,11 +253,6 @@ pub async fn print_call_trace(call: &Value, depth: usize) {
             .any(|field| call_obj.get(*field).is_some());
         let call_failed = has_error || has_revert || has_other_error;
 
-        // Debug: if there's any failure, print all fields to help identify the error structure
-        if call_failed && depth <= 2 {
-            eprintln!("DEBUG: Failed call at depth {}: {:#?}", depth, call_obj);
-        }
-
         // Create tree structure prefix
         let tree_prefix = if depth == 0 { "".to_string() } else { "  ".repeat(depth) + "├─ " };
 
@@ -295,19 +288,19 @@ pub async fn print_call_trace(call: &Value, depth: usize) {
         let mut found_error = false;
 
         if let Some(error) = call_obj.get("error") {
-            println!("{}{}", result_indent, format!("[Error] {}", error));
+            println!("{result_indent} [Error] {error}");
             found_error = true;
         }
 
         if let Some(revert_reason) = call_obj.get("revertReason") {
-            println!("{}{}", result_indent, format!("[Revert] {}", revert_reason));
+            println!("{}[Revert] {}", result_indent, revert_reason);
             found_error = true;
         }
 
         // Check for other possible error fields
         for error_field in ["revert", "reverted", "message", "errorMessage", "reason"] {
             if let Some(error_val) = call_obj.get(error_field) {
-                println!("{}{}", result_indent, format!("[{}] {}", error_field, error_val));
+                println!("{}[{}] {}", result_indent, error_field, error_val);
                 found_error = true;
             }
         }
@@ -319,28 +312,27 @@ pub async fn print_call_trace(call: &Value, depth: usize) {
         {
             if !output.is_empty() && output != "0x" {
                 // Try to decode revert reason from output if it looks like revert data
-                if output.starts_with("0x08c379a0") {
+                if let Some(stripped) = output.strip_prefix("0x08c379a0") {
                     // Error(string) selector
-                    if let Ok(decoded) = hex::decode(&output[10..]) {
-                        if let Ok(reason) = alloy::dyn_abi::DynSolType::String.abi_decode(&decoded)
+                    if let Ok(decoded) = hex::decode(stripped) {
+                        if let Ok(alloy::dyn_abi::DynSolValue::String(reason_str)) =
+                            alloy::dyn_abi::DynSolType::String.abi_decode(&decoded)
                         {
-                            if let alloy::dyn_abi::DynSolValue::String(reason_str) = reason {
-                                println!(
-                                    "{}{}",
-                                    result_indent,
-                                    format!("[Revert] {}", reason_str).red()
-                                );
-                                found_error = true;
-                            }
+                            println!(
+                                "{}{}",
+                                result_indent,
+                                format!("[Revert] {}", reason_str).red()
+                            );
+                            found_error = true;
                         }
                     }
                 }
 
                 if !found_error {
-                    println!("{}{}", result_indent, format!("[Return] {}", output));
+                    println!("{}[Return] {}", result_indent, output);
                 }
             } else if !found_error {
-                println!("{}{}", result_indent, "[Return]");
+                println!("{}[Return]", result_indent);
             }
         }
 

@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
-use tycho_common::{dto::ProtocolComponent, Bytes};
+use tycho_simulation::{protocol::models::ProtocolComponent, tycho_common::Bytes};
 
 /// Represents a ProtocolComponent with its main attributes
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -31,14 +31,18 @@ impl ProtocolComponentExpectation {
         let mut diffs = Vec::new();
 
         // Compare id (case-insensitive)
-        if self.id.to_lowercase() != other.id.to_lowercase() {
-            let diff = self.format_diff("id", &self.id, &other.id, colorize_output);
+        if self.id.to_lowercase() != other.id.to_string().to_lowercase() {
+            let diff = self.format_diff("id", &self.id, &other.id.to_string(), colorize_output);
             diffs.push(format!("Field 'id' mismatch for {}:\n{}", self.id, diff));
         }
 
         // Compare tokens (order-independent)
         let self_tokens_set: HashSet<_> = self.tokens.iter().collect();
-        let other_tokens_set: HashSet<_> = other.tokens.iter().collect();
+        let other_tokens_set: HashSet<_> = other
+            .tokens
+            .iter()
+            .map(|token| &token.address)
+            .collect();
         if self_tokens_set != other_tokens_set {
             let self_tokens = format!("{:?}", self.tokens);
             let other_tokens = format!("{:?}", other.tokens);

@@ -1,14 +1,16 @@
 use std::{collections::HashMap, error::Error as StdError, fmt};
 
 use tracing::debug;
-use tycho_client::{rpc::RPCClient, HttpRPCClient};
-use tycho_common::{
-    dto::{
-        Chain, PaginationParams, ProtocolComponent, ProtocolComponentsRequestBody, ResponseAccount,
-        ResponseProtocolState, ResponseToken, StateRequestBody, VersionParam,
+use tycho_simulation::{
+    tycho_client::{rpc::RPCClient, HttpRPCClient},
+    tycho_common::{
+        dto::{
+            Chain, PaginationParams, ProtocolComponent, ProtocolComponentsRequestBody,
+            ResponseAccount, ResponseProtocolState, ResponseToken, StateRequestBody, VersionParam,
+        },
+        models::token::Token,
+        Bytes,
     },
-    models::token::Token,
-    Bytes,
 };
 
 /// Custom error type for RPC operations
@@ -33,8 +35,8 @@ impl From<Box<dyn StdError>> for RpcError {
     }
 }
 
-impl From<tycho_client::RPCError> for RpcError {
-    fn from(error: tycho_client::RPCError) -> Self {
+impl From<tycho_simulation::tycho_client::RPCError> for RpcError {
+    fn from(error: tycho_simulation::tycho_client::RPCError) -> Self {
         RpcError::ClientError(error.to_string())
     }
 }
@@ -79,7 +81,7 @@ impl TychoClient {
     ) -> Result<Vec<ResponseProtocolState>, RpcError> {
         let chunk_size = 100;
         let concurrency = 1;
-        let version: tycho_common::dto::VersionParam = VersionParam::default();
+        let version: tycho_simulation::tycho_common::dto::VersionParam = VersionParam::default();
 
         let protocol_states = self
             .http_client
