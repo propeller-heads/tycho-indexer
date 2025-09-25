@@ -109,10 +109,6 @@ impl BlockAggregatedChanges {
         component_tvl: HashMap<String, f64>,
         dci_update: DCIUpdate,
     ) -> Self {
-        if committed_upto_block_height > finalized_block_height {
-            panic!("committed_upto_block_height cannot be greater than finalized_block_height");
-        }
-
         Self {
             extractor: extractor.to_string(),
             chain,
