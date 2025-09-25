@@ -1,3 +1,10 @@
+## [0.128.0](https://github.com/propeller-heads/tycho-execution/compare/0.127.0...0.128.0) (2025-09-25)
+
+
+### Features
+
+* Use tycho-common from crates.io ([89435b5](https://github.com/propeller-heads/tycho-execution/commit/89435b5c76bbd1fbf2c946686ede442c4647cd29))
+
 ## [0.127.0](https://github.com/propeller-heads/tycho-execution/compare/0.126.0...0.127.0) (2025-09-25)
 
 
