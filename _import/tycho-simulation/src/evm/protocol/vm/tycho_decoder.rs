@@ -30,7 +30,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
     #[allow(deprecated)]
     async fn try_from_with_header(
         snapshot: ComponentWithState,
-        block: BlockHeader,
+        _block: BlockHeader,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
         decoder_context: &DecoderContext,
@@ -148,7 +148,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
             vm_traces = *trace;
         }
         let mut pool_state_builder =
-            EVMPoolStateBuilder::new(id.clone(), tokens.clone(), block, adapter_contract_address)
+            EVMPoolStateBuilder::new(id.clone(), tokens.clone(), adapter_contract_address)
                 .balances(component_balances)
                 .account_balances(account_balances)
                 .adapter_contract_bytecode(adapter_bytecode)

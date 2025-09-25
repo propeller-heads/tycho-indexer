@@ -60,14 +60,13 @@ where
         sell_token: Address,
         buy_token: Address,
         amounts: Vec<U256>,
-        block: u64,
         overwrites: Option<HashMap<Address, Overwrites>>,
     ) -> Result<Vec<f64>, SimulationError> {
         let args = (string_to_bytes32(pair_id)?, sell_token, buy_token, amounts);
         let selector = "price(bytes32,address,address,uint256[])";
 
         let res = self
-            .call(selector, args, block, None, overwrites, None, U256::from(0u64), None)?
+            .call(selector, args, overwrites, None, U256::from(0u64), None)?
             .return_value;
 
         let decoded: PriceReturn = PriceReturn::abi_decode(&res).map_err(|e| {
@@ -86,14 +85,12 @@ where
         buy_token: Address,
         is_buy: bool,
         amount: U256,
-        block: u64,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<(Trade, HashMap<Address, StateUpdate>), SimulationError> {
         let args = (string_to_bytes32(pair_id)?, sell_token, buy_token, is_buy, amount);
         let selector = "swap(bytes32,address,address,uint8,uint256)";
 
-        let res =
-            self.call(selector, args, block, None, overwrites, None, U256::from(0u64), None)?;
+        let res = self.call(selector, args, overwrites, None, U256::from(0u64), None)?;
 
         let decoded: SwapReturn = SwapReturn::abi_decode(&res.return_value).map_err(|_| {
             SimulationError::FatalError(format!(
@@ -122,14 +119,13 @@ where
         pair_id: &str,
         sell_token: Address,
         buy_token: Address,
-        block: u64,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<(U256, U256), SimulationError> {
         let args = (string_to_bytes32(pair_id)?, sell_token, buy_token);
         let selector = "getLimits(bytes32,address,address)";
 
         let res = self
-            .call(selector, args, block, None, overwrites, None, U256::from(0u64), None)?
+            .call(selector, args, overwrites, None, U256::from(0u64), None)?
             .return_value;
 
         let decoded: LimitsReturn = LimitsReturn::abi_decode(&res).map_err(|e| {
@@ -151,7 +147,7 @@ where
         let selector = "getCapabilities(bytes32,address,address)";
 
         let res = self
-            .call(selector, args, 1, None, None, None, U256::from(0u64), None)?
+            .call(selector, args, None, None, U256::from(0u64), None)?
             .return_value;
         let decoded: CapabilitiesReturn = CapabilitiesReturn::abi_decode(&res).map_err(|e| {
             SimulationError::FatalError(format!(
@@ -173,7 +169,7 @@ where
         let selector = "minGasUsage()";
 
         let res = self
-            .call(selector, args, 1, None, None, None, U256::from(0u64), None)?
+            .call(selector, args, None, None, U256::from(0u64), None)?
             .return_value;
 
         let decoded: MinGasUsageReturn = MinGasUsageReturn::abi_decode(&res).map_err(|e| {

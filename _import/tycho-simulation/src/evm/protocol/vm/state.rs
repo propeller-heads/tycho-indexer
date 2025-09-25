@@ -10,7 +10,6 @@ use alloy::primitives::{Address, U256};
 use itertools::Itertools;
 use num_bigint::BigUint;
 use revm::DatabaseRef;
-use tycho_client::feed::BlockHeader;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -45,8 +44,6 @@ where
     id: String,
     /// The pool's token's addresses
     pub tokens: Vec<Bytes>,
-    /// The current block, will be used to set vm context
-    block: BlockHeader,
     /// The pool's component balances.
     balances: HashMap<Address, U256>,
     /// The contract address for where protocol balances are stored (i.e. a vault contract).
@@ -87,7 +84,6 @@ where
     pub fn new(
         id: String,
         tokens: Vec<Bytes>,
-        block: BlockHeader,
         component_balances: HashMap<Address, U256>,
         balance_owner: Option<Address>,
         contract_balances: HashMap<Address, HashMap<Address, U256>>,
@@ -101,7 +97,6 @@ where
         Self {
             id,
             tokens,
-            block,
             balances: component_balances,
             balance_owner,
             spot_prices,
@@ -197,7 +192,6 @@ where
                         sell_token_address,
                         buy_token_address,
                         vec![sell_amount_limit / U256::from(100)],
-                        self.block.number,
                         overwrites,
                     )?;
 
@@ -251,7 +245,7 @@ where
                     // amount (y1).
                     let y1 = self
                         .adapter_contract
-                        .swap(&self.id, t0, t1, false, x1, self.block.number, overwrites.clone())?
+                        .swap(&self.id, t0, t1, false, x1, overwrites.clone())?
                         .0
                         .received_amount;
 
@@ -259,7 +253,7 @@ where
                     // amount (y2).
                     let y2 = self
                         .adapter_contract
-                        .swap(&self.id, t0, t1, false, x2, self.block.number, overwrites)?
+                        .swap(&self.id, t0, t1, false, x2, overwrites)?
                         .0
                         .received_amount;
 
@@ -321,13 +315,9 @@ where
         tokens: Vec<Address>,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<(U256, U256), SimulationError> {
-        let limits = self.adapter_contract.get_limits(
-            &self.id,
-            tokens[0],
-            tokens[1],
-            self.block.number,
-            overwrites,
-        )?;
+        let limits = self
+            .adapter_contract
+            .get_limits(&self.id, tokens[0], tokens[1], overwrites)?;
 
         Ok(limits)
     }
@@ -582,7 +572,6 @@ where
             buy_token_address,
             false,
             sell_amount_respecting_limit,
-            self.block.number,
             Some(complete_overwrites),
         )?;
 
@@ -656,39 +645,6 @@ where
         tokens: &HashMap<Bytes, Token>,
         balances: &Balances,
     ) -> Result<(), TransitionError<String>> {
-        // Update block information if provided in the delta attributes
-        let block_number_bytes = delta
-            .updated_attributes
-            .get("block_number")
-            .ok_or_else(|| {
-                SimulationError::FatalError("block_number not found in updated attributes".into())
-            })?;
-
-        self.block.number = u64::from_be_bytes(
-            block_number_bytes[block_number_bytes.len() - 8..]
-                .try_into()
-                .map_err(|_| {
-                    TransitionError::DecodeError("Invalid block_number bytes".to_string())
-                })?,
-        );
-
-        let block_timestamp_bytes = delta
-            .updated_attributes
-            .get("block_timestamp")
-            .ok_or_else(|| {
-                SimulationError::FatalError(
-                    "block_timestamp not found in updated attributes".into(),
-                )
-            })?;
-
-        self.block.timestamp = u64::from_be_bytes(
-            block_timestamp_bytes[block_timestamp_bytes.len() - 8..]
-                .try_into()
-                .map_err(|_| {
-                    TransitionError::DecodeError("Invalid block_timestamp bytes".to_string())
-                })?,
-        );
-
         if self.manual_updates {
             // Directly check for "update_marker" in `updated_attributes`
             if let Some(marker) = delta
@@ -850,6 +806,8 @@ mod tests {
             timestamp: 0,
             ..Default::default()
         };
+        db.update(vec![], Some(block.clone()))
+            .unwrap();
 
         let pool_id: String =
             "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".into();
@@ -866,7 +824,7 @@ mod tests {
         let adapter_address =
             Address::from_str("0xA2C5C98A892fD6656a7F39A2f63228C0Bc846270").unwrap();
 
-        EVMPoolStateBuilder::new(pool_id, tokens, block, adapter_address)
+        EVMPoolStateBuilder::new(pool_id, tokens, adapter_address)
             .balances(balances)
             .balance_owner(Address::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap())
             .adapter_contract_bytecode(Bytecode::new_raw(BALANCER_V2.into()))
@@ -878,6 +836,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_init() {
+        // Clear DB from this test to prevent interference from other tests
+        SHARED_TYCHO_DB.clear();
         let pool_state = setup_pool_state().await;
 
         let expected_capabilities = vec![
@@ -1262,41 +1222,5 @@ mod tests {
             U256::from(3000000000u64),
             "New token balance should be unchanged"
         );
-    }
-
-    #[tokio::test]
-    async fn test_delta_transition_block_update() {
-        let mut pool_state = setup_pool_state().await;
-
-        let initial_number = pool_state.block.number;
-        let initial_timestamp = pool_state.block.timestamp;
-
-        let new_block_number = initial_number + 1;
-        let new_timestamp = initial_timestamp + 100;
-
-        let attributes: HashMap<String, Bytes> = [
-            ("block_number".to_string(), Bytes::from(new_block_number.to_be_bytes().to_vec())),
-            ("block_timestamp".to_string(), Bytes::from(new_timestamp.to_be_bytes().to_vec())),
-        ]
-        .into_iter()
-        .collect();
-
-        let delta = ProtocolStateDelta {
-            component_id: "test_pool".to_owned(),
-            updated_attributes: attributes,
-            deleted_attributes: HashSet::new(),
-        };
-
-        let mut tokens = HashMap::new();
-        tokens.insert(dai().address, dai());
-        tokens.insert(bal().address, bal());
-        let balances = Balances::default();
-
-        pool_state
-            .delta_transition(delta, &tokens, &balances)
-            .unwrap();
-
-        assert_eq!(pool_state.block.number, new_block_number);
-        assert_eq!(pool_state.block.timestamp, new_timestamp);
     }
 }

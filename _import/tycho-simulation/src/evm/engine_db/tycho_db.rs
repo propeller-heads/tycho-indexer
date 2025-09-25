@@ -289,6 +289,10 @@ impl EngineDatabaseInterface for PreCachedDB {
     fn clear_temp_storage(&mut self) {
         debug!("Temp storage in TychoDB is never set, nothing to clear");
     }
+
+    fn get_current_block(&self) -> Option<BlockHeader> {
+        self.inner.read().unwrap().block.clone()
+    }
 }
 
 impl DatabaseRef for PreCachedDB {

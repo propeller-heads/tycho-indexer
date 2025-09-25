@@ -5,7 +5,6 @@ use alloy::{
     sol_types::SolType,
 };
 use revm::DatabaseRef;
-use tycho_client::feed::BlockHeader;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -99,7 +98,6 @@ where
     fn before_swap(
         &self,
         params: BeforeSwapParameters,
-        block: BlockHeader,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
         transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<WithGasEstimate<BeforeSwapOutput>, SimulationError> {
@@ -130,8 +128,6 @@ where
         let res = self.contract.call(
             selector,
             args,
-            block.number,
-            Some(block.timestamp),
             overwrites,
             Some(self.pool_manager),
             U256::from(0u64),
@@ -163,7 +159,6 @@ where
     fn after_swap(
         &self,
         params: AfterSwapParameters,
-        block: BlockHeader,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
         transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<WithGasEstimate<AfterSwapDelta>, SimulationError> {
@@ -195,8 +190,6 @@ where
         let res = self.contract.call(
             selector,
             args,
-            block.number,
-            Some(block.timestamp),
             overwrites,
             Some(self.pool_manager),
             U256::from(0u64),
@@ -257,8 +250,6 @@ where
             let res = limits_contract.call(
                 function_signature,
                 args,
-                0,                // block number (not used to get limits)
-                None,             // timestamp
                 None,             // overwrites
                 None,             // caller
                 U256::from(0u64), // value
@@ -400,7 +391,7 @@ mod tests {
             hook_data: Default::default(),
         };
 
-        let result = hook_handler.before_swap(params, block, None, None);
+        let result = hook_handler.before_swap(params, None, None);
 
         let res = result.unwrap().result;
         assert_eq!(
@@ -529,7 +520,7 @@ mod tests {
             hook_data: Bytes::new(),
         };
 
-        let result = hook_handler.after_swap(after_swap_params, block, None, None);
+        let result = hook_handler.after_swap(after_swap_params, None, None);
 
         let res = result.unwrap().result;
         // This hook does not return any delta, so we expect it to be zero.
@@ -602,7 +593,7 @@ mod tests {
         )]);
 
         let result = hook_handler
-            .before_swap(params, block.clone(), None, Some(transient_storage.clone()))
+            .before_swap(params, None, Some(transient_storage.clone()))
             .unwrap();
 
         assert_eq!(result.result.amount_delta, BeforeSwapDelta(I256::from_dec_str("0").unwrap()));
@@ -621,7 +612,6 @@ mod tests {
         transient_storage.extend(result.result.transient_storage);
         let result = hook_handler.after_swap(
             after_swap_params,
-            block,
             Some(result.result.overwrites),
             Some(transient_storage),
         );
@@ -639,9 +629,10 @@ mod tests {
                 "0x639d7e454339ba43da3b2288b45078405330afcc3cd7f10e6e852be9c70ac164",
             )
             .unwrap(),
-            timestamp: 1748397011,
+            timestamp: 1754368727,
             ..Default::default()
         };
+
         let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
 

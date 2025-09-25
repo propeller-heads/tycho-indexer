@@ -1,7 +1,6 @@
 use std::{collections::HashMap, fmt::Debug};
 
 use alloy::primitives::{Address, U256};
-use tycho_client::feed::BlockHeader;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -31,7 +30,6 @@ pub trait HookHandler: Debug + Send + Sync + 'static {
     fn before_swap(
         &self,
         params: BeforeSwapParameters,
-        block: BlockHeader,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
         transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<WithGasEstimate<BeforeSwapOutput>, SimulationError>;
@@ -40,7 +38,6 @@ pub trait HookHandler: Debug + Send + Sync + 'static {
     fn after_swap(
         &self,
         params: AfterSwapParameters,
-        block: BlockHeader,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
         transient_storage_params: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<WithGasEstimate<AfterSwapDelta>, SimulationError>;
