@@ -50,7 +50,7 @@ lazy_static = "1.4.0"
 # Tycho dependencies
 tycho-client = "0.88.0"
 tycho-common = "0.88.0"
-tycho-ethereum = "0.88.0"
+tycho-ethereum = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-ethereum", tag = "0.88.0", features = ["onchain_data"] }
 
 # EVM dependencies
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "d6daa0ac83fe6b3883072436bb3f95ba7820e5d9", optional = true }
@@ -77,7 +77,7 @@ async-stream = { version = "0.3.6", optional = true }
 http = { version = "1.0", optional = true }
 prost = { version = "0.13", optional = true }
 # tycho execution for quickstart
-tycho-execution = "0.125.0"
+tycho-execution = "0.126.0"
 
 [dev-dependencies]
 # tycho execution for quickstart
