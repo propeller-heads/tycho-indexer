@@ -47,16 +47,7 @@ impl<'a> HookCreationParams<'a> {
         balances: &'a HashMap<Bytes, Bytes>,
         vm_traces: Option<bool>,
     ) -> Self {
-        Self {
-
-            hook_address,
-            account_balances,
-            all_tokens,
-            state,
-            attributes,
-            balances,
-            vm_traces,
-        }
+        Self { hook_address, account_balances, all_tokens, state, attributes, balances, vm_traces }
     }
 }
 
