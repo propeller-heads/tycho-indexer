@@ -1374,6 +1374,7 @@ mod tests {
             HashMap::new(),
             HashMap::new(),
             None,
+            true, // Euler hook
         )
         .unwrap();
 
@@ -1449,6 +1450,7 @@ mod tests {
             HashMap::new(),
             HashMap::new(),
             None,
+            true, // Euler hook
         )
         .unwrap();
 

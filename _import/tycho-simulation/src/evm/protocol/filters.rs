@@ -30,15 +30,13 @@ pub fn uniswap_v4_pool_with_hook_filter(component: &ComponentWithState) -> bool 
 }
 
 pub fn uniswap_v4_pool_with_euler_hook_filter(component: &ComponentWithState) -> bool {
-    if let Some(_hooks_data) = component
+    component
         .component
         .static_attributes
         .get("hook_identifier")
-    {
-        // Only Euler pools have a hook_identifier
-        return true;
-    }
-    false
+        .and_then(|bytes| String::from_utf8(bytes.0.to_vec()).ok())
+        .unwrap_or_default() ==
+        "euler_v1"
 }
 
 /// Filters out pools that are failing at the moment after DCI update
