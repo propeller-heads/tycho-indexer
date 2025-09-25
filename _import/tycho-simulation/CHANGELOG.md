@@ -1,3 +1,16 @@
+## [0.163.0](https://github.com/propeller-heads/tycho-simulation/compare/0.162.0...0.163.0) (2025-09-25)
+
+
+### Features
+
+* Bump tycho-common and tycho-execution versions ([1d3aa5a](https://github.com/propeller-heads/tycho-simulation/commit/1d3aa5a7ac19cb29ffc84591e29f1645f1de4bc0))
+
+
+### Bug Fixes
+
+* Solve issue with low balance tokens in pool manager ([13d9ebe](https://github.com/propeller-heads/tycho-simulation/commit/13d9ebe38899dc10d9f82a54c4a1b370f284a440))
+* Support passing vm traces to generic_vm_hook_handler.rs ([9f69fc7](https://github.com/propeller-heads/tycho-simulation/commit/9f69fc7351502ec7a272999335d88ed7dfb7b486))
+
 ## [0.162.0](https://github.com/propeller-heads/tycho-simulation/compare/0.161.0...0.162.0) (2025-09-25)
 
 
