@@ -877,14 +877,12 @@ mod test {
             .insert_block(get_block_changes(3))
             .unwrap();
 
-        let committed = reorg_buffer
-            .drain_new_committed_blocks(3)
-            .unwrap();
+        let committed = reorg_buffer.drain_blocks(3).unwrap();
 
         assert_eq!(reorg_buffer.block_messages.len(), 1);
         assert_eq!(committed, vec![get_block_changes(1), get_block_changes(2)]);
 
-        let unknown = reorg_buffer.drain_new_committed_blocks(999);
+        let unknown = reorg_buffer.drain_blocks(999);
 
         assert!(unknown.is_err());
     }
