@@ -1,3 +1,15 @@
+## [0.164.0](https://github.com/propeller-heads/tycho-simulation/compare/0.163.0...0.164.0) (2025-09-25)
+
+
+### Features
+
+* Use custom contract to fetch Euler limits with the correct values ([f51c5a0](https://github.com/propeller-heads/tycho-simulation/commit/f51c5a017afb21bf6a30a0f08aa1ffbe25b84e01))
+
+
+### Bug Fixes
+
+* Check for euler_v1 param in the euler hook filter ([40fc353](https://github.com/propeller-heads/tycho-simulation/commit/40fc3538834d4a03a7714de31c101850b2ae68ec))
+
 ## [0.163.0](https://github.com/propeller-heads/tycho-simulation/compare/0.162.0...0.163.0) (2025-09-25)
 
 
