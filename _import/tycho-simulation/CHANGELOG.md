@@ -1,3 +1,17 @@
+## [0.162.0](https://github.com/propeller-heads/tycho-simulation/compare/0.161.0...0.162.0) (2025-09-25)
+
+
+### Features
+
+* Remove block from EVMPoolState ([7199c02](https://github.com/propeller-heads/tycho-simulation/commit/7199c02fd06ff87b57a5fdcc21837768fb3e4409))
+* Remove block from SimulationParams, retrieve from DB instead ([6f75769](https://github.com/propeller-heads/tycho-simulation/commit/6f757692cc9419e19d24a43e6992f4aa9bf33bea))
+* Use proper Cargo.toml to be able to run in CI ([fc5c28d](https://github.com/propeller-heads/tycho-simulation/commit/fc5c28d76f9fe069bb26fe57b91d5465b1bfdcec))
+
+
+### Bug Fixes
+
+* Fix incorrect timestamp in test_get_amount_ranges ([d8866b0](https://github.com/propeller-heads/tycho-simulation/commit/d8866b05ae5b198d64ab532ac202f0fb2e3f14de))
+
 ## [0.161.0](https://github.com/propeller-heads/tycho-simulation/compare/0.160.1...0.161.0) (2025-09-23)
 
 
