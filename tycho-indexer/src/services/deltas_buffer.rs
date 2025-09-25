@@ -121,12 +121,12 @@ impl PendingDeltas {
                     trace!(
                         block_number = message.block.number,
                         finality = message.finalized_block_height,
-                        commit_upto = message.committed_upto_block_height,
+                        db_commit_upto = message.db_committed_upto_block_height,
                         extractor = message.extractor,
                         "DeltaBufferInsertion"
                     );
                     guard.insert_block((*message).clone())?;
-                    guard.drain_blocks(message.committed_upto_block_height)?;
+                    guard.drain_blocks(message.db_committed_upto_block_height)?;
                 }
             }
             _ => return Err(PendingDeltasError::UnknownExtractor(message.extractor.clone())),
@@ -508,7 +508,7 @@ mod test {
         BlockAggregatedChanges {
             extractor: "vm:extractor".to_string(),
             block: block(1),
-            committed_upto_block_height: 1,
+            db_committed_upto_block_height: 1,
             finalized_block_height: 1,
             revert: false,
             account_deltas: HashMap::from([
@@ -639,7 +639,7 @@ mod test {
         BlockAggregatedChanges {
             extractor: "native:extractor".to_string(),
             block: block(1),
-            committed_upto_block_height: 1,
+            db_committed_upto_block_height: 1,
             finalized_block_height: 1,
             revert: false,
             state_deltas: HashMap::from([

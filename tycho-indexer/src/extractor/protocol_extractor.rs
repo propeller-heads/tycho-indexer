@@ -1199,7 +1199,7 @@ where
             extractor: self.name.clone(),
             chain: self.chain,
             block: new_latest_block.clone(),
-            committed_upto_block_height: finalized_block_height,
+            db_committed_upto_block_height: finalized_block_height,
             finalized_block_height,
             revert: true,
             state_deltas,
@@ -2900,8 +2900,8 @@ mod test_serial_db {
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
                     chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
                 ),
-                committed_upto_block_height: 1,
                 finalized_block_height: 1,
+                db_committed_upto_block_height: 1,
                 revert: true,
                 state_deltas: HashMap::from([
                     ("pc_1".to_string(), ProtocolComponentStateDelta {
@@ -3081,8 +3081,8 @@ mod test_serial_db {
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
                     chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
                 ),
-                committed_upto_block_height: 1,
                 finalized_block_height: 1,
+                db_committed_upto_block_height: 1,
                 revert: true,
                 account_deltas: HashMap::from([
                     (account1.clone(), AccountDelta::new(

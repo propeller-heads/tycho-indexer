@@ -230,7 +230,7 @@ impl BlockChanges {
             extractor: self.extractor,
             chain: self.chain,
             block: self.block,
-            committed_upto_block_height: self.finalized_block_height,
+            db_committed_upto_block_height: self.finalized_block_height,
             finalized_block_height: self.finalized_block_height,
             revert: self.revert,
             new_protocol_components: aggregated_changes.protocol_components,

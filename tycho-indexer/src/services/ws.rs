@@ -508,7 +508,7 @@ mod tests {
                                     .unwrap()
                                     .naive_utc(),
                             ),
-                            committed_upto_block_height: 1,
+                            db_committed_upto_block_height: 1,
                             finalized_block_height: 1,
                             revert: false,
                             ..Default::default()
@@ -872,7 +872,7 @@ mod tests {
                                     .unwrap()
                                     .naive_utc(),
                             ),
-                            committed_upto_block_height: 1,
+                            db_committed_upto_block_height: 1,
                             finalized_block_height: 1,
                             revert: false,
                             ..Default::default()
