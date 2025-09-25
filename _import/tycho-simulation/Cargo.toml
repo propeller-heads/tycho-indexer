@@ -48,8 +48,8 @@ mini-moka = "0.10"
 lazy_static = "1.4.0"
 
 # Tycho dependencies
-tycho-client = "0.88.0"
-tycho-common = "0.88.0"
+tycho-client = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-client", tag = "0.88.0" }
+tycho-common = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-common", tag = "0.88.0" }
 tycho-ethereum = { git = "https://github.com/propeller-heads/tycho-indexer.git", package = "tycho-ethereum", tag = "0.88.0", features = ["onchain_data"] }
 
 # EVM dependencies
@@ -77,7 +77,7 @@ async-stream = { version = "0.3.6", optional = true }
 http = { version = "1.0", optional = true }
 prost = { version = "0.13", optional = true }
 # tycho execution for quickstart
-tycho-execution = "0.126.0"
+tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", tag = "0.127.0" }
 
 [dev-dependencies]
 # tycho execution for quickstart
