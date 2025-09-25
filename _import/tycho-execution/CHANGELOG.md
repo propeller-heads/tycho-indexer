@@ -1,3 +1,10 @@
+## [0.127.0](https://github.com/propeller-heads/tycho-execution/compare/0.126.0...0.127.0) (2025-09-25)
+
+
+### Features
+
+* Use tycho-common from github ([5d73e3b](https://github.com/propeller-heads/tycho-execution/commit/5d73e3b47c5cbff4fa0c88e71f15f48f3831f199))
+
 ## [0.126.0](https://github.com/propeller-heads/tycho-execution/compare/0.125.0...0.126.0) (2025-09-25)
 
 
