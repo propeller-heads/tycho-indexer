@@ -54,14 +54,18 @@ pub fn get_block_storage_changes(block: &eth::v2::Block) -> Vec<TransactionStora
                 // Collect latest change per slot
                 let mut latest_changes: HashMap<Vec<u8>, ContractSlot> = HashMap::new();
                 for change in changes {
-                    latest_changes.insert(
-                        change.key.clone(),
-                        ContractSlot {
+                    latest_changes
+                        .entry(change.key.clone())
+                        .and_modify(|slot| {
+                            // Only update the latest value, previous value stays the first seen
+                            // one.
+                            slot.value = change.new_value.clone();
+                        })
+                        .or_insert(ContractSlot {
                             slot: change.key,
                             value: change.new_value,
                             previous_value: change.old_value,
-                        },
-                    );
+                        });
                 }
 
                 StorageChanges { address, slots: latest_changes.into_values().collect() }
