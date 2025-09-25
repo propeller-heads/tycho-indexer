@@ -191,7 +191,7 @@ where
 
         // Get the contract IDs from the request
         let addresses = request.contract_ids.clone();
-        debug!(?addresses, "Getting contract states.");
+        trace!(?addresses, "Getting contract states.");
         let addresses = addresses.as_deref();
 
         // Apply pagination to the contract addresses. This is done so that we can determine which
