@@ -97,14 +97,11 @@ where
         Ok(())
     }
 
-    /// Drains blocks up to the specified committed block height from the buffer. Returns the
+    /// Drains blocks up to the specified block height from the buffer. Returns the
     /// drained blocks ordered by ascending number or an error if the target height is not found
     /// in the buffer and strict mode is enabled.
-    pub fn drain_new_committed_blocks(
-        &mut self,
-        committed_upto_block_height: u64,
-    ) -> Result<Vec<B>, StorageError> {
-        let target_index = self.find_index(|b| b.block().number == committed_upto_block_height);
+    pub fn drain_blocks(&mut self, drain_upto_block_height: u64) -> Result<Vec<B>, StorageError> {
+        let target_index = self.find_index(|b| b.block().number == drain_upto_block_height);
         let first = self
             .get_block_range(None, None)?
             .next()
@@ -116,21 +113,21 @@ where
             std::mem::swap(&mut self.block_messages, &mut temp);
             trace!(?temp, "ReorgBuffer drained blocks");
             Ok(temp.into())
-        } else if !self.strict && first.unwrap_or(0) < committed_upto_block_height {
+        } else if !self.strict && first.unwrap_or(0) < drain_upto_block_height {
             warn!(
                 ?first,
-                ?committed_upto_block_height,
+                ?drain_upto_block_height,
                 "First uncommitted block not found in ReorgBuffer"
             );
             Ok(Vec::new())
         } else {
             error!(
                 ?first,
-                ?committed_upto_block_height,
+                ?drain_upto_block_height,
                 "First uncommitted block not found in ReorgBuffer. Strict mode is {}",
                 self.strict
             );
-            Err(StorageError::NotFound("block".into(), committed_upto_block_height.to_string()))
+            Err(StorageError::NotFound("block".into(), drain_upto_block_height.to_string()))
         }
     }
 
