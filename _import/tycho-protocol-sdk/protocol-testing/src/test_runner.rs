@@ -22,15 +22,7 @@ use postgres::{Client, Error, NoTls};
 use tokio::runtime::Runtime;
 use tracing::{debug, error, info, warn};
 use tycho_simulation::{
-    evm::{
-        decoder::TychoStreamDecoder,
-        engine_db::tycho_db::PreCachedDB,
-        protocol::{
-            ekubo::state::EkuboState, pancakeswap_v2::state::PancakeswapV2State,
-            u256_num::bytes_to_u256, uniswap_v2::state::UniswapV2State,
-            uniswap_v3::state::UniswapV3State, vm::state::EVMPoolState,
-        },
-    },
+    evm::{decoder::TychoStreamDecoder, protocol::u256_num::bytes_to_u256},
     protocol::models::{DecoderContext, Update},
     tycho_client::feed::{
         synchronizer::{ComponentWithState, Snapshot, StateSyncMessage},
@@ -50,6 +42,7 @@ use crate::{
     encoding::encode_swap,
     execution,
     rpc::RPCProvider,
+    state_registry::register_decoder_for_protocol,
     tycho_rpc::TychoClient,
     tycho_runner::TychoRunner,
     utils::build_spkg,
@@ -436,36 +429,7 @@ impl TestRunner {
         if let Some(vm_adapter_path) = adapter_contract_path_str {
             decoder_context = decoder_context.vm_adapter_path(vm_adapter_path);
         }
-        match protocol_system {
-            "uniswap_v2" | "sushiswap_v2" => {
-                decoder.register_decoder_with_context::<UniswapV2State>(
-                    protocol_system,
-                    decoder_context,
-                );
-            }
-            "pancakeswap_v2" => {
-                decoder.register_decoder_with_context::<PancakeswapV2State>(
-                    protocol_system,
-                    decoder_context,
-                );
-            }
-            "uniswap_v3" | "pancakeswap_v3" => {
-                decoder.register_decoder_with_context::<UniswapV3State>(
-                    protocol_system,
-                    decoder_context,
-                );
-            }
-            "ekubo_v2" => {
-                decoder
-                    .register_decoder_with_context::<EkuboState>(protocol_system, decoder_context);
-            }
-            _ => {
-                decoder.register_decoder_with_context::<EVMPoolState<PreCachedDB>>(
-                    protocol_system,
-                    decoder_context,
-                );
-            }
-        }
+        register_decoder_for_protocol(&mut decoder, protocol_system, decoder_context)?;
 
         // Mock a stream message, with only a Snapshot and no deltas
         let mut states: HashMap<String, ComponentWithState> = HashMap::new();

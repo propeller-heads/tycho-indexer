@@ -3,6 +3,7 @@ mod config;
 mod encoding;
 mod execution;
 mod rpc;
+mod state_registry;
 mod test_runner;
 mod traces;
 mod tycho_rpc;
