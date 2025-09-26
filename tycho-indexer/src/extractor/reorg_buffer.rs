@@ -187,12 +187,12 @@ where
         None
     }
 
-    /// Returns the number of finalized blocks currently in the buffer.
-    /// Assumes the blocks in `block_messages` are ordered by ascending block number.
-    pub fn finalized_block_count(&self, finalized_height: u64) -> usize {
+    /// Returns the number of blocks in the buffer with a block number less than the specified
+    /// target block number. Assumes blocks are stored in ascending order.
+    pub fn count_blocks_before(&self, target_block: u64) -> usize {
         self.block_messages
             .iter()
-            .take_while(|msg| msg.block().number <= finalized_height)
+            .take_while(|msg| msg.block().number < target_block)
             .count()
     }
 
