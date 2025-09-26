@@ -1,3 +1,18 @@
+## [0.89.0](https://github.com/propeller-heads/tycho-indexer/compare/0.88.1...0.89.0) (2025-09-26)
+
+
+### Features
+
+* add `get_oldest_block` method in reorg buffer ([913ee16](https://github.com/propeller-heads/tycho-indexer/commit/913ee1605a261738c012f92bf9c3ce2a1efea941))
+* decouple `ReorgBuffer` db commit tracking from finality ([#710](https://github.com/propeller-heads/tycho-indexer/issues/710)) ([a969a82](https://github.com/propeller-heads/tycho-indexer/commit/a969a82dd99d428083306497981bb6e19cea0a0a))
+* have the extractor set the `db_committed_upto_block_height` ([711d80b](https://github.com/propeller-heads/tycho-indexer/commit/711d80bb3a3827846d2236379aa42bdd3543ea88))
+* rework reorg buffer to track committed height independently of finality ([fd676f9](https://github.com/propeller-heads/tycho-indexer/commit/fd676f9a0d9dfb654328f025a245e6d9085a5c4f))
+
+
+### Bug Fixes
+
+* adjust revert-finalized height to equal to last not first purged block and improve error handling ([e5982d5](https://github.com/propeller-heads/tycho-indexer/commit/e5982d5d6749a3534d7acbf35f38eaf0230b3064))
+
 ## [0.88.1](https://github.com/propeller-heads/tycho-indexer/compare/0.88.0...0.88.1) (2025-09-25)
 
 ## [0.88.0](https://github.com/propeller-heads/tycho-indexer/compare/0.87.0...0.88.0) (2025-09-25)
