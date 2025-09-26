@@ -10,7 +10,7 @@ use chrono::{Duration, NaiveDateTime};
 use metrics::{counter, gauge};
 use mockall::automock;
 use prost::Message;
-use tokio::sync::{Mutex, MutexGuard};
+use tokio::sync::Mutex;
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     models::{
@@ -588,6 +588,54 @@ where
             .collect();
         Ok(new_tokens)
     }
+
+    async fn insert_and_maybe_flush_buffer(
+        &self,
+        msg: &BlockChanges,
+        inp: &BlockScopedData,
+        is_syncing: bool,
+    ) -> Result<u64, ExtractionError> {
+        let mut reorg_buffer = self.reorg_buffer.lock().await;
+
+        let committed_height_from_buffer =
+            |buffer: &ReorgBuffer<_>| -> Result<u64, ExtractionError> {
+                buffer
+                    .get_oldest_block()
+                    .map(|block| block.number.saturating_sub(1))
+                    .ok_or_else(|| {
+                        ExtractionError::ReorgBufferError("Reorg buffer is empty".into())
+                    })
+            };
+
+        reorg_buffer
+            .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
+            .map_err(ExtractionError::Storage)?;
+
+        if reorg_buffer.finalized_block_count(inp.final_block_height) <
+            self.database_insert_batch_size
+        {
+            return committed_height_from_buffer(&reorg_buffer);
+        }
+
+        let mut msgs = reorg_buffer
+            .drain_blocks(inp.final_block_height)
+            .map_err(ExtractionError::Storage)?
+            .into_iter()
+            .peekable();
+
+        while let Some(msg) = msgs.next() {
+            // Force a database commit if we're not syncing and this is the last block to be
+            // sent. Otherwise, wait to accumulate a full batch before
+            // committing.
+            let force_db_commit = if is_syncing { false } else { msgs.peek().is_none() };
+
+            self.gateway
+                .advance(msg.block_update(), msg.cursor(), force_db_commit)
+                .await?;
+        }
+
+        committed_height_from_buffer(&reorg_buffer)
+    }
 }
 
 #[async_trait]
@@ -746,45 +794,9 @@ where
         // block finality blockchains.
         let is_syncing = inp.final_block_height >= msg.block.number;
 
-        let db_committed_upto_block_height = 'reorg_buffer_scope: {
-            // keep reorg buffer guard within a limited scope
-            let mut reorg_buffer = self.reorg_buffer.lock().await;
-
-            reorg_buffer
-                .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
-                .map_err(ExtractionError::Storage)?;
-
-            let get_db_committed_upto_block_height =
-                |reorg_buffer: MutexGuard<ReorgBuffer<_>>| -> Result<u64, ExtractionError> {
-                    reorg_buffer
-                        .get_oldest_block()
-                        .ok_or(ExtractionError::ReorgBufferError("Reorg buffer is empty".into()))
-                        .map(|block| block.number)
-                };
-
-            if reorg_buffer.len() > self.database_insert_batch_size {
-                break 'reorg_buffer_scope get_db_committed_upto_block_height(reorg_buffer)?;
-            }
-
-            let mut msgs = reorg_buffer
-                .drain_blocks(inp.final_block_height)
-                .map_err(ExtractionError::Storage)?
-                .into_iter()
-                .peekable();
-
-            while let Some(msg) = msgs.next() {
-                // Force a database commit if we're not syncing and this is the last block to be
-                // sent. Otherwise, wait to accumulate a full batch before
-                // committing.
-                let force_db_commit = if is_syncing { false } else { msgs.peek().is_none() };
-
-                self.gateway
-                    .advance(msg.block_update(), msg.cursor(), force_db_commit)
-                    .await?;
-            }
-
-            get_db_committed_upto_block_height(reorg_buffer)?
-        };
+        let db_committed_upto_block_height = self
+            .insert_and_maybe_flush_buffer(&msg, &inp, is_syncing)
+            .await?;
 
         self.update_last_processed_block(msg.block.clone())
             .await;
