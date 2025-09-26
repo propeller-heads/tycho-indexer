@@ -187,6 +187,15 @@ where
         None
     }
 
+    /// Returns the number of blocks in the buffer with a block number less than the specified
+    /// target block number. Assumes blocks are stored in ascending order.
+    pub fn count_blocks_before(&self, target_block: u64) -> usize {
+        self.block_messages
+            .iter()
+            .take_while(|msg| msg.block().number < target_block)
+            .count()
+    }
+
     /// Retrieves a range of blocks from the buffer.
     ///
     /// The retrieved iterator will include both the start and end block of specified range. In case
@@ -861,6 +870,25 @@ mod test {
                 )
             ])
         );
+    }
+
+    #[test]
+    fn test_count_blocks_before() {
+        let mut reorg_buffer = ReorgBuffer::new();
+        reorg_buffer
+            .insert_block(get_block_changes(1))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(2))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(3))
+            .unwrap();
+
+        assert_eq!(reorg_buffer.count_blocks_before(1), 0);
+        assert_eq!(reorg_buffer.count_blocks_before(2), 1);
+        assert_eq!(reorg_buffer.count_blocks_before(3), 2);
+        assert_eq!(reorg_buffer.count_blocks_before(4), 3);
     }
 
     #[test]
