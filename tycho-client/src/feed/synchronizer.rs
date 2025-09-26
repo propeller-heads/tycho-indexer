@@ -503,26 +503,33 @@ where
 
             // initial snapshot
             let block = first_msg.get_block().clone();
-            info!(height = &block.number, "Deltas received. Retrieving snapshot");
+            info!(height = &block.number, "First deltas received");
             let header = BlockHeader::from_block(first_msg.get_block(), first_msg.is_revert());
-            let snapshot = self
-                .get_snapshots::<Vec<&String>>(
-                    BlockHeader::from_block(&block, false),
-                    None,
-                )
-                .await?
-                .merge(StateSyncMessage {
-                    header: BlockHeader::from_block(first_msg.get_block(), first_msg.is_revert()),
-                    snapshots: Default::default(),
-                    deltas: Some(first_msg),
-                    removed_components: Default::default(),
-                });
+            let deltas_msg = StateSyncMessage {
+                header: BlockHeader::from_block(first_msg.get_block(), first_msg.is_revert()),
+                snapshots: Default::default(),
+                deltas: Some(first_msg),
+                removed_components: Default::default(),
+            };
 
-            let n_components = self.component_tracker.components.len();
-            let n_snapshots = snapshot.snapshots.states.len();
-            info!(n_components, n_snapshots, "Initial snapshot retrieved, starting delta message feed");
-
-            block_tx.send(Ok(snapshot)).await?;
+            // If possible skip retrieving snapshots
+            let msg = if !self.is_next_expected(&header) {
+                info!("Retrieving snapshot");
+                let snapshot = self
+                    .get_snapshots::<Vec<&String>>(
+                        BlockHeader::from_block(&block, false),
+                        None,
+                    )
+                    .await?
+                    .merge(deltas_msg);
+                let n_components = self.component_tracker.components.len();
+                let n_snapshots = snapshot.snapshots.states.len();
+                info!(n_components, n_snapshots, "Initial snapshot retrieved, starting delta message feed");
+                snapshot
+            } else {
+                deltas_msg
+            };
+            block_tx.send(Ok(msg)).await?;
             self.last_synced_block = Some(header.clone());
             loop {
                 select! {
@@ -594,8 +601,7 @@ where
         }.await;
 
         // This cleanup code now runs regardless of how the function exits (error or channel close)
-        warn!(last_synced_block = ?&self.last_synced_block, "Deltas processing ended, resetting last synced block.");
-        self.last_synced_block = None;
+        warn!(last_synced_block = ?&self.last_synced_block, "Deltas processing ended.");
         //Ignore error
         let _ = self
             .deltas_client
@@ -618,6 +624,12 @@ where
         }
     }
 
+    fn is_next_expected(&self, incoming: &BlockHeader) -> bool {
+        if let Some(block) = self.last_synced_block.as_ref() {
+            return incoming.parent_hash == block.hash;
+        }
+        false
+    }
     fn filter_deltas(&self, deltas: &mut BlockChanges) {
         deltas.filter_by_component(|id| {
             self.component_tracker
@@ -2287,5 +2299,194 @@ mod test {
         // The task should complete (not hang) after max retries
         let task_result = tokio::time::timeout(Duration::from_secs(2), jh).await;
         assert!(task_result.is_ok(), "Synchronizer task should complete after max retries");
+    }
+
+    #[test(tokio::test)]
+    async fn test_is_next_expected() {
+        // Test the is_next_expected function to ensure it correctly identifies
+        // when an incoming block is the expected next block in the chain
+
+        let mut state_sync = with_mocked_clients(true, false, None, None);
+
+        // Test 1: No previous block - should return false
+        let incoming_header = BlockHeader {
+            number: 100,
+            hash: Bytes::from("0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+            parent_hash: Bytes::from(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            revert: false,
+            timestamp: 123456789,
+        };
+        assert!(
+            !state_sync.is_next_expected(&incoming_header),
+            "Should return false when no previous block is set"
+        );
+
+        // Test 2: Set a previous block and test with matching parent hash
+        let previous_header = BlockHeader {
+            number: 99,
+            hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000000"),
+            parent_hash: Bytes::from(
+                "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+            ),
+            revert: false,
+            timestamp: 123456788,
+        };
+        state_sync.last_synced_block = Some(previous_header.clone());
+
+        assert!(
+            state_sync.is_next_expected(&incoming_header),
+            "Should return true when incoming parent_hash matches previous hash"
+        );
+
+        // Test 3: Test with non-matching parent hash
+        let non_matching_header = BlockHeader {
+            number: 100,
+            hash: Bytes::from("0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+            parent_hash: Bytes::from(
+                "0x1111111111111111111111111111111111111111111111111111111111111111",
+            ), // Wrong parent hash
+            revert: false,
+            timestamp: 123456789,
+        };
+        assert!(
+            !state_sync.is_next_expected(&non_matching_header),
+            "Should return false when incoming parent_hash doesn't match previous hash"
+        );
+    }
+
+    #[test(tokio::test)]
+    async fn test_synchronizer_restart_skip_snapshot_on_expected_block() {
+        // Test that on synchronizer restart with the next expected block,
+        // get_snapshot is not called and only deltas are sent
+
+        let mut rpc_client = MockRPCClient::new();
+        let mut deltas_client = MockDeltasClient::new();
+
+        // Mock the initial components call
+        rpc_client
+            .expect_get_protocol_components()
+            .returning(|_| {
+                Ok(ProtocolComponentRequestResponse {
+                    protocol_components: vec![ProtocolComponent {
+                        id: "Component1".to_string(),
+                        ..Default::default()
+                    }],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+                })
+            });
+
+        // Set up deltas client to send a message that is the next expected block
+        let (tx, rx) = channel(10);
+        deltas_client
+            .expect_subscribe()
+            .return_once(move |_, _| {
+                let expected_next_delta = BlockChanges {
+                    extractor: "uniswap-v2".to_string(),
+                    chain: Chain::Ethereum,
+                    block: Block {
+                        hash: Bytes::from(
+                            "0x0000000000000000000000000000000000000000000000000000000000000002",
+                        ), // This will be the next expected block
+                        number: 2,
+                        parent_hash: Bytes::from(
+                            "0x0000000000000000000000000000000000000000000000000000000000000001",
+                        ), // This matches our last synced block hash
+                        chain: Chain::Ethereum,
+                        ts: chrono::DateTime::from_timestamp(1234567890, 0)
+                            .unwrap()
+                            .naive_utc(),
+                    },
+                    revert: false,
+                    ..Default::default()
+                };
+
+                tokio::spawn(async move {
+                    let _ = tx.send(expected_next_delta).await;
+                });
+
+                Ok((Uuid::default(), rx))
+            });
+
+        deltas_client
+            .expect_unsubscribe()
+            .return_once(|_| Ok(()));
+
+        let mut state_sync = ProtocolStateSynchronizer::new(
+            ExtractorIdentity::new(Chain::Ethereum, "uniswap-v2"),
+            true,
+            ComponentFilter::with_tvl_range(0.0, 1000.0),
+            1,
+            Duration::from_secs(0),
+            true, // include_snapshots = true
+            false,
+            ArcRPCClient(Arc::new(rpc_client)),
+            ArcDeltasClient(Arc::new(deltas_client)),
+            10000_u64,
+        );
+
+        // Initialize and set up the last synced block to simulate a restart scenario
+        state_sync
+            .initialize()
+            .await
+            .expect("Init should succeed");
+
+        // Set last_synced_block to simulate that we've previously synced block 1
+        state_sync.last_synced_block = Some(BlockHeader {
+            number: 1,
+            hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000001"), /* This matches the parent_hash in our delta */
+            parent_hash: Bytes::from(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            revert: false,
+            timestamp: 123456789,
+        });
+
+        let (mut block_tx, mut block_rx) = channel(10);
+        let (end_tx, end_rx) = oneshot::channel::<()>();
+
+        // Start state_sync
+        let state_sync_handle = tokio::spawn(async move {
+            state_sync
+                .state_sync(&mut block_tx, end_rx)
+                .await
+        });
+
+        // Wait for the message - it should be a delta-only message (no snapshots)
+        let result_msg = timeout(Duration::from_millis(200), block_rx.recv())
+            .await
+            .expect("Should receive message within timeout")
+            .expect("Channel should be open")
+            .expect("Should not be an error");
+
+        // Send close signal
+        let _ = end_tx.send(());
+
+        // Wait for state_sync to finish
+        let _ = state_sync_handle
+            .await
+            .expect("Task should not panic");
+
+        // Verify the message contains deltas but no snapshots
+        // (because we skipped snapshot retrieval)
+        assert!(result_msg.deltas.is_some(), "Should contain deltas");
+        assert!(
+            result_msg.snapshots.states.is_empty(),
+            "Should not contain snapshots when next expected block is received"
+        );
+
+        // Verify the block details match our expected next block
+        if let Some(deltas) = &result_msg.deltas {
+            assert_eq!(deltas.block.number, 2);
+            assert_eq!(
+                deltas.block.hash,
+                Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000002")
+            );
+            assert_eq!(
+                deltas.block.parent_hash,
+                Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000001")
+            );
+        }
     }
 }
