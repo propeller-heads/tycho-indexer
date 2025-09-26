@@ -11,9 +11,8 @@ license = "MIT"
 categories = ["finance", "cryptography::cryptocurrencies"]
 readme = "README.md"
 
-
 [workspace]
-members = ["tycho_simulation_py"]
+members = ["tycho-integration-test", "tycho_simulation_py"]
 
 [dependencies]
 # Serialization/Deserialization
@@ -85,8 +84,8 @@ approx = "0.5.1"
 rstest = "0.23.0"
 rstest_reuse = "0.7.0"
 tracing-subscriber = { version = "0.3.17", default-features = false, features = [
-    "env-filter",
-    "fmt",
+  "env-filter",
+  "fmt",
 ] }
 tempfile = "3.13.0"
 
@@ -101,12 +100,11 @@ crossterm = { version = "0.28.1", features = ["event-stream"] }
 unicode-width = "0.1.13"
 tracing-appender = "0.2.3"
 
-
 [features]
 default = ["evm", "rfq"]
 network_tests = []
 evm = [
-    "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors", "dep:alloy",
+  "dep:foundry-config", "dep:foundry-evm", "dep:revm", "dep:revm-inspectors", "dep:alloy",
 ]
 rfq = ["dep:reqwest", "dep:async-trait", "dep:tokio-tungstenite", "dep:async-stream", "dep:http", "dep:prost"]
 
