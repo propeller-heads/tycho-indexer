@@ -2,11 +2,12 @@ use std::{collections::HashMap, sync::Arc};
 
 use futures::{Stream, StreamExt};
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 use tycho_client::{
     feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState, BlockHeader},
     stream::{StreamError, TychoStreamBuilder},
 };
+use tycho_client::feed::SynchronizerState;
 use tycho_common::{
     models::{token::Token, Chain},
     simulation::protocol_sim::ProtocolSim,
@@ -20,6 +21,27 @@ use crate::{
         models::{TryFromWithBlock, Update},
     },
 };
+
+#[derive(Default, Debug, Clone, Copy)]
+pub enum StreamEndPolicy {
+    #[default]
+    AllEndedOrStale,
+    AnyEnded,
+    AnyEndedOrStale,
+    AnyStale,
+}
+
+impl StreamEndPolicy {
+    fn should_end<'a>(&self, states: impl IntoIterator<Item=&'a SynchronizerState>) -> bool {
+        let mut it = states.into_iter();
+        match self {
+            StreamEndPolicy::AllEndedOrStale => false,
+            StreamEndPolicy::AnyEnded => it.any(|s| matches!(s, SynchronizerState::Ended(_))),
+            StreamEndPolicy::AnyStale => it.any(|s| matches!(s, SynchronizerState::Stale(_))),
+            StreamEndPolicy::AnyEndedOrStale => it.any(|s| matches!(s, SynchronizerState::Stale(_) | SynchronizerState::Ended(_))),
+        }
+    }
+}
 
 /// Builds the protocol stream, providing a `BlockUpdate` for each block received.
 ///
@@ -53,6 +75,7 @@ use crate::{
 pub struct ProtocolStreamBuilder {
     decoder: TychoStreamDecoder<BlockHeader>,
     stream_builder: TychoStreamBuilder,
+    stream_end_policy: StreamEndPolicy,
 }
 
 impl ProtocolStreamBuilder {
@@ -60,6 +83,7 @@ impl ProtocolStreamBuilder {
         Self {
             decoder: TychoStreamDecoder::new(),
             stream_builder: TychoStreamBuilder::new(tycho_url, chain.into()),
+            stream_end_policy: StreamEndPolicy::default(),
         }
     }
 
@@ -126,6 +150,14 @@ impl ProtocolStreamBuilder {
         self
     }
 
+    /// Sets stream end policy
+    ///
+    /// Decides whether to end the stream based on the protocol synchronisation states.
+    pub fn stream_end_policy(mut self, stream_end_policy: StreamEndPolicy) -> Self {
+        self.stream_end_policy = stream_end_policy;
+        self
+    }
+
     /// Sets the currently known tokens which to be considered during decoding.
     ///
     /// Protocol components containing tokens which are not included in this initial list, or
@@ -149,17 +181,33 @@ impl ProtocolStreamBuilder {
         let (_, rx) = self.stream_builder.build().await?;
         let decoder = Arc::new(self.decoder);
 
-        Ok(Box::pin(ReceiverStream::new(rx).then({
+        let stream = Box::pin(ReceiverStream::new(rx).take_while(move |msg| match msg {
+            Ok(msg) => {
+                let states = msg.sync_states.values();
+                if self.stream_end_policy.should_end(states) {
+                    error!("Block stream ended due to {:?}: {:?}", self.stream_end_policy, msg.sync_states);
+                    futures::future::ready(false)
+                } else {
+                    futures::future::ready(true)
+                }
+            }
+            Err(e) => {
+                error!("Block stream ended with terminal error: {e}");
+                futures::future::ready(false)
+            }
+        }).then({
             let decoder = decoder.clone(); // Clone the decoder for the closure
             move |msg| {
                 let decoder = decoder.clone(); // Clone again for the async block
                 async move {
+                    let msg = msg.expect("Save since stream ends if we receive an error");
                     decoder.decode(&msg).await.map_err(|e| {
                         debug!(msg=?msg, "Decode error: {}", e);
                         e
                     })
                 }
             }
-        })))
+        }));
+        Ok(stream)
     }
 }
