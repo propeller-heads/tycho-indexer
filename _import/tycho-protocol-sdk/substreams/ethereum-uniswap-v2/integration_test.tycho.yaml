@@ -3,18 +3,18 @@ protocol_system: "uniswap_v2"
 protocol_type_names:
   - "uniswap_v2_pool"
 module_name: "map_pool_events"
-skip_balance_check: true
+skip_balance_check: false
 initialized_accounts:
 tests:
-  - name: test_spx_weth_pool
-    start_block: 17924533
-    stop_block: 17924534
+  - name: test_wolf_weth_pool
+    start_block: 19701395
+    stop_block: 19701397
     expected_components:
-      - id: "0x52c77b0CB827aFbAD022E6d6CAF2C44452eDbc39"
+      - id: "0x67324985b5014b36b960273353deb3d96f2f18c2"
         tokens:
-          - "0xe0f63a424a4439cbe457d80e4f4b51ad25b2c56c"
+          - "0x67466BE17df832165F8C80a5A120CCc652bD7E69"
           - "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
         static_attributes:
           fee: "0x1e"
-        creation_tx: "0xf09ac8ad7e21d15ded627a176ec718903baae5e5a9ce671a611bd852691b24f9"
+        creation_tx: "0x5e01ae1522722340871708a3c55e1395dda647a57767781230317319fa36ea7b"
         skip_simulation: false

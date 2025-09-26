@@ -267,7 +267,7 @@ impl TestRunner {
                 self.validate_token_balances(
                     &component_tokens,
                     &response_protocol_states_by_id,
-                    test.start_block,
+                    test.stop_block,
                 )?;
                 info!("All token balances match the values found onchain")
             }
@@ -772,7 +772,7 @@ impl TestRunner {
         &self,
         component_tokens: &HashMap<String, Vec<Token>>,
         protocol_states_by_id: &HashMap<String, ResponseProtocolState>,
-        start_block: u64,
+        stop_block: u64,
     ) -> miette::Result<()> {
         for (id, component) in protocol_states_by_id.iter() {
             let tokens = component_tokens.get(id);
@@ -797,12 +797,11 @@ impl TestRunner {
                             .block_on(self.rpc_provider.get_token_balance(
                                 token_address,
                                 component_address,
-                                start_block,
+                                stop_block,
                             ))?;
                     if balance != node_balance {
                         return Err(miette!(
-                            "Token balance mismatch for component {} and token {}",
-                            id,
+                            "Token balance mismatch for component {id} and token {}. Balance: {balance}, Node balance: {node_balance}",
                             token.symbol
                         ));
                     }
