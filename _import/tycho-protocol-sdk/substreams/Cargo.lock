@@ -240,7 +240,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-balancer-v2"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "ethabi 18.0.0",
@@ -250,7 +250,7 @@ dependencies = [
  "num-bigint",
  "substreams",
  "substreams-ethereum",
- "tycho-substreams 0.5.0",
+ "tycho-substreams 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1760,15 +1760,14 @@ dependencies = [
 
 [[package]]
 name = "tycho-substreams"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "828cbe6f7b984fefe39d8fdb4c40311e329f30ded0a70e477e8f2add4d60483d"
+version = "0.5.1"
 dependencies = [
  "ethabi 18.0.0",
  "hex",
  "itertools 0.12.1",
  "num-bigint",
  "prost 0.11.9",
+ "rstest",
  "serde",
  "serde_json",
  "substreams",
@@ -1778,13 +1777,14 @@ dependencies = [
 [[package]]
 name = "tycho-substreams"
 version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a164ecbc3f2d7515e9447d7c1933a01fba6e54a082bbe1c73eb7b827d2a45b47"
 dependencies = [
  "ethabi 18.0.0",
  "hex",
  "itertools 0.12.1",
  "num-bigint",
  "prost 0.11.9",
- "rstest",
  "serde",
  "serde_json",
  "substreams",
