@@ -22,6 +22,7 @@ use tokio::{
 };
 use tracing::{debug, error, info, trace, warn};
 use tycho_common::{
+    display::opt,
     dto::{Block, ExtractorIdentity},
     Bytes,
 };
@@ -51,6 +52,19 @@ pub struct BlockHeader {
     pub parent_hash: Bytes,
     pub revert: bool,
     pub timestamp: u64,
+}
+
+impl Display for BlockHeader {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // Take first 6 hex chars of the hash for readability
+        let short_hash = if self.hash.len() >= 4 {
+            hex::encode(&self.hash[..4]) // 4 bytes → 8 hex chars
+        } else {
+            hex::encode(&self.hash)
+        };
+
+        write!(f, "Block #{} [0x{}..]", self.number, short_hash)
+    }
 }
 
 impl BlockHeader {
@@ -229,8 +243,6 @@ impl SynchronizerStream {
                 warn!(state=?&self.state, "Advancing Synchronizer in this state not supported!");
                 Ok(None)
             }
-            // TODO: get rid of this entirely, if any synchronizer is advanced, it
-            //  becomes the latest block and we reset block history
             SynchronizerState::Advanced(b) => {
                 let future_block = b.clone();
                 // Transition to ready once we arrived at the expected height
@@ -250,8 +262,8 @@ impl SynchronizerStream {
             SynchronizerState::Delayed(old_block) => {
                 // try to catch up all currently queued blocks until the expected block
                 debug!(
-                    ?old_block,
-                    ?latest_block,
+                    %old_block,
+                    latest_block=opt(&latest_block),
                     %extractor_id,
                     "Trying to catch up to latest block"
                 );
@@ -261,8 +273,8 @@ impl SynchronizerStream {
             SynchronizerState::Stale(old_block) => {
                 // try to catch up all currently queued blocks until the expected block
                 debug!(
-                    ?old_block,
-                    ?latest_block,
+                    %old_block,
+                    latest_block=opt(&latest_block),
                     %extractor_id,
                     "Trying to catch up stale synchronizer to latest block"
                 );
@@ -306,7 +318,7 @@ impl SynchronizerStream {
             }
             Err(_) => {
                 // trying to advance a block timed out
-                debug!(%extractor_id, ?previous_block, "No block received within time limit.");
+                debug!(%extractor_id, %previous_block, "No block received within time limit.");
 
                 // TODO: as per prev condition check, the state will always be always ready here -
                 // simplify
@@ -365,7 +377,7 @@ impl SynchronizerStream {
             .await
             {
                 Ok(Some(Ok(msg))) => {
-                    debug!(%extractor_id, block_num=?msg.header.number, "Received new message during catch-up");
+                    debug!(%extractor_id, block=%msg.header, "Received new message during catch-up");
                     let block_pos = block_history.determine_block_position(&msg.header)?;
                     results.push(msg);
                     if matches!(block_pos, BlockPosition::NextExpected) {
@@ -400,7 +412,7 @@ impl SynchronizerStream {
 
         if let Some(msg) = merged {
             // we were able to get at least one block out
-            debug!(?extractor_id, "Delayed extractor made progress!");
+            debug!(%extractor_id, "Delayed extractor made progress!");
             self.transition(msg.header.clone(), block_history, stale_threshold)?;
             Ok(Some(msg))
         } else {
@@ -463,8 +475,8 @@ impl SynchronizerStream {
             BlockPosition::NextExpected => {
                 self.state = SynchronizerState::Ready(latest_retrieved.clone());
                 trace!(
-                    next = ?latest_retrieved,
-                    extractor = ?extractor_id,
+                    next = %latest_retrieved,
+                    extractor = %extractor_id,
                     "SynchronizerStream transition to next expected"
                 )
             }
@@ -474,20 +486,20 @@ impl SynchronizerStream {
                     Some(latest_retrieved.clone()),
                 )? {
                     warn!(
-                        ?extractor_id,
+                        %extractor_id,
                         ?last_message_at,
-                        ?block,
+                        %block,
                         "SynchronizerStream transition transition to delayed."
                     );
                     self.state = SynchronizerState::Delayed(latest_retrieved.clone());
                 }
             }
             BlockPosition::Advanced => {
-                error!(
-                    ?extractor_id,
+                info!(
+                    %extractor_id,
                     ?last_message_at,
-                    latest = ?block_history.latest(),
-                    ?block,
+                    latest = opt(&block_history.latest()),
+                    %block,
                     "SynchronizerStream transition to advanced."
                 );
                 self.state = SynchronizerState::Advanced(latest_retrieved.clone());
@@ -497,12 +509,21 @@ impl SynchronizerStream {
         Ok(())
     }
 
+    /// Marks this stream as errored
+    ///
+    /// Sets an error and transitions the stream to Ended, correctly recording the
+    /// time at which this happened.
     fn mark_errored(&mut self, error: SynchronizerError) {
         self.state = SynchronizerState::Ended(error.to_string());
         self.modify_ts = Local::now().naive_utc();
         self.error = Some(error);
     }
 
+    /// Marks a stream as closed.
+    ///
+    /// If the stream has not been ended previously, e.g. by an error it will be marked
+    /// as Ended without error. This should not happen since we should stop consuming
+    /// from the stream if an error occured.
     fn mark_closed(&mut self) {
         if !matches!(self.state, SynchronizerState::Ended(_)) {
             self.state = SynchronizerState::Ended("Closed".to_string());
@@ -510,11 +531,13 @@ impl SynchronizerStream {
         }
     }
 
+    /// Marks a stream as stale.
     fn mark_stale(&mut self, header: &BlockHeader) {
         self.state = SynchronizerState::Stale(header.clone());
         self.modify_ts = Local::now().naive_utc();
     }
 
+    /// Marks this stream as ready.
     fn mark_ready(&mut self, header: &BlockHeader) {
         self.state = SynchronizerState::Ready(header.clone());
         self.modify_ts = Local::now().naive_utc();
@@ -528,9 +551,18 @@ impl SynchronizerStream {
         matches!(self.state, SynchronizerState::Stale(_))
     }
 
+    fn is_advanced(&self) -> bool {
+        matches!(self.state, SynchronizerState::Advanced(_))
+    }
+
+    /// Gets the streams current header from active streams.
+    ///
+    /// A stream is considered as active unless it has ended or is stale.
     fn get_current_header(&self) -> Option<&BlockHeader> {
         match &self.state {
-            SynchronizerState::Ready(b) | SynchronizerState::Delayed(b) => Some(b),
+            SynchronizerState::Ready(b) |
+            SynchronizerState::Delayed(b) |
+            SynchronizerState::Advanced(b) => Some(b),
             _ => None,
         }
     }
@@ -632,6 +664,10 @@ where
         }
     }
 
+    /// Starts the synchronization of streams.
+    ///
+    /// Will error directly if the startup fails. Once the startup is complete, it will
+    /// communicate any fatal errors through the stream before closing it.
     pub async fn run(
         mut self,
     ) -> BlockSyncResult<(JoinHandle<()>, Receiver<BlockSyncResult<FeedMessage<BlockHeader>>>)>
@@ -720,9 +756,9 @@ where
             .latest()
             .expect("Safe since we checked streams before");
         info!(
-            start_block=?start_header,
-            n_healthy=?ready_sync_msgs.len(),
-            n_total=?sync_streams.len(),
+            start_block=%start_header,
+            n_healthy=ready_sync_msgs.len(),
+            n_total=sync_streams.len(),
             "Block synchronization started successfully!"
         );
 
@@ -733,8 +769,8 @@ where
                 if header.number < start_header.number {
                     debug!(
                         extractor_id=%stream.extractor_id,
-                        synchronizer_block=?header.number,
-                        current_block=?start_header.number,
+                        synchronizer_block=header.number,
+                        current_block=start_header.number,
                         "Marking synchronizer as delayed during initialization"
                     );
                     stream.state = SynchronizerState::Delayed(header);
@@ -795,11 +831,17 @@ where
                     error!("BlockSynchornizer main loop panicked: {e}")
                 }
             });
+            debug!("Main loop exited. Closing synchronizers");
             Self::cleanup_synchronizers(state_sync_tasks, sync_close_senders).await;
+            debug!("Shutdown complete");
         });
         Ok((nanny_jh, sync_rx))
     }
 
+    /// Retrieves next message from synchronizers
+    ///
+    /// The result is written into `ready_sync_messages`. Errors only if there is a
+    /// non-recoverable error or all synchronizers have ended.
     async fn handle_next_message(
         &self,
         sync_streams: &mut HashMap<ExtractorIdentity, SynchronizerStream>,
@@ -848,25 +890,69 @@ where
         // If all synchronizers have been purged (Stale/Ended), exit the main loop
         Self::check_streams(sync_streams)?;
 
-        // Find the latest connected block header to advance history
-        if let Some(header) = sync_streams
+        // if we have any advanced header, we reinit the block history,
+        // else we simply advance the existing history
+        if sync_streams
             .values()
-            .filter_map(SynchronizerStream::get_current_header)
-            .max_by_key(|b| b.number)
+            .any(SynchronizerStream::is_advanced)
         {
-            block_history.push(header.clone())?;
-            Ok(())
+            *block_history = Self::reinit_block_history(sync_streams, block_history)?;
         } else {
-            // TODO: This happens if e.g. the ws connection was dropped and all
-            //  synchronizer restarted their stream at a later block, in this
-            //  case they are all marked as advanced. Need to decide if we
-            //  should handle this here or earlier.
-            Err(BlockSynchronizerError::NoReadySynchronizers(
-                "Only advanced SynchronizerStreams remain".to_string(),
-            ))
+            let header = sync_streams
+                .values()
+                .filter_map(SynchronizerStream::get_current_header)
+                .max_by_key(|b| b.number)
+                .expect("Active streams are present, since we checked above");
+            block_history.push(header.clone())?;
         }
+        Ok(())
     }
 
+    /// Reinitialise block history and reclassifies active synchronizers states.
+    ///
+    /// We call this if we detect a future detached block. This usually only happens if
+    /// a synchronizer has a restart.
+    fn reinit_block_history(
+        sync_streams: &mut HashMap<ExtractorIdentity, SynchronizerStream>,
+        block_history: &mut BlockHistory,
+    ) -> Result<BlockHistory, BlockSynchronizerError> {
+        let previous = block_history
+            .latest()
+            .expect("Old block history is not empty, startup finished at this point");
+        let blocks = sync_streams
+            .values()
+            .filter_map(SynchronizerStream::get_current_header)
+            .cloned()
+            .collect();
+        let new_block_history = BlockHistory::new(blocks, 10)?;
+        let latest = block_history
+            .latest()
+            .expect("block history is not empty");
+        info!(
+             %previous,
+            %latest,
+            "Advanced synchronizer detected. Reinitialized block history."
+        );
+        sync_streams
+            .values_mut()
+            .for_each(|stream| {
+                // we only get headers from, advanced, ready and delayed so stale
+                // or ended streams are not considered here
+                if let Some(header) = stream.get_current_header() {
+                    if header.number < latest.number {
+                        stream.state = SynchronizerState::Delayed(header.clone());
+                    } else if header.number == latest.number {
+                        stream.state = SynchronizerState::Ready(header.clone());
+                    }
+                }
+            });
+        Ok(new_block_history)
+    }
+
+    /// Checks if we still have at least one active stream else errors.
+    ///
+    /// If there are not active streams meaning all  areended or stale, it returns a
+    /// summary error message for the state of all synchronizers.
     fn check_streams(
         sync_streams: &HashMap<ExtractorIdentity, SynchronizerStream>,
     ) -> BlockSyncResult<()> {
@@ -1005,6 +1091,7 @@ mod tests {
             }
 
             let behavior = self.behavior.clone();
+            let close_received_clone = self.close_received.clone();
             let tx = self.header_tx.clone();
 
             let jh = tokio::spawn(async move {
@@ -1031,6 +1118,8 @@ mod tests {
                             result = close_rx => result,
                             result = close_rx_for_test => result,
                         };
+                        let mut guard = close_received_clone.lock().await;
+                        *guard = true;
                     }
                 }
             });
@@ -1040,135 +1129,76 @@ mod tests {
         }
     }
 
-    #[test(tokio::test)]
-    async fn test_two_ready_synchronizers() {
-        let v2_sync = MockStateSync::new();
-        let v3_sync = MockStateSync::new();
-        let block_sync = BlockSynchronizer::with_short_timeouts()
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-                v2_sync.clone(),
-            )
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-                v3_sync.clone(),
-            );
-        let start_msg = StateSyncMessage {
-            header: BlockHeader { number: 1, ..Default::default() },
-            ..Default::default()
-        };
-        v2_sync
-            .send_header(start_msg.clone())
-            .await
-            .expect("send_header failed");
-        v3_sync
-            .send_header(start_msg.clone())
-            .await
-            .expect("send_header failed");
-
-        let (_jh, mut rx) = block_sync
-            .run()
-            .await
-            .expect("BlockSynchronizer failed to start.");
-        let first_feed_msg = rx
-            .recv()
-            .await
-            .expect("header channel was closed");
-        let second_msg = StateSyncMessage {
-            header: BlockHeader { number: 2, ..Default::default() },
-            ..Default::default()
-        };
-        v2_sync
-            .send_header(second_msg.clone())
-            .await
-            .expect("send_header failed");
-        v3_sync
-            .send_header(second_msg.clone())
-            .await
-            .expect("send_header failed");
-        let second_feed_msg = rx
-            .recv()
-            .await
-            .expect("header channel was closed!");
-
-        let exp1 = FeedMessage {
-            state_msgs: [
-                ("uniswap-v2".to_string(), start_msg.clone()),
-                ("uniswap-v3".to_string(), start_msg.clone()),
-            ]
-            .into_iter()
-            .collect(),
-            sync_states: [
-                ("uniswap-v3".to_string(), SynchronizerState::Ready(start_msg.header.clone())),
-                ("uniswap-v2".to_string(), SynchronizerState::Ready(start_msg.header.clone())),
-            ]
-            .into_iter()
-            .collect(),
-        };
-        let exp2 = FeedMessage {
-            state_msgs: [
-                ("uniswap-v2".to_string(), second_msg.clone()),
-                ("uniswap-v3".to_string(), second_msg.clone()),
-            ]
-            .into_iter()
-            .collect(),
-            sync_states: [
-                ("uniswap-v3".to_string(), SynchronizerState::Ready(second_msg.header.clone())),
-                ("uniswap-v2".to_string(), SynchronizerState::Ready(second_msg.header.clone())),
-            ]
-            .into_iter()
-            .collect(),
-        };
-        assert_eq!(first_feed_msg.unwrap(), exp1);
-        assert_eq!(second_feed_msg.unwrap(), exp2);
-    }
-
-    #[test(tokio::test)]
-    async fn test_delayed_synchronizer_catches_up() {
-        let v2_sync = MockStateSync::new();
-        let v3_sync = MockStateSync::new();
-        let block_sync = BlockSynchronizer::with_short_timeouts()
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-                v2_sync.clone(),
-            )
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-                v3_sync.clone(),
-            );
-
-        // Initial messages - both synchronizers are at block 1
-        let block1_msg = StateSyncMessage {
+    fn header_message(block: u8) -> StateSyncMessage<BlockHeader> {
+        StateSyncMessage {
             header: BlockHeader {
-                number: 1,
-                hash: Bytes::from(vec![1]),
-                parent_hash: Bytes::from(vec![0]),
+                number: block as u64,
+                hash: Bytes::from(vec![block]),
+                parent_hash: Bytes::from(vec![block - 1]),
                 revert: false,
-                ..Default::default()
+                timestamp: 1000,
             },
             ..Default::default()
-        };
-        v2_sync
-            .send_header(block1_msg.clone())
+        }
+    }
+
+    async fn receive_message(rx: &mut Receiver<BlockSyncResult<FeedMessage>>) -> FeedMessage {
+        timeout(Duration::from_millis(100), rx.recv())
             .await
-            .expect("send_header failed");
-        v3_sync
+            .expect("Responds in time")
+            .expect("Should receive first message")
+            .expect("No error")
+    }
+
+    async fn setup_block_sync(
+    ) -> (MockStateSync, MockStateSync, JoinHandle<()>, Receiver<BlockSyncResult<FeedMessage>>)
+    {
+        setup_block_sync_with_behaviour(MockBehavior::Normal, MockBehavior::Normal).await
+    }
+
+    // Starts up a synchronizer and consumes the first message on block 1.
+    async fn setup_block_sync_with_behaviour(
+        v2_behavior: MockBehavior,
+        v3_behavior: MockBehavior,
+    ) -> (MockStateSync, MockStateSync, JoinHandle<()>, Receiver<BlockSyncResult<FeedMessage>>)
+    {
+        let v2_sync = MockStateSync::with_behavior(v2_behavior);
+        let v3_sync = MockStateSync::with_behavior(v3_behavior);
+
+        // Use reasonable timeouts to observe proper state transitions
+        let mut block_sync = BlockSynchronizer::new(
+            Duration::from_millis(20), // block_time
+            Duration::from_millis(10), // max_wait
+            3,                         // max_missed_blocks (stale threshold = 20ms * 3 = 60ms)
+        );
+        block_sync.max_messages(10); // Allow enough messages to see the progression
+
+        let block_sync = block_sync
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+                v2_sync.clone(),
+            )
+            .register_synchronizer(
+                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+                v3_sync.clone(),
+            );
+
+        // Send initial messages to both synchronizers
+        let block1_msg = header_message(1);
+        let _ = v2_sync
             .send_header(block1_msg.clone())
-            .await
-            .expect("send_header failed");
+            .await;
+        let _ = v3_sync
+            .send_header(block1_msg.clone())
+            .await;
 
         // Start the block synchronizer
-        let (_jh, mut rx) = block_sync
+        let (nanny_handle, mut rx) = block_sync
             .run()
             .await
-            .expect("BlockSynchronizer failed to start.");
+            .expect("BlockSynchronizer failed to start");
 
-        // Consume the first message
-        let first_feed_msg = rx
-            .recv()
-            .await
-            .expect("header channel was closed")
-            .expect("no error");
+        let first_feed_msg = receive_message(&mut rx).await;
         assert_eq!(first_feed_msg.state_msgs.len(), 2);
         assert!(matches!(
             first_feed_msg
@@ -1185,28 +1215,70 @@ mod tests {
             SynchronizerState::Ready(_)
         ));
 
-        // Send block 2 to v2 synchronizer only
-        let block2_msg = StateSyncMessage {
-            header: BlockHeader {
-                number: 2,
-                hash: Bytes::from(vec![2]),
-                parent_hash: Bytes::from(vec![1]),
-                revert: false,
-                ..Default::default()
-            },
-            ..Default::default()
+        (v2_sync, v3_sync, nanny_handle, rx)
+    }
+
+    async fn shutdown_block_synchronizer(
+        v2_sync: &MockStateSync,
+        v3_sync: &MockStateSync,
+        nanny_handle: JoinHandle<()>,
+    ) {
+        v3_sync.trigger_close().await;
+        v2_sync.trigger_close().await;
+
+        timeout(Duration::from_millis(100), nanny_handle)
+            .await
+            .expect("Nanny failed to exit within time")
+            .expect("Nanny panicked");
+    }
+
+    #[test(tokio::test)]
+    async fn test_two_ready_synchronizers() {
+        let (v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
+
+        let second_msg = header_message(2);
+        v2_sync
+            .send_header(second_msg.clone())
+            .await
+            .expect("send_header failed");
+        v3_sync
+            .send_header(second_msg.clone())
+            .await
+            .expect("send_header failed");
+        let second_feed_msg = receive_message(&mut rx).await;
+
+        let exp2 = FeedMessage {
+            state_msgs: [
+                ("uniswap-v2".to_string(), second_msg.clone()),
+                ("uniswap-v3".to_string(), second_msg.clone()),
+            ]
+            .into_iter()
+            .collect(),
+            sync_states: [
+                ("uniswap-v3".to_string(), SynchronizerState::Ready(second_msg.header.clone())),
+                ("uniswap-v2".to_string(), SynchronizerState::Ready(second_msg.header.clone())),
+            ]
+            .into_iter()
+            .collect(),
         };
+        assert_eq!(second_feed_msg, exp2);
+
+        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
+    }
+
+    #[test(tokio::test)]
+    async fn test_delayed_synchronizer_catches_up() {
+        let (v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
+
+        // Send block 2 to v2 synchronizer only
+        let block2_msg = header_message(2);
         v2_sync
             .send_header(block2_msg.clone())
             .await
             .expect("send_header failed");
 
         // Consume second message - v3 should be delayed
-        let second_feed_msg = rx
-            .recv()
-            .await
-            .expect("header channel was closed")
-            .expect("no error");
+        let second_feed_msg = receive_message(&mut rx).await;
         debug!("Consumed second message for v2");
 
         assert!(second_feed_msg
@@ -1231,16 +1303,7 @@ mod tests {
             .expect("send_header failed");
 
         // Both advance to block 3
-        let block3_msg = StateSyncMessage {
-            header: BlockHeader {
-                number: 3,
-                hash: Bytes::from(vec![3]),
-                parent_hash: Bytes::from(vec![2]),
-                revert: false,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
+        let block3_msg = header_message(3);
         v2_sync
             .send_header(block3_msg.clone())
             .await
@@ -1252,11 +1315,7 @@ mod tests {
 
         // Consume messages until we get both synchronizers on block 3
         // We may get an intermediate message for v3's catch-up or a combined message
-        let mut third_feed_msg = rx
-            .recv()
-            .await
-            .expect("header channel was closed")
-            .expect("no error");
+        let mut third_feed_msg = receive_message(&mut rx).await;
 
         // If this message doesn't have both univ2, it's an intermediate message, so we get the next
         // one
@@ -1284,6 +1343,8 @@ mod tests {
             third_feed_msg.sync_states.get("uniswap-v3").unwrap(),
             SynchronizerState::Ready(header) if header.number == 3
         ));
+
+        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
     }
 
     #[test(tokio::test)]
@@ -1301,26 +1362,8 @@ mod tests {
             );
 
         // Initial messages - synchronizers at different blocks
-        let block1_msg = StateSyncMessage {
-            header: BlockHeader {
-                number: 1,
-                hash: Bytes::from(vec![1]),
-                parent_hash: Bytes::from(vec![0]),
-                revert: false,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let block2_msg = StateSyncMessage {
-            header: BlockHeader {
-                number: 2,
-                hash: Bytes::from(vec![2]),
-                parent_hash: Bytes::from(vec![1]),
-                revert: false,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
+        let block1_msg = header_message(1);
+        let block2_msg = header_message(2);
 
         let _ = v2_sync
             .send_header(block1_msg.clone())
@@ -1331,17 +1374,13 @@ mod tests {
             .expect("send_header failed");
 
         // Start the block synchronizer - it should use block 2 as the starting block
-        let (_jh, mut rx) = block_sync
+        let (jh, mut rx) = block_sync
             .run()
             .await
             .expect("BlockSynchronizer failed to start.");
 
         // Consume first message
-        let first_feed_msg = rx
-            .recv()
-            .await
-            .expect("header channel was closed")
-            .expect("no error");
+        let first_feed_msg = receive_message(&mut rx).await;
         assert!(matches!(
             first_feed_msg.sync_states.get("uniswap-v2").unwrap(),
             SynchronizerState::Delayed(header) if header.number == 1
@@ -1358,16 +1397,7 @@ mod tests {
             .expect("send_header failed");
 
         // Both advance to block 3
-        let block3_msg = StateSyncMessage {
-            header: BlockHeader {
-                number: 3,
-                hash: Bytes::from(vec![3]),
-                parent_hash: Bytes::from(vec![2]),
-                revert: false,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
+        let block3_msg = header_message(3);
         let _ = v2_sync
             .send_header(block3_msg.clone())
             .await;
@@ -1377,11 +1407,7 @@ mod tests {
             .expect("send_header failed");
 
         // Consume third message - both should be on block 3
-        let second_feed_msg = rx
-            .recv()
-            .await
-            .expect("header channel was closed")
-            .expect("no error");
+        let second_feed_msg = receive_message(&mut rx).await;
         assert_eq!(second_feed_msg.state_msgs.len(), 2);
         assert!(matches!(
             second_feed_msg.sync_states.get("uniswap-v2").unwrap(),
@@ -1391,65 +1417,15 @@ mod tests {
             second_feed_msg.sync_states.get("uniswap-v3").unwrap(),
             SynchronizerState::Ready(header) if header.number == 3
         ));
+
+        shutdown_block_synchronizer(&v2_sync, &v3_sync, jh).await;
     }
 
     #[test(tokio::test)]
     async fn test_synchronizer_fails_other_goes_stale() {
-        let v2_sync = MockStateSync::with_behavior(MockBehavior::ExitImmediately);
-        let v3_sync = MockStateSync::new(); // Normal behavior
-
-        let block_sync = BlockSynchronizer::with_short_timeouts()
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-                v2_sync.clone(),
-            )
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-                v3_sync.clone(),
-            );
-
-        // Send initial messages
-        let start_msg = StateSyncMessage {
-            header: BlockHeader { number: 1, ..Default::default() },
-            ..Default::default()
-        };
-        v2_sync
-            .send_header(start_msg.clone())
-            .await
-            .expect("send_header failed");
-        v3_sync
-            .send_header(start_msg.clone())
-            .await
-            .expect("send_header failed");
-
-        // Start BlockSynchronizer - v2_sync will exit immediately with error
-        let (nanny_handle, mut sync_rx) = block_sync
-            .run()
-            .await
-            .expect("BlockSynchronizer failed to start");
-
-        // Consume first message to ensure at least one synchronizer is running
-        let first_msg = sync_rx
-            .recv()
-            .await
-            .expect("Should receive first message")
-            .expect("no error");
-        // TODO assert v2 is ok and v3 is ok, then v2 ended and v3 is **still ok**
-        // v2_sync might have already failed, so we might only get v3_sync message
-        assert!(matches!(
-            first_msg
-                .sync_states
-                .get("uniswap-v2")
-                .unwrap(),
-            SynchronizerState::Ready(_)
-        ));
-        assert!(matches!(
-            first_msg
-                .sync_states
-                .get("uniswap-v3")
-                .unwrap(),
-            SynchronizerState::Ready(_)
-        ));
+        let (_v2_sync, v3_sync, nanny_handle, mut sync_rx) =
+            setup_block_sync_with_behaviour(MockBehavior::ExitImmediately, MockBehavior::Normal)
+                .await;
 
         let mut error_reported = false;
         for _ in 0..3 {
@@ -1490,43 +1466,11 @@ mod tests {
     async fn test_cleanup_timeout_warning() {
         // Verify that cleanup_synchronizers emits a warning when synchronizers timeout during
         // cleanup
-
-        let v2_sync = MockStateSync::with_behavior(MockBehavior::ExitImmediately);
-        let v3_sync = MockStateSync::with_behavior(MockBehavior::IgnoreClose);
-
-        let block_sync = BlockSynchronizer::with_short_timeouts()
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-                v2_sync.clone(),
-            )
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-                v3_sync.clone(),
-            );
-
-        // Send initial messages
-        let start_msg = StateSyncMessage {
-            header: BlockHeader { number: 1, ..Default::default() },
-            ..Default::default()
-        };
-        v2_sync
-            .send_header(start_msg.clone())
-            .await
-            .expect("send_header failed");
-        v3_sync
-            .send_header(start_msg.clone())
-            .await
-            .expect("send_header failed");
-
-        // Start BlockSynchronizer - v2_sync will exit immediately, triggering cleanup
-        // v3_sync will ignore close signals and timeout during cleanup
-        let (nanny_handle, mut sync_rx) = block_sync
-            .run()
-            .await
-            .expect("BlockSynchronizer failed to start");
-
-        // Might not get any messages if v2_sync fails before producing output
-        let _ = sync_rx.recv().await;
+        let (_v2_sync, _v3_sync, nanny_handle, _rx) = setup_block_sync_with_behaviour(
+            MockBehavior::ExitImmediately,
+            MockBehavior::IgnoreClose,
+        )
+        .await;
 
         // Wait for nanny to complete - cleanup should timeout on v3_sync but still complete
         let result = timeout(Duration::from_secs(10), nanny_handle).await;
@@ -1543,96 +1487,17 @@ mod tests {
     #[test(tokio::test)]
     async fn test_one_synchronizer_goes_stale_while_other_works() {
         // Test Case 1: One protocol goes stale and is removed while another protocol works normally
-
-        let v2_sync = MockStateSync::new();
-        let v3_sync = MockStateSync::new();
-
-        // Use reasonable timeouts to observe proper state transitions
-        let mut block_sync = BlockSynchronizer::new(
-            Duration::from_millis(20), // block_time
-            Duration::from_millis(10), // max_wait
-            2,                         // max_missed_blocks (stale threshold = 20ms * 2 = 40ms)
-        );
-        block_sync.max_messages(5); // Limit messages for test
-
-        let block_sync = block_sync
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-                v2_sync.clone(),
-            )
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-                v3_sync.clone(),
-            );
-
-        // Send initial messages to both synchronizers
-        let block1_msg = StateSyncMessage {
-            header: BlockHeader {
-                number: 1,
-                hash: Bytes::from(vec![1]),
-                parent_hash: Bytes::from(vec![0]),
-                revert: false,
-                timestamp: 1000,
-            },
-            ..Default::default()
-        };
-        let _ = v2_sync
-            .send_header(block1_msg.clone())
-            .await;
-        let _ = v3_sync
-            .send_header(block1_msg.clone())
-            .await;
-
-        // Start the block synchronizer
-        let (nanny_handle, mut rx) = block_sync
-            .run()
-            .await
-            .expect("BlockSynchronizer failed to start");
-
-        // Consume the first message - both should be ready
-        let first_feed_msg = rx
-            .recv()
-            .await
-            .expect("Should receive first message")
-            .expect("no error");
-        assert_eq!(first_feed_msg.state_msgs.len(), 2);
-        assert!(matches!(
-            first_feed_msg
-                .sync_states
-                .get("uniswap-v2")
-                .unwrap(),
-            SynchronizerState::Ready(_)
-        ));
-        assert!(matches!(
-            first_feed_msg
-                .sync_states
-                .get("uniswap-v3")
-                .unwrap(),
-            SynchronizerState::Ready(_)
-        ));
+        let (v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
 
         // Send block 2 only to v3, v2 will timeout and become delayed
-        let block2_msg = StateSyncMessage {
-            header: BlockHeader {
-                number: 2,
-                hash: Bytes::from(vec![2]),
-                parent_hash: Bytes::from(vec![1]),
-                revert: false,
-                timestamp: 2000,
-            },
-            ..Default::default()
-        };
+        let block2_msg = header_message(2);
         let _ = v3_sync
             .send_header(block2_msg.clone())
             .await;
         // Don't send to v2_sync - it will timeout
 
         // Consume second message - v2 should be delayed, v3 ready
-        let second_feed_msg = rx
-            .recv()
-            .await
-            .expect("Should receive second message")
-            .expect("no error");
+        let second_feed_msg = receive_message(&mut rx).await;
         assert!(second_feed_msg
             .state_msgs
             .contains_key("uniswap-v3"));
@@ -1664,16 +1529,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(15)).await;
 
         // Continue sending blocks only to v3 to keep it healthy while v2 goes stale
-        let block3_msg = StateSyncMessage {
-            header: BlockHeader {
-                number: 3,
-                hash: Bytes::from(vec![3]),
-                parent_hash: Bytes::from(vec![2]),
-                revert: false,
-                timestamp: 3000,
-            },
-            ..Default::default()
-        };
+        let block3_msg = header_message(3);
         let _ = v3_sync
             .send_header(block3_msg.clone())
             .await;
@@ -1689,78 +1545,14 @@ mod tests {
             }
         }
         assert!(stale_found, "v2 synchronizer should be stale");
+
+        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
     }
 
     #[test(tokio::test)]
     async fn test_all_synchronizers_go_stale_main_loop_exits() {
         // Test Case 2: All protocols go stale and main loop exits gracefully
-
-        let v2_sync = MockStateSync::new();
-        let v3_sync = MockStateSync::new();
-
-        // Use reasonable timeouts to observe proper state transitions
-        let mut block_sync = BlockSynchronizer::new(
-            Duration::from_millis(20), // block_time
-            Duration::from_millis(10), // max_wait
-            3,                         // max_missed_blocks (stale threshold = 20ms * 3 = 60ms)
-        );
-        block_sync.max_messages(10); // Allow enough messages to see the progression
-
-        let block_sync = block_sync
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-                v2_sync.clone(),
-            )
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-                v3_sync.clone(),
-            );
-
-        // Send initial messages to both synchronizers
-        let block1_msg = StateSyncMessage {
-            header: BlockHeader {
-                number: 1,
-                hash: Bytes::from(vec![1]),
-                parent_hash: Bytes::from(vec![0]),
-                revert: false,
-                timestamp: 1000,
-            },
-            ..Default::default()
-        };
-        let _ = v2_sync
-            .send_header(block1_msg.clone())
-            .await;
-        let _ = v3_sync
-            .send_header(block1_msg.clone())
-            .await;
-
-        // Start the block synchronizer
-        let (nanny_handle, mut rx) = block_sync
-            .run()
-            .await
-            .expect("BlockSynchronizer failed to start");
-
-        // Consume the first message - both should be ready
-        let first_feed_msg = rx
-            .recv()
-            .await
-            .expect("Should receive first message")
-            .expect("no error");
-        assert_eq!(first_feed_msg.state_msgs.len(), 2);
-        assert!(matches!(
-            first_feed_msg
-                .sync_states
-                .get("uniswap-v2")
-                .unwrap(),
-            SynchronizerState::Ready(_)
-        ));
-        assert!(matches!(
-            first_feed_msg
-                .sync_states
-                .get("uniswap-v3")
-                .unwrap(),
-            SynchronizerState::Ready(_)
-        ));
+        let (v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
 
         // Stop sending messages to both synchronizers - they should both timeout and go stale
         // Don't send any more messages, let them timeout and become delayed, then stale
@@ -1798,15 +1590,13 @@ mod tests {
                 break;
             }
         }
-
-        // Wait for the main loop to complete (all synchronizers should eventually go stale)
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        // Verify that synchronizers went through proper state transitions
+        assert!(seen_delayed, "Synchronizers should transition to Delayed state first");
 
         let mut error_reported = false;
         // Consume any remaining messages until channel closes
         while let Some(msg) = rx.recv().await {
             if let Err(e) = msg {
-                dbg!(&e);
                 assert!(e
                     .to_string()
                     .contains("became: Stale(1)"));
@@ -1822,17 +1612,6 @@ mod tests {
         let nanny_result = timeout(Duration::from_secs(2), nanny_handle).await;
         assert!(nanny_result.is_ok(), "Nanny should complete when main loop exits");
 
-        // Verify that synchronizers went through proper state transitions
-        assert!(seen_delayed, "Synchronizers should transition to Delayed state first");
-        // Note: We might not see the Stale state because stale synchronizers are immediately purged
-        // The important thing is that they stayed in Delayed for the proper duration before being
-        // removed
-
-        // If we reach here, the channel was closed, indicating the main loop exited gracefully
-
-        // Give cleanup time to execute
-        tokio::time::sleep(Duration::from_millis(50)).await;
-
         // Verify cleanup was triggered for both synchronizers
         assert!(
             v2_sync.was_close_received().await,
@@ -1847,85 +1626,11 @@ mod tests {
     #[test(tokio::test)]
     async fn test_stale_synchronizer_recovers() {
         // Test Case 2: All protocols go stale and main loop exits gracefully
-
-        let v2_sync = MockStateSync::new();
-        let v3_sync = MockStateSync::new();
-
-        // Use reasonable timeouts to observe proper state transitions
-        let mut block_sync = BlockSynchronizer::new(
-            Duration::from_millis(20), // block_time
-            Duration::from_millis(10), // max_wait
-            3,                         // max_missed_blocks (stale threshold = 20ms * 3 = 60ms)
-        );
-        block_sync.max_messages(10); // Allow enough messages to see the progression
-
-        let block_sync = block_sync
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-                v2_sync.clone(),
-            )
-            .register_synchronizer(
-                ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-                v3_sync.clone(),
-            );
-
-        // Send initial messages to both synchronizers
-        let block1_msg = StateSyncMessage {
-            header: BlockHeader {
-                number: 1,
-                hash: Bytes::from(vec![1]),
-                parent_hash: Bytes::from(vec![0]),
-                revert: false,
-                timestamp: 1000,
-            },
-            ..Default::default()
-        };
-        let _ = v2_sync
-            .send_header(block1_msg.clone())
-            .await;
-        let _ = v3_sync
-            .send_header(block1_msg.clone())
-            .await;
-
-        // Start the block synchronizer
-        let (nanny_handle, mut rx) = block_sync
-            .run()
-            .await
-            .expect("BlockSynchronizer failed to start");
-
-        let first_feed_msg = rx
-            .recv()
-            .await
-            .expect("Should receive first message")
-            .expect("no error");
-        assert_eq!(first_feed_msg.state_msgs.len(), 2);
-        assert!(matches!(
-            first_feed_msg
-                .sync_states
-                .get("uniswap-v2")
-                .unwrap(),
-            SynchronizerState::Ready(_)
-        ));
-        assert!(matches!(
-            first_feed_msg
-                .sync_states
-                .get("uniswap-v3")
-                .unwrap(),
-            SynchronizerState::Ready(_)
-        ));
+        let (v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
 
         // Send second messages to v2 only, shortly before both would go stale
         tokio::time::sleep(Duration::from_millis(50)).await;
-        let block2_msg = StateSyncMessage {
-            header: BlockHeader {
-                number: 2,
-                hash: Bytes::from(vec![2]),
-                parent_hash: Bytes::from(vec![1]),
-                revert: false,
-                timestamp: 1000,
-            },
-            ..Default::default()
-        };
+        let block2_msg = header_message(2);
         let _ = v2_sync
             .send_header(block2_msg.clone())
             .await;
@@ -1956,24 +1661,11 @@ mod tests {
 
         // Now v3 should be stale
         tokio::time::sleep(Duration::from_millis(15)).await;
-        let block3_msg = StateSyncMessage {
-            header: BlockHeader {
-                number: 3,
-                hash: Bytes::from(vec![3]),
-                parent_hash: Bytes::from(vec![2]),
-                revert: false,
-                timestamp: 1000,
-            },
-            ..Default::default()
-        };
+        let block3_msg = header_message(3);
         let _ = v2_sync
             .send_header(block3_msg.clone())
             .await;
-        let third_msg = rx
-            .recv()
-            .await
-            .expect("Should receive first message")
-            .expect("no error");
+        let third_msg = receive_message(&mut rx).await;
         dbg!(&third_msg);
         assert!(matches!(
             third_msg
@@ -1990,16 +1682,7 @@ mod tests {
             SynchronizerState::Stale(_)
         ));
 
-        let block4_msg = StateSyncMessage {
-            header: BlockHeader {
-                number: 3,
-                hash: Bytes::from(vec![4]),
-                parent_hash: Bytes::from(vec![3]),
-                revert: false,
-                timestamp: 1000,
-            },
-            ..Default::default()
-        };
+        let block4_msg = header_message(4);
         let _ = v3_sync
             .send_header(block2_msg.clone())
             .await;
@@ -2012,11 +1695,7 @@ mod tests {
         let _ = v2_sync
             .send_header(block4_msg.clone())
             .await;
-        let fourth_msg = rx
-            .recv()
-            .await
-            .expect("Should receive fourth message")
-            .expect("no error");
+        let fourth_msg = receive_message(&mut rx).await;
         assert!(matches!(
             fourth_msg
                 .sync_states
@@ -2032,13 +1711,7 @@ mod tests {
             SynchronizerState::Ready(_)
         ));
 
-        v3_sync.trigger_close().await;
-        v2_sync.trigger_close().await;
-
-        timeout(Duration::from_millis(100), nanny_handle)
-            .await
-            .expect("Nanny failed to exit within time")
-            .expect("Nanny panicked");
+        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
 
         // Verify cleanup was triggered for both synchronizers
         assert!(
@@ -2049,5 +1722,71 @@ mod tests {
             v3_sync.was_close_received().await,
             "v3_sync should have received close signal during cleanup"
         );
+    }
+
+    #[test(tokio::test)]
+    async fn test_all_synchronizer_advanced() {
+        // Test the case were all synchronizers successfully recover but stream
+        // from a disconnected future block.
+
+        let (v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
+
+        let block3 = header_message(3);
+        v2_sync
+            .send_header(block3.clone())
+            .await
+            .unwrap();
+        v3_sync
+            .send_header(block3)
+            .await
+            .unwrap();
+
+        let msg = receive_message(&mut rx).await;
+        matches!(
+            msg.sync_states
+                .get("uniswap-v2")
+                .unwrap(),
+            SynchronizerState::Ready(_)
+        );
+        matches!(
+            msg.sync_states
+                .get("uniswap-v3")
+                .unwrap(),
+            SynchronizerState::Ready(_)
+        );
+
+        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
+    }
+
+    #[test(tokio::test)]
+    async fn test_one_synchronizer_advanced() {
+        let (v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
+
+        let block2 = header_message(2);
+        let block4 = header_message(4);
+        v2_sync
+            .send_header(block4.clone())
+            .await
+            .unwrap();
+        v3_sync
+            .send_header(block2.clone())
+            .await
+            .unwrap();
+
+        let msg = receive_message(&mut rx).await;
+        matches!(
+            msg.sync_states
+                .get("uniswap-v2")
+                .unwrap(),
+            SynchronizerState::Ready(_)
+        );
+        matches!(
+            msg.sync_states
+                .get("uniswap-v3")
+                .unwrap(),
+            SynchronizerState::Delayed(_)
+        );
+
+        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
     }
 }

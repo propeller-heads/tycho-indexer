@@ -1,3 +1,4 @@
+pub mod display;
 pub mod dto;
 pub mod hex_bytes;
 pub mod models;
