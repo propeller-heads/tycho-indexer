@@ -48,6 +48,11 @@ pub struct GlobalArgs {
     )]
     pub database_url: String,
 
+    /// Batch size for the database inserts
+    /// Defaults to Ethereum finality of 128 blocks
+    #[clap(long, default_value = "128")]
+    pub database_insert_batch_size: u64,
+
     /// Name of the s3 bucket used to retrieve spkgs
     #[clap(env = "TYCHO_S3_BUCKET", long, default_value = "repo.propellerheads-propellerheads")]
     //Default is for backward compatibility but needs to be removed later
@@ -205,6 +210,8 @@ mod cli_tests {
             "http://example.com",
             "--database-url",
             "my_db",
+            "--database-insert-batch-size",
+            "256",
             "--rpc-url",
             "http://example.com",
             "run",
@@ -227,6 +234,7 @@ mod cli_tests {
             global_args: GlobalArgs {
                 endpoint_url: "http://example.com".to_string(),
                 database_url: "my_db".to_string(),
+                database_insert_batch_size: 256,
                 rpc_url: "http://example.com".to_string(),
                 s3_bucket: Some("repo.propellerheads-propellerheads".to_string()),
                 server_ip: "0.0.0.0".to_string(),
@@ -275,6 +283,7 @@ mod cli_tests {
             global_args: GlobalArgs {
                 endpoint_url: "http://example.com".to_string(),
                 database_url: "my_db".to_string(),
+                database_insert_batch_size: 128,
                 rpc_url: "http://example.com".to_string(),
                 s3_bucket: Some("repo.propellerheads-propellerheads".to_string()),
                 server_ip: "0.0.0.0".to_string(),
