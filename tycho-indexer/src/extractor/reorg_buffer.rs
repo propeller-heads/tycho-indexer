@@ -873,6 +873,25 @@ mod test {
     }
 
     #[test]
+    fn test_count_blocks_before() {
+        let mut reorg_buffer = ReorgBuffer::new();
+        reorg_buffer
+            .insert_block(get_block_changes(1))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(2))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(3))
+            .unwrap();
+
+        assert_eq!(reorg_buffer.count_blocks_before(1), 0);
+        assert_eq!(reorg_buffer.count_blocks_before(2), 1);
+        assert_eq!(reorg_buffer.count_blocks_before(3), 2);
+        assert_eq!(reorg_buffer.count_blocks_before(4), 3);
+    }
+
+    #[test]
     fn test_drain_committed_blocks() {
         let mut reorg_buffer = ReorgBuffer::new();
         reorg_buffer.strict = true;
