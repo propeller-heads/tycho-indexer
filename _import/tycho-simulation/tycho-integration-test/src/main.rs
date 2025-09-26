@@ -282,6 +282,18 @@ async fn test_chain(cli: Cli, chain: Chain) -> miette::Result<()> {
 
                 info!("simulated amount_out: {simulated_amount_out} {}", token_out.symbol);
 
+                // Calculate slippage
+                let slippage = if simulated_amount_out > expected_amount_out {
+                    let diff = &simulated_amount_out - &expected_amount_out;
+                    let slippage = (diff.clone() * BigUint::from(10000u32)) / expected_amount_out;
+                    format!("+{:.2}%", slippage.to_f64().unwrap_or(0.0) / 100.0)
+                } else {
+                    let diff = &expected_amount_out - &simulated_amount_out;
+                    let slippage = (diff.clone() * BigUint::from(10000u32)) / expected_amount_out;
+                    format!("-{:.2}%", slippage.to_f64().unwrap_or(0.0) / 100.0)
+                };
+                info!("slippage: {slippage}");
+
                 info!("pool processed {id:?} from {} to {}", token_in.symbol, token_out.symbol);
             }
         }
