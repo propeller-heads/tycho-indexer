@@ -200,7 +200,17 @@ impl BlockChanges {
     /// # Errors
     ///
     /// This returns an `ExtractionError` if there was a problem during merge.
-    pub fn aggregate_updates(self) -> Result<BlockAggregatedChanges, ExtractionError> {
+    pub fn into_aggregated(
+        self,
+        db_committed_upto_block_height: u64,
+    ) -> Result<BlockAggregatedChanges, ExtractionError> {
+        if db_committed_upto_block_height > self.finalized_block_height {
+            return Err(ExtractionError::ReorgBufferError(format!(
+                "Database committed block height {} is greater than finalized_block_height {}",
+                db_committed_upto_block_height, self.finalized_block_height
+            )));
+        }
+
         let mut iter = self.txs_with_update.into_iter();
 
         // Use unwrap_or_else to provide a default state if iter.next() is None
@@ -230,6 +240,7 @@ impl BlockChanges {
             extractor: self.extractor,
             chain: self.chain,
             block: self.block,
+            db_committed_upto_block_height,
             finalized_block_height: self.finalized_block_height,
             revert: self.revert,
             new_protocol_components: aggregated_changes.protocol_components,
@@ -915,6 +926,7 @@ mod test {
 
     use fixtures::create_transaction;
     use prost::Message;
+    use rstest::rstest;
 
     use super::*;
 
@@ -946,6 +958,48 @@ mod test {
                 ((account1, slot2), Bytes::from(3520254932_u64).lpad(32, 0))
             ])
         );
+    }
+
+    #[rstest]
+    #[case::commit_before_finalized(4, Ok(4))]
+    #[case::commit_equals_finalized(5, Ok(5))]
+    #[case::commit_exceeds_finalized(6, Err(ExtractionError::ReorgBufferError("Some Error".to_string())))]
+    fn into_aggregated_respects_commit_invariant(
+        #[case] committed_height: u64,
+        #[case] expected: Result<u64, ExtractionError>,
+    ) {
+        use chrono::NaiveDateTime;
+
+        let block = Block::new(
+            1,
+            Chain::Ethereum,
+            Bytes::zero(32),
+            Bytes::zero(32),
+            NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+        );
+
+        let changes = BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            block,
+            5,
+            false,
+            Vec::new(),
+            Vec::new(),
+        );
+
+        let result = changes.into_aggregated(committed_height);
+
+        match expected {
+            Ok(expected_height) => {
+                let aggregated = result.expect("expected success");
+                assert_eq!(aggregated.db_committed_upto_block_height, expected_height);
+            }
+            Err(ExtractionError::ReorgBufferError(_)) => {
+                assert!(matches!(result, Err(ExtractionError::ReorgBufferError(_))));
+            }
+            _ => panic!("unexpected error type"),
+        }
     }
 
     #[test]

@@ -741,6 +741,7 @@ where
         // Depending on how Substreams handle them, this condition could be problematic for single
         // block finality blockchains.
         let is_syncing = inp.final_block_height >= msg.block.number;
+        let db_committed_upto_block_height;
         {
             // keep reorg buffer guard within a limited scope
             let mut reorg_buffer = self.reorg_buffer.lock().await;
@@ -749,7 +750,7 @@ where
                 .map_err(ExtractionError::Storage)?;
 
             let mut msgs = reorg_buffer
-                .drain_new_finalized_blocks(inp.final_block_height)
+                .drain_blocks(inp.final_block_height)
                 .map_err(ExtractionError::Storage)?
                 .into_iter()
                 .peekable();
@@ -764,6 +765,13 @@ where
                     .advance(msg.block_update(), msg.cursor(), force_db_commit)
                     .await?;
             }
+
+            db_committed_upto_block_height = reorg_buffer
+                .get_oldest_block()
+                .ok_or(ExtractionError::ReorgBufferError(
+                    "Reorg buffer is empty after draining blocks".into(),
+                ))?
+                .number;
         }
 
         self.update_last_processed_block(msg.block.clone())
@@ -776,7 +784,7 @@ where
 
         self.update_cursor(inp.cursor).await;
 
-        let mut changes = msg.aggregate_updates()?;
+        let mut changes = msg.into_aggregated(db_committed_upto_block_height)?;
         self.handle_tvl_changes(&mut changes)
             .await?;
 
@@ -1189,15 +1197,34 @@ where
 
         let new_latest_block = reorg_buffer
             .get_most_recent_block()
-            .expect("Couldn't find most recent block in buffer during revert");
+            .ok_or(ExtractionError::ReorgBufferError("Reorg buffer is empty after purge".into()))?;
+
+        // The latest finalized block height is the one of the last block in the reverted_state
+        // (i.e. the most recent block that is reverted)
+        let finalized_block_height = reverted_state
+            .last()
+            .ok_or(ExtractionError::ReorgBufferError("Reorg buffer is empty after purge".into()))?
+            .block_update
+            .finalized_block_height;
+
+        let db_committed_upto_block_height = reorg_buffer
+            .get_oldest_block()
+            .ok_or(ExtractionError::ReorgBufferError("Reorg buffer is empty after purge".into()))?
+            .number;
+
+        if db_committed_upto_block_height > finalized_block_height {
+            return Err(ExtractionError::ReorgBufferError(format!(
+                "Database committed block height {} is greater than finalized_block_height {}",
+                db_committed_upto_block_height, finalized_block_height
+            )));
+        }
 
         let revert_message = BlockAggregatedChanges {
             extractor: self.name.clone(),
             chain: self.chain,
             block: new_latest_block.clone(),
-            finalized_block_height: reverted_state[0]
-                .block_update
-                .finalized_block_height,
+            db_committed_upto_block_height,
+            finalized_block_height,
             revert: true,
             state_deltas,
             account_deltas,
@@ -2897,7 +2924,8 @@ mod test_serial_db {
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
                     chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
                 ),
-                finalized_block_height: 1,
+                db_committed_upto_block_height: 3,
+                finalized_block_height: 3,
                 revert: true,
                 state_deltas: HashMap::from([
                     ("pc_1".to_string(), ProtocolComponentStateDelta {
@@ -3077,7 +3105,8 @@ mod test_serial_db {
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
                     chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
                 ),
-                finalized_block_height: 1,
+                db_committed_upto_block_height: 3,
+                finalized_block_height: 3,
                 revert: true,
                 account_deltas: HashMap::from([
                     (account1.clone(), AccountDelta::new(
