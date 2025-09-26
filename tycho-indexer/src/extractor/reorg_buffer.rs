@@ -192,7 +192,7 @@ where
     pub fn finalized_block_count(&self, finalized_height: u64) -> usize {
         self.block_messages
             .iter()
-            .take_while(|msg| msg.block().number < finalized_height)
+            .take_while(|msg| msg.block().number <= finalized_height)
             .count()
     }
 
