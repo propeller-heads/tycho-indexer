@@ -187,6 +187,11 @@ where
         None
     }
 
+    /// Returns the number of blocks currently in the buffer.
+    pub fn len(&self) -> usize {
+        self.block_messages.len()
+    }
+
     /// Retrieves a range of blocks from the buffer.
     ///
     /// The retrieved iterator will include both the start and end block of specified range. In case

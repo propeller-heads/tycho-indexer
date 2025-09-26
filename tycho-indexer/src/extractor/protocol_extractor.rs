@@ -10,7 +10,7 @@ use chrono::{Duration, NaiveDateTime};
 use metrics::{counter, gauge};
 use mockall::automock;
 use prost::Message;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, MutexGuard};
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     models::{
@@ -60,7 +60,6 @@ pub struct Inner {
 
 pub struct ProtocolExtractor<G, T, E> {
     gateway: G,
-    #[allow(dead_code)]
     database_insert_batch_size: usize,
     name: String,
     chain: Chain,
@@ -746,13 +745,26 @@ where
         // Depending on how Substreams handle them, this condition could be problematic for single
         // block finality blockchains.
         let is_syncing = inp.final_block_height >= msg.block.number;
-        let db_committed_upto_block_height;
-        {
+
+        let db_committed_upto_block_height = 'reorg_buffer_scope: {
             // keep reorg buffer guard within a limited scope
             let mut reorg_buffer = self.reorg_buffer.lock().await;
+
             reorg_buffer
                 .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
                 .map_err(ExtractionError::Storage)?;
+
+            let get_db_committed_upto_block_height =
+                |reorg_buffer: MutexGuard<ReorgBuffer<_>>| -> Result<u64, ExtractionError> {
+                    reorg_buffer
+                        .get_oldest_block()
+                        .ok_or(ExtractionError::ReorgBufferError("Reorg buffer is empty".into()))
+                        .map(|block| block.number)
+                };
+
+            if reorg_buffer.len() > self.database_insert_batch_size {
+                break 'reorg_buffer_scope get_db_committed_upto_block_height(reorg_buffer)?;
+            }
 
             let mut msgs = reorg_buffer
                 .drain_blocks(inp.final_block_height)
@@ -771,13 +783,8 @@ where
                     .await?;
             }
 
-            db_committed_upto_block_height = reorg_buffer
-                .get_oldest_block()
-                .ok_or(ExtractionError::ReorgBufferError(
-                    "Reorg buffer is empty after draining blocks".into(),
-                ))?
-                .number;
-        }
+            get_db_committed_upto_block_height(reorg_buffer)?
+        };
 
         self.update_last_processed_block(msg.block.clone())
             .await;
