@@ -117,13 +117,10 @@ pub fn encode_swap(
         .wrap_err("Failed to encode solution")?[0]
         .clone();
 
-    let transaction = encode_tycho_router_call(
-        encoded_solution,
-        &solution,
-        &chain.wrapped_native_token().address,
-    )
-    .into_diagnostic()
-    .wrap_err("Failed to encode router calldata")?;
+    let transaction =
+        encode_tycho_router_call(encoded_solution, &solution, &chain.native_token().address)
+            .into_diagnostic()
+            .wrap_err("Failed to encode router calldata")?;
     Ok((transaction, solution))
 }
 

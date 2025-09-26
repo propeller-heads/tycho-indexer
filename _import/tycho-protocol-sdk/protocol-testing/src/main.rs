@@ -81,7 +81,7 @@ impl Args {
 fn main() -> miette::Result<()> {
     // Load .env file before setting up logging
     dotenv().ok();
-    
+
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .with_target(false)
