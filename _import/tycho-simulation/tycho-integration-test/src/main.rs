@@ -82,6 +82,7 @@ struct Cli {
     #[arg(long, env = "PRIVATE_KEY", hide_env_values = true)]
     swapper_pk: String,
 
+    // TODO: each chain should have its own RPC URL
     #[arg(long, env = "RPC_URL")]
     rpc_url: String,
 }
