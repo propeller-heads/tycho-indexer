@@ -417,7 +417,7 @@ async fn build_all_extractors(
     endpoint_url: &str,
     s3_bucket: Option<&str>,
     cached_gw: &CachedGateway,
-    database_insert_batch_size: u64,
+    database_insert_batch_size: usize,
     token_pre_processor: &EthereumTokenPreProcessor,
     rpc_url: &str,
     runtime: Option<&tokio::runtime::Handle>,

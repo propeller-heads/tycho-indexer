@@ -429,7 +429,7 @@ pub struct ExtractorBuilder {
     s3_bucket: Option<String>,
     token: String,
     extractor: Option<Arc<dyn Extractor>>,
-    database_insert_batch_size: Option<u64>,
+    database_insert_batch_size: Option<usize>,
     final_block_only: bool,
     /// Handle of the tokio runtime on which the extraction tasks will be run.
     /// If 'None' the default runtime will be used.
@@ -491,7 +491,7 @@ impl ExtractorBuilder {
     }
 
     /// Set the global database insert batch size
-    pub fn database_insert_batch_size(mut self, database_insert_batch_size: u64) -> Self {
+    pub fn database_insert_batch_size(mut self, database_insert_batch_size: usize) -> Self {
         self.database_insert_batch_size = Some(database_insert_batch_size);
         self
     }

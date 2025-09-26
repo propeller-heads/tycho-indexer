@@ -61,7 +61,7 @@ pub struct Inner {
 pub struct ProtocolExtractor<G, T, E> {
     gateway: G,
     #[allow(dead_code)]
-    database_insert_batch_size: u64,
+    database_insert_batch_size: usize,
     name: String,
     chain: Chain,
     chain_state: ChainState,
@@ -85,7 +85,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         gateway: G,
-        database_insert_batch_size: u64,
+        database_insert_batch_size: usize,
         name: &str,
         chain: Chain,
         chain_state: ChainState,
@@ -1638,7 +1638,7 @@ mod test {
 
     const EXTRACTOR_NAME: &str = "TestExtractor";
     const TEST_PROTOCOL: &str = "TestProtocol";
-    const DATABASE_INSERT_BATCH_SIZE: u64 = 128;
+    const DATABASE_INSERT_BATCH_SIZE: usize = 128;
     async fn create_extractor(
         gw: MockExtractorGateway,
     ) -> ProtocolExtractor<MockExtractorGateway, MockTokenPreProcessor, MockExtractorExtension>
@@ -2371,7 +2371,7 @@ mod test_serial_db {
         0x32, 0xbc, 0x34, 0xf6, 0x88,
     ]; // 0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688
 
-    const DATABASE_INSERT_BATCH_SIZE: u64 = 128;
+    const DATABASE_INSERT_BATCH_SIZE: usize = 128;
 
     // SETUP
     fn get_mocked_token_pre_processor() -> MockTokenPreProcessor {
