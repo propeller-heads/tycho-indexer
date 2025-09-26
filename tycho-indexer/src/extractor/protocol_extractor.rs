@@ -1631,6 +1631,11 @@ impl ExtractorGateway for ExtractorPgGateway {
 
 #[cfg(test)]
 mod test {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+
     use float_eq::assert_float_eq;
     use mockall::mock;
     use tycho_common::{models::blockchain::TxWithChanges, traits::TokenOwnerFinding};
@@ -1657,9 +1662,9 @@ mod test {
 
     const EXTRACTOR_NAME: &str = "TestExtractor";
     const TEST_PROTOCOL: &str = "TestProtocol";
-    const DATABASE_INSERT_BATCH_SIZE: usize = 128;
-    async fn create_extractor(
+    async fn create_extractor_with_batch_size(
         gw: MockExtractorGateway,
+        batch_size: usize,
     ) -> ProtocolExtractor<MockExtractorGateway, MockTokenPreProcessor, MockExtractorExtension>
     {
         let protocol_types = HashMap::from([("pt_1".to_string(), ProtocolType::default())]);
@@ -1674,7 +1679,7 @@ mod test {
             .returning(|_, _, _| Vec::new());
         ProtocolExtractor::new(
             gw,
-            DATABASE_INSERT_BATCH_SIZE,
+            batch_size,
             EXTRACTOR_NAME,
             Chain::Ethereum,
             ChainState::default(),
@@ -1687,6 +1692,15 @@ mod test {
         )
         .await
         .expect("Failed to create extractor")
+    }
+
+    async fn create_extractor(
+        gw: MockExtractorGateway,
+    ) -> ProtocolExtractor<MockExtractorGateway, MockTokenPreProcessor, MockExtractorExtension>
+    {
+        // Default value that flushes the buffer once a single finalized block lands in the buffer.
+        // This behavior is consistent with flushing on every finalized block.
+        create_extractor_with_batch_size(gw, 1).await
     }
 
     #[tokio::test]
@@ -1758,7 +1772,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_handle_tick_scoped_data_old_native_msg() {
+    async fn test_reorg_buffer_flush_respects_batch_size() {
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
             .times(1)
@@ -1766,9 +1780,85 @@ mod test {
         gw.expect_get_cursor()
             .times(1)
             .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let call_count_clone = call_count.clone();
+        gw.expect_advance()
+            .times(2)
+            .returning(move |_, _, _| {
+                call_count_clone.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            });
+
+        let extractor = create_extractor_with_batch_size(gw, 2).await;
+
+        let scoped_data = |block_number: u64, final_height: u64| {
+            pb_fixtures::pb_block_scoped_data(
+                tycho_substreams::BlockChanges {
+                    block: Some(pb_fixtures::pb_blocks(block_number)),
+                    ..Default::default()
+                },
+                Some(format!("cursor@{block_number}").as_str()),
+                Some(final_height),
+            )
+        };
+
+        extractor
+            .handle_tick_scoped_data(scoped_data(1, 1))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+        {
+            let guard = extractor.reorg_buffer.lock().await;
+            assert_eq!(guard.count_blocks_before(1), 0);
+        }
+
+        extractor
+            .handle_tick_scoped_data(scoped_data(2, 2))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+        {
+            let guard = extractor.reorg_buffer.lock().await;
+            assert_eq!(guard.count_blocks_before(2), 1);
+        }
+
+        extractor
+            .handle_tick_scoped_data(scoped_data(3, 3))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(call_count.load(Ordering::SeqCst), 2);
+        {
+            let guard = extractor.reorg_buffer.lock().await;
+            assert_eq!(guard.count_blocks_before(3), 0);
+            assert_eq!(guard.get_oldest_block().unwrap().number, 3);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_tick_scoped_data_old_native_msg() {
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
         gw.expect_advance()
             .times(1)
             .returning(|_, _, _| Ok(()));
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
         gw.expect_get_block()
             .times(1)
             .returning(|_| Ok(Block::default()));
@@ -2162,7 +2252,7 @@ mod test {
             MockExtractorExtension,
         >::new(
             extractor_gw,
-            DATABASE_INSERT_BATCH_SIZE,
+            1,
             EXTRACTOR_NAME,
             Chain::Ethereum,
             ChainState::default(),
@@ -2296,7 +2386,7 @@ mod test {
             MockExtractorExtension,
         >::new(
             extractor_gw,
-            DATABASE_INSERT_BATCH_SIZE,
+            1,
             "vm_name",
             Chain::Ethereum,
             ChainState::default(),
@@ -2390,7 +2480,7 @@ mod test_serial_db {
         0x32, 0xbc, 0x34, 0xf6, 0x88,
     ]; // 0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688
 
-    const DATABASE_INSERT_BATCH_SIZE: usize = 128;
+    const DATABASE_INSERT_BATCH_SIZE: usize = 2;
 
     // SETUP
     fn get_mocked_token_pre_processor() -> MockTokenPreProcessor {
