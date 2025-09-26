@@ -51,7 +51,7 @@ pub struct GlobalArgs {
     /// Batch size for the database inserts
     /// Defaults to Ethereum finality of 128 blocks
     #[clap(long, default_value = "128")]
-    pub database_insert_batch_size: u64,
+    pub database_insert_batch_size: usize,
 
     /// Name of the s3 bucket used to retrieve spkgs
     #[clap(env = "TYCHO_S3_BUCKET", long, default_value = "repo.propellerheads-propellerheads")]
