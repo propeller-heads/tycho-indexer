@@ -60,6 +60,8 @@ pub struct Inner {
 
 pub struct ProtocolExtractor<G, T, E> {
     gateway: G,
+    #[allow(dead_code)]
+    database_insert_batch_size: u64,
     name: String,
     chain: Chain,
     chain_state: ChainState,
@@ -83,6 +85,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         gateway: G,
+        database_insert_batch_size: u64,
         name: &str,
         chain: Chain,
         chain_state: ChainState,
@@ -101,6 +104,7 @@ where
                 warn!(?name, ?chain, "No cursor found, starting from the beginning");
                 ProtocolExtractor {
                     gateway,
+                    database_insert_batch_size,
                     name: name.to_string(),
                     chain,
                     chain_state,
@@ -137,6 +141,7 @@ where
                 );
                 ProtocolExtractor {
                     gateway,
+                    database_insert_batch_size,
                     name: name.to_string(),
                     chain,
                     chain_state,
@@ -1633,6 +1638,7 @@ mod test {
 
     const EXTRACTOR_NAME: &str = "TestExtractor";
     const TEST_PROTOCOL: &str = "TestProtocol";
+    const DATABASE_INSERT_BATCH_SIZE: u64 = 128;
     async fn create_extractor(
         gw: MockExtractorGateway,
     ) -> ProtocolExtractor<MockExtractorGateway, MockTokenPreProcessor, MockExtractorExtension>
@@ -1649,6 +1655,7 @@ mod test {
             .returning(|_, _, _| Vec::new());
         ProtocolExtractor::new(
             gw,
+            DATABASE_INSERT_BATCH_SIZE,
             EXTRACTOR_NAME,
             Chain::Ethereum,
             ChainState::default(),
@@ -2136,6 +2143,7 @@ mod test {
             MockExtractorExtension,
         >::new(
             extractor_gw,
+            DATABASE_INSERT_BATCH_SIZE,
             EXTRACTOR_NAME,
             Chain::Ethereum,
             ChainState::default(),
@@ -2269,6 +2277,7 @@ mod test {
             MockExtractorExtension,
         >::new(
             extractor_gw,
+            DATABASE_INSERT_BATCH_SIZE,
             "vm_name",
             Chain::Ethereum,
             ChainState::default(),
@@ -2361,6 +2370,8 @@ mod test_serial_db {
         0xaa, 0xaa, 0xaa, 0xaa, 0xa2, 0x4e, 0xee, 0xb8, 0xd5, 0x7d, 0x43, 0x12, 0x24, 0xf7, 0x38,
         0x32, 0xbc, 0x34, 0xf6, 0x88,
     ]; // 0xaaaaaaaaa24eeeb8d57d431224f73832bc34f688
+
+    const DATABASE_INSERT_BATCH_SIZE: u64 = 128;
 
     // SETUP
     fn get_mocked_token_pre_processor() -> MockTokenPreProcessor {
@@ -2879,6 +2890,7 @@ mod test_serial_db {
                 MockExtractorExtension,
             >::new(
                 gw,
+                DATABASE_INSERT_BATCH_SIZE,
                 "native_name",
                 Chain::Ethereum,
                 ChainState::default(),
@@ -3058,6 +3070,7 @@ mod test_serial_db {
                 MockExtractorExtension,
             >::new(
                 gw,
+                DATABASE_INSERT_BATCH_SIZE,
                 "vm_name",
                 Chain::Ethereum,
                 ChainState::default(),
@@ -3256,6 +3269,7 @@ mod test_serial_db {
                 MockExtractorExtension,
             >::new(
                 gw,
+                DATABASE_INSERT_BATCH_SIZE,
                 "vm_name",
                 Chain::Ethereum,
                 ChainState::default(),

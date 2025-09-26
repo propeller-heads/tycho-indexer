@@ -382,7 +382,7 @@ async fn create_indexing_tasks(
 
     let (runners, extractor_handles): (Vec<_>, Vec<_>) =
         // TODO: accept substreams configuration from cli.
-        build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url, global_args.s3_bucket.as_deref(), &substreams_args.substreams_api_token, &cached_gw, &token_processor, &global_args.rpc_url.clone(), extraction_runtime)
+        build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url, global_args.s3_bucket.as_deref(), &substreams_args.substreams_api_token, &cached_gw, global_args.database_insert_batch_size, &token_processor, &global_args.rpc_url.clone(), extraction_runtime)
             .await
             .map_err(|e| ExtractionError::Setup(format!("Failed to create extractors: {e}")))?
             .into_iter()
@@ -421,6 +421,7 @@ async fn build_all_extractors(
     s3_bucket: Option<&str>,
     substreams_api_token: &str,
     cached_gw: &CachedGateway,
+    database_insert_batch_size: u64,
     token_pre_processor: &EthereumTokenPreProcessor,
     rpc_url: &str,
     runtime: Option<&tokio::runtime::Handle>,
@@ -456,6 +457,7 @@ async fn build_all_extractors(
         let (runner, handle) =
             ExtractorBuilder::new(extractor_config, endpoint_url, s3_bucket, substreams_api_token)
                 .rpc_url(rpc_url)
+                .database_insert_batch_size(database_insert_batch_size)
                 .build(chain_state, cached_gw, token_pre_processor, &protocol_cache)
                 .await?
                 .set_runtime(runtime)
