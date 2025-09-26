@@ -611,7 +611,7 @@ where
             .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
             .map_err(ExtractionError::Storage)?;
 
-        if reorg_buffer.finalized_block_count(inp.final_block_height) <
+        if reorg_buffer.count_blocks_before(inp.final_block_height) <
             self.database_insert_batch_size
         {
             return committed_upto_height_from_buffer(&reorg_buffer);
