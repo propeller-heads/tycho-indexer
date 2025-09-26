@@ -597,11 +597,11 @@ where
     ) -> Result<u64, ExtractionError> {
         let mut reorg_buffer = self.reorg_buffer.lock().await;
 
-        let committed_height_from_buffer =
+        let committed_upto_height_from_buffer =
             |buffer: &ReorgBuffer<_>| -> Result<u64, ExtractionError> {
                 buffer
                     .get_oldest_block()
-                    .map(|block| block.number.saturating_sub(1))
+                    .map(|block| block.number)
                     .ok_or_else(|| {
                         ExtractionError::ReorgBufferError("Reorg buffer is empty".into())
                     })
@@ -614,7 +614,7 @@ where
         if reorg_buffer.finalized_block_count(inp.final_block_height) <
             self.database_insert_batch_size
         {
-            return committed_height_from_buffer(&reorg_buffer);
+            return committed_upto_height_from_buffer(&reorg_buffer);
         }
 
         let mut msgs = reorg_buffer
@@ -634,7 +634,7 @@ where
                 .await?;
         }
 
-        committed_height_from_buffer(&reorg_buffer)
+        committed_upto_height_from_buffer(&reorg_buffer)
     }
 }
 
