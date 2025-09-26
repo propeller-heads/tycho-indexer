@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Debug, str::FromStr};
 use alloy::{
     eips::BlockNumberOrTag,
     network::{Ethereum, EthereumWallet},
-    primitives::{map::AddressHashMap, Address, Keccak256, Signature, B256, U256},
+    primitives::{map::AddressHashMap, Address, Keccak256, B256, U256},
     providers::{
         fillers::{FillProvider, JoinFill, WalletFiller},
         Identity, Provider, ProviderBuilder, RootProvider,
@@ -13,8 +13,8 @@ use alloy::{
         state::AccountOverride,
         Block, TransactionRequest,
     },
-    signers::{local::PrivateKeySigner, SignerSync},
-    sol_types::{eip712_domain, SolStruct, SolValue},
+    signers::local::PrivateKeySigner,
+    sol_types::SolValue,
 };
 use alloy_chains::NamedChain;
 use clap::Parser;
@@ -22,7 +22,7 @@ use futures::{Stream, StreamExt};
 use itertools::Itertools;
 use miette::{miette, IntoDiagnostic, WrapErr};
 use num_bigint::BigUint;
-use num_traits::Zero;
+use num_traits::{ToPrimitive, Zero};
 use tracing::{debug, info, trace, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_ethereum::entrypoint_tracer::{
@@ -30,8 +30,7 @@ use tycho_ethereum::entrypoint_tracer::{
     balance_slot_detector::{BalanceSlotDetectorConfig, EVMBalanceSlotDetector},
 };
 use tycho_execution::encoding::{
-    evm::{approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder},
-    models,
+    evm::encoder_builders::TychoRouterEncoderBuilder,
     models::{EncodedSolution, Solution, SwapBuilder, Transaction, UserTransferType},
 };
 use tycho_simulation::{
@@ -215,7 +214,10 @@ async fn test_chain(cli: Cli, chain: Chain) -> miette::Result<()> {
                 .map(|perm| (perm[0].clone(), perm[1].clone())) //TODO: not assume two tokens?
                 .collect();
             for (token_in, token_out) in swap_directions.iter() {
-                info!("processing pool {id:?} from {} to {}", token_in.symbol, token_out.symbol);
+                info!(
+                    "processing {} pool {id:?}, from {} to {}",
+                    component.protocol_system, token_in.symbol, token_out.symbol
+                );
 
                 // Get max input/output limits
                 let (max_input, max_output) = state
@@ -259,12 +261,12 @@ async fn test_chain(cli: Cli, chain: Chain) -> miette::Result<()> {
                     &component,
                     token_in,
                     token_out,
-                    amount_in,
-                    expected_amount_out,
+                    amount_in.clone(),
+                    expected_amount_out.clone(),
                     &signer,
                     chain,
                 )?;
-                let simulated_amount_out = match new_simulate_swap_transaction(
+                let simulated_amount_out = match simulate_swap_transaction(
                     provider.clone(),
                     &cli.rpc_url,
                     &solution,
@@ -273,13 +275,12 @@ async fn test_chain(cli: Cli, chain: Chain) -> miette::Result<()> {
                 )
                 .await
                 {
-                    Ok(a) => a,
+                    Ok(amount) => amount,
                     Err(e) => {
                         warn!("failed to simulate swap: {e}");
                         continue;
                     }
                 };
-
                 info!("simulated amount_out: {simulated_amount_out} {}", token_out.symbol);
 
                 // Calculate slippage
@@ -394,7 +395,7 @@ fn encode_swap(
     let encoded_solution = {
         let encoder = TychoRouterEncoderBuilder::new()
             .chain(chain)
-            .user_transfer_type(UserTransferType::TransferFromPermit2)
+            .user_transfer_type(UserTransferType::TransferFrom)
             .build()
             .into_diagnostic()
             .wrap_err("Failed to build encoder")?;
@@ -406,13 +407,8 @@ fn encode_swap(
             .next()
             .ok_or_else(|| miette!("Missing solution"))?
     };
-    let transaction = encoded_transaction(
-        chain.id(),
-        encoded_solution.clone(),
-        &solution,
-        chain.native_token().address,
-        signer.clone(),
-    )?;
+    let transaction =
+        encoded_transaction(encoded_solution.clone(), &solution, chain.native_token().address)?;
     Ok((solution, transaction))
 }
 
@@ -454,19 +450,10 @@ fn create_solution(
 }
 
 fn encoded_transaction(
-    chain_id: u64,
     encoded_solution: EncodedSolution,
     solution: &Solution,
     native_address: Bytes,
-    signer: PrivateKeySigner,
 ) -> miette::Result<Transaction> {
-    let p = encoded_solution
-        .permit
-        .ok_or_else(|| miette::miette!("Permit object must be set"))?;
-    let permit = PermitSingle::try_from(&p)
-        .into_diagnostic()
-        .wrap_err("Invalid permit")?;
-    let signature = sign_permit(chain_id, &p, signer)?;
     let given_amount = biguint_to_u256(&solution.given_amount);
     let min_amount_out = biguint_to_u256(&solution.checked_amount);
     let given_token = Address::from_slice(&solution.given_token);
@@ -481,8 +468,7 @@ fn encoded_transaction(
         false,
         false,
         receiver,
-        permit,
-        signature.as_bytes().to_vec(),
+        true,
         encoded_solution.swaps,
     )
         .abi_encode();
@@ -494,27 +480,6 @@ fn encoded_transaction(
         BigUint::ZERO
     };
     Ok(Transaction { to: encoded_solution.interacting_with, value, data: contract_interaction })
-}
-
-fn sign_permit(
-    chain_id: u64,
-    permit_single: &models::PermitSingle,
-    signer: PrivateKeySigner,
-) -> miette::Result<Signature> {
-    let permit2_address = Address::from_str("0x000000000022D473030F116dDEE9F6B43aC78BA3")
-        .into_diagnostic()
-        .wrap_err("Permit2 address not valid")?;
-    let domain = eip712_domain! {
-        name: "Permit2",
-        chain_id: chain_id,
-        verifying_contract: permit2_address,
-    };
-    let permit_single: PermitSingle = PermitSingle::try_from(permit_single).into_diagnostic()?;
-    let hash = permit_single.eip712_signing_hash(&domain);
-    signer
-        .sign_hash_sync(&hash)
-        .into_diagnostic()
-        .wrap_err("Failed to sign permit2 approval")
 }
 
 /// Encodes the input data for a function call to the given function selector.
@@ -539,7 +504,7 @@ pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
     call_data
 }
 
-async fn new_simulate_swap_transaction(
+async fn simulate_swap_transaction(
     provider: FillProvider<
         JoinFill<Identity, WalletFiller<EthereumWallet>>,
         RootProvider<Ethereum>,
@@ -571,16 +536,19 @@ async fn new_simulate_swap_transaction(
                 info!("simulated block {}", block.inner.header.number);
                 if let Some((idx, transaction)) = block.calls.iter().enumerate().next() {
                     use alloy::{primitives::U256, sol_types::SolValue};
-                    let swap_amount = U256::abi_decode(&transaction.return_data)
-                        .map_err(|e| miette!("Failed to decode swap amount: {e:?}"))?;
-                    info!("swap amount: {}", swap_amount);
                     info!(
                         "transaction {transaction_num}, status: {status:?}, gas used: {gas_used}",
                         transaction_num = idx + 1,
                         status = transaction.status,
                         gas_used = transaction.gas_used
                     );
-                    return BigUint::from_str(swap_amount.to_string().as_str()).into_diagnostic();
+                    if !transaction.status {
+                        warn!("transaction: {transaction:?}");
+                        return Err(miette!("Transaction status is false"));
+                    }
+                    let amount_out = U256::abi_decode(&transaction.return_data)
+                        .map_err(|e| miette!("Failed to decode swap amount: {e:?}"))?;
+                    return BigUint::from_str(amount_out.to_string().as_str()).into_diagnostic();
                 }
             }
             Err(miette!("No blocks found in simulation output"))
