@@ -305,6 +305,10 @@ where
             .unwrap()
             .clear_temp_storage();
     }
+
+    fn get_current_block(&self) -> Option<BlockHeader> {
+        self.block.clone()
+    }
 }
 
 #[derive(Error, Debug)]

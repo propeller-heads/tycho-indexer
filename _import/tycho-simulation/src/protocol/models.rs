@@ -41,15 +41,21 @@ use tycho_common::{
 #[derive(Debug, Clone)]
 pub struct DecoderContext {
     pub adapter_path: Option<String>,
+    pub vm_traces: Option<bool>,
 }
 
 impl DecoderContext {
     pub fn new() -> Self {
-        Self { adapter_path: None }
+        Self { adapter_path: None, vm_traces: None }
     }
 
     pub fn vm_adapter_path<S: Into<String>>(mut self, path: S) -> Self {
         self.adapter_path = Some(path.into());
+        self
+    }
+
+    pub fn vm_traces(mut self, trace: bool) -> Self {
+        self.vm_traces = Some(trace);
         self
     }
 }

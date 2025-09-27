@@ -4,8 +4,10 @@ use alloy::{
     primitives::{keccak256, Address, Signed, Uint, I128, U256},
     sol_types::SolType,
 };
-use revm::DatabaseRef;
-use tycho_client::feed::BlockHeader;
+use revm::{
+    state::{AccountInfo, Bytecode},
+    DatabaseRef,
+};
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -30,10 +32,15 @@ use crate::evm::{
             },
             state::UniswapV4State,
         },
-        vm::tycho_simulation_contract::TychoSimulationContract,
+        vm::{
+            erc20_token::TokenProxyOverwriteFactory,
+            tycho_simulation_contract::TychoSimulationContract,
+        },
     },
     simulation::SimulationEngine,
 };
+
+const EULER_LENS_BYTECODE_BYTES: &[u8] = include_bytes!("assets/EulerLimitsLens.evm.runtime");
 
 #[derive(Debug, Clone)]
 pub(crate) struct GenericVMHookHandler<D: EngineDatabaseInterface + Clone + Debug>
@@ -45,6 +52,7 @@ where
     address: Address,
     pool_manager: Address,
     limits_entrypoint: Option<String>,
+    is_euler: bool,
 }
 
 impl<D: EngineDatabaseInterface + Clone + Debug> PartialEq for GenericVMHookHandler<D>
@@ -71,12 +79,14 @@ where
         _all_tokens: HashMap<Bytes, Token>,
         _account_balances: HashMap<Bytes, HashMap<Bytes, Bytes>>,
         limits_entrypoint: Option<String>,
+        is_euler: bool,
     ) -> Result<Self, SimulationError> {
         Ok(GenericVMHookHandler {
             contract: TychoSimulationContract::new(address, engine)?,
             address,
             pool_manager,
             limits_entrypoint,
+            is_euler,
         })
     }
 
@@ -99,7 +109,6 @@ where
     fn before_swap(
         &self,
         params: BeforeSwapParameters,
-        block: BlockHeader,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
         transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<WithGasEstimate<BeforeSwapOutput>, SimulationError> {
@@ -107,6 +116,25 @@ where
         if let Some(input_params) = transient_storage {
             transient_storage_params.extend(input_params);
         }
+
+        let token_in = if params.swap_params.zero_for_one {
+            params.context.currency_0
+        } else {
+            params.context.currency_1
+        };
+        let mut token_overwrites = TokenProxyOverwriteFactory::new(token_in, None);
+        // Overwrite pool manager's balance of token in. This is relevant when the pool manager does
+        // not have a lot of these tokens and the hook assumes that the token in is transferred
+        // before before_swap
+        token_overwrites.set_balance(U256::MAX, self.pool_manager);
+        // This is only to set the custom allowance flag to true, so we can fall in this condition
+        // https://github.com/propeller-heads/tycho-simulation/blob/23c3b1fbacdf4cccec62b633c109e668c6d5f12a/token-proxy/src/TokenProxy.sol#L342
+        token_overwrites.set_allowance(U256::MAX, Address::ZERO, self.address);
+        let mut final_overwrites = token_overwrites.get_overwrites();
+        if let Some(input_overwrites) = overwrites {
+            final_overwrites.extend(input_overwrites)
+        }
+
         let args = (
             params.sender,
             (
@@ -130,9 +158,7 @@ where
         let res = self.contract.call(
             selector,
             args,
-            block.number,
-            Some(block.timestamp),
-            overwrites,
+            Some(final_overwrites),
             Some(self.pool_manager),
             U256::from(0u64),
             Some(transient_storage_params),
@@ -163,7 +189,6 @@ where
     fn after_swap(
         &self,
         params: AfterSwapParameters,
-        block: BlockHeader,
         overwrites: Option<HashMap<Address, HashMap<U256, U256>>>,
         transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
     ) -> Result<WithGasEstimate<AfterSwapDelta>, SimulationError> {
@@ -195,8 +220,6 @@ where
         let res = self.contract.call(
             selector,
             args,
-            block.number,
-            Some(block.timestamp),
             overwrites,
             Some(self.pool_manager),
             U256::from(0u64),
@@ -239,27 +262,57 @@ where
                     "Invalid limits_entrypoint format. Expected 'address:signature'".to_string(),
                 ));
             }
-
+            let function_signature = parts[1];
+            let token_in_addr = Address::from_slice(&token_in.0);
+            let token_out_addr = Address::from_slice(&token_out.0);
             let contract_address = Address::from_str(parts[0]).map_err(|e| {
                 SimulationError::FatalError(format!("Failed to parse contract address: {e:?}"))
             })?;
-
-            let function_signature = parts[1];
-
-            let token_in_addr = Address::from_slice(&token_in.0);
-            let token_out_addr = Address::from_slice(&token_out.0);
-
-            let limits_contract =
-                TychoSimulationContract::new(contract_address, self.contract.engine.clone())?;
-
             let args = (token_in_addr, token_out_addr);
+
+            // Use a deterministic lens contract address for state override
+            // The lens contract bytecode will be deployed via state override during the eth_call.
+            // This maintains the same interface as the original getLimits.
+            let limits_contract = if self.is_euler {
+                let lens_address = Address::from_str("0x0000000000000000000000000000000000001337")
+                    .map_err(|e| {
+                        SimulationError::FatalError(format!(
+                            "Failed to parse contract address: {e:?}"
+                        ))
+                    })?;
+                let info: AccountInfo = AccountInfo {
+                    nonce: Default::default(),
+                    balance: U256::from(0),
+                    code: Some(Bytecode::new_raw(EULER_LENS_BYTECODE_BYTES.into())),
+                    code_hash: keccak256(EULER_LENS_BYTECODE_BYTES),
+                };
+                let mut permanent_storage = HashMap::new();
+
+                // We set the hooks address to the slot 0 to allow identifying the desired hook
+                // address
+                let original_contract = format!("0x000000000000000000000000{:x}", contract_address);
+                let original_contract_u256 = U256::from_str(&original_contract).map_err(|e| {
+                    SimulationError::FatalError(format!(
+                        "Failed to convert hook contract to U256: {e:?}"
+                    ))
+                })?;
+                permanent_storage.insert(U256::from(0), original_contract_u256);
+
+                self.contract.engine.state.init_account(
+                    lens_address,
+                    info,
+                    Some(permanent_storage),
+                    true, // mocked
+                );
+                TychoSimulationContract::new(lens_address, self.contract.engine.clone())?
+            } else {
+                TychoSimulationContract::new(contract_address, self.contract.engine.clone())?
+            };
 
             let res = limits_contract.call(
                 function_signature,
                 args,
-                0,                // block number (not used to get limits)
-                None,             // timestamp
-                None,             // overwrites
+                None,             // overrides
                 None,             // caller
                 U256::from(0u64), // value
                 None,             // transient_storage
@@ -378,6 +431,7 @@ mod tests {
             HashMap::new(),
             HashMap::new(),
             None,
+            false, // Not Euler - this is a Bunni hook contract
         )
         .expect("Failed to create GenericVMHookHandler");
 
@@ -400,7 +454,7 @@ mod tests {
             hook_data: Default::default(),
         };
 
-        let result = hook_handler.before_swap(params, block, None, None);
+        let result = hook_handler.before_swap(params, None, None);
 
         let res = result.unwrap().result;
         assert_eq!(
@@ -503,6 +557,7 @@ mod tests {
             HashMap::new(),
             HashMap::new(),
             None,
+            false, // Not euler contract
         )
         .expect("Failed to create GenericVMHookHandler");
 
@@ -529,7 +584,7 @@ mod tests {
             hook_data: Bytes::new(),
         };
 
-        let result = hook_handler.after_swap(after_swap_params, block, None, None);
+        let result = hook_handler.after_swap(after_swap_params, None, None);
 
         let res = result.unwrap().result;
         // This hook does not return any delta, so we expect it to be zero.
@@ -568,6 +623,7 @@ mod tests {
             HashMap::new(),
             HashMap::new(),
             None,
+            false, // Not euler
         )
         .expect("Failed to create GenericVMHookHandler");
 
@@ -602,7 +658,7 @@ mod tests {
         )]);
 
         let result = hook_handler
-            .before_swap(params, block.clone(), None, Some(transient_storage.clone()))
+            .before_swap(params, None, Some(transient_storage.clone()))
             .unwrap();
 
         assert_eq!(result.result.amount_delta, BeforeSwapDelta(I256::from_dec_str("0").unwrap()));
@@ -621,7 +677,6 @@ mod tests {
         transient_storage.extend(result.result.transient_storage);
         let result = hook_handler.after_swap(
             after_swap_params,
-            block,
             Some(result.result.overwrites),
             Some(transient_storage),
         );
@@ -639,9 +694,10 @@ mod tests {
                 "0x639d7e454339ba43da3b2288b45078405330afcc3cd7f10e6e852be9c70ac164",
             )
             .unwrap(),
-            timestamp: 1748397011,
+            timestamp: 1754368727,
             ..Default::default()
         };
+
         let db = SimulationDB::new(get_client(None), get_runtime(), Some(block.clone()));
         let engine = create_engine(db, true).expect("Failed to create simulation engine");
 
@@ -661,6 +717,7 @@ mod tests {
             HashMap::new(),
             HashMap::new(),
             Some(limits_entrypoint.to_string()),
+            true, // Euler contract
         )
         .expect("Failed to create GenericVMHookHandler");
 
@@ -706,6 +763,7 @@ mod tests {
             address: Address::ZERO,
             pool_manager: Address::ZERO,
             limits_entrypoint: None,
+            is_euler: true,
         };
 
         assert!(hook_handler.limits_entrypoint.is_none());

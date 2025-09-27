@@ -5,7 +5,6 @@ use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
 use revm::primitives::I128;
 use tracing::trace;
-use tycho_client::feed::BlockHeader;
 use tycho_common::{
     dto::ProtocolStateDelta,
     models::token::Token,
@@ -50,8 +49,6 @@ pub struct UniswapV4State {
     ticks: TickList,
     tick_spacing: i32,
     pub hook: Option<Box<dyn HookHandler>>,
-    /// The current block, will be used to set vm context
-    block: BlockHeader,
 }
 
 impl PartialEq for UniswapV4State {
@@ -96,7 +93,6 @@ impl UniswapV4State {
         tick: i32,
         tick_spacing: i32,
         ticks: Vec<TickInfo>,
-        block: BlockHeader,
     ) -> Self {
         let tick_list = TickList::from(
             tick_spacing
@@ -114,7 +110,6 @@ impl UniswapV4State {
             ticks: tick_list,
             tick_spacing,
             hook: None,
-            block,
         }
     }
 
@@ -472,7 +467,7 @@ impl ProtocolSim for UniswapV4State {
                 };
 
                 let before_swap_result = hook
-                    .before_swap(before_swap_params, self.block.clone(), None, None)
+                    .before_swap(before_swap_params, None, None)
                     .map_err(|e| {
                         SimulationError::FatalError(format!(
                             "BeforeSwap hook simulation failed: {e:?}"
@@ -533,7 +528,7 @@ impl ProtocolSim for UniswapV4State {
                 };
 
                 let after_swap_result = hook
-                    .after_swap(after_swap_params, self.block.clone(), storage_overwrites, None)
+                    .after_swap(after_swap_params, storage_overwrites, None)
                     .map_err(|e| {
                         SimulationError::FatalError(format!(
                             "AfterSwap hook simulation failed: {e:?}"
@@ -809,7 +804,7 @@ mod tests {
     use num_traits::FromPrimitive;
     use rstest::rstest;
     use serde_json::Value;
-    use tycho_client::feed::synchronizer::ComponentWithState;
+    use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
     use tycho_common::models::Chain;
 
     use super::*;
@@ -864,16 +859,6 @@ mod tests {
 
     #[test]
     fn test_delta_transition() {
-        let block = BlockHeader {
-            number: 7239119,
-            hash: Bytes::from_str(
-                "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
-            )
-            .expect("Invalid block hash"),
-            parent_hash: Bytes::from(vec![0; 32]),
-            revert: false,
-            timestamp: 0,
-        };
         let mut pool = UniswapV4State::new(
             1000,
             U256::from_str("1000").unwrap(),
@@ -881,7 +866,6 @@ mod tests {
             100,
             60,
             vec![TickInfo::new(120, 10000), TickInfo::new(180, -10000)],
-            block,
         );
 
         let attributes: HashMap<String, Bytes> = [
@@ -893,6 +877,8 @@ mod tests {
             ("fee".to_string(), Bytes::from(100_u32.to_be_bytes().to_vec())),
             ("ticks/-120/net_liquidity".to_string(), Bytes::from(10200_u64.to_be_bytes().to_vec())),
             ("ticks/120/net_liquidity".to_string(), Bytes::from(9800_u64.to_be_bytes().to_vec())),
+            ("block_number".to_string(), Bytes::from(2000_u64.to_be_bytes().to_vec())),
+            ("block_timestamp".to_string(), Bytes::from(1758201935_u64.to_be_bytes().to_vec())),
         ]
         .into_iter()
         .collect();
@@ -1079,16 +1065,6 @@ mod tests {
     #[test]
     fn test_get_amount_out_no_hook() {
         // Test using transaction 0x78ea4bbb7d4405000f33fdf6f3fa08b5e557d50e5e7f826a79766d50bd643b6f
-        let block = BlockHeader {
-            number: 23234805,
-            parent_hash: Default::default(),
-            hash: Bytes::from_str(
-                "0xb00f46215c5f07b73ab02226f82e408a35f1c8ef057d4684429d65c47b5ab1ae",
-            )
-            .expect("Invalid block hash"),
-            timestamp: 1749739055,
-            revert: false,
-        };
 
         // Pool ID: 0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7
         // Information taken from Tenderly simulation / event emitted on Etherscan
@@ -1332,7 +1308,6 @@ mod tests {
                         .unwrap(),
                 },
             ],
-            block,
         );
 
         let t0 = usdc();
@@ -1382,7 +1357,6 @@ mod tests {
             0,
             1,
             vec![],
-            block.clone(),
         );
 
         let hook_address: Address = Address::from_str("0x69058613588536167ba0aa94f0cc1fe420ef28a8")
@@ -1400,6 +1374,7 @@ mod tests {
             HashMap::new(),
             HashMap::new(),
             None,
+            true, // Euler hook
         )
         .unwrap();
 
@@ -1418,16 +1393,6 @@ mod tests {
     fn test_spot_price_with_recoverable_error() {
         // Test that spot_price correctly falls back to swap-based calculation
         // when a RecoverableError (other than "not implemented") is returned
-        let block = BlockHeader {
-            number: 22689128,
-            parent_hash: Default::default(),
-            hash: Bytes::from_str(
-                "0xfbfa716523d25d6d5248c18d001ca02b1caf10cabd1ab7321465e2262c41157b",
-            )
-            .expect("Invalid block hash"),
-            timestamp: 1749739055,
-            revert: false,
-        };
 
         let usv4_state = UniswapV4State::new(
             1000000000000000000u128,                                  // 1e18 liquidity
@@ -1439,7 +1404,6 @@ mod tests {
                 TickInfo::new(-600, 500000000000000000i128),
                 TickInfo::new(600, -500000000000000000i128),
             ],
-            block,
         );
 
         // Test spot price calculation without a hook (should use default implementation)
@@ -1486,6 +1450,7 @@ mod tests {
             HashMap::new(),
             HashMap::new(),
             None,
+            true, // Euler hook
         )
         .unwrap();
 
@@ -1497,7 +1462,6 @@ mod tests {
             0,      // current tick
             1,      // tick spacing
             vec![], // no ticks - hook manages liquidity
-            block.clone(),
         );
 
         usv4_state.set_hook_handler(Box::new(hook_handler));
@@ -1524,16 +1488,6 @@ mod tests {
     #[case::medium_liquidity(10000000000000000000u128)] // Moderate liquidity: 10e18
     #[case::minimal_liquidity(1000u128)] // Very small liquidity
     fn test_find_max_amount(#[case] liquidity: u128) {
-        let block = BlockHeader {
-            number: 22578103,
-            hash: Bytes::from_str(
-                "0x035c0e674c3bf3384a74b766908ab41c1968e989360aa26bea1dd64b1626f5f0",
-            )
-            .unwrap(),
-            timestamp: 1748397011,
-            ..Default::default()
-        };
-
         // Use fixed configuration for all test cases
         let fees = UniswapV4Fees { zero_for_one: 100, one_for_zero: 100, lp_fee: 100 };
         let tick_spacing = 60;
@@ -1549,7 +1503,6 @@ mod tests {
             0,
             tick_spacing,
             ticks,
-            block,
         );
 
         let token_in = usdc();

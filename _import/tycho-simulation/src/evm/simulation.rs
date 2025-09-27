@@ -110,9 +110,16 @@ where
             ..Default::default()
         };
 
+        let block = self
+            .state
+            .get_current_block()
+            .ok_or(SimulationEngineError::StorageError(
+                "Current block not set in SimulationEngine.".into(),
+            ))?;
+
         let block_env = BlockEnv {
-            number: U256::from(params.block_number),
-            timestamp: U256::from(params.timestamp),
+            number: U256::from(block.number),
+            timestamp: U256::from(block.timestamp),
             ..Default::default()
         };
 
@@ -361,10 +368,6 @@ pub struct SimulationParameters {
     pub overrides: Option<HashMap<Address, HashMap<U256, U256>>>,
     /// Limit of gas to be used by the transaction
     pub gas_limit: Option<u64>,
-    /// The block number to be used by the transaction. This is independent of the states block.
-    pub block_number: u64,
-    /// The timestamp to be used by the transaction
-    pub timestamp: u64,
     /// Map of the address whose transient storage will be overwritten, to a map of storage slot
     /// and value.
     pub transient_storage: Option<HashMap<Address, HashMap<U256, U256>>>,
@@ -385,6 +388,7 @@ mod tests {
             Account, AccountInfo, AccountStatus, Bytecode, EvmState as rState, EvmStorageSlot,
         },
     };
+    use tycho_client::feed::BlockHeader;
     use tycho_common::simulation::errors::SimulationError;
 
     use super::*;
@@ -610,11 +614,20 @@ mod tests {
             value: U256::from(0u64),
             overrides: None,
             gas_limit: None,
-            block_number: 0,
-            timestamp: 0,
             transient_storage: None,
         };
-        let eng = SimulationEngine::new(state, true);
+        let mut eng = SimulationEngine::new(state, true);
+
+        let block = BlockHeader {
+            number: 23428552,
+            hash: tycho_common::Bytes::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+            timestamp: 1758665355,
+            ..Default::default()
+        };
+        eng.state.set_block(Some(block));
 
         let result = eng.simulate(&sim_params);
         type BalanceReturn = Vec<U256>;
@@ -740,12 +753,22 @@ mod tests {
             value: U256::from(0u64),
             overrides: Some(overrides),
             gas_limit: None,
-            block_number: 0,
-            timestamp: 0,
             transient_storage: None,
         };
 
-        let eng = SimulationEngine::new(state, false);
+        let mut eng = SimulationEngine::new(state, false);
+
+        // Dummy block (irrelevant for this test)
+        let block = BlockHeader {
+            number: 1,
+            hash: tycho_common::Bytes::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+            timestamp: 1748397011,
+            ..Default::default()
+        };
+        eng.state.set_block(Some(block));
 
         // println!("Deploying a mocked contract!");
         // let deployment_result = eng.simulate(&deployment_params);

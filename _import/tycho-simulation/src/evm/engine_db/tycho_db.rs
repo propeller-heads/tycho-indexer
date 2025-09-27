@@ -36,6 +36,8 @@ pub enum TychoClientError {
 pub enum PreCachedDBError {
     #[error("Account {0} not found")]
     MissingAccount(Address),
+    #[error("Bad account update: {0} - {1:?}")]
+    BadUpdate(String, Box<AccountUpdate>),
     #[error("Block needs to be set")]
     BlockNotSet(),
     #[error("Tycho Client error: {0}")]
@@ -76,10 +78,17 @@ impl PreCachedDB {
     }
 
     #[instrument(skip_all)]
-    pub fn update(&self, account_updates: Vec<AccountUpdate>, block: Option<BlockHeader>) {
+    pub fn update(
+        &self,
+        account_updates: Vec<AccountUpdate>,
+        block: Option<BlockHeader>,
+    ) -> Result<(), PreCachedDBError> {
         // Hold the write lock for the duration of the function so that no other thread can
         // write to the storage.
-        let mut write_guard = self.inner.write().unwrap();
+        let mut write_guard = self
+            .inner
+            .write()
+            .expect("Fatal tycho state db lock poisoned");
 
         write_guard.block = block;
 
@@ -108,10 +117,13 @@ impl PreCachedDB {
 
                     // We expect the code to be present.
                     let code = Bytecode::new_raw(AlloyBytes::from(
-                        update.code.clone().unwrap_or_else(|| {
+                        update.code.clone().ok_or_else(|| {
                             error!(%update.address, "MissingCode");
-                            Vec::new()
-                        }),
+                            PreCachedDBError::BadUpdate(
+                                "MissingCode".into(),
+                                Box::new(update.clone()),
+                            )
+                        })?,
                     ));
                     // If the balance is not present, we set it to zero.
                     let balance = update.balance.unwrap_or(U256::ZERO);
@@ -130,6 +142,7 @@ impl PreCachedDB {
                 }
             }
         }
+        Ok(())
     }
 
     /// Retrieves the storage value at the specified index for the given account, if it exists.
@@ -275,6 +288,10 @@ impl EngineDatabaseInterface for PreCachedDB {
     /// Deprecated in TychoDB
     fn clear_temp_storage(&mut self) {
         debug!("Temp storage in TychoDB is never set, nothing to clear");
+    }
+
+    fn get_current_block(&self) -> Option<BlockHeader> {
+        self.inner.read().unwrap().block.clone()
     }
 }
 
@@ -552,7 +569,9 @@ mod tests {
             ..Default::default()
         };
 
-        mock_db.update(vec![account_update], Some(new_block));
+        mock_db
+            .update(vec![account_update], Some(new_block))
+            .unwrap();
 
         let account_info = mock_db
             .basic_ref(Address::from_str("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D").unwrap())

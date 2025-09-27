@@ -68,7 +68,7 @@ impl RFQStreamBuilder {
                 Ok((provider, msg)) => {
                     let update = self
                         .decoder
-                        .decode(FeedMessage {
+                        .decode(&FeedMessage {
                             state_msgs: HashMap::from([(provider.clone(), msg)]),
                             sync_states: HashMap::new(),
                         })

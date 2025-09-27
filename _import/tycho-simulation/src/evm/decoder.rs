@@ -10,7 +10,7 @@ use alloy::primitives::{Address, U256};
 use thiserror::Error;
 use tokio::sync::{RwLock, RwLockReadGuard};
 use tracing::{debug, error, info, warn};
-use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage, HeaderLike};
+use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader, FeedMessage, HeaderLike};
 use tycho_common::{
     dto::{ChangeType, ProtocolStateDelta},
     models::{token::Token, Chain},
@@ -214,7 +214,7 @@ where
 
     /// Decodes a `FeedMessage` into a `BlockUpdate` containing the updated states of protocol
     /// components
-    pub async fn decode(&self, msg: FeedMessage<H>) -> Result<Update, StreamDecodeError> {
+    pub async fn decode(&self, msg: &FeedMessage<H>) -> Result<Update, StreamDecodeError> {
         // stores all states updated in this tick/msg
         let mut updated_states = HashMap::new();
         let mut new_pairs = HashMap::new();
@@ -228,6 +228,11 @@ where
             .ok_or_else(|| StreamDecodeError::Fatal("Missing block!".into()))?
             .header
             .clone();
+
+        let block_number_or_timestamp = header
+            .clone()
+            .block_number_or_timestamp();
+        let current_block = header.clone().block();
 
         for (protocol, protocol_msg) in msg.state_msgs.iter() {
             // Add any new tokens
@@ -377,7 +382,8 @@ where
                     Some(storage_by_address),
                     token_proxy_accounts,
                 )
-                .await;
+                .await
+                .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
                 info!("Engine updated");
                 drop(state_guard);
             }
@@ -437,6 +443,8 @@ where
                                         continue 'outer;
                                     }
                                 };
+                                // TODO: Ok we deployed a proxy whenever we see a new token without
+                                // a implementation set.
                                 if !state_guard
                                     .proxy_token_addresses
                                     .contains_key(&token_address)
@@ -474,7 +482,8 @@ where
                             None,
                             new_tokens_accounts,
                         )
-                        .await;
+                        .await
+                        .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
                     }
 
                     // collect contracts:ids mapping for states that should update on contract
@@ -562,6 +571,9 @@ where
                     .map(|(key, value)| {
                         let mut update: AccountUpdate = value.clone().into();
 
+                        // TODO: Unify this different initialisation if we receive
+                        //  state updates for the token with the usual case. Also
+                        //  switch the if cases.
                         if state_guard.tokens.contains_key(key) {
                             // If the account is a token, we need to handle it with a proxy contract
 
@@ -599,6 +611,21 @@ where
                                     .unwrap()
                             };
 
+                            // TEMP PATCH (ENG-4993)
+                            //
+                            // The indexer emits deltas without code marked as creations,
+                            // which crashes TychoDB. Until fixed, treat them as updates
+                            // (since EVM code cannot be deleted).
+                            if update.code.is_none() &&
+                                matches!(update.change, ChangeType::Creation)
+                            {
+                                error!(
+                                    update = ?update,
+                                    "FaultyCreationDelta"
+                                );
+                                update.change = ChangeType::Update;
+                            }
+
                             // assign original token contract to new address
                             update.address = proxy_addr;
                         };
@@ -617,7 +644,8 @@ where
                     None,
                     token_proxy_accounts,
                 )
-                .await;
+                .await
+                .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
                 info!("Engine updated");
 
                 // Collect all pools related to the updated accounts
@@ -675,9 +703,11 @@ where
 
                 // update states with protocol state deltas (attribute changes etc.)
                 for (id, update) in deltas.state_updates {
+                    let update_with_block =
+                        Self::add_block_info_to_delta(update, current_block.clone());
                     match Self::apply_update(
                         &id,
-                        update,
+                        update_with_block,
                         &mut updated_states,
                         &state_guard,
                         &all_balances,
@@ -710,9 +740,13 @@ where
 
                 // update remaining pools linked to updated contracts/updated balances
                 for pool in pools_to_update {
+                    let default_delta_with_block = Self::add_block_info_to_delta(
+                        ProtocolStateDelta::default(),
+                        current_block.clone(),
+                    );
                     match Self::apply_update(
                         &pool,
-                        ProtocolStateDelta::default(),
+                        default_delta_with_block,
                         &mut updated_states,
                         &state_guard,
                         &all_balances,
@@ -769,9 +803,29 @@ where
         }
 
         // Send the tick with all updated states
-        Ok(Update::new(header.block_number_or_timestamp(), updated_states, new_pairs)
+        Ok(Update::new(block_number_or_timestamp, updated_states, new_pairs)
             .set_removed_pairs(removed_pairs)
-            .set_sync_states(msg.sync_states))
+            .set_sync_states(msg.sync_states.clone()))
+    }
+
+    /// Add block information (number and timestamp) to a ProtocolStateDelta
+    fn add_block_info_to_delta(
+        mut delta: ProtocolStateDelta,
+        block_header_opt: Option<BlockHeader>,
+    ) -> ProtocolStateDelta {
+        if let Some(header) = block_header_opt {
+            // Add block_number and block_timestamp attributes to ensure pool states
+            // receive current block information during delta_transition
+            delta.updated_attributes.insert(
+                "block_number".to_string(),
+                Bytes::from(header.number.to_be_bytes().to_vec()),
+            );
+            delta.updated_attributes.insert(
+                "block_timestamp".to_string(),
+                Bytes::from(header.timestamp.to_be_bytes().to_vec()),
+            );
+        }
+        delta
     }
 
     fn apply_update(
@@ -975,12 +1029,12 @@ mod tests {
 
         let msg = load_test_msg("uniswap_v2_snapshot");
         let res1 = decoder
-            .decode(msg)
+            .decode(&msg)
             .await
             .expect("decode failure");
         let msg = load_test_msg("uniswap_v2_delta");
         let res2 = decoder
-            .decode(msg)
+            .decode(&msg)
             .await
             .expect("decode failure");
 
@@ -1007,7 +1061,7 @@ mod tests {
 
         let msg = load_test_msg("uniswap_v2_snapshot");
         let res1 = decoder
-            .decode(msg)
+            .decode(&msg)
             .await
             .expect("decode failure");
 
@@ -1023,7 +1077,7 @@ mod tests {
         decoder.skip_state_decode_failures = skip_failures;
 
         let msg = load_test_msg("uniswap_v2_snapshot_broken_id");
-        match decoder.decode(msg).await {
+        match decoder.decode(&msg).await {
             Err(StreamDecodeError::Fatal(msg)) => {
                 if !skip_failures {
                     assert_eq!(
@@ -1053,7 +1107,7 @@ mod tests {
         decoder.skip_state_decode_failures = skip_failures;
 
         let msg = load_test_msg("uniswap_v2_snapshot_broken_state");
-        match decoder.decode(msg).await {
+        match decoder.decode(&msg).await {
             Err(StreamDecodeError::Fatal(msg)) => {
                 if !skip_failures {
                     assert_eq!(msg, "Missing attributes reserve0");
@@ -1119,7 +1173,7 @@ mod tests {
 
         // Decode the message
         let _ = decoder
-            .decode(msg)
+            .decode(&msg)
             .await
             .expect("decode failure");
 
@@ -1135,5 +1189,49 @@ mod tests {
         let idx = 123456;
         let generated_address = generate_proxy_token_address(idx);
         assert_eq!(generated_address, address!("00000000000000000000000000001e240badbabe"));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_euler_hook_low_pool_manager_balance() {
+        let mut decoder = TychoStreamDecoder::new();
+
+        decoder.register_decoder_with_context::<crate::evm::protocol::uniswap_v4::state::UniswapV4State>(
+            "uniswap_v4_hooks", DecoderContext::new().vm_traces(true)
+        );
+
+        let weth = Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap();
+        let teth = Bytes::from_str("0xd11c452fc99cf405034ee446803b6f6c1f6d5ed8").unwrap();
+        let tokens = HashMap::from([
+            (
+                weth.clone(),
+                Token::new(&weth, "WETH", 18, 100, &[Some(100_000)], Chain::Ethereum, 100),
+            ),
+            (
+                teth.clone(),
+                Token::new(&teth, "tETH", 18, 100, &[Some(100_000)], Chain::Ethereum, 100),
+            ),
+        ]);
+
+        decoder.set_tokens(tokens.clone()).await;
+
+        let msg = load_test_msg("euler_hook_snapshot");
+        let res = decoder
+            .decode(&msg)
+            .await
+            .expect("decode failure");
+
+        let pool_state = res
+            .states
+            .get("0xc70d7fbd7fcccdf726e02fed78548b40dc52502b097c7a1ee7d995f4d4396134")
+            .expect("Couldn't find target pool");
+        let amount_out = pool_state
+            .get_amount_out(
+                BigUint::from_str("1000000000000000000").unwrap(),
+                tokens.get(&teth).unwrap(),
+                tokens.get(&weth).unwrap(),
+            )
+            .expect("Get amount out failed");
+
+        assert_eq!(amount_out.amount, BigUint::from_str("1216190190361759119").unwrap());
     }
 }

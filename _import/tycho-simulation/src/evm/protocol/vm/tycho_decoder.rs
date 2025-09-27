@@ -30,7 +30,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
     #[allow(deprecated)]
     async fn try_from_with_header(
         snapshot: ComponentWithState,
-        block: BlockHeader,
+        _block: BlockHeader,
         account_balances: &HashMap<Bytes, HashMap<Bytes, Bytes>>,
         all_tokens: &HashMap<Bytes, Token>,
         decoder_context: &DecoderContext,
@@ -143,15 +143,19 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
                 "Error converting protocol name to address".to_string(),
             )
         })?;
-
+        let mut vm_traces = false;
+        if let Some(trace) = &decoder_context.vm_traces {
+            vm_traces = *trace;
+        }
         let mut pool_state_builder =
-            EVMPoolStateBuilder::new(id.clone(), tokens.clone(), block, adapter_contract_address)
+            EVMPoolStateBuilder::new(id.clone(), tokens.clone(), adapter_contract_address)
                 .balances(component_balances)
                 .account_balances(account_balances)
                 .adapter_contract_bytecode(adapter_bytecode)
                 .involved_contracts(involved_contracts)
                 .stateless_contracts(stateless_contracts)
-                .manual_updates(manual_updates);
+                .manual_updates(manual_updates)
+                .trace(vm_traces);
 
         if let Some(balance_owner) = balance_owner {
             pool_state_builder = pool_state_builder.balance_owner(balance_owner)
@@ -307,7 +311,8 @@ mod tests {
                 false,
             );
         }
-        db.update(accounts, Some(block));
+        db.update(accounts, Some(block))
+            .unwrap();
         let account_balances = HashMap::from([(
             Bytes::from("0xBA12222222228d8Ba445958a75a0704d566BF2C8"),
             HashMap::from([

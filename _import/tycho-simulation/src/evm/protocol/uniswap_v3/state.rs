@@ -64,6 +64,9 @@ impl UniswapV3State {
     fn get_spacing(fee: FeeAmount) -> u16 {
         match fee {
             FeeAmount::Lowest => 1,
+            FeeAmount::Lowest2 => 2,
+            FeeAmount::Lowest3 => 3,
+            FeeAmount::Lowest4 => 4,
             FeeAmount::Low => 10,
             FeeAmount::MediumLow => 50,
             FeeAmount::Medium => 60,

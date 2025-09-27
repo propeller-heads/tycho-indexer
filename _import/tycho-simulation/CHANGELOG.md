@@ -1,3 +1,71 @@
+## [0.164.0](https://github.com/propeller-heads/tycho-simulation/compare/0.163.0...0.164.0) (2025-09-25)
+
+
+### Features
+
+* Use custom contract to fetch Euler limits with the correct values ([f51c5a0](https://github.com/propeller-heads/tycho-simulation/commit/f51c5a017afb21bf6a30a0f08aa1ffbe25b84e01))
+
+
+### Bug Fixes
+
+* Check for euler_v1 param in the euler hook filter ([40fc353](https://github.com/propeller-heads/tycho-simulation/commit/40fc3538834d4a03a7714de31c101850b2ae68ec))
+
+## [0.163.0](https://github.com/propeller-heads/tycho-simulation/compare/0.162.0...0.163.0) (2025-09-25)
+
+
+### Features
+
+* Bump tycho-common and tycho-execution versions ([1d3aa5a](https://github.com/propeller-heads/tycho-simulation/commit/1d3aa5a7ac19cb29ffc84591e29f1645f1de4bc0))
+
+
+### Bug Fixes
+
+* Solve issue with low balance tokens in pool manager ([13d9ebe](https://github.com/propeller-heads/tycho-simulation/commit/13d9ebe38899dc10d9f82a54c4a1b370f284a440))
+* Support passing vm traces to generic_vm_hook_handler.rs ([9f69fc7](https://github.com/propeller-heads/tycho-simulation/commit/9f69fc7351502ec7a272999335d88ed7dfb7b486))
+
+## [0.162.0](https://github.com/propeller-heads/tycho-simulation/compare/0.161.0...0.162.0) (2025-09-25)
+
+
+### Features
+
+* Remove block from EVMPoolState ([7199c02](https://github.com/propeller-heads/tycho-simulation/commit/7199c02fd06ff87b57a5fdcc21837768fb3e4409))
+* Remove block from SimulationParams, retrieve from DB instead ([6f75769](https://github.com/propeller-heads/tycho-simulation/commit/6f757692cc9419e19d24a43e6992f4aa9bf33bea))
+* Use proper Cargo.toml to be able to run in CI ([fc5c28d](https://github.com/propeller-heads/tycho-simulation/commit/fc5c28d76f9fe069bb26fe57b91d5465b1bfdcec))
+
+
+### Bug Fixes
+
+* Fix incorrect timestamp in test_get_amount_ranges ([d8866b0](https://github.com/propeller-heads/tycho-simulation/commit/d8866b05ae5b198d64ab532ac202f0fb2e3f14de))
+
+## [0.161.0](https://github.com/propeller-heads/tycho-simulation/compare/0.160.1...0.161.0) (2025-09-23)
+
+
+### Features
+
+* Add 2, 3 and 4 BIPS fee tiers to uniswap v3 ([b192f10](https://github.com/propeller-heads/tycho-simulation/commit/b192f10fc6e96b4a1b23449867cef30055d084ff))
+
+## [0.160.1](https://github.com/propeller-heads/tycho-simulation/compare/0.160.0...0.160.1) (2025-09-19)
+
+
+### Bug Fixes
+
+* error if block info not passed during delta transition ([e929d61](https://github.com/propeller-heads/tycho-simulation/commit/e929d6169131387baa0f5e1adcb298aabc426254))
+* Update block in UniswapV4State and EVMPoolState ([0e9a3c3](https://github.com/propeller-heads/tycho-simulation/commit/0e9a3c3253cf1c138755b54cc5730f5f15866ec6))
+
+## [0.160.0](https://github.com/propeller-heads/tycho-simulation/compare/0.159.0...0.160.0) (2025-09-15)
+
+
+### Features
+
+* Propagate db update errors ([c4078a5](https://github.com/propeller-heads/tycho-simulation/commit/c4078a5b3f90cb4d0eb2560374b9470cc98aaf57))
+
+## [0.159.0](https://github.com/propeller-heads/tycho-simulation/compare/0.158.0...0.159.0) (2025-09-12)
+
+
+### Features
+
+* Add vm_trace to DecoderContext ([5d2e59e](https://github.com/propeller-heads/tycho-simulation/commit/5d2e59e6b7f0e52f7346f0a7c2e26e3869fdd3c9))
+
 ## [0.158.0](https://github.com/propeller-heads/tycho-simulation/compare/0.157.1...0.158.0) (2025-09-11)
 
 
