@@ -2,22 +2,19 @@ use std::{collections::HashMap, fmt::Debug, str::FromStr};
 
 use alloy::{
     eips::BlockNumberOrTag,
-    network::{Ethereum, EthereumWallet},
-    primitives::{map::AddressHashMap, Address, Keccak256, B256, U256},
-    providers::{
-        fillers::{FillProvider, JoinFill, WalletFiller},
-        Identity, Provider, ProviderBuilder, RootProvider,
-    },
+    network::Ethereum,
+    primitives::{map::AddressHashMap, Address, Keccak256, U256},
+    providers::{Provider, ProviderBuilder, RootProvider},
     rpc::types::{
         simulate::{SimBlock, SimulatePayload},
         state::AccountOverride,
         Block, TransactionRequest,
     },
-    signers::local::PrivateKeySigner,
     sol_types::SolValue,
 };
 use alloy_chains::NamedChain;
 use clap::Parser;
+use dotenv::dotenv;
 use futures::{Stream, StreamExt};
 use itertools::Itertools;
 use miette::{miette, IntoDiagnostic, WrapErr};
@@ -68,7 +65,7 @@ struct Cli {
     tvl_threshold: f64,
 
     #[arg(long, default_value = "ethereum")]
-    chains: Vec<Chain>,
+    chain: Chain,
 
     #[arg(
         long,
@@ -79,10 +76,6 @@ struct Cli {
     )]
     tycho_api_key: String,
 
-    #[arg(long, env = "PRIVATE_KEY", hide_env_values = true)]
-    swapper_pk: String,
-
-    // TODO: each chain should have its own RPC URL
     #[arg(long, env = "RPC_URL")]
     rpc_url: String,
 }
@@ -91,9 +84,8 @@ impl Debug for Cli {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Cli")
             .field("tvl_threshold", &self.tvl_threshold)
-            .field("chains", &self.chains)
+            .field("chain", &self.chain)
             .field("tycho_api_key", &"****")
-            .field("swapper_pk", &"****")
             .field("rpc_url", &self.rpc_url)
             .finish()
     }
@@ -101,32 +93,20 @@ impl Debug for Cli {
 
 #[tokio::main]
 async fn main() -> miette::Result<()> {
+    dotenv().ok();
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .init();
-
     let cli = Cli::parse();
     debug!("parsed args: {:?}", cli);
-
-    let mut handles = vec![];
-    for chain in &cli.chains {
-        let cli_clone = cli.clone();
-        let chain_clone = *chain;
-        handles.push(tokio::spawn(async move { test_chain(cli_clone, chain_clone).await }));
-    }
-
-    for handle in handles {
-        handle
-            .await
-            .map_err(|e| miette!("Task join error: {e}"))??
-    }
-
+    run(cli).await?;
     Ok(())
 }
 
-#[tracing::instrument(skip(cli), fields(chain = %chain))]
-async fn test_chain(cli: Cli, chain: Chain) -> miette::Result<()> {
+async fn run(cli: Cli) -> miette::Result<()> {
     info!("starting integration test");
+
+    let chain = cli.chain;
 
     // Load tokens from Tycho
     let tycho_url =
@@ -137,16 +117,6 @@ async fn test_chain(cli: Cli, chain: Chain) -> miette::Result<()> {
             .await;
     info!(%tycho_url, "loaded tokens");
 
-    // Create signer
-    let pk_str = cli.swapper_pk.as_str();
-    let pk = B256::from_str(pk_str)
-        .into_diagnostic()
-        .wrap_err("Failed to convert swapper pk to B256")?;
-    let signer = PrivateKeySigner::from_bytes(&pk)
-        .into_diagnostic()
-        .wrap_err("Failed to create PrivateKeySigner")?;
-    let tx_signer = EthereumWallet::from(signer.clone());
-
     // Create provider
     let provider = ProviderBuilder::default()
         .with_chain(
@@ -154,7 +124,6 @@ async fn test_chain(cli: Cli, chain: Chain) -> miette::Result<()> {
                 .into_diagnostic()
                 .wrap_err("Invalid chain")?,
         )
-        .wallet(tx_signer)
         .connect(&cli.rpc_url)
         .await
         .into_diagnostic()
@@ -162,7 +131,6 @@ async fn test_chain(cli: Cli, chain: Chain) -> miette::Result<()> {
 
     // Init stream
     let mut pairs: HashMap<String, ProtocolComponent> = HashMap::new();
-    let _amounts_out: HashMap<String, BigUint> = HashMap::new();
     let mut protocol_stream = build_protocol_stream(&cli, chain, &tycho_url, &all_tokens).await?;
     let mut first_message_skipped = false;
 
@@ -257,14 +225,13 @@ async fn test_chain(cli: Cli, chain: Chain) -> miette::Result<()> {
                 let expected_amount_out = amount_out_result.amount;
                 info!("calculated amount_out: {expected_amount_out} {}", token_out.symbol);
 
-                // Simulate amount_out
+                // Simulate execution amount out
                 let (solution, transaction) = encode_swap(
                     &component,
                     token_in,
                     token_out,
                     amount_in.clone(),
                     expected_amount_out.clone(),
-                    &signer,
                     chain,
                 )?;
                 let simulated_amount_out = match simulate_swap_transaction(
@@ -382,7 +349,6 @@ fn encode_swap(
     buy_token: &Token,
     amount_in: BigUint,
     expected_amount_out: BigUint,
-    signer: &PrivateKeySigner,
     chain: Chain,
 ) -> miette::Result<(Solution, Transaction)> {
     let solution = create_solution(
@@ -391,8 +357,7 @@ fn encode_swap(
         buy_token.clone(),
         amount_in.clone(),
         expected_amount_out.clone(),
-        Bytes::from(signer.address().to_vec()),
-    );
+    )?;
     let encoded_solution = {
         let encoder = TychoRouterEncoderBuilder::new()
             .chain(chain)
@@ -419,8 +384,10 @@ fn create_solution(
     buy_token: Token,
     amount_in: BigUint,
     expected_amount_out: BigUint,
-    user_address: Bytes,
-) -> Solution {
+) -> miette::Result<Solution> {
+    let user_address =
+        Bytes::from_str("0xf847a638E44186F3287ee9F8cAF73FF4d4B80784").into_diagnostic()?;
+
     // Prepare data to encode. First we need to create a swap object
     let simple_swap =
         SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone()).build();
@@ -437,7 +404,7 @@ fn create_solution(
     let min_amount_out = (expected_amount_out * &multiplier) / &bps;
 
     // Then we create a solution object with the previous swap
-    Solution {
+    Ok(Solution {
         sender: user_address.clone(),
         receiver: user_address,
         given_token: sell_token.address,
@@ -447,7 +414,7 @@ fn create_solution(
         checked_amount: min_amount_out,
         swaps: vec![simple_swap],
         ..Default::default()
-    }
+    })
 }
 
 fn encoded_transaction(
@@ -506,10 +473,7 @@ pub fn encode_input(selector: &str, mut encoded_args: Vec<u8>) -> Vec<u8> {
 }
 
 async fn simulate_swap_transaction(
-    provider: FillProvider<
-        JoinFill<Identity, WalletFiller<EthereumWallet>>,
-        RootProvider<Ethereum>,
-    >,
+    provider: RootProvider<Ethereum>,
     rpc_url: &str,
     solution: &Solution,
     transaction: &Transaction,
@@ -532,27 +496,26 @@ async fn simulate_swap_transaction(
     // TODO: add retry logic to handle rate limiting
     match provider.simulate(&payload).await {
         Ok(output) => {
-            // TODO: can we assume there is only one block and one transaction?
-            for block in output.iter() {
-                info!("simulated block {}", block.inner.header.number);
-                if let Some((idx, transaction)) = block.calls.iter().enumerate().next() {
-                    use alloy::{primitives::U256, sol_types::SolValue};
-                    info!(
-                        "transaction {transaction_num}, status: {status:?}, gas used: {gas_used}",
-                        transaction_num = idx + 1,
-                        status = transaction.status,
-                        gas_used = transaction.gas_used
-                    );
-                    if !transaction.status {
-                        warn!("transaction: {transaction:?}");
-                        return Err(miette!("Transaction status is false"));
-                    }
-                    let amount_out = U256::abi_decode(&transaction.return_data)
-                        .map_err(|e| miette!("Failed to decode swap amount: {e:?}"))?;
-                    return BigUint::from_str(amount_out.to_string().as_str()).into_diagnostic();
-                }
+            let block = output
+                .first()
+                .ok_or_else(|| miette!("No blocks found in simulation output"))?;
+            info!("simulated block {}", block.inner.header.number);
+            let transaction = block
+                .calls
+                .first()
+                .ok_or_else(|| miette!("No transactions found in simulated block"))?;
+            info!(
+                "transaction status: {status:?}, gas used: {gas_used}",
+                status = transaction.status,
+                gas_used = transaction.gas_used
+            );
+            if !transaction.status {
+                warn!("transaction: {transaction:?}");
+                return Err(miette!("Transaction status is false"));
             }
-            Err(miette!("No blocks found in simulation output"))
+            let amount_out = U256::abi_decode(&transaction.return_data)
+                .map_err(|e| miette!("Failed to decode swap amount: {e:?}"))?;
+            BigUint::from_str(amount_out.to_string().as_str()).into_diagnostic()
         }
         Err(e) => Err(miette!("error during simulation: {e:?}")),
     }
