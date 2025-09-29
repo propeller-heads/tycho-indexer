@@ -1732,6 +1732,55 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_handle_tick_scoped_data_sync() {
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| ());
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_advance()
+            .times(0)
+            .returning(|_, _, _| Ok(()));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+
+        let extractor = create_extractor(gw).await;
+
+        extractor
+            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
+                tycho_substreams::BlockChanges {
+                    block: Some(pb_fixtures::pb_blocks(1)),
+                    ..Default::default()
+                },
+                Some(format!("cursor@{}", 1).as_str()),
+                Some(10),
+            ))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        extractor
+            .handle_tick_scoped_data(pb_fixtures::pb_block_scoped_data(
+                tycho_substreams::BlockChanges {
+                    block: Some(pb_fixtures::pb_blocks(2)),
+                    ..Default::default()
+                },
+                Some(format!("cursor@{}", 2).as_str()),
+                Some(10),
+            ))
+            .await
+            .map(|o| o.map(|_| ()))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(extractor.get_cursor().await, "cursor@2");
+    }
+
+    #[tokio::test]
     async fn test_handle_tick_scoped_data_old_native_msg() {
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
