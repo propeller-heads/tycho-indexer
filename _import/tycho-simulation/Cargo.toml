@@ -52,12 +52,13 @@ tycho-client = "0.88.0"
 tycho-common = "0.88.0"
 
 # EVM dependencies
-foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "5a552bb0de7126fa35170fd84532bbd3d40cd348", optional = true }
-foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "5a552bb0de7126fa35170fd84532bbd3d40cd348", optional = true }
-solar-config = "=0.1.5"
-alloy = { version = "1.0.6", features = ["providers", "signer-local", "rpc-types-eth"], optional = true }
-revm = { version = "27.0.3", features = ["alloydb", "serde"], optional = true }
-revm-inspectors = { version = "0.26.5", features = ["serde"], optional = true }
+foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "d6daa0ac83fe6b3883072436bb3f95ba7820e5d9", optional = true }
+foundry-evm = { git = "https://github.com/foundry-rs/foundry", rev = "d6daa0ac83fe6b3883072436bb3f95ba7820e5d9", optional = true }
+solar-config = "=0.1.7"
+solar-data-structures = "=0.1.7"
+alloy = { version = "1.0.30", features = ["providers", "signer-local", "rpc-types-eth"], optional = true }
+revm = { version = "29.0.1", features = ["alloydb", "serde"], optional = true }
+revm-inspectors = { version = "0.30.0", features = ["serde"], optional = true }
 num-bigint = { version = "0.4", features = ["serde"] }
 tokio-stream = "0.1.16"
 
