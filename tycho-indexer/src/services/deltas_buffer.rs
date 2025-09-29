@@ -126,7 +126,7 @@ impl PendingDeltas {
                         "DeltaBufferInsertion"
                     );
                     guard.insert_block((*message).clone())?;
-                    guard.drain_blocks(message.db_committed_upto_block_height)?;
+                    guard.drain_blocks_until(message.db_committed_upto_block_height)?;
                 }
             }
             _ => return Err(PendingDeltasError::UnknownExtractor(message.extractor.clone())),
