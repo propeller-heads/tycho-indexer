@@ -337,7 +337,7 @@ impl Inner {
             let info = e.remove();
             if let SubscriptionInfo::RequestedUnsubscription(tx) = info {
                 let _ = tx.send(()).map_err(|_| {
-                    warn!(?subscription_id, "failed to notify about removed subscription")
+                    debug!(?subscription_id, "failed to notify about removed subscription")
                 });
                 self.sender
                     .remove(&subscription_id)
@@ -349,7 +349,11 @@ impl Inner {
                     .ok_or_else(|| DeltasError::Fatal("sender channel missing".to_string()))?;
             }
         } else {
-            error!(
+            // TODO: There is a race condition that can trigger multiple unsubscribes
+            //  if server doesn't respond quickly enough leading to some ugly logs but
+            //  doesn't affect behaviour negatively. E.g. BufferFull and multiple
+            //  messages from the ws connection are queued.
+            trace!(
                 ?subscription_id,
                 "Received `SubscriptionEnded`, but was never subscribed to it. This is likely a bug!"
             );
@@ -628,6 +632,14 @@ impl WsDeltasClient {
     /// Is used only if the message can't be processed due to an error that might resolve
     /// itself by resubscribing.
     async fn force_unsubscribe(subscription_id: Uuid, inner: &mut Inner) {
+        // avoid unsubscribing multiple times
+        if let Some(SubscriptionInfo::RequestedUnsubscription(_)) = inner
+            .subscriptions
+            .get(&subscription_id)
+        {
+            return
+        }
+
         let (tx, rx) = oneshot::channel();
         if let Err(e) = WsDeltasClient::unsubscribe_inner(inner, subscription_id, tx).await {
             warn!(?e, ?subscription_id, "Failed to send unsubscribe command");
@@ -2033,5 +2045,79 @@ mod tests {
             .expect("ws loop errored")
             .unwrap();
         server_thread.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_force_unsubscribe_prevents_multiple_calls() {
+        // Test that force_unsubscribe prevents sending duplicate unsubscribe commands
+        // when called multiple times for the same subscription_id
+
+        let subscription_id = Uuid::new_v4();
+
+        let exp_comm = [
+            ExpectedComm::Receive(
+                100,
+                tungstenite::protocol::Message::Text(
+                    r#"{"method":"subscribe","extractor_id":{"chain":"ethereum","name":"vm:ambient"},"include_state":true}"#.to_string()
+                ),
+            ),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(format!(
+                r#"{{"method":"newsubscription","extractor_id":{{"chain":"ethereum","name":"vm:ambient"}},"subscription_id":"{}"}}"#,
+                subscription_id
+            ))),
+            // Expect only ONE unsubscribe message, even though force_unsubscribe is called twice
+            ExpectedComm::Receive(
+                100,
+                tungstenite::protocol::Message::Text(format!(
+                    r#"{{"method":"unsubscribe","subscription_id":"{}"}}"#,
+                    subscription_id
+                )),
+            ),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(format!(
+                r#"{{"method":"subscriptionended","subscription_id":"{}"}}"#,
+                subscription_id
+            ))),
+        ];
+
+        let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
+
+        let client = WsDeltasClient::new(&format!("ws://{addr}"), None).unwrap();
+        let jh = client
+            .connect()
+            .await
+            .expect("connect failed");
+
+        let (received_sub_id, _rx) = timeout(
+            Duration::from_millis(100),
+            client.subscribe(
+                ExtractorIdentity::new(Chain::Ethereum, "vm:ambient"),
+                SubscriptionOptions::new(),
+            ),
+        )
+        .await
+        .expect("subscription timed out")
+        .expect("subscription failed");
+
+        assert_eq!(received_sub_id, subscription_id);
+
+        // Access the inner state to call force_unsubscribe directly
+        {
+            let mut inner_guard = client.inner.lock().await;
+            let inner = inner_guard.as_mut().expect("client should be connected");
+
+            // Call force_unsubscribe twice - only the first should send an unsubscribe message
+            WsDeltasClient::force_unsubscribe(subscription_id, inner).await;
+            WsDeltasClient::force_unsubscribe(subscription_id, inner).await;
+        }
+
+        // Give time for messages to be processed
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Close may fail if client disconnected after unsubscribe, which is fine
+        let _ = timeout(Duration::from_millis(100), client.close()).await;
+        
+        // Wait for tasks to complete
+        let _ = jh.await;
+        let _ = server_thread.await;
     }
 }
