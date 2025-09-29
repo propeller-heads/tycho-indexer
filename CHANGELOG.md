@@ -1,3 +1,19 @@
+## [0.90.0](https://github.com/propeller-heads/tycho-indexer/compare/0.89.0...0.90.0) (2025-09-29)
+
+
+### Features
+
+* Client stability improvements ([#711](https://github.com/propeller-heads/tycho-indexer/issues/711)) ([4a87809](https://github.com/propeller-heads/tycho-indexer/commit/4a87809d5ab09c5eebf5f116c849989f534aaf90))
+* correctly deal with advanced synchronizers ([cc9bdce](https://github.com/propeller-heads/tycho-indexer/commit/cc9bdce0dadbe093ef7bfb7d5560cf0f20753bb7))
+* keep stale protocol streams ([d6837dd](https://github.com/propeller-heads/tycho-indexer/commit/d6837dddfc4083aa57b85cb13d4c46cc4777073e))
+* skip snapshots on quick recoveries ([1648362](https://github.com/propeller-heads/tycho-indexer/commit/1648362bf944c94c6143e4a78c0289191ad1cb86))
+* skip syncing extractors messages ([e272e70](https://github.com/propeller-heads/tycho-indexer/commit/e272e70a57e1dd3894c4cee71031a8ad672bcd74))
+
+
+### Bug Fixes
+
+* avoid unsubscribing multiple times ([7a23165](https://github.com/propeller-heads/tycho-indexer/commit/7a2316592babd431cd6cb56a9e972017b138b19e))
+
 ## [0.89.0](https://github.com/propeller-heads/tycho-indexer/compare/0.88.1...0.89.0) (2025-09-26)
 
 
