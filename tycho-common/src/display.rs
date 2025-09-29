@@ -14,7 +14,7 @@ impl<'a, T: Display> Display for DisplayOption<'a, T> {
     }
 }
 
-/// Convenience function so you can write `%opt!(value)` in `tracing` logs.
+/// Convenience function so you can write `%opt(value)` in `tracing` logs.
 pub fn opt<T: Display>(val: &Option<T>) -> impl Value + '_ {
     tracing::field::display(DisplayOption(val))
 }

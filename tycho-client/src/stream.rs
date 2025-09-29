@@ -85,7 +85,7 @@ impl TychoStreamBuilder {
             ),
             websockets_retry_config: RetryConfiguration::constant(
                 128,
-                Duration::from_secs(max(block_time / 4, 1)),
+                Duration::from_secs(max(block_time / 6, 1)),
             ),
             no_state: false,
             auth_key: None,

@@ -2657,7 +2657,9 @@ mod test {
         state_sync.last_synced_block = Some(BlockHeader {
             number: 5,
             hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000005"),
-            parent_hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000004"),
+            parent_hash: Bytes::from(
+                "0x0000000000000000000000000000000000000000000000000000000000000004",
+            ),
             revert: false,
             timestamp: 1234567892,
         });
@@ -2690,7 +2692,10 @@ mod test {
         // Verify we only got the message for block 6 (the expected next block)
         assert!(result_msg.deltas.is_some(), "Should contain deltas");
         if let Some(deltas) = &result_msg.deltas {
-            assert_eq!(deltas.block.number, 6, "Should only process block 6, skipping earlier blocks");
+            assert_eq!(
+                deltas.block.number, 6,
+                "Should only process block 6, skipping earlier blocks"
+            );
             assert_eq!(
                 deltas.block.hash,
                 Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000006")
@@ -2702,13 +2707,13 @@ mod test {
         match timeout(Duration::from_millis(50), block_rx.recv()).await {
             Err(_) => {
                 // Timeout is expected - no more messages should come
-            },
+            }
             Ok(Some(Err(_))) => {
                 // Error received is also acceptable (connection closed)
-            },
+            }
             Ok(Some(Ok(_))) => {
                 panic!("Should not receive additional messages - old blocks should be skipped");
-            },
+            }
             Ok(None) => {
                 // Channel closed is also acceptable
             }

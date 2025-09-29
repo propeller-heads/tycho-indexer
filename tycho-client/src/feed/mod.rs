@@ -197,7 +197,6 @@ impl Display for SynchronizerState {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             SynchronizerState::Started => write!(f, "Started"),
-
             SynchronizerState::Ready(b) => write!(f, "Started({})", b.number),
             SynchronizerState::Delayed(b) => write!(f, "Delayed({})", b.number),
             SynchronizerState::Stale(b) => write!(f, "Stale({})", b.number),
@@ -286,8 +285,11 @@ impl SynchronizerStream {
 
     /// Standard way to advance a well-behaved state synchronizer.
     ///
-    /// Will wait for a new block on the synchronizer within a timeout. And modify its state based
-    /// on the outcome.
+    /// Will wait for a new block on the synchronizer within a timeout. And modify its
+    /// state based on the outcome.
+    ///
+    /// ## Note
+    /// This method assumes that the current state is `Ready`.
     async fn try_recv_next_expected(
         &mut self,
         max_wait: std::time::Duration,
@@ -319,34 +321,10 @@ impl SynchronizerStream {
             Err(_) => {
                 // trying to advance a block timed out
                 debug!(%extractor_id, %previous_block, "No block received within time limit.");
-
-                // TODO: as per prev condition check, the state will always be always ready here -
-                // simplify
-                match &self.state {
-                    SynchronizerState::Ready(_) => {
-                        // First timeout: always transition to Delayed
-                        self.state = SynchronizerState::Delayed(previous_block.clone());
-                        self.modify_ts = Local::now().naive_utc();
-                    }
-                    SynchronizerState::Delayed(_) => {
-                        // Already delayed, check if we should go stale
-                        // DON'T update modify_ts here - we want to track time since first delay
-                        self.check_and_transition_to_stale_if_needed(
-                            stale_threshold,
-                            Some(previous_block.clone()),
-                        )?;
-                    }
-                    _ => {
-                        // For other states, use the stale check
-                        if !self.check_and_transition_to_stale_if_needed(
-                            stale_threshold,
-                            Some(previous_block.clone()),
-                        )? {
-                            self.state = SynchronizerState::Delayed(previous_block.clone());
-                            self.modify_ts = Local::now().naive_utc();
-                        }
-                    }
-                }
+                // No need to consider state since we only call this method if we are
+                // in the Ready state.
+                self.state = SynchronizerState::Delayed(previous_block.clone());
+                self.modify_ts = Local::now().naive_utc();
                 Ok(None)
             }
         }
@@ -912,13 +890,17 @@ where
     ///
     /// We call this if we detect a future detached block. This usually only happens if
     /// a synchronizer has a restart.
+    ///
+    /// ## Note
+    /// This method assumes that at least one synchronizer is in Advanced, Ready or
+    /// Delayed state, it will panic in case this is not the case.
     fn reinit_block_history(
         sync_streams: &mut HashMap<ExtractorIdentity, SynchronizerStream>,
         block_history: &mut BlockHistory,
     ) -> Result<BlockHistory, BlockSynchronizerError> {
-        let previous = block_history
-            .latest()
-            .expect("Old block history is not empty, startup finished at this point");
+        let previous = block_history.latest().expect(
+            "Old block history should not be empty, startup should have populated it at this point",
+        );
         let blocks = sync_streams
             .values()
             .filter_map(SynchronizerStream::get_current_header)
@@ -927,7 +909,7 @@ where
         let new_block_history = BlockHistory::new(blocks, 10)?;
         let latest = block_history
             .latest()
-            .expect("block history is not empty");
+            .expect("Block history should not be empty, we just populated it.");
         info!(
              %previous,
             %latest,
@@ -936,7 +918,7 @@ where
         sync_streams
             .values_mut()
             .for_each(|stream| {
-                // we only get headers from, advanced, ready and delayed so stale
+                // we only get headers from advanced, ready and delayed so stale
                 // or ended streams are not considered here
                 if let Some(header) = stream.get_current_header() {
                     if header.number < latest.number {
@@ -951,7 +933,7 @@ where
 
     /// Checks if we still have at least one active stream else errors.
     ///
-    /// If there are not active streams meaning all  areended or stale, it returns a
+    /// If there are no active streams meaning all are ended or stale, it returns a
     /// summary error message for the state of all synchronizers.
     fn check_streams(
         sync_streams: &HashMap<ExtractorIdentity, SynchronizerStream>,
@@ -970,7 +952,7 @@ where
                     // All synchronizers were errored/stale and the last one errored
                     reason.push(format!("Synchronizer for {last_errored_id} errored with: {err}"))
                 } else {
-                    // All synchronizer were errored/stale and the last one also becomae stale
+                    // All synchronizer were errored/stale and the last one also became stale
                     reason.push(format!(
                         "Synchronizer for {last_errored_id} became: {}",
                         last_errored_stream.state

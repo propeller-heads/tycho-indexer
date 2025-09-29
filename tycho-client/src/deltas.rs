@@ -2103,7 +2103,9 @@ mod tests {
         // Access the inner state to call force_unsubscribe directly
         {
             let mut inner_guard = client.inner.lock().await;
-            let inner = inner_guard.as_mut().expect("client should be connected");
+            let inner = inner_guard
+                .as_mut()
+                .expect("client should be connected");
 
             // Call force_unsubscribe twice - only the first should send an unsubscribe message
             WsDeltasClient::force_unsubscribe(subscription_id, inner).await;
@@ -2115,7 +2117,7 @@ mod tests {
 
         // Close may fail if client disconnected after unsubscribe, which is fine
         let _ = timeout(Duration::from_millis(100), client.close()).await;
-        
+
         // Wait for tasks to complete
         let _ = jh.await;
         let _ = server_thread.await;
