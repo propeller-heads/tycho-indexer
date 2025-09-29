@@ -107,9 +107,7 @@ impl TychoRouterEncoder {
                 solution
                     .swaps
                     .iter()
-                    .all(|swap| swap.split == 0.0) &&
-                !(solution.given_token == solution.checked_token && solution.swaps.len() > 2))
-        // This is a special case for cyclical swaps
+                    .all(|swap| swap.split == 0.0))
         {
             self.single_swap_strategy
                 .encode_strategy(solution)?
