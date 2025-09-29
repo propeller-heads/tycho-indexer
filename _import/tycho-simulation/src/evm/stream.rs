@@ -4,10 +4,12 @@ use futures::{Stream, StreamExt};
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, error, warn};
 use tycho_client::{
-    feed::{component_tracker::ComponentFilter, synchronizer::ComponentWithState, BlockHeader},
+    feed::{
+        component_tracker::ComponentFilter, synchronizer::ComponentWithState, BlockHeader,
+        SynchronizerState,
+    },
     stream::{StreamError, TychoStreamBuilder},
 };
-use tycho_client::feed::SynchronizerState;
 use tycho_common::{
     models::{token::Token, Chain},
     simulation::protocol_sim::ProtocolSim,
@@ -32,13 +34,15 @@ pub enum StreamEndPolicy {
 }
 
 impl StreamEndPolicy {
-    fn should_end<'a>(&self, states: impl IntoIterator<Item=&'a SynchronizerState>) -> bool {
+    fn should_end<'a>(&self, states: impl IntoIterator<Item = &'a SynchronizerState>) -> bool {
         let mut it = states.into_iter();
         match self {
             StreamEndPolicy::AllEndedOrStale => false,
             StreamEndPolicy::AnyEnded => it.any(|s| matches!(s, SynchronizerState::Ended(_))),
             StreamEndPolicy::AnyStale => it.any(|s| matches!(s, SynchronizerState::Stale(_))),
-            StreamEndPolicy::AnyEndedOrStale => it.any(|s| matches!(s, SynchronizerState::Stale(_) | SynchronizerState::Ended(_))),
+            StreamEndPolicy::AnyEndedOrStale => {
+                it.any(|s| matches!(s, SynchronizerState::Stale(_) | SynchronizerState::Ended(_)))
+            }
         }
     }
 }
@@ -181,33 +185,43 @@ impl ProtocolStreamBuilder {
         let (_, rx) = self.stream_builder.build().await?;
         let decoder = Arc::new(self.decoder);
 
-        let stream = Box::pin(ReceiverStream::new(rx).take_while(move |msg| match msg {
-            Ok(msg) => {
-                let states = msg.sync_states.values();
-                if self.stream_end_policy.should_end(states) {
-                    error!("Block stream ended due to {:?}: {:?}", self.stream_end_policy, msg.sync_states);
-                    futures::future::ready(false)
-                } else {
-                    futures::future::ready(true)
-                }
-            }
-            Err(e) => {
-                error!("Block stream ended with terminal error: {e}");
-                futures::future::ready(false)
-            }
-        }).then({
-            let decoder = decoder.clone(); // Clone the decoder for the closure
-            move |msg| {
-                let decoder = decoder.clone(); // Clone again for the async block
-                async move {
-                    let msg = msg.expect("Save since stream ends if we receive an error");
-                    decoder.decode(&msg).await.map_err(|e| {
-                        debug!(msg=?msg, "Decode error: {}", e);
-                        e
-                    })
-                }
-            }
-        }));
+        let stream = Box::pin(
+            ReceiverStream::new(rx)
+                .take_while(move |msg| match msg {
+                    Ok(msg) => {
+                        let states = msg.sync_states.values();
+                        if self
+                            .stream_end_policy
+                            .should_end(states)
+                        {
+                            error!(
+                                "Block stream ended due to {:?}: {:?}",
+                                self.stream_end_policy, msg.sync_states
+                            );
+                            futures::future::ready(false)
+                        } else {
+                            futures::future::ready(true)
+                        }
+                    }
+                    Err(e) => {
+                        error!("Block stream ended with terminal error: {e}");
+                        futures::future::ready(false)
+                    }
+                })
+                .then({
+                    let decoder = decoder.clone(); // Clone the decoder for the closure
+                    move |msg| {
+                        let decoder = decoder.clone(); // Clone again for the async block
+                        async move {
+                            let msg = msg.expect("Save since stream ends if we receive an error");
+                            decoder.decode(&msg).await.map_err(|e| {
+                                debug!(msg=?msg, "Decode error: {}", e);
+                                e
+                            })
+                        }
+                    }
+                }),
+        );
         Ok(stream)
     }
 }

@@ -8669,8 +8669,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.89.0"
-source = "git+https://github.com/propeller-heads/tycho-indexer?rev=1648362bf944c94c6143e4a78c0289191ad1cb86#1648362bf944c94c6143e4a78c0289191ad1cb86"
+version = "0.90.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f2ae7a4d1d0f89a911aafeb43078be046a539f405806eb6d57817f334d2bf83"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8691,39 +8692,15 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber 0.3.20",
- "tycho-common 0.89.0",
+ "tycho-common",
  "uuid 1.18.1",
 ]
 
 [[package]]
 name = "tycho-common"
-version = "0.88.1"
+version = "0.90.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac0c309443e15797f3b713f10b8f00e79067abe91ea7c58421e4ce345b022e0d"
-dependencies = [
- "anyhow",
- "async-trait",
- "bytes",
- "chrono",
- "hex",
- "num-bigint",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "strum 0.25.0",
- "strum_macros 0.25.3",
- "thiserror 1.0.69",
- "tiny-keccak",
- "tracing",
- "typetag",
- "utoipa",
- "uuid 1.17.0",
-]
-
-[[package]]
-name = "tycho-common"
-version = "0.89.0"
-source = "git+https://github.com/propeller-heads/tycho-indexer?rev=1648362bf944c94c6143e4a78c0289191ad1cb86#1648362bf944c94c6143e4a78c0289191ad1cb86"
+checksum = "d3e2f3efae636ca7fcfd0235b1776caadc21c1c7f38259a83f6b07db1c8d2a80"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8746,9 +8723,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.125.0"
+version = "0.128.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90d1b18ddf0f5018af1294956cefc00a7b3893f6135df12c22776728af1402a0"
+checksum = "f2dfcbc5769a75428f93e9af1b7b0be59233082934b731535131c06dfde03158"
 dependencies = [
  "alloy",
  "chrono",
@@ -8763,7 +8740,7 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
- "tycho-common 0.88.1",
+ "tycho-common",
 ]
 
 [[package]]
@@ -8816,7 +8793,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber 0.3.20",
  "tycho-client",
- "tycho-common 0.89.0",
+ "tycho-common",
  "tycho-execution",
  "unicode-width 0.1.14",
  "uuid 1.18.1",

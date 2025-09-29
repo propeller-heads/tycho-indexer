@@ -13,7 +13,6 @@ pub use tycho_client;
 pub use tycho_common;
 pub use tycho_common as tycho_core; // Use `tycho_common` directly instead of `tycho_core`.
 
-
 #[cfg(feature = "evm")]
 pub mod evm;
 pub mod protocol;
