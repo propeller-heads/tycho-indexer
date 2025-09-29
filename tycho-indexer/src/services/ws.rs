@@ -52,11 +52,11 @@ pub struct WsActor {
     heartbeat: Instant,
     app_state: web::Data<WsData>,
     subscriptions: HashMap<Uuid, SpawnHandle>,
-    user_identity: Option<String>,
+    user_identity: String,
 }
 
 impl WsActor {
-    fn new(app_state: web::Data<WsData>, user_identity: Option<String>) -> Self {
+    fn new(app_state: web::Data<WsData>, user_identity: String) -> Self {
         Self {
             id: Uuid::new_v4(),
             heartbeat: Instant::now(),
@@ -76,12 +76,10 @@ impl WsActor {
         let user_identity = req
             .headers()
             .get("user-identity")
-            .map(|value| {
-                value
-                    .to_str()
-                    .unwrap_or("unknown")
-                    .to_string()
-            });
+            .map(|value| value.to_str().ok())
+            .flatten()
+            .unwrap_or("unknown")
+            .to_string();
         let ws_actor = WsActor::new(data, user_identity);
 
         // metrics
@@ -99,7 +97,7 @@ impl WsActor {
             "websocket_connections_metadata",
             "id" => ws_actor.id.to_string(),
             "client_version" => user_agent,
-            "user_identity" => ws_actor.user_identity.clone().unwrap_or("unknown".to_string()),
+            "user_identity" => ws_actor.user_identity,
         )
         .increment(1);
 
@@ -270,7 +268,7 @@ impl WsActor {
                         "subscription_id" => subscription_id.to_string(),
                         "chain"=> extractor_id.chain.to_string(),
                         "extractor" => extractor_id.name.to_string(),
-                        "user_identity" => user_identity.unwrap_or("unknown".to_string()),
+                        "user_identity" => user_identity,
                     )
                     .increment(1);
 
