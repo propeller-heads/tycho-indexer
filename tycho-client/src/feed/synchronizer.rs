@@ -478,27 +478,42 @@ where
 
         let result = async {
             info!("Waiting for deltas...");
-            // wait for first deltas message
-            let mut first_msg = select! {
-                deltas_result = timeout(Duration::from_secs(self.timeout), msg_rx.recv()) => {
-                    deltas_result
-                        .map_err(|_| {
-                            SynchronizerError::Timeout(format!(
-                                "First deltas took longer than {t}s to arrive",
-                                t = self.timeout
-                            ))
-                        })?
-                        .ok_or_else(|| {
-                            SynchronizerError::ConnectionError(
-                                "Deltas channel closed before first message".to_string(),
-                            )
-                        })?
-                },
-                _ = &mut end_rx => {
-                    info!("Received close signal while waiting for first deltas");
-                    return Ok(());
+            let mut warned = false;
+            let mut first_msg = loop {
+                let msg = select! {
+                    deltas_result = timeout(Duration::from_secs(self.timeout), msg_rx.recv()) => {
+                        deltas_result
+                            .map_err(|_| {
+                                SynchronizerError::Timeout(format!(
+                                    "First deltas took longer than {t}s to arrive",
+                                    t = self.timeout
+                                ))
+                            })?
+                            .ok_or_else(|| {
+                                SynchronizerError::ConnectionError(
+                                    "Deltas channel closed before first message".to_string(),
+                                )
+                            })?
+                    },
+                    _ = &mut end_rx => {
+                        info!("Received close signal while waiting for first deltas");
+                        return Ok(());
+                    }
+                };
+
+                let incoming = BlockHeader::from_block(msg.get_block(), msg.is_revert());
+                if let Some(current) = &self.last_synced_block {
+                    if current.number >= incoming.number && !self.is_next_expected(&incoming) {
+                        if !warned {
+                            info!(extractor=%self.extractor_id, from=incoming.number, to=current.number, "Syncing. Skipping messages");
+                            warned = true;
+                        }
+                        continue
+                    }
                 }
+                break msg;
             };
+
             self.filter_deltas(&mut first_msg);
 
             // initial snapshot
@@ -2487,6 +2502,216 @@ mod test {
                 deltas.block.parent_hash,
                 Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000001")
             );
+        }
+    }
+
+    #[test(tokio::test)]
+    async fn test_skip_previously_processed_messages() {
+        // Test that the synchronizer skips messages for blocks that have already been processed
+        // This simulates a service restart scenario where old messages are re-emitted
+
+        let mut rpc_client = MockRPCClient::new();
+        let mut deltas_client = MockDeltasClient::new();
+
+        // Mock the initial components call
+        rpc_client
+            .expect_get_protocol_components()
+            .returning(|_| {
+                Ok(ProtocolComponentRequestResponse {
+                    protocol_components: vec![ProtocolComponent {
+                        id: "Component1".to_string(),
+                        ..Default::default()
+                    }],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+                })
+            });
+
+        // Mock snapshot calls for when we process the expected next block (block 6)
+        rpc_client
+            .expect_get_protocol_states()
+            .returning(|_| {
+                Ok(ProtocolStateRequestResponse {
+                    states: vec![ResponseProtocolState {
+                        component_id: "Component1".to_string(),
+                        ..Default::default()
+                    }],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+                })
+            });
+
+        rpc_client
+            .expect_get_component_tvl()
+            .returning(|_| {
+                Ok(ComponentTvlRequestResponse {
+                    tvl: [("Component1".to_string(), 100.0)]
+                        .into_iter()
+                        .collect(),
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+                })
+            });
+
+        rpc_client
+            .expect_get_traced_entry_points()
+            .returning(|_| {
+                Ok(TracedEntryPointRequestResponse {
+                    traced_entry_points: HashMap::new(),
+                    pagination: PaginationResponse::new(0, 20, 0),
+                })
+            });
+
+        // Set up deltas client to send old messages first, then the expected next block
+        let (tx, rx) = channel(10);
+        deltas_client
+            .expect_subscribe()
+            .return_once(move |_, _| {
+                // Send messages for blocks 3, 4, 5 (already processed), then block 6 (expected)
+                let old_messages = vec![
+                    BlockChanges {
+                        extractor: "uniswap-v2".to_string(),
+                        chain: Chain::Ethereum,
+                        block: Block {
+                            hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000003"),
+                            number: 3,
+                            parent_hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000002"),
+                            chain: Chain::Ethereum,
+                            ts: chrono::DateTime::from_timestamp(1234567890, 0).unwrap().naive_utc(),
+                        },
+                        revert: false,
+                        ..Default::default()
+                    },
+                    BlockChanges {
+                        extractor: "uniswap-v2".to_string(),
+                        chain: Chain::Ethereum,
+                        block: Block {
+                            hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000004"),
+                            number: 4,
+                            parent_hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000003"),
+                            chain: Chain::Ethereum,
+                            ts: chrono::DateTime::from_timestamp(1234567891, 0).unwrap().naive_utc(),
+                        },
+                        revert: false,
+                        ..Default::default()
+                    },
+                    BlockChanges {
+                        extractor: "uniswap-v2".to_string(),
+                        chain: Chain::Ethereum,
+                        block: Block {
+                            hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000005"),
+                            number: 5,
+                            parent_hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000004"),
+                            chain: Chain::Ethereum,
+                            ts: chrono::DateTime::from_timestamp(1234567892, 0).unwrap().naive_utc(),
+                        },
+                        revert: false,
+                        ..Default::default()
+                    },
+                    // This is the expected next block (block 6)
+                    BlockChanges {
+                        extractor: "uniswap-v2".to_string(),
+                        chain: Chain::Ethereum,
+                        block: Block {
+                            hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000006"),
+                            number: 6,
+                            parent_hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000005"),
+                            chain: Chain::Ethereum,
+                            ts: chrono::DateTime::from_timestamp(1234567893, 0).unwrap().naive_utc(),
+                        },
+                        revert: false,
+                        ..Default::default()
+                    },
+                ];
+
+                tokio::spawn(async move {
+                    for message in old_messages {
+                        let _ = tx.send(message).await;
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                });
+
+                Ok((Uuid::default(), rx))
+            });
+
+        deltas_client
+            .expect_unsubscribe()
+            .return_once(|_| Ok(()));
+
+        let mut state_sync = ProtocolStateSynchronizer::new(
+            ExtractorIdentity::new(Chain::Ethereum, "uniswap-v2"),
+            true,
+            ComponentFilter::with_tvl_range(0.0, 1000.0),
+            1,
+            Duration::from_secs(0),
+            true,
+            true,
+            ArcRPCClient(Arc::new(rpc_client)),
+            ArcDeltasClient(Arc::new(deltas_client)),
+            10000_u64,
+        );
+
+        // Initialize and set last_synced_block to simulate we've already processed block 5
+        state_sync
+            .initialize()
+            .await
+            .expect("Init should succeed");
+
+        state_sync.last_synced_block = Some(BlockHeader {
+            number: 5,
+            hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000005"),
+            parent_hash: Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000004"),
+            revert: false,
+            timestamp: 1234567892,
+        });
+
+        let (mut block_tx, mut block_rx) = channel(10);
+        let (end_tx, end_rx) = oneshot::channel::<()>();
+
+        // Start state_sync
+        let state_sync_handle = tokio::spawn(async move {
+            state_sync
+                .state_sync(&mut block_tx, end_rx)
+                .await
+        });
+
+        // Wait for the message - it should only be for block 6 (skipping blocks 3, 4, 5)
+        let result_msg = timeout(Duration::from_millis(500), block_rx.recv())
+            .await
+            .expect("Should receive message within timeout")
+            .expect("Channel should be open")
+            .expect("Should not be an error");
+
+        // Send close signal
+        let _ = end_tx.send(());
+
+        // Wait for state_sync to finish
+        let _ = state_sync_handle
+            .await
+            .expect("Task should not panic");
+
+        // Verify we only got the message for block 6 (the expected next block)
+        assert!(result_msg.deltas.is_some(), "Should contain deltas");
+        if let Some(deltas) = &result_msg.deltas {
+            assert_eq!(deltas.block.number, 6, "Should only process block 6, skipping earlier blocks");
+            assert_eq!(
+                deltas.block.hash,
+                Bytes::from("0x0000000000000000000000000000000000000000000000000000000000000006")
+            );
+        }
+
+        // Verify that no additional messages are received immediately
+        // (since the old blocks 3, 4, 5 were skipped and only block 6 was processed)
+        match timeout(Duration::from_millis(50), block_rx.recv()).await {
+            Err(_) => {
+                // Timeout is expected - no more messages should come
+            },
+            Ok(Some(Err(_))) => {
+                // Error received is also acceptable (connection closed)
+            },
+            Ok(Some(Ok(_))) => {
+                panic!("Should not receive additional messages - old blocks should be skipped");
+            },
+            Ok(None) => {
+                // Channel closed is also acceptable
+            }
         }
     }
 }

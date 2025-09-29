@@ -81,7 +81,7 @@ impl TychoStreamBuilder {
             max_missed_blocks,
             state_sync_retry_config: RetryConfiguration::constant(
                 32,
-                Duration::from_secs(max(block_time / 2, 2)),
+                Duration::from_secs(max(block_time / 4, 2)),
             ),
             websockets_retry_config: RetryConfiguration::constant(
                 128,
