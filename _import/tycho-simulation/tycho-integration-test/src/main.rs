@@ -20,6 +20,10 @@ use itertools::Itertools;
 use miette::{miette, IntoDiagnostic, WrapErr};
 use num_bigint::BigUint;
 use num_traits::{ToPrimitive, Zero};
+use tokio_retry2::{
+    strategy::{jitter, ExponentialFactorBackoff},
+    Retry, RetryError,
+};
 use tracing::{debug, info, trace, warn};
 use tracing_subscriber::EnvFilter;
 use tycho_ethereum::entrypoint_tracer::{
@@ -149,16 +153,18 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 .entry(id.clone())
                 .or_insert_with(|| comp.clone());
         }
-        if !first_message_skipped {
-            first_message_skipped = true;
-            info!("skipping simulation on first block...");
-            continue;
-        }
-        let block = provider
+        let block = match provider
             .get_block_by_number(BlockNumberOrTag::Latest)
             .await
             .into_diagnostic()
-            .wrap_err("Failed to fetch latest block")?;
+            .wrap_err("Failed to fetch latest block")
+        {
+            Ok(b) => b,
+            Err(e) => {
+                warn!("{e}");
+                continue;
+            }
+        };
         let block = match block {
             Some(b) => b,
             None => {
@@ -166,7 +172,11 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 continue;
             }
         };
-
+        if !first_message_skipped {
+            first_message_skipped = true;
+            info!("skipping simulation on first block...");
+            continue;
+        }
         for (id, state) in message.states.iter() {
             let component = match pairs.get(id) {
                 Some(comp) => comp.clone(),
@@ -175,12 +185,16 @@ async fn run(cli: Cli) -> miette::Result<()> {
                     continue;
                 }
             };
+            let tokens_len = component.tokens.len();
+            if tokens_len < 2 {
+                trace!("component {id} has less than 2 tokens, skipping...");
+                continue;
+            }
             let swap_directions: Vec<(Token, Token)> = component
                 .tokens
-                .clone()
-                .into_iter()
+                .iter()
                 .permutations(2)
-                .map(|perm| (perm[0].clone(), perm[1].clone())) //TODO: not assume two tokens?
+                .map(|perm| (perm[0].clone(), perm[1].clone()))
                 .collect();
             for (token_in, token_out) in swap_directions.iter() {
                 info!(
@@ -189,13 +203,19 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 );
 
                 // Get max input/output limits
-                let (max_input, max_output) = state
+                let (max_input, max_output) = match state
                     .get_limits(token_in.address.clone(), token_out.address.clone())
                     .into_diagnostic()
                     .wrap_err(format!(
                         "Error getting limits for Pool {id:?} for in token: {}, and out token: {}",
                         token_in.address, token_out.address
-                    ))?;
+                    )) {
+                    Ok(limits) => limits,
+                    Err(e) => {
+                        warn!("{e}");
+                        continue;
+                    }
+                };
                 info!(
                     "retrieved limits: max input {max_input} {}; max output {max_output} {}",
                     token_in.symbol, token_out.symbol
@@ -214,26 +234,38 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 info!("calculated amount_in: {amount_in} {}", token_in.symbol);
 
                 // Get amount_out
-                let amount_out_result = state
+                let amount_out_result = match state
                     .get_amount_out(amount_in.clone(), token_in, token_out)
                     .into_diagnostic()
                     .wrap_err(format!(
                         "Error calculating amount out for Pool {id:?} at {:.1}% with input of {amount_in} {}.",
                         percentage * 100.0,
                         token_in.symbol,
-                    ))?;
+                    )) {
+                        Ok(res) => res,
+                        Err(e) => {
+                            warn!("{e}");
+                            continue;
+                        }
+                };
                 let expected_amount_out = amount_out_result.amount;
                 info!("calculated amount_out: {expected_amount_out} {}", token_out.symbol);
 
                 // Simulate execution amount out
-                let (solution, transaction) = encode_swap(
+                let (solution, transaction) = match encode_swap(
                     &component,
                     token_in,
                     token_out,
                     amount_in.clone(),
                     expected_amount_out.clone(),
                     chain,
-                )?;
+                ) {
+                    Ok(res) => res,
+                    Err(e) => {
+                        warn!("{e}");
+                        continue;
+                    }
+                };
                 let simulated_amount_out = match simulate_swap_transaction(
                     provider.clone(),
                     &cli.rpc_url,
@@ -493,32 +525,37 @@ async fn simulate_swap_transaction(
         validation: true,
         return_full_transactions: true,
     };
-    // TODO: add retry logic to handle rate limiting
-    match provider.simulate(&payload).await {
-        Ok(output) => {
-            let block = output
-                .first()
-                .ok_or_else(|| miette!("No blocks found in simulation output"))?;
-            info!("simulated block {}", block.inner.header.number);
-            let transaction = block
-                .calls
-                .first()
-                .ok_or_else(|| miette!("No transactions found in simulated block"))?;
-            info!(
-                "transaction status: {status:?}, gas used: {gas_used}",
-                status = transaction.status,
-                gas_used = transaction.gas_used
-            );
-            if !transaction.status {
-                warn!("transaction: {transaction:?}");
-                return Err(miette!("Transaction status is false"));
-            }
-            let amount_out = U256::abi_decode(&transaction.return_data)
-                .map_err(|e| miette!("Failed to decode swap amount: {e:?}"))?;
-            BigUint::from_str(amount_out.to_string().as_str()).into_diagnostic()
-        }
-        Err(e) => Err(miette!("error during simulation: {e:?}")),
+    let retry_strategy = ExponentialFactorBackoff::from_millis(1000, 2.)
+        .max_delay_millis(10000)
+        .map(jitter)
+        .take(10);
+    let output = Retry::spawn(retry_strategy, async || match provider.simulate(&payload).await {
+        Ok(res) => Ok(res),
+        Err(e) => Err(RetryError::transient(e)),
+    })
+    .await
+    .into_diagnostic()
+    .wrap_err(miette!("Failed to simulate transaction after retries"))?;
+    let block = output
+        .first()
+        .ok_or_else(|| miette!("No blocks found in simulation output"))?;
+    info!("simulated block {}", block.inner.header.number);
+    let transaction = block
+        .calls
+        .first()
+        .ok_or_else(|| miette!("No transactions found in simulated block"))?;
+    info!(
+        "transaction status: {status:?}, gas used: {gas_used}",
+        status = transaction.status,
+        gas_used = transaction.gas_used
+    );
+    if !transaction.status {
+        warn!("transaction: {transaction:?}");
+        return Err(miette!("Transaction status is false"));
     }
+    let amount_out = U256::abi_decode(&transaction.return_data)
+        .map_err(|e| miette!("Failed to decode swap amount: {e:?}"))?;
+    BigUint::from_str(amount_out.to_string().as_str()).into_diagnostic()
 }
 
 fn swap_request(
