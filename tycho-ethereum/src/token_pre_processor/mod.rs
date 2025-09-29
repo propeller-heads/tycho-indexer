@@ -1,9 +1,8 @@
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 
+use alloy::{hex, primitives::Address};
 use async_trait::async_trait;
-use ethers::{abi::Abi, contract::Contract, prelude::Provider, providers::Http, types::H160};
-use ethrpc::Web3;
-use serde_json::from_str;
+use reqwest::Client;
 use tracing::{instrument, warn};
 use tycho_common::{
     models::{
@@ -16,41 +15,131 @@ use tycho_common::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{token_analyzer::trace_call::TraceCallDetector, BytesCodec};
+use crate::{erc20_abi, token_analyzer::trace_call::TraceCallDetector, BytesCodec};
 
 #[derive(Debug, Clone)]
 pub struct EthereumTokenPreProcessor {
-    ethers_client: Arc<Provider<Http>>,
-    erc20_abi: Abi,
-    web3_client: Web3,
+    rpc_url: String,
     chain: Chain,
 }
 
-const ABI_STR: &str = include_str!("./abi/erc20.json");
-
 impl EthereumTokenPreProcessor {
-    pub fn new(ethers_client: Provider<Http>, web3_client: Web3, chain: Chain) -> Self {
-        let abi = from_str::<Abi>(ABI_STR).expect("Unable to parse ABI");
-        EthereumTokenPreProcessor {
-            ethers_client: Arc::new(ethers_client),
-            erc20_abi: abi,
-            web3_client,
-            chain,
+    pub fn new_from_url(rpc_url: &str, chain: Chain) -> Self {
+        EthereumTokenPreProcessor { rpc_url: rpc_url.to_string(), chain }
+    }
+
+    async fn call_symbol(
+        &self,
+        token: Address,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let calldata = match erc20_abi::encode_symbol() {
+            Ok(calldata) => calldata,
+            Err(e) => {
+                warn!(?e, "Failed to encode symbol function call, using address as fallback");
+                return Ok(format!("0x{:x}", token));
+            }
+        };
+
+        let result = match self
+            .make_rpc_call(token, calldata)
+            .await
+        {
+            Ok(result) => result,
+            Err(e) => {
+                warn!(?e, ?token, "Failed to call symbol function, using address as fallback");
+                return Ok(format!("0x{:x}", token));
+            }
+        };
+
+        match erc20_abi::decode_symbol(&result) {
+            Ok(symbol) => Ok(symbol),
+            Err(e) => {
+                warn!(
+                    ?e,
+                    ?token,
+                    "Failed to decode symbol function result, using address as fallback"
+                );
+                Ok(format!("0x{:x}", token))
+            }
         }
     }
 
-    pub fn new_from_url(rpc_url: &str, chain: Chain) -> Self {
-        let abi = from_str::<Abi>(ABI_STR).expect("Unable to parse ABI");
-        let ethers_client: Provider<Http> =
-            Provider::<Http>::try_from(rpc_url).expect("Error creating HTTP provider");
+    async fn call_decimals(
+        &self,
+        token: Address,
+    ) -> Result<u8, Box<dyn std::error::Error + Send + Sync>> {
+        let calldata = match erc20_abi::encode_decimals() {
+            Ok(calldata) => calldata,
+            Err(e) => {
+                warn!(?e, "Failed to encode decimals function call, using default decimals 18");
+                return Ok(18);
+            }
+        };
 
-        let web3_client = Web3::new_from_url(rpc_url);
-        EthereumTokenPreProcessor {
-            ethers_client: Arc::new(ethers_client),
-            erc20_abi: abi,
-            web3_client,
-            chain,
+        let result = match self
+            .make_rpc_call(token, calldata)
+            .await
+        {
+            Ok(result) => result,
+            Err(e) => {
+                warn!(?e, ?token, "Failed to call decimals function, using default decimals 18");
+                return Ok(18);
+            }
+        };
+
+        match erc20_abi::decode_decimals(&result) {
+            Ok(decimals) => Ok(decimals),
+            Err(e) => {
+                warn!(
+                    ?e,
+                    ?token,
+                    "Failed to decode decimals function result, using default decimals 18"
+                );
+                Ok(18)
+            }
         }
+    }
+
+    async fn make_rpc_call(
+        &self,
+        to: Address,
+        data: Vec<u8>,
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+        let client = Client::new();
+
+        let call_request = serde_json::json!({
+            "to": format!("0x{:x}", to),
+            "data": format!("0x{}", hex::encode(data))
+        });
+
+        let rpc_request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "eth_call",
+            "params": [call_request, "latest"],
+            "id": 1
+        });
+
+        let response = client
+            .post(&self.rpc_url)
+            .json(&rpc_request)
+            .send()
+            .await?
+            .json::<serde_json::Value>()
+            .await?;
+
+        if let Some(error) = response.get("error") {
+            return Err(format!("RPC error: {}", error).into());
+        }
+
+        let result_str = response
+            .get("result")
+            .and_then(|r| r.as_str())
+            .ok_or("No result in response")?;
+
+        let hex_str = result_str
+            .strip_prefix("0x")
+            .unwrap_or(result_str);
+        Ok(hex::decode(hex_str)?)
     }
 }
 
@@ -66,30 +155,13 @@ impl TokenPreProcessor for EthereumTokenPreProcessor {
         let mut tokens_info = Vec::new();
 
         for address in addresses {
-            let contract = Contract::new(
-                H160::from_bytes(&address),
-                self.erc20_abi.clone(),
-                self.ethers_client.clone(),
-            );
+            let token_address = Address::from_bytes(&address);
 
-            let symbol = contract
-                .method("symbol", ())
-                .expect("Error preparing request")
-                .call()
-                .await;
+            // Make RPC calls directly for symbol and decimals
+            let symbol = self.call_symbol(token_address).await;
+            let decimals = self.call_decimals(token_address).await;
 
-            let decimals: Result<u8, _> = contract
-                .method("decimals", ())
-                .expect("Error preparing request")
-                .call()
-                .await;
-
-            let trace_call = TraceCallDetector {
-                web3: self.web3_client.clone(),
-                finder: token_finder.clone(),
-                settlement_contract: H160::from_str("0xc9f2e6ea1637E499406986ac50ddC92401ce1f58") // middle contract used to check for fees, set to cowswap settlement
-                    .unwrap(),
-            };
+            let trace_call = TraceCallDetector::new(&self.rpc_url, token_finder.clone());
 
             let (token_quality, gas, tax) = trace_call
                 .analyze(address.clone(), block)
@@ -141,7 +213,7 @@ impl TokenPreProcessor for EthereumTokenPreProcessor {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, env};
+    use std::{collections::HashMap, env, str::FromStr};
 
     use tycho_common::models::token::TokenOwnerStore;
 
@@ -152,12 +224,8 @@ mod tests {
     // This test requires a real RPC URL
     async fn test_get_tokens() {
         let archive_rpc = env::var("ARCHIVE_ETH_RPC_URL").expect("ARCHIVE_ETH_RPC_URL is not set");
-        let client: Provider<Http> =
-            Provider::<Http>::try_from(archive_rpc.clone()).expect("Error creating HTTP provider");
 
-        let w3 = Web3::new_from_url(&archive_rpc);
-
-        let processor = EthereumTokenPreProcessor::new(client, w3, Chain::Ethereum);
+        let processor = EthereumTokenPreProcessor::new_from_url(&archive_rpc, Chain::Ethereum);
 
         let tf = TokenOwnerStore::new(HashMap::new());
 

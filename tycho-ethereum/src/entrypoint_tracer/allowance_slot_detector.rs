@@ -8,7 +8,6 @@ use std::{
 use alloy::primitives::{Address as AlloyAddress, U256};
 use alloy_rpc_types_trace::geth::{GethTrace, PreStateFrame, PreStateMode};
 use async_trait::async_trait;
-use ethers::types::spoof::balance;
 use futures::future::join_all;
 use serde_json::{json, Value};
 use thiserror::Error;

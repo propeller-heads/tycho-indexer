@@ -4,16 +4,16 @@ use std::{
 };
 
 use alloy::{
-    eips::BlockNumberOrTag,
-    primitives::Uint,
+    eips::{BlockId, BlockNumberOrTag},
+    primitives::{Address as AlloyAddress, Uint, B256, U256},
+    providers::{
+        fillers::{BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller},
+        Identity, Provider, ProviderBuilder,
+    },
     rpc::client::{ClientBuilder, ReqwestClient},
 };
 use async_trait::async_trait;
 use chrono::DateTime;
-use ethers::{
-    middleware::Middleware,
-    prelude::{BlockId, Http, Provider, H160, H256, U256},
-};
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, trace, warn};
@@ -24,6 +24,14 @@ use tycho_common::{
 };
 
 use crate::{BytesCodec, RPCError, RequestError};
+
+type AlloyProvider = FillProvider<
+    JoinFill<
+        Identity,
+        JoinFill<GasFiller, JoinFill<BlobGasFiller, JoinFill<NonceFiller, ChainIdFiller>>>,
+    >,
+    alloy::providers::RootProvider,
+>;
 
 /// Helper function to extract the full error chain including source errors
 fn extract_error_chain(error: &dyn Error) -> String {
@@ -45,7 +53,7 @@ fn extract_error_chain(error: &dyn Error) -> String {
 /// `EVMAccountExtractor` is a struct that implements the `AccountExtractor` trait for Ethereum
 /// accounts. It is recommended for nodes that do not support batch requests.
 pub struct EVMAccountExtractor {
-    provider: Provider<Http>,
+    provider: AlloyProvider,
     chain: Chain,
 }
 
@@ -67,30 +75,32 @@ impl AccountExtractor for EVMAccountExtractor {
         requests: &[StorageSnapshotRequest],
     ) -> Result<HashMap<Bytes, AccountDelta>, Self::Error> {
         let mut updates = HashMap::new();
-        let block_id = Some(BlockId::from(block.number));
+        let block_number = BlockNumberOrTag::Number(block.number);
 
-        // Convert addresses to H160 for easier handling
-        let h160_addresses: Vec<H160> = requests
+        // Convert addresses to AlloyAddress for easier handling
+        let alloy_addresses: Vec<AlloyAddress> = requests
             .iter()
-            .map(|request| H160::from_bytes(&request.address))
+            .map(|request| AlloyAddress::from_bytes(&request.address))
             .collect();
 
         // Create futures for balance and code retrieval
-        let balance_futures: Vec<_> = h160_addresses
+        let balance_futures = alloy_addresses
             .iter()
-            .map(|&address| {
+            .map(|&address| async move {
                 self.provider
-                    .get_balance(address, block_id)
-            })
-            .collect();
+                    .get_balance(address)
+                    .block_id(BlockId::Number(block_number))
+                    .await
+            });
 
-        let code_futures: Vec<_> = h160_addresses
+        let code_futures = alloy_addresses
             .iter()
-            .map(|&address| {
+            .map(|&address| async move {
                 self.provider
-                    .get_code(address, block_id)
-            })
-            .collect();
+                    .get_code_at(address)
+                    .block_id(BlockId::Number(block_number))
+                    .await
+            });
 
         // Execute all balance and code requests concurrently
         let (result_balances, result_codes) =
@@ -110,7 +120,7 @@ impl AccountExtractor for EVMAccountExtractor {
         })?;
 
         // Process each address with its corresponding balance and code
-        for (i, &address) in h160_addresses.iter().enumerate() {
+        for (i, &address) in alloy_addresses.iter().enumerate() {
             trace!(contract=?address, block_number=?block.number, block_hash=?block.hash, "Extracting contract code and storage" );
 
             let balance = Some(balances[i]);
@@ -125,14 +135,14 @@ impl AccountExtractor for EVMAccountExtractor {
             }
 
             let slots = self
-                .get_storage_range(address, H256::from_bytes(&block.hash))
+                .get_storage_range(address, B256::from_slice(&block.hash))
                 .await?
                 .into_iter()
                 .map(|(k, v)| (k.to_bytes(), Some(v.to_bytes())))
                 .collect();
 
             updates.insert(
-                Bytes::from(address.to_fixed_bytes()),
+                address.to_bytes(),
                 AccountDelta::new(
                     self.chain,
                     address.to_bytes(),
@@ -153,20 +163,22 @@ impl EVMAccountExtractor {
     where
         Self: Sized,
     {
-        let provider = Provider::<Http>::try_from(node_url);
-        match provider {
-            Ok(p) => Ok(Self { provider: p, chain }),
-            Err(e) => Err(RPCError::SetupError(e.to_string())),
-        }
+        let url = node_url
+            .parse()
+            .map_err(|e: url::ParseError| {
+                RPCError::RequestError(RequestError::Other(e.to_string()))
+            })?;
+        let provider = ProviderBuilder::new().connect_http(url);
+        Ok(Self { provider, chain })
     }
 
     async fn get_storage_range(
         &self,
-        address: H160,
-        block: H256,
+        address: AlloyAddress,
+        block: B256,
     ) -> Result<HashMap<U256, U256>, RPCError> {
         let mut all_slots = HashMap::new();
-        let mut start_key = H256::zero();
+        let mut start_key = B256::ZERO;
         let block = format!("0x{block:x}");
         loop {
             let params = serde_json::json!([
@@ -177,7 +189,7 @@ impl EVMAccountExtractor {
             trace!("Requesting storage range for {:?}, block: {:?}", address, block);
             let result: StorageRange = self
                 .provider
-                .request("debug_storageRangeAt", params)
+                .raw_request("debug_storageRangeAt".into(), params)
                 .await
                 .map_err(|e| {
                     let error_chain = extract_error_chain(&e);
@@ -187,8 +199,10 @@ impl EVMAccountExtractor {
                 })?;
 
             for (_, entry) in result.storage {
-                all_slots
-                    .insert(U256::from(entry.key.as_bytes()), U256::from(entry.value.as_bytes()));
+                all_slots.insert(
+                    U256::from_be_bytes(entry.key.into()),
+                    U256::from_be_bytes(entry.value.into()),
+                );
             }
 
             if let Some(next_key) = result.next_key {
@@ -204,7 +218,9 @@ impl EVMAccountExtractor {
     pub async fn get_block_data(&self, block_id: i64) -> Result<Block, RPCError> {
         let block = self
             .provider
-            .get_block(BlockId::from(u64::try_from(block_id).expect("Invalid block number")))
+            .get_block_by_number(BlockNumberOrTag::Number(
+                u64::try_from(block_id).expect("Invalid block number"),
+            ))
             .await
             .map_err(|e| {
                 RPCError::RequestError(RequestError::Other(format!("Failed to get block: {e}")))
@@ -212,11 +228,11 @@ impl EVMAccountExtractor {
             .expect("Block not found");
 
         Ok(Block {
-            number: block.number.unwrap().as_u64(),
-            hash: block.hash.unwrap().to_bytes(),
-            parent_hash: block.parent_hash.to_bytes(),
+            number: block.header.number,
+            hash: block.header.hash.to_bytes(),
+            parent_hash: block.header.parent_hash.to_bytes(),
             chain: Chain::Ethereum,
-            ts: DateTime::from_timestamp(block.timestamp.as_u64() as i64, 0)
+            ts: DateTime::from_timestamp(block.header.timestamp as i64, 0)
                 .expect("Failed to convert timestamp")
                 .naive_utc(),
         })
@@ -438,7 +454,7 @@ impl EVMBatchAccountExtractor {
         warn!("Requesting all storage slots for address: {:?}. This request can consume a lot of data, and the method might not be available on the requested chain / node.", address);
 
         let mut all_slots = HashMap::new();
-        let mut start_key = H256::zero();
+        let mut start_key = B256::ZERO;
         loop {
             trace!("Requesting storage range for {:?}, block: {:?}", address.clone(), block);
 
@@ -484,7 +500,7 @@ impl EVMBatchAccountExtractor {
 
             for (_, entry) in result.storage {
                 all_slots
-                    .insert(Bytes::from(entry.key.as_bytes()), Bytes::from(entry.value.as_bytes()));
+                    .insert(Bytes::from(entry.key.0.to_vec()), Bytes::from(entry.value.0.to_vec()));
             }
 
             if let Some(next_key) = result.next_key {
@@ -602,21 +618,22 @@ impl AccountExtractor for EVMBatchAccountExtractor {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct StorageEntry {
-    key: H256,
-    value: H256,
+    key: B256,
+    value: B256,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct StorageRange {
-    storage: HashMap<H256, StorageEntry>,
-    next_key: Option<H256>,
+    storage: HashMap<B256, StorageEntry>,
+    next_key: Option<B256>,
 }
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
+    use alloy::hex;
     use tracing_test::traced_test;
 
     use super::*;
@@ -671,7 +688,15 @@ mod tests {
         async fn new() -> Self {
             let node_url = std::env::var("RPC_URL").expect("RPC_URL must be set for testing");
 
-            let block_hash = H256::from_str(TEST_BLOCK_HASH).expect("valid block hash");
+            let block_hash = B256::from_bytes(
+                &hex::decode(
+                    TEST_BLOCK_HASH
+                        .strip_prefix("0x")
+                        .unwrap_or(TEST_BLOCK_HASH),
+                )
+                .expect("valid hex")
+                .into(),
+            );
 
             let block = Block::new(
                 TEST_BLOCK_NUMBER,

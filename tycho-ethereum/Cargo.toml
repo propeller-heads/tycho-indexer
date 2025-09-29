@@ -21,24 +21,18 @@ tycho-common.workspace = true
 serde.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
-reqwest.workspace = true
+reqwest = { workspace = true, features = ["json"] }
 unicode-segmentation.workspace = true
 rand.workspace = true
 url = "2"
 futures = "0.3"
 
 # Required dependencies
-ethers = "^2.0.2"
 web3 = { version = "0.19", default-features = false }
 alloy = { version = "1.0.30", default-features = true, features = ["reqwest-default-tls"] }
 alloy-rpc-types-trace = "1.0.24"
 
 # Optional dependencies
-contracts = { git = "https://github.com/cowprotocol/services", tag = "v2.326.0", optional = true }
-ethrpc = { git = "https://github.com/cowprotocol/services", tag = "v2.326.0", optional = true }
-ethcontract = { git = "https://github.com/cowprotocol/ethcontract-rs", rev = "8817f4ba868e686f21cda886d6c8b75834eb51f2", default-features = false, features = [
-    "aws-kms",
-], optional = true }
 clap = { version = "4", features = ["derive", "env"], optional = true }
 humantime = { version = "2.1.0", optional = true }
 tracing-test = "0.2.5"
@@ -49,4 +43,4 @@ mockito.workspace = true
 
 [features]
 default = []
-onchain_data = ["ethrpc", "ethcontract", "dep:contracts", "humantime", "clap"]
+onchain_data = ["humantime", "clap"]
