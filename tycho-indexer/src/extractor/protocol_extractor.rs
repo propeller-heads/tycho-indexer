@@ -588,54 +588,6 @@ where
             .collect();
         Ok(new_tokens)
     }
-
-    async fn insert_and_maybe_flush_buffer(
-        &self,
-        msg: &BlockChanges,
-        inp: &BlockScopedData,
-        is_syncing: bool,
-    ) -> Result<u64, ExtractionError> {
-        let mut reorg_buffer = self.reorg_buffer.lock().await;
-
-        let committed_upto_height_from_buffer =
-            |buffer: &ReorgBuffer<_>| -> Result<u64, ExtractionError> {
-                buffer
-                    .get_oldest_block()
-                    .map(|block| block.number)
-                    .ok_or_else(|| {
-                        ExtractionError::ReorgBufferError("Reorg buffer is empty".into())
-                    })
-            };
-
-        reorg_buffer
-            .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
-            .map_err(ExtractionError::Storage)?;
-
-        if reorg_buffer.count_blocks_before(inp.final_block_height) <
-            self.database_insert_batch_size
-        {
-            return committed_upto_height_from_buffer(&reorg_buffer);
-        }
-
-        let mut msgs = reorg_buffer
-            .drain_blocks(inp.final_block_height)
-            .map_err(ExtractionError::Storage)?
-            .into_iter()
-            .peekable();
-
-        while let Some(msg) = msgs.next() {
-            // Force a database commit if we're not syncing and this is the last block to be
-            // sent. Otherwise, wait to accumulate a full batch before
-            // committing.
-            let force_db_commit = if is_syncing { false } else { msgs.peek().is_none() };
-
-            self.gateway
-                .advance(msg.block_update(), msg.cursor(), force_db_commit)
-                .await?;
-        }
-
-        committed_upto_height_from_buffer(&reorg_buffer)
-    }
 }
 
 #[async_trait]
@@ -794,9 +746,42 @@ where
         // block finality blockchains.
         let is_syncing = inp.final_block_height >= msg.block.number;
 
-        let db_committed_upto_block_height = self
-            .insert_and_maybe_flush_buffer(&msg, &inp, is_syncing)
-            .await?;
+        // Create a scope to lock the reorg buffer, insert the new block and possibly commit to the
+        // database if we have enough blocks in the buffer.
+        // Return the block height up to which we have committed to the database.
+        let db_committed_upto_block_height = {
+            let mut reorg_buffer = self.reorg_buffer.lock().await;
+
+            reorg_buffer
+                .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
+                .map_err(ExtractionError::Storage)?;
+
+            if reorg_buffer.count_blocks_before(inp.final_block_height) >=
+                self.database_insert_batch_size
+            {
+                let mut msgs = reorg_buffer
+                    .drain_blocks(inp.final_block_height)
+                    .map_err(ExtractionError::Storage)?
+                    .into_iter()
+                    .peekable();
+
+                while let Some(msg) = msgs.next() {
+                    // Force a database commit if we're not syncing and this is the last block to be
+                    // sent. Otherwise, wait to accumulate a full batch before
+                    // committing.
+                    let force_db_commit = if is_syncing { false } else { msgs.peek().is_none() };
+
+                    self.gateway
+                        .advance(msg.block_update(), msg.cursor(), force_db_commit)
+                        .await?;
+                }
+            }
+
+            reorg_buffer
+                .get_oldest_block()
+                .map(|block| block.number)
+                .ok_or_else(|| ExtractionError::ReorgBufferError("Reorg buffer is empty".into()))?
+        };
 
         self.update_last_processed_block(msg.block.clone())
             .await;
