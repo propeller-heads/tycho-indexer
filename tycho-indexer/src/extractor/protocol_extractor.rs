@@ -760,7 +760,7 @@ where
                 self.database_insert_batch_size
             {
                 let mut msgs = reorg_buffer
-                    .drain_blocks(inp.final_block_height)
+                    .drain_blocks_until(inp.final_block_height)
                     .map_err(ExtractionError::Storage)?
                     .into_iter()
                     .peekable();
