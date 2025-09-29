@@ -1,3 +1,10 @@
+## [0.165.0](https://github.com/propeller-heads/tycho-simulation/compare/0.164.0...0.165.0) (2025-09-29)
+
+
+### Features
+
+* Upgrade revm, foundry, solar and alloy deps ([46e13cc](https://github.com/propeller-heads/tycho-simulation/commit/46e13cc84a937bd71c77e8084ea01fd341711f71))
+
 ## [0.164.0](https://github.com/propeller-heads/tycho-simulation/compare/0.163.0...0.164.0) (2025-09-25)
 
 
