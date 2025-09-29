@@ -45,7 +45,6 @@
     * [Ethereum: Solidity](for-dexs/protocol-integration/simulation/ethereum-solidity.md)
   * [Execution](for-dexs/protocol-integration/execution/README.md)
     * [Code Architecture](for-dexs/protocol-integration/execution/code-architecture.md)
-  * [Testing](for-dexs/protocol-integration/3.-testing/README.md)
-    * [How to Run](for-dexs/protocol-integration/3.-testing/how-to-run.md)
+  * [Testing](for-dexs/protocol-integration/3.-testing.md)
   * [Request for Quote Protocols](for-dexs/protocol-integration/request-for-quote-protocols.md)
   * [Contributing guidelines](for-dexs/protocol-integration/contributing-guidelines.md)

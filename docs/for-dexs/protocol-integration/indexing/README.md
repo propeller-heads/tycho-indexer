@@ -69,7 +69,7 @@ For a hands-on integration guide, see the following pages:
 [2.-implementation.md](2.-implementation.md)
 {% endcontent-ref %}
 
-{% content-ref url="../3.-testing/" %}
-[3.-testing](../3.-testing/)
+{% content-ref url="../3.-testing.md" %}
+[3.-testing.md](../3.-testing.md)
 {% endcontent-ref %}
 

@@ -178,7 +178,7 @@ Both builders require the target **chain** to be set.
 
 Both encoders have the following options:
 
-* `executors_file_path` Path to the executor addresses configuration file (defaults to `config/executor_addresses.json`)
+* `executors_addresses` JSON string with the executor addresses to be used during encoding (defaults to the values in `config/executor_addresses.json`)
 
 The router builder includes the following configuration options:
 
