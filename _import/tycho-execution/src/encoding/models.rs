@@ -273,6 +273,8 @@ impl PartialEq for PermitDetails {
 /// * `group_token_in`: Token to be used as the input for the group swap.
 /// * `group_token_out`: Token to be used as the output for the group swap.
 /// * `transfer`: Type of transfer to be performed. See `TransferType` for more details.
+/// * `historical_trade`: Whether the swap is to be done in the current block or in an historical
+///   one. This is relevant for checking token approvals in some protocols (like Balancer v2).
 #[derive(Clone, Debug)]
 pub struct EncodingContext {
     pub receiver: Bytes,
@@ -281,6 +283,7 @@ pub struct EncodingContext {
     pub group_token_in: Bytes,
     pub group_token_out: Bytes,
     pub transfer_type: TransferType,
+    pub historical_trade: bool,
 }
 
 /// Represents the type of transfer to be performed into the pool.

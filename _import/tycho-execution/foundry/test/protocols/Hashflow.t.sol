@@ -41,7 +41,7 @@ contract HashflowUtils is Test {
     }
 }
 
-contract HashflowExecutorECR20Test is Constants, HashflowUtils {
+contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
     using SafeERC20 for IERC20;
 
     HashflowExecutorExposed executor;

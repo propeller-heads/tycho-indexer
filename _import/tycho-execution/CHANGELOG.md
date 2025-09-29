@@ -1,3 +1,40 @@
+## [0.128.0](https://github.com/propeller-heads/tycho-execution/compare/0.127.0...0.128.0) (2025-09-25)
+
+
+### Features
+
+* Use tycho-common from crates.io ([89435b5](https://github.com/propeller-heads/tycho-execution/commit/89435b5c76bbd1fbf2c946686ede442c4647cd29))
+
+## [0.127.0](https://github.com/propeller-heads/tycho-execution/compare/0.126.0...0.127.0) (2025-09-25)
+
+
+### Features
+
+* Use tycho-common from github ([5d73e3b](https://github.com/propeller-heads/tycho-execution/commit/5d73e3b47c5cbff4fa0c88e71f15f48f3831f199))
+
+## [0.126.0](https://github.com/propeller-heads/tycho-execution/compare/0.125.0...0.126.0) (2025-09-25)
+
+
+### Features
+
+* Add historical_trade option to encoding ([c51c6f5](https://github.com/propeller-heads/tycho-execution/commit/c51c6f52a5c1a7e47caab3bfa721f7c373a8229e))
+* Pass the file contents instead of the file path for executors ([e78a362](https://github.com/propeller-heads/tycho-execution/commit/e78a362894955a8b0e676bbcb189195d00815aad))
+* Update tycho common to point to hooks feature branch ([a98e8d2](https://github.com/propeller-heads/tycho-execution/commit/a98e8d21ccd2eafeb42805acb6ce157b60374a0c))
+
+## [0.125.0](https://github.com/propeller-heads/tycho-execution/compare/0.124.0...0.125.0) (2025-09-25)
+
+
+### Features
+
+* bump tycho-common version ([fa3bb6d](https://github.com/propeller-heads/tycho-execution/commit/fa3bb6daf74c6df254a4b65718663ec0ca7339d6))
+
+## [0.124.0](https://github.com/propeller-heads/tycho-execution/compare/0.123.0...0.124.0) (2025-09-11)
+
+
+### Features
+
+* bump tycho-common version ([bbd732d](https://github.com/propeller-heads/tycho-execution/commit/bbd732d15a4405fc358eedbb3cbb3b98ec3f61b5))
+
 ## [0.123.0](https://github.com/propeller-heads/tycho-execution/compare/0.122.0...0.123.0) (2025-09-02)
 
 

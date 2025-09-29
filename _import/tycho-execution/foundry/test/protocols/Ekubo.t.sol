@@ -202,6 +202,10 @@ contract EkuboExecutorTest is Constants, TestUtils {
     function testMultiHopSwapIntegration() public setUpFork(22082754) {
         multiHopSwap(loadCallDataFromFile("test_ekubo_encode_swap_multi"));
     }
+
+    function testExportContract() public {
+        exportRuntimeBytecode(address(executor), "Ekubo");
+    }
 }
 
 contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {

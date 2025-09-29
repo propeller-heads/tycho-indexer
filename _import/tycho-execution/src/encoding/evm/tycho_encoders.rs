@@ -54,6 +54,7 @@ impl TychoRouterEncoder {
         router_address: Bytes,
         user_transfer_type: UserTransferType,
         signer: Option<PrivateKeySigner>,
+        historical_trade: bool,
     ) -> Result<Self, EncodingError> {
         let permit2 = if user_transfer_type == UserTransferType::TransferFromPermit2 {
             Some(Permit2::new()?)
@@ -66,18 +67,21 @@ impl TychoRouterEncoder {
                 swap_encoder_registry.clone(),
                 user_transfer_type.clone(),
                 router_address.clone(),
+                historical_trade,
             )?,
             sequential_swap_strategy: SequentialSwapStrategyEncoder::new(
                 chain,
                 swap_encoder_registry.clone(),
                 user_transfer_type.clone(),
                 router_address.clone(),
+                historical_trade,
             )?,
             split_swap_strategy: SplitSwapStrategyEncoder::new(
                 chain,
                 swap_encoder_registry,
                 user_transfer_type.clone(),
                 router_address.clone(),
+                historical_trade,
             )?,
             router_address,
             permit2,
@@ -333,6 +337,7 @@ impl TychoExecutorEncoder {
             group_token_in: grouped_swap.token_in.clone(),
             group_token_out: grouped_swap.token_out.clone(),
             transfer_type: transfer,
+            historical_trade: false,
         };
         let mut grouped_protocol_data: Vec<Vec<u8>> = vec![];
         let mut initial_protocol_data: Vec<u8> = vec![];
@@ -402,7 +407,7 @@ impl TychoEncoder for TychoExecutorEncoder {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, str::FromStr};
+    use std::{collections::HashMap, fs, str::FromStr};
 
     use num_bigint::{BigInt, BigUint};
     use tycho_common::models::{protocol::ProtocolComponent, Chain};
@@ -486,11 +491,9 @@ mod tests {
     }
 
     fn get_swap_encoder_registry() -> SwapEncoderRegistry {
-        SwapEncoderRegistry::new(
-            Some("config/test_executor_addresses.json".to_string()),
-            eth_chain(),
-        )
-        .unwrap()
+        let executors_addresses =
+            fs::read_to_string("config/test_executor_addresses.json").unwrap();
+        SwapEncoderRegistry::new(Some(executors_addresses), eth_chain()).unwrap()
     }
 
     fn get_tycho_router_encoder(user_transfer_type: UserTransferType) -> TychoRouterEncoder {
@@ -500,6 +503,7 @@ mod tests {
             router_address(),
             user_transfer_type,
             None,
+            false,
         )
         .unwrap()
     }
