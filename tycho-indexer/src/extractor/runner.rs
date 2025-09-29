@@ -665,7 +665,7 @@ impl ExtractorBuilder {
 
         let database_insert_batch_size = self
             .database_insert_batch_size
-            .ok_or(ExtractionError::Setup("Database insert batch size not set".to_string()))?;
+            .unwrap_or_default();
 
         self.extractor = Some(Arc::new(
             ProtocolExtractor::<ExtractorPgGateway, EthereumTokenPreProcessor, DCIPlugin>::new(
