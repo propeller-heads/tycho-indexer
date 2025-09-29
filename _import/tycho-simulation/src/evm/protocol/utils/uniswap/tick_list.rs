@@ -49,11 +49,10 @@ impl TickList {
     pub(crate) fn from(spacing: u16, ticks: Vec<TickInfo>) -> Self {
         let tick_list = TickList { tick_spacing: spacing, ticks };
         let valid = tick_list.valid_ticks();
-        if valid.is_ok() {
-            tick_list
-        } else {
-            panic!("{}", valid.unwrap_err());
+        if let Err(err) = valid {
+            panic!("{}", err);
         }
+        tick_list
     }
 
     // Asserts that all attributes are valid. Checks for:
