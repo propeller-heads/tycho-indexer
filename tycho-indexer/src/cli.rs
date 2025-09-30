@@ -119,7 +119,7 @@ pub struct RunSpkgArgs {
     pub module: String,
 
     // The names of the protocol_types to index
-    #[clap(long, value_delimiter = ',')]
+    #[clap(long, value_delimiter = ',', required = true)]
     pub protocol_type_names: Vec<String>,
 
     // Protocol system to index
