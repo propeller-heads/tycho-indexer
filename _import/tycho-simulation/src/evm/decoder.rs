@@ -274,7 +274,15 @@ where
                 let removed_components: Vec<(String, ProtocolComponent)> = protocol_msg
                     .removed_components
                     .iter()
-                    .filter_map(|(id, comp)| {
+                    .map(|(id, comp)| {
+                        if *id != comp.id {
+                            error!(
+                                "Component id mismatch in removed components {id} != {}",
+                                comp.id
+                            );
+                            return Err(StreamDecodeError::Fatal("Component id mismatch".into()));
+                        }
+
                         let tokens = comp
                             .tokens
                             .iter()
@@ -282,14 +290,18 @@ where
                             .collect::<Vec<_>>();
 
                         if tokens.len() == comp.tokens.len() {
-                            Some((
+                            Ok(Some((
                                 id.clone(),
                                 ProtocolComponent::from_with_tokens(comp.clone(), tokens),
-                            ))
+                            )))
                         } else {
-                            None
+                            Ok(None)
                         }
                     })
+                    .collect::<Result<Vec<Option<(String, ProtocolComponent)>>, StreamDecodeError>>(
+                    )?
+                    .into_iter()
+                    .flatten()
                     .collect();
 
                 // Remove components from state and add to removed_pairs
@@ -1087,32 +1099,17 @@ mod tests {
         assert_eq!(res1.states.len(), 0);
     }
 
-    #[rstest]
-    #[case(true)]
-    #[case(false)]
     #[tokio::test]
-    async fn test_decode_component_bad_id(#[case] skip_failures: bool) {
-        let mut decoder = setup_decoder(true).await;
-        decoder.skip_state_decode_failures = skip_failures;
-
+    async fn test_decode_component_bad_id() {
+        let decoder = setup_decoder(true).await;
         let msg = load_test_msg("uniswap_v2_snapshot_broken_id");
+
         match decoder.decode(&msg).await {
             Err(StreamDecodeError::Fatal(msg)) => {
-                if !skip_failures {
-                    assert_eq!(
-                        msg,
-                        "Failed to parse bytes: Invalid hex: Invalid character 'Z' at position 0"
-                    );
-                } else {
-                    panic!("Expected failures to be ignored. Err: {msg}")
-                }
+                assert_eq!(msg, "Component id mismatch");
             }
-            Ok(res) => {
-                if !skip_failures {
-                    panic!("Expected failures to be raised")
-                } else {
-                    assert_eq!(res.states.len(), 1);
-                }
+            Ok(_) => {
+                panic!("Expected failures to be raised")
             }
         }
     }
