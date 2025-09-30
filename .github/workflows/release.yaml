@@ -66,6 +66,7 @@ jobs:
         run: |
           cargo publish --locked --verbose --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }} --package tycho-common
           cargo publish --locked --verbose --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }} --package tycho-client
+          cargo publish --locked --verbose --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }} --package tycho-ethereum
 # we can't use the action because it errors on github dependencies in any workspace crate
 #      - uses: katyo/publish-crates@v2
 #        with:
