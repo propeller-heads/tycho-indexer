@@ -57,8 +57,9 @@ struct DecoderState {
     contracts_map: HashMap<Bytes, HashSet<String>>,
     // Maps original token address to their new proxy token address
     proxy_token_addresses: HashMap<Address, Address>,
-    // Set of failed components, these are components that failed to decode and will not be emitted again
-    // TODO: handle more gracefully inside tycho-client. We could fetch the snapshot and try to decode it again.
+    // Set of failed components, these are components that failed to decode and will not be emitted
+    // again TODO: handle more gracefully inside tycho-client. We could fetch the snapshot and
+    // try to decode it again.
     failed_components: HashSet<String>,
 }
 
@@ -375,7 +376,8 @@ where
                 drop(state_guard);
             }
 
-            // Construct a contract to token balances map: HashMap<ContractAddress, HashMap<TokenAddress, Balance>>
+            // Construct a contract to token balances map: HashMap<ContractAddress,
+            // HashMap<TokenAddress, Balance>>
             let account_balances = protocol_msg
                 .clone()
                 .snapshots
@@ -782,7 +784,8 @@ where
             .extend(msg_failed_components);
 
         // Remove any failed components from Updates
-        // Perf: we could do it directly in the decoder logic to avoid some steps, but this logic is complex and this is more robust.
+        // Perf: we could do it directly in the decoder logic to avoid some steps, but this logic is
+        // complex and this is more robust.
         updated_states.retain(|id, _| {
             !state_guard
                 .failed_components
