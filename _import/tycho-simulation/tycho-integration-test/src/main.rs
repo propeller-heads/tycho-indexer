@@ -102,24 +102,24 @@ async fn main() -> miette::Result<()> {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
     let cli = Cli::parse();
-    debug!("parsed args: {:?}", cli);
+    debug!("Parsed args: {:?}", cli);
     run(cli).await?;
     Ok(())
 }
 
 async fn run(cli: Cli) -> miette::Result<()> {
-    info!("starting integration test");
+    info!("Starting integration test");
 
     let chain = cli.chain;
 
     // Load tokens from Tycho
     let tycho_url =
         get_default_url(&chain).ok_or_else(|| miette!("No default Tycho URL for chain {chain}"))?;
-    info!(%tycho_url, "loading tokens...");
+    info!(%tycho_url, "Loading tokens...");
     let all_tokens =
         load_all_tokens(&tycho_url, false, Some(cli.tycho_api_key.as_str()), chain, None, None)
             .await;
-    info!(%tycho_url, "loaded tokens");
+    info!(%tycho_url, "Loaded tokens");
 
     // Create provider
     let provider = ProviderBuilder::default()
@@ -142,12 +142,12 @@ async fn run(cli: Cli) -> miette::Result<()> {
         let message = match res {
             Ok(msg) => msg,
             Err(e) => {
-                warn!("error receiving message: {e:?}");
-                warn!("continuing to next message...");
+                warn!("Error receiving message: {e:?}");
+                warn!("Continuing to next message...");
                 continue;
             }
         };
-        info!("received block {:?}", message.block_number_or_timestamp);
+        info!("Received block {:?}", message.block_number_or_timestamp);
         for (id, comp) in message.new_pairs.iter() {
             pairs
                 .entry(id.clone())
@@ -168,26 +168,26 @@ async fn run(cli: Cli) -> miette::Result<()> {
         let block = match block {
             Some(b) => b,
             None => {
-                warn!("failed to retrieve last block, continuing to next message...");
+                warn!("Failed to retrieve last block, continuing to next message...");
                 continue;
             }
         };
         if !first_message_skipped {
             first_message_skipped = true;
-            info!("skipping simulation on first block...");
+            info!("Skipping simulation on first block...");
             continue;
         }
         for (id, state) in message.states.iter() {
             let component = match pairs.get(id) {
                 Some(comp) => comp.clone(),
                 None => {
-                    trace!("component {id} not found in pairs");
+                    trace!("Component {id} not found in pairs");
                     continue;
                 }
             };
             let tokens_len = component.tokens.len();
             if tokens_len < 2 {
-                trace!("component {id} has less than 2 tokens, skipping...");
+                warn!("Component {id} has less than 2 tokens, skipping...");
                 continue;
             }
             let swap_directions: Vec<(Token, Token)> = component
@@ -198,7 +198,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 .collect();
             for (token_in, token_out) in swap_directions.iter() {
                 info!(
-                    "processing {} pool {id:?}, from {} to {}",
+                    "Processing {} pool {id:?}, from {} to {}",
                     component.protocol_system, token_in.symbol, token_out.symbol
                 );
 
@@ -217,7 +217,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
                     }
                 };
                 info!(
-                    "retrieved limits: max input {max_input} {}; max output {max_output} {}",
+                    "Retrieved limits: max input {max_input} {}; max output {max_output} {}",
                     token_in.symbol, token_out.symbol
                 );
 
@@ -228,10 +228,10 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 let thousand = BigUint::from(1000u32);
                 let amount_in = (&max_input * &percentage_biguint) / &thousand;
                 if amount_in.is_zero() {
-                    warn!("calculated amount_in is zero, skipping...");
+                    warn!("Calculated amount_in is zero, skipping...");
                     continue;
                 }
-                info!("calculated amount_in: {amount_in} {}", token_in.symbol);
+                info!("Calculated amount_in: {amount_in} {}", token_in.symbol);
 
                 // Get amount_out
                 let amount_out_result = match state
@@ -249,7 +249,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
                         }
                 };
                 let expected_amount_out = amount_out_result.amount;
-                info!("calculated amount_out: {expected_amount_out} {}", token_out.symbol);
+                info!("Calculated amount_out: {expected_amount_out} {}", token_out.symbol);
 
                 // Simulate execution amount out
                 let (solution, transaction) = match encode_swap(
@@ -277,11 +277,11 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 {
                     Ok(amount) => amount,
                     Err(e) => {
-                        warn!("failed to simulate swap: {e}");
+                        warn!("Failed to simulate swap: {e}");
                         continue;
                     }
                 };
-                info!("simulated amount_out: {simulated_amount_out} {}", token_out.symbol);
+                info!("Simulated amount_out: {simulated_amount_out} {}", token_out.symbol);
 
                 // Calculate slippage
                 let slippage = if simulated_amount_out > expected_amount_out {
@@ -293,9 +293,9 @@ async fn run(cli: Cli) -> miette::Result<()> {
                     let slippage = (diff.clone() * BigUint::from(10000u32)) / expected_amount_out;
                     format!("-{:.2}%", slippage.to_f64().unwrap_or(0.0) / 100.0)
                 };
-                info!("slippage: {slippage}");
+                info!("Slippage: {slippage}");
 
-                info!("pool processed {id:?} from {} to {}", token_in.symbol, token_out.symbol);
+                info!("Pool processed {id:?} from {} to {}", token_in.symbol, token_out.symbol);
             }
         }
     }
@@ -336,10 +336,6 @@ async fn build_protocol_stream(
                     tvl_filter.clone(),
                     Some(curve_pool_filter),
                 );
-            // COMING SOON!
-            // .exchange::<UniswapV4State>("uniswap_v4_hooks", tvl_filter.clone(),
-            // Some(uniswap_v4_pool_with_euler_hook_filter));
-            // .exchange::<EVMPoolState<PreCachedDB>>("vm:maverick_v2", tvl_filter.clone(), None);
         }
         Chain::Base => {
             protocol_stream = protocol_stream
@@ -539,18 +535,18 @@ async fn simulate_swap_transaction(
     let block = output
         .first()
         .ok_or_else(|| miette!("No blocks found in simulation output"))?;
-    info!("simulated block {}", block.inner.header.number);
+    info!("Simulated block {}", block.inner.header.number);
     let transaction = block
         .calls
         .first()
         .ok_or_else(|| miette!("No transactions found in simulated block"))?;
     info!(
-        "transaction status: {status:?}, gas used: {gas_used}",
+        "Transaction status: {status:?}, gas used: {gas_used}",
         status = transaction.status,
         gas_used = transaction.gas_used
     );
     if !transaction.status {
-        warn!("transaction: {transaction:?}");
+        warn!("Transaction: {transaction:?}");
         return Err(miette!("Transaction status is false"));
     }
     let amount_out = U256::abi_decode(&transaction.return_data)
@@ -592,7 +588,7 @@ fn calculate_gas_fees(block: &Block) -> miette::Result<(U256, U256)> {
     // Set max_fee_per_gas to base_fee * 2 + max_priority_fee_per_gas to handle fee fluctuations
     let max_fee_per_gas = U256::from(base_fee) * U256::from(2u64) + max_priority_fee_per_gas;
     info!(
-        "gas pricing: base_fee={}, max_priority_fee_per_gas={}, max_fee_per_gas={}",
+        "Gas pricing: base_fee={}, max_priority_fee_per_gas={}, max_fee_per_gas={}",
         base_fee, max_priority_fee_per_gas, max_fee_per_gas
     );
     Ok((max_fee_per_gas, max_priority_fee_per_gas))
