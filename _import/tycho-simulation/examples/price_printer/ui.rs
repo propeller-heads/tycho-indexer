@@ -16,7 +16,7 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 use tokio::{select, sync::mpsc::Receiver};
-use tracing::warn;
+use tracing::{info, warn};
 use tycho_common::{simulation::protocol_sim::ProtocolSim, Bytes};
 use tycho_simulation::protocol::models::{ProtocolComponent, Update};
 
@@ -143,6 +143,8 @@ impl App {
     }
 
     pub fn update_data(&mut self, update: Update) {
+        info!("Got {} new pairs", update.new_pairs.len());
+        info!("Total pairs: {}", self.items.len());
         for (id, comp) in update.new_pairs.iter() {
             let name = format!("{comp_id:#042x}", comp_id = comp.id);
             let tokens = comp
@@ -167,7 +169,7 @@ impl App {
                         Err(e) => {
                             // Skip pools with spot_price errors
                             warn!(
-                                "Skipping pool {comp_id} due to spot_price error: {e:?}",
+                                "Skipping pool {comp_id} due to spot_price error: {e}",
                                 comp_id = comp.id
                             );
                         }
@@ -368,7 +370,7 @@ impl App {
             rows,
             [
                 // + 1 is for padding.
-                Constraint::Length(43),
+                Constraint::Length(70),
                 Constraint::Min(1),
                 Constraint::Min(1),
                 Constraint::Min(1),
