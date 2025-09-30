@@ -742,9 +742,17 @@ where
 
         trace!(?msg, "Processing message");
 
-        // Depending on how Substreams handle them, this condition could be problematic for single
+        // We work under the invariant that final_block_height is always <= block.number.
+        // They are equal only when we are syncing and have reached the final block.
+        // Depending on how Substreams handle them, this invariant could be problematic for single
         // block finality blockchains.
-        let is_syncing = inp.final_block_height >= msg.block.number;
+        let is_syncing = inp.final_block_height == msg.block.number;
+        if inp.final_block_height > msg.block.number {
+            return Err(ExtractionError::ReorgBufferError(format!(
+                    "Final block height ({}) greater than block number ({}) are unsupported by the reorg buffer",
+                    inp.final_block_height, msg.block.number
+                )));
+        }
 
         // Create a scope to lock the reorg buffer, insert the new block and possibly commit to the
         // database if we have enough blocks in the buffer.
@@ -3416,7 +3424,7 @@ mod test_serial_db {
                             ..Default::default()
                         },
                         Some(format!("cursor@{version}").as_str()),
-                        Some(5), // Buffered
+                        Some(1), // Buffered
                     )
                 })
                 .collect::<Vec<_>>() // materialize into Vec
@@ -3456,7 +3464,7 @@ mod test_serial_db {
                         ..Default::default()
                     },
                     Some(format!("cursor@{}", 4).as_str()),
-                    Some(5), // Buffered
+                    Some(1), // Buffered
                 ))
                 .await
                 .unwrap()
