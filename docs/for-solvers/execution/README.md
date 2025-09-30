@@ -41,6 +41,6 @@ It is possible to bypass approvals altogether by directly transferring the input
 
 ## Security and Audits
 
-The Tycho Router has been audited. We continuously work to improve security and welcome feedback from the community. The current audits are [here](https://github.com/propeller-heads/tycho-execution/tree/main/docs/audits).
+The Tycho Router has been audited by [Maximilian Krüger](https://snd.github.io/). We continuously work to improve security and welcome feedback from the community. The current audits are [here](https://github.com/propeller-heads/tycho-execution/tree/main/docs/audits).
 
 If you discover potential security issues or have suggestions for improvements, please reach out through our official channels.
