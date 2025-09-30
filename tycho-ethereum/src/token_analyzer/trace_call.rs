@@ -96,9 +96,10 @@ impl TraceCallDetector {
                 let amount = cmp::max(
                     U256::from_be_bytes::<32>(
                         balance
+                            .lpad(32, 0)
                             .as_ref()
                             .try_into()
-                            .expect("slice with incorrect length"),
+                            .expect("balance should be 32 bytes"),
                     ) / U256::from(2),
                     U256::from(MIN_AMOUNT),
                 );
@@ -529,4 +530,62 @@ fn ensure_transaction_ok_and_get_gas(trace: &BlockTrace) -> Result<Result<U256, 
         bytes
     };
     Ok(Ok(U256::from_be_bytes(gas_used_bytes)))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, env, str::FromStr, sync::Arc};
+
+    use alloy::primitives::Address;
+    use tycho_common::{models::token::TokenOwnerStore, Bytes};
+    use web3::types::BlockNumber;
+
+    use super::*;
+
+    #[tokio::test]
+    #[ignore = "This test requires real RPC connection"]
+    async fn test_detect_impl_usdc() {
+        let rpc_url = env::var("RPC_URL").expect("RPC_URL environment variable must be set");
+
+        // USDC mainnet address
+        let usdc_address = Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
+
+        // Using USV4 pool manager
+        let holder = Bytes::from_str("0x000000000004444c5dc75cB358380D2e3dE08A90").unwrap();
+        let large_balance = Bytes::from_str("0x43f6e8f16703").unwrap(); // Large balance
+
+        let token_finder = TokenOwnerStore::new(HashMap::from([(
+            usdc_address.to_bytes(),
+            (holder, large_balance),
+        )]));
+
+        let detector = TraceCallDetector::new(&rpc_url, Arc::new(token_finder));
+
+        // Test with the latest block
+        let result = detector
+            .detect_impl(usdc_address, BlockNumber::Number(23475728.into()))
+            .await;
+
+        match result {
+            Ok((quality, gas_cost, transfer_tax)) => {
+                println!("USDC Analysis Results:");
+                println!("  Quality: {:?}", quality);
+                println!("  Gas Cost: {:?}", gas_cost);
+                println!("  Transfer Tax: {:?}", transfer_tax);
+
+                // USDC should be a good token (no fees, standard behavior)
+                assert!(matches!(quality, TokenQuality::Good));
+                assert!(gas_cost.is_some());
+                assert!(transfer_tax.is_some());
+
+                // USDC should have 0 transfer tax
+                if let Some(tax) = transfer_tax {
+                    assert_eq!(tax, U256::ZERO, "USDC should not have transfer fees");
+                }
+            }
+            Err(e) => {
+                panic!("Failed to analyze USDC: {}", e);
+            }
+        }
+    }
 }
