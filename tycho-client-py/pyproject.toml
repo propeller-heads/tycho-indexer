@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "tycho-indexer-client"
 # this is versioned in lockstep with all other tycho packages
-version = "0.91.0"
+version = "0.91.1"
 description = "A package for interacting with the Tycho API."
 readme = "README.md"
 authors = [

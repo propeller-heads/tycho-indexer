@@ -1,3 +1,11 @@
+## [0.91.1](https://github.com/propeller-heads/tycho-indexer/compare/0.91.0...0.91.1) (2025-09-30)
+
+
+### Bug Fixes
+
+* correctly parse token balances in token-analyzer ([7ebb91d](https://github.com/propeller-heads/tycho-indexer/commit/7ebb91dad827fe72780ad83d22284cbae061b560))
+* correctly parse token balances in token-analyzer ([#715](https://github.com/propeller-heads/tycho-indexer/issues/715)) ([c31f74e](https://github.com/propeller-heads/tycho-indexer/commit/c31f74e28d61c4bb95ee271e8eb0db68b8835a25))
+
 ## [0.91.0](https://github.com/propeller-heads/tycho-indexer/compare/0.90.0...0.91.0) (2025-09-30)
 
 
