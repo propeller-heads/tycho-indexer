@@ -10,17 +10,15 @@ use alloy::{primitives::Keccak256, sol_types::SolValue};
 use miette::{IntoDiagnostic, WrapErr};
 use num_bigint::BigUint;
 use serde_json::json;
+use tycho_execution::encoding::{
+    errors::EncodingError,
+    evm::{encoder_builders::TychoRouterEncoderBuilder, utils::bytes_to_address},
+    models::{EncodedSolution, NativeAction, Solution, SwapBuilder, Transaction, UserTransferType},
+};
 use tycho_simulation::{
     evm::protocol::u256_num::biguint_to_u256,
     protocol::models::ProtocolComponent,
     tycho_common::{dto::Chain, Bytes},
-    tycho_execution::encoding::{
-        errors::EncodingError,
-        evm::{encoder_builders::TychoRouterEncoderBuilder, utils::bytes_to_address},
-        models::{
-            EncodedSolution, NativeAction, Solution, SwapBuilder, Transaction, UserTransferType,
-        },
-    },
 };
 
 use crate::execution::EXECUTOR_ADDRESS;

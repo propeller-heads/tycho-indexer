@@ -21,6 +21,7 @@ use num_traits::{Signed, ToPrimitive, Zero};
 use postgres::{Client, Error, NoTls};
 use tokio::runtime::Runtime;
 use tracing::{debug, error, info, warn};
+use tycho_execution::encoding::evm::utils::bytes_to_address;
 use tycho_simulation::{
     evm::{decoder::TychoStreamDecoder, protocol::u256_num::bytes_to_u256},
     protocol::models::{DecoderContext, Update},
@@ -33,7 +34,6 @@ use tycho_simulation::{
         models::token::Token,
         Bytes,
     },
-    tycho_execution::encoding::evm::utils::bytes_to_address,
 };
 
 use crate::{

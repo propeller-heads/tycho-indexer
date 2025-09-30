@@ -13,6 +13,7 @@ use alloy::{
 use miette::{miette, IntoDiagnostic, WrapErr};
 use num_bigint::BigUint;
 use tracing::info;
+use tycho_execution::encoding::models::Solution;
 use tycho_simulation::{
     evm::protocol::u256_num::{biguint_to_u256, u256_to_biguint},
     tycho_common::{
@@ -23,7 +24,6 @@ use tycho_simulation::{
         allowance_slot_detector::{AllowanceSlotDetectorConfig, EVMAllowanceSlotDetector},
         balance_slot_detector::{BalanceSlotDetectorConfig, EVMBalanceSlotDetector},
     },
-    tycho_execution::encoding::models::Solution,
 };
 
 use crate::rpc::RPCProvider;
@@ -236,7 +236,7 @@ pub async fn setup_router_overwrites(
 /// - RPC queries for storage detection fail
 async fn setup_user_overwrites(
     solution: &Solution,
-    transaction: &tycho_simulation::tycho_execution::encoding::models::Transaction,
+    transaction: &tycho_execution::encoding::models::Transaction,
     user_address: Address,
     rpc_url: String,
     block: &Block,
@@ -319,7 +319,7 @@ async fn setup_user_overwrites(
 /// Simulate a trade using eth_call for historical blocks
 pub async fn simulate_trade_with_eth_call(
     rpc_provider: &RPCProvider,
-    transaction: &tycho_simulation::tycho_execution::encoding::models::Transaction,
+    transaction: &tycho_execution::encoding::models::Transaction,
     solution: &Solution,
     block: &Block,
 ) -> miette::Result<BigUint> {
