@@ -756,14 +756,19 @@ where
                 .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
                 .map_err(ExtractionError::Storage)?;
 
-            if reorg_buffer.count_blocks_before(inp.final_block_height) >=
+            let commit_upto_block_height = inp.final_block_height;
+
+            if reorg_buffer.count_blocks_before(commit_upto_block_height) >=
                 self.database_insert_batch_size
             {
                 let mut msgs = reorg_buffer
-                    .drain_blocks_until(inp.final_block_height)
+                    .drain_blocks_until(commit_upto_block_height)
                     .map_err(ExtractionError::Storage)?
                     .into_iter()
                     .peekable();
+
+                // Drop the lock on the reorg buffer before doing any database operations.
+                drop(reorg_buffer);
 
                 while let Some(msg) = msgs.next() {
                     // Force a database commit if we're not syncing and this is the last block to be
@@ -775,12 +780,16 @@ where
                         .advance(msg.block_update(), msg.cursor(), force_db_commit)
                         .await?;
                 }
-            }
 
-            reorg_buffer
-                .get_oldest_block()
-                .map(|block| block.number)
-                .ok_or_else(|| ExtractionError::ReorgBufferError("Reorg buffer is empty".into()))?
+                commit_upto_block_height
+            } else {
+                reorg_buffer
+                    .get_oldest_block()
+                    .map(|block| block.number)
+                    .ok_or_else(|| {
+                        ExtractionError::ReorgBufferError("Reorg buffer is empty".into())
+                    })?
+            }
         };
 
         self.update_last_processed_block(msg.block.clone())
