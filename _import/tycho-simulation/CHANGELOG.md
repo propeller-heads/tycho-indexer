@@ -1,3 +1,13 @@
+## [0.167.0](https://github.com/propeller-heads/tycho-simulation/compare/0.166.0...0.167.0) (2025-09-30)
+
+
+### Features
+
+* Re export foundry_evm and tycho_ethereum to use in the sdk repo ([475656a](https://github.com/propeller-heads/tycho-simulation/commit/475656a792667f130917eaa373650eab58c08688))
+* Upgrade tycho dependencies ([673d45a](https://github.com/propeller-heads/tycho-simulation/commit/673d45a9c06eb26b24ead9da65ee810cccb2e66b))
+* Upgrade tycho deps ([4272917](https://github.com/propeller-heads/tycho-simulation/commit/4272917ee2c79da7d81e6ffd7c2d95e48a7d64bf))
+* Upgrade tycho deps to use the github version ([4134d6b](https://github.com/propeller-heads/tycho-simulation/commit/4134d6ba1acceea1c983fd9374f1a26b7b5a9855))
+
 ## [0.166.0](https://github.com/propeller-heads/tycho-simulation/compare/0.165.0...0.166.0) (2025-09-30)
 
 
