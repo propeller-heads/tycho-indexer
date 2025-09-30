@@ -130,11 +130,7 @@ impl App {
             let current_items = self.current_items();
             if idx < current_items.len() {
                 let comp = &current_items[idx].component;
-                Some(if self.zero2one {
-                    comp.tokens[0].decimals
-                } else {
-                    comp.tokens[1].decimals
-                })
+                Some(if self.zero2one { comp.tokens[0].decimals } else { comp.tokens[1].decimals })
             } else {
                 None
             }
@@ -164,8 +160,8 @@ impl App {
                 if decimals >= prev_decimals {
                     self.quote_amount *= BigUint::from(10u64).pow(decimals - prev_decimals);
                 } else {
-                    let new_amount =
-                        self.quote_amount.clone() / BigUint::from(10u64).pow(prev_decimals - decimals);
+                    let new_amount = self.quote_amount.clone() /
+                        BigUint::from(10u64).pow(prev_decimals - decimals);
                     self.quote_amount =
                         if new_amount > BigUint::ZERO { new_amount } else { BigUint::one() };
                 }
@@ -528,17 +524,17 @@ impl App {
                 if idx < current_items.len() {
                     let comp = &current_items[idx].component;
                     let state = &current_items[idx].state;
-                let (token_in, token_out) = if self.zero2one {
-                    (&comp.tokens[0], &comp.tokens[1])
-                } else {
-                    (&comp.tokens[1], &comp.tokens[0])
-                };
+                    let (token_in, token_out) = if self.zero2one {
+                        (&comp.tokens[0], &comp.tokens[1])
+                    } else {
+                        (&comp.tokens[1], &comp.tokens[0])
+                    };
 
-                let start = Instant::now();
-                let res = state.get_amount_out(self.quote_amount.clone(), token_in, token_out);
-                let duration = start.elapsed();
+                    let start = Instant::now();
+                    let res = state.get_amount_out(self.quote_amount.clone(), token_in, token_out);
+                    let duration = start.elapsed();
 
-                let text = res
+                    let text = res
                     .map(|data| {
                         format!(
                             "Swap Direction: {token_in_symbol} → {token_out_symbol}\nQuote amount: {quote_amount}\nReceived amount: {amount}\nGas: {gas}\nDuration: {duration:?}",
@@ -551,13 +547,14 @@ impl App {
                     })
                     .unwrap_or_else(|err| format!("{err:?}"));
 
-                let block = Block::bordered().title("Quote:");
-                let popup = Paragraph::new(Text::from(text))
-                    .block(block)
-                    .wrap(Wrap { trim: false });
-                let area = popup_area(area, Constraint::Percentage(50), Constraint::Percentage(50));
-                frame.render_widget(Clear, area);
-                frame.render_widget(popup, area);
+                    let block = Block::bordered().title("Quote:");
+                    let popup = Paragraph::new(Text::from(text))
+                        .block(block)
+                        .wrap(Wrap { trim: false });
+                    let area =
+                        popup_area(area, Constraint::Percentage(50), Constraint::Percentage(50));
+                    frame.render_widget(Clear, area);
+                    frame.render_widget(popup, area);
                 }
             }
         }
@@ -647,7 +644,11 @@ impl App {
         if self.available_protocols.is_empty() {
             text.push_str("No protocols available");
         } else {
-            for (i, protocol) in self.available_protocols.iter().enumerate() {
+            for (i, protocol) in self
+                .available_protocols
+                .iter()
+                .enumerate()
+            {
                 let marker = if Some(i) == self.state.selected() { "► " } else { "  " };
                 text.push_str(&format!("{}{}\n", marker, protocol));
             }
