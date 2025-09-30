@@ -2,7 +2,6 @@ use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     future::Future,
     pin::Pin,
-    str::FromStr,
     sync::Arc,
 };
 
@@ -58,6 +57,9 @@ struct DecoderState {
     contracts_map: HashMap<Bytes, HashSet<String>>,
     // Maps original token address to their new proxy token address
     proxy_token_addresses: HashMap<Address, Address>,
+    // Set of failed components, these are components that failed to decode and will not be emitted again
+    // TODO: handle more gracefully inside tycho-client. We could fetch the snapshot and try to decode it again.
+    failed_components: HashSet<String>,
 }
 
 type DecodeFut =
@@ -220,6 +222,7 @@ where
         let mut new_pairs = HashMap::new();
         let mut removed_pairs = HashMap::new();
         let mut contracts_map = HashMap::new();
+        let mut msg_failed_components = HashSet::new();
 
         let header = msg
             .state_msgs
@@ -270,19 +273,7 @@ where
                 let removed_components: Vec<(String, ProtocolComponent)> = protocol_msg
                     .removed_components
                     .iter()
-                    .flat_map(|(id, comp)| match Bytes::from_str(id) {
-                        Ok(addr) => Some(Ok((id, addr, comp))),
-                        Err(e) => {
-                            if self.skip_state_decode_failures {
-                                None
-                            } else {
-                                Some(Err(StreamDecodeError::Fatal(e.to_string())))
-                            }
-                        }
-                    })
-                    .collect::<Result<Vec<_>, StreamDecodeError>>()?
-                    .into_iter()
-                    .flat_map(|(id, _, comp)| {
+                    .filter_map(|(id, comp)| {
                         let tokens = comp
                             .tokens
                             .iter()
@@ -295,9 +286,6 @@ where
                                 ProtocolComponent::from_with_tokens(comp.clone(), tokens),
                             ))
                         } else {
-                            // We may reach this point if the removed component
-                            //  contained low quality tokens, in this case the component
-                            //  was never added, so we can skip emitting it.
                             None
                         }
                     })
@@ -382,12 +370,12 @@ where
                     Some(storage_by_address),
                     token_proxy_accounts,
                 )
-                .await
                 .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
                 info!("Engine updated");
                 drop(state_guard);
             }
 
+            // Construct a contract to token balances map: HashMap<ContractAddress, HashMap<TokenAddress, Balance>>
             let account_balances = protocol_msg
                 .clone()
                 .snapshots
@@ -408,19 +396,18 @@ where
             {
                 let state_guard = self.state.read().await;
                 // PROCESS SNAPSHOTS
-                'outer: for (id, snapshot) in protocol_msg
+                'snapshot_loop: for (id, snapshot) in protocol_msg
                     .snapshots
                     .get_states()
                     .clone()
                 {
                     // Skip any unsupported pools
-                    if let Some(predicate) = self
+                    if self
                         .inclusion_filters
                         .get(protocol.as_str())
+                        .is_some_and(|predicate| !predicate(&snapshot))
                     {
-                        if !predicate(&snapshot) {
-                            continue;
-                        }
+                        continue;
                     }
 
                     // Construct component from snapshot
@@ -436,11 +423,11 @@ where
                                 let token_address = match bytes_to_address(&token.address) {
                                     Ok(addr) => addr,
                                     Err(_) => {
-                                        debug!(
+                                        warn!(
                                             "Token address could not be decoded {}, ignoring pool {:x?}",
                                             token.address, id
                                         );
-                                        continue 'outer;
+                                        continue 'snapshot_loop;
                                     }
                                 };
                                 // TODO: Ok we deployed a proxy whenever we see a new token without
@@ -465,7 +452,7 @@ where
                             None => {
                                 count_token_skips += 1;
                                 debug!("Token not found {}, ignoring pool {:x?}", token, id);
-                                continue 'outer;
+                                continue 'snapshot_loop;
                             }
                         }
                     }
@@ -482,7 +469,6 @@ where
                             None,
                             new_tokens_accounts,
                         )
-                        .await
                         .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
                     }
 
@@ -522,7 +508,8 @@ where
                             Err(e) => {
                                 if self.skip_state_decode_failures {
                                     warn!(pool = id, error = %e, "StateDecodingFailure");
-                                    continue 'outer;
+                                    msg_failed_components.insert(id.clone());
+                                    continue 'snapshot_loop;
                                 } else {
                                     error!(pool = id, error = %e, "StateDecodingFailure");
                                     return Err(StreamDecodeError::Fatal(format!("{e}")));
@@ -531,7 +518,8 @@ where
                         }
                     } else if self.skip_state_decode_failures {
                         warn!(pool = id, "MissingDecoderRegistration");
-                        continue 'outer;
+                        msg_failed_components.insert(id.clone());
+                        continue 'snapshot_loop;
                     } else {
                         error!(pool = id, "MissingDecoderRegistration");
                         return Err(StreamDecodeError::Fatal(format!(
@@ -557,6 +545,8 @@ where
             if count_token_skips > 0 {
                 info!("Skipped {count_token_skips} pools due to missing tokens");
             }
+
+            //TODO: should we remove failed components for new_components?
             updated_states.extend(new_components);
 
             // PROCESS DELTAS
@@ -644,7 +634,6 @@ where
                     None,
                     token_proxy_accounts,
                 )
-                .await
                 .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
                 info!("Engine updated");
 
@@ -703,6 +692,7 @@ where
 
                 // update states with protocol state deltas (attribute changes etc.)
                 for (id, update) in deltas.state_updates {
+                    // TODO: is this needed?
                     let update_with_block =
                         Self::add_block_info_to_delta(update, current_block.clone());
                     match Self::apply_update(
@@ -731,6 +721,9 @@ where
                                     warn!(pool = id, "Component not found in new_pairs or state, cannot add to removed_pairs");
                                 }
                                 pools_to_update.remove(&id);
+
+                                // Add to failed components
+                                msg_failed_components.insert(id.clone());
                             } else {
                                 return Err(e);
                             }
@@ -740,6 +733,7 @@ where
 
                 // update remaining pools linked to updated contracts/updated balances
                 for pool in pools_to_update {
+                    // TODO: is this needed?
                     let default_delta_with_block = Self::add_block_info_to_delta(
                         ProtocolStateDelta::default(),
                         current_block.clone(),
@@ -767,6 +761,9 @@ where
                                     // happen
                                     warn!(pool = pool, "Component not found in new_pairs or state, cannot add to removed_pairs");
                                 }
+
+                                // Add to failed components
+                                msg_failed_components.insert(pool.clone());
                             } else {
                                 return Err(e);
                             }
@@ -778,6 +775,25 @@ where
 
         // Persist the newly added/updated states
         let mut state_guard = self.state.write().await;
+
+        // Update failed components with any new ones
+        state_guard
+            .failed_components
+            .extend(msg_failed_components);
+
+        // Remove any failed components from Updates
+        // Perf: we could do it directly in the decoder logic to avoid some steps, but this logic is complex and this is more robust.
+        updated_states.retain(|id, _| {
+            !state_guard
+                .failed_components
+                .contains(id)
+        });
+        new_pairs.retain(|id, _| {
+            !state_guard
+                .failed_components
+                .contains(id)
+        });
+
         state_guard
             .states
             .extend(updated_states.clone().into_iter());
@@ -983,7 +999,7 @@ impl ProtocolSim for MockProtocolSim {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::Path};
+    use std::{fs, path::Path, str::FromStr};
 
     use alloy::primitives::address;
     use mockall::predicate::*;
