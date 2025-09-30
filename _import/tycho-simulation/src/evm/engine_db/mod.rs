@@ -68,7 +68,7 @@ where
     Ok(engine)
 }
 
-pub async fn update_engine(
+pub fn update_engine(
     db: PreCachedDB,
     block: Option<BlockHeader>,
     vm_storage: Option<HashMap<Address, ResponseAccount>>,

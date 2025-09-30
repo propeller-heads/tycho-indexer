@@ -48,10 +48,9 @@ pub(crate) struct TickList {
 impl TickList {
     pub(crate) fn from(spacing: u16, ticks: Vec<TickInfo>) -> Self {
         let tick_list = TickList { tick_spacing: spacing, ticks };
-        let valid = tick_list.valid_ticks();
-        if let Err(err) = valid {
-            panic!("{}", err);
-        }
+        tick_list
+            .valid_ticks()
+            .expect("Invalid tick list");
         tick_list
     }
 
