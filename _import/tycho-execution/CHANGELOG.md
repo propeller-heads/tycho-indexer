@@ -1,3 +1,17 @@
+## [0.129.0](https://github.com/propeller-heads/tycho-execution/compare/0.128.1...0.129.0) (2025-09-30)
+
+
+### Features
+
+* Update tycho-common version ([6c5e17a](https://github.com/propeller-heads/tycho-execution/commit/6c5e17a6701e426dcd19eb433cee22f11e55ce02))
+
+## [0.128.1](https://github.com/propeller-heads/tycho-execution/compare/0.128.0...0.128.1) (2025-09-29)
+
+
+### Bug Fixes
+
+* Bump tycho-common & alloy version ([100522c](https://github.com/propeller-heads/tycho-execution/commit/100522caa0c45abdb7298a1876029adc2689c126))
+
 ## [0.128.0](https://github.com/propeller-heads/tycho-execution/compare/0.127.0...0.128.0) (2025-09-25)
 
 
