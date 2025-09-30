@@ -1,3 +1,28 @@
+## [0.167.0](https://github.com/propeller-heads/tycho-simulation/compare/0.166.0...0.167.0) (2025-09-30)
+
+
+### Features
+
+* Re export foundry_evm and tycho_ethereum to use in the sdk repo ([475656a](https://github.com/propeller-heads/tycho-simulation/commit/475656a792667f130917eaa373650eab58c08688))
+* Upgrade tycho dependencies ([673d45a](https://github.com/propeller-heads/tycho-simulation/commit/673d45a9c06eb26b24ead9da65ee810cccb2e66b))
+* Upgrade tycho deps ([4272917](https://github.com/propeller-heads/tycho-simulation/commit/4272917ee2c79da7d81e6ffd7c2d95e48a7d64bf))
+* Upgrade tycho deps to use the github version ([4134d6b](https://github.com/propeller-heads/tycho-simulation/commit/4134d6ba1acceea1c983fd9374f1a26b7b5a9855))
+
+## [0.166.0](https://github.com/propeller-heads/tycho-simulation/compare/0.165.0...0.166.0) (2025-09-30)
+
+
+### Features
+
+* Bump tycho-client and tycho-common dependencies ([bcf548d](https://github.com/propeller-heads/tycho-simulation/commit/bcf548d48d5e0cc072eb3531eecc19264c9254eb))
+* Make stream end condition configurable. ([f9c77fc](https://github.com/propeller-heads/tycho-simulation/commit/f9c77fce407d461024ff9d05349b7affddea4516))
+
+## [0.165.0](https://github.com/propeller-heads/tycho-simulation/compare/0.164.0...0.165.0) (2025-09-29)
+
+
+### Features
+
+* Upgrade revm, foundry, solar and alloy deps ([46e13cc](https://github.com/propeller-heads/tycho-simulation/commit/46e13cc84a937bd71c77e8084ea01fd341711f71))
+
 ## [0.164.0](https://github.com/propeller-heads/tycho-simulation/compare/0.163.0...0.164.0) (2025-09-25)
 
 

@@ -584,7 +584,7 @@ pub fn mev_resist() -> TestCase {
             ("tick".to_string(), TICK_INDEX_BETWEEN.to_be_bytes().into()),
         ]
         .into(),
-        swap_token0: (100_u8.into(), 87_u8.into()),
+        swap_token0: (100_u8.into(), 86_u8.into()),
         expected_limit_token0: 553_u16.into(),
     }
 }
