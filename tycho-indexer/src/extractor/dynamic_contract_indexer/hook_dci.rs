@@ -597,17 +597,6 @@ where
 
         Ok((components_needing_full_processing, components_needing_balance_only))
     }
-
-    fn update_component_balances(
-        &self,
-        component: &ProtocolComponent,
-        block_changes: &mut BlockChanges,
-    ) -> Result<(), ExtractionError> {
-        // This method should not be needed anymore as the HookOrchestrator
-        // already handles balance updates in prepare_components method.
-        // The balances are injected into block_changes.txs_with_update by the orchestrator.
-        Ok(())
-    }
 }
 
 // Component state tracking
@@ -658,7 +647,7 @@ where
                 ExtractionError::Unknown(format!("Failed to ensure block layer: {e:?}"))
             })?;
 
-        // 1. Filter components with swap hooks (beforeSwap/afterSwap only)
+        // 1. Filter-out components with no swap hooks (keep beforeSwap or afterSwap only)
         let swap_hook_components = {
             let _span = span!(Level::INFO, "extract_swap_hook_components").entered();
 
