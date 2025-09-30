@@ -21,8 +21,8 @@ use tycho_common::{simulation::protocol_sim::ProtocolSim, Bytes};
 use tycho_simulation::protocol::models::{ProtocolComponent, Update};
 
 const INFO_TEXT: [&str; 2] = [
-    "(Esc) quit | (↑) move up | (↓) move down | (↵) Toggle Quote | (+) Increase Quote Amount",
-    "(-) Decrease Quote Amount | (z) Flip Quote Direction | (=) Enter Quote Amount",
+    "(Esc) quit | (↑/↓) navigate | (↵) Toggle Quote | (d) Pool Details | (+/-) Adjust Quote | (z) Flip Direction | (=) Enter Amount",
+    "(f) Filter by Protocol | (c) Clear Filter | Quote: Press ↵ to show/hide | Use +/- to adjust | = to enter custom amount",
 ];
 
 const ITEM_HEIGHT: usize = 3;
@@ -57,6 +57,7 @@ impl TableColors {
     }
 }
 
+#[derive(Clone)]
 struct Data {
     component: ProtocolComponent,
     state: Box<dyn ProtocolSim>,
@@ -74,48 +75,75 @@ impl Data {
 pub struct App {
     state: TableState,
     show_popup: bool,
+    show_details: bool,
     quote_amount: BigUint,
     zero2one: bool,
     items: Vec<Data>,
+    filtered_items: Vec<Data>,
     rx: Receiver<Update>,
     scroll_state: ScrollbarState,
     colors: TableColors,
     input_mode: bool,
     input_buffer: String,
+    filter_mode: bool,
+    filter_protocol: String,
+    available_protocols: Vec<String>,
 }
 
 impl App {
     pub fn new(rx: Receiver<Update>) -> Self {
-        let data_vec = Vec::new();
         Self {
             state: TableState::default().with_selected(0),
             show_popup: false,
+            show_details: false,
             quote_amount: BigUint::one(),
             zero2one: true,
             rx,
             scroll_state: ScrollbarState::new(0),
             colors: TableColors::new(&tailwind::BLUE),
-            items: data_vec,
+            items: Vec::new(),
+            filtered_items: Vec::new(),
             input_mode: false,
             input_buffer: String::new(),
+            filter_mode: false,
+            filter_protocol: String::new(),
+            available_protocols: Vec::new(),
+        }
+    }
+
+    fn current_items(&self) -> &Vec<Data> {
+        if self.filter_protocol.is_empty() {
+            &self.items
+        } else {
+            &self.filtered_items
         }
     }
 
     pub fn move_row(&mut self, direction: isize) {
+        let current_items_len = self.current_items().len();
+        if current_items_len == 0 {
+            return;
+        }
+
         // Get current decimals, if any
-        let current_decimals = self.state.selected().map(|idx| {
-            let comp = &self.items[idx].component;
-            if self.zero2one {
-                comp.tokens[0].decimals
+        let current_decimals = self.state.selected().and_then(|idx| {
+            let current_items = self.current_items();
+            if idx < current_items.len() {
+                let comp = &current_items[idx].component;
+                Some(if self.zero2one {
+                    comp.tokens[0].decimals
+                } else {
+                    comp.tokens[1].decimals
+                })
             } else {
-                comp.tokens[1].decimals
+                None
             }
         });
 
         // Calculate the new index based on direction
         let new_index = match self.state.selected() {
             Some(i) => {
-                ((i as isize + direction + self.items.len() as isize) % self.items.len() as isize)
+                ((i as isize + direction + current_items_len as isize) % current_items_len as isize)
                     as usize
             }
             None => 0,
@@ -129,15 +157,18 @@ impl App {
 
         // Adjust quote amount if decimals have changed
         if let Some(prev_decimals) = current_decimals {
-            let comp = &self.items[new_index].component;
-            let decimals = comp.tokens[if self.zero2one { 0 } else { 1 }].decimals;
-            if decimals >= prev_decimals {
-                self.quote_amount *= BigUint::from(10u64).pow(decimals - prev_decimals);
-            } else {
-                let new_amount =
-                    self.quote_amount.clone() / BigUint::from(10u64).pow(prev_decimals - decimals);
-                self.quote_amount =
-                    if new_amount > BigUint::ZERO { new_amount } else { BigUint::one() };
+            let current_items = self.current_items();
+            if new_index < current_items.len() {
+                let comp = &current_items[new_index].component;
+                let decimals = comp.tokens[if self.zero2one { 0 } else { 1 }].decimals;
+                if decimals >= prev_decimals {
+                    self.quote_amount *= BigUint::from(10u64).pow(decimals - prev_decimals);
+                } else {
+                    let new_amount =
+                        self.quote_amount.clone() / BigUint::from(10u64).pow(prev_decimals - decimals);
+                    self.quote_amount =
+                        if new_amount > BigUint::ZERO { new_amount } else { BigUint::one() };
+                }
             }
         }
     }
@@ -215,6 +246,35 @@ impl App {
                 self.items.remove(idx);
             }
         }
+
+        // Update available protocols
+        self.update_available_protocols();
+        // Update filtered items if filter is active
+        self.update_filtered_items();
+    }
+
+    fn update_available_protocols(&mut self) {
+        let mut protocols: Vec<String> = self
+            .items
+            .iter()
+            .map(|item| item.component.protocol_system.clone())
+            .collect();
+        protocols.sort_unstable();
+        protocols.dedup();
+        self.available_protocols = protocols;
+    }
+
+    fn update_filtered_items(&mut self) {
+        if self.filter_protocol.is_empty() {
+            self.filtered_items.clear();
+        } else {
+            self.filtered_items = self
+                .items
+                .iter()
+                .filter(|item| item.component.protocol_system == self.filter_protocol)
+                .cloned()
+                .collect();
+        }
     }
 
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> anyhow::Result<()> {
@@ -241,8 +301,8 @@ impl App {
                                         self.input_buffer.pop();
                                     },
                                     KeyCode::Enter => {
-                                        if let Ok(amount) = self.input_buffer.parse::<u64>() {
-                                            self.quote_amount = BigUint::from(amount);
+                                        if let Ok(amount) = BigUint::from_str(&self.input_buffer) {
+                                            self.quote_amount = amount;
                                         }
                                         self.input_mode = false;
                                         self.input_buffer.clear();
@@ -256,10 +316,12 @@ impl App {
                             } else {
                                 match key.code {
                                     KeyCode::Char('q') | KeyCode::Esc => {
-                                        if !self.show_popup {
+                                        if !self.show_popup && !self.show_details && !self.filter_mode {
                                             return Ok(())
                                         } else {
-                                            self.show_popup = !self.show_popup
+                                            self.show_popup = false;
+                                            self.show_details = false;
+                                            self.filter_mode = false;
                                         }
                                     },
                                     KeyCode::Char('j') | KeyCode::Down => self.move_row(1),
@@ -278,7 +340,20 @@ impl App {
                                         self.input_mode = true;
                                         self.input_buffer.clear();
                                     },
-                                    KeyCode::Enter => self.show_popup = !self.show_popup,
+                                    KeyCode::Char('d') => self.show_details = !self.show_details,
+                                    KeyCode::Char('f') => self.filter_mode = !self.filter_mode,
+                                    KeyCode::Char('c') => {
+                                        self.filter_protocol.clear();
+                                        self.update_filtered_items();
+                                        self.state.select(Some(0));
+                                    },
+                                    KeyCode::Enter => {
+                                        if self.filter_mode {
+                                            self.select_filter();
+                                        } else {
+                                            self.show_popup = !self.show_popup;
+                                        }
+                                    },
                                     _ => {}
                                 }
                             }
@@ -289,22 +364,35 @@ impl App {
         }
     }
 
+    fn select_filter(&mut self) {
+        if !self.available_protocols.is_empty() {
+            let selected_idx = self.state.selected().unwrap_or(0) % self.available_protocols.len();
+            self.filter_protocol = self.available_protocols[selected_idx].clone();
+            self.update_filtered_items();
+            self.filter_mode = false;
+            self.state.select(Some(0));
+        }
+    }
+
     fn modify_quote(&mut self, increase: bool) {
         if !self.show_popup {
             return;
         }
 
         if let Some(idx) = self.state.selected() {
-            let comp = &self.items[idx].component;
-            let decimals =
-                if self.zero2one { comp.tokens[0].decimals } else { comp.tokens[1].decimals };
-            if increase {
-                self.quote_amount += BigUint::from(10u64).pow(decimals);
-            } else {
-                self.quote_amount = self
-                    .quote_amount
-                    .checked_sub(&BigUint::from(10u64).pow(decimals))
-                    .unwrap_or(BigUint::one());
+            let current_items = self.current_items();
+            if idx < current_items.len() {
+                let comp = &current_items[idx].component;
+                let decimals =
+                    if self.zero2one { comp.tokens[0].decimals } else { comp.tokens[1].decimals };
+                if increase {
+                    self.quote_amount += BigUint::from(10u64).pow(decimals);
+                } else {
+                    self.quote_amount = self
+                        .quote_amount
+                        .checked_sub(&BigUint::from(10u64).pow(decimals))
+                        .unwrap_or(BigUint::one());
+                }
             }
         }
     }
@@ -321,6 +409,12 @@ impl App {
         }
         if self.show_popup {
             self.render_quote_popup(frame);
+        }
+        if self.show_details {
+            self.render_details_popup(frame);
+        }
+        if self.filter_mode {
+            self.render_filter_popup(frame);
         }
         if self.input_mode {
             self.render_input_popup(frame);
@@ -345,8 +439,8 @@ impl App {
             .collect::<Row>()
             .style(header_style)
             .height(1);
-        let rows = self
-            .items
+        let current_items = self.current_items();
+        let rows = current_items
             .iter()
             .enumerate()
             .map(|(i, data)| {
@@ -430,8 +524,10 @@ impl App {
 
         if let Some(idx) = self.state.selected() {
             if self.quote_amount > BigUint::ZERO {
-                let comp = &self.items[idx].component;
-                let state = &self.items[idx].state;
+                let current_items = self.current_items();
+                if idx < current_items.len() {
+                    let comp = &current_items[idx].component;
+                    let state = &current_items[idx].state;
                 let (token_in, token_out) = if self.zero2one {
                     (&comp.tokens[0], &comp.tokens[1])
                 } else {
@@ -462,6 +558,7 @@ impl App {
                 let area = popup_area(area, Constraint::Percentage(50), Constraint::Percentage(50));
                 frame.render_widget(Clear, area);
                 frame.render_widget(popup, area);
+                }
             }
         }
     }
@@ -487,6 +584,90 @@ impl App {
         let area = popup_area(area, Constraint::Percentage(50), Constraint::Length(8));
         frame.render_widget(Clear, area);
         frame.render_widget(input, area);
+    }
+
+    fn render_details_popup(&self, frame: &mut Frame) {
+        let area = frame.area();
+
+        if let Some(idx) = self.state.selected() {
+            let current_items = self.current_items();
+            if idx < current_items.len() {
+                let comp = &current_items[idx].component;
+                let mut text = format!(
+                    "Pool ID: {:#042x}\nProtocol System: {}\nProtocol Type: {}\nChain: {:?}\nCreated At: {}\nCreation Tx: {:#042x}\n\nTokens:\n",
+                    comp.id,
+                    comp.protocol_system,
+                    comp.protocol_type_name,
+                    comp.chain,
+                    comp.created_at.format("%Y-%m-%d %H:%M:%S"),
+                    comp.creation_tx
+                );
+
+                for (i, token) in comp.tokens.iter().enumerate() {
+                    text.push_str(&format!(
+                        "  {}: {} ({}), decimals: {}\n",
+                        i, token.symbol, token.address, token.decimals
+                    ));
+                }
+
+                text.push_str("\nContract IDs:\n");
+                for (i, contract_id) in comp.contract_ids.iter().enumerate() {
+                    text.push_str(&format!("  {}: {:#042x}\n", i, contract_id));
+                }
+
+                if !comp.static_attributes.is_empty() {
+                    text.push_str("\nStatic Attributes:\n");
+                    for (key, value) in &comp.static_attributes {
+                        text.push_str(&format!("  {}: {:#x}\n", key, value));
+                    }
+                }
+
+                let block = Block::bordered()
+                    .title("Pool Details")
+                    .border_style(Style::new().fg(self.colors.footer_border_color));
+                let popup = Paragraph::new(Text::from(text))
+                    .block(block)
+                    .wrap(Wrap { trim: false })
+                    .style(
+                        Style::new()
+                            .fg(self.colors.row_fg)
+                            .bg(self.colors.buffer_bg),
+                    );
+                let area = popup_area(area, Constraint::Percentage(80), Constraint::Percentage(80));
+                frame.render_widget(Clear, area);
+                frame.render_widget(popup, area);
+            }
+        }
+    }
+
+    fn render_filter_popup(&self, frame: &mut Frame) {
+        let area = frame.area();
+
+        let mut text = String::from("Select Protocol to Filter:\n\n");
+        if self.available_protocols.is_empty() {
+            text.push_str("No protocols available");
+        } else {
+            for (i, protocol) in self.available_protocols.iter().enumerate() {
+                let marker = if Some(i) == self.state.selected() { "► " } else { "  " };
+                text.push_str(&format!("{}{}\n", marker, protocol));
+            }
+            text.push_str("\nPress Enter to select, Esc to cancel");
+        }
+
+        let block = Block::bordered()
+            .title("Protocol Filter")
+            .border_style(Style::new().fg(self.colors.footer_border_color));
+        let popup = Paragraph::new(Text::from(text))
+            .block(block)
+            .wrap(Wrap { trim: false })
+            .style(
+                Style::new()
+                    .fg(self.colors.row_fg)
+                    .bg(self.colors.buffer_bg),
+            );
+        let area = popup_area(area, Constraint::Percentage(60), Constraint::Percentage(60));
+        frame.render_widget(Clear, area);
+        frame.render_widget(popup, area);
     }
 }
 
