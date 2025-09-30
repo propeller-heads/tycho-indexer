@@ -554,9 +554,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_batch_with_mock_batch_size_1() {
-        let retry_config =
-            RPCRetryConfig { max_retries: 3, initial_backoff_ms: 100, max_backoff_ms: 5000 };
-        let provider = RPCMetadataProvider::new_with_retry_config(1, retry_config);
+        let provider = RPCMetadataProvider::new(1);
         let mut server = Server::new_async().await;
         let endpoint = server.url();
 
