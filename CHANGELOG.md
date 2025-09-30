@@ -1,3 +1,11 @@
+## [0.91.0](https://github.com/propeller-heads/tycho-indexer/compare/0.90.0...0.91.0) (2025-09-30)
+
+
+### Features
+
+* Remove dependency on ethers, contracts, ethrpc and ethcontract ([0e798bf](https://github.com/propeller-heads/tycho-indexer/commit/0e798bfbc4e87fd7b9268e10feb46dbbb0bb1c5b))
+* Remove dependency on ethers, contracts, ethrpc and ethcontract ([#713](https://github.com/propeller-heads/tycho-indexer/issues/713)) ([043d774](https://github.com/propeller-heads/tycho-indexer/commit/043d774f206620462c1395c7c3945d2a6c941b71))
+
 ## [0.90.0](https://github.com/propeller-heads/tycho-indexer/compare/0.89.0...0.90.0) (2025-09-29)
 
 
