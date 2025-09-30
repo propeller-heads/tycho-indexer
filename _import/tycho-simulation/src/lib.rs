@@ -12,7 +12,6 @@ extern crate core;
 pub use tycho_client;
 pub use tycho_common;
 pub use tycho_common as tycho_core; // Use `tycho_common` directly instead of `tycho_core`.
-pub use tycho_execution;
 
 #[cfg(feature = "evm")]
 pub mod evm;
