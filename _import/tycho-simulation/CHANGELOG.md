@@ -1,3 +1,10 @@
+## [0.167.1](https://github.com/propeller-heads/tycho-simulation/compare/0.167.0...0.167.1) (2025-09-30)
+
+
+### Bug Fixes
+
+* make sure we don't emit any update after we skipped a decoder failure for a component ([5ef3f52](https://github.com/propeller-heads/tycho-simulation/commit/5ef3f52a05f88c7838fe9e8f63673aaf0ca8b381))
+
 ## [0.167.0](https://github.com/propeller-heads/tycho-simulation/compare/0.166.0...0.167.0) (2025-09-30)
 
 
