@@ -64,7 +64,7 @@ use tycho_simulation::{
 
 #[derive(Parser, Clone)]
 struct Cli {
-    /// The tvl threshold to filter the graph by
+    /// The tvl threshold in ETH/native token units to filter the graph by
     #[arg(long, default_value_t = 100.0)]
     tvl_threshold: f64,
 

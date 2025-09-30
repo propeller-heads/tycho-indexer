@@ -4,6 +4,5 @@ Continuously simulate swaps in all chains and protocols. By default, the binary 
 
 ```bash
 export RPC_URL=...
-export PRIVATE_KEY=...
 cargo run --package tycho-integration-test
 ```
