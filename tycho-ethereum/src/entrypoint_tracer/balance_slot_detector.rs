@@ -7,6 +7,7 @@ use std::{
 
 use tokio::sync::RwLock;
 
+#[derive(Debug, Clone)]
 struct ValidationData {
     token: Address,
     storage_addr: Address,
@@ -1566,18 +1567,24 @@ mod tests {
         // Use real token addresses and block for testing (WETH, USDC)
         let weth_bytes = alloy::hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
         let usdc_bytes = alloy::hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
+        let usdt_bytes = alloy::hex::decode("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
+
         let pool_manager_bytes =
             alloy::hex::decode("000000000004444c5dc75cB358380D2e3dE08A90").unwrap();
 
         let weth = Address::from(weth_bytes);
         let usdc = Address::from(usdc_bytes);
+        let usdt = Address::from(usdt_bytes);
+
         let pool_manager = Address::from(pool_manager_bytes);
 
         println!("WETH address: 0x{}", alloy::hex::encode(weth.as_ref()));
         println!("USDC address: 0x{}", alloy::hex::encode(usdc.as_ref()));
+        println!("USDT address: 0x{}", alloy::hex::encode(usdt.as_ref()));
+
         println!("Pool manager address: 0x{}", alloy::hex::encode(pool_manager.as_ref()));
 
-        let tokens = vec![weth.clone(), usdc.clone()];
+        let tokens = vec![weth.clone(), usdc.clone(), usdt.clone()];
 
         // Use a recent block
         let block_hash_bytes =
@@ -1626,6 +1633,21 @@ mod tests {
             }
         } else {
             panic!("No result for USDC token");
+        }
+
+        if let Some(usdt_result) = results.get(&usdt) {
+            match usdt_result {
+                Ok((storage_addr, slot)) => {
+                    println!(
+                        "USDT slot detected - Storage: 0x{}, Slot: 0x{}",
+                        alloy::hex::encode(storage_addr.as_ref()),
+                        alloy::hex::encode(slot.as_ref())
+                    );
+                }
+                Err(e) => panic!("Failed to detect USDT slot: {}", e),
+            }
+        } else {
+            panic!("No result for USDT token");
         }
     }
 
