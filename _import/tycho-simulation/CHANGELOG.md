@@ -1,3 +1,11 @@
+## [0.166.0](https://github.com/propeller-heads/tycho-simulation/compare/0.165.0...0.166.0) (2025-09-30)
+
+
+### Features
+
+* Bump tycho-client and tycho-common dependencies ([bcf548d](https://github.com/propeller-heads/tycho-simulation/commit/bcf548d48d5e0cc072eb3531eecc19264c9254eb))
+* Make stream end condition configurable. ([f9c77fc](https://github.com/propeller-heads/tycho-simulation/commit/f9c77fce407d461024ff9d05349b7affddea4516))
+
 ## [0.165.0](https://github.com/propeller-heads/tycho-simulation/compare/0.164.0...0.165.0) (2025-09-29)
 
 
