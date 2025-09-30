@@ -1,3 +1,17 @@
+## [0.168.0](https://github.com/propeller-heads/tycho-simulation/compare/0.167.1...0.168.0) (2025-09-30)
+
+
+### Features
+
+* add binary to run the cluster test ([6142296](https://github.com/propeller-heads/tycho-simulation/commit/6142296dde2d7dfffc2088d82604d77bf13e920a))
+* add slippage calculation ([b3af474](https://github.com/propeller-heads/tycho-simulation/commit/b3af4746535df1626cdeb913cae51223864639d1))
+* Re export foundry_evm and tycho_ethereum to use in the sdk repo ([9c21a18](https://github.com/propeller-heads/tycho-simulation/commit/9c21a18ad4d74529b8661a6b33721c5ba56f137a))
+
+
+### Bug Fixes
+
+* use regular `user_transfer_type` when encoding the swap ([404e81c](https://github.com/propeller-heads/tycho-simulation/commit/404e81c66e34b29a638132f255ed2f36894fd54a))
+
 ## [0.167.1](https://github.com/propeller-heads/tycho-simulation/compare/0.167.0...0.167.1) (2025-09-30)
 
 
