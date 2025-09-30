@@ -39,7 +39,7 @@ use tycho_ethereum::{
     token_analyzer::rpc_client::EthereumRpcClient, token_pre_processor::EthereumTokenPreProcessor,
 };
 use tycho_indexer::{
-    cli::{AnalyzeTokenArgs, Cli, Command, GlobalArgs, IndexArgs, RunSpkgArgs},
+    cli::{AnalyzeTokenArgs, Cli, Command, GlobalArgs, IndexArgs, RunSpkgArgs, SubstreamsArgs},
     extractor::{
         chain_state::ChainState,
         protocol_cache::ProtocolMemoryCache,
@@ -213,6 +213,7 @@ fn run_indexer(global_args: GlobalArgs, index_args: IndexArgs) -> Result<(), Ext
 
             let (extraction_tasks, other_tasks) = create_indexing_tasks(
                 &global_args,
+                &index_args.substreams_args,
                 &index_args
                     .chains
                     .iter()
@@ -301,6 +302,7 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
 
     let (extraction_tasks, mut other_tasks) = create_indexing_tasks(
         &global_args,
+        &run_args.substreams_args,
         &[Chain::from_str(&run_args.chain).unwrap()],
         Utc::now().naive_utc(),
         config,
@@ -345,6 +347,7 @@ async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
 /// Creates extraction and server tasks.
 async fn create_indexing_tasks(
     global_args: &GlobalArgs,
+    substreams_args: &SubstreamsArgs,
     chains: &[Chain],
     retention_horizon: NaiveDateTime,
     extractors_config: ExtractorConfigs,
@@ -379,7 +382,7 @@ async fn create_indexing_tasks(
 
     let (runners, extractor_handles): (Vec<_>, Vec<_>) =
         // TODO: accept substreams configuration from cli.
-        build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url,global_args.s3_bucket.as_deref(), &cached_gw, &token_processor, &global_args.rpc_url.clone(), extraction_runtime)
+        build_all_extractors(&extractors_config, chain_state, chains, &global_args.endpoint_url, global_args.s3_bucket.as_deref(), &substreams_args.substreams_api_token, &cached_gw, &token_processor, &global_args.rpc_url.clone(), extraction_runtime)
             .await
             .map_err(|e| ExtractionError::Setup(format!("Failed to create extractors: {e}")))?
             .into_iter()
@@ -416,6 +419,7 @@ async fn build_all_extractors(
     chains: &[Chain],
     endpoint_url: &str,
     s3_bucket: Option<&str>,
+    substreams_api_token: &str,
     cached_gw: &CachedGateway,
     token_pre_processor: &EthereumTokenPreProcessor,
     rpc_url: &str,
@@ -449,13 +453,14 @@ async fn build_all_extractors(
             .cloned()
             .unwrap_or_else(|| tokio::runtime::Handle::current());
 
-        let (runner, handle) = ExtractorBuilder::new(extractor_config, endpoint_url, s3_bucket)
-            .rpc_url(rpc_url)
-            .build(chain_state, cached_gw, token_pre_processor, &protocol_cache)
-            .await?
-            .set_runtime(runtime)
-            .into_runner()
-            .await?;
+        let (runner, handle) =
+            ExtractorBuilder::new(extractor_config, endpoint_url, s3_bucket, substreams_api_token)
+                .rpc_url(rpc_url)
+                .build(chain_state, cached_gw, token_pre_processor, &protocol_cache)
+                .await?
+                .set_runtime(runtime)
+                .into_runner()
+                .await?;
 
         extractor_handles.push((runner, handle));
     }
