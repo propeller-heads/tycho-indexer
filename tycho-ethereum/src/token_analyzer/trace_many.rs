@@ -1,19 +1,16 @@
 use anyhow::{Context, Result};
-use ethrpc::Web3;
-use web3::{
-    types::{BlockNumber, BlockTrace, CallRequest, TraceType},
-    Transport,
-};
+use reqwest::Client as HttpClient;
+use web3::types::{BlockNumber, BlockTrace, CallRequest, TraceType};
 
 // Use the trace_callMany api https://openethereum.github.io/JSONRPC-trace-module#trace_callmany
 // api to simulate these call requests applied together one after another.
 // Err if communication with the node failed.
 pub async fn trace_many(
     requests: Vec<CallRequest>,
-    web3: &Web3,
+    rpc_url: &str,
     block: BlockNumber,
 ) -> Result<Vec<BlockTrace>> {
-    let transport = web3.transport();
+    let client = HttpClient::new();
     let requests = requests
         .into_iter()
         .map(|request| {
@@ -21,11 +18,35 @@ pub async fn trace_many(
         })
         .collect::<Result<Vec<_>>>()?;
     let params = vec![serde_json::to_value(requests)?, serde_json::to_value(block)?];
-    let response = transport
-        .execute("trace_callMany", params)
+
+    let rpc_request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "trace_callMany",
+        "params": params,
+        "id": 1
+    });
+
+    let response = client
+        .post(rpc_url)
+        .json(&rpc_request)
+        .send()
         .await
-        .context("trace_callMany failed")?;
-    serde_json::from_value(response).context("failed to decode trace_callMany response")
+        .context("Failed to send trace_callMany request")?;
+
+    let json_response: serde_json::Value = response
+        .json()
+        .await
+        .context("Failed to parse response as JSON")?;
+
+    if let Some(error) = json_response.get("error") {
+        return Err(anyhow::anyhow!("RPC error: {}", error));
+    }
+
+    let result = json_response
+        .get("result")
+        .context("No result in response")?;
+
+    serde_json::from_value(result.clone()).context("failed to decode trace_callMany response")
 }
 
 // Check the return value of trace_many for whether all top level transactions

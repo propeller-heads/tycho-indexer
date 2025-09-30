@@ -4,6 +4,8 @@ pub mod account_extractor;
 #[allow(unused)] //TODO: Remove when used
 pub mod entrypoint_tracer;
 #[cfg(feature = "onchain_data")]
+pub mod erc20_abi;
+#[cfg(feature = "onchain_data")]
 pub mod token_analyzer;
 #[cfg(feature = "onchain_data")]
 pub mod token_pre_processor;
@@ -14,7 +16,7 @@ extern crate pretty_assertions;
 
 use std::fmt::Display;
 
-use ethers::types::{H160, H256, U256};
+use alloy::primitives::{Address, B256, U256};
 use thiserror::Error;
 use tycho_common::{models::blockchain::BlockTag, Bytes};
 use web3::types::BlockNumber;
@@ -102,9 +104,13 @@ impl From<BlockTagWrapper> for BlockNumber {
 ///
 /// # Examples
 /// ```
-/// let h160_value: H160 = ...;
-/// let bytes: Bytes = h160_value.to_bytes(); // Converts H160 to Bytes
-/// let new_h160 = H160::from_bytes(bytes);   // Converts Bytes back to H160
+/// use alloy::primitives::Address;
+/// use tycho_ethereum::BytesCodec;
+/// use tycho_common::Bytes;
+///
+/// let address_value = Address::ZERO;
+/// let bytes: Bytes = address_value.to_bytes(); // Converts Address to Bytes
+/// let new_address = Address::from_bytes(&bytes);  // Converts Bytes back to Address
 /// ```
 pub trait BytesCodec {
     /// Converts the current type into a `Bytes` object.
@@ -122,37 +128,37 @@ pub trait BytesCodec {
     fn from_bytes(bytes: &Bytes) -> Self;
 }
 
-// Implementing `BytesCodec` for `H160`.
-impl BytesCodec for H160 {
-    /// Converts `H160` to `Bytes`.
+// Implementing `BytesCodec` for `Address` (H160 equivalent).
+impl BytesCodec for Address {
+    /// Converts `Address` to `Bytes`.
     fn to_bytes(self) -> Bytes {
         Bytes::from(self.0.to_vec())
     }
 
-    /// Converts `Bytes` to `H160`.
+    /// Converts `Bytes` to `Address`.
     ///
     /// # Panics
     ///
-    /// Will panic if the length of `Bytes` is not 20 (which is the size of an `H160`).
+    /// Will panic if the length of `Bytes` is not 20 (which is the size of an `Address`).
     fn from_bytes(bytes: &Bytes) -> Self {
-        H160::from_slice(bytes.as_ref())
+        Address::from_slice(bytes.as_ref())
     }
 }
 
-// Implementing `BytesCodec` for `H256`.
-impl BytesCodec for H256 {
-    /// Converts `H256` to `Bytes`.
+// Implementing `BytesCodec` for `B256`
+impl BytesCodec for B256 {
+    /// Converts `B256` to `Bytes`.
     fn to_bytes(self) -> Bytes {
         Bytes::from(self.0.to_vec())
     }
 
-    /// Converts `Bytes` to `H256`.
+    /// Converts `Bytes` to `B256`.
     ///
     /// # Panics
     ///
-    /// Will panic if the length of `Bytes` is not 32 (which is the size of an `H256`).
+    /// Will panic if the length of `Bytes` is not 32 (which is the size of a `B256`).
     fn from_bytes(bytes: &Bytes) -> Self {
-        H256::from_slice(bytes.as_ref())
+        B256::from_slice(bytes.as_ref())
     }
 }
 
@@ -160,8 +166,7 @@ impl BytesCodec for H256 {
 impl BytesCodec for U256 {
     /// Converts `U256` to `Bytes`.
     fn to_bytes(self) -> Bytes {
-        let mut buf = [0u8; 32];
-        self.to_big_endian(&mut buf);
+        let buf = self.to_be_bytes::<32>();
         Bytes::from(buf.to_vec())
     }
 
@@ -180,6 +185,6 @@ impl BytesCodec for U256 {
         u256_bytes[32 - bytes_slice.len()..].copy_from_slice(bytes_slice);
 
         // Convert the byte array to `U256` using big-endian.
-        U256::from_big_endian(&u256_bytes)
+        U256::from_be_bytes(u256_bytes)
     }
 }
