@@ -1,3 +1,11 @@
+## [0.169.0](https://github.com/propeller-heads/tycho-simulation/compare/0.168.0...0.169.0) (2025-10-01)
+
+
+### Features
+
+* Add Dockerfile instead of Dockerfile.integration-test ([6159e2a](https://github.com/propeller-heads/tycho-simulation/commit/6159e2ac4f1c32895089a2eeee77708d69b1cab8))
+* Add Dockerfile.integration-test ([dbbebd7](https://github.com/propeller-heads/tycho-simulation/commit/dbbebd7d8f90c49b583f56054a00cd03075d4c10))
+
 ## [0.168.0](https://github.com/propeller-heads/tycho-simulation/compare/0.167.1...0.168.0) (2025-09-30)
 
 
