@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::Path, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 use anyhow::{format_err, Context, Result};
 use async_trait::async_trait;
@@ -438,12 +438,17 @@ pub struct ExtractorBuilder {
 }
 
 impl ExtractorBuilder {
-    pub fn new(config: &ExtractorConfig, endpoint_url: &str, s3_bucket: Option<&str>) -> Self {
+    pub fn new(
+        config: &ExtractorConfig,
+        endpoint_url: &str,
+        s3_bucket: Option<&str>,
+        substreams_api_token: &str,
+    ) -> Self {
         Self {
             config: config.clone(),
             endpoint_url: endpoint_url.to_owned(),
             s3_bucket: s3_bucket.map(ToString::to_string),
-            token: env::var("SUBSTREAMS_API_TOKEN").unwrap_or("".to_string()),
+            token: substreams_api_token.to_string(),
             extractor: None,
             final_block_only: false,
             runtime_handle: None,
@@ -814,6 +819,7 @@ mod test {
             },
             "https://mainnet.eth.streamingfast.io",
             None,
+            "test_token",
         )
         .token("test_token")
         .set_extractor(extractor);
