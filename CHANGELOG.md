@@ -1,3 +1,11 @@
+## [0.91.2](https://github.com/propeller-heads/tycho-indexer/compare/0.91.1...0.91.2) (2025-10-01)
+
+
+### Bug Fixes
+
+* support configuring `substreams_api_token` via CLI and instead of only env variables ([f8b1ece](https://github.com/propeller-heads/tycho-indexer/commit/f8b1ece18db7ce710ebd3c27e9e88ae33576e480))
+* support configuring `substreams_api_token` via CLI and instead of only env variables ([#716](https://github.com/propeller-heads/tycho-indexer/issues/716)) ([f7dfb24](https://github.com/propeller-heads/tycho-indexer/commit/f7dfb2408746d9ce3808e7926f96eaf91c033182))
+
 ## [0.91.1](https://github.com/propeller-heads/tycho-indexer/compare/0.91.0...0.91.1) (2025-09-30)
 
 
