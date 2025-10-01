@@ -1,3 +1,10 @@
+## [0.169.1](https://github.com/propeller-heads/tycho-simulation/compare/0.169.0...0.169.1) (2025-10-01)
+
+
+### Bug Fixes
+
+* processing of bebop's aggregate multihop responses ([41dc9d4](https://github.com/propeller-heads/tycho-simulation/commit/41dc9d49789fb3c12e3516faca2ff3de96d89b16))
+
 ## [0.169.0](https://github.com/propeller-heads/tycho-simulation/compare/0.168.0...0.169.0) (2025-10-01)
 
 
