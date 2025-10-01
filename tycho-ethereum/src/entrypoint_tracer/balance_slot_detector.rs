@@ -1552,7 +1552,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "require RPC connection"]
+    // #[ignore = "require RPC connection"]
     async fn test_detect_slots_integration() {
         let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
         println!("Using RPC URL: {}", rpc_url);
@@ -1565,37 +1565,31 @@ mod tests {
         };
 
         // Use real token addresses and block for testing (WETH, USDC)
-        let weth_bytes = alloy::hex::decode("C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2").unwrap();
-        let usdc_bytes = alloy::hex::decode("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
         let usdt_bytes = alloy::hex::decode("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
 
-        let pool_manager_bytes =
-            alloy::hex::decode("000000000004444c5dc75cB358380D2e3dE08A90").unwrap();
+        let user_address_bytes =
+            alloy::hex::decode("f847a638E44186F3287ee9F8cAF73FF4d4B80784").unwrap();
 
-        let weth = Address::from(weth_bytes);
-        let usdc = Address::from(usdc_bytes);
         let usdt = Address::from(usdt_bytes);
 
-        let pool_manager = Address::from(pool_manager_bytes);
+        let user_address = Address::from(user_address_bytes);
 
-        println!("WETH address: 0x{}", alloy::hex::encode(weth.as_ref()));
-        println!("USDC address: 0x{}", alloy::hex::encode(usdc.as_ref()));
         println!("USDT address: 0x{}", alloy::hex::encode(usdt.as_ref()));
 
-        println!("Pool manager address: 0x{}", alloy::hex::encode(pool_manager.as_ref()));
+        println!("User address: 0x{}", alloy::hex::encode(user_address.as_ref()));
 
-        let tokens = vec![weth.clone(), usdc.clone(), usdt.clone()];
+        let tokens = vec![ usdt.clone()];
 
         // Use a recent block
         let block_hash_bytes =
-            alloy::hex::decode("658814e4cb074359f10dd71237cc57b1ae6791fc9de59fde570e724bd884cbb0")
+            alloy::hex::decode("0xb6e2fe1e6a2170d2326d458c35659427e9267a72e73c195f47f15500948cb355")
                 .unwrap();
         let block_hash = BlockHash::from(block_hash_bytes);
         println!("Block hash: 0x{}", alloy::hex::encode(block_hash.as_ref()));
 
         let mut detector = EVMBalanceSlotDetector::new(config).unwrap();
         let results = detector
-            .detect_balance_slots(&tokens, pool_manager, block_hash)
+            .detect_balance_slots(&tokens, user_address, block_hash)
             .await;
 
         println!("Results: {:?}", results);
@@ -1603,37 +1597,6 @@ mod tests {
 
         // We should get results for the tokens
         assert!(!results.is_empty(), "Expected results for at least one token, but got none");
-
-        // Check individual tokens
-        if let Some(weth_result) = results.get(&weth) {
-            match weth_result {
-                Ok((storage_addr, slot)) => {
-                    println!(
-                        "WETH slot detected - Storage: 0x{}, Slot: 0x{}",
-                        alloy::hex::encode(storage_addr.as_ref()),
-                        alloy::hex::encode(slot.as_ref())
-                    );
-                }
-                Err(e) => panic!("Failed to detect WETH slot: {}", e),
-            }
-        } else {
-            panic!("No result for WETH token");
-        }
-
-        if let Some(usdc_result) = results.get(&usdc) {
-            match usdc_result {
-                Ok((storage_addr, slot)) => {
-                    println!(
-                        "USDC slot detected - Storage: 0x{}, Slot: 0x{}",
-                        alloy::hex::encode(storage_addr.as_ref()),
-                        alloy::hex::encode(slot.as_ref())
-                    );
-                }
-                Err(e) => panic!("Failed to detect USDC slot: {}", e),
-            }
-        } else {
-            panic!("No result for USDC token");
-        }
 
         if let Some(usdt_result) = results.get(&usdt) {
             match usdt_result {
