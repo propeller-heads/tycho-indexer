@@ -40,3 +40,22 @@ jobs:
     secrets:
       app_id: ${{ secrets.APP_ID }}
       app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+  build-and-push-integration-test:
+    needs:
+      - release
+    uses: propeller-heads/ci-cd-templates/.github/workflows/build-and-push-docker-image.yaml@main
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      image_tag: ${{ needs.release.outputs.next_release_version }}
+      image_name: tycho-integration-test
+      dockerfile_path: Dockerfile.integration-test
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+      role_to_assume: ${{ secrets.ROLE_TO_ASSUME }}
+      aws_region: ${{ secrets.AWS_REGION }}
+      repository_url: ${{ secrets.REPOSITORY_URL }}
+      domain_owner: ${{ secrets.DOMAIN_OWNER }}
