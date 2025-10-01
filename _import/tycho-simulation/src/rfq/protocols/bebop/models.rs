@@ -303,6 +303,8 @@ pub struct SingleOrderToSign {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AggregateOrderToSign {
     pub taker_address: Bytes,
+    pub maker_tokens: Vec<Vec<Bytes>>,
+    pub taker_tokens: Vec<Vec<Bytes>>,
     pub maker_amounts: Vec<Vec<String>>,
     pub taker_amounts: Vec<Vec<String>>,
     pub expiry: u64,
@@ -439,6 +441,12 @@ mod tests {
         fn aggregate_order() -> AggregateOrderToSign {
             AggregateOrderToSign {
                 taker_address: hex_to_bytes("0x2222222222222222222222222222222222222222"),
+                maker_tokens: vec![vec![hex_to_bytes(
+                    "0x3333333333333333333333333333333333333333",
+                )]],
+                taker_tokens: vec![vec![hex_to_bytes(
+                    "0x4444444444444444444444444444444444444444",
+                )]],
                 maker_amounts: vec![vec!["2000".to_string()]],
                 taker_amounts: vec![vec!["1000".to_string()]],
                 expiry: 123456,
