@@ -743,9 +743,8 @@ where
         trace!(?msg, "Processing message");
 
         // We work under the invariant that final_block_height is always <= block.number.
-        // They are equal only when we are syncing and have reached the final block.
-        // Depending on how Substreams handle them, this invariant could be problematic for single
-        // block finality blockchains.
+        // They are equal only when we are syncing. Depending on how Substreams handle them, this
+        // invariant could be problematic for single block finality blockchains.
         let is_syncing = inp.final_block_height == msg.block.number;
         if inp.final_block_height > msg.block.number {
             return Err(ExtractionError::ReorgBufferError(format!(
@@ -757,48 +756,46 @@ where
         // Create a scope to lock the reorg buffer, insert the new block and possibly commit to the
         // database if we have enough blocks in the buffer.
         // Return the block height up to which we have committed to the database.
-        let db_committed_upto_block_height = {
+        let (blocks_to_commit, oldest_uncommitted_block_height) = {
             let mut reorg_buffer = self.reorg_buffer.lock().await;
 
             reorg_buffer
                 .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
                 .map_err(ExtractionError::Storage)?;
 
-            let commit_upto_block_height = inp.final_block_height;
-
-            if reorg_buffer.count_blocks_before(commit_upto_block_height) >=
+            let blocks_to_commit = if reorg_buffer.count_blocks_before(inp.final_block_height) >=
                 self.database_insert_batch_size
             {
-                let mut msgs = reorg_buffer
-                    .drain_blocks_until(commit_upto_block_height)
-                    .map_err(ExtractionError::Storage)?
-                    .into_iter()
-                    .peekable();
-
-                // Drop the lock on the reorg buffer before doing any database operations.
-                drop(reorg_buffer);
-
-                while let Some(msg) = msgs.next() {
-                    // Force a database commit if we're not syncing and this is the last block to be
-                    // sent. Otherwise, wait to accumulate a full batch before
-                    // committing.
-                    let force_db_commit = if is_syncing { false } else { msgs.peek().is_none() };
-
-                    self.gateway
-                        .advance(msg.block_update(), msg.cursor(), force_db_commit)
-                        .await?;
-                }
-
-                commit_upto_block_height
-            } else {
                 reorg_buffer
-                    .get_oldest_block()
-                    .map(|block| block.number)
-                    .ok_or_else(|| {
-                        ExtractionError::ReorgBufferError("Reorg buffer is empty".into())
-                    })?
-            }
+                    .drain_blocks_until(inp.final_block_height)
+                    .map_err(ExtractionError::Storage)?
+            } else {
+                vec![]
+            };
+
+            let oldest_uncommitted_block_height = reorg_buffer
+                .get_oldest_block()
+                .map(|block| block.number)
+                .ok_or_else(|| ExtractionError::ReorgBufferError("Reorg buffer is empty".into()))?;
+
+            (blocks_to_commit, oldest_uncommitted_block_height)
         };
+
+        // Commit blocks to the database
+        let mut block_iter = blocks_to_commit.iter().peekable();
+        while let Some(block) = block_iter.next() {
+            // Force a database commit if we're not syncing and this is the last block to be
+            // sent. Otherwise, wait to accumulate a full batch before
+            // committing.
+            let force_db_commit = if is_syncing { false } else { block_iter.peek().is_none() };
+
+            self.gateway
+                .advance(block.block_update(), block.cursor(), force_db_commit)
+                .await?;
+        }
+
+        // At this point, we have committed all blocks up to the oldest uncommitted block height.
+        let db_committed_upto_block_height = oldest_uncommitted_block_height;
 
         self.update_last_processed_block(msg.block.clone())
             .await;
