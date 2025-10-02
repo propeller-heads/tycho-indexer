@@ -52,7 +52,7 @@ pub fn setup_metadata_registries(
 
     // Register RPC provider with default routing key and retry configuration
     let retry_config =
-        RPCRetryConfig { max_retries: 3, initial_backoff_ms: 100, max_backoff_ms: 5000 };
+        RPCRetryConfig { max_retries: 5, initial_backoff_ms: 150, max_backoff_ms: 5000 };
     provider_registry.register_provider(
         "rpc_default".to_string(),
         Arc::new(RPCMetadataProvider::new_with_retry_config(50, retry_config)), // batch size limit with retry config
