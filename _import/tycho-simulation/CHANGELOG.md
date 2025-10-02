@@ -1,3 +1,11 @@
+## [0.170.0](https://github.com/propeller-heads/tycho-simulation/compare/0.169.2...0.170.0) (2025-10-02)
+
+
+### Features
+
+* Meaningful error decoding in Holy Grail testing script (+bugfixes) ([698aa4e](https://github.com/propeller-heads/tycho-simulation/commit/698aa4e41325f3103502c0ae2815d8dc0ceaf752))
+* use error decoding in traces.rs ([ec04212](https://github.com/propeller-heads/tycho-simulation/commit/ec04212e728648d11803932c5f9aa4aa1b4a163f))
+
 ## [0.169.2](https://github.com/propeller-heads/tycho-simulation/compare/0.169.1...0.169.2) (2025-10-02)
 
 
