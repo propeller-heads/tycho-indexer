@@ -5,7 +5,11 @@ use std::collections::HashMap;
 
 use futures::{stream::select_all, StreamExt};
 use tycho_client::feed::{synchronizer::ComponentWithState, FeedMessage};
-use tycho_common::{models::token::Token, simulation::protocol_sim::ProtocolSim, Bytes};
+use tycho_common::{
+    models::token::Token,
+    simulation::{errors::SimulationError, protocol_sim::ProtocolSim},
+    Bytes,
+};
 
 use crate::{
     evm::decoder::TychoStreamDecoder,
@@ -54,7 +58,7 @@ impl RFQStreamBuilder {
         self
     }
 
-    pub async fn build(self, tx: tokio::sync::mpsc::Sender<Update>) {
+    pub async fn build(self, tx: tokio::sync::mpsc::Sender<Update>) -> Result<(), SimulationError> {
         let streams: Vec<_> = self
             .clients
             .into_iter()
@@ -73,8 +77,14 @@ impl RFQStreamBuilder {
                             sync_states: HashMap::new(),
                         })
                         .await
-                        .unwrap();
-                    tx.send(update).await.unwrap();
+                        .map_err(|e| {
+                            SimulationError::RecoverableError(format!("Decoding error: {e}"))
+                        })?;
+                    tx.send(update).await.map_err(|e| {
+                        SimulationError::RecoverableError(format!(
+                            "Failed to send update through channel: {e}"
+                        ))
+                    })?;
                 }
                 Err(e) => {
                     tracing::error!(
@@ -83,6 +93,8 @@ impl RFQStreamBuilder {
                 }
             }
         }
+
+        Ok(())
     }
 
     /// Sets the currently known tokens which to be considered during decoding.
