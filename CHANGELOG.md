@@ -1,3 +1,11 @@
+## [0.92.1](https://github.com/propeller-heads/tycho-indexer/compare/0.92.0...0.92.1) (2025-10-02)
+
+
+### Bug Fixes
+
+* make new component tokens available to blacklist ([23e21ed](https://github.com/propeller-heads/tycho-indexer/commit/23e21ed00b9e4ed175c4526367155cdfc79433c5))
+* make new component tokens available to blacklist ([#720](https://github.com/propeller-heads/tycho-indexer/issues/720)) ([f686d77](https://github.com/propeller-heads/tycho-indexer/commit/f686d770fbe1da43196592ec7358cb3bdd060ea0))
+
 ## [0.92.0](https://github.com/propeller-heads/tycho-indexer/compare/0.91.2...0.92.0) (2025-10-02)
 
 
