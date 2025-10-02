@@ -44,13 +44,9 @@ jobs:
   build-and-push-integration-test:
     needs:
       - release
-    uses: propeller-heads/ci-cd-templates/.github/workflows/build-and-push-docker-image.yaml@main
-    permissions:
-      id-token: write
-      contents: read
+    uses: ./.github/workflows/build-and-push-integration-test.yaml
     with:
-      image_tag: ${{ needs.release.outputs.next_release_version }}
-      image_name: tycho-integration-test
+      base_tag: ${{ needs.release.outputs.next_release_version }}
     secrets:
       app_id: ${{ secrets.APP_ID }}
       app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
