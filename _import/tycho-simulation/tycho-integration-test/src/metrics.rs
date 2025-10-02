@@ -5,10 +5,7 @@ use tracing::{error, info};
 
 /// Initialize the metrics registry and describe all metrics
 pub fn init_metrics() {
-    describe_counter!(
-        "simulation_success_total",
-        "Total number of successful simulations"
-    );
+    describe_counter!("simulation_success_total", "Total number of successful simulations");
     describe_counter!(
         "simulation_failure_total",
         "Total number of failed simulations with revert reason as label"
@@ -22,7 +19,7 @@ pub fn record_simulation_success() {
 
 /// Record a failed simulation with the revert reason
 pub fn record_simulation_failure(revert_reason: &str) {
-    counter!("simulation_failure_total", "reason" => revert_reason).increment(1);
+    counter!("simulation_failure_total", "reason" => revert_reason.to_string()).increment(1);
 }
 
 /// Creates and runs the Prometheus metrics exporter using Actix Web.
