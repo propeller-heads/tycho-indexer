@@ -61,8 +61,16 @@ jobs:
         id: tag
         run: |
           BASE_TAG="${{ inputs.base_tag || steps.latest_tag.outputs.tag }}"
-          TAG_SUFFIX="${{ inputs.tag_suffix || steps.commit.outputs.hash }}"
-          IMAGE_TAG="${BASE_TAG}-${TAG_SUFFIX}"
+          
+          # If called from main workflow (base_tag is provided), use only the base tag
+          # If manually triggered or from other branches, add commit hash suffix
+          if [[ -n "${{ inputs.base_tag }}" ]]; then
+            IMAGE_TAG="$BASE_TAG"
+          else
+            TAG_SUFFIX="${{ inputs.tag_suffix || steps.commit.outputs.hash }}"
+            IMAGE_TAG="${BASE_TAG}-${TAG_SUFFIX}"
+          fi
+          
           echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
   build-and-push-integration-test:
