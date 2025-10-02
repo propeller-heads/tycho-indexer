@@ -73,15 +73,17 @@ where
         self.cache
             .try_insert_block_layer(&block_changes.block)?;
 
-        // Process new tokens from BlockChanges
-        for (address, _token) in block_changes.new_tokens.iter() {
-            // Add new tokens to the ERC-20 cache
-            self.cache
-                .erc20_addresses
-                .pending_entry(&block_changes.block, address)?
-                .or_insert(true);
-
-            debug!("Added new ERC-20 token to skip list: {}", address);
+        for c in block_changes
+            .txs_with_update
+            .iter()
+            .flat_map(|tx| tx.protocol_components.values())
+        {
+            for t in c.tokens.iter() {
+                self.cache
+                    .erc20_addresses
+                    .pending_entry(&block_changes.block, t)?
+                    .or_insert(true);
+            }
         }
 
         for (component_id, ep) in block_changes
