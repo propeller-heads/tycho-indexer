@@ -680,7 +680,9 @@ where
             "Found swap hook components to process"
         );
 
-        // 2. Categorize components based on processing state
+        // 2. Categorize components based on processing state.
+        // Full-processing are the ones that will need an Entrypoint to be generated.
+        // Balance updates are the ones that only needs their balances to be updated.
         let (components_needing_full_processing, components_needing_balance_only) = {
             let _span = span!(
                 Level::INFO,
@@ -698,8 +700,8 @@ where
             "Categorized components by processing needs"
         );
 
-        // 3. Process the components - collect metadata
-        let component_metadata = self
+        // 3. Collect metadata for components where the liquidity is outside the PoolManager.
+        let component_metadata_from_external_source = self
             .metadata_orchestrator
             .collect_metadata_for_block(
                 &components_needing_balance_only,
@@ -715,7 +717,10 @@ where
                 ExtractionError::Unknown(format!("Failed to collect metadata: {e:?}"))
             })?;
 
-        info!(metadata_count = component_metadata.len(), "Collected component metadata");
+        info!(
+            metadata_count = component_metadata_from_external_source.len(),
+            "Collected component metadata"
+        );
 
         let tx_map = block_changes
             .txs_with_update
@@ -723,7 +728,7 @@ where
             .map(|tx_with_changes| (tx_with_changes.tx.hash.clone(), tx_with_changes.tx.clone()))
             .collect::<HashMap<_, _>>();
 
-        let component_id_to_tx_map = component_metadata
+        let component_id_to_tx_map = component_metadata_from_external_source
             .iter()
             .map(|(component, metadata)| {
                 (component.id.clone(), tx_map.get(&metadata.tx_hash).cloned())
@@ -731,14 +736,18 @@ where
             .collect::<HashMap<_, _>>();
 
         // 3a. Process metadata errors and update component states
-        self.process_metadata_errors(&component_metadata, &component_id_to_tx_map, block_changes)?;
+        self.process_metadata_errors(
+            &component_metadata_from_external_source,
+            &component_id_to_tx_map,
+            block_changes,
+        )?;
 
         // 4. Group components by hook address and separate by processing needs
         let (components_full_processing, components_balance_only, metadata_by_component_id) = {
             let _span = span!(
                 Level::INFO,
                 "group_components_by_hook",
-                total_metadata = component_metadata.len()
+                total_metadata = component_metadata_from_external_source.len()
             )
             .entered();
 
@@ -753,7 +762,7 @@ where
                     .map(|(_, comp)| comp.id.clone())
                     .collect();
 
-            for (component, metadata) in component_metadata {
+            for (component, metadata) in component_metadata_from_external_source {
                 metadata_by_component_id.insert(component.id.clone(), metadata);
 
                 if let Some(hook_address) = component.static_attributes.get("hooks") {
