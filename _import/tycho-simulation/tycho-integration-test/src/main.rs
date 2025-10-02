@@ -84,6 +84,10 @@ struct Cli {
 
     #[arg(long, env = "RPC_URL")]
     rpc_url: String,
+
+    /// Port for the Prometheus metrics server
+    #[arg(long, default_value_t = 9898)]
+    metrics_port: u16,
 }
 
 impl Debug for Cli {
@@ -93,6 +97,7 @@ impl Debug for Cli {
             .field("chain", &self.chain)
             .field("tycho_api_key", &"****")
             .field("rpc_url", &self.rpc_url)
+            .field("metrics_port", &self.metrics_port)
             .finish()
     }
 }
@@ -106,13 +111,25 @@ async fn main() -> miette::Result<()> {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
+    let cli = Cli::parse();
+
     // Initialize and start Prometheus metrics
     metrics::init_metrics();
-    let _metrics_task = metrics::create_metrics_exporter();
+    let metrics_task = metrics::create_metrics_exporter(cli.metrics_port).await?;
 
-    let cli = Cli::parse();
-    debug!("Parsed args: {:?}", cli);
-    run(cli).await?;
+    // Run the main application logic and metrics server in parallel
+    // If either fails, the other will be cancelled
+    tokio::select! {
+        result = run(cli) => {
+            result?;
+        }
+        result = metrics_task => {
+            result
+                .into_diagnostic()
+                .wrap_err("Metrics server task panicked")??;
+        }
+    }
+
     Ok(())
 }
 
@@ -290,7 +307,9 @@ async fn run(cli: Cli) -> miette::Result<()> {
 
                             // Extract revert reason from error message
                             // Error format is typically "Transaction reverted: <reason>"
-                            let revert_reason = if let Some(reason) = error_msg.strip_prefix("Transaction reverted: ") {
+                            let revert_reason = if let Some(reason) =
+                                error_msg.strip_prefix("Transaction reverted: ")
+                            {
                                 reason
                             } else {
                                 &error_msg

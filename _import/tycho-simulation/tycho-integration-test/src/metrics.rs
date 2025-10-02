@@ -1,7 +1,8 @@
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{rt::System, web, App, HttpResponse, HttpServer, Responder};
 use metrics::{counter, describe_counter};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
-use tracing::{error, info};
+use miette::{Context, IntoDiagnostic, Result};
+use tracing::info;
 
 /// Initialize the metrics registry and describe all metrics
 pub fn init_metrics() {
@@ -23,32 +24,51 @@ pub fn record_simulation_failure(revert_reason: &str) {
 }
 
 /// Creates and runs the Prometheus metrics exporter using Actix Web.
-pub fn create_metrics_exporter() -> tokio::task::JoinHandle<()> {
+/// Returns a JoinHandle that should be awaited to detect server failures.
+pub async fn create_metrics_exporter(port: u16) -> Result<tokio::task::JoinHandle<Result<()>>> {
     let exporter_builder = PrometheusBuilder::new();
     let handle = exporter_builder
         .install_recorder()
-        .expect("Failed to install Prometheus recorder");
+        .into_diagnostic()
+        .wrap_err("Failed to install Prometheus recorder")?;
 
-    info!("Starting Prometheus metrics server on 0.0.0.0:9898");
+    // Verify port is available by attempting to bind
+    let test_bind = std::net::TcpListener::bind(("0.0.0.0", port))
+        .into_diagnostic()
+        .wrap_err(format!("Failed to bind metrics server to port {} - port may be in use", port))?;
+    drop(test_bind);
 
-    tokio::spawn(async move {
-        if let Err(e) = HttpServer::new(move || {
-            App::new().route(
-                "/metrics",
-                web::get().to({
-                    let handle = handle.clone();
-                    move || metrics_handler(handle.clone())
-                }),
-            )
+    info!("Starting Prometheus metrics server on 0.0.0.0:{}", port);
+
+    // Spawn in a separate thread with its own Actix runtime
+    let task = std::thread::spawn(move || {
+        System::new().block_on(async move {
+            HttpServer::new(move || {
+                App::new().route(
+                    "/metrics",
+                    web::get().to({
+                        let handle = handle.clone();
+                        move || metrics_handler(handle.clone())
+                    }),
+                )
+            })
+            .bind(("0.0.0.0", port))
+            .into_diagnostic()
+            .wrap_err(format!("Failed to bind metrics server to port {}", port))?
+            .run()
+            .await
+            .into_diagnostic()
+            .wrap_err("Metrics server failed")
         })
-        .bind(("0.0.0.0", 9898))
-        .expect("Failed to bind metrics server")
-        .run()
-        .await
-        {
-            error!("Metrics server failed: {}", e);
-        }
-    })
+    });
+
+    // Wrap the thread handle in a tokio task
+    let join_handle = tokio::spawn(async move {
+        task.join()
+            .map_err(|_| miette::miette!("Metrics server thread panicked"))?
+    });
+
+    Ok(join_handle)
 }
 
 /// Handles requests to the /metrics endpoint, rendering Prometheus metrics.
