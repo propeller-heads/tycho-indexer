@@ -1672,12 +1672,16 @@ impl ExtractorGateway for ExtractorPgGateway {
 
 #[cfg(test)]
 mod test {
-    use std::sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
+    use std::{
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        thread::sleep,
     };
 
     use float_eq::assert_float_eq;
+    use futures03::FutureExt;
     use mockall::mock;
     use tycho_common::{models::blockchain::TxWithChanges, traits::TokenOwnerFinding};
 
@@ -1813,8 +1817,9 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_reorg_buffer_flush_respects_batch_size() {
+    async fn test_handle_tick_scoped_respects_batch_async_commit() {
         let mut gw = MockExtractorGateway::new();
+
         gw.expect_ensure_protocol_types()
             .times(1)
             .returning(|_| ());
@@ -1825,79 +1830,136 @@ mod test {
             .times(1)
             .returning(|_| Ok(Block::default()));
 
+        // Use blocking channels as mock does not support async
+        let (tx, rx) = std::sync::mpsc::channel::<bool>();
         let call_count = Arc::new(AtomicUsize::new(0));
         let call_count_clone = call_count.clone();
         gw.expect_advance()
-            .times(2)
+            .times(4)
             .returning(move |_, _, _| {
+                rx.recv().unwrap();
                 call_count_clone.fetch_add(1, Ordering::SeqCst);
                 Ok(())
             });
 
-        let extractor = create_extractor_with_batch_size(gw, 2).await;
+        let commit_batch_size = 2;
+        let extractor = create_extractor_with_batch_size(gw, commit_batch_size).await;
 
-        let scoped_data = |block_number: u64, final_height: u64| {
+        let scoped = |n: u64, fin: u64| {
             pb_fixtures::pb_block_scoped_data(
                 tycho_substreams::BlockChanges {
-                    block: Some(pb_fixtures::pb_blocks(block_number)),
+                    block: Some(pb_fixtures::pb_blocks(n)),
                     ..Default::default()
                 },
-                Some(format!("cursor@{block_number}").as_str()),
-                Some(final_height),
+                Some(&format!("cursor@{n}")),
+                Some(fin),
             )
         };
+        let commit_task_is_running = async |ex: &ProtocolExtractor<_, _, _>| -> bool {
+            let guard = ex.database_commit_task.lock().await;
+            guard
+                .as_ref()
+                .is_some_and(|h| !h.is_finished())
+        };
+        let commit_task_is_none = async |ex: &ProtocolExtractor<_, _, _>| -> bool {
+            ex.database_commit_task
+                .lock()
+                .await
+                .is_none()
+        };
+        let count_before = async |ex: &ProtocolExtractor<_, _, _>, n: u64| -> usize {
+            let g = ex.reorg_buffer.lock().await;
+            g.count_blocks_before(n)
+        };
 
+        // #1 — no database commit yet (counted 0 out of 2 needed to trigger commit)
         extractor
-            .handle_tick_scoped_data(scoped_data(1, 1))
+            .handle_tick_scoped_data(scoped(1, 1))
             .await
-            .map(|o| o.map(|_| ()))
             .unwrap()
             .unwrap();
-
         assert_eq!(call_count.load(Ordering::SeqCst), 0);
-        {
-            let guard = extractor.reorg_buffer.lock().await;
-            assert_eq!(guard.count_blocks_before(1), 0);
-        }
+        assert!(commit_task_is_none(&extractor).await);
+        assert_eq!(count_before(&extractor, 1).await, 0);
 
+        // #2 — no database commit yet (counted 1 out of 2 needed to trigger commit)
         extractor
-            .handle_tick_scoped_data(scoped_data(2, 2))
+            .handle_tick_scoped_data(scoped(2, 2))
             .await
-            .map(|o| o.map(|_| ()))
             .unwrap()
             .unwrap();
-
         assert_eq!(call_count.load(Ordering::SeqCst), 0);
-        {
-            let guard = extractor.reorg_buffer.lock().await;
-            assert_eq!(guard.count_blocks_before(2), 1);
-        }
+        assert!(commit_task_is_none(&extractor).await);
+        assert_eq!(count_before(&extractor, 2).await, 1);
 
+        // #3 — reaches batch size → kicks off first async commit task (which is blocked by channel)
         extractor
-            .handle_tick_scoped_data(scoped_data(3, 3))
+            .handle_tick_scoped_data(scoped(3, 3))
             .await
-            .map(|o| o.map(|_| ()))
             .unwrap()
             .unwrap();
-
         assert_eq!(call_count.load(Ordering::SeqCst), 0);
-        {
-            let guard = extractor.reorg_buffer.lock().await;
-            assert_eq!(guard.count_blocks_before(3), 0);
-        }
+        assert!(commit_task_is_running(&extractor).await);
+        assert_eq!(count_before(&extractor, 3).await, 0);
 
-        if let Some(handle) = extractor
-            .database_commit_task
-            .lock()
+        // #4 — no database commit yet (counted 1 out of 2)
+        // new tick processing should still succeed despite the commit task being blocked
+        extractor
+            .handle_tick_scoped_data(scoped(4, 4))
             .await
-            .take()
-        {
-            handle.await.unwrap().unwrap();
-        } else {
-            panic!("Expected a database commit task to be running");
-        }
+            .unwrap()
+            .unwrap();
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+        assert!(commit_task_is_running(&extractor).await);
+        assert_eq!(count_before(&extractor, 4).await, 1);
 
-        assert_eq!(call_count.load(Ordering::SeqCst), 2);
+        // #5 — should trigger second commit task, however as the first one is still blocked,
+        // this tick processing should also be blocked until the first commit task is done
+        let mut fifth_tick_future = extractor.handle_tick_scoped_data(scoped(5, 5));
+
+        // Sleep for a short while to ensure the fifth call processing is blocked
+        sleep(std::time::Duration::from_millis(100));
+
+        // Confirm the fifth call is *pending* (blocked on the first commit still running)
+        assert!(
+            fifth_tick_future
+                .as_mut()
+                .now_or_never()
+                .is_none(),
+            "should be pending"
+        );
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+
+        // ---- Unblock first commit (allow it to finish) ----
+        tx.send(true).unwrap();
+        tx.send(true).unwrap();
+
+        // The fifth call (which also triggers a commit) can now complete
+        fifth_tick_future
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(call_count.load(Ordering::SeqCst), 2, "first commit should be counted");
+
+        // A second commit task should be running now async, still blocked
+        assert!(commit_task_is_running(&extractor).await);
+
+        // ---- Unblock second commit and wait for its task handle ----
+        tx.send(true).unwrap();
+        tx.send(true).unwrap();
+
+        // Await for the commit task to finish
+        let handle = {
+            let mut g = extractor
+                .database_commit_task
+                .lock()
+                .await;
+            g.take()
+        }
+        .expect("expected a running commit task");
+        handle.await.unwrap().unwrap();
+
+        assert_eq!(call_count.load(Ordering::SeqCst), 4, "second commit should be counted");
     }
 
     #[tokio::test]
