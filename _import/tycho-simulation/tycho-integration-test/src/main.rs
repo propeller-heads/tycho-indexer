@@ -1,5 +1,7 @@
 mod execution_simulator;
 mod four_byte_client;
+mod metrics;
+mod ot;
 mod traces;
 
 use std::{collections::HashMap, fmt::Debug, str::FromStr};
@@ -99,9 +101,22 @@ impl Debug for Cli {
 #[tokio::main]
 async fn main() -> miette::Result<()> {
     dotenv().ok();
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
+
+    // Initialize tracing with OpenTelemetry if configured
+    if let Ok(otlp_exporter_endpoint) = std::env::var("OTLP_EXPORTER_ENDPOINT") {
+        let config = ot::TracingConfig { otlp_exporter_endpoint };
+        ot::init_tracing(config)
+            .wrap_err("Failed to initialize OpenTelemetry tracing")?;
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .init();
+    }
+
+    // Initialize and start Prometheus metrics
+    metrics::init_metrics();
+    let _metrics_task = metrics::create_metrics_exporter();
+
     let cli = Cli::parse();
     debug!("Parsed args: {:?}", cli);
     run(cli).await?;
@@ -272,9 +287,23 @@ async fn run(cli: Cli) -> miette::Result<()> {
                     match simulate_swap_transaction(&cli.rpc_url, &solution, &transaction, &block)
                         .await
                     {
-                        Ok(amount) => amount,
+                        Ok(amount) => {
+                            metrics::record_simulation_success();
+                            amount
+                        }
                         Err(e) => {
-                            error!("Failed to simulate swap: {e}");
+                            let error_msg = e.to_string();
+                            error!("Failed to simulate swap: {error_msg}");
+
+                            // Extract revert reason from error message
+                            // Error format is typically "Transaction reverted: <reason>"
+                            let revert_reason = if let Some(reason) = error_msg.strip_prefix("Transaction reverted: ") {
+                                reason
+                            } else {
+                                &error_msg
+                            };
+
+                            metrics::record_simulation_failure(revert_reason);
                             continue;
                         }
                     };
