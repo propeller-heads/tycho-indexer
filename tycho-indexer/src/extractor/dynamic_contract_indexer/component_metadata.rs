@@ -20,7 +20,7 @@ use tycho_common::{
 // Core Metadata structure. Each Component that has a hook is expected to have Some (or None in case
 // of error) of those fields by the end of the extraction process.
 
-type Balances = HashMap<Address, Bytes>;
+pub(crate) type Balances = HashMap<Address, Bytes>;
 // Here we link the limits to the entrypoint that triggered the limit fetching. This is necessary
 // so that Tycho Simulation can use this information to calculate the limits for the component on
 // every block.
