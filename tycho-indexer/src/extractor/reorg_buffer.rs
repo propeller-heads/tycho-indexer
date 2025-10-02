@@ -157,6 +157,7 @@ where
         {
             if block_message.block().hash == target_hash {
                 target_index = Some(self.block_messages.len() - index);
+                break;
             }
         }
 
@@ -170,15 +171,6 @@ where
         } else {
             Err(StorageError::NotFound("block".into(), target_hash.to_string()))
         }
-    }
-
-    /// Returns an `Option` containing the oldest block in the buffer or `None` if the buffer
-    /// is empty
-    pub fn get_oldest_block(&self) -> Option<tycho_common::models::blockchain::Block> {
-        if let Some(block_message) = self.block_messages.front() {
-            return Some(block_message.block());
-        }
-        None
     }
 
     /// Returns an `Option` containing the most recent block in the buffer or `None` if the buffer
