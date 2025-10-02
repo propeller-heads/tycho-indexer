@@ -178,6 +178,10 @@ impl DCICache {
             .validate_and_ensure_block_layer_internal(block)?;
         self.ep_id_to_component_id
             .validate_and_ensure_block_layer_internal(block)?;
+        self.erc20_addresses
+            .validate_and_ensure_block_layer_internal(block)?;
+        self.blacklisted_addresses
+            .validate_and_ensure_block_layer_internal(block)?;
 
         Ok(())
     }
