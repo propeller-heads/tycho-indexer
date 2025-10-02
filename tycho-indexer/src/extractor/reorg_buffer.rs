@@ -97,10 +97,13 @@ where
         Ok(())
     }
 
-    /// Drains blocks up to the specified block height from the buffer. Returns the
+    /// Drains blocks up to the specified block height (non-inclusive) from the buffer. Returns the
     /// drained blocks ordered by ascending number or an error if the target height is not found
     /// in the buffer and strict mode is enabled.
-    pub fn drain_blocks(&mut self, drain_upto_block_height: u64) -> Result<Vec<B>, StorageError> {
+    pub fn drain_blocks_until(
+        &mut self,
+        drain_upto_block_height: u64,
+    ) -> Result<Vec<B>, StorageError> {
         let target_index = self.find_index(|b| b.block().number == drain_upto_block_height);
         let first = self
             .get_block_range(None, None)?
@@ -185,6 +188,15 @@ where
             return Some(block_message.block());
         }
         None
+    }
+
+    /// Returns the number of blocks in the buffer with a block number less than the specified
+    /// target block number. Assumes blocks are stored in ascending order.
+    pub fn count_blocks_before(&self, target_block: u64) -> usize {
+        self.block_messages
+            .iter()
+            .take_while(|msg| msg.block().number < target_block)
+            .count()
     }
 
     /// Retrieves a range of blocks from the buffer.
@@ -864,6 +876,25 @@ mod test {
     }
 
     #[test]
+    fn test_count_blocks_before() {
+        let mut reorg_buffer = ReorgBuffer::new();
+        reorg_buffer
+            .insert_block(get_block_changes(1))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(2))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(3))
+            .unwrap();
+
+        assert_eq!(reorg_buffer.count_blocks_before(1), 0);
+        assert_eq!(reorg_buffer.count_blocks_before(2), 1);
+        assert_eq!(reorg_buffer.count_blocks_before(3), 2);
+        assert_eq!(reorg_buffer.count_blocks_before(4), 3);
+    }
+
+    #[test]
     fn test_drain_committed_blocks() {
         let mut reorg_buffer = ReorgBuffer::new();
         reorg_buffer.strict = true;
@@ -877,12 +908,14 @@ mod test {
             .insert_block(get_block_changes(3))
             .unwrap();
 
-        let committed = reorg_buffer.drain_blocks(3).unwrap();
+        let committed = reorg_buffer
+            .drain_blocks_until(3)
+            .unwrap();
 
         assert_eq!(reorg_buffer.block_messages.len(), 1);
         assert_eq!(committed, vec![get_block_changes(1), get_block_changes(2)]);
 
-        let unknown = reorg_buffer.drain_blocks(999);
+        let unknown = reorg_buffer.drain_blocks_until(999);
 
         assert!(unknown.is_err());
     }

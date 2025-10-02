@@ -429,6 +429,7 @@ pub struct ExtractorBuilder {
     s3_bucket: Option<String>,
     token: String,
     extractor: Option<Arc<dyn Extractor>>,
+    database_insert_batch_size: Option<usize>,
     final_block_only: bool,
     /// Handle of the tokio runtime on which the extraction tasks will be run.
     /// If 'None' the default runtime will be used.
@@ -450,6 +451,7 @@ impl ExtractorBuilder {
             s3_bucket: s3_bucket.map(ToString::to_string),
             token: substreams_api_token.to_string(),
             extractor: None,
+            database_insert_batch_size: None,
             final_block_only: false,
             runtime_handle: None,
             rpc_url: None,
@@ -490,6 +492,12 @@ impl ExtractorBuilder {
     /// Set the global RPC URL to use for DCI plugins
     pub fn rpc_url(mut self, rpc_url: &str) -> Self {
         self.rpc_url = Some(rpc_url.to_string());
+        self
+    }
+
+    /// Set the global database insert batch size
+    pub fn database_insert_batch_size(mut self, database_insert_batch_size: usize) -> Self {
+        self.database_insert_batch_size = Some(database_insert_batch_size);
         self
     }
 
@@ -660,9 +668,14 @@ impl ExtractorBuilder {
             None
         };
 
+        let database_insert_batch_size = self
+            .database_insert_batch_size
+            .unwrap_or_default();
+
         self.extractor = Some(Arc::new(
             ProtocolExtractor::<ExtractorPgGateway, EthereumTokenPreProcessor, DCIPlugin>::new(
                 gw,
+                database_insert_batch_size,
                 &self.config.name,
                 self.config.chain,
                 chain_state,
