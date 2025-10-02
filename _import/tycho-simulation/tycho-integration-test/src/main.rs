@@ -1,7 +1,6 @@
 mod execution_simulator;
 mod four_byte_client;
 mod metrics;
-mod ot;
 mod traces;
 
 use std::{collections::HashMap, fmt::Debug, str::FromStr};
@@ -102,16 +101,10 @@ impl Debug for Cli {
 async fn main() -> miette::Result<()> {
     dotenv().ok();
 
-    // Initialize tracing with OpenTelemetry if configured
-    if let Ok(otlp_exporter_endpoint) = std::env::var("OTLP_EXPORTER_ENDPOINT") {
-        let config = ot::TracingConfig { otlp_exporter_endpoint };
-        ot::init_tracing(config)
-            .wrap_err("Failed to initialize OpenTelemetry tracing")?;
-    } else {
-        tracing_subscriber::fmt()
-            .with_env_filter(EnvFilter::from_default_env())
-            .init();
-    }
+    // Initialize tracing
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
     // Initialize and start Prometheus metrics
     metrics::init_metrics();

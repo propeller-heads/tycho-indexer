@@ -22,10 +22,6 @@ tokio = { version = "1.47.1", features = ["full"] }
 tokio-retry2 = { version = "0.6.0", features = ["jitter"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
-tracing-opentelemetry = { version = "0.22", default-features = false }
-opentelemetry = { version = "0.21" }
-opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.14", default-features = false, features = ["trace", "grpc-tonic"] }
 metrics = "0.24"
 metrics-exporter-prometheus = "0.16"
 actix-web = "4.4.0"

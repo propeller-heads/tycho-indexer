@@ -6,15 +6,9 @@ This document describes the metrics collection infrastructure for tycho-integrat
 
 The project uses the following observability stack:
 
-### For Metrics (Required for Grafana dashboards):
 - **Prometheus** - Scrapes and stores metrics from the application
 - **Actix Web** - Exposes the `/metrics` endpoint on port 9898
 - **Grafana** - Visualizes the metrics stored in Prometheus
-
-### For Tracing (Optional):
-- **OpenTelemetry** - Sends distributed trace data to an OTLP collector
-
-**Important:** You do NOT need OpenTelemetry to use Grafana for metrics visualization. The metrics are exposed via Prometheus format directly.
 
 ## Metrics Collected
 
@@ -42,7 +36,7 @@ The revert reason is automatically decoded using the execution simulator's error
 
 ## Setup
 
-### 1. Prometheus Metrics Endpoint (Required for Grafana)
+### Prometheus Metrics Endpoint
 
 The application automatically starts a Prometheus metrics server on:
 ```
@@ -52,25 +46,6 @@ http://0.0.0.0:9898/metrics
 **No configuration is required** - the metrics server starts automatically when the application runs.
 
 This endpoint is what Prometheus scrapes to collect metrics, which are then visualized in Grafana.
-
-### 2. OpenTelemetry Tracing (Optional - for distributed tracing, not metrics)
-
-OpenTelemetry is used for **distributed tracing**, which is separate from the Prometheus metrics used by Grafana.
-
-To enable OpenTelemetry tracing, set the following environment variable:
-
-```bash
-export OTLP_EXPORTER_ENDPOINT=http://your-otel-collector:4317
-```
-
-If this variable is not set, the application will use standard console logging.
-
-**Note:** OpenTelemetry is NOT required for Grafana dashboards. The metrics flow is:
-```
-Application → Prometheus (scrapes :9898/metrics) → Grafana (queries Prometheus)
-```
-
-OpenTelemetry tracing is an additional observability feature for request tracing.
 
 ## Usage
 
@@ -138,8 +113,6 @@ Prometheus UI will be available at http://localhost:9090
    - URL: `http://localhost:9090`
    - Click "Save & Test"
 4. Create a new dashboard and add panels using the queries from the "Example Prometheus Queries" section below
-
-That's it! No OpenTelemetry setup required for metrics visualization.
 
 ### Example Prometheus Queries
 
@@ -222,7 +195,6 @@ Grafana Dashboard
 ### Code Structure
 
 - `src/metrics.rs`: Metrics initialization and Prometheus server
-- `src/ot.rs`: OpenTelemetry tracing configuration
 - `src/main.rs`: Integration of metrics into the simulation loop
 
 ## Troubleshooting
@@ -239,10 +211,3 @@ netstat -an | grep 9898
 1. Verify the application is running
 2. Check Prometheus configuration
 3. Verify the target is "UP" in Prometheus UI: http://localhost:9090/targets
-
-### OpenTelemetry errors
-
-If you see errors related to OpenTelemetry:
-1. Verify `OTLP_EXPORTER_ENDPOINT` is set correctly
-2. Check that your OTLP collector is running and accessible
-3. Remove the environment variable to fall back to console logging
