@@ -30,7 +30,7 @@ pub enum SimulationResult {
 ///
 /// Contains methods to meaningfully decode a revert reason.
 #[derive(Debug, Clone)]
-struct SolidityError {
+pub struct SolidityError {
     // Name of the error, minus the types
     name: String,
     // Hex representation of the keccak hash of the error signature and arguments
@@ -40,11 +40,11 @@ struct SolidityError {
 }
 
 impl SolidityError {
-    fn new(name: String, bytes_sig: [u8; 4], types: Vec<String>) -> Self {
+    pub fn new(name: String, bytes_sig: [u8; 4], types: Vec<String>) -> Self {
         Self { name, bytes_sig, types }
     }
 
-    fn decode(&self, data: &Bytes) -> String {
+    pub fn decode(&self, data: &Bytes) -> String {
         if data.len() <= 4 {
             return format!("{}()", self.name);
         }
@@ -61,7 +61,7 @@ impl SolidityError {
     /// This ensures that we have as much information regarding the error as possible (for example,
     /// the values of the negative slippage as opposed to just the fact that there was
     /// NegativeSlippage.
-    fn decode_error_args(&self, data: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn decode_error_args(&self, data: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
         // This is a simplified version. For full ABI decoding, you'd need alloy-sol-types
         let mut args = Vec::new();
         let mut offset = 0;
@@ -121,7 +121,9 @@ impl SolidityError {
     /// Sometimes, another error can be hidden in the string of the highest-level error.
     /// This ensures we get to the bottom of what the true error is, as opposed to returning a
     /// vague "Error" type.
-    fn decode_nested_error_recursive(data: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn decode_nested_error_recursive(
+        data: &[u8],
+    ) -> Result<String, Box<dyn std::error::Error>> {
         // Check if it starts with Error(string) signature (0x08c379a0)
         if data.len() >= 4 {
             let mut sig = [0u8; 4];
@@ -356,7 +358,7 @@ impl ExecutionSimulator {
     }
 
     /// Decode a Panic(uint256) error code to a human-readable message
-    fn decode_panic_code(code: u64) -> String {
+    pub fn decode_panic_code(code: u64) -> String {
         match code {
             0x01 => "assertion failed".to_string(),
             0x11 => "arithmetic underflow or overflow".to_string(),

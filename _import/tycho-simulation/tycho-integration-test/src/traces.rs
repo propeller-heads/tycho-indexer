@@ -11,6 +11,8 @@ use colored::Colorize;
 use serde_json::Value;
 use tycho_simulation::foundry_evm::traces::identifier::SignaturesIdentifier;
 
+use crate::execution_simulator::{ExecutionSimulator, SolidityError};
+
 /// Decode method selectors and return function info
 pub async fn decode_method_selector_with_info(input: &str) -> Option<(String, Vec<DynSolType>)> {
     if input.len() < 10 || !input.starts_with("0x") {
@@ -211,7 +213,7 @@ fn is_legitimate_signature(signature: &str) -> bool {
 /// Trace printing with foundry-style formatting and colors
 pub async fn print_call_trace(call: &Value, depth: usize) {
     if depth == 0 {
-        println!("{}", "Traces:".cyan().bold());
+        eprintln!("{}", "Traces:".cyan().bold());
     }
 
     if let Some(call_obj) = call.as_object() {
@@ -315,17 +317,28 @@ pub async fn print_call_trace(call: &Value, depth: usize) {
         {
             if !output.is_empty() && output != "0x" {
                 // Try to decode revert reason from output if it looks like revert data
-                if let Some(stripped) = output.strip_prefix("0x08c379a0") {
-                    // Error(string) selector
-                    if let Ok(decoded) = hex::decode(stripped) {
-                        if let Ok(alloy::dyn_abi::DynSolValue::String(reason_str)) =
-                            alloy::dyn_abi::DynSolType::String.abi_decode(&decoded)
-                        {
-                            println!(
-                                "{}{}",
-                                result_indent,
-                                format!("[Revert] {}", reason_str).red()
-                            );
+                if let Ok(data) = hex::decode(output.trim_start_matches("0x")) {
+                    if data.len() >= 4 {
+                        // Check if it's Error(string) selector (0x08c379a0)
+                        if data[0..4] == [0x08, 0xc3, 0x79, 0xa0] {
+                            // Use the recursive decoder to handle nested Error(string) wrapping
+                            if let Ok(reason) = SolidityError::decode_nested_error_recursive(&data)
+                            {
+                                eprintln!(
+                                    "{}{}",
+                                    result_indent,
+                                    format!("[Revert] {}", reason).red()
+                                );
+                                found_error = true;
+                            }
+                        }
+                        // Check if it's Panic(uint256) selector (0x4e487b71)
+                        else if data[0..4] == [0x4e, 0x48, 0x7b, 0x71] && data.len() >= 36 {
+                            // Decode the panic code (uint256)
+                            let panic_code =
+                                alloy::primitives::U256::from_be_slice(&data[4..36]).to::<u64>();
+                            let panic_msg = ExecutionSimulator::decode_panic_code(panic_code);
+                            println!("{}{}", result_indent, format!("[Panic] {}", panic_msg).red());
                             found_error = true;
                         }
                     }
