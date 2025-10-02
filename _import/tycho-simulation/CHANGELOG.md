@@ -1,3 +1,10 @@
+## [0.169.2](https://github.com/propeller-heads/tycho-simulation/compare/0.169.1...0.169.2) (2025-10-02)
+
+
+### Bug Fixes
+
+* Separate build + push integration test workflow from main workflow ([7d02cd8](https://github.com/propeller-heads/tycho-simulation/commit/7d02cd8c389d396dabd604b994cb113d7eedb45e))
+
 ## [0.169.1](https://github.com/propeller-heads/tycho-simulation/compare/0.169.0...0.169.1) (2025-10-01)
 
 
