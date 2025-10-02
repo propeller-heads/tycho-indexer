@@ -1,3 +1,10 @@
+## [0.92.0](https://github.com/propeller-heads/tycho-indexer/compare/0.91.2...0.92.0) (2025-10-02)
+
+
+### Features
+
+* add configurable batch commit threshold for extractors ([#712](https://github.com/propeller-heads/tycho-indexer/issues/712)) ([635a3a6](https://github.com/propeller-heads/tycho-indexer/commit/635a3a6d164126c7252f9b43ab82f96296c4af45))
+
 ## [0.91.2](https://github.com/propeller-heads/tycho-indexer/compare/0.91.1...0.91.2) (2025-10-01)
 
 
