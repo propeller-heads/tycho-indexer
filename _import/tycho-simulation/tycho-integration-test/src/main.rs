@@ -197,7 +197,6 @@ async fn run(cli: Cli) -> miette::Result<()> {
             }
         };
 
-
         // Record block processing latency
         let block_timestamp = block.header.timestamp;
         let latency_seconds = (now as i64 - block_timestamp as i64).abs() as f64;
@@ -228,6 +227,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 .permutations(2)
                 .map(|perm| (perm[0].clone(), perm[1].clone()))
                 .collect();
+            let block_number = block.header.number;
             for (token_in, token_out) in swap_directions.iter() {
                 info!(
                     "Processing {} pool {id:?}, from {} to {}",
@@ -245,6 +245,13 @@ async fn run(cli: Cli) -> miette::Result<()> {
                     Ok(limits) => limits,
                     Err(e) => {
                         warn!("{e}");
+                        metrics::record_get_limits_failures(
+                            &component.protocol_system,
+                            id,
+                            block_number,
+                            &token_in.address,
+                            &token_out.address,
+                        );
                         continue;
                     }
                 };
@@ -278,11 +285,19 @@ async fn run(cli: Cli) -> miette::Result<()> {
                         Ok(res) => res,
                         Err(e) => {
                             warn!("{e}");
+                            metrics::record_get_amount_out_failures(
+                                &component.protocol_system,
+                                id,
+                                block_number,
+                                &token_in.address,
+                                &token_out.address,
+                                &amount_in
+                            );
                             continue;
                         }
                 };
                 let duration = start_time.elapsed().as_secs_f64();
-                metrics::record_get_amount_out_duration(&component.protocol_system, duration);
+                metrics::record_get_amount_out_duration(&component.protocol_system, duration, id);
 
                 let expected_amount_out = amount_out_result.amount;
                 info!("Calculated amount_out: {expected_amount_out} {}", token_out.symbol);
@@ -302,14 +317,13 @@ async fn run(cli: Cli) -> miette::Result<()> {
                         continue;
                     }
                 };
-                let block_number = block.header.number;
                 let simulated_amount_out =
                     match simulate_swap_transaction(&cli.rpc_url, &solution, &transaction, &block)
                         .await
                     {
                         Ok(amount) => {
-                            metrics::record_simulation_success();
-                            metrics::record_simulation_success_detailed(
+                            metrics::record_simulation_execution_success();
+                            metrics::record_simulation_execution_success_detailed(
                                 &component.protocol_system,
                                 id,
                                 block_number,
@@ -333,8 +347,8 @@ async fn run(cli: Cli) -> miette::Result<()> {
                             // Extract error name (first word or function signature)
                             let error_name = extract_error_name(revert_reason);
 
-                            metrics::record_simulation_failure(revert_reason);
-                            metrics::record_simulation_failure_detailed(
+                            metrics::record_simulation_execution_failure(revert_reason);
+                            metrics::record_simulation_execution_failure_detailed(
                                 &component.protocol_system,
                                 id,
                                 block_number,
@@ -349,14 +363,15 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 // Calculate slippage
                 let slippage = if simulated_amount_out > expected_amount_out {
                     let diff = &simulated_amount_out - &expected_amount_out;
-                    let slippage = (diff.clone() * BigUint::from(10000u32)) / expected_amount_out;
-                    format!("+{:.2}%", slippage.to_f64().unwrap_or(0.0) / 100.0)
+                    (diff.clone() * BigUint::from(10000u32)) / expected_amount_out
                 } else {
                     let diff = &expected_amount_out - &simulated_amount_out;
-                    let slippage = (diff.clone() * BigUint::from(10000u32)) / expected_amount_out;
-                    format!("-{:.2}%", slippage.to_f64().unwrap_or(0.0) / 100.0)
+                    (diff.clone() * BigUint::from(10000u32)) / expected_amount_out
                 };
-                info!("Slippage: {slippage}");
+                let slippage = slippage.to_f64().unwrap_or(0.0);
+
+                metrics::record_slippage(block_number, &component.protocol_system, id, slippage);
+                info!("Slippage: {:.2}%", slippage / 100.0);
 
                 info!("Pool processed {id:?} from {} to {}", token_in.symbol, token_out.symbol);
             }

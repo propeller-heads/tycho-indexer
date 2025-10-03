@@ -2,47 +2,111 @@ use actix_web::{rt::System, web, App, HttpResponse, HttpServer, Responder};
 use metrics::{counter, describe_counter, describe_histogram, histogram};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use miette::{Context, IntoDiagnostic, Result};
+use num_bigint::BigUint;
 use tracing::info;
+use tycho_common::Bytes;
 
 /// Initialize the metrics registry and describe all metrics
 pub fn init_metrics() {
-    describe_counter!("simulation_success_total", "Total number of successful simulations");
-    describe_counter!(
-        "simulation_failure_total",
-        "Total number of failed simulations with revert reason as label"
-    );
-    describe_counter!(
-        "simulation_success_by_protocol",
-        "Total number of successful simulations by protocol, component, and block"
-    );
-    describe_counter!(
-        "simulation_failure_by_protocol",
-        "Total number of failed simulations by protocol with detailed error information"
-    );
-    describe_histogram!(
-        "get_amount_out_duration_seconds",
-        "Time taken to execute get_amount_out for each protocol"
-    );
     describe_histogram!(
         "block_processing_latency_seconds",
         "Time between block timestamp and when protocol components are received"
     );
+    describe_counter!("get_limits_failures_total", "Total number of failed get limits");
+    describe_counter!("get_amount_out_failures_total", "Total number of failed get amount out");
+    describe_histogram!(
+        "get_amount_out_duration_seconds",
+        "Time taken to execute get_amount_out for each protocol"
+    );
+    describe_counter!(
+        "simulation_execution_success_total",
+        "Total number of successful simulations of execution"
+    );
+    describe_counter!(
+        "simulation_execution_failure_total",
+        "Total number of failed simulations of execution with revert reason as label"
+    );
+    describe_counter!(
+        "simulation_execution_success_by_protocol",
+        "Total number of successful simulations of execution by protocol, component, and block"
+    );
+    describe_counter!(
+        "simulation_execution_failure_by_protocol",
+        "Total number of failed simulations of execution by protocol with detailed error information"
+    );
+    describe_histogram!(
+        "slippage_between_simulation_and_execution",
+        "Slippage between simulated amount out and simulated execution amount out"
+    );
+}
+
+/// Record the latency between block timestamp and component receipt
+pub fn record_block_processing_latency(latency_seconds: f64) {
+    histogram!("block_processing_latency_seconds").record(latency_seconds);
+}
+
+pub fn record_get_limits_failures(
+    protocol: &str,
+    component_id: &str,
+    block_number: u64,
+    token_in: &Bytes,
+    token_out: &Bytes,
+) {
+    counter!("get_limits_failures_total", "protocol" => protocol.to_string(),
+        "component_id" => component_id.to_string(),
+        "block" => block_number.to_string(),
+        "token_in" => token_in.to_string(),
+        "token_out" => token_out.to_string()
+    )
+    .increment(1);
+}
+
+pub fn record_get_amount_out_failures(
+    protocol: &str,
+    component_id: &str,
+    block_number: u64,
+    token_in: &Bytes,
+    token_out: &Bytes,
+    amount_in: &BigUint,
+) {
+    counter!("get_amount_out_failures_total", "protocol" => protocol.to_string(),
+        "component_id" => component_id.to_string(),
+        "block" => block_number.to_string() ,       "token_in" => token_in.to_string(),
+        "token_out" => token_out.to_string(),
+        "amount_in" => amount_in.to_string(),
+    )
+    .increment(1);
+}
+
+/// Record the time taken to execute get_amount_out
+pub fn record_get_amount_out_duration(protocol: &str, duration_seconds: f64, component_id: &str) {
+    histogram!(
+        "get_amount_out_duration_seconds",
+        "protocol" => protocol.to_string(),
+        "component_id" => component_id.to_string()
+    )
+    .record(duration_seconds);
 }
 
 /// Record a successful simulation
-pub fn record_simulation_success() {
-    counter!("simulation_success_total").increment(1);
+pub fn record_simulation_execution_success() {
+    counter!("simulation_execution_success_total").increment(1);
 }
 
 /// Record a failed simulation with the revert reason
-pub fn record_simulation_failure(revert_reason: &str) {
-    counter!("simulation_failure_total", "reason" => revert_reason.to_string()).increment(1);
+pub fn record_simulation_execution_failure(revert_reason: &str) {
+    counter!("simulation_execution_failure_total", "reason" => revert_reason.to_string())
+        .increment(1);
 }
 
 /// Record a successful simulation with detailed protocol information
-pub fn record_simulation_success_detailed(protocol: &str, component_id: &str, block_number: u64) {
+pub fn record_simulation_execution_success_detailed(
+    protocol: &str,
+    component_id: &str,
+    block_number: u64,
+) {
     counter!(
-        "simulation_success_by_protocol",
+        "simulation_execution_success_by_protocol",
         "protocol" => protocol.to_string(),
         "component_id" => component_id.to_string(),
         "block" => block_number.to_string()
@@ -51,7 +115,7 @@ pub fn record_simulation_success_detailed(protocol: &str, component_id: &str, bl
 }
 
 /// Record a failed simulation with detailed protocol and error information
-pub fn record_simulation_failure_detailed(
+pub fn record_simulation_execution_failure_detailed(
     protocol: &str,
     component_id: &str,
     block_number: u64,
@@ -59,7 +123,7 @@ pub fn record_simulation_failure_detailed(
     error_name: &str,
 ) {
     counter!(
-        "simulation_failure_by_protocol",
+        "simulation_execution_failure_by_protocol",
         "protocol" => protocol.to_string(),
         "component_id" => component_id.to_string(),
         "block" => block_number.to_string(),
@@ -69,19 +133,9 @@ pub fn record_simulation_failure_detailed(
     .increment(1);
 }
 
-/// Record the time taken to execute get_amount_out
-pub fn record_get_amount_out_duration(protocol: &str, duration_seconds: f64) {
-    // TODO is this the right way to do it? Double check here
-    histogram!(
-        "get_amount_out_duration_seconds",
-        "protocol" => protocol.to_string()
-    )
-    .record(duration_seconds);
-}
-
-/// Record the latency between block timestamp and component receipt
-pub fn record_block_processing_latency(latency_seconds: f64) {
-    histogram!("block_processing_latency_seconds").record(latency_seconds);
+pub fn record_slippage(block_number: u64, protocol: &str, component_id: &str, slippage: f64) {
+    histogram!("slippage_between_simulation_and_execution","block" => block_number.to_string(), "protocol"=>protocol.to_string(), "component_id" => component_id.to_string(),)
+        .record(slippage);
 }
 
 /// Creates and runs the Prometheus metrics exporter using Actix Web.
