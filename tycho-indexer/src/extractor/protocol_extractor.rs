@@ -813,20 +813,13 @@ where
             };
 
             // If we have blocks to commit, spawn a new task to commit them to the database.
-            if !blocks_to_commit.is_empty() {
+            if let Some(last_block_height) = blocks_to_commit
+                .last()
+                .map(|b| b.block_update.block.number)
+            {
                 let gateway = self.gateway.clone();
 
                 let new_handle = tokio::spawn(async move {
-                    // Compute the height we’ll reach in this batch
-                    let most_recent_committed_block_height = blocks_to_commit
-                        .last()
-                        .map(|b| b.block_update.block.number)
-                        .ok_or_else(|| {
-                            ExtractionError::Storage(StorageError::Unexpected(
-                                "No blocks to commit".into(),
-                            ))
-                        })?;
-
                     let mut it = blocks_to_commit.iter().peekable();
                     while let Some(block) = it.next() {
                         // Force a database commit if we're not syncing and this is the last block
@@ -840,7 +833,7 @@ where
                             .map_err(ExtractionError::Storage)?;
                     }
 
-                    Ok(most_recent_committed_block_height)
+                    Ok(last_block_height)
                 });
 
                 // Store the new handle in the mutex that is guaranted to be None here.
