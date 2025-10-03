@@ -740,14 +740,14 @@ mod test {
 
     fn simple_block_changes(
         block_number: u64,
-        db_committed_upto_block_height: Option<u64>,
+        db_committed_block_height: Option<u64>,
     ) -> BlockAggregatedChanges {
         BlockAggregatedChanges {
             extractor: "vm:extractor".to_string(),
             chain: Chain::Ethereum,
             block: block(block_number),
             finalized_block_height: block_number,
-            db_committed_block_height: db_committed_upto_block_height,
+            db_committed_block_height,
             ..Default::default()
         }
     }
