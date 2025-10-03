@@ -242,13 +242,12 @@ async fn setup_user_overwrites(
     block: &Block,
 ) -> miette::Result<AddressHashMap<AccountOverride>> {
     let mut overwrites = AddressHashMap::default();
-    // Add ETH balance override for the user to ensure they have enough gas funds
-    let mut eth_balance = U256::from_str("100000000000000000000").unwrap(); // 100 ETH
-
     let token_address = Address::from_slice(&solution.given_token[..20]);
-    // If given token is ETH, add the given amount to the balance
+    // If given token is ETH, add the given amount to the balance + 100 ETH for gas
     if solution.given_token == Bytes::zero(20) {
-        eth_balance += biguint_to_u256(&solution.given_amount);
+        let eth_balance = biguint_to_u256(&solution.given_amount) +
+            U256::from_str("100000000000000000000").unwrap(); // given_amount + 100 ETH for gas
+        overwrites.insert(user_address, AccountOverride::default().with_balance(eth_balance));
     // if the given token is not ETH, do balance and allowance slots overwrites
     } else {
         let detector = EVMBalanceSlotDetector::new(BalanceSlotDetectorConfig {
@@ -265,9 +264,9 @@ async fn setup_user_overwrites(
             )
             .await;
 
-        let balance_slot =
-            if let Some(Ok((_storage_addr, slot))) = results.get(&solution.given_token.clone()) {
-                slot
+        let (balance_storage_addr, balance_slot) =
+            if let Some(Ok((storage_addr, slot))) = results.get(&solution.given_token.clone()) {
+                (storage_addr, slot)
             } else {
                 return Err(miette!("Couldn't find balance storage slot for token {token_address}"));
             };
@@ -287,32 +286,59 @@ async fn setup_user_overwrites(
             )
             .await;
 
-        let allowance_slot = if let Some(Ok((_storage_addr, slot))) =
+        let (allowance_storage_addr, allowance_slot) = if let Some(Ok((storage_addr, slot))) =
             results.get(&solution.given_token.clone())
         {
-            slot
+            (storage_addr, slot)
         } else {
             return Err(miette!("Couldn't find allowance storage slot for token {token_address}"));
         };
 
-        overwrites.insert(
-            token_address,
-            AccountOverride::default().with_state_diff(vec![
-                (
-                    alloy::primitives::B256::from_slice(allowance_slot),
-                    alloy::primitives::B256::from_slice(&U256::MAX.to_be_bytes::<32>()),
-                ),
-                (
-                    alloy::primitives::B256::from_slice(balance_slot),
-                    alloy::primitives::B256::from_slice(
-                        &biguint_to_u256(&solution.given_amount).to_be_bytes::<32>(),
-                    ),
-                ),
-            ]),
-        );
-    }
-    overwrites.insert(user_address, AccountOverride::default().with_balance(eth_balance));
+        // Use the exact given amount for balance and allowance (no buffer, no max)
+        let token_balance = biguint_to_u256(&solution.given_amount);
+        let token_allowance = biguint_to_u256(&solution.given_amount);
 
+        let balance_storage_address = Address::from_slice(&balance_storage_addr[..20]);
+        let allowance_storage_address = Address::from_slice(&allowance_storage_addr[..20]);
+
+        // Apply balance and allowance overrides
+        // If both storage addresses are the same, combine them into one override
+        if balance_storage_address == allowance_storage_address {
+            overwrites.insert(
+                balance_storage_address,
+                AccountOverride::default().with_state_diff(vec![
+                    (
+                        alloy::primitives::B256::from_slice(balance_slot),
+                        alloy::primitives::B256::from_slice(&token_balance.to_be_bytes::<32>()),
+                    ),
+                    (
+                        alloy::primitives::B256::from_slice(allowance_slot),
+                        alloy::primitives::B256::from_slice(&token_allowance.to_be_bytes::<32>()),
+                    ),
+                ]),
+            );
+        } else {
+            // Different storage addresses, apply separately
+            overwrites.insert(
+                balance_storage_address,
+                AccountOverride::default().with_state_diff(vec![(
+                    alloy::primitives::B256::from_slice(balance_slot),
+                    alloy::primitives::B256::from_slice(&token_balance.to_be_bytes::<32>()),
+                )]),
+            );
+            overwrites.insert(
+                allowance_storage_address,
+                AccountOverride::default().with_state_diff(vec![(
+                    alloy::primitives::B256::from_slice(allowance_slot),
+                    alloy::primitives::B256::from_slice(&token_allowance.to_be_bytes::<32>()),
+                )]),
+            );
+        }
+
+        // Add 1 ETH for gas for non-ETH token swaps
+        let eth_balance = U256::from_str("100000000000000000000").unwrap(); // 100 ETH for gas
+        overwrites.insert(user_address, AccountOverride::default().with_balance(eth_balance));
+    }
     Ok(overwrites)
 }
 

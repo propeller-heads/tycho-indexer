@@ -1,5 +1,8 @@
 services:
   db:
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
     image: protocol-testing-db:latest
     restart: "always"
     healthcheck:
@@ -30,7 +33,7 @@ services:
       SUBSTREAMS_API_TOKEN: "${SUBSTREAMS_API_TOKEN}"
     # PROTOCOLS to test separated by space and with optional filter
     # e.g. "ethereum-balancer-v2=weighted_legacy_creation ethereum-ekubo-v2"
-    entrypoint: ["/entrypoint.sh", "${PROTOCOLS}"]
+    entrypoint: [ "/entrypoint.sh", "${PROTOCOLS}" ]
 
 volumes:
   postgres_data:

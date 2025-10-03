@@ -31,7 +31,7 @@ impl TychoRunner {
         end_block: u64,
         protocol_type_names: &[String],
         protocol_system: &str,
-        module_name: &str,
+        module_name: Option<String>,
     ) -> miette::Result<()> {
         info!("Running Tycho indexer from block {start_block} to {end_block}...");
 
@@ -48,7 +48,9 @@ impl TychoRunner {
             "--spkg",
             spkg_path,
             "--module",
-            module_name,
+            module_name
+                .as_deref()
+                .unwrap_or("map_protocol_changes"),
             "--protocol-type-names",
             &protocol_type_names.join(","),
             "--protocol-system",

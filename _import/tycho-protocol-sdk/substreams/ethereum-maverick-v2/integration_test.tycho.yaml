@@ -1,6 +1,5 @@
 substreams_yaml_path: ./ethereum-maverick-v2.yaml
 protocol_system: "vm:maverick_v2"
-module_name: "map_protocol_changes"
 adapter_contract: "MaverickV2SwapAdapter"
 adapter_build_signature: "constructor(address,address)"
 adapter_build_args: "0x0A7e848Aca42d879EF06507Fca0E7b33A0a63c1e,0xb40AfdB85a07f37aE217E7D6462e609900dD8D7A"

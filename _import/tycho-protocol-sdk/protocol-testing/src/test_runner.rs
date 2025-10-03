@@ -234,7 +234,7 @@ impl TestRunner {
                 test.stop_block,
                 &config.protocol_type_names,
                 &config.protocol_system,
-                &config.module_name,
+                config.module_name.clone(),
             )
             .wrap_err("Failed to run Tycho")?;
 
@@ -438,9 +438,7 @@ impl TestRunner {
 
             let state = protocol_states_by_id
                 .get(component_id)
-                .wrap_err(format!(
-                    "Component {id} does not exist in protocol_states_by_id {protocol_states_by_id:?}"
-                ))?
+                .wrap_err(format!("No state found for component: {id}"))?
                 .clone();
 
             let component_with_state = ComponentWithState {
