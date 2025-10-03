@@ -1,5 +1,5 @@
 use actix_web::{rt::System, web, App, HttpResponse, HttpServer, Responder};
-use metrics::{counter, describe_counter};
+use metrics::{counter, describe_counter, describe_histogram, histogram};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use miette::{Context, IntoDiagnostic, Result};
 use tracing::info;
@@ -11,6 +11,22 @@ pub fn init_metrics() {
         "simulation_failure_total",
         "Total number of failed simulations with revert reason as label"
     );
+    describe_counter!(
+        "simulation_success_by_protocol",
+        "Total number of successful simulations by protocol, component, and block"
+    );
+    describe_counter!(
+        "simulation_failure_by_protocol",
+        "Total number of failed simulations by protocol with detailed error information"
+    );
+    describe_histogram!(
+        "get_amount_out_duration_seconds",
+        "Time taken to execute get_amount_out for each protocol"
+    );
+    describe_histogram!(
+        "block_processing_latency_seconds",
+        "Time between block timestamp and when protocol components are received"
+    );
 }
 
 /// Record a successful simulation
@@ -21,6 +37,51 @@ pub fn record_simulation_success() {
 /// Record a failed simulation with the revert reason
 pub fn record_simulation_failure(revert_reason: &str) {
     counter!("simulation_failure_total", "reason" => revert_reason.to_string()).increment(1);
+}
+
+/// Record a successful simulation with detailed protocol information
+pub fn record_simulation_success_detailed(protocol: &str, component_id: &str, block_number: u64) {
+    counter!(
+        "simulation_success_by_protocol",
+        "protocol" => protocol.to_string(),
+        "component_id" => component_id.to_string(),
+        "block" => block_number.to_string()
+    )
+    .increment(1);
+}
+
+/// Record a failed simulation with detailed protocol and error information
+pub fn record_simulation_failure_detailed(
+    protocol: &str,
+    component_id: &str,
+    block_number: u64,
+    error_message: &str,
+    error_name: &str,
+) {
+    counter!(
+        "simulation_failure_by_protocol",
+        "protocol" => protocol.to_string(),
+        "component_id" => component_id.to_string(),
+        "block" => block_number.to_string(),
+        "error_message" => error_message.to_string(),
+        "error_name" => error_name.to_string()
+    )
+    .increment(1);
+}
+
+/// Record the time taken to execute get_amount_out
+pub fn record_get_amount_out_duration(protocol: &str, duration_seconds: f64) {
+    // TODO is this the right way to do it? Double check here
+    histogram!(
+        "get_amount_out_duration_seconds",
+        "protocol" => protocol.to_string()
+    )
+    .record(duration_seconds);
+}
+
+/// Record the latency between block timestamp and component receipt
+pub fn record_block_processing_latency(latency_seconds: f64) {
+    histogram!("block_processing_latency_seconds").record(latency_seconds);
 }
 
 /// Creates and runs the Prometheus metrics exporter using Actix Web.

@@ -158,6 +158,11 @@ async fn run(cli: Cli) -> miette::Result<()> {
     let mut first_message_skipped = false;
 
     while let Some(res) = protocol_stream.next().await {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
         let message = match res {
             Ok(msg) => msg,
             Err(e) => {
@@ -191,6 +196,13 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 continue;
             }
         };
+
+
+        // Record block processing latency
+        let block_timestamp = block.header.timestamp;
+        let latency_seconds = (now as i64 - block_timestamp as i64).abs() as f64;
+        metrics::record_block_processing_latency(latency_seconds);
+
         // TODO why do we do this? Don't we also want to simulate on the first block?
         if !first_message_skipped {
             first_message_skipped = true;
@@ -253,7 +265,8 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 }
                 info!("Calculated amount_in: {amount_in} {}", token_in.symbol);
 
-                // Get expected amount out using tycho-simulation
+                // Get expected amount out using tycho-simulation and measure duration
+                let start_time = std::time::Instant::now();
                 let amount_out_result = match state
                     .get_amount_out(amount_in.clone(), token_in, token_out)
                     .into_diagnostic()
@@ -268,6 +281,9 @@ async fn run(cli: Cli) -> miette::Result<()> {
                             continue;
                         }
                 };
+                let duration = start_time.elapsed().as_secs_f64();
+                metrics::record_get_amount_out_duration(&component.protocol_system, duration);
+
                 let expected_amount_out = amount_out_result.amount;
                 info!("Calculated amount_out: {expected_amount_out} {}", token_out.symbol);
 
@@ -286,12 +302,18 @@ async fn run(cli: Cli) -> miette::Result<()> {
                         continue;
                     }
                 };
+                let block_number = block.header.number;
                 let simulated_amount_out =
                     match simulate_swap_transaction(&cli.rpc_url, &solution, &transaction, &block)
                         .await
                     {
                         Ok(amount) => {
                             metrics::record_simulation_success();
+                            metrics::record_simulation_success_detailed(
+                                &component.protocol_system,
+                                id,
+                                block_number,
+                            );
                             amount
                         }
                         Err(e) => {
@@ -308,7 +330,17 @@ async fn run(cli: Cli) -> miette::Result<()> {
                                 &error_msg
                             };
 
+                            // Extract error name (first word or function signature)
+                            let error_name = extract_error_name(revert_reason);
+
                             metrics::record_simulation_failure(revert_reason);
+                            metrics::record_simulation_failure_detailed(
+                                &component.protocol_system,
+                                id,
+                                block_number,
+                                revert_reason,
+                                &error_name,
+                            );
                             continue;
                         }
                     };
@@ -736,4 +768,26 @@ async fn setup_user_overwrites(
     }
 
     Ok(overwrites)
+}
+
+/// Extract the error name from a revert reason string
+/// Examples:
+/// - "TychoRouter__NegativeSlippage(1000, 990)" -> "TychoRouter__NegativeSlippage"
+/// - "arithmetic underflow or overflow" -> "arithmetic underflow or overflow"
+/// - "Error(string): insufficient balance" -> "Error"
+fn extract_error_name(revert_reason: &str) -> String {
+    // Check if it's a function-style error (e.g., "ErrorName(...)")
+    if let Some(paren_pos) = revert_reason.find('(') {
+        revert_reason[..paren_pos]
+            .trim()
+            .to_string()
+    } else if let Some(colon_pos) = revert_reason.find(':') {
+        // Handle "Error: message" format
+        revert_reason[..colon_pos]
+            .trim()
+            .to_string()
+    } else {
+        // Return the whole message for simple errors
+        revert_reason.trim().to_string()
+    }
 }
