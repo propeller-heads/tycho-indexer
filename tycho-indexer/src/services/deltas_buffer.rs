@@ -121,12 +121,14 @@ impl PendingDeltas {
                     trace!(
                         block_number = message.block.number,
                         finality = message.finalized_block_height,
-                        db_commit_upto = message.db_committed_upto_block_height,
+                        db_commit_upto = message.db_committed_block_height,
                         extractor = message.extractor,
                         "DeltaBufferInsertion"
                     );
                     guard.insert_block((*message).clone())?;
-                    guard.drain_blocks_until(message.db_committed_upto_block_height)?;
+                    if let Some(height) = message.db_committed_block_height {
+                        guard.drain_blocks_until(height + 1)?;
+                    }
                 }
             }
             _ => return Err(PendingDeltasError::UnknownExtractor(message.extractor.clone())),
@@ -508,7 +510,7 @@ mod test {
         BlockAggregatedChanges {
             extractor: "vm:extractor".to_string(),
             block: block(1),
-            db_committed_upto_block_height: 1,
+            db_committed_block_height: None,
             finalized_block_height: 1,
             revert: false,
             account_deltas: HashMap::from([
@@ -639,7 +641,7 @@ mod test {
         BlockAggregatedChanges {
             extractor: "native:extractor".to_string(),
             block: block(1),
-            db_committed_upto_block_height: 1,
+            db_committed_block_height: None,
             finalized_block_height: 1,
             revert: false,
             state_deltas: HashMap::from([
@@ -732,6 +734,20 @@ mod test {
                     .collect(),
                 ),
             ]),
+            ..Default::default()
+        }
+    }
+
+    fn simple_block_changes(
+        block_number: u64,
+        db_committed_block_height: Option<u64>,
+    ) -> BlockAggregatedChanges {
+        BlockAggregatedChanges {
+            extractor: "vm:extractor".to_string(),
+            chain: Chain::Ethereum,
+            block: block(block_number),
+            finalized_block_height: block_number,
+            db_committed_block_height,
             ..Default::default()
         }
     }
@@ -928,6 +944,59 @@ mod test {
             .unwrap();
 
         assert_eq!(new_components_tvl_filtered, vec![exp[1].clone()]);
+    }
+
+    #[test]
+    fn test_insert_respects_db_committed_height() {
+        let buffer = PendingDeltas::new(["vm:extractor"]);
+
+        let exp1 = simple_block_changes(1, None);
+        let exp2 = simple_block_changes(2, None);
+        let exp3 = simple_block_changes(3, Some(2));
+
+        buffer
+            .insert(Arc::new(exp1.clone()))
+            .expect("first insert failed");
+        buffer
+            .insert(Arc::new(exp2.clone()))
+            .expect("second insert failed");
+
+        {
+            let reorg_buffer = buffer
+                .buffers
+                .get("vm:extractor")
+                .expect("extractor buffer missing");
+            let guard = reorg_buffer
+                .lock()
+                .expect("lock poisoned");
+            let block_numbers: Vec<&BlockAggregatedChanges> = guard
+                .get_block_range(None, None)
+                .expect("Failed to get block range")
+                .collect();
+            assert_eq!(
+                block_numbers,
+                vec![&exp1, &exp2],
+                "blocks should remain when commit height is None"
+            );
+        }
+
+        buffer
+            .insert(Arc::new(exp3.clone()))
+            .expect("third insert failed");
+
+        let reorg_buffer = buffer
+            .buffers
+            .get("vm:extractor")
+            .expect("extractor buffer missing");
+        let guard = reorg_buffer
+            .lock()
+            .expect("lock poisoned");
+        let block_numbers: Vec<&BlockAggregatedChanges> = guard
+            .get_block_range(None, None)
+            .expect("Failed to get block range")
+            .collect();
+
+        assert_eq!(block_numbers, vec![&exp3], "blocks <= commit height should be drained");
     }
 
     use rstest::rstest;
