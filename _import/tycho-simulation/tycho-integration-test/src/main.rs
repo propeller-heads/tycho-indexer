@@ -251,6 +251,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
                             block_number,
                             &token_in.address,
                             &token_out.address,
+                            e.to_string(),
                         );
                         continue;
                     }
@@ -291,7 +292,8 @@ async fn run(cli: Cli) -> miette::Result<()> {
                                 block_number,
                                 &token_in.address,
                                 &token_out.address,
-                                &amount_in
+                                &amount_in,
+                                e.to_string(),
                             );
                             continue;
                         }

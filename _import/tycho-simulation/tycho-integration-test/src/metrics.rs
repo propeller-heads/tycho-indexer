@@ -51,12 +51,14 @@ pub fn record_get_limits_failures(
     block_number: u64,
     token_in: &Bytes,
     token_out: &Bytes,
+    error_msg: String,
 ) {
     counter!("get_limits_failures_total", "protocol" => protocol.to_string(),
         "component_id" => component_id.to_string(),
         "block" => block_number.to_string(),
         "token_in" => token_in.to_string(),
-        "token_out" => token_out.to_string()
+        "token_out" => token_out.to_string(),
+        "error_msg" => error_msg,
     )
     .increment(1);
 }
@@ -68,12 +70,14 @@ pub fn record_get_amount_out_failures(
     token_in: &Bytes,
     token_out: &Bytes,
     amount_in: &BigUint,
+    error_msg: String,
 ) {
     counter!("get_amount_out_failures_total", "protocol" => protocol.to_string(),
         "component_id" => component_id.to_string(),
         "block" => block_number.to_string() ,       "token_in" => token_in.to_string(),
         "token_out" => token_out.to_string(),
         "amount_in" => amount_in.to_string(),
+        "error_msg" => error_msg,
     )
     .increment(1);
 }
