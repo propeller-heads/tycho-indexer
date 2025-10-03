@@ -843,7 +843,14 @@ where
                     Ok(most_recent_committed_block_height)
                 });
 
-                // Store the new handle (short lock)
+                // Store the new handle in the mutex that is guaranted to be None here.
+                // This is because we hold the lock and took the previous handle out of it, if any.
+                if guard.is_some() {
+                    return Err(ExtractionError::Storage(StorageError::Unexpected(
+                        "Database commit task handle should be None".into(),
+                    )));
+                }
+
                 *guard = Some(new_handle);
             }
 
