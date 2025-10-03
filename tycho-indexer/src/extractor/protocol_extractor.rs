@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    ops::Deref,
     slice,
     str::FromStr,
     sync::Arc,
@@ -58,9 +59,23 @@ pub struct Inner {
     first_message_processed: bool,
 }
 
+#[derive(Default)]
+struct GatewayInner<G> {
+    gw: Arc<G>,
+    commit_handle: Mutex<Option<JoinHandle<Result<(), ExtractionError>>>>,
+    committed_block_height: Arc<Mutex<Option<u64>>>,
+    commit_batch_size: usize,
+}
+
+impl<G> Deref for GatewayInner<G> {
+    type Target = G;
+    fn deref(&self) -> &Self::Target {
+        &self.gw
+    }
+}
+
 pub struct ProtocolExtractor<G, T, E> {
-    gateway: Arc<G>,
-    database_insert_batch_size: usize,
+    gateway: GatewayInner<G>,
     name: String,
     chain: Chain,
     chain_state: ChainState,
@@ -72,7 +87,6 @@ pub struct ProtocolExtractor<G, T, E> {
     /// Allows to attach some custom logic, e.g. to fix encoding bugs without resync.
     post_processor: Option<fn(BlockChanges) -> BlockChanges>,
     reorg_buffer: Mutex<ReorgBuffer<BlockUpdateWithCursor<BlockChanges>>>,
-    database_commit_task: Mutex<Option<JoinHandle<Result<u64, ExtractionError>>>>,
     dci_plugin: Option<Arc<Mutex<E>>>,
 }
 
@@ -103,8 +117,12 @@ where
             Err(StorageError::NotFound(_, _)) => {
                 warn!(?name, ?chain, "No cursor found, starting from the beginning");
                 ProtocolExtractor {
-                    gateway: Arc::new(gateway),
-                    database_insert_batch_size,
+                    gateway: GatewayInner {
+                        gw: Arc::new(gateway),
+                        commit_handle: Default::default(),
+                        committed_block_height: Default::default(),
+                        commit_batch_size: database_insert_batch_size,
+                    },
                     name: name.to_string(),
                     chain,
                     chain_state,
@@ -121,7 +139,6 @@ where
                     protocol_types,
                     post_processor,
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
-                    database_commit_task: Default::default(),
                     dci_plugin,
                 }
             }
@@ -141,8 +158,14 @@ where
                     "Found existing cursor! Resuming extractor.."
                 );
                 ProtocolExtractor {
-                    gateway: Arc::new(gateway),
-                    database_insert_batch_size,
+                    gateway: GatewayInner {
+                        gw: Arc::new(gateway),
+                        commit_handle: Default::default(),
+                        committed_block_height: Arc::new(Mutex::new(Some(
+                            last_processed_block.number,
+                        ))),
+                        commit_batch_size: database_insert_batch_size,
+                    },
                     name: name.to_string(),
                     chain,
                     chain_state,
@@ -159,7 +182,6 @@ where
                     protocol_types,
                     post_processor,
                     reorg_buffer: Mutex::new(ReorgBuffer::new()),
-                    database_commit_task: Default::default(),
                     dci_plugin,
                 }
             }
@@ -366,6 +388,7 @@ where
         // Then get the missing balances from db
         let missing_balances: HashMap<String, HashMap<Bytes, ComponentBalance>> = self
             .gateway
+            .gw
             .get_components_balances(
                 &missing_balances_map
                     .keys()
@@ -446,6 +469,7 @@ where
         // Then get the missing account balances from db
         let missing_balances = self
             .gateway
+            .gw
             .get_account_balances(
                 &missing_balances_map
                     .keys()
@@ -767,7 +791,7 @@ where
                 .map_err(ExtractionError::Storage)?;
 
             if reorg_buffer.count_blocks_before(inp.final_block_height) >=
-                self.database_insert_batch_size
+                self.gateway.commit_batch_size
             {
                 reorg_buffer
                     .drain_blocks_until(inp.final_block_height)
@@ -777,78 +801,55 @@ where
             }
         };
 
-        // See if we need to join the previous database commit task based on whether it has finished
-        // or if we have new blocks to commit and launch a new database commit task if needed.
-        let db_committed_block_height = {
-            let mut guard = self.database_commit_task.lock().await;
+        // If we have blocks to commit, wait for the previous async commit task to finish and then
+        // spawn a new task that will commit the new blocks and update the committed block height.
+        if let Some(last_block) = blocks_to_commit.last() {
+            let mut guard = self.gateway.commit_handle.lock().await;
 
-            // We need to join the previous task if it has finished or if we have new blocks to
-            // commit.
-            let need_join = guard
-                .as_ref()
-                .is_some_and(|h| h.is_finished()) ||
-                !blocks_to_commit.is_empty();
-
-            // Join the previous task if needed and get the height up to which it has committed.
-            let db_committed_block_height = if need_join {
-                if let Some(db_commit_handle_to_join) = guard.take() {
-                    match db_commit_handle_to_join.await {
-                        Ok(Ok(height)) => Some(height),
-                        Ok(Err(storage_err)) => {
-                            // previous DB commit task *ran* but returned StorageError
-                            return Err(storage_err);
-                        }
-                        Err(join_err) => {
-                            // the task panicked/cancelled
-                            return Err(ExtractionError::Storage(StorageError::Unexpected(
-                                format!("Failed to join database commit task: {join_err}"),
-                            )));
-                        }
+            // Consume the previous commit handle, leaving None in its place
+            if let Some(db_commit_handle_to_join) = guard.take() {
+                match db_commit_handle_to_join.await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(storage_err)) => {
+                        return Err(storage_err);
                     }
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
-
-            // If we have blocks to commit, spawn a new task to commit them to the database.
-            if let Some(last_block_height) = blocks_to_commit
-                .last()
-                .map(|b| b.block_update.block.number)
-            {
-                let gateway = self.gateway.clone();
-
-                let new_handle = tokio::spawn(async move {
-                    let mut it = blocks_to_commit.iter().peekable();
-                    while let Some(block) = it.next() {
-                        // Force a database commit if we're not syncing and this is the last block
-                        // to be sent. Otherwise, wait to accumulate a full
-                        // batch before committing.
-                        let force_db_commit = if is_syncing { false } else { it.peek().is_none() };
-
-                        gateway
-                            .advance(block.block_update(), block.cursor(), force_db_commit)
-                            .await
-                            .map_err(ExtractionError::Storage)?;
+                    Err(join_err) => {
+                        return Err(ExtractionError::Storage(StorageError::Unexpected(format!(
+                            "Failed to join database commit task: {join_err}"
+                        ))));
                     }
-
-                    Ok(last_block_height)
-                });
-
-                // Store the new handle in the mutex that is guaranted to be None here.
-                // This is because we hold the lock and took the previous handle out of it, if any.
-                if guard.is_some() {
-                    return Err(ExtractionError::Storage(StorageError::Unexpected(
-                        "Database commit task handle should be None".into(),
-                    )));
                 }
-
-                *guard = Some(new_handle);
             }
 
-            // Return the height up to which the database has been committed in the joined task.
-            db_committed_block_height
+            let gateway = self.gateway.gw.clone();
+            let committed_block_height = self
+                .gateway
+                .committed_block_height
+                .clone();
+            let last_block_height = last_block.block_update.block.number;
+
+            // Spawn a new task to commit the new blocks and update the committed block height
+            let new_handle = tokio::spawn(async move {
+                let mut it = blocks_to_commit.iter().peekable();
+                while let Some(block) = it.next() {
+                    // Force a database commit if we're not syncing and this is the last block
+                    // to be sent. Otherwise, wait to accumulate a full
+                    // batch before committing.
+                    let force_db_commit = if is_syncing { false } else { it.peek().is_none() };
+
+                    gateway
+                        .advance(block.block_update(), block.cursor(), force_db_commit)
+                        .await
+                        .map_err(ExtractionError::Storage)?;
+                }
+
+                let mut guard = committed_block_height.lock().await;
+                *guard = Some(last_block_height);
+
+                Ok(())
+            });
+
+            *guard = Some(new_handle);
         };
 
         self.update_last_processed_block(msg.block.clone())
@@ -861,7 +862,12 @@ where
 
         self.update_cursor(inp.cursor).await;
 
-        let mut changes = msg.into_aggregated(db_committed_block_height)?;
+        let committed_block_height = *self
+            .gateway
+            .committed_block_height
+            .lock()
+            .await;
+        let mut changes = msg.into_aggregated(committed_block_height)?;
         self.handle_tvl_changes(&mut changes)
             .await?;
 
@@ -1856,13 +1862,14 @@ mod test {
             )
         };
         let commit_task_is_running = async |ex: &ProtocolExtractor<_, _, _>| -> bool {
-            let guard = ex.database_commit_task.lock().await;
+            let guard = ex.gateway.commit_handle.lock().await;
             guard
                 .as_ref()
                 .is_some_and(|h| !h.is_finished())
         };
         let commit_task_is_none = async |ex: &ProtocolExtractor<_, _, _>| -> bool {
-            ex.database_commit_task
+            ex.gateway
+                .commit_handle
                 .lock()
                 .await
                 .is_none()
@@ -1951,7 +1958,8 @@ mod test {
         // Await for the commit task to finish
         let handle = {
             let mut g = extractor
-                .database_commit_task
+                .gateway
+                .commit_handle
                 .lock()
                 .await;
             g.take()
@@ -3137,7 +3145,7 @@ mod test_serial_db {
             }
 
             // Wait for the extractor to finish processing
-            if let Some(handle) = extractor.database_commit_task.lock().await.take() {
+            if let Some(handle) = extractor.gateway.commit_handle.lock().await.take() {
                 handle.await.unwrap().unwrap();
             }
 
@@ -3322,7 +3330,7 @@ mod test_serial_db {
             }
 
             // Wait for the extractor to finish processing
-            if let Some(handle) = extractor.database_commit_task.lock().await.take() {
+            if let Some(handle) = extractor.gateway.commit_handle.lock().await.take() {
                 handle.await.unwrap().unwrap();
             }
 
@@ -3562,7 +3570,8 @@ mod test_serial_db {
 
             // Wait for the extractor to finish processing
             if let Some(handle) = extractor
-                .database_commit_task
+                .gateway
+                .commit_handle
                 .lock()
                 .await
                 .take()
