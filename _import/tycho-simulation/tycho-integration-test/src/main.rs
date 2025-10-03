@@ -368,10 +368,10 @@ async fn run(cli: Cli) -> miette::Result<()> {
                     let diff = &expected_amount_out - &simulated_amount_out;
                     (diff.clone() * BigUint::from(10000u32)) / expected_amount_out
                 };
-                let slippage = slippage.to_f64().unwrap_or(0.0);
+                let slippage = slippage.to_f64().unwrap_or(0.0) / 100.0;
 
                 metrics::record_slippage(block_number, &component.protocol_system, id, slippage);
-                info!("Slippage: {:.2}%", slippage / 100.0);
+                info!("Slippage: {:.2}%", slippage);
 
                 info!("Pool processed {id:?} from {} to {}", token_in.symbol, token_out.symbol);
             }
