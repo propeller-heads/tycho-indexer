@@ -827,6 +827,7 @@ where
                 .committed_block_height
                 .clone();
             let last_block_height = last_block.block_update.block.number;
+            let batch_size = blocks_to_commit.len();
 
             // Spawn a new task to commit the new blocks and update the committed block height
             let new_handle = tokio::spawn(async move {
@@ -846,10 +847,14 @@ where
                 let mut guard = committed_block_height.lock().await;
                 *guard = Some(last_block_height);
 
+                debug!(batch_size, block_height = last_block_height, "CommitTaskCompleted");
+
                 Ok(())
             });
 
             *guard = Some(new_handle);
+
+            debug!(batch_size, block_height = last_block_height, "CommitTaskQueued");
         };
 
         self.update_last_processed_block(msg.block.clone())
