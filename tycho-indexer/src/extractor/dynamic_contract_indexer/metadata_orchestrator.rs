@@ -1,14 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
 use tracing::{debug, error, info, instrument, warn};
-use tycho_common::models::{blockchain::Block, protocol::ProtocolComponent, ComponentId, TxHash};
+use tycho_common::models::{blockchain::Block, protocol::ProtocolComponent, TxHash};
 
-use crate::extractor::{
-    dynamic_contract_indexer::component_metadata::{
-        Balances, ComponentTracingMetadata, MetadataError, MetadataGeneratorRegistry,
-        MetadataRequest, MetadataResponseParserRegistry, MetadataResult, ProviderRegistry,
-    },
-    models::BlockChanges,
+use crate::extractor::dynamic_contract_indexer::component_metadata::{
+    ComponentTracingMetadata, MetadataError, MetadataGeneratorRegistry, MetadataRequest,
+    MetadataResponseParserRegistry, MetadataResult, ProviderRegistry,
 };
 
 pub struct BlockMetadataOrchestrator {
@@ -82,157 +79,6 @@ impl BlockMetadataOrchestrator {
         info!(metadata_count = final_metadata.len(), "Completed metadata collection");
 
         Ok(final_metadata)
-    }
-
-    /// Enriches component metadata with balance updates extracted from block changes.
-    ///
-    /// This method efficiently processes blockchain transaction data to extract the latest
-    /// balance updates for protocol components that require metadata enrichment. It uses an
-    /// optimized algorithm that processes transactions in reverse order to capture only the
-    /// most recent balance changes for each token, avoiding redundant processing.
-    ///
-    /// # Algorithm
-    /// 1. Creates efficient lookup structures for components and their tokens
-    /// 2. Iterates through transactions in reverse chronological order (latest first)
-    /// 3. For each transaction, extracts balance changes for tracked components
-    /// 4. Removes tokens from tracking once their latest balance is found
-    /// 5. Early exits when all components have been fully processed
-    /// 6. Filters out zero balances and incomplete components from final results
-    ///
-    /// # Arguments
-    /// * `components_needing_metadata` - Slice of tuples containing transaction hashes and protocol
-    ///   components that need balance metadata enrichment
-    /// * `block_changes` - Reference to block changes containing transaction data and balance
-    ///   updates
-    ///
-    /// # Returns
-    /// Vector of tuples containing:
-    /// - `ProtocolComponent`: The component that was enriched
-    /// - `ComponentTracingMetadata`: Metadata containing the extracted balance information
-    ///
-    /// Only components with non-zero balances and complete token data are returned.
-    ///
-    /// # Performance
-    /// - Time complexity: O(n + m) where n = components, m = transactions
-    /// - Space complexity: O(k) where k = total tokens across all components
-    /// - Uses early termination to avoid processing unnecessary transactions
-    /// - Pre-allocates HashMaps with appropriate capacity for better memory efficiency
-    #[instrument(skip_all, fields(
-        block_number = block_changes.block.number,
-        components_needing_metadata = components_needing_metadata.len()
-    ))]
-    pub fn enrich_metadata_with_balance_updates(
-        &self,
-        components_needing_metadata: &[(TxHash, ProtocolComponent)],
-        block_changes: &BlockChanges,
-    ) -> Vec<(ProtocolComponent, ComponentTracingMetadata)> {
-        debug!(
-            components_count = components_needing_metadata.len(),
-            transactions_count = block_changes.txs_with_update.len(),
-            "Starting balance-based metadata enrichment"
-        );
-
-        let mut components_enriched = 0;
-        let mut components_skipped_no_balances = 0;
-        let mut total_balance_entries = 0;
-        let mut transactions_processed = 0;
-
-        let mut enriched_metadata: HashMap<ComponentId, Balances> =
-            HashMap::with_capacity(components_needing_metadata.len());
-
-        let component_to_id: HashMap<ComponentId, (ProtocolComponent, TxHash)> =
-            components_needing_metadata
-                .iter()
-                .map(|(tx_hash, pc)| (pc.id.clone(), (pc.clone(), tx_hash.clone())))
-                .collect();
-
-        let mut remaining_components: HashMap<_, _> = components_needing_metadata
-            .iter()
-            .map(|(_, component)| {
-                (
-                    component.id.clone(),
-                    component
-                        .tokens
-                        .iter()
-                        .cloned()
-                        .collect::<HashSet<_>>(),
-                )
-            })
-            .collect();
-
-        // Iterate through the block changes to get only the latest changes
-        for tx_with_changes in block_changes
-            .txs_with_update
-            .iter()
-            .rev()
-        {
-
-            // Early exit if all components have been processed
-            if remaining_components.is_empty() {
-                debug!("Early exit: all components processed");
-                break;
-            }
-
-            for (component_id, balance_changes) in tx_with_changes.balance_changes.iter() {
-                if let Some(tokens_to_update) = remaining_components.get_mut(component_id) {
-                    let initial_token_count = tokens_to_update.len();
-
-                    for (token, component_balance) in balance_changes.iter() {
-                        if tokens_to_update.remove(token) {
-                            // Add the balance to the result
-                            enriched_metadata
-                                .entry(component_id.clone())
-                                .or_default()
-                                .insert(token.clone(), component_balance.balance.clone());
-                            total_balance_entries += 1;
-                        }
-                    }
-
-                    // Cleanup if all tokens for this component have been processed.
-                    // If only a subset of tokens was processed , an earlier transaction in the block
-                    // might update this token's balance. This is unlikely, but it's the safest way to process.
-                    if tokens_to_update.is_empty() {
-                        remaining_components.remove(component_id);
-                        if initial_token_count > 0 {
-                            components_enriched += 1;
-                            debug!(
-                                component_id = %component_id,
-                                tokens_processed = initial_token_count,
-                                tx_hash = %tx_with_changes.tx.hash,
-                                "Component fully enriched with balance data"
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        let mut res: Vec<(ProtocolComponent, ComponentTracingMetadata)> =
-            Vec::with_capacity(enriched_metadata.len());
-
-        // Count components that couldn't be fully enriched
-        components_skipped_no_balances = remaining_components.len();
-
-        // Loop through enriched_metadata and remove if both balances are 0, or if component_id is
-        // contained in remaining_components
-        for (id, balances) in enriched_metadata.iter() {
-            if !balances.values().all(|v| v.is_zero()) && !remaining_components.contains_key(id) {
-                let (pc, tx_hash) = component_to_id[id].clone();
-                let mut metadata = ComponentTracingMetadata::new(tx_hash);
-                metadata.balances = Some(Ok(balances.clone()));
-                res.push((pc, metadata));
-            }
-        }
-
-        info!(
-            components_enriched,
-            components_skipped_no_balances,
-            total_balance_entries,
-            result_count = res.len(),
-            "Completed balance-based metadata enrichment"
-        );
-
-        res
     }
 
     #[instrument(skip(self, components, block), fields(
