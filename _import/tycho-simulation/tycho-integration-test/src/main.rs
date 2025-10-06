@@ -87,6 +87,9 @@ struct Cli {
     /// Port for the Prometheus metrics server
     #[arg(long, default_value_t = 9898)]
     metrics_port: u16,
+
+    #[arg(short, default_value_t = 10)]
+    max_n_simulations: usize,
 }
 
 impl Debug for Cli {
@@ -208,7 +211,11 @@ async fn run(cli: Cli) -> miette::Result<()> {
             info!("Skipping simulation on first block...");
             continue;
         }
-        for (id, state) in message.states.iter() {
+        for (id, state) in message
+            .states
+            .iter()
+            .take(cli.max_n_simulations)
+        {
             let component = match pairs.get(id) {
                 Some(comp) => comp.clone(),
                 None => {
@@ -604,7 +611,7 @@ async fn simulate_swap_transaction(
 
         async move {
             match simulator
-                .simulate_with_trace(request, Some(state_overwrites))
+                .simulate_with_trace(request, Some(state_overwrites), block.number())
                 .await
             {
                 Ok(res) => Ok(res),
