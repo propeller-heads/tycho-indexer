@@ -7471,9 +7471,9 @@ dependencies = [
 
 [[package]]
 name = "tycho-substreams"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "828cbe6f7b984fefe39d8fdb4c40311e329f30ded0a70e477e8f2add4d60483d"
+checksum = "f6381b4b9443e767339412f1fdfc8a2dff208563ba8901d9b5181ac148b6064b"
 dependencies = [
  "ethabi 18.0.0",
  "hex",

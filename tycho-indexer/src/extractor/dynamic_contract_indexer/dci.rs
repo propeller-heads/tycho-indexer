@@ -24,7 +24,7 @@ use tycho_common::{
 use super::cache::DCICache;
 use crate::extractor::{
     dynamic_contract_indexer::PausingReason,
-    models::{insert_state_attribute_update, BlockChanges, TxWithStorageChanges},
+    models::{insert_state_attribute_update, BlockChanges, TxWithContractChanges},
     ExtractionError, ExtractorExtension,
 };
 
@@ -195,7 +195,7 @@ where
 
         // Use block storage changes to detect retriggered entrypoints
         let retriggered_entrypoints: HashMap<EntryPointWithTracingParams, &Transaction> =
-            self.detect_retriggers(&block_changes.block_storage_changes)?;
+            self.detect_retriggers(&block_changes.block_contract_changes)?;
 
         // Update the entrypoint results with the retriggered entrypoints
         entrypoints_to_analyze.extend(retriggered_entrypoints);
@@ -495,8 +495,8 @@ where
         let _span = span!(
             Level::INFO,
             "dci_extract_tracked_updates",
-            block_storage_changes = block_changes
-                .block_storage_changes
+            block_contract_changes = block_changes
+                .block_contract_changes
                 .len()
         )
         .entered();
@@ -737,7 +737,7 @@ where
     ))]
     fn detect_retriggers<'a>(
         &self,
-        tx_with_changes: &'a [TxWithStorageChanges],
+        tx_with_changes: &'a [TxWithContractChanges],
     ) -> Result<HashMap<EntryPointWithTracingParams, &'a Transaction>, ExtractionError> {
         // Create a map of storage locations that have been updated in the block and the transaction
         // that last detected the update.
@@ -756,8 +756,8 @@ where
             HashMap::new();
 
         for tx_with_changes in tx_with_changes.iter() {
-            for (account, contract_store) in tx_with_changes.storage_changes.iter() {
-                for (storage_key, storage_change) in contract_store.iter() {
+            for (account, contract_store) in tx_with_changes.contract_changes.iter() {
+                for (storage_key, storage_change) in contract_store.slots.iter() {
                     storage_locations_scanned += 1;
                     let location = (account.clone(), storage_key.clone());
                     // Check if this storage location triggers any entrypoints
@@ -953,10 +953,10 @@ where
         let mut tracked_updates: HashMap<TxHash, TxWithChanges> = HashMap::new();
 
         for tx in block_changes
-            .block_storage_changes
+            .block_contract_changes
             .iter()
         {
-            for (account, contract_store) in tx.storage_changes.iter() {
+            for (account, contract_changes) in tx.contract_changes.iter() {
                 let tracked_keys: HashSet<&StoreKey> = match self
                     .cache
                     .tracked_contracts
@@ -967,7 +967,8 @@ where
                     Some(keys) => keys.flatten().collect(),
                 };
 
-                let mut slot_updates = contract_store
+                let mut slot_updates = contract_changes
+                    .slots
                     .iter()
                     .map(|(slot, ContractStorageChange { value, .. })| {
                         if value.is_zero() {
@@ -983,14 +984,18 @@ where
                     slot_updates.retain(|slot, _| tracked_keys.contains(slot));
                 }
 
-                if !slot_updates.is_empty() {
+                if !slot_updates.is_empty() ||
+                    contract_changes
+                        .native_balance
+                        .is_some()
+                {
                     let account_delta = HashMap::from([(
                         account.clone(),
                         AccountDelta::new(
                             self.chain,
                             account.clone(),
                             slot_updates,
-                            None,
+                            contract_changes.native_balance.clone(),
                             None,
                             ChangeType::Update,
                         ),
@@ -1033,7 +1038,7 @@ mod tests {
                 AddressStorageLocation, EntryPoint, EntryPointWithTracingParams, RPCTracerParams,
                 TracingParams, Transaction, TxWithChanges,
             },
-            contract::AccountDelta,
+            contract::{AccountDelta, ContractChanges},
             Chain, ChangeType, EntryPointId,
         },
         storage::WithTotal,
@@ -1109,36 +1114,48 @@ mod tests {
                     3,
                     false,
                     vec![],
-                    vec![TxWithStorageChanges {
+                    vec![TxWithContractChanges {
                         tx,
-                        storage_changes: HashMap::from([
+                        contract_changes: HashMap::from([
                             (
                                 Bytes::from("0x02"),
-                                HashMap::from([
-                                    (
-                                        Bytes::from("0x01"),
-                                        ContractStorageChange::initial(Bytes::from("0x01")),
-                                    ),
-                                    (
-                                        Bytes::from("0x22"),
-                                        ContractStorageChange::initial(Bytes::from("0x22")),
-                                    ),
-                                ]),
+                                ContractChanges::new(
+                                    Bytes::from("0x02"),
+                                    HashMap::from([
+                                        (
+                                            Bytes::from("0x01"),
+                                            ContractStorageChange::initial(Bytes::from("0x01")),
+                                        ),
+                                        (
+                                            Bytes::from("0x22"),
+                                            ContractStorageChange::initial(Bytes::from("0x22")),
+                                        ),
+                                    ]),
+                                    None,
+                                ),
                             ),
                             (
                                 Bytes::from("0x22"),
-                                HashMap::from([(
+                                ContractChanges::new(
                                     Bytes::from("0x22"),
-                                    ContractStorageChange::initial(Bytes::from("0x01")),
-                                )]),
+                                    HashMap::from([(
+                                        Bytes::from("0x22"),
+                                        ContractStorageChange::initial(Bytes::from("0x01")),
+                                    )]),
+                                    None,
+                                ),
                             ),
                             // These should be ignored because they are not tracked
                             (
                                 Bytes::from("0x9999"),
-                                HashMap::from([(
-                                    Bytes::from("0x01"),
-                                    ContractStorageChange::initial(Bytes::from("0x01")),
-                                )]),
+                                ContractChanges::new(
+                                    Bytes::from("0x9999"),
+                                    HashMap::from([(
+                                        Bytes::from("0x01"),
+                                        ContractStorageChange::initial(Bytes::from("0x01")),
+                                    )]),
+                                    None,
+                                ),
                             ),
                         ]),
                     }],
@@ -1155,19 +1172,62 @@ mod tests {
                     4,
                     false,
                     vec![],
-                    vec![TxWithStorageChanges {
+                    vec![TxWithContractChanges {
                         tx,
-                        storage_changes: HashMap::from([
+                        contract_changes: HashMap::from([
                             // This should trigger the retrigger
                             (
                                 Bytes::from("0x01"),
-                                HashMap::from([(
+                                ContractChanges::new(
                                     Bytes::from("0x01"),
-                                    ContractStorageChange::new(
-                                        Bytes::from("0xabcd").lpad(32, 0),
-                                        Bytes::from("0x00").lpad(32, 0),
-                                    ),
-                                )]),
+                                    HashMap::from([(
+                                        Bytes::from("0x01"),
+                                        ContractStorageChange::new(
+                                            Bytes::from("0xabcd").lpad(32, 0),
+                                            Bytes::from("0x00").lpad(32, 0),
+                                        ),
+                                    )]),
+                                    None,
+                                ),
+                            ),
+                        ]),
+                    }],
+                )
+            }
+            // A block containing tracked contracts with balance changes
+            5 => {
+                let tx = get_transaction(1);
+
+                BlockChanges::new(
+                    "test".to_string(),
+                    Chain::Ethereum,
+                    testing::block(5),
+                    5,
+                    false,
+                    vec![],
+                    vec![TxWithContractChanges {
+                        tx,
+                        contract_changes: HashMap::from([
+                            // Contract with both storage and balance changes
+                            (
+                                Bytes::from("0x02"),
+                                ContractChanges::new(
+                                    Bytes::from("0x02"),
+                                    HashMap::from([(
+                                        Bytes::from("0x01"),
+                                        ContractStorageChange::initial(Bytes::from("0x01")),
+                                    )]),
+                                    Some(Bytes::from(1000000000000000000u64)), // 1 ETH in wei
+                                ),
+                            ),
+                            // Contract with only balance change (no storage changes)
+                            (
+                                Bytes::from("0x22"),
+                                ContractChanges::new(
+                                    Bytes::from("0x22"),
+                                    HashMap::new(),
+                                    Some(Bytes::from(500000000000000000u64)), // 0.5 ETH in wei
+                                ),
                             ),
                         ]),
                     }],
@@ -2031,40 +2091,56 @@ mod tests {
             3,
             false,
             vec![],
-            vec![TxWithStorageChanges {
+            vec![TxWithContractChanges {
                 tx: get_transaction(1),
-                storage_changes: HashMap::from([
+                contract_changes: HashMap::from([
                     // Token address - should have slots filtered
                     (
                         token_address.clone(),
-                        HashMap::from([
-                            /* Should be kept */
-                            (
-                                Bytes::from(0x01_u8).lpad(32, 0),
-                                ContractStorageChange::initial(Bytes::from(0x100_u16).lpad(32, 0)),
-                            ),
-                            /* Should be filtered out */
-                            (
-                                Bytes::from(0x03_u8).lpad(32, 0),
-                                ContractStorageChange::initial(Bytes::from(0x300_u16).lpad(32, 0)),
-                            ),
-                        ]),
+                        ContractChanges::new(
+                            token_address.clone(),
+                            HashMap::from([
+                                /* Should be kept */
+                                (
+                                    Bytes::from(0x01_u8).lpad(32, 0),
+                                    ContractStorageChange::initial(
+                                        Bytes::from(0x100_u16).lpad(32, 0),
+                                    ),
+                                ),
+                                /* Should be filtered out */
+                                (
+                                    Bytes::from(0x03_u8).lpad(32, 0),
+                                    ContractStorageChange::initial(
+                                        Bytes::from(0x300_u16).lpad(32, 0),
+                                    ),
+                                ),
+                            ]),
+                            None,
+                        ),
                     ),
                     // Normal address - should not have slots filtered
                     (
                         normal_address.clone(),
-                        HashMap::from([
-                            /* Should be kept */
-                            (
-                                Bytes::from(0x01_u8).lpad(32, 0),
-                                ContractStorageChange::initial(Bytes::from(0x100_u16).lpad(32, 0)),
-                            ),
-                            /* Should be kept */
-                            (
-                                Bytes::from(0x03_u8).lpad(32, 0),
-                                ContractStorageChange::initial(Bytes::from(0x300_u16).lpad(32, 0)),
-                            ),
-                        ]),
+                        ContractChanges::new(
+                            normal_address.clone(),
+                            HashMap::from([
+                                /* Should be kept */
+                                (
+                                    Bytes::from(0x01_u8).lpad(32, 0),
+                                    ContractStorageChange::initial(
+                                        Bytes::from(0x100_u16).lpad(32, 0),
+                                    ),
+                                ),
+                                /* Should be kept */
+                                (
+                                    Bytes::from(0x03_u8).lpad(32, 0),
+                                    ContractStorageChange::initial(
+                                        Bytes::from(0x300_u16).lpad(32, 0),
+                                    ),
+                                ),
+                            ]),
+                            None,
+                        ),
                     ),
                 ]),
             }],
@@ -2887,5 +2963,72 @@ mod tests {
                 .external_id,
             "entrypoint_9"
         );
+    }
+
+    #[tokio::test]
+    async fn test_extract_tracked_updates_with_contract_balances() {
+        let gateway = get_mock_gateway();
+        let account_extractor = MockAccountExtractor::new();
+        let entrypoint_tracer = MockEntryPointTracer::new();
+
+        let mut dci = DynamicContractIndexer::new(
+            Chain::Ethereum,
+            "test".to_string(),
+            gateway,
+            account_extractor,
+            entrypoint_tracer,
+        );
+
+        dci.initialize().await.unwrap();
+
+        // Add tracked contracts to cache (using same addresses as in get_block_changes(5))
+        let tracked_slots_1 = HashSet::from([Bytes::from("0x01")]);
+        let tracked_slots_2 = HashSet::from([Bytes::from("0x22")]);
+
+        dci.cache
+            .tracked_contracts
+            .insert_permanent(Bytes::from("0x02"), tracked_slots_1);
+        dci.cache
+            .tracked_contracts
+            .insert_permanent(Bytes::from("0x22"), tracked_slots_2);
+
+        // Use the new block changes with contract balances
+        let block_changes = get_block_changes(5);
+
+        // Extract tracked updates
+        let result = dci
+            .extract_tracked_updates(&block_changes)
+            .unwrap();
+
+        // Verify we have one transaction with updates
+        assert_eq!(result.len(), 1);
+        let tx_changes = result.values().next().unwrap();
+        assert_eq!(tx_changes.account_deltas.len(), 2);
+
+        // Verify contract 0x02 (with both storage and balance changes)
+        let contract_02_delta = tx_changes
+            .account_deltas
+            .get(&Bytes::from("0x02"))
+            .expect("Contract 0x02 should have account delta");
+        assert_eq!(contract_02_delta.slots.len(), 1); // One storage slot
+        assert_eq!(
+            contract_02_delta.balance,
+            Some(Bytes::from(1000000000000000000u64)) // 1 ETH
+        );
+        assert_eq!(contract_02_delta.chain, Chain::Ethereum);
+        assert_eq!(contract_02_delta.change_type(), ChangeType::Update);
+
+        // Verify contract 0x22 (with only balance change)
+        let contract_22_delta = tx_changes
+            .account_deltas
+            .get(&Bytes::from("0x22"))
+            .expect("Contract 0x22 should have account delta");
+        assert_eq!(contract_22_delta.slots.len(), 0); // No storage slots
+        assert_eq!(
+            contract_22_delta.balance,
+            Some(Bytes::from(500000000000000000u64)) // 0.5 ETH
+        );
+        assert_eq!(contract_22_delta.chain, Chain::Ethereum);
+        assert_eq!(contract_22_delta.change_type(), ChangeType::Update);
     }
 }

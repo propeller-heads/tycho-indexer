@@ -2551,6 +2551,7 @@ pub mod fixtures {
                                 previous_value: Bytes::new().into(),
                             },
                         ],
+                        native_balance: None,
                     },
                     StorageChanges {
                         address: address_from_str("0000000000000000000000000000000000000002"),
@@ -2559,6 +2560,7 @@ pub mod fixtures {
                             value: Bytes::from("0x03").into(),
                             previous_value: Bytes::new().into(),
                         }],
+                        native_balance: Some(Bytes::from(1000u64).to_vec()),
                     },
                 ],
             },
@@ -2572,6 +2574,7 @@ pub mod fixtures {
                             value: Bytes::from("0x04").into(),
                             previous_value: Bytes::new().into(),
                         }],
+                        native_balance: None,
                     },
                     StorageChanges {
                         address: address_from_str("0000000000000000000000000000000000000002"),
@@ -2580,6 +2583,7 @@ pub mod fixtures {
                             value: Bytes::from("0x05").into(),
                             previous_value: Bytes::new().into(),
                         }],
+                        native_balance: None,
                     },
                 ],
             },

@@ -501,8 +501,25 @@ impl ContractStorageChange {
     }
 }
 
+#[derive(Debug, PartialEq, Default, Clone)]
+pub struct ContractChanges {
+    pub account: Address,
+    pub slots: HashMap<StoreKey, ContractStorageChange>,
+    pub native_balance: Option<Balance>,
+}
+
+impl ContractChanges {
+    pub fn new(
+        account: Address,
+        slots: HashMap<StoreKey, ContractStorageChange>,
+        native_balance: Option<Balance>,
+    ) -> Self {
+        Self { account, slots, native_balance }
+    }
+}
+
 /// Multiple binary key-value stores grouped by account address.
-pub type AccountToContractChange = HashMap<Address, HashMap<StoreKey, ContractStorageChange>>;
+pub type AccountToContractChanges = HashMap<Address, ContractChanges>;
 
 #[cfg(test)]
 mod test {

@@ -7,7 +7,7 @@ use tycho_common::{
             Block, BlockAggregatedChanges, BlockScoped, DCIUpdate, TracedEntryPoint, TracingResult,
             Transaction, TxWithChanges,
         },
-        contract::{AccountBalance, AccountChangesWithTx, AccountToContractChange},
+        contract::{AccountBalance, AccountChangesWithTx, AccountToContractChanges},
         protocol::{
             ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
         },
@@ -139,9 +139,9 @@ impl BlockScoped for BlockEntityChanges {
 
 /// Storage changes grouped by transaction
 #[derive(Debug, PartialEq, Default, Clone)]
-pub struct TxWithStorageChanges {
+pub struct TxWithContractChanges {
     pub tx: Transaction,
-    pub storage_changes: AccountToContractChange,
+    pub contract_changes: AccountToContractChanges,
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
@@ -154,9 +154,9 @@ pub struct BlockChanges {
     pub new_tokens: HashMap<Address, Token>,
     /// Vec of updates at this block, aggregated by tx and sorted by tx index in ascending order
     pub txs_with_update: Vec<TxWithChanges>,
-    // Raw block storage changes. This is intended as DCI input and is to be omitted from the
+    // Raw block contract changes. This is intended as DCI input and is to be omitted from the
     // reorg buffer and aggregation into the `BlockAggregatedChanges` object.
-    pub block_storage_changes: Vec<TxWithStorageChanges>,
+    pub block_contract_changes: Vec<TxWithContractChanges>,
     /// Required here so that it is part of the reorg buffer and thus inserted into storage once
     /// finalized.
     /// Populated by the `DynamicContractIndexer`
@@ -171,7 +171,7 @@ impl BlockChanges {
         finalized_block_height: u64,
         revert: bool,
         txs_with_update: Vec<TxWithChanges>,
-        block_storage_changes: Vec<TxWithStorageChanges>,
+        block_contract_changes: Vec<TxWithContractChanges>,
     ) -> Self {
         BlockChanges {
             extractor,
@@ -181,7 +181,7 @@ impl BlockChanges {
             revert,
             new_tokens: HashMap::new(),
             txs_with_update,
-            block_storage_changes,
+            block_contract_changes,
             trace_results: Vec::new(),
         }
     }
@@ -508,8 +508,7 @@ impl From<BlockContractChanges> for BlockChanges {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
-            block_storage_changes: Vec::new(),
-            trace_results: Vec::new(),
+            ..Default::default()
         }
     }
 }
@@ -528,8 +527,7 @@ impl From<BlockEntityChanges> for BlockChanges {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
-            block_storage_changes: Vec::new(),
-            trace_results: Vec::new(),
+            ..Default::default()
         }
     }
 }
@@ -571,8 +569,7 @@ pub mod fixtures {
                 revert,
                 new_tokens,
                 txs_with_update,
-                block_storage_changes: Vec::new(),
-                trace_results: Vec::new(),
+                ..Default::default()
             }
         }
     }
