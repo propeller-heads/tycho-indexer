@@ -9645,6 +9645,7 @@ dependencies = [
  "tycho-ethereum",
  "tycho-execution",
  "tycho-simulation",
+ "urlencoding",
 ]
 
 [[package]]
