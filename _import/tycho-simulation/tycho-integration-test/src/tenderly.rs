@@ -88,7 +88,11 @@ pub fn build_tenderly_url(
         .clone()
         .unwrap_or_else(|| "1".to_string());
 
-    let block_param = overrides.block.clone().or(block_number).unwrap_or_default();
+    let block_param = overrides
+        .block
+        .clone()
+        .or(block_number)
+        .unwrap_or_default();
 
     // Build query parameters
     let mut params = vec![
@@ -128,10 +132,7 @@ pub fn build_tenderly_url(
         .collect::<Vec<_>>()
         .join("&");
 
-    format!(
-        "https://dashboard.tenderly.co/tvinagre/project/simulator/new?{}",
-        query_string
-    )
+    format!("https://dashboard.tenderly.co/tvinagre/project/simulator/new?{}", query_string)
 }
 
 /// Encode state overrides to JSON format for Tenderly
@@ -166,9 +167,10 @@ fn encode_state_overrides(overrides: &AddressHashMap<AccountOverride>) -> String
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use alloy::primitives::address;
     use tycho_execution::encoding::models::Transaction;
+
+    use super::*;
 
     #[test]
     fn test_build_url_with_transaction() {
@@ -211,10 +213,8 @@ mod tests {
     #[test]
     fn test_build_url_with_block() {
         let caller = address!("0000000000000000000000000000000000000000");
-        let overrides = TenderlySimParams {
-            block: Some("12345678".to_string()),
-            ..Default::default()
-        };
+        let overrides =
+            TenderlySimParams { block: Some("12345678".to_string()), ..Default::default() };
 
         let url = build_tenderly_url(&overrides, None, None, caller, None);
 

@@ -605,8 +605,7 @@ async fn simulate_swap_transaction(
     block: &Block,
 ) -> Result<BigUint, (miette::Error, Option<AddressHashMap<AccountOverride>>)> {
     let user_address = Address::from_slice(&solution.sender[..20]);
-    let request = swap_request(transaction, block, user_address)
-        .map_err(|e| (e, None))?;
+    let request = swap_request(transaction, block, user_address).map_err(|e| (e, None))?;
     let state_overwrites =
         setup_user_overwrites(rpc_url, solution, transaction, block, user_address)
             .await
@@ -636,13 +635,19 @@ async fn simulate_swap_transaction(
         }
     })
     .await
-    .map_err(|e| (miette!("Failed to simulate transaction after retries: {e}"), Some(state_overwrites.clone())))?;
+    .map_err(|e| {
+        (
+            miette!("Failed to simulate transaction after retries: {e}"),
+            Some(state_overwrites.clone()),
+        )
+    })?;
 
     match result {
         execution_simulator::SimulationResult::Success { return_data, gas_used } => {
             info!("Transaction succeeded, gas used: {gas_used}");
-            let amount_out = U256::abi_decode(&return_data)
-                .map_err(|e| (miette!("Failed to decode swap amount: {e:?}"), Some(state_overwrites.clone())))?;
+            let amount_out = U256::abi_decode(&return_data).map_err(|e| {
+                (miette!("Failed to decode swap amount: {e:?}"), Some(state_overwrites.clone()))
+            })?;
             BigUint::from_str(amount_out.to_string().as_str())
                 .into_diagnostic()
                 .map_err(|e| (e, Some(state_overwrites.clone())))
