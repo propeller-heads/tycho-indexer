@@ -245,6 +245,9 @@ pub struct StorageChanges {
     /// The contract's storage changes
     #[prost(message, repeated, tag="2")]
     pub slots: ::prost::alloc::vec::Vec<ContractSlot>,
+    /// \[optional\] The contract's balance change
+    #[prost(bytes="vec", optional, tag="3")]
+    pub native_balance: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 // Aggregate entities
 

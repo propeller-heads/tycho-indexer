@@ -1,6 +1,6 @@
 [package]
 name = "tycho-substreams"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 description = "Tycho substreams development kit, contains tycho-indexer block changes model and helper functions for common indexing tasks."
 repository = "https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/substreams/crates/tycho-substreams"
@@ -24,3 +24,4 @@ serde_json = "1.0.120"
 
 [dev-dependencies]
 rstest = "0.24.0"
+base64 = "0.22.1"

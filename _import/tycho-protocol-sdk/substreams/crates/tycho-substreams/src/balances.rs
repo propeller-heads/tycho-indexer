@@ -248,7 +248,7 @@ pub fn extract_balance_deltas_from_tx<F: Fn(&[u8], &[u8]) -> bool>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{mock_store::MockStore, pb::tycho::evm::v1::BalanceDelta};
+    use crate::{pb::tycho::evm::v1::BalanceDelta, testing::mock_store::MockStore};
     use substreams::{
         pb::substreams::StoreDelta,
         prelude::{StoreGet, StoreNew},

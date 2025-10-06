@@ -192,6 +192,8 @@ message StorageChanges {
   bytes address = 1;
   // The contract's storage changes
   repeated ContractSlot slots = 2;
+  // [optional] The contract's balance change
+  optional bytes native_balance = 3;
 }
 
 // Aggregate entities
