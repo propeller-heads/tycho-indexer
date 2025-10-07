@@ -1,3 +1,23 @@
+## [0.172.0](https://github.com/propeller-heads/tycho-simulation/compare/0.171.0...0.172.0) (2025-10-07)
+
+
+### Features
+
+* (WIP) create tenderly link ([20056e0](https://github.com/propeller-heads/tycho-simulation/commit/20056e023f34863559ad52e63ab0bd51e546dfa4))
+* Add more metrics information ([85c7cf9](https://github.com/propeller-heads/tycho-simulation/commit/85c7cf9edcb06c31b1b8927de007daf50853758f))
+* Add more metrics: ([07dc2bb](https://github.com/propeller-heads/tycho-simulation/commit/07dc2bbf7c7122cda7c0ab268722f179f590c0ef))
+* Add protocol_sync_state_total metric ([9d5d579](https://github.com/propeller-heads/tycho-simulation/commit/9d5d579d0d8177d2f6a3fd642777bd83773368e0))
+* Add tracing subscribing back ([7d27ab5](https://github.com/propeller-heads/tycho-simulation/commit/7d27ab558a88a6e265bcd3da7462f759e827d764))
+
+
+### Bug Fixes
+
+* Add max n simulations and force block in execution ([71bcf53](https://github.com/propeller-heads/tycho-simulation/commit/71bcf53fffd866aed3210e955c932d4531830ea4))
+* Add more info to simulation failures ([2cfe419](https://github.com/propeller-heads/tycho-simulation/commit/2cfe4194de76cb854385671316bb56ca1dbedf38))
+* Nightly format ([6e17a36](https://github.com/propeller-heads/tycho-simulation/commit/6e17a368022d0ca9b06dd8d2fc31335dc6718269))
+* Slippage calculation ([201e0da](https://github.com/propeller-heads/tycho-simulation/commit/201e0dac370364c6da08a337054d65753412ac7b))
+* Use gauge instead of counter for protocol_sync_state_total ([2644833](https://github.com/propeller-heads/tycho-simulation/commit/26448336d1cdd9ba7be9b396d3c11e2e3223d549))
+
 ## [0.171.0](https://github.com/propeller-heads/tycho-simulation/compare/0.170.0...0.171.0) (2025-10-07)
 
 
