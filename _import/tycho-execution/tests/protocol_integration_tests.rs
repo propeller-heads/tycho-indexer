@@ -493,7 +493,7 @@ fn test_single_encoding_strategy_ekubo_grouped_swap() {
     .data;
 
     let hex_calldata = encode(&calldata);
-    write_calldata_to_file("test_single_ekubo_multi_hop", hex_calldata.as_str());
+    write_calldata_to_file("test_single_ekubo_grouped_swap", hex_calldata.as_str());
 }
 
 #[test]

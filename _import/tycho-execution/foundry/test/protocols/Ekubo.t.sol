@@ -244,7 +244,7 @@ contract TychoRouterForEkuboTest is TychoRouterTestSetup {
         vm.startPrank(ALICE);
         IERC20(USDE_ADDR).approve(tychoRouterAddr, type(uint256).max);
         bytes memory callData =
-            loadCallDataFromFile("test_single_ekubo_multi_hop");
+            loadCallDataFromFile("test_single_ekubo_grouped_swap");
         (bool success,) = tychoRouterAddr.call(callData);
 
         vm.stopPrank();
