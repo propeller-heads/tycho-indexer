@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    ops::Deref,
     slice,
     str::FromStr,
     sync::Arc,
@@ -61,17 +60,10 @@ pub struct Inner {
 
 #[derive(Default)]
 struct GatewayInner<G> {
-    gw: Arc<G>,
+    inner: Arc<G>,
     commit_handle: Mutex<Option<JoinHandle<Result<(), ExtractionError>>>>,
     committed_block_height: Arc<Mutex<Option<u64>>>,
     commit_batch_size: usize,
-}
-
-impl<G> Deref for GatewayInner<G> {
-    type Target = G;
-    fn deref(&self) -> &Self::Target {
-        &self.gw
-    }
 }
 
 pub struct ProtocolExtractor<G, T, E> {
@@ -118,7 +110,7 @@ where
                 warn!(?name, ?chain, "No cursor found, starting from the beginning");
                 ProtocolExtractor {
                     gateway: GatewayInner {
-                        gw: Arc::new(gateway),
+                        inner: Arc::new(gateway),
                         commit_handle: Default::default(),
                         committed_block_height: Default::default(),
                         commit_batch_size: database_insert_batch_size,
@@ -159,7 +151,7 @@ where
                 );
                 ProtocolExtractor {
                     gateway: GatewayInner {
-                        gw: Arc::new(gateway),
+                        inner: Arc::new(gateway),
                         commit_handle: Default::default(),
                         committed_block_height: Arc::new(Mutex::new(Some(
                             last_processed_block.number,
@@ -388,7 +380,7 @@ where
         // Then get the missing balances from db
         let missing_balances: HashMap<String, HashMap<Bytes, ComponentBalance>> = self
             .gateway
-            .gw
+            .inner
             .get_components_balances(
                 &missing_balances_map
                     .keys()
@@ -469,7 +461,7 @@ where
         // Then get the missing account balances from db
         let missing_balances = self
             .gateway
-            .gw
+            .inner
             .get_account_balances(
                 &missing_balances_map
                     .keys()
@@ -636,6 +628,7 @@ where
             .cloned()
             .collect();
         self.gateway
+            .inner
             .ensure_protocol_types(&protocol_types)
             .await;
     }
@@ -821,7 +814,7 @@ where
                 }
             }
 
-            let gateway = self.gateway.gw.clone();
+            let gateway = self.gateway.inner.clone();
             let committed_block_height = self
                 .gateway
                 .committed_block_height
@@ -1045,6 +1038,7 @@ where
 
         let missing_contracts = self
             .gateway
+            .inner
             .get_contracts(
                 &missing_map
                     .keys()
@@ -1157,6 +1151,7 @@ where
 
         let missing_components_states = self
             .gateway
+            .inner
             .get_protocol_states(
                 &missing_map
                     .keys()
