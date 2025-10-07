@@ -2333,7 +2333,7 @@ mod test {
                 Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
                 chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
             ),
-            db_committed_upto_block_height: 1,
+            db_committed_block_height: Some(1),
             finalized_block_height: 1,
             revert: true,
             state_deltas: HashMap::from([

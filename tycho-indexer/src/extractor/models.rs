@@ -202,12 +202,12 @@ impl BlockChanges {
     /// This returns an `ExtractionError` if there was a problem during merge.
     pub fn into_aggregated(
         self,
-        db_committed_upto_block_height: u64,
+        db_committed_block_height: Option<u64>,
     ) -> Result<BlockAggregatedChanges, ExtractionError> {
-        if db_committed_upto_block_height > self.finalized_block_height {
+        if db_committed_block_height.is_some_and(|h| h > self.finalized_block_height) {
             return Err(ExtractionError::ReorgBufferError(format!(
-                "Database committed block height {} is greater than finalized_block_height {}",
-                db_committed_upto_block_height, self.finalized_block_height
+                "Database committed block height {:?} is greater than finalized_block_height {}",
+                db_committed_block_height, self.finalized_block_height
             )));
         }
 
@@ -240,7 +240,7 @@ impl BlockChanges {
             extractor: self.extractor,
             chain: self.chain,
             block: self.block,
-            db_committed_upto_block_height,
+            db_committed_block_height,
             finalized_block_height: self.finalized_block_height,
             revert: self.revert,
             new_protocol_components: aggregated_changes.protocol_components,
@@ -958,12 +958,13 @@ mod test {
     }
 
     #[rstest]
-    #[case::commit_before_finalized(4, Ok(4))]
-    #[case::commit_equals_finalized(5, Ok(5))]
-    #[case::commit_exceeds_finalized(6, Err(ExtractionError::ReorgBufferError("Some Error".to_string())))]
+    #[case::commit_before_finalized(None, Ok(None))]
+    #[case::commit_before_finalized(Some(4), Ok(Some(4)))]
+    #[case::commit_equals_finalized(Some(5), Ok(Some(5)))]
+    #[case::commit_exceeds_finalized(Some(6), Err(ExtractionError::ReorgBufferError("Some Error".to_string())))]
     fn into_aggregated_respects_commit_invariant(
-        #[case] committed_height: u64,
-        #[case] expected: Result<u64, ExtractionError>,
+        #[case] committed_height: Option<u64>,
+        #[case] expected: Result<Option<u64>, ExtractionError>,
     ) {
         use chrono::NaiveDateTime;
 
@@ -990,7 +991,7 @@ mod test {
         match expected {
             Ok(expected_height) => {
                 let aggregated = result.expect("expected success");
-                assert_eq!(aggregated.db_committed_upto_block_height, expected_height);
+                assert_eq!(aggregated.db_committed_block_height, expected_height);
             }
             Err(ExtractionError::ReorgBufferError(_)) => {
                 assert!(matches!(result, Err(ExtractionError::ReorgBufferError(_))));

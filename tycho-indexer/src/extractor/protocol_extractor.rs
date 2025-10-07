@@ -10,7 +10,7 @@ use chrono::{Duration, NaiveDateTime};
 use metrics::{counter, gauge};
 use mockall::automock;
 use prost::Message;
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, task::JoinHandle};
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     models::{
@@ -58,9 +58,16 @@ pub struct Inner {
     first_message_processed: bool,
 }
 
+#[derive(Default)]
+struct GatewayInner<G> {
+    inner: Arc<G>,
+    commit_handle: Mutex<Option<JoinHandle<Result<(), ExtractionError>>>>,
+    committed_block_height: Arc<Mutex<Option<u64>>>,
+    commit_batch_size: usize,
+}
+
 pub struct ProtocolExtractor<G, T, E> {
-    gateway: G,
-    database_insert_batch_size: usize,
+    gateway: GatewayInner<G>,
     name: String,
     chain: Chain,
     chain_state: ChainState,
@@ -77,7 +84,7 @@ pub struct ProtocolExtractor<G, T, E> {
 
 impl<G, T, E> ProtocolExtractor<G, T, E>
 where
-    G: ExtractorGateway,
+    G: ExtractorGateway + 'static,
     T: TokenPreProcessor,
     E: ExtractorExtension,
 {
@@ -102,8 +109,12 @@ where
             Err(StorageError::NotFound(_, _)) => {
                 warn!(?name, ?chain, "No cursor found, starting from the beginning");
                 ProtocolExtractor {
-                    gateway,
-                    database_insert_batch_size,
+                    gateway: GatewayInner {
+                        inner: Arc::new(gateway),
+                        commit_handle: Default::default(),
+                        committed_block_height: Default::default(),
+                        commit_batch_size: database_insert_batch_size,
+                    },
                     name: name.to_string(),
                     chain,
                     chain_state,
@@ -139,8 +150,14 @@ where
                     "Found existing cursor! Resuming extractor.."
                 );
                 ProtocolExtractor {
-                    gateway,
-                    database_insert_batch_size,
+                    gateway: GatewayInner {
+                        inner: Arc::new(gateway),
+                        commit_handle: Default::default(),
+                        committed_block_height: Arc::new(Mutex::new(Some(
+                            last_processed_block.number,
+                        ))),
+                        commit_batch_size: database_insert_batch_size,
+                    },
                     name: name.to_string(),
                     chain,
                     chain_state,
@@ -363,6 +380,7 @@ where
         // Then get the missing balances from db
         let missing_balances: HashMap<String, HashMap<Bytes, ComponentBalance>> = self
             .gateway
+            .inner
             .get_components_balances(
                 &missing_balances_map
                     .keys()
@@ -443,6 +461,7 @@ where
         // Then get the missing account balances from db
         let missing_balances = self
             .gateway
+            .inner
             .get_account_balances(
                 &missing_balances_map
                     .keys()
@@ -593,7 +612,7 @@ where
 #[async_trait]
 impl<G, T, E> Extractor for ProtocolExtractor<G, T, E>
 where
-    G: ExtractorGateway,
+    G: ExtractorGateway + 'static,
     T: TokenPreProcessor,
     E: ExtractorExtension,
 {
@@ -609,6 +628,7 @@ where
             .cloned()
             .collect();
         self.gateway
+            .inner
             .ensure_protocol_types(&protocol_types)
             .await;
     }
@@ -756,46 +776,79 @@ where
         // Create a scope to lock the reorg buffer, insert the new block and possibly commit to the
         // database if we have enough blocks in the buffer.
         // Return the block height up to which we have committed to the database.
-        let (blocks_to_commit, oldest_uncommitted_block_height) = {
+        let blocks_to_commit = {
             let mut reorg_buffer = self.reorg_buffer.lock().await;
 
             reorg_buffer
                 .insert_block(BlockUpdateWithCursor::new(msg.clone(), inp.cursor.clone()))
                 .map_err(ExtractionError::Storage)?;
 
-            let blocks_to_commit = if reorg_buffer.count_blocks_before(inp.final_block_height) >=
-                self.database_insert_batch_size
+            if reorg_buffer.count_blocks_before(inp.final_block_height) >=
+                self.gateway.commit_batch_size
             {
                 reorg_buffer
                     .drain_blocks_until(inp.final_block_height)
                     .map_err(ExtractionError::Storage)?
             } else {
-                vec![]
-            };
-
-            let oldest_uncommitted_block_height = reorg_buffer
-                .get_oldest_block()
-                .map(|block| block.number)
-                .ok_or_else(|| ExtractionError::ReorgBufferError("Reorg buffer is empty".into()))?;
-
-            (blocks_to_commit, oldest_uncommitted_block_height)
+                Vec::new()
+            }
         };
 
-        // Commit blocks to the database
-        let mut block_iter = blocks_to_commit.iter().peekable();
-        while let Some(block) = block_iter.next() {
-            // Force a database commit if we're not syncing and this is the last block to be
-            // sent. Otherwise, wait to accumulate a full batch before
-            // committing.
-            let force_db_commit = if is_syncing { false } else { block_iter.peek().is_none() };
+        // If we have blocks to commit, wait for the previous async commit task to finish and then
+        // spawn a new task that will commit the new blocks and update the committed block height.
+        if let Some(last_block) = blocks_to_commit.last() {
+            let mut commit_handle_guard = self.gateway.commit_handle.lock().await;
 
-            self.gateway
-                .advance(block.block_update(), block.cursor(), force_db_commit)
-                .await?;
-        }
+            // Consume the previous commit handle, leaving None in its place
+            if let Some(db_commit_handle_to_join) = commit_handle_guard.take() {
+                match db_commit_handle_to_join.await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(storage_err)) => {
+                        return Err(storage_err);
+                    }
+                    Err(join_err) => {
+                        return Err(ExtractionError::Storage(StorageError::Unexpected(format!(
+                            "Failed to join database commit task: {join_err}"
+                        ))));
+                    }
+                }
+            }
 
-        // At this point, we have committed all blocks up to the oldest uncommitted block height.
-        let db_committed_upto_block_height = oldest_uncommitted_block_height;
+            let gateway = self.gateway.inner.clone();
+            let committed_block_height = self
+                .gateway
+                .committed_block_height
+                .clone();
+            let last_block_height = last_block.block_update.block.number;
+            let batch_size = blocks_to_commit.len();
+
+            // Spawn a new task to commit the new blocks and update the committed block height
+            let new_handle = tokio::spawn(async move {
+                let mut it = blocks_to_commit.iter().peekable();
+                while let Some(block) = it.next() {
+                    // Force a database commit if we're not syncing and this is the last block
+                    // to be sent. Otherwise, wait to accumulate a full
+                    // batch before committing.
+                    let force_db_commit = if is_syncing { false } else { it.peek().is_none() };
+
+                    gateway
+                        .advance(block.block_update(), block.cursor(), force_db_commit)
+                        .await
+                        .map_err(ExtractionError::Storage)?;
+                }
+
+                let mut committed_hieght_guard = committed_block_height.lock().await;
+                *committed_hieght_guard = Some(last_block_height);
+
+                debug!(batch_size, block_height = last_block_height, "CommitTaskCompleted");
+
+                Ok(())
+            });
+
+            *commit_handle_guard = Some(new_handle);
+
+            debug!(batch_size, block_height = last_block_height, "CommitTaskQueued");
+        };
 
         self.update_last_processed_block(msg.block.clone())
             .await;
@@ -807,7 +860,12 @@ where
 
         self.update_cursor(inp.cursor).await;
 
-        let mut changes = msg.into_aggregated(db_committed_upto_block_height)?;
+        let committed_block_height = *self
+            .gateway
+            .committed_block_height
+            .lock()
+            .await;
+        let mut changes = msg.into_aggregated(committed_block_height)?;
         self.handle_tvl_changes(&mut changes)
             .await?;
 
@@ -980,6 +1038,7 @@ where
 
         let missing_contracts = self
             .gateway
+            .inner
             .get_contracts(
                 &missing_map
                     .keys()
@@ -1092,6 +1151,7 @@ where
 
         let missing_components_states = self
             .gateway
+            .inner
             .get_protocol_states(
                 &missing_map
                     .keys()
@@ -1230,23 +1290,11 @@ where
             .block_update
             .finalized_block_height;
 
-        let db_committed_upto_block_height = reorg_buffer
-            .get_oldest_block()
-            .ok_or(ExtractionError::ReorgBufferError("Reorg buffer is empty after purge".into()))?
-            .number;
-
-        if db_committed_upto_block_height > finalized_block_height {
-            return Err(ExtractionError::ReorgBufferError(format!(
-                "Database committed block height {} is greater than finalized_block_height {}",
-                db_committed_upto_block_height, finalized_block_height
-            )));
-        }
-
         let revert_message = BlockAggregatedChanges {
             extractor: self.name.clone(),
             chain: self.chain,
             block: new_latest_block.clone(),
-            db_committed_upto_block_height,
+            db_committed_block_height: None,
             finalized_block_height,
             revert: true,
             state_deltas,
@@ -1630,12 +1678,16 @@ impl ExtractorGateway for ExtractorPgGateway {
 
 #[cfg(test)]
 mod test {
-    use std::sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
+    use std::{
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        thread::sleep,
     };
 
     use float_eq::assert_float_eq;
+    use futures03::FutureExt;
     use mockall::mock;
     use tycho_common::{models::blockchain::TxWithChanges, traits::TokenOwnerFinding};
 
@@ -1771,8 +1823,9 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_reorg_buffer_flush_respects_batch_size() {
+    async fn test_handle_tick_scoped_respects_batch_async_commit() {
         let mut gw = MockExtractorGateway::new();
+
         gw.expect_ensure_protocol_types()
             .times(1)
             .returning(|_| ());
@@ -1783,67 +1836,138 @@ mod test {
             .times(1)
             .returning(|_| Ok(Block::default()));
 
+        // Use blocking channels as mock does not support async
+        let (tx, rx) = std::sync::mpsc::channel::<bool>();
         let call_count = Arc::new(AtomicUsize::new(0));
         let call_count_clone = call_count.clone();
         gw.expect_advance()
-            .times(2)
+            .times(4)
             .returning(move |_, _, _| {
+                rx.recv().unwrap();
                 call_count_clone.fetch_add(1, Ordering::SeqCst);
                 Ok(())
             });
 
-        let extractor = create_extractor_with_batch_size(gw, 2).await;
+        let commit_batch_size = 2;
+        let extractor = create_extractor_with_batch_size(gw, commit_batch_size).await;
 
-        let scoped_data = |block_number: u64, final_height: u64| {
+        let scoped = |n: u64, fin: u64| {
             pb_fixtures::pb_block_scoped_data(
                 tycho_substreams::BlockChanges {
-                    block: Some(pb_fixtures::pb_blocks(block_number)),
+                    block: Some(pb_fixtures::pb_blocks(n)),
                     ..Default::default()
                 },
-                Some(format!("cursor@{block_number}").as_str()),
-                Some(final_height),
+                Some(&format!("cursor@{n}")),
+                Some(fin),
             )
         };
+        let commit_task_is_running = async |ex: &ProtocolExtractor<_, _, _>| -> bool {
+            let guard = ex.gateway.commit_handle.lock().await;
+            guard
+                .as_ref()
+                .is_some_and(|h| !h.is_finished())
+        };
+        let commit_task_is_none = async |ex: &ProtocolExtractor<_, _, _>| -> bool {
+            ex.gateway
+                .commit_handle
+                .lock()
+                .await
+                .is_none()
+        };
+        let count_before = async |ex: &ProtocolExtractor<_, _, _>, n: u64| -> usize {
+            let g = ex.reorg_buffer.lock().await;
+            g.count_blocks_before(n)
+        };
 
+        // #1 — no database commit yet (counted 0 out of 2 needed to trigger commit)
         extractor
-            .handle_tick_scoped_data(scoped_data(1, 1))
+            .handle_tick_scoped_data(scoped(1, 1))
             .await
-            .map(|o| o.map(|_| ()))
             .unwrap()
             .unwrap();
-
         assert_eq!(call_count.load(Ordering::SeqCst), 0);
-        {
-            let guard = extractor.reorg_buffer.lock().await;
-            assert_eq!(guard.count_blocks_before(1), 0);
-        }
+        assert!(commit_task_is_none(&extractor).await);
+        assert_eq!(count_before(&extractor, 1).await, 0);
 
+        // #2 — no database commit yet (counted 1 out of 2 needed to trigger commit)
         extractor
-            .handle_tick_scoped_data(scoped_data(2, 2))
+            .handle_tick_scoped_data(scoped(2, 2))
             .await
-            .map(|o| o.map(|_| ()))
             .unwrap()
             .unwrap();
-
         assert_eq!(call_count.load(Ordering::SeqCst), 0);
-        {
-            let guard = extractor.reorg_buffer.lock().await;
-            assert_eq!(guard.count_blocks_before(2), 1);
-        }
+        assert!(commit_task_is_none(&extractor).await);
+        assert_eq!(count_before(&extractor, 2).await, 1);
 
+        // #3 — reaches batch size → kicks off first async commit task (which is blocked by channel)
         extractor
-            .handle_tick_scoped_data(scoped_data(3, 3))
+            .handle_tick_scoped_data(scoped(3, 3))
             .await
-            .map(|o| o.map(|_| ()))
             .unwrap()
             .unwrap();
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+        assert!(commit_task_is_running(&extractor).await);
+        assert_eq!(count_before(&extractor, 3).await, 0);
 
-        assert_eq!(call_count.load(Ordering::SeqCst), 2);
-        {
-            let guard = extractor.reorg_buffer.lock().await;
-            assert_eq!(guard.count_blocks_before(3), 0);
-            assert_eq!(guard.get_oldest_block().unwrap().number, 3);
+        // #4 — no database commit yet (counted 1 out of 2)
+        // new tick processing should still succeed despite the commit task being blocked
+        extractor
+            .handle_tick_scoped_data(scoped(4, 4))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+        assert!(commit_task_is_running(&extractor).await);
+        assert_eq!(count_before(&extractor, 4).await, 1);
+
+        // #5 — should trigger second commit task, however as the first one is still blocked,
+        // this tick processing should also be blocked until the first commit task is done
+        let mut fifth_tick_future = extractor.handle_tick_scoped_data(scoped(5, 5));
+
+        // Sleep for a short while to ensure the fifth call processing is blocked
+        sleep(std::time::Duration::from_millis(100));
+
+        // Confirm the fifth call is *pending* (blocked on the first commit still running)
+        assert!(
+            fifth_tick_future
+                .as_mut()
+                .now_or_never()
+                .is_none(),
+            "should be pending"
+        );
+        assert_eq!(call_count.load(Ordering::SeqCst), 0);
+
+        // ---- Unblock first commit (allow it to finish) ----
+        tx.send(true).unwrap();
+        tx.send(true).unwrap();
+
+        // The fifth call (which also triggers a commit) can now complete
+        fifth_tick_future
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(call_count.load(Ordering::SeqCst), 2, "first commit should be counted");
+
+        // A second commit task should be running now async, still blocked
+        assert!(commit_task_is_running(&extractor).await);
+
+        // ---- Unblock second commit and wait for its task handle ----
+        tx.send(true).unwrap();
+        tx.send(true).unwrap();
+
+        // Await for the commit task to finish
+        let handle = {
+            let mut g = extractor
+                .gateway
+                .commit_handle
+                .lock()
+                .await;
+            g.take()
         }
+        .expect("expected a running commit task");
+        handle.await.unwrap().unwrap();
+
+        assert_eq!(call_count.load(Ordering::SeqCst), 4, "second commit should be counted");
     }
 
     #[tokio::test]
@@ -3020,6 +3144,11 @@ mod test_serial_db {
                     .unwrap();
             }
 
+            // Wait for the extractor to finish processing
+            if let Some(handle) = extractor.gateway.commit_handle.lock().await.take() {
+                handle.await.unwrap().unwrap();
+            }
+
             let client_msg = extractor
                 .handle_revert(BlockUndoSignal {
                     last_valid_block: Some(BlockRef {
@@ -3044,7 +3173,7 @@ mod test_serial_db {
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
                     chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
                 ),
-                db_committed_upto_block_height: 3,
+                db_committed_block_height: None,
                 finalized_block_height: 3,
                 revert: true,
                 state_deltas: HashMap::from([
@@ -3200,6 +3329,11 @@ mod test_serial_db {
                     .unwrap();
             }
 
+            // Wait for the extractor to finish processing
+            if let Some(handle) = extractor.gateway.commit_handle.lock().await.take() {
+                handle.await.unwrap().unwrap();
+            }
+
             let client_msg = extractor
                 .handle_revert(BlockUndoSignal {
                     last_valid_block: Some(BlockRef {
@@ -3226,7 +3360,7 @@ mod test_serial_db {
                     Bytes::from_str("0x0000000000000000000000000000000000000000000000000000000000000002").unwrap(),
                     chrono::DateTime::from_timestamp(base_ts + 3000, 0).unwrap().naive_utc(),
                 ),
-                db_committed_upto_block_height: 3,
+                db_committed_block_height: None,
                 finalized_block_height: 3,
                 revert: true,
                 account_deltas: HashMap::from([
@@ -3432,6 +3566,17 @@ mod test_serial_db {
                     .handle_tick_scoped_data(inp)
                     .await
                     .unwrap();
+            }
+
+            // Wait for the extractor to finish processing
+            if let Some(handle) = extractor
+                .gateway
+                .commit_handle
+                .lock()
+                .await
+                .take()
+            {
+                handle.await.unwrap().unwrap();
             }
 
             // Revert block #4, which had a timestamp of 1 second after block #3.
