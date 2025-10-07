@@ -804,10 +804,10 @@ where
         // If we have blocks to commit, wait for the previous async commit task to finish and then
         // spawn a new task that will commit the new blocks and update the committed block height.
         if let Some(last_block) = blocks_to_commit.last() {
-            let mut guard = self.gateway.commit_handle.lock().await;
+            let mut commit_handle_guard = self.gateway.commit_handle.lock().await;
 
             // Consume the previous commit handle, leaving None in its place
-            if let Some(db_commit_handle_to_join) = guard.take() {
+            if let Some(db_commit_handle_to_join) = commit_handle_guard.take() {
                 match db_commit_handle_to_join.await {
                     Ok(Ok(())) => {}
                     Ok(Err(storage_err)) => {
@@ -844,15 +844,15 @@ where
                         .map_err(ExtractionError::Storage)?;
                 }
 
-                let mut guard = committed_block_height.lock().await;
-                *guard = Some(last_block_height);
+                let mut committed_hieght_guard = committed_block_height.lock().await;
+                *committed_hieght_guard = Some(last_block_height);
 
                 debug!(batch_size, block_height = last_block_height, "CommitTaskCompleted");
 
                 Ok(())
             });
 
-            *guard = Some(new_handle);
+            *commit_handle_guard = Some(new_handle);
 
             debug!(batch_size, block_height = last_block_height, "CommitTaskQueued");
         };
