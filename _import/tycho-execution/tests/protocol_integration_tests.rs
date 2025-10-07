@@ -407,6 +407,96 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
 }
 
 #[test]
+fn test_single_encoding_strategy_ekubo_grouped_swap() {
+    // Test multi-hop Ekubo swap (grouped swaps)
+    //
+    //   USDE ──(EKUBO)──> USDC ──(EKUBO)──> USDT
+
+    let usde = Bytes::from_str("0x4c9edd5852cd905f086c759e8383e09bff1e68b3").unwrap();
+    let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+    let usdt = Bytes::from_str("0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap();
+
+    // First swap: USDE -> USDC
+    let swap1 = Swap {
+        component: ProtocolComponent {
+            id: "a419f0ebb019eb85fdccd0200843752dd9cc31d0cb3127f3adb4ba37a092788f".to_string(),
+            protocol_system: "ekubo_v2".to_string(),
+            static_attributes: HashMap::from([
+                ("fee".to_string(), Bytes::from(922337203685478_u64)),
+                ("tick_spacing".to_string(), Bytes::from(100_u32)),
+                (
+                    "extension".to_string(),
+                    Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+                ),
+            ]),
+            ..Default::default()
+        },
+        token_in: usde.clone(),
+        token_out: usdc.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+
+    // Second swap: USDC -> USDT
+    let swap2 = Swap {
+        component: ProtocolComponent {
+            id: "ca5b3ef9770bb95940bd4e0bff5ead70a5973d904a8b370b52147820e61a2ff6".to_string(),
+            protocol_system: "ekubo_v2".to_string(),
+            static_attributes: HashMap::from([
+                ("fee".to_string(), Bytes::from(92233720368547_u64)),
+                ("tick_spacing".to_string(), Bytes::from(50_u32)),
+                (
+                    "extension".to_string(),
+                    Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+                ),
+            ]),
+            ..Default::default()
+        },
+        token_in: usdc.clone(),
+        token_out: usdt.clone(),
+        split: 0f64,
+        user_data: None,
+        protocol_state: None,
+        estimated_amount_in: None,
+    };
+
+    let encoder = get_tycho_router_encoder(UserTransferType::TransferFrom);
+
+    let solution = Solution {
+        exact_out: false,
+        given_token: usde,
+        given_amount: BigUint::from_str("1_000000000000000000").unwrap(),
+        checked_token: usdt,
+        checked_amount: BigUint::from_str("1000").unwrap(),
+        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        swaps: vec![swap1, swap2],
+        ..Default::default()
+    };
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &UserTransferType::TransferFrom,
+        &eth(),
+        None,
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_ekubo_grouped_swap", hex_calldata.as_str());
+}
+
+#[test]
 fn test_single_encoding_strategy_curve() {
     //   UWU ──(curve 2 crypto pool)──> WETH
 

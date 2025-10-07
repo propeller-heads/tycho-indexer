@@ -6,6 +6,7 @@ use tycho_common::{models::Chain, Bytes};
 use crate::encoding::{
     errors::EncodingError,
     evm::{
+        constants::NON_PLE_ENCODED_PROTOCOLS,
         group_swaps::group_swaps,
         strategy_encoder::{
             strategy_validators::{SequentialSwapValidator, SplitSwapValidator, SwapValidator},
@@ -139,7 +140,13 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
         }
 
         if !grouped_protocol_data.is_empty() {
-            initial_protocol_data.extend(ple_encode(grouped_protocol_data));
+            if NON_PLE_ENCODED_PROTOCOLS.contains(grouped_swap.protocol_system.as_str()) {
+                for protocol_data in grouped_protocol_data {
+                    initial_protocol_data.extend(protocol_data);
+                }
+            } else {
+                initial_protocol_data.extend(ple_encode(grouped_protocol_data));
+            }
         }
 
         let swap_data = self.encode_swap_header(
@@ -305,7 +312,13 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
             }
 
             if !grouped_protocol_data.is_empty() {
-                initial_protocol_data.extend(ple_encode(grouped_protocol_data));
+                if NON_PLE_ENCODED_PROTOCOLS.contains(grouped_swap.protocol_system.as_str()) {
+                    for protocol_data in grouped_protocol_data {
+                        initial_protocol_data.extend(protocol_data);
+                    }
+                } else {
+                    initial_protocol_data.extend(ple_encode(grouped_protocol_data));
+                }
             }
 
             let swap_data = self.encode_swap_header(
@@ -511,7 +524,13 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             }
 
             if !grouped_protocol_data.is_empty() {
-                initial_protocol_data.extend(ple_encode(grouped_protocol_data));
+                if NON_PLE_ENCODED_PROTOCOLS.contains(grouped_swap.protocol_system.as_str()) {
+                    for protocol_data in grouped_protocol_data {
+                        initial_protocol_data.extend(protocol_data);
+                    }
+                } else {
+                    initial_protocol_data.extend(ple_encode(grouped_protocol_data));
+                }
             }
 
             let swap_data = self.encode_swap_header(
