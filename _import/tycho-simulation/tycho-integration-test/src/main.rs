@@ -181,6 +181,10 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 .entry(id.clone())
                 .or_insert_with(|| comp.clone());
         }
+
+        for (protocol, sync_state) in message.sync_states.iter() {
+            metrics::record_protocol_sync_state(protocol, sync_state);
+        }
         let block = match provider
             .get_block_by_number(BlockNumberOrTag::Latest)
             .await

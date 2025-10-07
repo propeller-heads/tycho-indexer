@@ -4,6 +4,7 @@ use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use miette::{Context, IntoDiagnostic, Result};
 use num_bigint::BigUint;
 use tracing::info;
+use tycho_client::feed::SynchronizerState;
 use tycho_common::Bytes;
 
 /// Initialize the metrics registry and describe all metrics
@@ -37,6 +38,10 @@ pub fn init_metrics() {
     describe_histogram!(
         "slippage_between_simulation_and_execution",
         "Slippage between simulated amount out and simulated execution amount out"
+    );
+    describe_counter!(
+        "protocol_sync_state_total",
+        "Total count of sync states per protocol with state as label"
     );
 }
 
@@ -140,6 +145,19 @@ pub fn record_simulation_execution_failure_detailed(
 pub fn record_slippage(block_number: u64, protocol: &str, component_id: &str, slippage: f64) {
     histogram!("slippage_between_simulation_and_execution","block" => block_number.to_string(), "protocol"=>protocol.to_string(), "component_id" => component_id.to_string(),)
         .record(slippage);
+}
+
+pub fn record_protocol_sync_state(protocol: &str, sync_state: &SynchronizerState) {
+    let state_name = match sync_state {
+        SynchronizerState::Started => "Started",
+        SynchronizerState::Ready(_) => "Ready",
+        SynchronizerState::Delayed(_) => "Delayed",
+        SynchronizerState::Stale(_) => "Stale",
+        SynchronizerState::Advanced(_) => "Advanced",
+        SynchronizerState::Ended(_) => "Ended",
+    };
+    counter!("protocol_sync_state_total", "protocol" => protocol.to_string(), "sync_state" => state_name)
+        .increment(1);
 }
 
 /// Creates and runs the Prometheus metrics exporter using Actix Web.
