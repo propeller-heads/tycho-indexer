@@ -55,6 +55,8 @@ pub struct HashflowClient {
 }
 
 impl HashflowClient {
+    pub const PROTOCOL_SYSTEM: &'static str = "rfq:hashflow";
+
     pub fn new(
         chain: Chain,
         tokens: HashSet<Bytes>,
@@ -129,7 +131,7 @@ impl HashflowClient {
     ) -> ComponentWithState {
         let protocol_component = ProtocolComponent {
             id: component_id.clone(),
-            protocol_system: "rfq:hashflow".to_string(),
+            protocol_system: Self::PROTOCOL_SYSTEM.to_string(),
             protocol_type_name: "hashflow_pool".to_string(),
             chain: self.chain.into(),
             tokens,

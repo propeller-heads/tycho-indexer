@@ -73,6 +73,8 @@ pub struct BebopClient {
 }
 
 impl BebopClient {
+    pub const PROTOCOL_SYSTEM: &'static str = "rfq:bebop";
+
     pub fn new(
         chain: Chain,
         tokens: HashSet<Bytes>,
@@ -103,7 +105,7 @@ impl BebopClient {
     ) -> ComponentWithState {
         let protocol_component = ProtocolComponent {
             id: component_id.clone(),
-            protocol_system: "rfq:bebop".to_string(),
+            protocol_system: Self::PROTOCOL_SYSTEM.to_string(),
             protocol_type_name: "bebop_pool".to_string(),
             chain: self.chain.into(),
             tokens,

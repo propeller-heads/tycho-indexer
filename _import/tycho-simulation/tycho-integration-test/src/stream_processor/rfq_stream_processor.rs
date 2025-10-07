@@ -7,15 +7,15 @@ use std::{
 
 use miette::{miette, IntoDiagnostic, WrapErr};
 use rand::prelude::IteratorRandom;
-use tokio::{sync::mpsc::Sender, task::JoinHandle, time::timeout};
-use tracing::{debug, info, warn};
+use tokio::{sync::mpsc::Sender, task::JoinHandle};
+use tracing::{info, warn};
 use tycho_common::{
     models::{token::Token, Chain},
     Bytes,
 };
 use tycho_simulation::rfq::{
     protocols::{
-        bebop::{client_builder::BebopClientBuilder, state::BebopState},
+        bebop::{client::BebopClient, client_builder::BebopClientBuilder, state::BebopState},
         hashflow::{client::HashflowClient, state::HashflowState},
     },
     stream::RFQStreamBuilder,
@@ -32,8 +32,8 @@ pub enum RfqProtocol {
 impl Display for RfqProtocol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RfqProtocol::Bebop => write!(f, "Bebop"),
-            RfqProtocol::Hashflow => write!(f, "Hashflow"),
+            RfqProtocol::Bebop => write!(f, "{}", BebopClient::PROTOCOL_SYSTEM),
+            RfqProtocol::Hashflow => write!(f, "{}", HashflowClient::PROTOCOL_SYSTEM),
         }
     }
 }
@@ -120,32 +120,31 @@ impl RfqStreamProcessor {
         let _handle = tokio::spawn(rfq_stream_builder.build(tx));
         let sample_size = self.sample_size;
         let stream_sleep_time = self.stream_sleep_time;
-        let mut next_stream_time = tokio::time::Instant::now();
+        let mut next_stream_times: HashMap<String, tokio::time::Instant> = self
+            .rfq_credentials
+            .keys()
+            .map(|protocol| (protocol.to_string(), tokio::time::Instant::now()))
+            .collect();
         let handle = tokio::spawn(async move {
-            while let Some(update) = rx.recv().await {
-                // Drain any additional buffered messages to get the most recent one
-                let mut latest_update = update;
-                let mut drained_count = 0;
-                while let Ok(newer_update) = timeout(Duration::from_millis(10), rx.recv()).await {
-                    if let Some(newer_update) = newer_update {
-                        latest_update = newer_update;
-                        drained_count += 1;
+            while let Some(mut update) = rx.recv().await {
+                // Handle throttling for the update's protocol
+                if let Some((_, component)) = update.new_pairs.iter().next() {
+                    let next_stream_time =
+                        if let Some(t) = next_stream_times.get_mut(&component.protocol_system) {
+                            t
+                        } else {
+                            warn!("Unknown protocol system: {}", component.protocol_system);
+                            continue;
+                        };
+                    let now = tokio::time::Instant::now();
+                    if now < *next_stream_time {
+                        continue;
                     } else {
-                        break;
+                        *next_stream_time = now + stream_sleep_time;
                     }
-                }
-                if drained_count > 0 {
-                    debug!(
-                        "Fast-forwarded through {drained_count} older RFQ updates to get latest prices"
-                    );
-                }
-                let mut update = latest_update;
-
-                let now = tokio::time::Instant::now();
-                if now < next_stream_time {
+                } else {
                     continue;
-                }
-                next_stream_time = now + stream_sleep_time;
+                };
 
                 // Sample random RFQ quotes
                 update.states = update
