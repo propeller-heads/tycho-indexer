@@ -254,10 +254,9 @@ impl EVMBatchAccountExtractor {
         debug!(scheme = url.scheme(), host = url.host_str(), "Parsed URL successfully");
 
         // Create the RPC client using ReqwestClient for proper HTTPS support
-        debug!(url = %url, "Creating ReqwestClient for RPC with HTTPS support");
         let provider: ReqwestClient = ClientBuilder::default().http(url.clone());
 
-        info!(node_url, scheme = url.scheme(), "Successfully created RPC client");
+        info!(scheme = url.scheme(), "Successfully created RPC client");
         Ok(Self { provider, chain })
     }
 
