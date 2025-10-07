@@ -68,7 +68,7 @@ impl RfqStreamProcessor {
             tvl_threshold,
             rfq_credentials,
             sample_size: 10,
-            stream_sleep_time: Duration::from_secs(5),
+            stream_sleep_time: Duration::from_secs(10 * 60),
         })
     }
 
@@ -104,7 +104,7 @@ impl RfqStreamProcessor {
                         Default::default(),
                         user.clone(),
                         key.clone(),
-                        Duration::from_secs(1),
+                        Duration::from_secs(30),
                     )
                     .into_diagnostic()
                     .wrap_err("Failed to create Hashflow RFQ client")?;
