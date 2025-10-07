@@ -28,6 +28,7 @@ use tokio_retry2::{
     Retry, RetryError,
 };
 use tracing::{error, info, trace, warn};
+use tracing_subscriber::EnvFilter;
 use tycho_ethereum::entrypoint_tracer::{
     allowance_slot_detector::{AllowanceSlotDetectorConfig, EVMAllowanceSlotDetector},
     balance_slot_detector::{BalanceSlotDetectorConfig, EVMBalanceSlotDetector},
@@ -109,6 +110,9 @@ impl Debug for Cli {
 async fn main() -> miette::Result<()> {
     dotenv().ok();
     let cli = Cli::parse();
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
     // Initialize and start Prometheus metrics
     metrics::init_metrics();
