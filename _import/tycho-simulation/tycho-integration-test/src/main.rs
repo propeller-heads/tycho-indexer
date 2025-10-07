@@ -1,7 +1,9 @@
 mod execution_simulator;
 mod four_byte_client;
+mod metrics;
 mod stream_processor;
 mod swap_simulation;
+mod tenderly;
 mod traces;
 
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
@@ -9,6 +11,7 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use alloy::{
     eips::BlockNumberOrTag,
     network::Ethereum,
+    primitives::Address,
     providers::{Provider, ProviderBuilder, RootProvider},
     rpc::types::Block,
 };
@@ -56,6 +59,14 @@ struct Cli {
 
     #[arg(long, env = "RPC_URL")]
     rpc_url: String,
+
+    /// Port for the Prometheus metrics server
+    #[arg(long, default_value_t = 9898)]
+    metrics_port: u16,
+
+    /// Maximum number of simulations to run per protocol update
+    #[arg(short, default_value_t = 10)]
+    max_n_simulations: usize,
 }
 
 impl Debug for Cli {
@@ -65,6 +76,7 @@ impl Debug for Cli {
             .field("chain", &self.chain)
             .field("tycho_api_key", &"****")
             .field("rpc_url", &self.rpc_url)
+            .field("metrics_port", &self.metrics_port)
             .finish()
     }
 }
@@ -77,7 +89,24 @@ async fn main() -> miette::Result<()> {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
     let cli = Cli::parse();
-    run(cli).await?;
+
+    // Initialize and start Prometheus metrics
+    metrics::init_metrics();
+    let metrics_task = metrics::create_metrics_exporter(cli.metrics_port).await?;
+
+    // Run the main application logic and metrics server in parallel
+    // If either fails, the other will be cancelled
+    tokio::select! {
+        result = run(cli) => {
+            result?;
+        }
+        result = metrics_task => {
+            result
+                .into_diagnostic()
+                .wrap_err("Metrics server task panicked")??;
+        }
+    }
+
     Ok(())
 }
 
@@ -143,6 +172,13 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 continue;
             }
         }
+        for (protocol, sync_state) in update.update.sync_states.iter() {
+            metrics::record_protocol_sync_state(protocol, sync_state);
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .into_diagnostic()?
+            .as_secs();
         let block = match provider
             .get_block_by_number(BlockNumberOrTag::Latest)
             .await
@@ -151,13 +187,24 @@ async fn run(cli: Cli) -> miette::Result<()> {
             .ok()
             .flatten()
         {
-            Some(b) => b,
+            Some(b) => {
+                // Record block processing latency
+                let latency_seconds = (now as i64 - b.header.timestamp as i64).abs() as f64;
+                metrics::record_block_processing_latency(latency_seconds);
+                b
+            }
             None => {
                 warn!("Failed to retrieve last block, continuing to next message...");
                 continue;
             }
         };
-        for (id, state) in update.update.states.iter() {
+
+        for (id, state) in update
+            .update
+            .states
+            .iter()
+            .take(cli.max_n_simulations)
+        {
             process_update_state(&cli, chain, &protocol_pairs, &block, &update, id, state.as_ref())
                 .await;
         }
@@ -219,6 +266,14 @@ async fn process_update_state(
             Ok(limits) => limits,
             Err(e) => {
                 warn!("{e:?}");
+                metrics::record_get_limits_failures(
+                    &component.protocol_system,
+                    state_id,
+                    block.header.number,
+                    &token_in.address,
+                    &token_out.address,
+                    e.to_string(),
+                );
                 continue;
             }
         };
@@ -239,7 +294,8 @@ async fn process_update_state(
         }
         info!("Calculated amount_in: {amount_in} {}", token_in.symbol);
 
-        // Get expected amount out using tycho-simulation
+        // Get expected amount out using tycho-simulation and measure duration
+        let start_time = std::time::Instant::now();
         let amount_out_result = match state
             .get_amount_out(amount_in.clone(), token_in, token_out)
             .into_diagnostic()
@@ -251,9 +307,23 @@ async fn process_update_state(
             Ok(res) => res,
             Err(e) => {
                 warn!("{e}");
+                metrics::record_get_amount_out_failures(
+                    &component.protocol_system,
+                    state_id,
+                    block.header.number,
+                    &token_in.address,
+                    &token_out.address,
+                    &amount_in,
+                    e.to_string(),
+                );
                 continue;
             }
         };
+        metrics::record_get_amount_out_duration(
+            &component.protocol_system,
+            start_time.elapsed().as_secs_f64(),
+            state_id,
+        );
         let expected_amount_out = amount_out_result.amount;
         info!("Calculated amount_out: {expected_amount_out} {}", token_out.symbol);
 
@@ -279,9 +349,50 @@ async fn process_update_state(
         };
         let simulated_amount_out =
             match simulate_swap_transaction(&cli.rpc_url, &solution, &transaction, block).await {
-                Ok(amount) => amount,
-                Err(e) => {
-                    error!("Failed to simulate swap: {e}");
+                Ok(amount) => {
+                    metrics::record_simulation_execution_success();
+                    metrics::record_simulation_execution_success_detailed(
+                        &component.protocol_system,
+                        state_id,
+                        block.header.number,
+                    );
+                    amount
+                }
+                Err((e, state_overwrites)) => {
+                    let error_msg = e.to_string();
+                    error!("Failed to simulate swap: {error_msg}");
+
+                    // Extract revert reason from error message
+                    // Error format is typically "Transaction reverted: <reason>"
+                    let revert_reason =
+                        if let Some(reason) = error_msg.strip_prefix("Transaction reverted: ") {
+                            reason
+                        } else {
+                            &error_msg
+                        };
+
+                    // Extract error name (first word or function signature)
+                    let error_name = extract_error_name(revert_reason);
+
+                    // Generate Tenderly URL for debugging with state overrides
+                    let tenderly_url = tenderly::build_tenderly_url(
+                        &tenderly::TenderlySimParams::default(),
+                        Some(&transaction),
+                        Some(block),
+                        Address::from_slice(&solution.sender[..20]),
+                        state_overwrites.as_ref(),
+                    );
+                    info!("Tenderly simulation URL: {}", tenderly_url);
+
+                    metrics::record_simulation_execution_failure(revert_reason);
+                    metrics::record_simulation_execution_failure_detailed(
+                        &component.protocol_system,
+                        state_id,
+                        block.header.number,
+                        revert_reason,
+                        &error_name,
+                    );
+
                     continue;
                 }
             };
@@ -290,18 +401,46 @@ async fn process_update_state(
         // Calculate slippage
         let slippage = if simulated_amount_out > expected_amount_out {
             let diff = &simulated_amount_out - &expected_amount_out;
-            let slippage = (diff.clone() * BigUint::from(10000u32)) / expected_amount_out;
-            format!("+{:.2}%", slippage.to_f64().unwrap_or(0.0) / 100.0)
+            (diff.clone() * BigUint::from(10000u32)) / expected_amount_out
         } else {
             let diff = &expected_amount_out - &simulated_amount_out;
-            let slippage = (diff.clone() * BigUint::from(10000u32)) / expected_amount_out;
-            format!("-{:.2}%", slippage.to_f64().unwrap_or(0.0) / 100.0)
+            (diff.clone() * BigUint::from(10000u32)) / expected_amount_out
         };
-        info!("Slippage: {slippage}");
+        let slippage = slippage.to_f64().unwrap_or(0.0) / 100.0;
+
+        metrics::record_slippage(
+            block.header.number,
+            &component.protocol_system,
+            state_id,
+            slippage,
+        );
+        info!("Slippage: {:.2}%", slippage);
 
         info!(
             "{} pool processed {state_id} from {} to {}",
             component.protocol_system, token_in.symbol, token_out.symbol
         );
+    }
+}
+
+/// Extract the error name from a revert reason string
+/// Examples:
+/// - "TychoRouter__NegativeSlippage(1000, 990)" -> "TychoRouter__NegativeSlippage"
+/// - "arithmetic underflow or overflow" -> "arithmetic underflow or overflow"
+/// - "Error(string): insufficient balance" -> "Error"
+fn extract_error_name(revert_reason: &str) -> String {
+    // Check if it's a function-style error (e.g., "ErrorName(...)")
+    if let Some(paren_pos) = revert_reason.find('(') {
+        revert_reason[..paren_pos]
+            .trim()
+            .to_string()
+    } else if let Some(colon_pos) = revert_reason.find(':') {
+        // Handle "Error: message" format
+        revert_reason[..colon_pos]
+            .trim()
+            .to_string()
+    } else {
+        // Return the whole message for simple errors
+        revert_reason.trim().to_string()
     }
 }

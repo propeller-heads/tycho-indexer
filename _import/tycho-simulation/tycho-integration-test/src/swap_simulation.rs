@@ -178,11 +178,13 @@ pub async fn simulate_swap_transaction(
     solution: &Solution,
     transaction: &Transaction,
     block: &Block,
-) -> miette::Result<BigUint> {
+) -> Result<BigUint, (miette::Error, Option<AddressHashMap<AccountOverride>>)> {
     let user_address = Address::from_slice(&solution.sender[..20]);
-    let request = swap_request(transaction, block, user_address)?;
+    let request = swap_request(transaction, block, user_address).map_err(|e| (e, None))?;
     let state_overwrites =
-        setup_user_overwrites(rpc_url, solution, transaction, block, user_address).await?;
+        setup_user_overwrites(rpc_url, solution, transaction, block, user_address)
+            .await
+            .map_err(|e| (e, None))?;
 
     // Use debug_traceCall from the start with retry logic
     let retry_strategy = ExponentialFactorBackoff::from_millis(1000, 2.)
@@ -190,14 +192,16 @@ pub async fn simulate_swap_transaction(
         .map(jitter)
         .take(10);
 
+    // Clone state_overwrites before moving into closure
+    let state_overwrites_for_retry = state_overwrites.clone();
     let result = Retry::spawn(retry_strategy, move || {
         let mut simulator = ExecutionSimulator::new(rpc_url.to_string().clone());
         let request = request.clone();
-        let state_overwrites = state_overwrites.clone();
+        let state_overwrites = state_overwrites_for_retry.clone();
 
         async move {
             match simulator
-                .simulate_with_trace(request, Some(state_overwrites))
+                .simulate_with_trace(request, Some(state_overwrites), block.number())
                 .await
             {
                 Ok(res) => Ok(res),
@@ -206,17 +210,25 @@ pub async fn simulate_swap_transaction(
         }
     })
     .await
-    .map_err(|e| miette!("Failed to simulate transaction after retries: {e}"))?;
+    .map_err(|e| {
+        (
+            miette!("Failed to simulate transaction after retries: {e}"),
+            Some(state_overwrites.clone()),
+        )
+    })?;
 
     match result {
         execution_simulator::SimulationResult::Success { return_data, gas_used } => {
             info!("Transaction succeeded, gas used: {gas_used}");
-            let amount_out = U256::abi_decode(&return_data)
-                .map_err(|e| miette!("Failed to decode swap amount: {e:?}"))?;
-            BigUint::from_str(amount_out.to_string().as_str()).into_diagnostic()
+            let amount_out = U256::abi_decode(&return_data).map_err(|e| {
+                (miette!("Failed to decode swap amount: {e:?}"), Some(state_overwrites.clone()))
+            })?;
+            BigUint::from_str(amount_out.to_string().as_str())
+                .into_diagnostic()
+                .map_err(|e| (e, Some(state_overwrites.clone())))
         }
         execution_simulator::SimulationResult::Revert { reason } => {
-            Err(miette!("Transaction reverted: {}", reason))
+            Err((miette!("Transaction reverted: {}", reason), Some(state_overwrites)))
         }
     }
 }
