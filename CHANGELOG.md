@@ -1,3 +1,11 @@
+## [0.93.0](https://github.com/propeller-heads/tycho-indexer/compare/0.92.1...0.93.0) (2025-10-07)
+
+
+### Features
+
+* add native balance tracking in DCI ([55edb21](https://github.com/propeller-heads/tycho-indexer/commit/55edb2188552f2f80cffa109d80cb6e2b6218c71))
+* add native balance tracking in DCI ([#721](https://github.com/propeller-heads/tycho-indexer/issues/721)) ([247525f](https://github.com/propeller-heads/tycho-indexer/commit/247525f90cd241e0eb151a8175c9126636aefcde))
+
 ## [0.92.1](https://github.com/propeller-heads/tycho-indexer/compare/0.92.0...0.92.1) (2025-10-02)
 
 
