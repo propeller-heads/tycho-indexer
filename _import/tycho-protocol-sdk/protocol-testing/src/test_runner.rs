@@ -30,7 +30,10 @@ use tycho_simulation::{
         BlockHeader, FeedMessage,
     },
     tycho_common::{
-        dto::{Chain, ProtocolComponent, ResponseAccount, ResponseProtocolState},
+        dto::{
+            Chain, EntryPointWithTracingParams, ProtocolComponent, ResponseAccount,
+            ResponseProtocolState, TracingResult,
+        },
         models::token::Token,
         Bytes,
     },
@@ -369,6 +372,16 @@ impl TestRunner {
             .into_diagnostic()
             .wrap_err("Failed to get contract state")?;
 
+        let traced_entry_points = self
+            .runtime
+            .block_on(tycho_client.get_traced_entry_points(
+                protocol_system,
+                expected_component_ids.clone(),
+                chain,
+            ))
+            .into_diagnostic()
+            .wrap_err("Failed to get trace points")?;
+
         // Create a map of component IDs to components for easy lookup
         let mut components_by_id: HashMap<String, ProtocolComponent> = protocol_components
             .clone()
@@ -386,6 +399,7 @@ impl TestRunner {
 
         debug!("Found {} protocol components", components_by_id.len());
         debug!("Found {} protocol states", protocol_states_by_id.len());
+        debug!("Found {} traced entry points", traced_entry_points.len());
 
         let adapter_contract_path;
         let mut adapter_contract_path_str: Option<&str> = None;
@@ -441,13 +455,24 @@ impl TestRunner {
                 .wrap_err(format!("No state found for component: {id}"))?
                 .clone();
 
+            let traced_entry_points: Vec<(EntryPointWithTracingParams, TracingResult)> =
+                traced_entry_points
+                    .get(component_id)
+                    .map(|inner| {
+                        inner
+                            .iter()
+                            .map(|(k, v)| (k.clone(), v.clone()))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+
             let component_with_state = ComponentWithState {
                 state,
                 component: component.clone(),
                 component_tvl: None,
                 // Neither UniswapV4 with hooks not certain balancer pools are currently supported
                 // for SDK testing
-                entrypoints: vec![],
+                entrypoints: traced_entry_points,
             };
             states.insert(component_id.clone(), component_with_state);
         }

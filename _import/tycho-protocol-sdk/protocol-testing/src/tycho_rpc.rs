@@ -5,8 +5,9 @@ use tycho_simulation::{
     tycho_client::{rpc::RPCClient, HttpRPCClient},
     tycho_common::{
         dto::{
-            Chain, PaginationParams, ProtocolComponent, ProtocolComponentsRequestBody,
-            ResponseAccount, ResponseProtocolState, ResponseToken, StateRequestBody, VersionParam,
+            Chain, EntryPointWithTracingParams, PaginationParams, ProtocolComponent,
+            ProtocolComponentsRequestBody, ResponseAccount, ResponseProtocolState, ResponseToken,
+            StateRequestBody, TracedEntryPointRequestBody, TracingResult, VersionParam,
         },
         models::token::Token,
         Bytes,
@@ -152,5 +153,27 @@ impl TychoClient {
             .collect::<HashMap<_, Token>>();
 
         Ok(res)
+    }
+
+    /// Gets traced entry points from the RPC server
+    pub async fn get_traced_entry_points(
+        &self,
+        protocol_system: &str,
+        component_ids: Vec<String>,
+        chain: Chain,
+    ) -> Result<HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>, RpcError> {
+        let request_body = TracedEntryPointRequestBody {
+            protocol_system: protocol_system.to_string(),
+            chain,
+            pagination: PaginationParams { page: 0, page_size: 100 },
+            component_ids: Some(component_ids),
+        };
+
+        let traced_entry_points = self
+            .http_client
+            .get_traced_entry_points(&request_body)
+            .await?;
+
+        Ok(traced_entry_points.traced_entry_points)
     }
 }
