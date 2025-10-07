@@ -1,3 +1,11 @@
+## [0.94.0](https://github.com/propeller-heads/tycho-indexer/compare/0.93.1...0.94.0) (2025-10-07)
+
+
+### Features
+
+* make RPC retry config more permissive ([101325f](https://github.com/propeller-heads/tycho-indexer/commit/101325f5857b04ad954a198ddc26e5267e34b006))
+* make RPC retry config more permissive ([#717](https://github.com/propeller-heads/tycho-indexer/issues/717)) ([e322b5c](https://github.com/propeller-heads/tycho-indexer/commit/e322b5c8292537587f8bcc5ae1ca5cdf68e826cc))
+
 ## [0.93.1](https://github.com/propeller-heads/tycho-indexer/compare/0.93.0...0.93.1) (2025-10-07)
 
 ## [0.93.0](https://github.com/propeller-heads/tycho-indexer/compare/0.92.1...0.93.0) (2025-10-07)
