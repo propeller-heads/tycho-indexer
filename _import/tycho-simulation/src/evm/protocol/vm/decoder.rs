@@ -83,6 +83,13 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
             .map(|bytes: &Bytes| Address::from_slice(bytes.as_ref()))
             .collect::<HashSet<Address>>();
 
+        let filtered_potential_rebasing_tokens: HashSet<Address> = snapshot
+            .entrypoints
+            .iter()
+            .filter(|(ep, _)| ep.entry_point.signature == "balanceOf")
+            .map(|(ep, _)| Address::from_slice(ep.entry_point.target.as_ref()))
+            .collect();
+
         // Decode balances
         let balance_owner = snapshot
             .state
@@ -150,6 +157,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
         let mut pool_state_builder =
             EVMPoolStateBuilder::new(id.clone(), tokens.clone(), adapter_contract_address)
                 .balances(component_balances)
+                .disable_overwrite_tokens(filtered_potential_rebasing_tokens)
                 .account_balances(account_balances)
                 .adapter_contract_bytecode(adapter_bytecode)
                 .involved_contracts(involved_contracts)

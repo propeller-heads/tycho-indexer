@@ -95,6 +95,7 @@ where
     engine: Option<SimulationEngine<D>>,
     adapter_contract: Option<TychoSimulationContract<D>>,
     adapter_contract_bytecode: Option<Bytecode>,
+    disable_overwrite_tokens: HashSet<Address>,
 }
 
 impl<D> EVMPoolStateBuilder<D>
@@ -119,6 +120,7 @@ where
             engine: None,
             adapter_contract: None,
             adapter_contract_bytecode: None,
+            disable_overwrite_tokens: HashSet::new(),
         }
     }
 
@@ -186,6 +188,11 @@ where
         self
     }
 
+    pub fn disable_overwrite_tokens(mut self, disable_overwrite_tokens: HashSet<Address>) -> Self {
+        self.disable_overwrite_tokens = disable_overwrite_tokens;
+        self
+    }
+
     /// Build the final EVMPoolState object
     pub async fn build(mut self, db: D) -> Result<EVMPoolState<D>, SimulationError> {
         let engine = if let Some(engine) = &self.engine {
@@ -236,6 +243,7 @@ where
                 .unwrap_or_default(),
             self.manual_updates.unwrap_or(false),
             adapter_contract,
+            self.disable_overwrite_tokens,
         ))
     }
 
