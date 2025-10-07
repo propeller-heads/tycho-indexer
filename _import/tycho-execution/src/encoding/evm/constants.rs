@@ -53,3 +53,11 @@ pub static CALLBACK_CONSTRAINED_PROTOCOLS: LazyLock<HashSet<&'static str>> = Laz
     set.insert("vm:balancer_v3");
     set
 });
+
+/// These groupable protocols use simple concatenation when forming swap groups instead of PLE
+/// encoding for grouped protocol data.
+pub static NON_PLE_ENCODED_PROTOCOLS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
+    let mut set = HashSet::new();
+    set.insert("ekubo_v2");
+    set
+});

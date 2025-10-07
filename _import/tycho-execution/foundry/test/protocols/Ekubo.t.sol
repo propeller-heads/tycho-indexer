@@ -208,7 +208,11 @@ contract EkuboExecutorTest is Constants, TestUtils {
     }
 }
 
-contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
+contract TychoRouterForEkuboTest is TychoRouterTestSetup {
+    function getForkBlock() public view virtual override returns (uint256) {
+        return 23518049;
+    }
+
     function testSingleEkuboIntegration() public {
         vm.stopPrank();
 
@@ -225,6 +229,30 @@ contract TychoRouterForBalancerV3Test is TychoRouterTestSetup {
 
         assertTrue(success, "Call Failed");
         assertGe(balanceAfter - balanceBefore, 26173932);
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+    }
+
+    function testTwoEkuboIntegration() public {
+        // Test multi-hop Ekubo swaps (grouped swap)
+        //
+        // USDE ──(EKUBO)──> USDC ──(EKUBO)──> USDT
+        //
+        deal(USDE_ADDR, ALICE, 1 ether);
+        uint256 balanceBefore = IERC20(USDT_ADDR).balanceOf(ALICE);
+
+        // Approve permit2
+        vm.startPrank(ALICE);
+        IERC20(USDE_ADDR).approve(tychoRouterAddr, type(uint256).max);
+        bytes memory callData =
+            loadCallDataFromFile("test_single_ekubo_multi_hop");
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        vm.stopPrank();
+
+        uint256 balanceAfter = IERC20(USDT_ADDR).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertEq(balanceAfter - balanceBefore, 999804);
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 }
