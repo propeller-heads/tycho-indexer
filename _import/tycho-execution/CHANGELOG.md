@@ -1,3 +1,10 @@
+## [0.129.1](https://github.com/propeller-heads/tycho-execution/compare/0.129.0...0.129.1) (2025-10-07)
+
+
+### Bug Fixes
+
+* Don't PLE-encode for Ekubo ([ae1b1f8](https://github.com/propeller-heads/tycho-execution/commit/ae1b1f885067081f34743384608c5ce5631ac9bc))
+
 ## [0.129.0](https://github.com/propeller-heads/tycho-execution/compare/0.128.1...0.129.0) (2025-09-30)
 
 
