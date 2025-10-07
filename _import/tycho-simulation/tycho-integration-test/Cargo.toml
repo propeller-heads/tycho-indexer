@@ -24,7 +24,7 @@ tokio-retry2 = { version = "0.6.0", features = ["jitter"] }
 tracing = "0.1.41"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.16"
-actix-web = { version = "4.11.0" }
+actix-web = "4.11.0"
 tycho-client = "0.91.0"
 tycho-common = "0.91.0"
 tycho-ethereum = { version = "0.91.0", features = ["onchain_data"] }
