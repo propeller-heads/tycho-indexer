@@ -185,6 +185,7 @@ impl ExecutionSimulator {
         &mut self,
         tx: TransactionRequest,
         state_overrides: Option<AddressHashMap<AccountOverride>>,
+        block_number: u64,
     ) -> Result<SimulationResult, Box<dyn std::error::Error>> {
         let provider = ProviderBuilder::new().connect_http(self.rpc_url.parse()?);
 
@@ -207,7 +208,7 @@ impl ExecutionSimulator {
         // on past blocks, if we would need to do that in the future.
         let trace_result: Value = provider
             .client()
-            .request("debug_traceCall", (tx, BlockId::latest(), trace_options))
+            .request("debug_traceCall", (tx, BlockId::from(block_number), trace_options))
             .await?;
 
         // Check for error in response, print the full trace only on failure

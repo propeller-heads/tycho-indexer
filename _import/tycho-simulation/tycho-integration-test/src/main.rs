@@ -1,6 +1,7 @@
 mod execution_simulator;
 mod four_byte_client;
 mod metrics;
+mod tenderly;
 mod traces;
 
 use std::{collections::HashMap, fmt::Debug, str::FromStr};
@@ -27,6 +28,7 @@ use tokio_retry2::{
     Retry, RetryError,
 };
 use tracing::{error, info, trace, warn};
+use tracing_subscriber::EnvFilter;
 use tycho_ethereum::entrypoint_tracer::{
     allowance_slot_detector::{AllowanceSlotDetectorConfig, EVMAllowanceSlotDetector},
     balance_slot_detector::{BalanceSlotDetectorConfig, EVMBalanceSlotDetector},
@@ -87,6 +89,9 @@ struct Cli {
     /// Port for the Prometheus metrics server
     #[arg(long, default_value_t = 9898)]
     metrics_port: u16,
+
+    #[arg(short, default_value_t = 10)]
+    max_n_simulations: usize,
 }
 
 impl Debug for Cli {
@@ -105,6 +110,9 @@ impl Debug for Cli {
 async fn main() -> miette::Result<()> {
     dotenv().ok();
     let cli = Cli::parse();
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
     // Initialize and start Prometheus metrics
     metrics::init_metrics();
@@ -158,6 +166,11 @@ async fn run(cli: Cli) -> miette::Result<()> {
     let mut first_message_skipped = false;
 
     while let Some(res) = protocol_stream.next().await {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
         let message = match res {
             Ok(msg) => msg,
             Err(e) => {
@@ -171,6 +184,10 @@ async fn run(cli: Cli) -> miette::Result<()> {
             pairs
                 .entry(id.clone())
                 .or_insert_with(|| comp.clone());
+        }
+
+        for (protocol, sync_state) in message.sync_states.iter() {
+            metrics::record_protocol_sync_state(protocol, sync_state);
         }
         let block = match provider
             .get_block_by_number(BlockNumberOrTag::Latest)
@@ -191,13 +208,23 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 continue;
             }
         };
+
+        // Record block processing latency
+        let block_timestamp = block.header.timestamp;
+        let latency_seconds = (now as i64 - block_timestamp as i64).abs() as f64;
+        metrics::record_block_processing_latency(latency_seconds);
+
         // TODO why do we do this? Don't we also want to simulate on the first block?
         if !first_message_skipped {
             first_message_skipped = true;
             info!("Skipping simulation on first block...");
             continue;
         }
-        for (id, state) in message.states.iter() {
+        for (id, state) in message
+            .states
+            .iter()
+            .take(cli.max_n_simulations)
+        {
             let component = match pairs.get(id) {
                 Some(comp) => comp.clone(),
                 None => {
@@ -216,6 +243,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 .permutations(2)
                 .map(|perm| (perm[0].clone(), perm[1].clone()))
                 .collect();
+            let block_number = block.header.number;
             for (token_in, token_out) in swap_directions.iter() {
                 info!(
                     "Processing {} pool {id:?}, from {} to {}",
@@ -233,6 +261,14 @@ async fn run(cli: Cli) -> miette::Result<()> {
                     Ok(limits) => limits,
                     Err(e) => {
                         warn!("{e}");
+                        metrics::record_get_limits_failures(
+                            &component.protocol_system,
+                            id,
+                            block_number,
+                            &token_in.address,
+                            &token_out.address,
+                            e.to_string(),
+                        );
                         continue;
                     }
                 };
@@ -253,7 +289,8 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 }
                 info!("Calculated amount_in: {amount_in} {}", token_in.symbol);
 
-                // Get expected amount out using tycho-simulation
+                // Get expected amount out using tycho-simulation and measure duration
+                let start_time = std::time::Instant::now();
                 let amount_out_result = match state
                     .get_amount_out(amount_in.clone(), token_in, token_out)
                     .into_diagnostic()
@@ -265,9 +302,21 @@ async fn run(cli: Cli) -> miette::Result<()> {
                         Ok(res) => res,
                         Err(e) => {
                             warn!("{e}");
+                            metrics::record_get_amount_out_failures(
+                                &component.protocol_system,
+                                id,
+                                block_number,
+                                &token_in.address,
+                                &token_out.address,
+                                &amount_in,
+                                e.to_string(),
+                            );
                             continue;
                         }
                 };
+                let duration = start_time.elapsed().as_secs_f64();
+                metrics::record_get_amount_out_duration(&component.protocol_system, duration, id);
+
                 let expected_amount_out = amount_out_result.amount;
                 info!("Calculated amount_out: {expected_amount_out} {}", token_out.symbol);
 
@@ -291,10 +340,15 @@ async fn run(cli: Cli) -> miette::Result<()> {
                         .await
                     {
                         Ok(amount) => {
-                            metrics::record_simulation_success();
+                            metrics::record_simulation_execution_success();
+                            metrics::record_simulation_execution_success_detailed(
+                                &component.protocol_system,
+                                id,
+                                block_number,
+                            );
                             amount
                         }
-                        Err(e) => {
+                        Err((e, state_overwrites)) => {
                             let error_msg = e.to_string();
                             error!("Failed to simulate swap: {error_msg}");
 
@@ -308,7 +362,27 @@ async fn run(cli: Cli) -> miette::Result<()> {
                                 &error_msg
                             };
 
-                            metrics::record_simulation_failure(revert_reason);
+                            // Extract error name (first word or function signature)
+                            let error_name = extract_error_name(revert_reason);
+
+                            // Generate Tenderly URL for debugging with state overrides
+                            let tenderly_url = tenderly::build_tenderly_url(
+                                &tenderly::TenderlySimParams::default(),
+                                Some(&transaction),
+                                Some(&block),
+                                Address::from_slice(&solution.sender[..20]),
+                                state_overwrites.as_ref(),
+                            );
+                            info!("Tenderly simulation URL: {}", tenderly_url);
+
+                            metrics::record_simulation_execution_failure(revert_reason);
+                            metrics::record_simulation_execution_failure_detailed(
+                                &component.protocol_system,
+                                id,
+                                block_number,
+                                revert_reason,
+                                &error_name,
+                            );
                             continue;
                         }
                     };
@@ -317,14 +391,15 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 // Calculate slippage
                 let slippage = if simulated_amount_out > expected_amount_out {
                     let diff = &simulated_amount_out - &expected_amount_out;
-                    let slippage = (diff.clone() * BigUint::from(10000u32)) / expected_amount_out;
-                    format!("+{:.2}%", slippage.to_f64().unwrap_or(0.0) / 100.0)
+                    (diff.clone() * BigUint::from(10000u32)) / expected_amount_out
                 } else {
                     let diff = &expected_amount_out - &simulated_amount_out;
-                    let slippage = (diff.clone() * BigUint::from(10000u32)) / expected_amount_out;
-                    format!("-{:.2}%", slippage.to_f64().unwrap_or(0.0) / 100.0)
+                    (diff.clone() * BigUint::from(10000u32)) / expected_amount_out
                 };
-                info!("Slippage: {slippage}");
+                let slippage = slippage.to_f64().unwrap_or(0.0) / 100.0;
+
+                metrics::record_slippage(block_number, &component.protocol_system, id, slippage);
+                info!("Slippage: {:.2}%", slippage);
 
                 info!("Pool processed {id:?} from {} to {}", token_in.symbol, token_out.symbol);
             }
@@ -536,11 +611,13 @@ async fn simulate_swap_transaction(
     solution: &Solution,
     transaction: &Transaction,
     block: &Block,
-) -> miette::Result<BigUint> {
+) -> Result<BigUint, (miette::Error, Option<AddressHashMap<AccountOverride>>)> {
     let user_address = Address::from_slice(&solution.sender[..20]);
-    let request = swap_request(transaction, block, user_address)?;
+    let request = swap_request(transaction, block, user_address).map_err(|e| (e, None))?;
     let state_overwrites =
-        setup_user_overwrites(rpc_url, solution, transaction, block, user_address).await?;
+        setup_user_overwrites(rpc_url, solution, transaction, block, user_address)
+            .await
+            .map_err(|e| (e, None))?;
 
     // Use debug_traceCall from the start with retry logic
     let retry_strategy = ExponentialFactorBackoff::from_millis(1000, 2.)
@@ -548,14 +625,16 @@ async fn simulate_swap_transaction(
         .map(jitter)
         .take(10);
 
+    // Clone state_overwrites before moving into closure
+    let state_overwrites_for_retry = state_overwrites.clone();
     let result = Retry::spawn(retry_strategy, move || {
         let mut simulator = ExecutionSimulator::new(rpc_url.to_string().clone());
         let request = request.clone();
-        let state_overwrites = state_overwrites.clone();
+        let state_overwrites = state_overwrites_for_retry.clone();
 
         async move {
             match simulator
-                .simulate_with_trace(request, Some(state_overwrites))
+                .simulate_with_trace(request, Some(state_overwrites), block.number())
                 .await
             {
                 Ok(res) => Ok(res),
@@ -564,17 +643,25 @@ async fn simulate_swap_transaction(
         }
     })
     .await
-    .map_err(|e| miette!("Failed to simulate transaction after retries: {e}"))?;
+    .map_err(|e| {
+        (
+            miette!("Failed to simulate transaction after retries: {e}"),
+            Some(state_overwrites.clone()),
+        )
+    })?;
 
     match result {
         execution_simulator::SimulationResult::Success { return_data, gas_used } => {
             info!("Transaction succeeded, gas used: {gas_used}");
-            let amount_out = U256::abi_decode(&return_data)
-                .map_err(|e| miette!("Failed to decode swap amount: {e:?}"))?;
-            BigUint::from_str(amount_out.to_string().as_str()).into_diagnostic()
+            let amount_out = U256::abi_decode(&return_data).map_err(|e| {
+                (miette!("Failed to decode swap amount: {e:?}"), Some(state_overwrites.clone()))
+            })?;
+            BigUint::from_str(amount_out.to_string().as_str())
+                .into_diagnostic()
+                .map_err(|e| (e, Some(state_overwrites.clone())))
         }
         execution_simulator::SimulationResult::Revert { reason } => {
-            Err(miette!("Transaction reverted: {}", reason))
+            Err((miette!("Transaction reverted: {}", reason), Some(state_overwrites)))
         }
     }
 }
@@ -736,4 +823,26 @@ async fn setup_user_overwrites(
     }
 
     Ok(overwrites)
+}
+
+/// Extract the error name from a revert reason string
+/// Examples:
+/// - "TychoRouter__NegativeSlippage(1000, 990)" -> "TychoRouter__NegativeSlippage"
+/// - "arithmetic underflow or overflow" -> "arithmetic underflow or overflow"
+/// - "Error(string): insufficient balance" -> "Error"
+fn extract_error_name(revert_reason: &str) -> String {
+    // Check if it's a function-style error (e.g., "ErrorName(...)")
+    if let Some(paren_pos) = revert_reason.find('(') {
+        revert_reason[..paren_pos]
+            .trim()
+            .to_string()
+    } else if let Some(colon_pos) = revert_reason.find(':') {
+        // Handle "Error: message" format
+        revert_reason[..colon_pos]
+            .trim()
+            .to_string()
+    } else {
+        // Return the whole message for simple errors
+        revert_reason.trim().to_string()
+    }
 }
