@@ -3,7 +3,6 @@ use alloy::{
     primitives::{map::AddressHashMap, Address, B256, U256},
     rpc::types::{state::AccountOverride, Block},
 };
-use serde_json::json;
 use tycho_execution::encoding::models::Transaction;
 
 /// Metadata about storage slot overwrites to enable human-readable logging
@@ -170,36 +169,6 @@ pub fn build_tenderly_url(
     format!("https://dashboard.tenderly.co/tvinagre/project/simulator/new?{}", query_string)
 }
 
-/// Encode state overrides to JSON format for Tenderly
-///
-/// Converts the AddressHashMap of AccountOverrides to a JSON string suitable for
-/// Tenderly's stateOverrides parameter.
-fn encode_state_overrides(overrides: &AddressHashMap<AccountOverride>) -> String {
-    let mut state_obj = serde_json::Map::new();
-
-    for (address, account_override) in overrides {
-        let mut account_obj = serde_json::Map::new();
-
-        // Add balance if present
-        if let Some(balance) = &account_override.balance {
-            account_obj.insert("balance".to_string(), json!(format!("0x{:x}", balance)));
-        }
-
-        // Add state diff (storage slots) if present
-        if let Some(state_diff) = &account_override.state_diff {
-            let mut storage_obj = serde_json::Map::new();
-            for (slot, value) in state_diff {
-                storage_obj.insert(format!("0x{:x}", slot), json!(format!("0x{:x}", value)));
-            }
-            account_obj.insert("storage".to_string(), json!(storage_obj));
-        }
-
-        state_obj.insert(format!("0x{:x}", address), json!(account_obj));
-    }
-
-    serde_json::to_string(&state_obj).unwrap_or_else(|_| "{}".to_string())
-}
-
 pub fn get_overwites_string(
     overrides: &AddressHashMap<AccountOverride>,
     metadata: Option<&OverwriteMetadata>,
@@ -218,20 +187,19 @@ pub fn get_overwites_string(
         if let Some(state_diff) = &account_override.state_diff {
             for (slot, value) in state_diff {
                 // First add the raw storage slot info
-                token_overwrites
-                    .push(format!("slot: 0x{slot:x}"));
+                token_overwrites.push(format!("slot: 0x{slot:x}"));
 
                 // If metadata is available, add human-readable format
                 if let Some(meta) = metadata {
                     if let Some(slot_metas) = meta.slots.get(address) {
                         for slot_meta in slot_metas {
                             match slot_meta {
-                                SlotMetadata::Balance { owner, slot: meta_slot } if meta_slot == slot => {
+                                SlotMetadata::Balance { owner, slot: meta_slot }
+                                    if meta_slot == slot =>
+                                {
                                     let amount = U256::from_be_slice(value.as_slice());
-                                    token_overwrites.push(format!(
-                                        "balance[0x{:x}]: {}",
-                                        owner, amount
-                                    ));
+                                    token_overwrites
+                                        .push(format!("balance[0x{:x}]: {}", owner, amount));
                                 }
                                 SlotMetadata::Allowance { owner, spender, slot: meta_slot }
                                     if meta_slot == slot =>
@@ -276,7 +244,7 @@ mod tests {
         let caller = address!("f847a638E44186F3287ee9F8cAF73FF4d4B80784");
         let overrides = TenderlySimParams::default();
 
-        let url = build_tenderly_url(&overrides, Some(&tx), None, caller, None);
+        let url = build_tenderly_url(&overrides, Some(&tx), None, caller);
 
         assert!(url.contains("from=0xf847a638e44186f3287ee9f8caf73ff4d4b80784"));
         assert!(url.contains("contractAddress=0xdeadbeef"));
@@ -295,7 +263,7 @@ mod tests {
             ..Default::default()
         };
 
-        let url = build_tenderly_url(&overrides, None, None, caller, None);
+        let url = build_tenderly_url(&overrides, None, None, caller);
 
         assert!(url.contains("from=0x1234567890123456789012345678901234567890"));
         assert!(url.contains("contractAddress=0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"));
@@ -309,36 +277,8 @@ mod tests {
         let overrides =
             TenderlySimParams { block: Some("12345678".to_string()), ..Default::default() };
 
-        let url = build_tenderly_url(&overrides, None, None, caller, None);
+        let url = build_tenderly_url(&overrides, None, None, caller);
 
         assert!(url.contains("block=12345678"));
-    }
-
-    #[test]
-    fn test_build_url_with_state_overrides() {
-        use alloy::primitives::{b256, U256};
-
-        let caller = address!("f847a638E44186F3287ee9F8cAF73FF4d4B80784");
-        let overrides = TenderlySimParams::default();
-
-        let token_address = address!("A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
-        let balance_slot =
-            b256!("0000000000000000000000000000000000000000000000000000000000000001");
-        let balance_value = U256::from(1000000u64);
-
-        let mut state_overrides = AddressHashMap::default();
-        state_overrides.insert(
-            token_address,
-            AccountOverride::default().with_state_diff(vec![(balance_slot, balance_value.into())]),
-        );
-
-        let url = build_tenderly_url(&overrides, None, None, caller, Some(&state_overrides));
-
-        // Verify the URL contains state overrides
-        assert!(url.contains("stateOverrides="));
-        // Verify it contains the token address (lowercase)
-        assert!(url.contains("a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"));
-        // Verify it contains the storage key
-        assert!(url.contains("storage"));
     }
 }

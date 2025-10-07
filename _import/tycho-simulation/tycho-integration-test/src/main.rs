@@ -372,18 +372,14 @@ async fn run(cli: Cli) -> miette::Result<()> {
                                 Some(&block),
                                 Address::from_slice(&solution.sender[..20]),
                             );
-                            info!("Tenderly simulation URL: {}", tenderly_url);
 
-                            // Log state overwrites separately with metadata
-                            if let Some(overwrites) = state_overwrites.as_ref() {
-                                info!(
-                                    "Overwrites: {}",
-                                    tenderly::get_overwites_string(
-                                        overwrites,
-                                        metadata.as_ref()
-                                    )
-                                );
-                            }
+                            // Generate overwrites string with metadata
+                            let overwrites_string =
+                                if let Some(overwrites) = state_overwrites.as_ref() {
+                                    tenderly::get_overwites_string(overwrites, metadata.as_ref())
+                                } else {
+                                    String::new()
+                                };
 
                             metrics::record_simulation_execution_failure(revert_reason);
                             metrics::record_simulation_execution_failure_detailed(
@@ -392,6 +388,8 @@ async fn run(cli: Cli) -> miette::Result<()> {
                                 block_number,
                                 revert_reason,
                                 &error_name,
+                                &tenderly_url,
+                                &overwrites_string,
                             );
                             continue;
                         }
@@ -623,11 +621,7 @@ async fn simulate_swap_transaction(
     block: &Block,
 ) -> Result<
     BigUint,
-    (
-        miette::Error,
-        Option<AddressHashMap<AccountOverride>>,
-        Option<tenderly::OverwriteMetadata>,
-    ),
+    (miette::Error, Option<AddressHashMap<AccountOverride>>, Option<tenderly::OverwriteMetadata>),
 > {
     let user_address = Address::from_slice(&solution.sender[..20]);
     let request = swap_request(transaction, block, user_address).map_err(|e| (e, None, None))?;

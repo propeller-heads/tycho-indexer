@@ -130,6 +130,8 @@ pub fn record_simulation_execution_failure_detailed(
     block_number: u64,
     error_message: &str,
     error_name: &str,
+    tenderly_url: &str,
+    overwrites: &str,
 ) {
     counter!(
         "simulation_execution_failure_by_protocol",
@@ -137,7 +139,9 @@ pub fn record_simulation_execution_failure_detailed(
         "component_id" => component_id.to_string(),
         "block" => block_number.to_string(),
         "error_message" => error_message.to_string(),
-        "error_name" => error_name.to_string()
+        "error_name" => error_name.to_string(),
+        "tenderly_url" => tenderly_url.to_string(),
+        "overwrites" => overwrites.to_string()
     )
     .increment(1);
 }
