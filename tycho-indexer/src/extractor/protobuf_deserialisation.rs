@@ -8,7 +8,10 @@ use tycho_common::{
         blockchain::{
             Block, EntryPoint, RPCTracerParams, TracingParams, Transaction, TxWithChanges,
         },
-        contract::{AccountBalance, AccountChangesWithTx, AccountDelta, ContractStorageChange},
+        contract::{
+            AccountBalance, AccountChangesWithTx, AccountDelta, ContractChanges,
+            ContractStorageChange,
+        },
         protocol::{
             ComponentBalance, ProtocolChangesWithTx, ProtocolComponent, ProtocolComponentStateDelta,
         },
@@ -19,7 +22,7 @@ use tycho_common::{
 use tycho_substreams::pb::tycho::evm::v1 as substreams;
 
 use crate::extractor::{
-    models::{BlockChanges, BlockContractChanges, BlockEntityChanges, TxWithStorageChanges},
+    models::{BlockChanges, BlockContractChanges, BlockEntityChanges, TxWithContractChanges},
     u256_num::bytes_to_f64,
     ExtractionError,
 };
@@ -624,7 +627,7 @@ impl TryFromMessage for BlockEntityChanges {
     }
 }
 
-impl TryFromMessage for TxWithStorageChanges {
+impl TryFromMessage for TxWithContractChanges {
     type Args<'a> = (substreams::TransactionStorageChanges, &'a Block);
 
     fn try_from_message(args: Self::Args<'_>) -> Result<Self, ExtractionError> {
@@ -645,10 +648,17 @@ impl TryFromMessage for TxWithStorageChanges {
                         ContractStorageChange::new(change.value, change.previous_value),
                     );
                 }
-                all_storage_changes.insert(contract_changes.address.into(), storage_changes);
+                let contract_change = ContractChanges::new(
+                    contract_changes.address.clone().into(),
+                    storage_changes,
+                    contract_changes
+                        .native_balance
+                        .map(Into::into),
+                );
+                all_storage_changes.insert(contract_changes.address.into(), contract_change);
             });
 
-        Ok(Self { tx, storage_changes: all_storage_changes })
+        Ok(Self { tx, contract_changes: all_storage_changes })
     }
 }
 
@@ -688,8 +698,8 @@ impl TryFromMessage for BlockChanges {
             let block_storage_changes = msg
                 .storage_changes
                 .into_iter()
-                .map(|change| TxWithStorageChanges::try_from_message((change, &block)))
-                .collect::<Result<Vec<TxWithStorageChanges>, ExtractionError>>()?;
+                .map(|change| TxWithContractChanges::try_from_message((change, &block)))
+                .collect::<Result<Vec<TxWithContractChanges>, ExtractionError>>()?;
 
             Ok(Self::new(
                 extractor.to_string(),
@@ -740,33 +750,41 @@ mod test {
             Some(Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap()),
             1,
         );
-        let exp = TxWithStorageChanges {
+        let exp = TxWithContractChanges {
             tx,
-            storage_changes: HashMap::from([
+            contract_changes: HashMap::from([
                 (
                     Bytes::from_str("0000000000000000000000000000000000000001").unwrap(),
-                    HashMap::from([
-                        (
-                            Bytes::from_str("0x01").unwrap(),
-                            ContractStorageChange::initial(Bytes::from_str("0x01").unwrap()),
-                        ),
-                        (
-                            Bytes::from_str("0x02").unwrap(),
-                            ContractStorageChange::initial(Bytes::from_str("0x02").unwrap()),
-                        ),
-                    ]),
+                    ContractChanges::new(
+                        Bytes::from_str("0000000000000000000000000000000000000001").unwrap(),
+                        HashMap::from([
+                            (
+                                Bytes::from_str("0x01").unwrap(),
+                                ContractStorageChange::initial(Bytes::from_str("0x01").unwrap()),
+                            ),
+                            (
+                                Bytes::from_str("0x02").unwrap(),
+                                ContractStorageChange::initial(Bytes::from_str("0x02").unwrap()),
+                            ),
+                        ]),
+                        None,
+                    ),
                 ),
                 (
                     Bytes::from_str("0000000000000000000000000000000000000002").unwrap(),
-                    HashMap::from([(
-                        Bytes::from_str("0x03").unwrap(),
-                        ContractStorageChange::initial(Bytes::from_str("0x03").unwrap()),
-                    )]),
+                    ContractChanges::new(
+                        Bytes::from_str("0000000000000000000000000000000000000002").unwrap(),
+                        HashMap::from([(
+                            Bytes::from_str("0x03").unwrap(),
+                            ContractStorageChange::initial(Bytes::from_str("0x03").unwrap()),
+                        )]),
+                        Some(Bytes::from(1000u64)),
+                    ),
                 ),
             ]),
         };
 
-        let res = TxWithStorageChanges::try_from_message((msg, &Block::default())).unwrap();
+        let res = TxWithContractChanges::try_from_message((msg, &Block::default())).unwrap();
 
         assert_eq!(res, exp);
     }
