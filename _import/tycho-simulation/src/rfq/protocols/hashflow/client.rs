@@ -51,7 +51,7 @@ pub struct HashflowClient {
     auth_user: String,
     // Quote tokens to normalize to for TVL purposes. Should have the same prices.
     quote_tokens: HashSet<Bytes>,
-    poll_time: u64,
+    poll_time: Duration,
 }
 
 impl HashflowClient {
@@ -62,7 +62,7 @@ impl HashflowClient {
         quote_tokens: HashSet<Bytes>,
         auth_user: String,
         auth_key: String,
-        poll_time: u64,
+        poll_time: Duration,
     ) -> Result<Self, RFQError> {
         let quote_tokens = if quote_tokens.is_empty() {
             default_quote_tokens_for_chain(&chain)?
@@ -264,9 +264,9 @@ impl RFQClient for HashflowClient {
 
         Box::pin(async_stream::stream! {
             let mut current_components: HashMap<String, ComponentWithState> = HashMap::new();
-            let mut ticker = interval(Duration::from_secs(client.poll_time));
+            let mut ticker = interval(client.poll_time);
 
-            info!("Starting Hashflow price levels polling every {} seconds", client.poll_time);
+            info!("Starting Hashflow price levels polling every {} seconds", client.poll_time.as_secs());
             info!("TVL threshold: {:.2}", client.tvl);
 
             loop {
@@ -615,7 +615,7 @@ mod tests {
             quote_tokens,
             "test_user".to_string(),
             "test_key".to_string(),
-            5,
+            Duration::from_secs(5),
         )
         .unwrap()
     }
@@ -643,7 +643,7 @@ mod tests {
             quote_tokens,
             auth.user,
             auth.key,
-            1,
+            Duration::from_secs(1),
         )
         .unwrap();
 
@@ -728,7 +728,7 @@ mod tests {
             HashSet::new(),
             auth_user,
             auth_key,
-            0,
+            Duration::from_secs(0),
         )
         .unwrap();
 
