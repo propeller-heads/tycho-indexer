@@ -1,5 +1,5 @@
 use actix_web::{rt::System, web, App, HttpResponse, HttpServer, Responder};
-use metrics::{counter, describe_counter, describe_histogram, histogram};
+use metrics::{counter, describe_counter, describe_gauge, describe_histogram, gauge, histogram};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use miette::{Context, IntoDiagnostic, Result};
 use num_bigint::BigUint;
@@ -39,9 +39,9 @@ pub fn init_metrics() {
         "slippage_between_simulation_and_execution",
         "Slippage between simulated amount out and simulated execution amount out"
     );
-    describe_counter!(
-        "protocol_sync_state_total",
-        "Total count of sync states per protocol with state as label"
+    describe_gauge!(
+        "protocol_sync_state_current",
+        "Current sync state per protocol as numeric value"
     );
 }
 
@@ -148,16 +148,15 @@ pub fn record_slippage(block_number: u64, protocol: &str, component_id: &str, sl
 }
 
 pub fn record_protocol_sync_state(protocol: &str, sync_state: &SynchronizerState) {
-    let state_name = match sync_state {
-        SynchronizerState::Started => "Started",
-        SynchronizerState::Ready(_) => "Ready",
-        SynchronizerState::Delayed(_) => "Delayed",
-        SynchronizerState::Stale(_) => "Stale",
-        SynchronizerState::Advanced(_) => "Advanced",
-        SynchronizerState::Ended(_) => "Ended",
+    let state_value = match sync_state {
+        SynchronizerState::Started => 1.0,
+        SynchronizerState::Ready(_) => 2.0,
+        SynchronizerState::Delayed(_) => 3.0,
+        SynchronizerState::Stale(_) => 4.0,
+        SynchronizerState::Advanced(_) => 5.0,
+        SynchronizerState::Ended(_) => 6.0,
     };
-    counter!("protocol_sync_state_total", "protocol" => protocol.to_string(), "sync_state" => state_name)
-        .increment(1);
+    gauge!("protocol_sync_state_current", "protocol" => protocol.to_string()).set(state_value);
 }
 
 /// Creates and runs the Prometheus metrics exporter using Actix Web.
