@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "_tycho_simulation_py"
-version = "0.170.0"
+version = "0.171.0"
 dependencies = [
  "alloy",
  "num-bigint",
@@ -9640,7 +9640,6 @@ dependencies = [
  "tokio",
  "tokio-retry2",
  "tracing",
- "tracing-subscriber 0.3.20",
  "tycho-client",
  "tycho-common",
  "tycho-ethereum",
@@ -9650,7 +9649,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-simulation"
-version = "0.170.0"
+version = "0.171.0"
 dependencies = [
  "alloy",
  "anyhow",

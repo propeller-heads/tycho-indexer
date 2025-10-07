@@ -1,3 +1,18 @@
+## [0.171.0](https://github.com/propeller-heads/tycho-simulation/compare/0.170.0...0.171.0) (2025-10-07)
+
+
+### Features
+
+* (metrics) Don't silently fail of port is in use. ([46c267e](https://github.com/propeller-heads/tycho-simulation/commit/46c267e3f70c9cba59e7d87713104d63d4536263))
+* Integration test metrics ([2b6d2f5](https://github.com/propeller-heads/tycho-simulation/commit/2b6d2f53683d0a87c14f41ce807f6a03f64bb398))
+* remove opentelemetry - this was not needed ([5329172](https://github.com/propeller-heads/tycho-simulation/commit/53291724f28d908afdf118879bf30d3b9b5c6664))
+
+
+### Bug Fixes
+
+* Fix lifetime issue in record_simulation_failure ([5d5a0ca](https://github.com/propeller-heads/tycho-simulation/commit/5d5a0ca03f510f2d38ea8c885a835810e958d20e))
+* Remove unnecessary tracing and METRICS.md ([59453a4](https://github.com/propeller-heads/tycho-simulation/commit/59453a4bf70ec21b51ac01acc05f1173f3f57fda))
+
 ## [0.170.0](https://github.com/propeller-heads/tycho-simulation/compare/0.169.2...0.170.0) (2025-10-02)
 
 
