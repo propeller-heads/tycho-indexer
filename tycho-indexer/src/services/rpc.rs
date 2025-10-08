@@ -3,13 +3,14 @@
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
+    time::Instant,
 };
 
 use actix_web::{web, HttpRequest, HttpResponse, ResponseError};
 use anyhow::Error;
 use chrono::{Duration, Utc};
 use diesel_async::pooled_connection::deadpool;
-use metrics::counter;
+use metrics::{counter, histogram};
 use reqwest::StatusCode;
 use thiserror::Error;
 use tracing::{debug, error, info, instrument, trace, warn};
@@ -1083,6 +1084,7 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
     body: web::Json<dto::StateRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
+    let request_start = Instant::now();
     // Note - filtering by protocol system is not supported on this endpoint. This is due to the
     // complexity of paginating this endpoint with the current design.
 
@@ -1116,7 +1118,7 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
         .get_contract_state(&body)
         .await;
 
-    match response {
+    let http_response = match response {
         Ok(state) => HttpResponse::Ok().json(state),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting contract state.");
@@ -1125,7 +1127,11 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
                 .increment(1);
             HttpResponse::from_error(err)
         }
-    }
+    };
+
+    record_rpc_time("tokens", request_start);
+
+    http_response
 }
 
 /// Retrieve tokens
@@ -1149,6 +1155,7 @@ pub async fn tokens<G: Gateway, T: EntryPointTracer>(
     body: web::Json<dto::TokensRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
+    let request_start = Instant::now();
     let user_identity = req
         .headers()
         .get("user-identity")
@@ -1178,7 +1185,7 @@ pub async fn tokens<G: Gateway, T: EntryPointTracer>(
         .get_tokens(&body)
         .await;
 
-    match response {
+    let http_response = match response {
         Ok(state) => HttpResponse::Ok().json(state),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting tokens.");
@@ -1187,7 +1194,11 @@ pub async fn tokens<G: Gateway, T: EntryPointTracer>(
                 .increment(1);
             HttpResponse::from_error(err)
         }
-    }
+    };
+
+    record_rpc_time("tokens", request_start);
+
+    http_response
 }
 
 /// Retrieve protocol components
@@ -1211,6 +1222,7 @@ pub async fn protocol_components<G: Gateway, T: EntryPointTracer>(
     body: web::Json<dto::ProtocolComponentsRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
+    let request_start = Instant::now();
     let user_identity = req
         .headers()
         .get("user-identity")
@@ -1241,7 +1253,7 @@ pub async fn protocol_components<G: Gateway, T: EntryPointTracer>(
         .get_protocol_components(&body)
         .await;
 
-    match response {
+    let http_response = match response {
         Ok(state) => HttpResponse::Ok().json(state),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting tokens.");
@@ -1249,7 +1261,11 @@ pub async fn protocol_components<G: Gateway, T: EntryPointTracer>(
             counter!("rpc_requests_failed", "endpoint" => "protocol_components", "status" => status, "user_identity" => user_identity).increment(1);
             HttpResponse::from_error(err)
         }
-    }
+    };
+
+    record_rpc_time("protocol_components", request_start);
+
+    http_response
 }
 
 /// Retrieve protocol states
@@ -1272,6 +1288,7 @@ pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
     body: web::Json<dto::ProtocolStateRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
+    let request_start = Instant::now();
     let user_identity = req
         .headers()
         .get("user-identity")
@@ -1302,7 +1319,7 @@ pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
         .get_protocol_state(&body)
         .await;
 
-    match response {
+    let http_response = match response {
         Ok(state) => HttpResponse::Ok().json(state),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting protocol states.");
@@ -1311,7 +1328,11 @@ pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
                 .increment(1);
             HttpResponse::from_error(err)
         }
-    }
+    };
+
+    record_rpc_time("protocol_state", request_start);
+
+    http_response
 }
 
 /// Retrieve protocol systems
@@ -1334,6 +1355,7 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
     body: web::Json<dto::ProtocolSystemsRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
+    let request_start = Instant::now();
     let user_identity = req
         .headers()
         .get("user-identity")
@@ -1363,7 +1385,7 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
         .get_protocol_systems(&body)
         .await;
 
-    match response {
+    let http_response = match response {
         Ok(systems) => HttpResponse::Ok().json(systems),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting protocol systems.");
@@ -1372,7 +1394,11 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
                 .increment(1);
             HttpResponse::from_error(err)
         }
-    }
+    };
+
+    record_rpc_time("protocol_state", request_start);
+
+    http_response
 }
 
 /// Retrieve protocol component tvl
@@ -1395,6 +1421,7 @@ pub async fn component_tvl<G: Gateway, T: EntryPointTracer>(
     body: web::Json<dto::ComponentTvlRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
+    let request_start = Instant::now();
     let user_identity = req
         .headers()
         .get("user-identity")
@@ -1418,7 +1445,7 @@ pub async fn component_tvl<G: Gateway, T: EntryPointTracer>(
         .get_component_tvls(&body)
         .await;
 
-    match response {
+    let http_response = match response {
         Ok(systems) => HttpResponse::Ok().json(systems),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting component tvl.");
@@ -1427,7 +1454,11 @@ pub async fn component_tvl<G: Gateway, T: EntryPointTracer>(
                 .increment(1);
             HttpResponse::from_error(err)
         }
-    }
+    };
+
+    record_rpc_time("protocol_state", request_start);
+
+    http_response
 }
 
 /// Retrieve traced entry points
@@ -1450,6 +1481,7 @@ pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
     body: web::Json<dto::TracedEntryPointRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
+    let request_start = Instant::now();
     let user_identity = req
         .headers()
         .get("user-identity")
@@ -1479,7 +1511,7 @@ pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
         .get_traced_entry_points(&body)
         .await;
 
-    match response {
+    let http_response = match response {
         Ok(entry_points) => HttpResponse::Ok().json(entry_points),
         Err(err) => {
             error!(error = %err, ?body, "Error while getting traced entry points.");
@@ -1488,7 +1520,11 @@ pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
                 .increment(1);
             HttpResponse::from_error(err)
         }
-    }
+    };
+
+    record_rpc_time("protocol_state", request_start);
+
+    http_response
 }
 
 /// Add Entry Point
@@ -1511,6 +1547,7 @@ pub async fn add_entry_points<G: Gateway, T: EntryPointTracer>(
     body: web::Json<dto::AddEntryPointRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> HttpResponse {
+    let request_start = Instant::now();
     let user_identity = req
         .headers()
         .get("user-identity")
@@ -1532,7 +1569,7 @@ pub async fn add_entry_points<G: Gateway, T: EntryPointTracer>(
         .add_entry_points(&body)
         .await;
 
-    match response {
+    let http_response = match response {
         Ok(add_entry_points_result) => HttpResponse::Ok().json(add_entry_points_result),
         Err(err) => {
             error!(error = %err, ?body, "Error while adding entry points.");
@@ -1541,7 +1578,11 @@ pub async fn add_entry_points<G: Gateway, T: EntryPointTracer>(
                 .increment(1);
             HttpResponse::from_error(err)
         }
-    }
+    };
+
+    record_rpc_time("add_entry_points", request_start);
+
+    http_response
 }
 
 /// Health check endpoint
@@ -1560,6 +1601,14 @@ pub async fn add_entry_points<G: Gateway, T: EntryPointTracer>(
 pub async fn health() -> HttpResponse {
     counter!("rpc_requests", "endpoint" => "health").increment(1);
     HttpResponse::Ok().json(dto::Health::Ready)
+}
+
+fn record_rpc_time(endpoint: &'static str, elapsed_seconds: Instant) {
+    histogram!(
+        "rpc_request_duration_seconds",
+        "endpoint" => endpoint,
+    )
+    .record(elapsed_seconds.elapsed().as_millis() as f64);
 }
 
 #[cfg(test)]
