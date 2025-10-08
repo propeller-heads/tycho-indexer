@@ -878,9 +878,12 @@ where
                 .clone();
             let last_block_height = last_block.block_update.block.number;
             let batch_size = blocks_to_commit.len();
+            let (extractor_name, chain) = (self.name.clone(), self.chain);
 
             // Spawn a new task to commit the new blocks and update the committed block height
             let new_handle = tokio::spawn(async move {
+                let now = std::time::Instant::now();
+
                 let mut it = blocks_to_commit.iter().peekable();
                 while let Some(block) = it.next() {
                     // Force a database commit if we're not syncing and this is the last block
@@ -897,14 +900,19 @@ where
                 let mut committed_hieght_guard = committed_block_height.lock().await;
                 *committed_hieght_guard = Some(last_block_height);
 
-                debug!(batch_size, block_height = last_block_height, "CommitTaskCompleted");
+                debug!(batch_size, block_height = last_block_height, extractor_id = extractor_name, chain = %chain, "CommitTaskCompleted");
+
+                gauge!(
+                    "database_commit_duration_ms", "chain" => chain.to_string(), "extractor" => extractor_name
+                )
+                .set(now.elapsed().as_millis() as f64);
 
                 Ok(())
             });
 
             *commit_handle_guard = Some(new_handle);
 
-            debug!(batch_size, block_height = last_block_height, "CommitTaskQueued");
+            debug!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, "CommitTaskQueued");
         };
 
         self.update_last_processed_block(msg.block.clone())
