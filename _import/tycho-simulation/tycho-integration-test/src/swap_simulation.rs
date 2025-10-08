@@ -37,7 +37,7 @@ use crate::{execution_simulator, execution_simulator::ExecutionSimulator};
 
 pub fn encode_swap(
     component: &ProtocolComponent,
-    state: Option<Arc<dyn ProtocolSim>>,
+    state: Arc<dyn ProtocolSim>,
     sell_token: &Token,
     buy_token: &Token,
     amount_in: BigUint,
@@ -74,7 +74,7 @@ pub fn encode_swap(
 
 fn create_solution(
     component: ProtocolComponent,
-    state: Option<Arc<dyn ProtocolSim>>,
+    state: Arc<dyn ProtocolSim>,
     sell_token: Token,
     buy_token: Token,
     amount_in: BigUint,
@@ -84,14 +84,11 @@ fn create_solution(
         Bytes::from_str("0xf847a638E44186F3287ee9F8cAF73FF4d4B80784").into_diagnostic()?;
 
     // Prepare data to encode. First we need to create a swap object
-    let mut simple_swap =
-        SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone());
-    if let Some(state) = state {
-        simple_swap = simple_swap
+    let simple_swap =
+        SwapBuilder::new(component, sell_token.address.clone(), buy_token.address.clone())
             .protocol_state(state)
-            .estimated_amount_in(amount_in.clone());
-    }
-    let simple_swap = simple_swap.build();
+            .estimated_amount_in(amount_in.clone())
+            .build();
 
     // Compute a minimum amount out
     //

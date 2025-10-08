@@ -147,7 +147,9 @@ async fn run(cli: Cli) -> miette::Result<()> {
             .run_stream(&all_tokens, tx.clone())
             .await?;
     }
-    if let Ok(rfq_stream_processor) = RfqStreamProcessor::new(chain, cli.tvl_threshold) {
+    if let Ok(rfq_stream_processor) =
+        RfqStreamProcessor::new(chain, cli.tvl_threshold, cli.max_n_simulations)
+    {
         rfq_stream_processor
             .run_stream(&all_tokens, tx)
             .await?;
@@ -330,13 +332,9 @@ async fn process_update_state(
         info!("Calculated amount_out: {expected_amount_out} {}", token_out.symbol);
 
         // Simulate execution amount out against the RPC
-        let state = match update.update_type {
-            UpdateType::Protocol => Some(Arc::from(state.clone_box())),
-            UpdateType::Rfq => None,
-        };
         let (solution, transaction) = match encode_swap(
             &component,
-            state,
+            Arc::from(state.clone_box()),
             token_in,
             token_out,
             amount_in.clone(),

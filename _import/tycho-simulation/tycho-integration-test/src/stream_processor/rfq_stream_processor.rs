@@ -47,7 +47,7 @@ pub struct RfqStreamProcessor {
 }
 
 impl RfqStreamProcessor {
-    pub fn new(chain: Chain, tvl_threshold: f64) -> miette::Result<Self> {
+    pub fn new(chain: Chain, tvl_threshold: f64, sample_size: usize) -> miette::Result<Self> {
         let mut rfq_credentials = HashMap::new();
         let (bebop_user, bebop_key) = (env::var("BEBOP_USER").ok(), env::var("BEBOP_KEY").ok());
         if let (Some(user), Some(key)) = (bebop_user, bebop_key) {
@@ -67,7 +67,7 @@ impl RfqStreamProcessor {
             chain,
             tvl_threshold,
             rfq_credentials,
-            sample_size: 10,
+            sample_size,
             stream_sleep_time: Duration::from_secs(60),
         })
     }
