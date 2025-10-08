@@ -1,3 +1,10 @@
+## [0.176.0](https://github.com/propeller-heads/tycho-simulation/compare/0.175.0...0.176.0) (2025-10-08)
+
+
+### Features
+
+* Unfix tycho-common/client/ethereum versions ([2ed7386](https://github.com/propeller-heads/tycho-simulation/commit/2ed73863811c93d4b2260d1b9290c029662aecaf))
+
 ## [0.175.0](https://github.com/propeller-heads/tycho-simulation/compare/0.174.0...0.175.0) (2025-10-08)
 
 
