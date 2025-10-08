@@ -348,7 +348,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
                             );
                             amount
                         }
-                        Err((e, state_overwrites)) => {
+                        Err((e, state_overwrites, metadata)) => {
                             let error_msg = e.to_string();
                             error!("Failed to simulate swap: {error_msg}");
 
@@ -365,15 +365,21 @@ async fn run(cli: Cli) -> miette::Result<()> {
                             // Extract error name (first word or function signature)
                             let error_name = extract_error_name(revert_reason);
 
-                            // Generate Tenderly URL for debugging with state overrides
+                            // Generate Tenderly URL for debugging without state overrides
                             let tenderly_url = tenderly::build_tenderly_url(
                                 &tenderly::TenderlySimParams::default(),
                                 Some(&transaction),
                                 Some(&block),
                                 Address::from_slice(&solution.sender[..20]),
-                                state_overwrites.as_ref(),
                             );
-                            info!("Tenderly simulation URL: {}", tenderly_url);
+
+                            // Generate overwrites string with metadata
+                            let overwrites_string =
+                                if let Some(overwrites) = state_overwrites.as_ref() {
+                                    tenderly::get_overwites_string(overwrites, metadata.as_ref())
+                                } else {
+                                    String::new()
+                                };
 
                             metrics::record_simulation_execution_failure(revert_reason);
                             metrics::record_simulation_execution_failure_detailed(
@@ -382,6 +388,8 @@ async fn run(cli: Cli) -> miette::Result<()> {
                                 block_number,
                                 revert_reason,
                                 &error_name,
+                                &tenderly_url,
+                                &overwrites_string,
                             );
                             continue;
                         }
@@ -611,13 +619,16 @@ async fn simulate_swap_transaction(
     solution: &Solution,
     transaction: &Transaction,
     block: &Block,
-) -> Result<BigUint, (miette::Error, Option<AddressHashMap<AccountOverride>>)> {
+) -> Result<
+    BigUint,
+    (miette::Error, Option<AddressHashMap<AccountOverride>>, Option<tenderly::OverwriteMetadata>),
+> {
     let user_address = Address::from_slice(&solution.sender[..20]);
-    let request = swap_request(transaction, block, user_address).map_err(|e| (e, None))?;
-    let state_overwrites =
+    let request = swap_request(transaction, block, user_address).map_err(|e| (e, None, None))?;
+    let (state_overwrites, metadata) =
         setup_user_overwrites(rpc_url, solution, transaction, block, user_address)
             .await
-            .map_err(|e| (e, None))?;
+            .map_err(|e| (e, None, None))?;
 
     // Use debug_traceCall from the start with retry logic
     let retry_strategy = ExponentialFactorBackoff::from_millis(1000, 2.)
@@ -647,6 +658,7 @@ async fn simulate_swap_transaction(
         (
             miette!("Failed to simulate transaction after retries: {e}"),
             Some(state_overwrites.clone()),
+            Some(metadata.clone()),
         )
     })?;
 
@@ -654,15 +666,21 @@ async fn simulate_swap_transaction(
         execution_simulator::SimulationResult::Success { return_data, gas_used } => {
             info!("Transaction succeeded, gas used: {gas_used}");
             let amount_out = U256::abi_decode(&return_data).map_err(|e| {
-                (miette!("Failed to decode swap amount: {e:?}"), Some(state_overwrites.clone()))
+                (
+                    miette!("Failed to decode swap amount: {e:?}"),
+                    Some(state_overwrites.clone()),
+                    Some(metadata.clone()),
+                )
             })?;
             BigUint::from_str(amount_out.to_string().as_str())
                 .into_diagnostic()
-                .map_err(|e| (e, Some(state_overwrites.clone())))
+                .map_err(|e| (e, Some(state_overwrites.clone()), Some(metadata.clone())))
         }
-        execution_simulator::SimulationResult::Revert { reason } => {
-            Err((miette!("Transaction reverted: {}", reason), Some(state_overwrites)))
-        }
+        execution_simulator::SimulationResult::Revert { reason } => Err((
+            miette!("Transaction reverted: {}", reason),
+            Some(state_overwrites),
+            Some(metadata),
+        )),
     }
 }
 
@@ -710,14 +728,16 @@ fn calculate_gas_fees(block: &Block) -> miette::Result<(U256, U256)> {
 /// Set up all state overrides needed for simulation.
 ///
 /// This includes balance overrides and allowance overrides of the sell token for the sender.
+/// Returns both the overwrites and metadata for human-readable logging.
 async fn setup_user_overwrites(
     rpc_url: &str,
     solution: &Solution,
     transaction: &Transaction,
     block: &Block,
     user_address: Address,
-) -> miette::Result<AddressHashMap<AccountOverride>> {
+) -> miette::Result<(AddressHashMap<AccountOverride>, tenderly::OverwriteMetadata)> {
     let mut overwrites = AddressHashMap::default();
+    let mut metadata = tenderly::OverwriteMetadata::new();
     let token_address = Address::from_slice(&solution.given_token[..20]);
     // If given token is ETH, add the given amount + 1 ETH for gas
     if solution.given_token == Bytes::zero(20) {
@@ -777,9 +797,22 @@ async fn setup_user_overwrites(
         let balance_storage_address = Address::from_slice(&balance_storage_addr[..20]);
         let allowance_storage_address = Address::from_slice(&allowance_storage_addr[..20]);
 
+        let balance_slot_b256 = alloy::primitives::B256::from_slice(balance_slot);
+        let allowance_slot_b256 = alloy::primitives::B256::from_slice(allowance_slot);
+        let spender_address = Address::from_slice(&transaction.to[..20]);
+
         info!(
             "Setting token override for {token_address}: balance={}, allowance={}, balance_storage={}, allowance_storage={}",
             token_balance, token_allowance, balance_storage_address, allowance_storage_address
+        );
+
+        // Add metadata for human-readable logging
+        metadata.add_balance(balance_storage_address, user_address, balance_slot_b256);
+        metadata.add_allowance(
+            allowance_storage_address,
+            user_address,
+            spender_address,
+            allowance_slot_b256,
         );
 
         // Apply balance and allowance overrides
@@ -789,11 +822,11 @@ async fn setup_user_overwrites(
                 balance_storage_address,
                 AccountOverride::default().with_state_diff(vec![
                     (
-                        alloy::primitives::B256::from_slice(balance_slot),
+                        balance_slot_b256,
                         alloy::primitives::B256::from_slice(&token_balance.to_be_bytes::<32>()),
                     ),
                     (
-                        alloy::primitives::B256::from_slice(allowance_slot),
+                        allowance_slot_b256,
                         alloy::primitives::B256::from_slice(&token_allowance.to_be_bytes::<32>()),
                     ),
                 ]),
@@ -803,14 +836,14 @@ async fn setup_user_overwrites(
             overwrites.insert(
                 balance_storage_address,
                 AccountOverride::default().with_state_diff(vec![(
-                    alloy::primitives::B256::from_slice(balance_slot),
+                    balance_slot_b256,
                     alloy::primitives::B256::from_slice(&token_balance.to_be_bytes::<32>()),
                 )]),
             );
             overwrites.insert(
                 allowance_storage_address,
                 AccountOverride::default().with_state_diff(vec![(
-                    alloy::primitives::B256::from_slice(allowance_slot),
+                    allowance_slot_b256,
                     alloy::primitives::B256::from_slice(&token_allowance.to_be_bytes::<32>()),
                 )]),
             );
@@ -822,7 +855,7 @@ async fn setup_user_overwrites(
         info!("Setting ETH balance override for user {user_address}: {eth_balance} (for gas)");
     }
 
-    Ok(overwrites)
+    Ok((overwrites, metadata))
 }
 
 /// Extract the error name from a revert reason string
