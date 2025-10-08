@@ -6,7 +6,7 @@ mod swap_simulation;
 mod tenderly;
 mod traces;
 
-use std::{collections::HashMap, fmt::Debug, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -67,6 +67,10 @@ struct Cli {
     /// Maximum number of simulations to run per protocol update
     #[arg(short, default_value_t = 10)]
     max_n_simulations: usize,
+
+    /// The RFQ stream will skip messages for this duration after processing a message
+    #[arg(long, default_value_t = 600)]
+    skip_messages_duration: u64,
 }
 
 impl Debug for Cli {
@@ -147,9 +151,12 @@ async fn run(cli: Cli) -> miette::Result<()> {
             .run_stream(&all_tokens, tx.clone())
             .await?;
     }
-    if let Ok(rfq_stream_processor) =
-        RfqStreamProcessor::new(chain, cli.tvl_threshold, cli.max_n_simulations)
-    {
+    if let Ok(rfq_stream_processor) = RfqStreamProcessor::new(
+        chain,
+        cli.tvl_threshold,
+        cli.max_n_simulations,
+        Duration::from_secs(cli.skip_messages_duration),
+    ) {
         rfq_stream_processor
             .run_stream(&all_tokens, tx)
             .await?;

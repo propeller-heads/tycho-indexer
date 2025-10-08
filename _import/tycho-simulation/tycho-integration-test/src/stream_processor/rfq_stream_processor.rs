@@ -43,11 +43,17 @@ pub struct RfqStreamProcessor {
     tvl_threshold: f64,
     rfq_credentials: HashMap<RfqProtocol, (String, String)>,
     sample_size: usize,
-    stream_sleep_time: Duration,
+    /// The protocol's stream will skip messages for this duration after processing a message
+    skip_messages_duration: Duration,
 }
 
 impl RfqStreamProcessor {
-    pub fn new(chain: Chain, tvl_threshold: f64, sample_size: usize) -> miette::Result<Self> {
+    pub fn new(
+        chain: Chain,
+        tvl_threshold: f64,
+        sample_size: usize,
+        skip_messages_duration: Duration,
+    ) -> miette::Result<Self> {
         let mut rfq_credentials = HashMap::new();
         let (bebop_user, bebop_key) = (env::var("BEBOP_USER").ok(), env::var("BEBOP_KEY").ok());
         if let (Some(user), Some(key)) = (bebop_user, bebop_key) {
@@ -63,13 +69,7 @@ impl RfqStreamProcessor {
         if rfq_credentials.is_empty() {
             return Err(miette!("No RFQ credentials found. Please set BEBOP_USER and BEBOP_KEY or HASHFLOW_USER and HASHFLOW_KEY environment variables."));
         }
-        Ok(Self {
-            chain,
-            tvl_threshold,
-            rfq_credentials,
-            sample_size,
-            stream_sleep_time: Duration::from_secs(60),
-        })
+        Ok(Self { chain, tvl_threshold, rfq_credentials, sample_size, skip_messages_duration })
     }
 
     pub async fn run_stream(
@@ -119,7 +119,7 @@ impl RfqStreamProcessor {
         let (tx, mut rx) = tokio::sync::mpsc::channel(64);
         let _handle = tokio::spawn(rfq_stream_builder.build(tx));
         let sample_size = self.sample_size;
-        let stream_sleep_time = self.stream_sleep_time;
+        let skip_messages_duration = self.skip_messages_duration;
         let mut next_stream_times: HashMap<String, tokio::time::Instant> = self
             .rfq_credentials
             .keys()
@@ -140,7 +140,7 @@ impl RfqStreamProcessor {
                     if now < *next_stream_time {
                         continue;
                     } else {
-                        *next_stream_time = now + stream_sleep_time;
+                        *next_stream_time = now + skip_messages_duration;
                     }
                 } else {
                     continue;
