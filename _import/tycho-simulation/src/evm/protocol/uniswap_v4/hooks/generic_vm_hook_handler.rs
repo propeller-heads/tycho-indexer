@@ -273,6 +273,7 @@ where
             // Use a deterministic lens contract address for state override
             // The lens contract bytecode will be deployed via state override during the eth_call.
             // This maintains the same interface as the original getLimits.
+            let mut overwrites = None;
             let limits_contract = if self.is_euler {
                 let lens_address = Address::from_str("0x0000000000000000000000000000000000001337")
                     .map_err(|e| {
@@ -286,7 +287,7 @@ where
                     code: Some(Bytecode::new_raw(EULER_LENS_BYTECODE_BYTES.into())),
                     code_hash: keccak256(EULER_LENS_BYTECODE_BYTES),
                 };
-                let mut permanent_storage = HashMap::new();
+                let mut storage_overwrites = HashMap::new();
 
                 // We set the hooks address to the slot 0 to allow identifying the desired hook
                 // address
@@ -296,12 +297,13 @@ where
                         "Failed to convert hook contract to U256: {e:?}"
                     ))
                 })?;
-                permanent_storage.insert(U256::from(0), original_contract_u256);
+                storage_overwrites.insert(U256::from(0), original_contract_u256);
+                overwrites = Some(HashMap::from([(lens_address, storage_overwrites)]));
 
                 self.contract.engine.state.init_account(
                     lens_address,
                     info,
-                    Some(permanent_storage),
+                    None,
                     true, // mocked
                 );
                 TychoSimulationContract::new(lens_address, self.contract.engine.clone())?
@@ -312,7 +314,7 @@ where
             let res = limits_contract.call(
                 function_signature,
                 args,
-                None,             // overrides
+                overwrites,       // overwrites
                 None,             // caller
                 U256::from(0u64), // value
                 None,             // transient_storage
