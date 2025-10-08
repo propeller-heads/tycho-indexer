@@ -8,7 +8,7 @@ use std::{
 use async_trait::async_trait;
 use chrono::{Duration, NaiveDateTime};
 use deepsize::DeepSizeOf;
-use metrics::{counter, gauge};
+use metrics::{counter, gauge, histogram};
 use mockall::automock;
 use prost::Message;
 use tokio::{sync::Mutex, task::JoinHandle};
@@ -901,10 +901,10 @@ where
 
                 debug!(batch_size, block_height = last_block_height, extractor_id = extractor_name, chain = %chain, "CommitTaskCompleted");
 
-                gauge!(
+                histogram!(
                     "database_commit_duration_ms", "chain" => chain.to_string(), "extractor" => extractor_name
                 )
-                .set(now.elapsed().as_millis() as f64);
+                .record(now.elapsed().as_millis() as f64);
 
                 Ok(())
             });
