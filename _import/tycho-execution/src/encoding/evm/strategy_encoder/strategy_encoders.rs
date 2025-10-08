@@ -1,4 +1,4 @@
-use std::{collections::HashSet, str::FromStr};
+use std::collections::HashSet;
 
 use alloy::primitives::{aliases::U24, U8};
 use tycho_common::{models::Chain, Bytes};
@@ -149,11 +149,8 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
             }
         }
 
-        let swap_data = self.encode_swap_header(
-            Bytes::from_str(swap_encoder.executor_address())
-                .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?,
-            initial_protocol_data,
-        );
+        let swap_data =
+            self.encode_swap_header(swap_encoder.executor_address().clone(), initial_protocol_data);
         Ok(EncodedSolution {
             function_signature: self.function_signature.clone(),
             interacting_with: self.router_address.clone(),
@@ -321,12 +318,8 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 }
             }
 
-            let swap_data = self.encode_swap_header(
-                Bytes::from_str(swap_encoder.executor_address()).map_err(|_| {
-                    EncodingError::FatalError("Invalid executor address".to_string())
-                })?,
-                initial_protocol_data,
-            );
+            let swap_data = self
+                .encode_swap_header(swap_encoder.executor_address().clone(), initial_protocol_data);
             swaps.push(swap_data);
         }
 
@@ -537,9 +530,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 get_token_position(&tokens, &grouped_swap.token_in)?,
                 get_token_position(&tokens, &grouped_swap.token_out)?,
                 percentage_to_uint24(grouped_swap.split),
-                Bytes::from_str(swap_encoder.executor_address()).map_err(|_| {
-                    EncodingError::FatalError("Invalid executor address".to_string())
-                })?,
+                swap_encoder.executor_address().clone(),
                 initial_protocol_data,
             );
             swaps.push(swap_data);

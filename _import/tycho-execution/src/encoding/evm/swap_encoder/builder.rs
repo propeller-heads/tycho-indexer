@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use tycho_common::models::Chain;
+use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -15,7 +15,7 @@ use crate::encoding::{
 /// Builds a `SwapEncoder` for the given protocol system and executor address.
 pub struct SwapEncoderBuilder {
     protocol_system: String,
-    executor_address: String,
+    executor_address: Bytes,
     chain: Chain,
     config: Option<HashMap<String, String>>,
 }
@@ -23,13 +23,13 @@ pub struct SwapEncoderBuilder {
 impl SwapEncoderBuilder {
     pub fn new(
         protocol_system: &str,
-        executor_address: &str,
+        executor_address: Bytes,
         chain: Chain,
         config: Option<HashMap<String, String>>,
     ) -> Self {
         SwapEncoderBuilder {
             protocol_system: protocol_system.to_string(),
-            executor_address: executor_address.to_string(),
+            executor_address,
             chain,
             config,
         }

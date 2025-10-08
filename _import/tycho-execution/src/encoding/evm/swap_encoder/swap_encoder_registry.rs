@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
-use tycho_common::models::Chain;
+use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -43,7 +43,12 @@ impl SwapEncoderRegistry {
         for (protocol, executor_address) in executors {
             let builder = SwapEncoderBuilder::new(
                 protocol,
-                executor_address,
+                Bytes::from_str(executor_address).map_err(|_| {
+                    EncodingError::FatalError(format!(
+                        "Invalid executor address for protocol {}",
+                        protocol
+                    ))
+                })?,
                 chain,
                 protocol_specific_config
                     .get(protocol)

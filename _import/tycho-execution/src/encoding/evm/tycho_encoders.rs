@@ -1,4 +1,4 @@
-use std::{collections::HashSet, str::FromStr};
+use std::collections::HashSet;
 
 use alloy::signers::local::PrivateKeySigner;
 use tycho_common::{models::Chain, Bytes};
@@ -352,12 +352,9 @@ impl TychoExecutorEncoder {
             initial_protocol_data.extend(ple_encode(grouped_protocol_data));
         }
 
-        let executor_address = Bytes::from_str(swap_encoder.executor_address())
-            .map_err(|_| EncodingError::FatalError("Invalid executor address".to_string()))?;
-
         Ok(EncodedSolution {
             swaps: initial_protocol_data,
-            interacting_with: executor_address,
+            interacting_with: swap_encoder.executor_address().clone(),
             permit: None,
             function_signature: "".to_string(),
             n_tokens: 0,

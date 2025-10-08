@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use tycho_common::models::Chain;
+use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
@@ -18,7 +18,7 @@ pub trait SwapEncoder: Sync + Send {
     /// * `config` - Additional configuration parameters for the encoder, like vault or registry
     ///   address
     fn new(
-        executor_address: String,
+        executor_address: Bytes,
         chain: Chain,
         config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError>
@@ -41,7 +41,7 @@ pub trait SwapEncoder: Sync + Send {
     ) -> Result<Vec<u8>, EncodingError>;
 
     /// Returns the address of the protocol-specific executor contract.
-    fn executor_address(&self) -> &str;
+    fn executor_address(&self) -> &Bytes;
 
     /// Creates a cloned instance of the swap encoder.
     ///

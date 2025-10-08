@@ -32,7 +32,7 @@ use crate::encoding::{
 /// * `executor_address` - The address of the executor contract that will perform the swap.
 #[derive(Clone)]
 pub struct UniswapV2SwapEncoder {
-    executor_address: String,
+    executor_address: Bytes,
 }
 
 impl UniswapV2SwapEncoder {
@@ -43,7 +43,7 @@ impl UniswapV2SwapEncoder {
 
 impl SwapEncoder for UniswapV2SwapEncoder {
     fn new(
-        executor_address: String,
+        executor_address: Bytes,
         _chain: Chain,
         _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
@@ -75,7 +75,7 @@ impl SwapEncoder for UniswapV2SwapEncoder {
         Ok(args.abi_encode_packed())
     }
 
-    fn executor_address(&self) -> &str {
+    fn executor_address(&self) -> &Bytes {
         &self.executor_address
     }
 
@@ -90,7 +90,7 @@ impl SwapEncoder for UniswapV2SwapEncoder {
 /// * `executor_address` - The address of the executor contract that will perform the swap.
 #[derive(Clone)]
 pub struct UniswapV3SwapEncoder {
-    executor_address: String,
+    executor_address: Bytes,
 }
 
 impl UniswapV3SwapEncoder {
@@ -101,7 +101,7 @@ impl UniswapV3SwapEncoder {
 
 impl SwapEncoder for UniswapV3SwapEncoder {
     fn new(
-        executor_address: String,
+        executor_address: Bytes,
         _chain: Chain,
         _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
@@ -137,7 +137,7 @@ impl SwapEncoder for UniswapV3SwapEncoder {
         Ok(args.abi_encode_packed())
     }
 
-    fn executor_address(&self) -> &str {
+    fn executor_address(&self) -> &Bytes {
         &self.executor_address
     }
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
@@ -151,7 +151,7 @@ impl SwapEncoder for UniswapV3SwapEncoder {
 /// * `executor_address` - The address of the executor contract that will perform the swap.
 #[derive(Clone)]
 pub struct UniswapV4SwapEncoder {
-    executor_address: String,
+    executor_address: Bytes,
 }
 
 impl UniswapV4SwapEncoder {
@@ -162,7 +162,7 @@ impl UniswapV4SwapEncoder {
 
 impl SwapEncoder for UniswapV4SwapEncoder {
     fn new(
-        executor_address: String,
+        executor_address: Bytes,
         _chain: Chain,
         _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
@@ -235,7 +235,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         Ok(args.abi_encode_packed())
     }
 
-    fn executor_address(&self) -> &str {
+    fn executor_address(&self) -> &Bytes {
         &self.executor_address
     }
 
@@ -251,13 +251,13 @@ impl SwapEncoder for UniswapV4SwapEncoder {
 /// * `vault_address` - The address of the vault contract that will perform the swap.
 #[derive(Clone)]
 pub struct BalancerV2SwapEncoder {
-    executor_address: String,
-    vault_address: String,
+    executor_address: Bytes,
+    vault_address: Bytes,
 }
 
 impl SwapEncoder for BalancerV2SwapEncoder {
     fn new(
-        executor_address: String,
+        executor_address: Bytes,
         _chain: Chain,
         config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
@@ -266,10 +266,15 @@ impl SwapEncoder for BalancerV2SwapEncoder {
         ))?;
         let vault_address = config
             .get("vault_address")
+            .map(|s| {
+                Bytes::from_str(s).map_err(|_| {
+                    EncodingError::FatalError("Invalid balancer v2 vault address".to_string())
+                })
+            })
             .ok_or(EncodingError::FatalError(
                 "Missing balancer v2 vault address in config".to_string(),
-            ))?
-            .to_string();
+            ))
+            .flatten()?;
         Ok(Self { executor_address, vault_address })
     }
 
@@ -288,9 +293,7 @@ impl SwapEncoder for BalancerV2SwapEncoder {
                 approval_needed = token_approvals_manager.approval_needed(
                     token,
                     tycho_router_address,
-                    Address::from_str(&self.vault_address).map_err(|_| {
-                        EncodingError::FatalError("Invalid vault address".to_string())
-                    })?,
+                    Address::from_slice(&self.vault_address),
                 )?;
             }
         };
@@ -309,7 +312,7 @@ impl SwapEncoder for BalancerV2SwapEncoder {
         Ok(args.abi_encode_packed())
     }
 
-    fn executor_address(&self) -> &str {
+    fn executor_address(&self) -> &Bytes {
         &self.executor_address
     }
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
@@ -323,12 +326,12 @@ impl SwapEncoder for BalancerV2SwapEncoder {
 /// * `executor_address` - The address of the executor contract that will perform the swap.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EkuboSwapEncoder {
-    executor_address: String,
+    executor_address: Bytes,
 }
 
 impl SwapEncoder for EkuboSwapEncoder {
     fn new(
-        executor_address: String,
+        executor_address: Bytes,
         _chain: Chain,
         _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
@@ -377,7 +380,7 @@ impl SwapEncoder for EkuboSwapEncoder {
         Ok(encoded)
     }
 
-    fn executor_address(&self) -> &str {
+    fn executor_address(&self) -> &Bytes {
         &self.executor_address
     }
 
@@ -396,8 +399,8 @@ impl SwapEncoder for EkuboSwapEncoder {
 /// * `native_token_address` - The address of the native token.
 #[derive(Clone)]
 pub struct CurveSwapEncoder {
-    executor_address: String,
-    native_token_curve_address: String,
+    executor_address: Bytes,
+    native_token_curve_address: Bytes,
     native_token_address: Bytes,
     wrapped_native_token_address: Bytes,
 }
@@ -438,10 +441,7 @@ impl CurveSwapEncoder {
     // Some curve pools support both ETH and WETH as tokens.
     // They do the wrapping/unwrapping inside the pool
     fn normalize_token(&self, token: Address, coins: &[Address]) -> Result<Address, EncodingError> {
-        let native_token_address =
-            Address::from_str(&self.native_token_curve_address).map_err(|_| {
-                EncodingError::FatalError("Invalid native token curve address".to_string())
-            })?;
+        let native_token_address = Address::from_slice(&self.native_token_curve_address);
         let wrapped_native_token_address = bytes_to_address(&self.wrapped_native_token_address)?;
         if token == native_token_address && !coins.contains(&token) {
             Ok(wrapped_native_token_address)
@@ -482,7 +482,7 @@ impl CurveSwapEncoder {
 
 impl SwapEncoder for CurveSwapEncoder {
     fn new(
-        executor_address: String,
+        executor_address: Bytes,
         chain: Chain,
         config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
@@ -491,10 +491,15 @@ impl SwapEncoder for CurveSwapEncoder {
         ))?;
         let native_token_curve_address = config
             .get("native_token_address")
+            .map(|s| {
+                Bytes::from_str(s).map_err(|_| {
+                    EncodingError::FatalError("Invalid native token curve address".to_string())
+                })
+            })
             .ok_or(EncodingError::FatalError(
                 "Missing native token curve address in config".to_string(),
-            ))?
-            .to_string();
+            ))
+            .flatten()?;
         Ok(Self {
             executor_address,
             native_token_address: chain.native_token().address,
@@ -509,10 +514,7 @@ impl SwapEncoder for CurveSwapEncoder {
         encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let token_approvals_manager = ProtocolApprovalsManager::new()?;
-        let native_token_curve_address = Address::from_str(&self.native_token_curve_address)
-            .map_err(|_| {
-                EncodingError::FatalError("Invalid Curve native token curve address".to_string())
-            })?;
+        let native_token_curve_address = Address::from_slice(&self.native_token_curve_address);
         let token_in = if swap.token_in == self.native_token_address {
             native_token_curve_address
         } else {
@@ -574,7 +576,7 @@ impl SwapEncoder for CurveSwapEncoder {
         Ok(args.abi_encode_packed())
     }
 
-    fn executor_address(&self) -> &str {
+    fn executor_address(&self) -> &Bytes {
         &self.executor_address
     }
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
@@ -588,12 +590,12 @@ impl SwapEncoder for CurveSwapEncoder {
 /// * `executor_address` - The address of the executor contract that will perform the swap.
 #[derive(Clone)]
 pub struct MaverickV2SwapEncoder {
-    executor_address: String,
+    executor_address: Bytes,
 }
 
 impl SwapEncoder for MaverickV2SwapEncoder {
     fn new(
-        executor_address: String,
+        executor_address: Bytes,
         _chain: Chain,
         _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
@@ -617,7 +619,7 @@ impl SwapEncoder for MaverickV2SwapEncoder {
         Ok(args.abi_encode_packed())
     }
 
-    fn executor_address(&self) -> &str {
+    fn executor_address(&self) -> &Bytes {
         &self.executor_address
     }
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
@@ -631,12 +633,12 @@ impl SwapEncoder for MaverickV2SwapEncoder {
 /// * `executor_address` - The address of the executor contract that will perform the swap.
 #[derive(Clone)]
 pub struct BalancerV3SwapEncoder {
-    executor_address: String,
+    executor_address: Bytes,
 }
 
 impl SwapEncoder for BalancerV3SwapEncoder {
     fn new(
-        executor_address: String,
+        executor_address: Bytes,
         _chain: Chain,
         _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
@@ -662,7 +664,7 @@ impl SwapEncoder for BalancerV3SwapEncoder {
         Ok(args.abi_encode_packed())
     }
 
-    fn executor_address(&self) -> &str {
+    fn executor_address(&self) -> &Bytes {
         &self.executor_address
     }
 
@@ -681,8 +683,8 @@ impl SwapEncoder for BalancerV3SwapEncoder {
 /// * `settlement_address` - The address of the Bebop settlement contract.
 #[derive(Clone)]
 pub struct BebopSwapEncoder {
-    executor_address: String,
-    settlement_address: String,
+    executor_address: Bytes,
+    settlement_address: Bytes,
     native_token_bebop_address: Bytes,
     native_token_address: Bytes,
     runtime_handle: Handle,
@@ -692,7 +694,7 @@ pub struct BebopSwapEncoder {
 
 impl SwapEncoder for BebopSwapEncoder {
     fn new(
-        executor_address: String,
+        executor_address: Bytes,
         chain: Chain,
         config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
@@ -701,20 +703,26 @@ impl SwapEncoder for BebopSwapEncoder {
         ))?;
         let settlement_address = config
             .get("bebop_settlement_address")
+            .map(|s| {
+                Bytes::from_str(s).map_err(|_| {
+                    EncodingError::FatalError("Invalid bebop settlement address".to_string())
+                })
+            })
             .ok_or(EncodingError::FatalError(
                 "Missing bebop settlement address in config".to_string(),
-            ))?
-            .to_string();
+            ))
+            .flatten()?;
         let native_token_bebop_address = config
             .get("native_token_address")
+            .map(|s| {
+                Bytes::from_str(s).map_err(|_| {
+                    EncodingError::FatalError("Invalid native token bebop address".to_string())
+                })
+            })
             .ok_or(EncodingError::FatalError(
                 "Missing native token bebop address in config".to_string(),
-            ))?
-            .to_string();
-        let native_token_bebop_address =
-            Bytes::from_str(&native_token_bebop_address).map_err(|_| {
-                EncodingError::FatalError("Invalid Bebop native token address".to_string())
-            })?;
+            ))
+            .flatten()?;
         let (runtime_handle, runtime) = get_runtime()?;
         Ok(Self {
             executor_address,
@@ -743,8 +751,10 @@ impl SwapEncoder for BebopSwapEncoder {
             false
         } else {
             let tycho_router_address = bytes_to_address(&sender)?;
-            let settlement_address = Address::from_str(&self.settlement_address)
-                .map_err(|_| EncodingError::FatalError("Invalid settlement address".to_string()))?;
+            let settlement_address = Address::from_str(&self.settlement_address.to_string())
+                .map_err(|_| {
+                    EncodingError::FatalError("Invalid bebop settlement address".to_string())
+                })?;
             ProtocolApprovalsManager::new()?.approval_needed(
                 token_in,
                 tycho_router_address,
@@ -839,7 +849,7 @@ impl SwapEncoder for BebopSwapEncoder {
         Ok(args.abi_encode_packed())
     }
 
-    fn executor_address(&self) -> &str {
+    fn executor_address(&self) -> &Bytes {
         &self.executor_address
     }
 
@@ -850,8 +860,8 @@ impl SwapEncoder for BebopSwapEncoder {
 
 #[derive(Clone)]
 pub struct HashflowSwapEncoder {
-    executor_address: String,
-    hashflow_router_address: String,
+    executor_address: Bytes,
+    hashflow_router_address: Bytes,
     native_token_address: Bytes,
     runtime_handle: Handle,
     #[allow(dead_code)]
@@ -860,7 +870,7 @@ pub struct HashflowSwapEncoder {
 
 impl SwapEncoder for HashflowSwapEncoder {
     fn new(
-        executor_address: String,
+        executor_address: Bytes,
         chain: Chain,
         config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
@@ -869,10 +879,15 @@ impl SwapEncoder for HashflowSwapEncoder {
         ))?;
         let hashflow_router_address = config
             .get("hashflow_router_address")
+            .map(|s| {
+                Bytes::from_str(s).map_err(|_| {
+                    EncodingError::FatalError("Invalid hashflow router address".to_string())
+                })
+            })
             .ok_or(EncodingError::FatalError(
                 "Missing hashflow router address in config".to_string(),
-            ))?
-            .to_string();
+            ))
+            .flatten()?;
         let native_token_address = chain.native_token().address;
         let (runtime_handle, runtime) = get_runtime()?;
         Ok(Self {
@@ -902,10 +917,7 @@ impl SwapEncoder for HashflowSwapEncoder {
             false
         } else {
             let tycho_router_address = bytes_to_address(&sender)?;
-            let hashflow_router_address = Address::from_str(&self.hashflow_router_address)
-                .map_err(|_| {
-                    EncodingError::FatalError("Invalid hashflow router address address".to_string())
-                })?;
+            let hashflow_router_address = Address::from_slice(&self.hashflow_router_address);
             ProtocolApprovalsManager::new()?.approval_needed(
                 bytes_to_address(&swap.token_in)?,
                 tycho_router_address,
@@ -981,7 +993,7 @@ impl SwapEncoder for HashflowSwapEncoder {
         Ok(args.abi_encode_packed())
     }
 
-    fn executor_address(&self) -> &str {
+    fn executor_address(&self) -> &Bytes {
         &self.executor_address
     }
 
@@ -1030,7 +1042,7 @@ mod tests {
                 historical_trade: false,
             };
             let encoder = UniswapV2SwapEncoder::new(
-                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 Chain::Ethereum,
                 None,
             )
@@ -1086,7 +1098,7 @@ mod tests {
                 historical_trade: false,
             };
             let encoder = UniswapV3SwapEncoder::new(
-                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 Chain::Ethereum,
                 None,
             )
@@ -1144,7 +1156,7 @@ mod tests {
                 historical_trade: true,
             };
             let encoder = BalancerV2SwapEncoder::new(
-                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 Chain::Ethereum,
                 Some(HashMap::from([(
                     "vault_address".to_string(),
@@ -1214,7 +1226,7 @@ mod tests {
                 historical_trade: false,
             };
             let encoder = UniswapV4SwapEncoder::new(
-                String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
+                Bytes::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
                 Chain::Ethereum,
                 None,
             )
@@ -1284,7 +1296,7 @@ mod tests {
             };
 
             let encoder = UniswapV4SwapEncoder::new(
-                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 Chain::Ethereum,
                 None,
             )
@@ -1371,7 +1383,7 @@ mod tests {
                     .build();
 
             let encoder = UniswapV4SwapEncoder::new(
-                String::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
+                Bytes::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
                 Chain::Ethereum,
                 None,
             )
@@ -1458,7 +1470,7 @@ mod tests {
                 historical_trade: false,
             };
 
-            let encoder = EkuboSwapEncoder::new(String::default(), Chain::Ethereum, None).unwrap();
+            let encoder = EkuboSwapEncoder::new(Bytes::default(), Chain::Ethereum, None).unwrap();
 
             let encoded_swap = encoder
                 .encode_swap(&swap, &encoding_context)
@@ -1489,7 +1501,7 @@ mod tests {
             let group_token_out = Bytes::from("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT
             let intermediary_token = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
 
-            let encoder = EkuboSwapEncoder::new(String::default(), Chain::Ethereum, None).unwrap();
+            let encoder = EkuboSwapEncoder::new(Bytes::default(), Chain::Ethereum, None).unwrap();
 
             let encoding_context = EncodingContext {
                 receiver: RECEIVER.into(),
@@ -1653,7 +1665,7 @@ mod tests {
             .build();
 
             let encoder =
-                CurveSwapEncoder::new(String::default(), Chain::Ethereum, curve_config()).unwrap();
+                CurveSwapEncoder::new(Bytes::default(), Chain::Ethereum, curve_config()).unwrap();
             let (i, j) = encoder
                 .get_coin_indexes(
                     &swap,
@@ -1699,7 +1711,7 @@ mod tests {
                 historical_trade: false,
             };
             let encoder = CurveSwapEncoder::new(
-                String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
+                Bytes::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
                 Chain::Ethereum,
                 curve_config(),
             )
@@ -1766,7 +1778,7 @@ mod tests {
                 historical_trade: false,
             };
             let encoder = CurveSwapEncoder::new(
-                String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
+                Bytes::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
                 Chain::Ethereum,
                 curve_config(),
             )
@@ -1834,7 +1846,7 @@ mod tests {
                 historical_trade: false,
             };
             let encoder = CurveSwapEncoder::new(
-                String::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
+                Bytes::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
                 Chain::Ethereum,
                 Some(HashMap::from([
                     (
@@ -1903,7 +1915,7 @@ mod tests {
                 historical_trade: false,
             };
             let encoder = BalancerV3SwapEncoder::new(
-                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 Chain::Ethereum,
                 None,
             )
@@ -1956,7 +1968,7 @@ mod tests {
                 historical_trade: false,
             };
             let encoder = MaverickV2SwapEncoder::new(
-                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 Chain::Ethereum,
                 None,
             )
@@ -2051,7 +2063,7 @@ mod tests {
             };
 
             let encoder = BebopSwapEncoder::new(
-                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 Chain::Ethereum,
                 Some(bebop_config()),
             )
@@ -2126,7 +2138,7 @@ mod tests {
             };
 
             let encoder = HashflowSwapEncoder::new(
-                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 Chain::Ethereum,
                 hashflow_config(),
             )
@@ -2220,7 +2232,7 @@ mod tests {
             };
 
             let encoder = HashflowSwapEncoder::new(
-                String::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
+                Bytes::from("0x543778987b293C7E8Cf0722BB2e935ba6f4068D4"),
                 Chain::Ethereum,
                 hashflow_config(),
             )
