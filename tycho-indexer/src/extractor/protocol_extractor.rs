@@ -801,6 +801,9 @@ where
 
             // Consume the previous commit handle, leaving None in its place
             if let Some(db_commit_handle_to_join) = commit_handle_guard.take() {
+                let awaited_commit = !db_commit_handle_to_join.is_finished();
+                let now = chrono::Utc::now().naive_utc();
+
                 match db_commit_handle_to_join.await {
                     Ok(Ok(())) => {}
                     Ok(Err(storage_err)) => {
@@ -811,6 +814,13 @@ where
                             "Failed to join database commit task: {join_err}"
                         ))));
                     }
+                }
+
+                if awaited_commit {
+                    let wait_time = chrono::Utc::now()
+                        .naive_utc()
+                        .signed_duration_since(now);
+                    debug!(wait_time = %wait_time, "CommitTaskAwaited");
                 }
             }
 
