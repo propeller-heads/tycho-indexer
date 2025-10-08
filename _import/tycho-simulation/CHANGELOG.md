@@ -1,3 +1,11 @@
+## [0.175.0](https://github.com/propeller-heads/tycho-simulation/compare/0.174.0...0.175.0) (2025-10-08)
+
+
+### Features
+
+* Log override metadata ([63e617b](https://github.com/propeller-heads/tycho-simulation/commit/63e617b7b08ec37997ca215030bcefc030d261e9))
+* Send tenderly URL + overwrites to metrics dashboard ([f529794](https://github.com/propeller-heads/tycho-simulation/commit/f52979405b606ea567fa3fb242cf9ae94d3e7967))
+
 ## [0.174.0](https://github.com/propeller-heads/tycho-simulation/compare/0.173.1...0.174.0) (2025-10-08)
 
 
