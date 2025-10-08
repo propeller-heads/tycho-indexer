@@ -1,3 +1,10 @@
+## [0.173.0](https://github.com/propeller-heads/tycho-simulation/compare/0.172.0...0.173.0) (2025-10-08)
+
+
+### Features
+
+* Bump tycho-execution ([87af52b](https://github.com/propeller-heads/tycho-simulation/commit/87af52b8e8e2c4f5070ad93e8075363893beb3b9))
+
 ## [0.172.0](https://github.com/propeller-heads/tycho-simulation/compare/0.171.0...0.172.0) (2025-10-07)
 
 
