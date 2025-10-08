@@ -78,7 +78,7 @@ prost = { version = "0.13", optional = true }
 
 [dev-dependencies]
 # tycho execution for quickstart
-tycho-execution = "0.129.1"
+tycho-execution = ">=0.129.1"
 tokio-test = "0.4.4"
 approx = "0.5.1"
 rstest = "0.23.0"
