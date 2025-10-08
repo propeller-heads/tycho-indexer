@@ -68,7 +68,7 @@ struct Cli {
     #[arg(short, default_value_t = 10)]
     max_n_simulations: usize,
 
-    /// The RFQ stream will skip messages for this duration after processing a message
+    /// The RFQ stream will skip messages for this duration (in seconds) after processing a message
     #[arg(long, default_value_t = 600)]
     skip_messages_duration: u64,
 }
@@ -165,6 +165,13 @@ async fn run(cli: Cli) -> miette::Result<()> {
     // Process streams updates
     let mut protocol_pairs: HashMap<String, ProtocolComponent> = HashMap::new();
     while let Some(update) = rx.recv().await {
+        let update = match update {
+            Ok(u) => u,
+            Err(e) => {
+                warn!("{e:?}");
+                continue;
+            }
+        };
         info!(
             "Got protocol update with block {}, {} new pairs, and {} states",
             update.update.block_number_or_timestamp,

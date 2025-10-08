@@ -75,7 +75,7 @@ impl RfqStreamProcessor {
     pub async fn run_stream(
         &self,
         all_tokens: &HashMap<Bytes, Token>,
-        stream_tx: Sender<StreamUpdate>,
+        stream_tx: Sender<miette::Result<StreamUpdate>>,
     ) -> miette::Result<JoinHandle<()>> {
         // Set up RFQ stream
         let rfq_tokens: HashSet<Bytes> = all_tokens.keys().cloned().collect();
@@ -133,7 +133,18 @@ impl RfqStreamProcessor {
                         if let Some(t) = next_stream_times.get_mut(&component.protocol_system) {
                             t
                         } else {
-                            warn!("Unknown protocol system: {}", component.protocol_system);
+                            if stream_tx
+                                .send(Err(miette!(
+                                    "Protocol system not configured: {}",
+                                    component.protocol_system
+                                )))
+                                .await
+                                .is_err()
+                            {
+                                warn!("Receiver dropped, stopping stream processor");
+                                _handle.abort();
+                                break;
+                            }
                             continue;
                         };
                     let now = tokio::time::Instant::now();
@@ -162,7 +173,11 @@ impl RfqStreamProcessor {
                 if is_first_update {
                     is_first_update = false;
                 }
-                if stream_tx.send(update).await.is_err() {
+                if stream_tx
+                    .send(Ok(update))
+                    .await
+                    .is_err()
+                {
                     warn!("Receiver dropped, stopping stream processor");
                     _handle.abort();
                     break;

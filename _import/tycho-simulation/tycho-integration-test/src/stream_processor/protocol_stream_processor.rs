@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use futures::{Stream, StreamExt};
-use miette::{IntoDiagnostic, WrapErr};
+use miette::{miette, IntoDiagnostic, WrapErr};
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 use tracing::warn;
 use tycho_client::feed::component_tracker::ComponentFilter;
@@ -51,7 +51,7 @@ impl ProtocolStreamProcessor {
     pub async fn run_stream(
         &self,
         all_tokens: &HashMap<Bytes, Token>,
-        tx: Sender<StreamUpdate>,
+        tx: Sender<miette::Result<StreamUpdate>>,
     ) -> miette::Result<JoinHandle<()>> {
         let mut stream = self.build_stream(all_tokens).await?;
         let handle = tokio::spawn(async move {
@@ -60,8 +60,16 @@ impl ProtocolStreamProcessor {
                 let update = match res {
                     Ok(msg) => msg,
                     Err(e) => {
-                        warn!("Error receiving message: {e:?}");
-                        warn!("Continuing to next message...");
+                        if tx
+                            .send(Err(
+                                miette!(e).wrap_err("Error receiving message from protocol stream")
+                            ))
+                            .await
+                            .is_err()
+                        {
+                            warn!("Receiver dropped, stopping stream processor");
+                            break;
+                        }
                         continue;
                     }
                 };
@@ -70,7 +78,7 @@ impl ProtocolStreamProcessor {
                 if is_first_update {
                     is_first_update = false;
                 }
-                if tx.send(update).await.is_err() {
+                if tx.send(Ok(update)).await.is_err() {
                     warn!("Receiver dropped, stopping stream processor");
                     break;
                 }
