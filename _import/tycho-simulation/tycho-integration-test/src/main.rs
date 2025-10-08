@@ -179,21 +179,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
             update.update.new_pairs.len(),
             update.update.states.len()
         );
-        if let UpdateType::Protocol = update.update_type {
-            for (id, comp) in update.update.new_pairs.iter() {
-                protocol_pairs
-                    .entry(id.clone())
-                    .or_insert_with(|| comp.clone());
-            }
-            // TODO why do we do this? Don't we also want to simulate on the first block?
-            if update.is_first_update {
-                info!("Skipping simulation on first protocol update...");
-                continue;
-            }
-        }
-        for (protocol, sync_state) in update.update.sync_states.iter() {
-            metrics::record_protocol_sync_state(protocol, sync_state);
-        }
+
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .into_diagnostic()?
@@ -217,6 +203,33 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 continue;
             }
         };
+
+        if let UpdateType::Protocol = update.update_type {
+            // Consume messages that are older than the current block, to give the stream a chance
+            // to catch up
+            if update.update.block_number_or_timestamp < block.header.number {
+                warn!(
+                    "Update block ({}) is behind the current block ({}), skipping to catch up.",
+                    update.update.block_number_or_timestamp, block.header.number
+                );
+                metrics::record_skipped_update();
+                continue;
+            }
+
+            for (id, comp) in update.update.new_pairs.iter() {
+                protocol_pairs
+                    .entry(id.clone())
+                    .or_insert_with(|| comp.clone());
+            }
+            if update.is_first_update {
+                info!("Skipping simulation on first protocol update...");
+                continue;
+            }
+        }
+
+        for (protocol, sync_state) in update.update.sync_states.iter() {
+            metrics::record_protocol_sync_state(protocol, sync_state);
+        }
 
         for (id, state) in update
             .update

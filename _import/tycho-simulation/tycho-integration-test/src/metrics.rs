@@ -43,6 +43,10 @@ pub fn init_metrics() {
         "protocol_sync_state_current",
         "Current sync state per protocol as numeric value"
     );
+    describe_counter!(
+        "skipped_updates_total",
+        "Total number of updates skipped because they are behind the current block"
+    );
 }
 
 /// Record the latency between block timestamp and component receipt
@@ -161,6 +165,11 @@ pub fn record_protocol_sync_state(protocol: &str, sync_state: &SynchronizerState
         SynchronizerState::Ended(_) => 6.0,
     };
     gauge!("protocol_sync_state_current", "protocol" => protocol.to_string()).set(state_value);
+}
+
+/// Record when an update is skipped because it's behind the current block
+pub fn record_skipped_update() {
+    counter!("skipped_updates_total").increment(1);
 }
 
 /// Creates and runs the Prometheus metrics exporter using Actix Web.
