@@ -350,7 +350,7 @@ async fn process_update_state(
         ) {
             Ok(res) => res,
             Err(e) => {
-                warn!("{e}");
+                warn!("{e:?}");
                 continue;
             }
         };
