@@ -845,6 +845,14 @@ where
         // spawn a new task that will commit the new blocks and update the committed block height.
         if let Some(last_block) = blocks_to_commit.last() {
             let mut commit_handle_guard = self.gateway.commit_handle.lock().await;
+            let gateway = self.gateway.inner.clone();
+            let committed_block_height = self
+                .gateway
+                .committed_block_height
+                .clone();
+            let last_block_height = last_block.block_update.block.number;
+            let batch_size = blocks_to_commit.len();
+            let (extractor_name, chain) = (self.name.clone(), self.chain);
 
             // Consume the previous commit handle, leaving None in its place
             if let Some(db_commit_handle_to_join) = commit_handle_guard.take() {
@@ -867,18 +875,9 @@ where
                     let wait_time = chrono::Utc::now()
                         .naive_utc()
                         .signed_duration_since(now);
-                    debug!(wait_time = %wait_time, "CommitTaskAwaited");
+                    debug!(batch_size, block_height = last_block_height, extractor_id = self.name.clone(), chain = %self.chain, wait_time = %wait_time, "CommitTaskAwaited");
                 }
             }
-
-            let gateway = self.gateway.inner.clone();
-            let committed_block_height = self
-                .gateway
-                .committed_block_height
-                .clone();
-            let last_block_height = last_block.block_update.block.number;
-            let batch_size = blocks_to_commit.len();
-            let (extractor_name, chain) = (self.name.clone(), self.chain);
 
             // Spawn a new task to commit the new blocks and update the committed block height
             let new_handle = tokio::spawn(async move {
