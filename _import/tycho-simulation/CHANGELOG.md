@@ -1,3 +1,10 @@
+## [0.173.1](https://github.com/propeller-heads/tycho-simulation/compare/0.173.0...0.173.1) (2025-10-08)
+
+
+### Bug Fixes
+
+* Don't use permanent_storage in get_amount_ranges ([b34789b](https://github.com/propeller-heads/tycho-simulation/commit/b34789b478ce003e9e1bdaef35721209afcac4d0))
+
 ## [0.173.0](https://github.com/propeller-heads/tycho-simulation/compare/0.172.0...0.173.0) (2025-10-08)
 
 
