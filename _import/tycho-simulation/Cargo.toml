@@ -47,9 +47,9 @@ mini-moka = "0.10"
 lazy_static = "1.4.0"
 
 # Tycho dependencies
-tycho-client = "0.91.0"
-tycho-common = "0.91.0"
-tycho-ethereum = { version = "0.91.0", features = ["onchain_data"] }
+tycho-client = ">=0.91.0"
+tycho-common = ">=0.91.0"
+tycho-ethereum = { version = ">=0.91.0", features = ["onchain_data"] }
 
 # EVM dependencies
 foundry-config = { git = "https://github.com/foundry-rs/foundry", rev = "d6daa0ac83fe6b3883072436bb3f95ba7820e5d9", optional = true }
