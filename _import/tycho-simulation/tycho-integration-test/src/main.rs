@@ -137,19 +137,21 @@ async fn run(cli: Cli) -> miette::Result<()> {
 
     // Run streams in background tasks
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
-    let protocol_stream_processor = ProtocolStreamProcessor::new(
+    if let Ok(protocol_stream_processor) = ProtocolStreamProcessor::new(
         chain,
         tycho_url.clone(),
         cli.tycho_api_key.clone(),
         cli.tvl_threshold,
-    )?;
-    protocol_stream_processor
-        .run_stream(&all_tokens, tx.clone())
-        .await?;
-    let rfq_stream_processor = RfqStreamProcessor::new(chain, cli.tvl_threshold)?;
-    rfq_stream_processor
-        .run_stream(&all_tokens, tx)
-        .await?;
+    ) {
+        protocol_stream_processor
+            .run_stream(&all_tokens, tx.clone())
+            .await?;
+    }
+    if let Ok(rfq_stream_processor) = RfqStreamProcessor::new(chain, cli.tvl_threshold) {
+        rfq_stream_processor
+            .run_stream(&all_tokens, tx)
+            .await?;
+    }
 
     // Process streams updates
     let mut protocol_pairs: HashMap<String, ProtocolComponent> = HashMap::new();

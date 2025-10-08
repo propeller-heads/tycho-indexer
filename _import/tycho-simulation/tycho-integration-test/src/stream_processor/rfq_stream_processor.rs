@@ -68,7 +68,7 @@ impl RfqStreamProcessor {
             tvl_threshold,
             rfq_credentials,
             sample_size: 10,
-            stream_sleep_time: Duration::from_secs(10 * 60),
+            stream_sleep_time: Duration::from_secs(60),
         })
     }
 
