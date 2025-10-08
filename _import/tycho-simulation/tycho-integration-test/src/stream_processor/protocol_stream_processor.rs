@@ -55,7 +55,7 @@ impl ProtocolStreamProcessor {
     ) -> miette::Result<JoinHandle<()>> {
         let mut stream = self.build_stream(all_tokens).await?;
         let handle = tokio::spawn(async move {
-            let mut is_first_update = false;
+            let mut is_first_update = true;
             while let Some(res) = stream.next().await {
                 let update = match res {
                     Ok(msg) => msg,

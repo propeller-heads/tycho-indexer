@@ -115,7 +115,7 @@ impl RfqStreamProcessor {
         }
 
         // Start the RFQ stream
-        let mut is_first_update = false;
+        let mut is_first_update = true;
         let (tx, mut rx) = tokio::sync::mpsc::channel(64);
         let _handle = tokio::spawn(rfq_stream_builder.build(tx));
         let sample_size = self.sample_size;
